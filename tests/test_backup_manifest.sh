@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
 # tests/test_backup_manifest.sh — guard what a backup run records, and how it says so.
 #
-# WHY this suite exists: a run that keeps the database dump but cannot archive the volume
-# is not a failed backup and not a successful one, and a caller that only sees 0 or 1 cannot
-# tell it from either. Worse, the failure mode it replaced returned straight out of the
-# volume step, so the manifest, the rotation and the notification were all skipped and the
-# run left no trace at all — indistinguishable from a run that never started. The exit
-# contract is three values, and the manifest entry is what tells a reader which of them
-# happened: 0 complete, 1 nothing usable, 3 the dump is safe and the volume is not.
+# WHY this suite exists: a run that keeps the database dump but cannot write the manifest
+# entry is not a failed backup and not a successful one, and a caller that only sees 0 or 1
+# cannot tell it from either. Worse, the failure mode it replaced returned straight out of
+# the step that failed, so the manifest, the rotation and the notification were all skipped
+# and the run left no trace at all — indistinguishable from a run that never started. The
+# exit contract is three values, and the manifest entry is what tells a reader which of them
+# happened: 0 complete, 1 nothing usable, 3 the dump is safe but unrecorded.
+#
+# The entry shape is asserted whole, key by key, rather than field by field. A reader this
+# suite does not know about is not the one that has to survive: what matters is that a
+# stale volume key — vol_tar, vol_sha256, volume_status, sizes.vol_bytes — makes this
+# suite fail, so an entry describing an archive no run produces cannot be added back
+# unnoticed.
 #
 # The second half runs the manifest writer with python3 removed from the PATH. jq, not
 # python3, is the tool the chain has to use: the monitor image ships jq and no python3, so a
 # manifest that only a python3-first chain can produce is a manifest the container never
-# writes. The suite removes the interpreter and checks the file, then reads the result back
-# through the real drill reader.
+# writes. The suite removes the interpreter and checks the file.
 #
 # Usage: bash tests/test_backup_manifest.sh
 set -u
@@ -24,15 +29,13 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/__lib/backup_harness.sh"
 set -u
 
-build_stub_archive
-
 # ---------------------------------------------------------------------------
-# 1. A partial run is recorded, and rotation still happens
+# 1. A partial run is recorded as absent, and rotation still happens
 # ---------------------------------------------------------------------------
-# Rotation is the proof that the run did not return at the volume step: the manifest and the
-# rotation sit after the archive, so a run that short-circuited on a failed volume would
-# leave every superseded set in place.
-printf '== partial run records itself and still rotates ==\n'
+# Rotation is the proof that the run did not return at the failing step: the manifest and the
+# rotation sit after the dump, so a run that short-circuited would leave every superseded
+# set in place.
+printf '== a partial run rotates anyway and records nothing ==\n'
 new_run_root partial-rotation
 for old_ts in 20200101-000000 20200102-000000 20200103-000000; do
   printf 'superseded dump\n' > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump"
@@ -40,24 +43,21 @@ for old_ts in 20200101-000000 20200102-000000 20200103-000000; do
     "0000000000000000000000000000000000000000000000000000000000000000" "$old_ts" \
     > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump.sha256"
 done
-run_backup STUB_VOLUME=all-fail BACKUP_MAX_COUNT=1 BACKUP_MAX_AGE_DAYS=0 BACKUP_MAX_SIZE_GB=0
-expect_exit "a kept dump with no volume archive is exit 3" "3"
+run_backup STUB_FAULT_JQ=--argjson BACKUP_MAX_COUNT=1 BACKUP_MAX_AGE_DAYS=0 BACKUP_MAX_SIZE_GB=0
+expect_exit "a kept dump the manifest cannot record is exit 3" "3"
 
 check_eq "the dump of the partial run is kept" "1" \
   "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2*.dump')"
+check_eq "the checksum of the partial run is kept" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2*.dump.sha256')"
 check_eq "every superseded set was pruned" "0" \
   "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2020010*.dump')"
 check_eq "only the newest set is left" "1" \
   "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
-
-PARTIAL_MANIFEST="${RUN_ROOT}/backups/manifest.json"
-check_eq "the manifest exists and holds the run" "1" "$(entry_count "$PARTIAL_MANIFEST")"
-check_eq "the entry is marked as a volume failure" "failed" \
-  "$(entry_field "$PARTIAL_MANIFEST" 0 '.volume_status')"
-check_eq "the dump is still described in full" "yes" \
-  "$(grep_yes "$PARTIAL_MANIFEST" 'db/cmsdb-')"
+check_eq "the manifest is never created for a run that could not record itself" "0" \
+  "$(count_matching "${RUN_ROOT}/backups" 'manifest.json')"
 check_eq "the reason is named in the run log" "yes" \
-  "$(grep_yes "$RUN_LOG" 'Backup partial')"
+  "$(grep_yes "$RUN_LOG" 'manifest unrecorded')"
 
 # ---------------------------------------------------------------------------
 # 2. A failed dump is still exit 1, and records nothing
@@ -71,8 +71,7 @@ check_eq "no manifest is written" "0" \
   "$(count_matching "${RUN_ROOT}/backups" 'manifest.json')"
 check_eq "no dump is kept" "0" \
   "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
-check_eq "the archive step is never reached" "0" \
-  "$(count_lines "$STREAM_LOG")"
+check_eq "no helper container was launched" "0" "$(count_lines "$STREAM_LOG")"
 check_eq "the run names the dump failure" "yes" \
   "$(grep_yes "$RUN_LOG" 'pg_dump as cms_backup failed')"
 
@@ -92,75 +91,53 @@ run_backup_on "$QUIET_PATH"
 expect_exit "a complete run needs no python3" "0"
 
 new_run_root quiet
-run_backup_on "$QUIET_PATH" STUB_VOLUME=all-fail
-expect_exit "a partial run needs no python3" "3"
-READER_ON_MARKED="$(drill_reader "${RUN_ROOT}/backups/manifest.json")"
+run_cleanup_on "$QUIET_PATH"
+expect_exit "a cleanup-only run needs no python3" "0"
 
 new_run_root quiet
 run_backup_on "$QUIET_PATH"
 expect_exit "a later complete run needs no python3 either" "0"
 
 QUIET_MANIFEST="${RUN_ROOT}/backups/manifest.json"
-check_eq "each run appended an entry instead of replacing the file" "3" \
+check_eq "each run appended an entry instead of replacing the file" "2" \
   "$(entry_count "$QUIET_MANIFEST")"
 check_eq "the file is an array of entries" "array" \
   "$(jq -r 'type' "$QUIET_MANIFEST")"
 
 FIRST_TS="$(entry_field "$QUIET_MANIFEST" 0 '.ts')"
-check_eq "a complete entry keeps the shape readers already expect" "false" \
-  "$(entry_field "$QUIET_MANIFEST" 0 'has("volume_status")')"
-check_eq "a complete entry names the archive relative to the root" \
-  "volumes/cms-data-${FIRST_TS}.tar.gz" "$(entry_field "$QUIET_MANIFEST" 0 '.vol_tar')"
-check_eq "a complete entry carries the archive checksum" "64" \
-  "$(printf '%s' "$(entry_field "$QUIET_MANIFEST" 0 '.vol_sha256')" | wc -c | tr -d ' ')"
-
-# The entry names one archive and that archive has to hold every volume. The manifest
-# is the record of what a restore can get back, so an entry that pointed at an archive
-# holding only cms-data would be a true statement about a false one — submissions and
-# ranking are mounted under the CMS data root and a tar of that root alone walks past
-# both of them.
-RECORDED_ARCHIVE="${RUN_ROOT}/backups/$(entry_field "$QUIET_MANIFEST" 0 '.vol_tar')"
-for archived_prefix in cms-data cms-submissions cms-ranking; do
-  check_eq "the archive the manifest names holds ${archived_prefix}'s files" "yes" \
-    "$( { tar tzf "$RECORDED_ARCHIVE" | grep -q "^${archived_prefix}/" && printf yes || printf no; } )"
-done
-check_eq "a complete entry keeps vol_bytes a number" "true" \
-  "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.vol_bytes | type == "number"')"
-
-MARKED_TS="$(entry_field "$QUIET_MANIFEST" 1 '.ts')"
-check_eq "a partial entry is marked" "failed" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.volume_status')"
-check_eq "a partial entry reports no archive" "null" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.vol_tar')"
-check_eq "a partial entry reports no checksum" "null" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.vol_sha256')"
-check_eq "a partial entry zeroes the volume size" "0" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.sizes.vol_bytes')"
-check_eq "a partial entry totals to the dump alone" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.sizes.db_bytes')" \
-  "$(entry_field "$QUIET_MANIFEST" 1 '.sizes.total_bytes')"
-check_eq "a partial entry still describes the dump it kept" \
-  "db/cmsdb-${MARKED_TS}.dump" "$(entry_field "$QUIET_MANIFEST" 1 '.db_dump')"
-check_eq "the newest complete entry is unmarked too" "false" \
-  "$(entry_field "$QUIET_MANIFEST" 2 'has("volume_status")')"
-
-# The drill is the reader that exists in this repository, and it has to work on whatever
-# the writer left behind — including a newest entry that is marked.
-check_eq "the drill reader reads a marked newest entry" \
-  "$(printf '%s\t%s\t%s\t%s' "$MARKED_TS" \
-     "$(entry_field "$QUIET_MANIFEST" 1 '.sizes.db_bytes')" "0" \
-     "$(entry_field "$QUIET_MANIFEST" 1 '.pg_version')")" \
-  "$READER_ON_MARKED"
-LAST_TS="$(entry_field "$QUIET_MANIFEST" 2 '.ts')"
-check_eq "the drill reader reads the newest entry" \
-  "$(printf '%s\t%s\t%s\t%s' "$LAST_TS" \
-     "$(entry_field "$QUIET_MANIFEST" 2 '.sizes.db_bytes')" \
-     "$(entry_field "$QUIET_MANIFEST" 2 '.sizes.vol_bytes')" \
-     "$(entry_field "$QUIET_MANIFEST" 2 '.pg_version')")" \
-  "$(drill_reader "$QUIET_MANIFEST")"
+check_eq "the entry names the run it recorded" "db/cmsdb-${FIRST_TS}.dump" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.db_dump')"
+check_eq "the entry carries the dump checksum" "64" \
+  "$(printf '%s' "$(entry_field "$QUIET_MANIFEST" 0 '.db_sha256')" | wc -c | tr -d ' ')"
+check_eq "db_bytes stays a number" "true" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.db_bytes | type == "number"')"
+check_eq "total_bytes equals the dump, because the dump is all there is" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.db_bytes')" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.total_bytes')"
 
 # ---------------------------------------------------------------------------
-# 4. A retired set is marked in the manifest, and its entry is kept
+# 4. The entry shape, asserted whole
+# ---------------------------------------------------------------------------
+# A key list rather than a per-field test, so a key nobody asked for fails here. A run that
+# archives no volume has no archive to point at, no archive to checksum and no partial
+# volume status to record, and every one of those keys would be a field describing
+# something no reader could ever find on disk.
+printf '\n== the entry carries exactly the database-only fields ==\n'
+check_eq "a complete entry has no key beyond the database-only set" \
+  "db_dump,db_sha256,kind,pg_version,sizes,tables,ts" \
+  "$(entry_field "$QUIET_MANIFEST" 0 'keys | join(",")')"
+check_eq "the sizes object counts the dump alone" "db_bytes,total_bytes" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.sizes | keys | join(",")')"
+check_eq "no stale volume key is left on the newest entry either" \
+  "db_dump,db_sha256,kind,pg_version,sizes,tables,ts" \
+  "$(entry_field "$QUIET_MANIFEST" 1 'keys | join(",")')"
+
+LAST_TS="$(entry_field "$QUIET_MANIFEST" 1 '.ts')"
+check_eq "the newest entry still describes the dump it names" \
+  "db/cmsdb-${LAST_TS}.dump" "$(entry_field "$QUIET_MANIFEST" 1 '.db_dump')"
+
+# ---------------------------------------------------------------------------
+# 5. A retired set is marked in the manifest, and its entry is kept
 # ---------------------------------------------------------------------------
 # Rotation deletes the files, but the entry describing them outlives them: a reader cannot
 # tell a set the operator still holds from one whose files are gone, and an entry with no
@@ -172,27 +149,23 @@ printf '\n== rotation marks each entry it retired, and keeps the entry ==\n'
 new_run_root pruned-mark
 PRUNED_MANIFEST="${RUN_ROOT}/backups/manifest.json"
 
-# Two complete sets, each with an entry already on file, so the run rotates entries that
-# predate it rather than marking the one it is about to write itself.
+# Two sets, each with an entry already on file, so the run rotates entries that predate it
+# rather than marking the one it is about to write itself.
 for old_ts in 20200101-000000 20200102-000000; do
   printf 'superseded dump\n' > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump"
   printf '%s  cmsdb-%s.dump\n' \
     "0000000000000000000000000000000000000000000000000000000000000000" "$old_ts" \
     > "${RUN_ROOT}/backups/db/cmsdb-${old_ts}.dump.sha256"
-  printf 'superseded archive\n' > "${RUN_ROOT}/backups/volumes/cms-data-${old_ts}.tar.gz"
-  printf '%s  cms-data-%s.tar.gz\n' \
-    "0000000000000000000000000000000000000000000000000000000000000000" "$old_ts" \
-    > "${RUN_ROOT}/backups/volumes/cms-data-${old_ts}.tar.gz.sha256"
 done
 jq -n --arg first 20200101-000000 --arg second 20200102-000000 '
   def complete($ts):
     {ts: $ts,
      db_dump: ("db/cmsdb-" + $ts + ".dump"),
      db_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
-     vol_tar: ("volumes/cms-data-" + $ts + ".tar.gz"),
-     vol_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
      pg_version: "15.4",
-     sizes: {db_bytes: 18, vol_bytes: 21, total_bytes: 39}};
+     sizes: {db_bytes: 18, total_bytes: 18},
+     kind: "full",
+     tables: []};
   [complete($first), complete($second)]
 ' > "$PRUNED_MANIFEST"
 
@@ -204,8 +177,8 @@ expect_exit "a run that rotates its superseded sets is still a complete run" "0"
 
 check_eq "rotation removed the oldest dump" "0" \
   "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-20200101-000000.dump')"
-check_eq "rotation removed the oldest archive" "0" \
-  "$(count_matching "${RUN_ROOT}/backups/volumes" 'cms-data-20200101-000000.tar.gz')"
+check_eq "rotation removed the oldest checksum" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-20200101-000000.dump.sha256')"
 check_eq "the set the run kept is the only one left on disk" "1" \
   "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2*.dump')"
 
@@ -224,6 +197,9 @@ check_eq "the moment is named in UTC" "true" \
      '.pruned_at | tostring | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")')"
 check_eq "the newest entry, whose files are still on disk, is unmarked" "false" \
   "$(entry_field "$PRUNED_MANIFEST" 2 'has("pruned")')"
+check_eq "a mark adds no key to the entry it marks" \
+  "db_dump,db_sha256,kind,pg_version,pruned,pruned_at,sizes,tables,ts" \
+  "$(entry_field "$PRUNED_MANIFEST" 0 'keys | join(",")')"
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$PASS" "$FAIL"

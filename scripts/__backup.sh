@@ -9,9 +9,10 @@ fi
 # CMS Backup Script
 # - Logical pg_dump via docker exec (PGPASSWORD in env, not argv)
 # - Full database, or a --tables selection turned into one -t per table
-# - Volume tar via helper container (every volume mounted under the CMS data
-#   root, each :ro, all of them carried in one archive)
-# - manifest.json, rotation across BOTH dirs, disk guard, Discord webhook
+# - Database-only. No volume is archived: every submitted file and testcase is
+#   stored in the database keyed by its SHA1 digest (src/cms/db/fsobject.py),
+#   so a volume holds a local copy of what the dump already carries
+# - manifest.json, rotation, disk guard, Discord webhook
 # - --root <path> retargets the archive set; --stdout streams the dump to the
 #   caller and archives nothing
 ###############################################################################
@@ -50,7 +51,6 @@ done
 # ---------------------------------------------------------------------------
 BACKUP_ROOT="${BACKUP_DIR:-${REPO_ROOT}/backups}"
 BACKUP_DB_DIR="${BACKUP_ROOT}/db"
-BACKUP_VOL_DIR="${BACKUP_ROOT}/volumes"
 MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
 
 # Rotation envs — support both new and legacy names
@@ -70,47 +70,17 @@ POSTGRES_BACKUP_USER_VAL="cms_backup"
 POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 
 CONTAINER_DB="cms-database"
-# The name a whole archive set keys on — list_backup_timestamps, delete_backup_set,
-# the size total and the manifest's vol_tar all name this one archive per run.
-VOLUME_DATA="cms-data"
-
-# Every named volume mounted UNDER the CMS data root, as <prefix>=<docker name>.
-# WHY a prefix beside each name: one archive carries all of them, so the archive
-# itself has to say whose files each member belongs to and a restore has to be able
-# to read that back. WITHOUT this table the two volumes mounted underneath
-# /var/local/lib/cms were never archived at all: a tar of cms-data alone walks past
-# them and finds empty mount points, so contest submissions and ranking data reached
-# no backup set and no restore could put them back.
-# WHY the prefix is not the compose key: docker-compose.yml:824-825 declares the
-# volume as `cms-submissions` with `name: cms-submissions-contest`, so a -v naming
-# the compose key mounts a fresh empty volume docker creates on the spot — the same
-# silent hole, opened through a different name.
-# WHY these three and not others: these are the volumes that live inside the CMS
-# data root. cms-database-data is held by the pg_dump, the cache and log volumes are
-# either reconstructible or already on the host filesystem, and the worker tmp volume
-# is shard-indexed and needs discovery rather than a fixed list.
-BACKUP_VOLUMES=(
-  "cms-data=cms-data"
-  "cms-submissions=cms-submissions-contest"
-  "cms-ranking=cms-ranking-data"
-)
-
-# The two halves of one table entry. A single table with a separator is what keeps
-# the prefix and the docker name from drifting apart into two parallel lists.
-volume_prefix() { printf '%s' "${1%%=*}"; }
-volume_docker_name() { printf '%s' "${1#*=}"; }
 
 # Exit contract — a caller must be able to separate "the database is safe" from
 # "nothing was archived" without reading the log:
-#   0 = the DB dump and the volume archive are both on disk and readable. A run whose rotation
-#       was skipped still reports 0: the run was recorded, so what it costs is retention.
+#   0 = the DB dump is on disk, its checksum is written, and the manifest records this run. A
+#       run whose rotation was skipped still reports 0: the run was recorded, so what it costs is
+#       retention.
 #   1 = no usable backup (the DB step failed, so no dump was kept)
 #   2 = the disk guard stopped the run — free space at the backup root was unreadable or under the
 #       floor, so nothing was written and there is no dump from this run to judge
-#   3 = partial backup — the dump was kept, but the run is not whole: the volume archive
-#       did not yield one a restore could put back (it failed, or it carried no file for
-#       at least one of the volumes it claims to hold), or the manifest does not record
-#       this run.
+#   3 = partial backup — the dump was kept, but the manifest does not record this run, so a caller
+#       that saw 0 would retire a backup it has no way to check
 # --cleanup-only writes no backup and runs no disk guard, so it only ever returns 0 (the rotation
 # reclaimed disk) or 1 (the rotation itself failed) and never 2 or 3.
 readonly EXIT_PARTIAL_BACKUP=3
@@ -253,94 +223,14 @@ get_pg_version() {
 }
 
 # ---------------------------------------------------------------------------
-# stream_volume_tar <image> — gzipped tar of every mounted CMS volume on stdout
-# ---------------------------------------------------------------------------
-# WHY stdout instead of `-v BACKUP_VOL_DIR:/backup`: the docker CLI only sends the
-# mount request to the host daemon, which resolves a bind-mount source on the
-# HOST, so the archive lands in the host's tree and never in this container's
-# filesystem — the file then does not exist here and every later step that reads
-# it is skipped. A named volume is one the daemon resolves on its own side, so the
-# mount is identical from host or container and only the output channel has to move.
-# The caller redirects this function's stdout to the archive and reads its exit
-# status, so no pipeline is involved: a failing docker cannot be masked by a
-# succeeding writer, with or without pipefail.
-# WHY one helper run and one archive: each volume is mounted at its own path under
-# a single parent, so the tar records every volume's files under that path as a
-# prefix and a restore can put each back where the stack mounts it. One file per
-# volume would buy per-volume status that no reader of this manifest has, and would
-# put new names into every filename list, rotation path, size total and manifest
-# field — all of which must keep working for the single-archive sets already on disk.
-stream_volume_tar() {
-  local image="$1" entry
-  local -a mounts=()
-  local -a prefixes=()
-  for entry in "${BACKUP_VOLUMES[@]}"; do
-    mounts+=(-v "$(volume_docker_name "$entry"):/volume/$(volume_prefix "$entry"):ro")
-    prefixes+=("$(volume_prefix "$entry")")
-  done
-  docker run --rm "${mounts[@]}" "$image" tar czf - -C /volume "${prefixes[@]}"
-}
-
-# ---------------------------------------------------------------------------
-# volume_archive_has_files <archive> — true when the archive carries, under EVERY
-# volume prefix it claims, at least one member that is not a directory, i.e. a
-# restore would put something back from each of them.
-# ---------------------------------------------------------------------------
-# WHY the mode column and not the member name: both tars a backup run can meet — BusyBox
-# on the monitor image, GNU on the host — mark a directory with a leading "d" in the
-# permissions field, while only one of them appends a trailing slash to a directory in a
-# listing. A name test therefore passes for the wrong reason on one of them, and a check
-# that cannot fail is not guarding anything.
-# WHY the first file no longer ends the scan: a run whose cms-data archived its files
-# while cms-submissions came back empty has lost a volume, and a test that stopped at
-# the first member found would call that run complete. Whether a prefix is absent
-# cannot be known before the archive ends, so one pass over every member is what the
-# answer costs — and that is what makes the lost volume nameable at all.
-# WHY the pipeline's own status is dropped: a tar that could not read the archive at
-# all prints no listing — which fails the same way a file-less archive does, and an
-# unreadable archive is no use to a restore either.
-volume_archive_has_files() {
-  local archive="$1" entry prefix listing
-  listing="$(tar -tzvf "$archive" 2>/dev/null | awk '$1 !~ /^d/ { print $NF }')" || true
-  for entry in "${BACKUP_VOLUMES[@]}"; do
-    prefix="$(volume_prefix "$entry")"
-    # WHY the member is matched whole and not as a substring: a bare substring test is
-    # satisfied by cms-data-legacy/x when the question is about cms-data, so a volume
-    # would be declared backed up on the strength of another volume's files.
-    if ! printf '%s\n' "$listing" | grep -q -e "^${prefix}/"; then
-      return 1
-    fi
-  done
-  return 0
-}
-
-# volume_archive_missing_files <archive> — the volume prefixes the archive holds no
-# file under, comma-separated, or nothing when it holds all of them.
-# WHY this beside the boolean above: the run has to say WHICH volume it lost. An
-# operator handed "volume tar holds no files" for an archive that in fact holds two
-# volumes' files has been told nothing they can act on.
-volume_archive_missing_files() {
-  local archive="$1" entry prefix listing missing=""
-  listing="$(tar -tzvf "$archive" 2>/dev/null | awk '$1 !~ /^d/ { print $NF }')" || true
-  for entry in "${BACKUP_VOLUMES[@]}"; do
-    prefix="$(volume_prefix "$entry")"
-    if ! printf '%s\n' "$listing" | grep -q -e "^${prefix}/"; then
-      missing="${missing:+${missing}, }${prefix}"
-    fi
-  done
-  printf '%s' "$missing"
-}
-
-# ---------------------------------------------------------------------------
-# Rotation — operates on timestamp sets across BOTH dirs, always keeps ≥1 set
+# Rotation — one timestamp set per run, always keeps ≥1 set
 # ---------------------------------------------------------------------------
 list_backup_timestamps() {
   # Print sorted unique timestamps (oldest first) derived from filenames
-  # cmsdb-YYYYmmdd-HHMMSS.dump  and cms-data-YYYYmmdd-HHMMSS.tar.gz
+  # cmsdb-YYYYmmdd-HHMMSS.dump
   local t
   {
     ls -1 "${BACKUP_DB_DIR}"/cmsdb-*.dump 2>/dev/null | xargs -r -n1 basename | sed -n 's/^cmsdb-\(.*\)\.dump$/\1/p'
-    ls -1 "${BACKUP_VOL_DIR}"/cms-data-*.tar.gz 2>/dev/null | xargs -r -n1 basename | sed -n 's/^cms-data-\(.*\)\.tar\.gz$/\1/p'
   } | sort -u
 }
 
@@ -348,7 +238,7 @@ delete_backup_set() {
   local ts="$1"
   local f
   local removed=0
-  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz.sha256"; do
+  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256"; do
     if [[ -f "$f" ]]; then
       # WHY the status is read instead of left to errexit: the caller tests the rotation in a
       # condition, and errexit is ignored inside a function called that way — so an unchecked
@@ -405,8 +295,6 @@ apply_rotation() {
       local ref_file=""
       if [[ -f "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" ]]; then
         ref_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
-      elif [[ -f "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" ]]; then
-        ref_file="${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz"
       else
         continue
       fi
@@ -428,9 +316,9 @@ apply_rotation() {
   if [[ "$BACKUP_MAX_SIZE_GB" =~ ^[0-9]+$ ]] && (( BACKUP_MAX_SIZE_GB > 0 )); then
     local max_bytes=$(( BACKUP_MAX_SIZE_GB * 1024 * 1024 * 1024 ))
     local total_bytes
-    total_bytes="$(du -sb "${BACKUP_DB_DIR}" "${BACKUP_VOL_DIR}" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+    total_bytes="$(du -sb "${BACKUP_DB_DIR}" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
     if [[ -z "$total_bytes" || "$total_bytes" == "0" ]]; then
-      total_bytes="$(du -cb "${BACKUP_DB_DIR}"/* "${BACKUP_VOL_DIR}"/* 2>/dev/null | tail -1 | awk '{print $1}')"
+      total_bytes="$(du -cb "${BACKUP_DB_DIR}"/* 2>/dev/null | tail -1 | awk '{print $1}')"
       total_bytes="${total_bytes:-0}"
     fi
     mapfile -t timestamps < <(list_backup_timestamps)
@@ -440,7 +328,7 @@ apply_rotation() {
       local oldest="${timestamps[0]}"
       # Calculate size of oldest set
       local set_bytes=0
-      for f in "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump" "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz.sha256"; do
+      for f in "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump" "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump.sha256"; do
         if [[ -f "$f" ]]; then
           local sz
           sz="$(file_size_bytes "$f")"
@@ -474,40 +362,28 @@ apply_rotation() {
 # reader written before them keeps working because an extra key is not a rename.
 # ---------------------------------------------------------------------------
 manifest_entry_json() {
-  local ts="$1" db_sha="$2" vol_tar="$3" vol_sha="$4" vol_status="$5"
-  local pg_ver="$6" db_bytes="$7" vol_bytes="$8" total_bytes="$9"
-  local kind="${10:-full}" tables_csv="${11:-}"
-  # WHY an empty vol_tar/vol_sha256 becomes null rather than "": a reader has to be
-  # able to tell "no volume archive was produced" from "an archive exists at this
-  # path", and a size stays a number so size arithmetic never special-cases the run.
-  # WHY volume_status is added only when set: a complete run keeps the entry shape it
-  # has always had, so every reader that exists today is unaffected by a partial run.
+  local ts="$1" db_sha="$2"
+  local pg_ver="$3" db_bytes="$4" total_bytes="$5"
+  local kind="${6:-full}" tables_csv="${7:-}"
   # WHY tables is an array and not a joined string: a reader asks whether a table is
   # in the set, and split-on-comma in every reader is a second place to get it wrong.
   jq -n \
     --arg ts "$ts" \
     --arg db_sha256 "$db_sha" \
-    --arg vol_tar "$vol_tar" \
-    --arg vol_sha256 "$vol_sha" \
-    --arg vol_status "$vol_status" \
     --arg pg_version "$pg_ver" \
     --arg kind "$kind" \
     --arg tables_csv "$tables_csv" \
     --argjson db_bytes "$db_bytes" \
-    --argjson vol_bytes "$vol_bytes" \
     --argjson total_bytes "$total_bytes" \
     '{
        ts: $ts,
        db_dump: ("db/cmsdb-" + $ts + ".dump"),
        db_sha256: $db_sha256,
-       vol_tar: (if $vol_tar == "" then null else $vol_tar end),
-       vol_sha256: (if $vol_sha256 == "" then null else $vol_sha256 end),
        pg_version: $pg_version,
-       sizes: {db_bytes: $db_bytes, vol_bytes: $vol_bytes, total_bytes: $total_bytes},
+       sizes: {db_bytes: $db_bytes, total_bytes: $total_bytes},
        kind: $kind,
        tables: ($tables_csv | split(",") | map(select(length > 0)))
-     }
-     + (if $vol_status == "" then {} else {volume_status: $vol_status} end)'
+     }'
 }
 
 manifest_merge() {
@@ -535,9 +411,8 @@ manifest_seed() {
   mv -- "$seeded" "$manifest"
 }
 
-# manifest_append <manifest> <ts> <db_sha256> <vol_tar> <vol_sha256>
-#               <vol_status> <pg_version> <db_bytes> <vol_bytes> <total_bytes>
-#               <kind> <tables_csv>
+# manifest_append <manifest> <ts> <db_sha256> <pg_version> <db_bytes>
+#               <total_bytes> <kind> <tables_csv>
 manifest_append() {
   local manifest="$1"
   # WHY the ts is read before the shift: every alert below names the run it belongs to, and
@@ -556,10 +431,10 @@ manifest_append() {
       return 1
     fi
     log_warn "jq not found — manifest update is approximate"
-    send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — ts \`${ts}\`"
-    # WHY partial and not success: exit 0 is the contract's "full backup", and a run nobody can read
-    # back is not one. The dump and the volume archive exist, but nothing records them, so a caller
-    # that saw 0 would retire a backup it cannot verify.
+    send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — backups are database-only — ts \`${ts}\`"
+    # WHY partial and not success: exit 0 is the contract's "complete backup", and a run nobody can read
+    # back is not one. The dump exists, but nothing records it, so a caller that saw 0 would retire a
+    # backup it cannot verify.
     return "$EXIT_PARTIAL_BACKUP"
   fi
 
@@ -704,11 +579,11 @@ run_backup() {
   fi
 
   # After the guard, so a run that cannot start leaves no directories behind.
-  mkdir -p "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
+  mkdir -p "$BACKUP_DB_DIR"
   # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
   # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
   # and locks the host operator out of its own backups. Ownership is that repair's alone.
-  chmod g+rwx,g+s "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
+  chmod g+rwx,g+s "$BACKUP_DB_DIR" 2>/dev/null || true
   chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
@@ -733,8 +608,6 @@ run_backup() {
   chmod 600 "$pgdump_log" 2>/dev/null || true
   local db_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
   local db_sha_file="${db_file}.sha256"
-  local vol_file="${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz"
-  local vol_sha_file="${vol_file}.sha256"
 
   # WHY both files are removed here: the dump's container path is only needed until it has been
   # copied out and the stderr log only until its text has reached the failure alert, so neither has
@@ -796,121 +669,40 @@ run_backup() {
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 
-  # 2) Volume backup — archive streamed from the helper container (ro mount).
-  # WHY no early return here: the dump is already on disk, so a lost volume leaves a
-  # usable database backup. Returning at this point would report the run as a total
-  # failure and record nothing, which is indistinguishable from a failed dump. The
-  # reason is captured instead, and the manifest, the rotation and the notification
-  # all run before the run is reported as partial.
-  log_info "Archiving mounted CMS volumes ($VOLUME_DATA, cms-submissions-contest, cms-ranking-data) ..."
-  local vol_image="alpine:3.22"
-  # Pull quietly if needed (ignore failure — try busybox fallback)
-  docker pull "$vol_image" >/dev/null 2>&1 || true
-  local vol_fail_reason=""
-  if ! stream_volume_tar "$vol_image" > "$vol_file"; then
-    # Fallback to busybox
-    if ! stream_volume_tar busybox > "$vol_file"; then
-      rm -f "$vol_file"
-      vol_fail_reason="volume tar failed"
-    fi
-  fi
-
-  if [[ -z "$vol_fail_reason" && ! -f "$vol_file" ]]; then
-    vol_fail_reason="volume tar missing"
-  fi
-
-  # WHY -s and not just -f: a stream that died before the first tar block leaves a
-  # file that exists and is 0 bytes, which -f accepts and the manifest then records
-  # as a complete archive.
-  if [[ -z "$vol_fail_reason" && ! -s "$vol_file" ]]; then
-    rm -f "$vol_file"
-    vol_fail_reason="volume tar empty"
-  fi
-
-  # WHY a listing here and not a byte floor: -s is answered by the gzip envelope, and an
-  # empty volume still tars to a non-zero gzip header, so an archive holding nothing at
-  # all passes the test above and the manifest then records a complete one. A byte floor
-  # would also encode a policy about how much counts as backed up that no reader of this
-  # file owns, and it would still pass an archive that is large and holds none of the
-  # volume's files. The question a restore actually asks is whether the archive carries
-  # any member that is not a directory, and the listing answers exactly that.
-  # WHY the same vol_fail_reason channel as a stream that died: the run is in the same
-  # state either way — a kept dump and no volume — so it takes the same verdict, the
-  # same partial alert and the same status rather than a second shape to reason about.
-  if [[ -z "$vol_fail_reason" ]] && ! volume_archive_has_files "$vol_file"; then
-    # WHY the missing volumes are read before the archive is removed, and named in the
-    # reason: an archive that holds cms-data's files and none of cms-submissions' is not
-    # a failed archive, it is a partial run, and "volume tar holds no files" sent an
-    # operator looking for an archive that was never there. The reason travels into the
-    # log line and the amber alert alike.
-    local vol_missing
-    vol_missing="$(volume_archive_missing_files "$vol_file")"
-    rm -f "$vol_file"
-    vol_fail_reason="volume tar holds no files for: ${vol_missing}"
-  fi
-
-  # WHY the path is empty and the byte count zero when the archive is missing: a
-  # reader has to be able to tell "no volume archive was produced" from "an archive
-  # exists at this path", and a size stays a number so size arithmetic on an entry
-  # never has to special-case this run.
-  local vol_sha=""
-  local vol_bytes=0
-  local vol_status=""
-  local vol_tar_rel="volumes/cms-data-${ts}.tar.gz"
-  if [[ -n "$vol_fail_reason" ]]; then
-    log_warn "Volume archive not produced: $vol_fail_reason"
-    vol_status="failed"
-    vol_tar_rel=""
-  else
-    chmod 600 "$vol_file" 2>/dev/null || true
-    sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
-    chmod 600 "$vol_sha_file" 2>/dev/null || true
-    vol_sha="$(awk '{print $1}' "$vol_sha_file")"
-    vol_bytes="$(file_size_bytes "$vol_file")"
-  fi
-
+  # 2) manifest.json append
+  # WHY no volume step runs at all: the database holds the authoritative copy of every
+  # submitted file and testcase — src/cms/db/fsobject.py stores the content in fsobjects
+  # keyed by its SHA1 digest, and the volume holds only the local copy gated behind
+  # submit_local_copy / tests_local_copy in src/cms/conf.py. A backup set therefore
+  # carries the dump and nothing else, and the trade — a restore brings back no
+  # on-disk submission history — is the one the operator accepted.
   local pg_ver
   pg_ver="$(get_pg_version)"
-  local total_bytes=$(( db_bytes + vol_bytes ))
+  local total_bytes="$db_bytes"
 
-  # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
   # WHY the status is captured instead of left to errexit: a manifest that cannot be written
-  # costs this run its record, not its dump and its archive, and errexit would end the run on
-  # the spot — before the rotation, before the summary, and before the run says one word about
+  # costs this run its record, not its dump, and errexit would end the run on the spot —
+  # before the rotation, before the summary, and before the run says one word about
   # itself. Judged with the rest of the run's verdict below, it still reaches an exit code.
   local manifest_status=0
-  manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$vol_tar_rel" "$vol_sha" \
-    "$vol_status" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" \
-    "$BACKUP_KIND" "$SELECTED_TABLES_CSV" || manifest_status=$?
+  manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$pg_ver" "$db_bytes" \
+    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" || manifest_status=$?
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
-  # 4) Rotation
-  # WHY degraded and not fatal: the dump and the volume archive are already written and recorded by
-  # the time rotation runs, so a rotation that aborts costs retention rather than this run's backup.
-  # The flag is what makes the difference visible — it routes the run to the degraded verdict below
-  # instead of the success alert — and the status stays 0 because the contract's 0 covers the DB and
-  # the volume, both of which are present and readable.
+  # 3) Rotation
+  # WHY degraded and not fatal: the dump is already written and recorded by the time rotation
+  # runs, so a rotation that aborts costs retention rather than this run's backup. The flag is
+  # what makes the difference visible — it routes the run to the degraded verdict below instead
+  # of the success alert — and the status stays 0 because the contract's 0 covers the dump and
+  # its manifest entry, both of which are present.
   if ! apply_rotation; then
     log_warn "Rotation encountered an error (non-fatal)"
     send_degraded "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`"
   fi
 
-  local db_mb vol_mb
+  local db_mb
   db_mb="$(awk "BEGIN{printf \"%.2f\", $db_bytes/1048576}")"
-  vol_mb="$(awk "BEGIN{printf \"%.2f\", $vol_bytes/1048576}")"
-  if [[ -n "$vol_status" ]]; then
-    log_warn "Backup partial: db=${db_mb}MB vol=FAILED (${vol_fail_reason}) ts=${ts}"
-    # WHY guarded and not sent: rotation has already announced its own amber when it aborted, so
-    # an unconditional send here gives one run two verdicts and leaves the reader choosing between
-    # them. The flag is the run's own record that it already spoke, and the volume failure stays
-    # in the log line above and in the status returned below. send_degraded, not send_discord, so
-    # the alert and the flag cannot drift apart — the same reason the rotation path uses it.
-    if (( is_degraded == 0 )); then
-      send_degraded "⚠️ **Backup Partial** — ts \`${ts}\` — DB ${db_mb}MB OK / Vol FAILED (${vol_fail_reason}) — \`${pg_ver}\`"
-    fi
-    return "$EXIT_PARTIAL_BACKUP"
-  fi
   # WHY the manifest status is judged here and not left to the alert the function already sent:
   # a run nobody can read back is one a caller cannot verify, and a caller that read 0 would
   # retire a backup it has no way to check. No second alert is sent — the function named the
@@ -918,7 +710,7 @@ run_backup() {
   # failure scores 3 and never 1: 1 is reserved for a run that kept no dump, and the dump is
   # on disk by the time this is reached.
   if (( manifest_status != 0 )); then
-    log_warn "Backup degraded: db=${db_mb}MB vol=${vol_mb}MB manifest unrecorded ts=${ts}"
+    log_warn "Backup degraded: db=${db_mb}MB manifest unrecorded ts=${ts}"
     return "$EXIT_PARTIAL_BACKUP"
   fi
   # WHY the success alert is withheld once a run has degraded: the amber alert already went
@@ -927,11 +719,11 @@ run_backup() {
   # alert stands as this run's verdict. The status is unchanged, so a caller that reads the
   # exit code sees exactly what it saw before.
   if (( is_degraded == 1 )); then
-    log_warn "Backup degraded: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
+    log_warn "Backup degraded: db=${db_mb}MB ts=${ts}"
     return 0
   fi
-  log_info "Backup complete: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
-  send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB / Vol ${vol_mb}MB — \`${pg_ver}\`" 65280 "false"
+  log_info "Backup complete: db=${db_mb}MB ts=${ts}"
+  send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB (database-only) — \`${pg_ver}\`" 65280 "false"
 }
 
 # ---------------------------------------------------------------------------
@@ -983,7 +775,7 @@ run_stdout_dump() {
 # pg_dump, and an unrecognised flag still runs the backup as it always has.
 # ---------------------------------------------------------------------------
 BACKUP_MODE="full"
-BACKUP_ROOT_OVERRIDE=""  # --root <path>: retargets db/, volumes/ and manifest.json
+BACKUP_ROOT_OVERRIDE=""  # --root <path>: retargets db/ and manifest.json
 BACKUP_STDOUT=0          # --stdout: stream the dump to the caller, archive nothing
 SELECTED_TABLES=()   # validated table names in the order pg_dump must dump them
 PG_SELECTION_ARGS=()  # one -t per selected table, plus -b for large objects
@@ -997,7 +789,7 @@ usage() {
   echo "Without --tables the whole database is dumped, exactly as before."
   echo "--large-objects adds pg_dump -b and is only meaningful together with --tables."
   echo "--tables accepts ^[a-z_]+$ names; the admin panel allowlists them first."
-  echo "--root <path> writes the archive set (db/, volumes/, manifest.json) under <path>"
+  echo "--root <path> writes the archive set (db/, manifest.json) under <path>"
   echo "  instead of BACKUP_DIR; also retargets --cleanup-only. Path is used as given."
   echo "--stdout streams the dump to stdout and archives nothing: no file, no manifest,"
   echo "  no rotation, no webhook. Log lines move to stderr so they cannot corrupt it."
@@ -1096,14 +888,13 @@ parse_args() {
 
 parse_args "$@"
 
-# --root retargets the whole archive set: db/, volumes/ and manifest.json are
-# derived, so all three follow the new root for run_backup and run_cleanup_only
-# alike. An empty override means the flag was absent (a bare --root with no path
-# dies in parse_args), so BACKUP_DIR keeps its historical meaning.
+# --root retargets the whole archive set: db/ and manifest.json are derived, so both
+# follow the new root for run_backup and run_cleanup_only alike. An empty override
+# means the flag was absent (a bare --root with no path dies in parse_args), so
+# BACKUP_DIR keeps its historical meaning.
 if [[ -n "$BACKUP_ROOT_OVERRIDE" ]]; then
   BACKUP_ROOT="$BACKUP_ROOT_OVERRIDE"
   BACKUP_DB_DIR="${BACKUP_ROOT}/db"
-  BACKUP_VOL_DIR="${BACKUP_ROOT}/volumes"
   MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
 fi
 

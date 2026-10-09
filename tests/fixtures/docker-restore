@@ -2,27 +2,19 @@
 # tests/fixtures/docker-restore — the docker a restore suite puts on the PATH.
 #
 # WHY a second fixture and not tests/fixtures/docker: that one answers a backup run by
-# writing an archive on stdout, which is the whole question a backup suite asks. A
-# restore asks the opposite question — does the helper put each volume's files at its
-# own mount point — and answering it needs the container's work to actually happen. So
-# this one executes the script __restore.sh hands the helper instead of pretending to,
-# which is what makes "the submissions volume got its own files back" a fact about the
-# shipped script rather than a fact about a recorded command line.
+# writing an archive on stdout, which is the whole question a backup suite asks. A restore
+# asks whether the dump came back, so this one runs the pg_restore/verification sequence
+# and answers the psql count queries — which is what makes "the database is back" a fact
+# about the shipped script rather than about a recorded command line.
 #
-# WHY the container paths are rewritten rather than mounted: the helper script has to be
-# run by something, and the two absolute paths it uses — /backup and /restore — are the
-# only two the rewrite has to touch. Every other token, argument order and quoting in it
-# is executed exactly as shipped, so a restore that extracted the wrong files, or to the
-# wrong place, or without stripping the volume prefix, fails here.
+# WHY there is no helper-container branch any more: a restore no longer unpacks anything.
+# The only `docker run` the script issues is the scratch postgres container, which is
+# started and never inspected.
 #
-# It never reaches a network and never reads a credential. Each named volume is a
-# directory under STUB_VOLUME_ROOT, which is what makes "put each volume back where it
-# belongs" checkable without a daemon.
+# It never reaches a network and never reads a credential.
 set -u
 
 printf '%s\n' "$*" >> "${STUB_LOG}"
-
-volume_host_dir() { printf '%s/%s' "${STUB_VOLUME_ROOT}" "$1"; }
 
 case "${1:-}" in
   ps)
@@ -41,10 +33,21 @@ case "${1:-}" in
     container=""
     command_name=""
     seen_container=0
-    for arg in "$@"; do
-      if (( seen_container )) && [[ -z "$command_name" ]]; then command_name="$arg"; continue; fi
-      if (( seen_container )); then break; fi
-      [[ "$arg" == "${STUB_CONTAINER:-cms-database}" || "$arg" == cms-database ]] && seen_container=1
+    # WHY the container is whatever follows the -e pairs rather than a fixed name: the
+    # scratch restore execs into cms-restore-scratch-db and the live one into cms-database,
+    # and a fixture that only knows the second name answers neither run's verification
+    # queries — it silently returns nothing, which reads as a restore that counted zero
+    # submissions rather than as a stub that was never asked.
+    while [[ $# -gt 0 ]]; do
+      if (( ! seen_container )); then
+        if [[ "$1" == "-e" ]]; then shift 2; continue; fi
+        container="$1"
+        seen_container=1
+        shift
+        continue
+      fi
+      if [[ -z "$command_name" ]]; then command_name="$1"; fi
+      break
     done
     case "$command_name" in
       pg_isready) exit 0 ;;
@@ -58,83 +61,11 @@ case "${1:-}" in
     ;;
   run)
     shift
-    # The scratch postgres container: started, never inspected.
+    # The scratch postgres container: started, never inspected. A restore issues no other
+    # `docker run`, so anything else here is a helper the script should not be launching.
     if [[ "$*" == *"-d postgres:15"* ]]; then exit 0; fi
-
-    script=""
-    want_volume=0
-    want_script=0
-    saw_script_owner=0
-    declare -a mounts=()
-    declare -a operands=()
-    for arg in "$@"; do
-      if (( want_volume )); then mounts+=("$arg"); want_volume=0; continue; fi
-      if (( want_script )); then script="$arg"; want_script=0; saw_script_owner=1; continue; fi
-      if (( saw_script_owner )); then operands+=("$arg"); continue; fi
-      case "$arg" in
-        -v) want_volume=1 ;;
-        -c) want_script=1 ;;
-      esac
-    done
-
-    [[ -n "$script" ]] || { printf 'stub: run without a helper script\n' >&2; exit 1; }
-
-    # STUB_FAIL_VOLUME names the docker volume whose helper is to fail, so a suite can
-    # put one volume's restore in the state the run has to survive.
-    # WHY one resolved mount per container path rather than one rewritten copy of the
-    # script per mount: a helper mounts the destination volume AND the archive
-    # directory, so a copy-per-mount would leave the second path unreplaced and the run
-    # would fail on a /backup it has no business knowing about.
-    declare -a targets=()
-    declare -a hosts=()
-    for spec in "${mounts[@]}"; do
-      source_part="${spec%%:*}"
-      remainder="${spec#*:}"
-      target="${remainder%%:*}"
-      if [[ "${source_part}" == /* ]]; then
-        host_dir="$source_part"
-      elif [[ "${STUB_FAIL_VOLUME:-}" == "$source_part" ]]; then
-        printf 'stub: helper cannot mount %s\n' "$source_part" >&2
-        exit 1
-      else
-        host_dir="$(volume_host_dir "$source_part")"
-        mkdir -p "$host_dir"
-      fi
-      targets+=("$target")
-      hosts+=("$host_dir")
-    done
-    [[ "${#targets[@]}" -gt 0 ]] || { printf 'stub: helper with no mount\n' >&2; exit 1; }
-
-    runnable="$script"
-    declare -a redirected=()
-    for operand in ${operands[@]+"${operands[@]}"}; do
-      replaced="$operand"
-      for index in "${!targets[@]}"; do
-        if [[ "$operand" == "${targets[${index}]}" ]]; then
-          replaced="${hosts[${index}]}"
-        elif [[ "$operand" == "${targets[${index}]}"/* ]]; then
-          replaced="${hosts[${index}]}${operand#"${targets[${index}]}"}"
-        fi
-      done
-      redirected+=("$replaced")
-    done
-    for index in "${!targets[@]}"; do
-      runnable="${runnable//${targets[${index}]}/${hosts[${index}]}}"
-    done
-
-    # WHY the operands are rewritten too and not only the script text: the helper takes
-    # its destination as an argument, so a rewrite that stopped at the script would run
-    # the shipped code against a literal /restore and fail on permissions while proving
-    # nothing about where the files land.
-
-    # WHY sh and not bash: the helper script __restore.sh ships is POSIX sh, and running
-    # it under a shell with extensions would let a script that only works on one of them
-    # pass here and fail in the alpine container the restore actually uses.
-    # WHY the operands are passed whole: sh reads the first one as $0 and the rest as
-    # $1.., which is how __restore.sh wrote the call, so the arguments the helper sees
-    # are the ones the shipped code handed it.
-    sh -c "$runnable" ${redirected[0]+"${redirected[@]}"}
-    exit $?
+    printf 'stub: unexpected helper container: %s\n' "$*" >&2
+    exit 1
     ;;
 esac
 exit 0

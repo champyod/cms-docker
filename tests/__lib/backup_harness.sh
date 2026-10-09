@@ -7,10 +7,9 @@
 # byte-identical file beside a stub .env, so the code under test is the shipped code and
 # every value it sees is one the suite invented.
 #
-# WHY docker is stubbed: the archive contract is which channel the bytes travel (stdout of
-# a helper container, not a host bind mount), and a stub records that argv verbatim. No
-# daemon, no network, no credentials — and the assertions read the recorded command line
-# instead of trusting a code reading.
+# WHY docker is stubbed: the contract is which commands a run issues and which files it leaves
+# behind, and a stub records that argv verbatim. No daemon, no network, no credentials — and the
+# assertions read the recorded command line instead of trusting a code reading.
 #
 # Sourced by the tests/test_backup_*.sh suites. Not a suite on its own.
 
@@ -68,18 +67,6 @@ HARNESS_REPO="${WORK}/repo"
 HARNESS_SCRIPT="${HARNESS_REPO}/scripts/__backup.sh"
 HARNESS_BIN="${WORK}/bin"
 HARNESS_QUIET_BIN="${WORK}/jq-only-bin"
-STUB_ARCHIVE="${WORK}/helper-archive.tar.gz"
-STUB_PAYLOAD_MEMBER="uploads/keep.txt"
-# One distinct member per volume, each filed under the prefix __backup.sh records that
-# volume's files under. WHY one member each and not one shared blob: a suite that
-# cannot tell cms-data's bytes from cms-submissions' cannot tell an archive holding
-# one volume from an archive holding three, which is the whole defect this fixture
-# exists to make reachable.
-STUB_VOLUME_MEMBERS=(
-  "cms-data/uploads/keep.txt"
-  "cms-submissions/entries/2026-contest.txt"
-  "cms-ranking/leaderboard.csv"
-)
 STUB_PG_VERSION="15.4"
 HARNESS_PATH="${HARNESS_BIN}:${PATH}"
 
@@ -122,21 +109,6 @@ POSTGRES_PASSWORD=stub-owner-password
 POSTGRES_BACKUP_PASSWORD=stub-backup-password
 POSTGRES_DB=cmsdb
 STUB_ENV
-
-build_stub_archive() {
-  local payload="${WORK}/payload" member
-  # WHY an explicit member list rather than ".": a tar of "." records members as
-  # "./uploads/keep.txt" with no volume prefix, and __backup.sh now judges an archive
-  # by whether each volume prefix carries a file. An archive shaped like that would
-  # look like a run that lost every volume, so the fixture has to speak the shape the
-  # script writes.
-  for member in "${STUB_VOLUME_MEMBERS[@]}"; do
-    mkdir -p "${payload}/$(dirname -- "$member")"
-    printf 'stub bytes for %s\n' "$member" > "${payload}/${member}"
-  done
-  tar czf "$STUB_ARCHIVE" -C "$payload" \
-    cms-data cms-submissions cms-ranking
-}
 
 # ---------------------------------------------------------------------------
 # The alert contract
@@ -258,7 +230,10 @@ python3_absent() { # true when the PATH under test resolves no python3
 # ---------------------------------------------------------------------------
 new_run_root() { # <name> — empty backup root for a single run
   RUN_ROOT="${WORK}/runs/${1}"
-  mkdir -p "${RUN_ROOT}/backups/db" "${RUN_ROOT}/backups/volumes"
+  # WHY only db/ is staged: the script creates every directory it needs, so pre-creating the
+  # volumes directory here would make "a run writes no volume archive" true by construction
+  # rather than by the run.
+  mkdir -p "${RUN_ROOT}/backups/db"
   STUB_LOG="${RUN_ROOT}/docker.log"
   STREAM_LOG="${RUN_ROOT}/docker-stream.log"
   RUN_LOG="${RUN_ROOT}/run.log"
@@ -289,8 +264,6 @@ run_staged_backup() {
     ROLE_ID="$STUB_ROLE" \
     STUB_LOG="$STUB_LOG" \
     STUB_WEBHOOK_LOG="$WEBHOOK_LOG" \
-    STUB_ARCHIVE="$STUB_ARCHIVE" \
-    STUB_VOLUME=ok \
     STUB_DUMP=ok \
     STUB_DF=ok \
     STUB_PG_VERSION="$STUB_PG_VERSION" \
@@ -304,8 +277,9 @@ run_staged_backup() {
     "$@" \
     "$BASH_BIN" "$HARNESS_SCRIPT" "$script_arg" >"$RUN_LOG" 2>&1
   LAST_EXIT=$?
-  # Only the helper invocations, so an assertion about the archive channel is never
-  # answered by a backup path that a `docker cp` is entitled to carry.
+  # Only the helper invocations, so a suite can assert that no run ever asked for an
+  # archive. `tar czf -` is how __backup.sh used to stream one onto stdout, so its absence
+  # here is what proves the archive channel is gone rather than merely unused.
   grep 'tar czf -' "$STUB_LOG" > "$STREAM_LOG" 2>/dev/null || true
   # 127 is a tool the script shells out to missing from the PATH this run was given, which
   # is a fault in the fixture rather than a contract under test. Carrying on would bury it

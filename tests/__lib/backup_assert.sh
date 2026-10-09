@@ -105,28 +105,3 @@ alert_mention_of() { # <webhook log> <colour>
     '[.[] | select(.embeds[0].color == $colour) | .content // ""] | join("")' \
     "$1" 2>/dev/null || printf 'unreadable'
 }
-
-# archive_image <streaming log> — the image of the last helper invocation, read the way the
-# invocation spells it: the word before `tar` in `docker run ... <image> tar czf -`.
-archive_image() {
-  tail -1 "$1" |
-    awk '{ for (position = 1; position <= NF; position++) if ($position == "tar") { print $(position - 1); exit } }'
-}
-
-# The fields __backup_drill.sh pulls from the newest entry, read the way that script reads
-# them, so a manifest a suite produced is proven usable by the reader that exists in this
-# repository rather than only by the writer's own tooling. The path arrives as an argument
-# rather than interpolated, which is the only difference from the original.
-drill_reader() { # <manifest> -> ts TAB db_bytes TAB vol_bytes TAB pg_version
-  python3 -c '
-import json, sys
-with open(sys.argv[1]) as handle:
-    entries = json.load(handle)
-newest = entries[-1] if isinstance(entries, list) and entries else None
-if newest is None:
-    print("unknown\t0\t0\tunknown")
-else:
-    print("\t".join([newest["ts"], str(newest["sizes"]["db_bytes"]),
-                     str(newest["sizes"]["vol_bytes"]), newest["pg_version"]]))
-' "$1"
-}

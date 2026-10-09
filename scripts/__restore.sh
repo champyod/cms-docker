@@ -7,11 +7,12 @@ fi
 
 ###############################################################################
 # CMS Restore Script
-# Usage: cms-restore.sh <dump-file> [--with-volumes <tar>]
+# Usage: cms-restore.sh <dump-file> [--force]
+# - Database-only. There is no volume archive to restore: the database holds the
+#   authoritative copy of every submitted file and testcase, so a dump is the
+#   whole backup set
 # - Restores into SCRATCH containers by default (never touches live cms-database)
-# - --with-volumes takes the one archive __backup.sh writes, which carries every
-#   volume mounted under the CMS data root, each under its own prefix
-# - --force: stop core profile services, restore into real volumes
+# - --force: stop core profile services, restore into the live cms-database
 # - After restore prints verification counts
 ###############################################################################
 
@@ -48,29 +49,6 @@ POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
 POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
 CONTAINER_DB="cms-database"
-# The volume the data tree lives in, and the prefix the archive records it under.
-VOLUME_DATA="cms-data"
-
-# The archive __backup.sh writes is one file carrying every volume mounted under the
-# CMS data root, each member filed under that volume's prefix. This is the other half
-# of that table — <prefix>=<docker name> — and it is what tells the restore which
-# volume each prefix belongs to. WHY the table is written out here rather than read
-# out of the archive: the archive names what it holds, never where it goes, and the
-# compose key is not the docker name — docker-compose.yml:824-825 declares
-# `cms-submissions` as `cms-submissions-contest`. Keep it in step with the
-# BACKUP_VOLUMES table in __backup.sh, or a restore mounts the wrong volume.
-RESTORE_VOLUMES=(
-  "cms-data=cms-data"
-  "cms-submissions=cms-submissions-contest"
-  "cms-ranking=cms-ranking-data"
-)
-
-# How many volumes the last restore put back, and how many it could not. Printed
-# beside the existing verification counts, because a restore that silently skipped a
-# volume is worse than one that failed: the operator reads a clean summary and
-# believes the submissions tree is back when it is still empty.
-VOLUMES_RESTORED=0
-VOLUMES_FAILED=0
 
 # WHY pre-create cms_backup before pg_restore: dumps contain grants to cms_backup
 # which fail with "role does not exist" on a fresh database. Creating a stub
@@ -86,118 +64,26 @@ ensure_roles_exist() {
 require_disk_free_gb "$REPO_ROOT" 3 5
 
 # ---------------------------------------------------------------------------
-# Volume restore
-# ---------------------------------------------------------------------------
-# archive_carries_prefix <archive> <prefix> — does the archive hold anything under
-# this volume's prefix?
-# WHY awk over grep -q: grep -q closes the pipe on its first match, tar dies of
-# SIGPIPE, and under pipefail that turns an archive which DOES carry the volume
-# into a negative answer. awk reads the whole listing and decides once at the end.
-archive_carries_prefix() {
-  tar -tzf "$1" 2>/dev/null | awk -v prefix="$2/" '
-    index($0, prefix) == 1 { found = 1 }
-    END { exit found ? 0 : 1 }'
-}
-
-# extract_volume <prefix> <docker volume> <destination> <archive> — one volume's
-# files, from inside the archive, into one volume at one path.
-# WHY the helper mounts the destination volume at /restore and copies into it rather
-# than unpacking straight onto it: the archive files every volume under its own
-# prefix, so the prefix has to come off before the files land where the stack reads
-# them. `tar xzf … "$prefix"` reads only that volume's members, so the archive is
-# not unpacked once per volume in full — which matters when it holds contest uploads.
-# WHY the destination is created first: a fresh volume has an empty root, and a copy
-# into a path that does not exist fails on the first volume restored into it.
-extract_volume() {
-  local prefix="$1" docker_volume="$2" destination="$3" archive="$4"
-  docker run --rm -v "${docker_volume}:/restore:z" -v "$(dirname -- "$archive"):/backup:ro" \
-    alpine:3.22 sh -c '
-      set -eu
-      staging=/tmp/cms-restore-staging
-      rm -rf "$staging"
-      mkdir -p "$staging" "$3"
-      tar xzf "/backup/$1" -C "$staging" "$2"
-      cp -a "$staging/$2/." "$3/"
-      rm -rf "$staging"
-    ' sh "$(basename -- "$archive")" "$prefix" "$destination"
-}
-
-# extract_volume_flat <docker volume> <archive> — the whole archive into one volume.
-# This is the path a pre-multi-volume archive takes: its members carry no prefix at
-# all, so the prefixed rule would drop cms-data's files beside the volume mounts
-# instead of inside one, and the restore would report success having restored nothing.
-extract_volume_flat() {
-  local docker_volume="$1" archive="$2"
-  docker run --rm -v "${docker_volume}:/restore:z" -v "$(dirname -- "$archive"):/backup:ro" \
-    alpine:3.22 sh -c 'set -eu; tar xzf "/backup/$1" -C /restore' sh "$(basename -- "$archive")"
-}
-
-# restore_volumes <archive> — put every volume the archive carries back where the
-# stack mounts it, reporting each one by name.
-# WHY warn and carry on rather than die: the database restore has already succeeded
-# by the time this runs, and this script's own precedent for a step that can fail
-# after that point — the role bootstrap, the dump copy — is log_warn and continue.
-# Dying here would throw away a database restore over a volume. The cost of that
-# policy is that "continue" must never mean "quietly", so every volume is named as
-# it is restored or lost, and the count is printed with the other verification
-# figures. A caller who wants a hard failure reads the count.
-restore_volumes() {
-  local archive="$1" entry prefix docker_volume remainder destination
-  VOLUMES_RESTORED=0
-  VOLUMES_FAILED=0
-
-  if [[ ! -f "$archive" ]]; then
-    log_warn "Volume tar file not found: $archive — skipping volume restore"
-    return 0
-  fi
-
-  if ! archive_carries_prefix "$archive" "${VOLUME_DATA}"; then
-    log_warn "Archive carries no '${VOLUME_DATA}/' prefix — it predates multi-volume backups, so it holds ${VOLUME_DATA} only and carries no submissions or ranking files"
-    if extract_volume_flat "$RESTORE_DATA_VOLUME" "$archive"; then
-      log_info "Volume restored: ${VOLUME_DATA} -> ${RESTORE_DATA_VOLUME}"
-      VOLUMES_RESTORED=1
-    else
-      log_warn "Volume restore failed: ${VOLUME_DATA} -> ${RESTORE_DATA_VOLUME} — its files are not back"
-      VOLUMES_FAILED=1
-    fi
-    return 0
-  fi
-
-  for entry in "${RESTORE_TARGETS[@]}"; do
-    prefix="${entry%%=*}"
-    remainder="${entry#*=}"
-    docker_volume="${remainder%%=*}"
-    destination="${remainder#*=}"
-    if extract_volume "$prefix" "$docker_volume" "$destination" "$archive"; then
-      log_info "Volume restored: ${prefix} -> ${docker_volume} at ${destination}"
-      VOLUMES_RESTORED=$(( VOLUMES_RESTORED + 1 ))
-    else
-      log_warn "Volume restore failed: ${prefix} -> ${docker_volume} — its files are not back"
-      VOLUMES_FAILED=$(( VOLUMES_FAILED + 1 ))
-    fi
-  done
-}
-
-# ---------------------------------------------------------------------------
 # Args
 # ---------------------------------------------------------------------------
 if [[ $# -lt 1 ]]; then
-  log_die "Usage: $0 <dump-file> [--with-volumes <tar>] [--force]"
+  log_die "Usage: $0 <dump-file> [--force]"
 fi
 
 DUMP_FILE="$1"
-WITH_VOLUMES=""
 FORCE=0
 
 shift
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --with-volumes)
-      if [[ -z "$2" ]]; then
-        log_die "--with-volumes requires a tar file argument"
-      fi
-      WITH_VOLUMES="$2"
-      shift 2
+    --with-volumes|--with-volumes=*)
+      # WHY refused rather than ignored: __backup.sh used to accept --with-volumes, and a flag
+      # that is now only warned about is read by the operator as a restore that also put the
+      # volumes back — the opposite of what happened. Silently dropping it is how --force came
+      # to renew unconditionally elsewhere in this codebase. WHY both spellings: the argument
+      # form and the = form are the same flag, and an operator who typed the second was told
+      # "Unknown argument" and had no reason to think the restore had changed.
+      log_die "--with-volumes is not supported: backups are database-only. Every submitted file and testcase is stored in the database (src/cms/db/fsobject.py, keyed by SHA1); the CMS volumes hold only the optional local copy, and no backup set has carried it since the volume archive was removed. Restore the dump alone: $0 <dump-file> [--force]"
       ;;
     --force)
       FORCE=1
@@ -290,17 +176,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
     log_warn "Failed to create scratch volume (may already exist)"
   fi
 
-  # WHY one scratch volume and three destinations rather than three scratch volumes:
-  # on the live stack cms-submissions and cms-ranking are mounted at paths INSIDE the
-  # cms-data tree, so reproducing that layout in one volume shows the operator the
-  # shape the containers will see. /restore stands for the CMS data root.
-  RESTORE_DATA_VOLUME="$SCRATCH_VOLUME"
-  RESTORE_TARGETS=(
-    "cms-data=${SCRATCH_VOLUME}=/restore"
-    "cms-submissions=${SCRATCH_VOLUME}=/restore/submissions"
-    "cms-ranking=${SCRATCH_VOLUME}=/restore/ranking"
-  )
-
   log_info "Starting scratch postgres container..."
   docker run --name "$SCRATCH_CONTAINER" \
     -e POSTGRES_USER="$POSTGRES_USER_VAL" \
@@ -334,11 +209,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   fi
   log_info "Database restore complete"
 
-  if [[ -n "$WITH_VOLUMES" ]]; then
-    log_info "Restoring volumes from $WITH_VOLUMES..."
-    restore_volumes "$WITH_VOLUMES"
-  fi
-
   log_info "Running verification queries against scratch container..."
 
   sub_count="0"
@@ -363,11 +233,6 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   log_info "CMS restore complete (scratch mode)"
   log_info "  Submissions count: $sub_count"
   log_info "  pg_largeobject entries: $lob_count"
-  if [[ -n "$WITH_VOLUMES" ]]; then
-    # WHY printed beside the other counts: a restore that quietly left a volume out
-    # reads as a clean restore, and this is the one line that says otherwise.
-    log_info "  Volumes restored: ${VOLUMES_RESTORED}/${#RESTORE_TARGETS[@]} (${VOLUMES_FAILED} failed)"
-  fi
   exit 0
 fi
 
@@ -375,18 +240,6 @@ fi
 # Live restore (--force mode)
 # ---------------------------------------------------------------------------
 log_info "Restoring into live cms-database..."
-
-# Each volume is mounted at the CMS data root of its own container, so the three
-# restores are three separate helper containers rather than one container with three
-# mounts. One container that extracted to all three would report one status for
-# three volumes, and an operator who could not tell which volume came back would
-# have to assume the one that did not.
-RESTORE_DATA_VOLUME="$VOLUME_DATA"
-RESTORE_TARGETS=(
-  "cms-data=${VOLUME_DATA}=/restore"
-  "cms-submissions=cms-submissions-contest=/restore"
-  "cms-ranking=cms-ranking-data=/restore"
-)
 
 local_dump="/tmp/live-restore-${TS_BASE}.dump"
 log_info "Copying dump into live container..."
@@ -414,11 +267,6 @@ else
   log_warn "$APPLY_SQL_SCRIPT missing — cms_backup password not bootstrapped"
 fi
 
-if [[ -n "$WITH_VOLUMES" ]]; then
-  log_info "Restoring volumes from $WITH_VOLUMES..."
-  restore_volumes "$WITH_VOLUMES"
-fi
-
 log_info "Running verification queries against live container..."
 
 sub_count="0"
@@ -438,9 +286,4 @@ docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -
 log_info "CMS restore complete (live mode)"
 log_info "  Submissions count: $sub_count"
 log_info "  pg_largeobject entries: $lob_count"
-if [[ -n "$WITH_VOLUMES" ]]; then
-  # WHY printed beside the other counts: a restore that quietly left a volume out
-  # reads as a clean restore, and this is the one line that says otherwise.
-  log_info "  Volumes restored: ${VOLUMES_RESTORED}/${#RESTORE_TARGETS[@]} (${VOLUMES_FAILED} failed)"
-fi
 exit 0

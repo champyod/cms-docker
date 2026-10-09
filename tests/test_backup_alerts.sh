@@ -26,8 +26,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/__lib/backup_harness.sh"
 set -u
 
-build_stub_archive
-
 # ---------------------------------------------------------------------------
 # Verdict helpers
 # ---------------------------------------------------------------------------
@@ -123,11 +121,17 @@ check_eq "the script sends only the four colours the suites name" \
 printf '\n== a complete run reports one green ==\n'
 new_run_root complete
 run_backup
-expect_exit "a run that archived both is still a success" "0"
+expect_exit "a database-only backup is still a success" "0"
 expect_verdict "a complete run" "$ALERT_GREEN" 1 "noping"
 expect_says "a complete run" "$ALERT_GREEN" '**Backup Successful**'
-expect_says "a complete run" "$ALERT_GREEN" 'DB 0.00MB / Vol 0.00MB'
+expect_says "a complete run" "$ALERT_GREEN" 'DB 0.00MB'
+expect_says "a complete run" "$ALERT_GREEN" 'database-only'
 expect_names_run "a complete run" "$ALERT_GREEN"
+# WHY the absence is asserted and not just the absence of a positive: the alert used to read
+# "DB 0.00MB / Vol 0.00MB", so an operator reading a green headline was told about a second
+# artefact that no run produces any more.
+check_eq "a complete run says nothing about a volume" "yes" \
+  "$(not_has_yes "$(alert_description_of "$WEBHOOK_LOG" "$ALERT_GREEN")" 'Vol')"
 
 # ---------------------------------------------------------------------------
 # 2. A rotation that prunes says so, and the run still ends green
@@ -148,36 +152,34 @@ check_eq "a routine rotation pings nobody" "" "$(alert_mention_of "$WEBHOOK_LOG"
 check_eq "a routine success pings nobody" "" "$(alert_mention_of "$WEBHOOK_LOG" "$ALERT_GREEN")"
 
 # ---------------------------------------------------------------------------
-# 3. A kept dump with no volume ends on amber, and never green
+# 3. A kept dump the manifest cannot record ends on amber, and never green
 # ---------------------------------------------------------------------------
+# This is what "partial" now means, and it is the only cause left: the dump is on disk, the
+# manifest does not say so, and a caller that read 0 would retire a backup it has no way to
+# check. The manifest is what fails — a run archives no volume, so there is nothing else
+# left for it to fail on.
 printf '\n== a partial run reports one amber ==\n'
 new_run_root partial
-run_backup STUB_VOLUME=all-fail
-expect_exit "a kept dump with no volume is still exit 3" "3"
+run_backup_on "$NO_JQ_PATH"
+expect_exit "a kept dump whose manifest went unrecorded is exit 3" "3"
 expect_verdict "a partial run" "$ALERT_AMBER" 1 "ping"
-expect_says "a partial run" "$ALERT_AMBER" '**Backup Partial**'
-expect_says "a partial run" "$ALERT_AMBER" 'Vol FAILED'
+expect_says "a partial run" "$ALERT_AMBER" '**Backup Degraded**'
+expect_says "a partial run" "$ALERT_AMBER" 'jq not found'
+expect_says "a partial run" "$ALERT_AMBER" 'this run is unrecorded'
+expect_says "a partial run" "$ALERT_AMBER" 'database-only'
 expect_names_run "a partial run" "$ALERT_AMBER"
+check_eq "the dump the partial run kept is on disk" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+check_eq "the run log says it degraded rather than completed" "yes" \
+  "$(grep_yes "$RUN_LOG" 'Backup degraded')"
 
 # ---------------------------------------------------------------------------
 # 4. A degraded run ends on amber, and the green is withheld
 # ---------------------------------------------------------------------------
-# The two halves of the defect. Both runs keep their dump, so both still exit 0 and both used
-# to follow the amber with a green that outranked it. The amber is the verdict; the green is
-# the thing that has to stop.
+# The two halves of the defect. A run that keeps its dump, records it, and then fails its
+# rotation used to follow the amber with a green that outranked it. The amber is the verdict;
+# the green is the thing that has to stop.
 printf '\n== a degraded run reports amber and no green ==\n'
-
-new_run_root degraded-no-jq
-run_backup_on "$NO_JQ_PATH"
-expect_exit "a run whose manifest went unrecorded is exit 3" "3"
-expect_verdict "a run with no jq" "$ALERT_AMBER" 1 "ping"
-expect_says "a run with no jq" "$ALERT_AMBER" '**Backup Degraded**'
-expect_says "a run with no jq" "$ALERT_AMBER" 'jq not found'
-expect_says "a run with no jq" "$ALERT_AMBER" 'this run is unrecorded'
-expect_names_run "a run with no jq" "$ALERT_AMBER"
-check_eq "the run log says it degraded rather than completed" "yes" \
-  "$(grep_yes "$RUN_LOG" 'Backup degraded')"
-
 new_run_root degraded-rotation
 seed_superseded_sets
 run_backup "${COUNT_ONLY_RULES[@]}" STUB_FAULT_RM=cmsdb-20200101-000000.dump
