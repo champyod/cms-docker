@@ -1,9 +1,15 @@
+use axum::extract::Query;
+use std::convert::Infallible;
+
 use axum::extract::State;
 use axum::http::{header, HeaderValue, StatusCode};
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json, Response};
 use axum::routing::{any, get};
 use axum::Router;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 use tower_http::services::ServeDir;
 
 use crate::store::{load_appearance, load_ledger, Appearance};
@@ -57,7 +63,8 @@ pub fn router(state: AppState) -> Router {
         .route("/history", get(history))
         .route("/config", get(config))
         .route("/logo", get(logo))
-        .route("/credits", get(credits));
+        .route("/credits", get(credits))
+        .route("/events", get(events));
     match state.config().static_dir.clone() {
         // The vendored page asks for its stylesheet, scripts and images by name at
         // the root, so the directory is the fallback rather than one route.
@@ -163,6 +170,48 @@ async fn credits(State(state): State<AppState>) -> Response {
         Ok(credits) => Json(credits).into_response(),
         Err(error) => refuse(&error.to_string()),
     }
+}
+
+#[derive(Deserialize)]
+pub struct EventsQuery {
+    pub last_event_id: Option<String>,
+}
+
+/// The live stream. A client that names a last event id gets the events it missed,
+/// or a reinit when the gap is wider than the cache, which is what the Python
+/// server did; a subscriber that falls behind gets a reinit too, because it can no
+/// longer be told what it missed.
+async fn events(State(state): State<AppState>, Query(query): Query<EventsQuery>) -> Response {
+    let feed = state.feed().clone();
+    let receiver = feed.subscribe();
+    // axum's Sse takes a stream of Results so a producer error can end the stream;
+    // nothing here fails, so every item is Ok.
+    let opening: Vec<Result<Event, Infallible>> = match feed.since(query.last_event_id.as_deref()) {
+        Some(events) => events
+            .into_iter()
+            .map(|event| Ok(to_event(event)))
+            .collect(),
+        None => vec![Ok(Event::default().event("reinit"))],
+    };
+    let live = BroadcastStream::new(receiver).map(|result| match result {
+        Ok(event) => Ok(to_event(event)),
+        Err(_) => Ok(Event::default().event("reinit")),
+    });
+    let stream = tokio_stream::iter(opening).chain(live);
+    Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .interval(std::time::Duration::from_secs(15))
+                .text("keep-alive"),
+        )
+        .into_response()
+}
+
+fn to_event(event: crate::feed::RankingEvent) -> Event {
+    Event::default()
+        .id(event.id)
+        .event(event.name)
+        .data(event.data)
 }
 
 /// Resolves the appearance, or the refusal the caller must return. The database is

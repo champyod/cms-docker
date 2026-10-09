@@ -180,9 +180,15 @@ The service keeps the existing public surface: / (page), /history, /scores, /eve
 /config, /credits, plus the Basic-authenticated CRUD used by cmsRWSHelper during the transition.
 
 /events stays server-sent events with the same event names; a change to ranking_settings or
-ranking_overrides must reach connected browsers without a reload. Proposed mechanism: LISTEN/NOTIFY
-on two trigger channels with a 5 s poll fallback, chosen over polling alone because the override
-list is small and changes rarely but must appear immediately.
+ranking_overrides must reach connected browsers without a reload. LISTEN/NOTIFY on two trigger
+channels, ranking_entities and ranking_control, carries the change; the triggers are created by the
+migration rather than published by the writer, so no writer can forget them.
+
+The 5 s poll fallback this spec first proposed was dropped after the listener was implemented.
+NOTIFY has no replay, so a listener that was disconnected cannot know what it missed, and a poll
+would have to scan the projection every 5 seconds to find out. The service publishes event:reinit on
+reconnect instead — the signal the Python server already sent when its own cache could not cover a
+gap — and the page refetches. That is one round trip per reconnect rather than a scan per 5 seconds.
 
 ### 4.4 Push path change
 

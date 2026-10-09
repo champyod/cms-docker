@@ -139,3 +139,36 @@ async fn appearance_is_absent_until_the_panel_writes_it() {
     assert_eq!(appearance.access_mode, "protected");
     assert!(!appearance.show_id_column());
 }
+
+/// The trigger, not the writer, is what makes the board live; this is the only place
+/// the trigger is exercised as a trigger rather than as a migration that applied.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables and triggers"]
+async fn a_projection_write_notifies_listeners() {
+    let pool = pool();
+    let mut listener = sqlx::postgres::PgListener::connect_with(&pool)
+        .await
+        .expect("a listener connects");
+    listener
+        .listen("ranking_entities")
+        .await
+        .expect("the channel is listened on");
+    sqlx::query("INSERT INTO ranking_teams (key, name) VALUES ('notify_probe', 'Probe')")
+        .execute(&pool)
+        .await
+        .expect("the write commits");
+    let notification = tokio::time::timeout(std::time::Duration::from_secs(5), listener.recv())
+        .await
+        .expect("a notification arrives before the timeout")
+        .expect("the notification reads");
+    assert_eq!(notification.channel(), "ranking_entities");
+    assert!(
+        notification.payload().starts_with("ranking_teams "),
+        "the payload names the table: {}",
+        notification.payload()
+    );
+    sqlx::query("DELETE FROM ranking_teams WHERE key = 'notify_probe'")
+        .execute(&pool)
+        .await
+        .expect("the probe is removed");
+}

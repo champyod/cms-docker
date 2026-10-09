@@ -1,5 +1,6 @@
 pub mod config;
 pub mod db;
+pub mod feed;
 pub mod http;
 pub mod scoring;
 pub mod store;
@@ -8,6 +9,7 @@ pub mod surface;
 use std::sync::Arc;
 
 pub use config::{ConfigError, RankingConfig};
+pub use feed::Feed;
 pub use http::router;
 
 #[derive(Clone)]
@@ -18,12 +20,17 @@ pub struct AppState {
 struct AppStateInner {
     db: Option<db::Db>,
     config: RankingConfig,
+    feed: Feed,
 }
 
 impl AppState {
     pub fn new(db: Option<db::Db>, config: RankingConfig) -> Self {
         Self {
-            inner: Arc::new(AppStateInner { db, config }),
+            inner: Arc::new(AppStateInner {
+                db,
+                config,
+                feed: Feed::new(),
+            }),
         }
     }
 
@@ -39,6 +46,10 @@ impl AppState {
 
     pub fn config(&self) -> &RankingConfig {
         &self.inner.config
+    }
+
+    pub fn feed(&self) -> &Feed {
+        &self.inner.feed
     }
 
     /// Reports whether the service can serve real ranking data. A missing database
@@ -72,13 +83,20 @@ pub async fn run() -> Result<(), StartupError> {
         Some(url) => Some(db::Db::connect_lazy(url)?),
         None => None,
     };
+    let state = AppState::new(db, config.clone());
+    // The listener runs for the process lifetime: without it the board only changes
+    // when a browser reloads, which is the behaviour this slice exists to remove.
+    if let Some(database) = state.db().cloned() {
+        let feed = state.feed().clone();
+        tokio::spawn(async move { feed::listen(database, feed).await });
+    }
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await
         .map_err(|source| StartupError::Listen {
             address: config.bind,
             source,
         })?;
-    axum::serve(listener, router(AppState::new(db, config.clone())))
+    axum::serve(listener, router(state))
         .await
         .map_err(|source| StartupError::Listen {
             address: config.bind,

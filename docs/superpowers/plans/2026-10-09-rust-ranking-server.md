@@ -75,10 +75,11 @@
 
 ### Slice 4: Live events
 
-- [ ] Implement /events with the same event names and ordering as the Python service, driven by the store plus a change channel.
-- [ ] Propagate a control-table change (appearance or override) to connected browsers: LISTEN/NOTIFY with a bounded poll fallback.
-- [ ] Test: an override written through the panel reaches an open event stream without a reload.
-- **Verify:** event fixtures match; the propagation test passes against a real database in the test container.
+- [x] /events streams the Python service's vocabulary: the entity kind as the event name, "<operation> <key>" as the data, a hexadecimal microsecond id, and a control event that tells the page to refetch /config.
+- [x] Changes are published by database triggers on all eight tables (migration 20261009160000_ranking_notify) rather than by the writer, so the notification sits beside the row it describes.
+- [x] A reconnecting client replays from a 100-event cache or gets event:reinit when the gap is wider, and a listener that loses its connection publishes a reinit rather than pretending it missed nothing.
+- [ ] Open: the panel-side override test, which needs Slice 6 to be able to write an override.
+- **Verify:** six feed tests green locally (framing, replay, uncovered gap, subscriber delivery, entity mapping); the trigger has an ignored round-trip test that CI runs against postgres after applying all three migrations.
 - **Commit:** feat(ranking): stream live ranking events
 
 ### Slice 5: The two authentication planes

@@ -425,8 +425,17 @@ jobs:
           key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('tools/cms-ranking/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
-      - name: Apply the ranking tables
-        run: psql "$RANKING_TEST_DATABASE_URL" -f admin-panel/prisma/migrations/20261009150000_ranking_tables/migration.sql
+      # All three, in order: the CreateTable, the RLS pair the repository generates,
+      # and the notify triggers the live stream depends on. Applying fewer would
+      # test a schema no deployment has.
+      - name: Apply the ranking migrations
+        run: |
+          for migration in \
+            admin-panel/prisma/migrations/20261009150000_ranking_tables \
+            admin-panel/prisma/migrations/20261009150100_ranking_tables_rls \
+            admin-panel/prisma/migrations/20261009160000_ranking_notify; do
+            psql "$RANKING_TEST_DATABASE_URL" -f "$migration/migration.sql"
+          done
 
       - name: Format check
         working-directory: tools/cms-ranking
