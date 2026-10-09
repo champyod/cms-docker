@@ -8,7 +8,7 @@ set -euo pipefail
 
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly BASE_URL="${RANKING_URL:-http://127.0.0.1:8890}"
-readonly OUT_DIR="${1:-${HERE}/captured/$(date +%Y%m%dT%H%M%S)}"
+OUT_DIR="${1:-${HERE}/captured/$(date +%Y%m%dT%H%M%S)}"
 readonly EVENTS_SECONDS="${EVENTS_SECONDS:-5}"
 
 require_command() {
@@ -67,11 +67,24 @@ write_manifest() {
     } >"${OUT_DIR}/MANIFEST.txt"
 }
 
+# The capture is read-only with --no-seed: nothing is written to the service, which is what
+# makes it safe to run against a live deployment whose data is already the one to compare.
+SEED=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-seed) SEED=0 ;;
+        -h|--help) printf 'usage: capture.sh [--no-seed] [output-dir]\n'; exit 0 ;;
+        *) OUT_DIR="$arg" ;;
+    esac
+done
+
 main() {
     require_command curl
     require_command python3
     mkdir -p "${OUT_DIR}"
-    seed_store
+    if [ "$SEED" = 1 ]; then
+        seed_store
+    fi
     capture_body root /
     capture_body scores /scores
     capture_body history /history
