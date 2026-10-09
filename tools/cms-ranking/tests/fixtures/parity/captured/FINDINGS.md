@@ -23,9 +23,17 @@ its own authenticated PUT path (`seed_sha256=19734aff...`). Every row is observe
 
 ## The three findings that matter
 
-**Faces and flags are never 404 for a known key.** The service answers with its bundled
-dummy assets when the entity has none, so the earlier 404s were for keys that do not exist.
-The port must serve a fallback image, and the images ship with the vendored static files.
+**Faces and flags always answer 200.** No entity is looked up at all: `ImageHandler` takes the
+key as a filename pattern, looks for `<key>.<ext>` beside the ranking data, and when nothing
+matches it serves its configured `fallback` (the bundled dummy) with status 200. There is no
+existence check, so an unknown key gets the same dummy as a known one. Verified two ways: the
+seeded capture shows 200 image/png for keys with no image, and the handler source shows the
+unconditional 200.
+
+CORRECTION: an earlier revision of this file claimed a key that does not exist returns 404. That
+was an over-generalisation from the ENTITY singles (`/users/nonexistent` -> 404), which do check
+existence, and it was wrong for the two image routes. The port must serve the fallback for every
+key, and any 404 there is a divergence from the service it replaces.
 
 **`Timestamp` is not universal.** It is on `/scores` and on every entity list and single
 route, and absent from `/history`, `/sublist`, `/config`, `/credits`, `/logo` and every 404.
