@@ -94,6 +94,7 @@
 - **Commit:** feat(ranking): verify console credentials and count failures
 
 ### Slice 6: Panel control surfaces
+- [ ] Decided for the lockout surface: Redis is the shared counter store, so the panel gets its own client plus REDIS_URL to list and clear the cms:ranking:login: namespace, recording an audit entry for each clearance. The panel's Basic-credential files (ranking-session.ts and the auth and snapshot routes) go with it.
 
 - [ ] Add the appearance editor (all six approved groups) as a permissioned, audited server action plus API route and a page section under the ranking area.
 - [ ] Add the override editor: list, add, end. Every mutation records actor, reason and timestamp; no row is hard-deleted.

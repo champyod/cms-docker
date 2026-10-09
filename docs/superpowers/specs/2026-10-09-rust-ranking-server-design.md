@@ -251,9 +251,17 @@ a Tornado server does not call the panel for this (docs/LOGIN-CAPTCHA.md section
 same 5-failure lockout and 429 with Retry-After.
 
 The login requirement itself is a panel toggle, not a config key: ranking_settings.access_mode selects
-public or login-required for the whole scoreboard. Lockout counters stay in memory per process, as they
-are in the panel, and the panel gains the unblock path, because an operator otherwise has to restart a
-process to clear a failed counter.
+public or login-required for the whole scoreboard.
+
+Lockout counters live in the Redis the stack already runs for rate limiting, under the
+cms:ranking:login: namespace, so a restart does not forgive a brute-force run and the namespace keeps
+a clearance here from forgiving one against the contest surface.
+
+The panel reads and clears those counters through its own Redis client, with REDIS_URL in its
+environment, and records an audit entry for the clearance. This follows the decision that Redis is the
+shared counter store for every login surface; the Python servers can join it by switching
+LOGIN_RATE_LIMIT_REDIS_ENABLED on. A console that cannot reach the counters refuses every login, because
+a login that cannot be counted cannot be guarded.
 
 ## 6. Appearance and credits
 
