@@ -90,6 +90,11 @@ const CATALOG = [
   { name: 'admin_permission_overrides', label: 'Admin Permission Overrides', pk: ['id'], sensitive: true },
   { name: 'backup_schedules', label: 'Backup Schedules', pk: ['id'] },
   { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
+  // Ranking control tables. Nothing references them and they reference nothing,
+  // so their place among the roots is free; they are selected because the
+  // appearance and override rows exist only in the panel.
+  { name: 'ranking_settings', label: 'Ranking Settings', pk: ['id'] },
+  { name: 'ranking_overrides', label: 'Ranking Overrides', pk: ['id'] },
   { name: 'fsobjects', label: 'File System Objects', pk: ['digest'], needsLargeObjects: true },
 ] as const satisfies readonly BackupTable[];
 

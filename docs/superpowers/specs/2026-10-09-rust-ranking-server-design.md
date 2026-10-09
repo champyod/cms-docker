@@ -149,10 +149,17 @@ Two table families, both Prisma models, both RLS-covered, because the panel is t
 RLS gate plus the Prisma client both read that schema.
 
 Family A — the pushed store, one table per entity kind, mirroring src/cmsranking/{User,Team,Task,
-Contest,Submission,Subchange}.py so the wire payloads and the consistency checks keep their meaning:
+Contest,Submission,Subchange}.py so the wire payloads and the consistency checks keep their meaning.
+Columns are typed rather than a jsonb document per row, because /scores and /history aggregate over
+user, task and time and those must be indexable columns. The wire field order is stored as
+display_order, since order is a reserved word in SQL. No foreign keys are declared: the pusher
+writes kinds in dependency order and the Python store dropped a dangling reference rather than
+failing the write, so a constraint would turn a push-order slip into a lost submission.
 
-    ranking_contests(id, key, data jsonb, updated_at)
-    ranking_tasks(...)      ranking_users(...)    ranking_teams(...)
+    ranking_contests(key pk, name, begin, end, score_precision, updated_at)
+    ranking_tasks(key pk, name, short_name, contest, max_score, score_precision,
+                  extra_headers jsonb, display_order, score_mode, updated_at)
+    ranking_teams(key pk, name, updated_at)     ranking_users(key pk, f_name, l_name, team, updated_at)
     ranking_submissions(...) ranking_subchanges(...)
 
 Family B — the panel-owned control tables:

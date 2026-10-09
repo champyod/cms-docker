@@ -670,3 +670,128 @@ model security_blocks {
   @@index([started_at], map: "ix_security_blocks_started_at")
   @@map("security_blocks")
 }
+
+/// The ranking projection the proxy pushes: one table per entity kind, so the
+/// wire shape and the consistency rules stay readable instead of hiding inside a
+/// jsonb blob.
+///
+/// No foreign keys on purpose. The pusher sends kinds in dependency order and
+/// the Python store treated a dangling reference as one entity to drop, never as
+/// a failed write; a constraint here would turn a push-order slip into a lost
+/// submission.
+model ranking_contests {
+  key             String   @id @db.VarChar
+  name            String   @db.VarChar
+  begin           Int
+  end             Int
+  score_precision Int
+  updated_at      DateTime @default(now())
+
+  @@map("ranking_contests")
+}
+
+model ranking_tasks {
+  key             String   @id @db.VarChar
+  name            String   @db.VarChar
+  short_name      String   @db.VarChar
+  contest         String   @db.VarChar
+  max_score       Float
+  score_precision Int
+  extra_headers   Json
+  display_order   Int
+  score_mode      String   @db.VarChar
+  updated_at      DateTime @default(now())
+
+  @@index([contest], map: "ix_ranking_tasks_contest")
+  @@index([display_order], map: "ix_ranking_tasks_order")
+  @@map("ranking_tasks")
+}
+
+model ranking_teams {
+  key        String   @id @db.VarChar
+  name       String   @db.VarChar
+  updated_at DateTime @default(now())
+
+  @@map("ranking_teams")
+}
+
+model ranking_users {
+  key        String   @id @db.VarChar
+  f_name     String   @db.VarChar
+  l_name     String   @db.VarChar
+  team       String?  @db.VarChar
+  updated_at DateTime @default(now())
+
+  @@index([team], map: "ix_ranking_users_team")
+  @@map("ranking_users")
+}
+
+model ranking_submissions {
+  key        String   @id @db.VarChar
+  user       String   @db.VarChar
+  task       String   @db.VarChar
+  time       Int
+  updated_at DateTime @default(now())
+
+  @@index([user, task], map: "ix_ranking_submissions_user_task")
+  @@index([time], map: "ix_ranking_submissions_time")
+  @@map("ranking_submissions")
+}
+
+model ranking_subchanges {
+  key        String   @id @db.VarChar
+  submission String   @db.VarChar
+  time       Int
+  score      Float?
+  token      Boolean?
+  extra      Json?
+  updated_at DateTime @default(now())
+
+  @@index([submission], map: "ix_ranking_subchanges_submission")
+  @@index([time], map: "ix_ranking_subchanges_time")
+  @@map("ranking_subchanges")
+}
+
+/// One row, id 1: what the panel decides about how the scoreboard looks.
+/// Appearance is operator configuration, so unlike the projection above it
+/// belongs in a backup and in the restore preview.
+model ranking_settings {
+  id            Int      @id @default(1)
+  title         String?  @db.VarChar
+  subtitle      String?  @db.VarChar
+  organisation  String?  @db.VarChar
+  logo_asset    String?  @db.VarChar
+  favicon_asset String?  @db.VarChar
+  theme         Json?
+  columns       Json?
+  score_format  Json?
+  footer_text   String?  @db.VarChar
+  credits_text  String?  @db.VarChar
+  access_mode   String   @default("public") @db.VarChar
+  updated_at    DateTime @default(now())
+  updated_by    Int?
+
+  @@map("ranking_settings")
+}
+
+/// One manual change to what the scoreboard shows. A row is ended, never
+/// deleted, so "who hid this row and why" outlives the correction.
+model ranking_overrides {
+  id          BigInt   @id @default(autoincrement())
+  contest_id  Int
+  target_kind String   @db.VarChar
+  target_key  String   @db.VarChar
+  action      String   @db.VarChar
+  payload     Json?
+  reason      String?  @db.VarChar
+  active      Boolean  @default(true)
+  created_at  DateTime @default(now())
+  created_by  Int?
+  ended_at    DateTime?
+  ended_by    Int?
+
+  @@index([active], map: "ix_ranking_overrides_active")
+  @@index([contest_id, active, target_kind], map: "ix_ranking_overrides_contest")
+  @@index([target_kind, target_key], map: "ix_ranking_overrides_target")
+  @@map("ranking_overrides")
+}

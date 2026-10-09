@@ -23,8 +23,28 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * Everything else in the schema is selectable: the RBAC grant tables are here
  * because a restore that carried no privileges would land every admin with an
  * empty permission set, which is a panel nobody can operate.
+ *
+ * The six ranking_* projection tables are excluded for the same reason as
+ * `audit_log`: they hold what the proxy pushed to the scoreboard, which is
+ * derived from the contests, participations and submissions a restore already
+ * carries. Restoring the projection would either duplicate the rebuild or
+ * contradict the contest data restored beside it.
+ *
+ * The two ranking control tables are NOT excluded. The appearance row and the
+ * override rows are operator decisions that exist nowhere else, so they belong
+ * in the catalog.
  */
-const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set(['monitor_targets', 'audit_log', 'security_blocks']);
+const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
+  'monitor_targets',
+  'audit_log',
+  'security_blocks',
+  'ranking_contests',
+  'ranking_tasks',
+  'ranking_teams',
+  'ranking_users',
+  'ranking_submissions',
+  'ranking_subchanges',
+]);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */
 const UNSATISFIABLE_EDGES: ReadonlyArray<readonly [string, string]> = [['tasks', 'datasets']];
