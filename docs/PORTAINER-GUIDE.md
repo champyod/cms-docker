@@ -378,6 +378,22 @@ Use Nginx or Traefik for load balancing.
    - Select volume (e.g., `cms-database-data`)
    - Click "Export"
 
+### Backup Destinations
+
+Scheduled and manual backups write into a destination configured in `config.toml`:
+
+```toml
+[backup]
+BACKUP_LOCATIONS = '[{"id":"default","label":"Primary volume","path":"./backups"}]'
+BACKUP_DEFAULT_LOCATION = "default"
+```
+
+- `BACKUP_LOCATIONS` is a JSON list of `{id, label, path}` — the destinations the admin panel's Backup & Restore page offers.
+- `BACKUP_DEFAULT_LOCATION` is the id a new schedule preselects. It must be an id the list carries, not a path.
+- A `path` outside the repository root has to be bind-mounted into **both** `cms-monitor` (which writes the archives) and `cms-admin-panel-next` (which lists and restores them) before it can be used. A path only the panel can see lists archives that no backup ever writes to.
+
+> This configuration surface is being replaced by a table the panel manages directly. Until that lands, the values above are the source of truth.
+
 2. **Stack Configuration Backup**
    - Go to "Stacks"
    - Click stack name
