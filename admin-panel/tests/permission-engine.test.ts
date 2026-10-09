@@ -182,7 +182,7 @@ describe('PERMISSION_REGISTRY', () => {
   // (security:read, waf:read, waf:config, ban:read, ban:unban, lockout:read,
   // lockout:unlock, tls:read, tls:renew) = 220.
   it('holds exactly 220 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(220);
+    expect(PERMISSION_REGISTRY.length).toBe(221);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
