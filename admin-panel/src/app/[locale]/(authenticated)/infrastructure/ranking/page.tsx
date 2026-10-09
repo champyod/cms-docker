@@ -1,4 +1,4 @@
-import { RankingClient } from '@/components/ranking/RankingClient';
+import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
 import { getRankingAppearance, submitRankingAppearance } from '@/app/actions/rankingAppearance';
 import { clearRankingLockout, getRankingLockouts } from '@/app/actions/rankingLockouts';
 import { endRankingOverride, getRankingOverrides, saveRankingOverride } from '@/app/actions/rankingOverrides';
@@ -173,7 +173,7 @@ export default async function InfrastructureRankingPage(): Promise<React.JSX.Ele
         </section>
       )}
 
-      <RankingClient permissionKeys={[...effective]} />
+      <RankingLogoCard canManage={effective.has("ranking:update")} />
     </div>
   );
 }
