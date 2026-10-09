@@ -183,6 +183,13 @@ KEEP_SANDBOX = false            # bool; reserved — compose exports it to the w
 MAX_FILE_SIZE = 1048576         # num; KiB; reserved — compose exports it to the worker container env; the live cap is max_file_size in config/cms.toml [sandbox] (KiB; sandbox.fsize = value × 1024)
 
 [infra]
+# The body ceiling every nginx vhost serves with (client_max_body_size), applied to the
+# contest, admin, ranking and OJ vhosts alike. WHY one key rather than a per-vhost pair:
+# the vhosts previously carried 10M except OJ at 100M, and the admin vhost's 10M is below
+# the admin panel's own 51MB testcase-upload cap, so an upload in that range died as a bare
+# nginx 413 before the panel could explain it. Set this above the largest upload the panel
+# accepts — it also raises the lever MAX_SUBMISSION_LENGTH (in [contest]) tells you to use.
+PROXY_MAX_BODY_SIZE = "100M"     # str; nginx size (K/M/G suffix or bare bytes); default 100M keeps every vhost at least as large as it was
 DISCORD_WEBHOOK_URL = ""        # url; Discord webhook the monitor and backup scripts POST alerts to — empty drops alerts with a warning
 DISCORD_ROLE_ID = ""            # str; Discord role id prepended as a <@&id> mention on monitor/backup alerts; empty = no mention
 MONITOR_CPU_THRESHOLD = 80      # num; percent; cpu usage above this triggers a Discord WARNING from the monitor

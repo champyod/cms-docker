@@ -156,6 +156,14 @@ CERT_PATH=""
 KEY_PATH=""
 CERT_EMAIL="${CERT_EMAIL:-}"
 HSTS_MAX_AGE="${HSTS_MAX_AGE:-31536000}"
+# The body ceiling every vhost in config/grader.nginx.conf.template hands to
+# client_max_body_size. WHY 100M and not the 10M three of the four vhosts carried: this
+# one value is the only lever, so any fallback below the largest existing limit would
+# silently shrink the one vhost that needs 100M, and the panel's own 51MB upload cap
+# would still be refused by an unset key. 100M keeps every current vhost working and
+# makes the panel's limit the effective one; an operator who wants the old 10M ceiling
+# sets PROXY_MAX_BODY_SIZE=10M in config.toml [infra].
+PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
 PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
 REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
@@ -1250,7 +1258,7 @@ EOF
 
   _domain_routes_build
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${PROXY_MAX_BODY_SIZE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
     | _filter_optional_blocks > "$output"
   log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then

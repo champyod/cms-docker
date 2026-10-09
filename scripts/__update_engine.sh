@@ -834,6 +834,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|WAF_ANOMALY_OUTBOUND|num||4"
   "Infra & Monitoring|[infra]|WAF_BIND_IP|str||127.0.0.1"
   "Infra & Monitoring|[infra]|WAF_BACKEND|str||http://grader-nginx-proxy:80"
+  "Infra & Monitoring|[infra]|PROXY_MAX_BODY_SIZE|str||100M"
   "Infra & Monitoring|[infra]|WAF_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|WAF_PARANOIA|num||1"
   "Infra & Monitoring|[infra]|WAF_PORT|port||8080"

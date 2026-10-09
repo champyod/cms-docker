@@ -6,7 +6,7 @@
 set -eu
 
 PROXY_COMMON='
-    client_max_body_size 10M;
+    client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;
@@ -25,7 +25,7 @@ PROXY_COMMON='
 # the lockout; a same-level second proxy_set_header does not replace the first,
 # so the panel's gateway needs its own block that asserts $remote_addr.
 PROXY_ADMIN_PANEL='
-    client_max_body_size 10M;
+    client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;
@@ -169,8 +169,19 @@ $PROXY_COMMON
 }"
 fi
 
+# The body ceiling for the contest and admin vhosts this script renders. WHY the same
+# 100M default the domain proxy uses: it has to agree with config/grader.nginx.conf.template,
+# and a smaller fallback here would refuse the panel's 51MB upload while the domain proxy
+# accepted it, so the limit would move with which proxy fronts the request.
+PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 export PROXY_COMMON HTTP_SERVER FUNNEL_SERVERS
 REALM="${FUNNEL_REALM:-CMS restricted}"
 REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
-envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS}' < /etc/nginx/templates/default.conf.template | sed "s|@FUNNEL_REALM@|$REALM_SAFE|g" > /etc/nginx/conf.d/default.conf
+# WHY @PROXY_MAX_BODY_SIZE@ is a sentinel and not ${PROXY_MAX_BODY_SIZE}: the two blocks
+# above are single-quoted so nginx's own $host and $scheme survive the shell, which means
+# envsubst expands PROXY_COMMON to text that still reads ${PROXY_MAX_BODY_SIZE} and never
+# looks at it again — one pass, no recursion. nginx would then be handed a literal
+# ${PROXY_MAX_BODY_SIZE} as its body size and refuse to start. The same substitution pass
+# that already resolves @FUNNEL_REALM@ resolves this one.
+envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'

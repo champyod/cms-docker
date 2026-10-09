@@ -694,6 +694,71 @@ check_isolate_sandbox() {
   fi
 }
 
+# nginx size (52M, 100M) or a bare byte count, as both sides of this comparison are
+# written by hand in config files. WHY the suffix matters: comparing the strings would
+# put "100M" and "104857600" on either side of an inequality and warn about a limit that
+# is actually the larger one.
+nginx_size_to_bytes() {
+  local raw="$1" number unit
+  raw="$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]' | tr -d '[:space:]')"
+  [[ "$raw" =~ ^([0-9]+)([KMG]?)$ ]] || return 1
+  number="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    K) printf '%s' "$(( number * 1024 ))" ;;
+    M) printf '%s' "$(( number * 1024 * 1024 ))" ;;
+    G) printf '%s' "$(( number * 1024 * 1024 * 1024 ))" ;;
+    *) printf '%s' "$number" ;;
+  esac
+}
+
+# Whether the proxy will accept everything the panel is willing to send.
+# WHY this is a warning and not a failure: the stack works, every smaller upload works,
+# and only a batch between the two limits is refused — with nginx's bare 413, so the
+# operator sees no explanation from the panel. It is a mismatch to reconcile, not a
+# deployment that will not come up.
+check_proxy_body_size() {
+  local configured panel_expr panel_bytes proxy_bytes
+  configured="${PROXY_MAX_BODY_SIZE:-}"
+  if [[ -z "$configured" ]]; then
+    record_result "proxy body size" "PASS" "PROXY_MAX_BODY_SIZE unset — the proxy default applies"
+    return 0
+  fi
+  if ! proxy_bytes="$(nginx_size_to_bytes "$configured")"; then
+    record_result "proxy body size" "WARN" "PROXY_MAX_BODY_SIZE=${configured} is not a size nginx understands"
+    return 0
+  fi
+  # The panel's cap is a TypeScript constant, so it is read from the source rather than
+  # restated here — a copy would drift and the warning would stop matching reality.
+  panel_expr="$(sed -n 's/^const DEFAULT_UPLOAD_BYTES *= *\([0-9][0-9* ]*\);.*/\1/p' \
+    "${REPO_ROOT}/admin-panel/src/lib/testcase-limits.ts" 2>/dev/null | head -1 | tr -d '[:space:]')"
+  # WHY the factors are multiplied rather than concatenated: the source spells the cap
+  # `50 * 1024 * 1024`, and treating those digits as one number yields 5010241024 — a cap
+  # a thousand times too large, which turns every comparison into a false warning.
+  local factor product=1
+  if [[ "$panel_expr" =~ ^[0-9]+(\*[0-9]+)+$ ]]; then
+    local IFS='*'
+    for factor in $panel_expr; do
+      product=$(( product * factor ))
+    done
+    panel_bytes="$product"
+  elif [[ "$panel_expr" =~ ^[0-9]+$ ]]; then
+    panel_bytes="$panel_expr"
+  fi
+  if [[ ! "$panel_bytes" =~ ^[0-9]+$ || "$panel_bytes" -le 0 ]]; then
+    # The panel source is not where it was expected, so say the check did not run rather
+    # than reporting a comparison that was never made.
+    record_result "proxy body size" "PASS" "panel upload cap not readable — nothing to compare against"
+    return 0
+  fi
+  if (( proxy_bytes >= panel_bytes )); then
+    record_result "proxy body size" "PASS" "proxy ${configured} accepts the panel's ${panel_bytes}-byte upload cap"
+  else
+    record_result "proxy body size" "WARN" \
+      "proxy ${configured} is below the panel's ${panel_bytes}-byte cap — uploads in that range fail as a bare nginx 413"
+  fi
+}
+
 check_disk
 check_docker
 check_env
@@ -704,6 +769,7 @@ check_ports
 check_worker_cgroup
 check_monitor_backup_access
 check_config_stale
+check_proxy_body_size
 check_certbot_issuance
 check_isolate_sandbox
 
