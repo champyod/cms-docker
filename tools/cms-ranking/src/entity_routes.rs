@@ -18,13 +18,6 @@ enum Fallback {
 }
 
 impl Fallback {
-    fn entity(self) -> Kind {
-        match self {
-            Self::Face => Kind::User,
-            Self::Flag => Kind::Team,
-        }
-    }
-
     fn file(self) -> &'static str {
         match self {
             Self::Face => "face.png",
@@ -99,15 +92,12 @@ async fn sublist(State(state): State<AppState>, Path(user): Path<String>) -> Res
     }
 }
 
-async fn image(state: AppState, key: &str, fallback: Fallback) -> Response {
-    let Some(db) = state.db() else {
-        return refuse("no database is configured");
-    };
-    match entities::exists(db.pool(), fallback.entity(), key).await {
-        Ok(true) => bundled(&state, fallback).await,
-        Ok(false) => not_found(),
-        Err(error) => refuse(&error.to_string()),
-    }
+/// Never a 404: the service treats the key as a filename pattern and answers with its bundled
+/// fallback whenever nothing matches, so a key naming nothing gets the same dummy as an entity
+/// with no image. It needs no database for the same reason, and a 404 here would be a divergence
+/// from the service being replaced rather than a stricter check.
+async fn image(state: AppState, _key: &str, fallback: Fallback) -> Response {
+    bundled(&state, fallback).await
 }
 
 async fn bundled(state: &AppState, fallback: Fallback) -> Response {
