@@ -45,7 +45,7 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 # which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
@@ -207,6 +207,15 @@ domain:
 	fi
 	$(COMPOSE_CMD) $(DOMAIN_COMPOSE_FLAGS) up -d
 	@echo "Domain stack started (grader-nginx-proxy + certbot + redis-rate-limit)."
+
+# Install the certificate-renewal timer from THIS checkout.
+# WHY here and not in src/install.py: that installer substitutes @CMS_DIR@ to
+# ~/cms, a directory this fork does not have, and its `systemd` verb has no caller
+# on the host (the image runs only `install.py venv` and `install.py cms`). The
+# shipped pair therefore kept its literal placeholder, which systemd cannot parse,
+# so renewal never fired.
+cert-timer-install:
+	@bash scripts/__cert_timer.sh --apply
 
 waf:
 	@if [ "$${WAF_ENABLED:-0}" != "1" ]; then \

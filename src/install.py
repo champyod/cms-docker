@@ -78,12 +78,6 @@ INSTALL_SYSTEMD_SERVICES = [
     'cms@.service',
     'cms-logging.service',
     'cms-ranking.service',
-    # SSL renewal ships as a unit+timer pair: the service holds the @CMS_DIR@
-    # deploy-hook path, the timer is what actually schedules it. Neither was in
-    # this list, so the only @CMS_DIR@ substituter below never saw them and the
-    # units were never installed — renewal silently never ran.
-    'grader-cert-renew.service',
-    'grader-cert-renew.timer',
 ]
 
 
@@ -171,15 +165,6 @@ def install_systemd(args: Namespace) -> None:
     progress("Reloading user systemd")
     subprocess.run(['systemctl', '--user', 'daemon-reload'],
                    check=True)
-
-    # WHY only a printed command: writing a unit does not schedule it, and nothing
-    # else here enables units either. Enabling the timer is what makes renewal
-    # actually fire, so say so explicitly instead of leaving the operator with a
-    # unit that is installed but dormant. It is not run here because it needs
-    # certbot on the host, and a hard failure would break installs that used to
-    # succeed.
-    progress("To start automatic certificate renewal: "
-             "systemctl --user enable --now grader-cert-renew.timer")
 
 
 if __name__ == '__main__':
