@@ -23,10 +23,14 @@ the service needs to move.
 1. **Migrations.** The five ranking migrations must be applied, in order:
 
    ```bash
-   for migration in ranking_tables ranking_tables_rls ranking_notify \
-                    ranking_console_users ranking_console_users_rls; do
+   for migration in \
+       20261009150000_ranking_tables \
+       20261009150100_ranking_tables_rls \
+       20261009160000_ranking_notify \
+       20261009170000_ranking_console_users \
+       20261009170100_ranking_console_users_rls; do
      docker compose exec -T database psql -U cmsuser -d "${POSTGRES_DB:-cmsdb}" \
-       -f - < "admin-panel/prisma/migrations/2026100915${migration:0:0}000_${migration}/migration.sql"
+       -f - < "admin-panel/prisma/migrations/${migration}/migration.sql"
    done
    ```
 
