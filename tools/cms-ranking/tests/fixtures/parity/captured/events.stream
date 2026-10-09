@@ -1,1 +1,37 @@
 :
+id:65d6788bbf122
+event:contest
+data:create c0
+
+id:65d6788bc1010
+event:task
+data:create t0
+
+id:65d6788bc2ea2
+event:task
+data:create t1
+
+id:65d6788bc5115
+event:team
+data:create team0
+
+id:65d6788bc6bd2
+event:user
+data:create u0
+
+id:65d6788bc978e
+event:user
+data:create u1
+
+id:65d6788bd459f
+event:score
+data:u0 t0 50.0
+
+id:65d6788bd653b
+event:score
+data:u0 t0 100.0
+
+id:65d6788bda888
+event:user
+data:create u1
+

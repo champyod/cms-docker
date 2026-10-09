@@ -1,37 +1,42 @@
 # What the capture says about the port
 
-Each row compares the captured bytes with what `tools/cms-ranking` emits today.
+Recorded from the running Python service on 2026-10-09 with the fixture set seeded through
+its own authenticated PUT path (`seed_sha256=19734aff...`). Every row is observed bytes.
 
-| Route | Captured | The port | Verdict |
-| :--- | :--- | :--- | :--- |
-| `/` | the vendored page | the same file from `RANKING_STATIC_DIR` | matches |
-| `/scores` | `{}` | an object keyed by user, empty with no submissions | matches |
-| `/history` | `[]` | an array, empty with no submissions | matches |
-| `/config` | exactly two keys | thirteen fields, nulls included | **diverges** |
-| `/credits` | `project` and `license` are objects | both are strings | **diverges** |
-| `/users/` | 200 with the users, `f_name`/`l_name`/`team` | 503, not routed | **missing** |
-| `/users/u0` | 404, HTML body | not routed | **diverges** |
-| `/events` | a `:` heartbeat, no data event in five seconds | a `reinit` event on connect | **diverges** |
-| `/logo` | `image/jpeg`, `Last-Modified` | the file, type by extension probe | matches |
+## Routes the page fetches, and what the port must serve
 
-## Why each divergence matters
+| Route | Observed | Notes |
+| :--- | :--- | :--- |
+| `/` | the vendored page | already served |
+| `/scores` | `{"u0": {"t0": 100.0}, ...}` | nested user -> task -> best score, `Timestamp` |
+| `/history` | `[["u0", "t0", 1700001000, 50.0], ...]` | arrays, no `Timestamp` |
+| `/config` | two keys | already served, but 13 are serialised |
+| `/credits` | `license`/`project` are objects | the port flattens them to strings |
+| `/logo` | `image/jpeg` | already served |
+| `/contests/`, `/contests/<k>` | object keyed by key | **missing in the port** |
+| `/tasks/`, `/tasks/<k>` | object keyed by key | **missing** |
+| `/teams/`, `/teams/<k>` | object keyed by key | **missing** |
+| `/users/`, `/users/<k>` | object keyed by key | **missing** |
+| `/sublist/<user>` | `[]` for a user with no submissions | **missing**; no `Timestamp` |
+| `/faces/<user>` | 200 `image/png`, the bundled dummy face | **missing**; not 404 |
+| `/flags/<team>` | 200 `image/png`, the bundled dummy flag | **missing**; not 404 |
 
-**`/users/` is the serious one.** The page needs names and teams; it is not a push route as
-assumed when the CRUD endpoints were left out. Without it the Rust scoreboard shows scores
-with no names against them. It must read the `ranking_users` projection.
+## The three findings that matter
 
-**`/credits` is a contract, not cosmetics.** The captured body nests `license.spdx_id` and
-`project.name`; the port flattening them to strings breaks anything reading those paths, and
-the licence is the one thing this project refuses to render wrong.
+**Faces and flags are never 404 for a known key.** The service answers with its bundled
+dummy assets when the entity has none, so the earlier 404s were for keys that do not exist.
+The port must serve a fallback image, and the images ship with the vendored static files.
 
-**`/config` extra keys are additive** and the page reads by name, so it will not break — but
-byte comparison is impossible while thirteen keys are serialised where two were sent, and
-`access_mode` leaks the protected-mode setting to anonymous readers.
+**`Timestamp` is not universal.** It is on `/scores` and on every entity list and single
+route, and absent from `/history`, `/sublist`, `/config`, `/credits`, `/logo` and every 404.
 
-**`Timestamp`.** The capture shows `Timestamp` on `/scores` but not on `/history`; the page's
-data store uses it to discard out-of-order responses. The port must send it where the
-baseline does and nowhere else.
+**The event stream, verbatim.** The greeting is `:`; each block is `id:<hex microseconds>`,
+`event:<name>`, `data:<payload>` and a blank line; `reinit` appears only after a stale
+`Last-Event-ID` and carries neither `id` nor `data`. Names and payloads observed:
+`contest|task|team|user` with `create <key>` / `update <key>`, and `score` with
+`<user> <task> <score>`. Re-seeding the same keys emitted `update` instead of `create` and
+no `score` events, because the scores did not change.
 
-**`/events` connect behaviour** differs, so an EventSource client sees a different first
-message than it did in production.
+The port's current feed opens with `reinit` unconditionally, uses compact JSON, and sends no
+`Timestamp`.
 
