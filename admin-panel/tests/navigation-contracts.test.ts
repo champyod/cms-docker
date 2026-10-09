@@ -71,15 +71,6 @@ const DIRECT_LABEL_CASES = [
   { labelKey: 'navigation.tasks.list.label', en: 'Tasks', th: 'งาน' },
 ] as const;
 
-// Why one id and not the group: a module contributes a single sidebar entry, the
-// landing page its tab strip opens on, while its remaining routes stay reachable
-// as tabs and from the palette, the search page, and the shortcut chords.
-const ADMINISTRATION_LANDING_ROUTE_ID: RouteId = 'administration.admins';
-
-const INFRASTRUCTURE_LANDING_ROUTE_ID: RouteId = 'infrastructure.deployments';
-
-const SYSTEM_LANDING_ROUTE_ID: RouteId = 'system.appearance';
-
 const INFRASTRUCTURE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
@@ -95,6 +86,12 @@ const SYSTEM_ROUTE_IDS = [
   'system.docs',
   'system.about',
 ] as const satisfies readonly RouteId[];
+
+const MODULE_FIELD_IDS: readonly RouteId[] = [
+  ...ADMINISTRATION_ROUTE_IDS,
+  ...INFRASTRUCTURE_ROUTE_IDS,
+  ...SYSTEM_ROUTE_IDS,
+];
 
 function tabIdsVisibleTo(effective: ReadonlySet<string>): string[] {
   return ROUTE_REGISTRY
@@ -175,22 +172,13 @@ describe('target route registry', () => {
     const enabledIdSet = new Set<string>(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => route.enabled).map((route) => route.id)).toEqual(enabledIds);
     expect(ROUTE_REGISTRY.filter((route) => !enabledIdSet.has(route.id)).every((route) => !route.enabled)).toBe(true);
-    // Why: page surfaces are group-scoped, so the sidebar equality is scoped to
-    // the module IDs this registry owns — a People or Evaluation entry owned by
-    // another slice would otherwise make the complete visible list look
-    // incomplete.
     const sidebarIds = visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id);
     expect(sidebarIds.slice(0, directIds.length)).toEqual(directIds);
-    const moduleIds = new Set<RouteId>([
-      ...ADMINISTRATION_ROUTE_IDS,
-      ...INFRASTRUCTURE_ROUTE_IDS,
-      ...SYSTEM_ROUTE_IDS,
-    ]);
-    expect(sidebarIds.filter((id) => moduleIds.has(id))).toEqual([
-      ADMINISTRATION_LANDING_ROUTE_ID,
-      INFRASTRUCTURE_LANDING_ROUTE_ID,
-      SYSTEM_LANDING_ROUTE_ID,
-    ]);
+  });
+
+  it('lists every module field on the sidebar in registry order', () => {
+    const sidebarIds = visibleRoutes(new Set(['all:all']), 'sidebar').map((route) => route.id);
+    expect(sidebarIds.filter((id) => MODULE_FIELD_IDS.includes(id))).toEqual(MODULE_FIELD_IDS);
   });
 
   it('uses stable unique IDs and unique canonical patterns', () => {

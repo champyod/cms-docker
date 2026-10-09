@@ -27,6 +27,12 @@ const GROUP_PAGE_SURFACES: readonly NavigationSurface[] = [
   'breadcrumbs',
 ];
 
+const CHORD_SURFACE: NavigationSurface = 'shortcuts';
+
+// A field a reader reaches deliberately costs one of the few available chord letters.
+export const GROUP_PAGE_SURFACES_WITHOUT_CHORD: readonly NavigationSurface[] =
+  GROUP_PAGE_SURFACES.filter((surface) => surface !== CHORD_SURFACE);
+
 const RECORD_SURFACES: readonly NavigationSurface[] = [
   'palette',
   'search',

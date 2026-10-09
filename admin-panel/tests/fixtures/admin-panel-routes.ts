@@ -109,7 +109,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'infrastructure.ranking': { all: ['ranking:list', 'ranking:read'] },
   'system.appearance': { all: ['appearance:read', 'appearance:list'] },
   'system.maintenance': { any: ['maintenance:update', 'backup:create'] },
-  'system.backup-restore': { any: ['backup:create', 'backup:list', 'backup:restore', 'backup:schedule'] },
+  'system.backup-restore': { any: ['backup:create', 'backup:delete', 'backup:list', 'backup:restore', 'backup:schedule', 'backup:settle'] },
   'system.settings': { all: ['env:read', 'env:list', 'monitor:read', 'monitor:list'] },
   'system.docs': {},
   'system.about': {},

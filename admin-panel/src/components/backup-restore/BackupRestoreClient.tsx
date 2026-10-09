@@ -14,25 +14,8 @@ import { RestoreSection } from '@/components/backup-restore/RestoreSection';
 import { SaveToFileFlow } from '@/components/backup-restore/SaveToFileFlow';
 import { ScheduleRunsSection } from '@/components/backup-restore/ScheduleRunsSection';
 import { ScheduleSection } from '@/components/backup-restore/ScheduleSection';
+import { BACKUP_MODES, type BackupModeId } from '@/lib/backup/modes';
 import { hasEffectivePermission } from '@/lib/permission-engine';
-
-type ModeTabId = 'from-file' | 'to-file' | 'from-dir' | 'to-dir' | 'schedules';
-
-interface ModeTab {
-    readonly id: ModeTabId;
-    readonly label: string;
-    /** One key the reader must hold; a tab they cannot act inside is not offered. */
-    readonly anyOf: readonly string[];
-    readonly showsLocationSwitcher: boolean;
-}
-
-const MODE_TABS: readonly ModeTab[] = [
-    { id: 'from-file', label: 'From File', anyOf: ['backup:restore'], showsLocationSwitcher: false },
-    { id: 'to-file', label: 'To File', anyOf: ['backup:create'], showsLocationSwitcher: false },
-    { id: 'from-dir', label: 'From Backup Dir', anyOf: ['backup:restore', 'backup:list', 'backup:delete'], showsLocationSwitcher: true },
-    { id: 'to-dir', label: 'To Backup Dir', anyOf: ['backup:create'], showsLocationSwitcher: true },
-    { id: 'schedules', label: 'Schedules', anyOf: ['backup:schedule', 'backup:settle'], showsLocationSwitcher: false },
-];
 
 interface BackupRestoreClientProps {
     readonly permissionKeys: readonly string[];
@@ -46,8 +29,8 @@ export function BackupRestoreClient({
     defaultLocationId,
 }: BackupRestoreClientProps): React.JSX.Element {
     const effective = new Set(permissionKeys);
-    const visibleTabs = MODE_TABS.filter((tab) => tab.anyOf.some((key) => hasEffectivePermission(effective, key)));
-    const [activeTabId, setActiveTabId] = useState<ModeTabId>(visibleTabs[0]?.id ?? 'from-file');
+    const visibleTabs = BACKUP_MODES.filter((tab) => tab.anyOf.some((key) => hasEffectivePermission(effective, key)));
+    const [activeTabId, setActiveTabId] = useState<BackupModeId>(visibleTabs[0]?.id ?? BACKUP_MODES[0].id);
     const [activeLocationId, setActiveLocationId] = useState(defaultLocationId);
     // A selective dump starts detached, so the archive browser is told to look again rather
     // than showing the pre-run list until the operator presses Refresh.
@@ -70,7 +53,7 @@ export function BackupRestoreClient({
                 items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
                 activeId={activeTab.id}
                 ariaLabel="Backup and restore modes"
-                onSelect={(id) => setActiveTabId(id as ModeTabId)}
+                onSelect={(id) => setActiveTabId(id as BackupModeId)}
             />
             {activeTab.showsLocationSwitcher && (
                 <DirLocationSwitcher locations={locations} activeId={activeLocationId} onSelect={setActiveLocationId} />

@@ -353,14 +353,12 @@ describe('permission coverage', () => {
 
   it('hides every gated surface from a keyless caller', () => {
     const empty = new Set<string>();
-    // Why the ID set and not the per-route shape: visibleRoutes already filters on
-    // isRoutePermitted, and a requirement-free route is permitted for anyone, so
-    // asserting an empty requirement per visible route holds by construction. The
-    // exact visible ID set is the form that can actually fail when a route is
-    // enabled whose gate does not reach the sidebar surface. Home is the one
-    // authenticated-public target left on the sidebar, so a keyless caller sees
-    // exactly that: Docs reaches the same reader as a System tab, not as a rail entry.
-    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual(['home']);
+    // An exact ID set is what fails when an enabled route's gate stops reaching the sidebar.
+    expect(visibleRoutes(empty, 'sidebar').map((route) => route.id)).toEqual([
+      'home',
+      'system.docs',
+      'system.about',
+    ]);
   });
 
   it('uses only registry keys in frontend permission checks', () => {
