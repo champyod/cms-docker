@@ -518,8 +518,14 @@ fi
 
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "monitor"; then
   log_info "up: monitor profile"
+  # WHY --profile core as well: the monitor profile also holds cms-scheduler, whose
+  # depends_on is `database: service_healthy` while database sits behind
+  # profiles: [core]. Compose validates the whole project before starting anything, so
+  # --profile monitor alone failed with `service "scheduler" depends on undefined
+  # service "database"` and the monitor never came up — in the one script whose job is
+  # to prove the stacks start.
   # shellcheck disable=SC2086
-  docker compose -f "$COMPOSE_FILE" --profile monitor up -d 2>&1 || fail_mid_flow "compose up monitor failed"
+  docker compose -f "$COMPOSE_FILE" --profile core --profile monitor up -d 2>&1 || fail_mid_flow "compose up monitor failed"
   # Monitor has no HTTP endpoint; check container running
   run_wait_healthy "cms-monitor" 60 || true
 fi

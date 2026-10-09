@@ -4,13 +4,14 @@ that produced P1-P5 (stale paths, exec-bit loss, CLI drift, profile-graph
 gaps, bind-mount perms)."""
 import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 os.chdir(Path(__file__).resolve().parent.parent)
 
-issues, checks = [], 0
+issues, checks, skipped = [], 0, 0
 
 def track(msg):
     issues.append(msg)
@@ -139,6 +140,16 @@ for f in scan_files:
     for i, line in enumerate(open(f, errors="replace"), 1):
         for m in re.finditer(r"--profile (\S+)", line):
             INVOCATION_SOURCES.append((f, i, m.group(1)))
+
+# WHY the guard: this section is the only one that shells out to docker, and calling it
+# unguarded made the whole audit die with a FileNotFoundError traceback on any host
+# without a daemon — a workstation or CI runner. The remaining sections check stale
+# paths, exec bits, bind-mount perms and CLI drift, none of which need docker, so a
+# missing docker should cost this one section and nothing else. It is reported as a
+# skipped check rather than a pass, because "not checked" and "checked and clean" are
+# different answers and only one of them is true here.
+DOCKER_AVAILABLE = shutil.which("docker") is not None
+
 def real_validate(profiles: list[str]) -> tuple[bool, str]:
     cmd = ["docker","compose","-f","docker-compose.yml"]
     for p in profiles: cmd += ["--profile", p]
@@ -154,6 +165,9 @@ for f, ln, prof in INVOCATION_SOURCES:
     seen.setdefault((f, full), ln)
 for (f, full), ln in sorted(seen.items()):
     checks += 1
+    if not DOCKER_AVAILABLE:
+        skipped += 1
+        continue
     ok, why = real_validate(list(full))
     if not ok:
         track(f"D {f}:{ln}: compose profile set {list(full)} INVALID: {why}")
@@ -203,4 +217,6 @@ if issues:
 else:
     print("ALL CLEAN")
 print(f"\nchecks run: {checks}")
+if skipped:
+    print(f"checks skipped (need docker): {skipped}")
 sys.exit(1 if issues else 0)
