@@ -70,6 +70,38 @@ PY
     fi
 }
 
+# The first user in the list usually has no submissions, so walk the users /history
+# proves have some before falling back to the list, and stop at the first non-empty body.
+capture_sublist() {
+    local key
+    while IFS= read -r key; do
+        [ -n "$key" ] || continue
+        capture_body sublist "/sublist/${key}"
+        if [ -s "${OUT_DIR}/sublist.body" ] && [ "$(cat "${OUT_DIR}/sublist.body")" != "[]" ]; then
+            printf 'sublist populated by user %s\n' "${key}" >&2
+            return
+        fi
+    done < <(python3 - "${OUT_DIR}/history.body" "${OUT_DIR}/users_list.body" <<'PY'
+import json
+import sys
+
+seen = []
+for path in sys.argv[1:]:
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        continue
+    keys = [entry[0] for entry in data] if path.endswith("history.body") else list(data)
+    for key in keys:
+        if key not in seen:
+            seen.append(key)
+for key in seen:
+    print(key)
+PY
+)
+}
+
 # Subscribe before the first write: the service replays only events a subscriber
 # has not seen, so a stream opened after seeding would miss every seed event.
 start_events() {
@@ -161,7 +193,7 @@ main() {
     capture_entity teams_list /teams/ team_one
     capture_entity teams_list /flags/ flag
     capture_entity users_list /faces/ face
-    capture_entity users_list /sublist/ sublist
+    capture_sublist
     stop_events
     write_manifest
     if [ "$STDOUT_ONLY" = 1 ]; then

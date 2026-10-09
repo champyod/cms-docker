@@ -110,6 +110,37 @@ fn scores_and_history_match_the_python_scorer() {
     }
 }
 
+/// /sublist serves every submission of a user (not just the best), each with its own
+/// score, token and extra, ordered by (task, time) the way the Python handler sorted.
+#[test]
+fn the_sublist_carries_every_submission_of_a_user() {
+    let seed = fixture("seed.json");
+    let (tasks, submissions, subchanges) = inputs(&seed);
+    let ledger = assemble(&tasks, &submissions, &subchanges).expect("known modes");
+
+    let u0 = ledger.sublist("u0");
+    assert_eq!(u0.len(), 2, "u0 has two submissions in the seed");
+    assert_eq!(
+        (
+            u0[0].task.as_str(),
+            u0[0].time,
+            u0[0].key.as_str(),
+            u0[0].score,
+        ),
+        ("t0", 1700001000, "s0", 50.0)
+    );
+    assert_eq!((u0[1].key.as_str(), u0[1].score), ("s1", 100.0));
+
+    let tasks_of_u1: Vec<&str> = ledger
+        .sublist("u1")
+        .into_iter()
+        .map(|entry| entry.task.as_str())
+        .collect();
+    assert_eq!(tasks_of_u1, vec!["t0", "t1"]);
+
+    assert!(ledger.sublist("nobody").is_empty());
+}
+
 /// Guards the one place the two Python helpers differ: the max mode keeps a
 /// negative score, while a released query is clamped at zero.
 #[test]

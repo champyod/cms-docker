@@ -122,11 +122,9 @@ events_follow_a_write() {
     pass "a write reaches an open event stream"
 }
 
-/**
- * A console account, seeded as plaintext instead of a hash: the password format supports
- * both, seeding a hash would need a hashing tool this script does not require, and the
- * plaintext branch is the one a fresh deployment starts with.
- */
+# A console account, seeded as plaintext instead of a hash: the password format supports
+# both, seeding a hash would need a hashing tool this script does not require, and the
+# plaintext branch is the one a fresh deployment starts with.
 seed_console_user() {
     psql "${DATABASE_URL}" -q -c "DELETE FROM ranking_console_users WHERE username = 'e2e'" >/dev/null
     psql "${DATABASE_URL}" -q -c "INSERT INTO ranking_console_users (username, password) VALUES ('e2e', 'plaintext:e2e-secret')" >/dev/null

@@ -45,6 +45,6 @@ route, and absent from `/history`, `/sublist`, `/config`, `/credits`, `/logo` an
 `<user> <task> <score>`. Re-seeding the same keys emitted `update` instead of `create` and
 no `score` events, because the scores did not change.
 
-The port's current feed opens with `reinit` unconditionally, uses compact JSON, and sends no
-`Timestamp`.
+The five seconds of `/events` recorded here carry no frame — only the `:` heartbeat — so the
+event vocabulary and framing above are read from the handler source, not observed on the wire.
 
