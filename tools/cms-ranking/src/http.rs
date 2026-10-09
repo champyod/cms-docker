@@ -5,7 +5,7 @@ use axum::extract::State;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Json, Response};
-use axum::routing::{any, get};
+use axum::routing::{any, get, post};
 use axum::Router;
 use serde::{Deserialize, Serialize};
 use tokio_stream::wrappers::BroadcastStream;
@@ -47,10 +47,10 @@ const DEFAULT_SOURCE_URL: &str = "https://github.com/champyod/cms-docker";
 
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
 /// that a Response in the Err slot makes every call site pay for the failure path.
-struct Refusal(String);
+pub(crate) struct Refusal(pub(crate) String);
 
 impl Refusal {
-    fn response(self) -> Response {
+    pub(crate) fn response(self) -> Response {
         refuse(&self.0)
     }
 }
@@ -58,6 +58,8 @@ impl Refusal {
 pub fn router(state: AppState) -> Router {
     let router = Router::new()
         .route("/healthz", get(health))
+        .route("/login", get(crate::login::page).post(crate::login::submit))
+        .route("/logout", post(crate::login::logout))
         .route("/", get(root))
         .route("/scores", get(scores))
         .route("/history", get(history))
@@ -65,6 +67,12 @@ pub fn router(state: AppState) -> Router {
         .route("/logo", get(logo))
         .route("/credits", get(credits))
         .route("/events", get(events));
+    // One gate rather than the same check in five handlers, and it reads access_mode
+    // from the row /config serves, so a panel change applies on the next request.
+    let router = router.layer(axum::middleware::from_fn_with_state(
+        state.clone(),
+        crate::login::gate,
+    ));
     match state.config().static_dir.clone() {
         // The vendored page asks for its stylesheet, scripts and images by name at
         // the root, so the directory is the fallback rather than one route.
@@ -287,7 +295,7 @@ fn html_response(html: &str) -> Response {
         .into_response()
 }
 
-fn refuse(reason: &str) -> Response {
+pub(crate) fn refuse(reason: &str) -> Response {
     eprintln!("cms-ranking: refused: {reason}");
     (
         StatusCode::SERVICE_UNAVAILABLE,
