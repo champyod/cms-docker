@@ -90,7 +90,7 @@ pub enum DispatchKey {
     DomainStatus,
     /// `./cms domain renew`
     DomainRenew,
-    /// `./cms domain setup --install-timer`
+    /// `./cms domain {setup|renew} --install-timer`
     DomainCertTimerInstall,
     /// `./cms domain preflight`
     DomainPreflight,

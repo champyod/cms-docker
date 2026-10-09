@@ -214,7 +214,7 @@ pub fn domain_setup_args(verb: &str, setup: &DomainSetupRequest) -> Vec<String> 
             out.push(value);
         }
     }
-    out.extend(retry_args(setup));
+    out.extend(retry_args(&setup.retry));
     for (flag, field) in BOOL_FLAGS {
         if field(setup) {
             out.push(flag.to_string());
@@ -243,24 +243,29 @@ pub fn domain_setup_args(verb: &str, setup: &DomainSetupRequest) -> Vec<String> 
 
 /// The three retry flags, in the CLI's established order.
 ///
+/// WHY it takes [`DomainRetryPolicy`] rather than a whole request: `setup`, `cert` and
+/// `renew` all answer the same retry question, so one encoder over the shared policy is
+/// the whole of it. Reading it from the request instead would mean the two encoders each
+/// carried their own copy of an identical rule.
+///
 /// WHY `--retry-forever` is expanded here and not forwarded as a bare flag: the script
 /// reads an unlimited run as `--auto-retry` with `--retry-attempts 0`, so forwarding the
 /// name alone would leave the default cap of 8 in force.
-fn retry_args(setup: &DomainSetupRequest) -> Vec<String> {
+pub(crate) fn retry_args(retry: &DomainRetryPolicy) -> Vec<String> {
     let mut out = Vec::new();
-    if setup.retry.is_auto_retry || setup.retry.is_retry_forever {
+    if retry.is_auto_retry || retry.is_retry_forever {
         out.push("--auto-retry".to_string());
     }
-    let attempts = if setup.retry.is_retry_forever {
+    let attempts = if retry.is_retry_forever {
         Some(0)
     } else {
-        setup.retry.attempts
+        retry.attempts
     };
     if let Some(attempts) = attempts {
         out.push("--retry-attempts".to_string());
         out.push(attempts.to_string());
     }
-    if let Some(interval) = setup.retry.interval {
+    if let Some(interval) = retry.interval {
         out.push("--retry-interval".to_string());
         out.push(interval.to_string());
     }

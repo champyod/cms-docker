@@ -8,11 +8,12 @@
 //! put flags on the wire that the renew path parses and then ignores — the operator
 //! would have typed `--auto-renew` on a verb whose entire job is the renewal.
 //!
-//! WHY `DomainRetryPolicy` and `DomainSwitches` are imported rather than redeclared: the
-//! script's own help heads the retry group "Retry options (setup, renew)", and the run
-//! switches are the same three in both verbs. A second copy is free to drift.
+//! WHY `DomainRetryPolicy`, `retry_args` and `DomainSwitches` are imported rather than
+//! redeclared: the script's own help heads the retry group "Retry options (setup,
+//! renew)", and the run switches are the same three in both verbs. A second copy is
+//! free to drift.
 
-use crate::core::domain_setup::{DomainRetryPolicy, DomainSwitches};
+use crate::core::domain_setup::{retry_args, DomainRetryPolicy, DomainSwitches};
 
 /// Every value `scripts/__domain.sh renew` accepts, before it becomes argv.
 ///
@@ -137,7 +138,7 @@ pub fn domain_renew_args(renew: &DomainRenewRequest) -> Vec<String> {
             out.push(value);
         }
     }
-    out.extend(retry_args(renew));
+    out.extend(retry_args(&renew.retry));
     for (flag, field) in BOOL_FLAGS {
         if field(renew) {
             out.push(flag.to_string());
@@ -145,32 +146,6 @@ pub fn domain_renew_args(renew: &DomainRenewRequest) -> Vec<String> {
     }
     if renew.is_apply {
         out.push("--apply".to_string());
-    }
-    out
-}
-
-/// The three retry flags, in the CLI's established order.
-///
-/// WHY `--retry-forever` is expanded here and not forwarded as a bare flag: the script
-/// reads an unlimited run as `--auto-retry` with `--retry-attempts 0`, so forwarding the
-/// name alone would leave the default cap of 8 in force.
-fn retry_args(renew: &DomainRenewRequest) -> Vec<String> {
-    let mut out = Vec::new();
-    if renew.retry.is_auto_retry || renew.retry.is_retry_forever {
-        out.push("--auto-retry".to_string());
-    }
-    let attempts = if renew.retry.is_retry_forever {
-        Some(0)
-    } else {
-        renew.retry.attempts
-    };
-    if let Some(attempts) = attempts {
-        out.push("--retry-attempts".to_string());
-        out.push(attempts.to_string());
-    }
-    if let Some(interval) = renew.retry.interval {
-        out.push("--retry-interval".to_string());
-        out.push(interval.to_string());
     }
     out
 }
