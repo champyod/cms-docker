@@ -71,7 +71,13 @@ def install_proxy_surface():
     requests.exceptions = register(
         "requests.exceptions", RequestException=Exception)
 
-    register("sqlalchemy", not_=lambda condition: condition)
+    # ProxyService imports not_, text and sqlalchemy.exc.SQLAlchemyError;
+    # none runs in the initialize() path this suite drives, so placeholders
+    # suffice for the import to succeed.
+    sqlalchemy = register(
+        "sqlalchemy", not_=lambda condition: condition,
+        text=lambda statement: statement)
+    sqlalchemy.exc = register("sqlalchemy.exc", SQLAlchemyError=Exception)
 
     database = sys.modules["cms.db"]
     database.SessionGen = SessionGen
