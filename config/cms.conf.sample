@@ -113,8 +113,8 @@
     "num_proxies_used": 0,
 
     "_help": "Maximum size of a submission in bytes. If you use a proxy",
-    "_help": "and set these sizes to large values remember to change",
-    "_help": "client_max_body_size in nginx.conf too.",
+    "_help": "and set these sizes to large values, raise PROXY_MAX_BODY_SIZE",
+    "_help": "in config.toml [infra] with it.",
     "max_submission_length": 100000,
     "max_input_length": 5000000,
 
