@@ -161,6 +161,25 @@ pub fn logo_path(
         if path.is_file() {
             return path.to_path_buf();
         }
+        // A configured path with no extension is a stem, not a file: the operator names
+        // where the logo lives and the upload decides whether it is a png or a jpg. The
+        // Python handler negotiated this over Accept; probing in a fixed order keeps the
+        // same outcome without a content-negotiation dance for one image.
+        if path.extension().is_none() {
+            if let Some(found) = probe_extensions(path) {
+                return found;
+            }
+        }
     }
     static_dir.join("img").join("logo.png")
+}
+
+/// The image formats the Python handler accepted, in the order it preferred them.
+const LOGO_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "bmp"];
+
+fn probe_extensions(stem: &Path) -> Option<PathBuf> {
+    LOGO_EXTENSIONS
+        .iter()
+        .map(|extension| stem.with_extension(extension))
+        .find(|candidate| candidate.is_file())
 }

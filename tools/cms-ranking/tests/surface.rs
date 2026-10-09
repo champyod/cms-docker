@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use cms_ranking::store::Appearance;
-use cms_ranking::surface::{credits_from_file, render_page};
+use cms_ranking::surface::{credits_from_file, logo_path, render_page};
 
 fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearance {
     Appearance {
@@ -74,4 +74,34 @@ fn credits_keep_the_names_the_python_route_used() {
 fn a_missing_credits_file_is_refused_rather_than_emptied() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/absent.json");
     assert!(credits_from_file(&path, None).is_err());
+}
+
+/// The panel stores one file per format and removes the others, so the configured path
+/// is a stem and the format is whatever was last uploaded.
+#[test]
+fn a_logo_stem_resolves_to_the_format_on_disk() {
+    let directory = std::env::temp_dir().join(format!("ranking-logo-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("a temporary directory");
+    let stem = directory.join("logo");
+    std::fs::write(directory.join("logo.jpg"), b"jpeg bytes").expect("the fixture is written");
+    assert_eq!(
+        logo_path(None, Some(&stem), &directory),
+        directory.join("logo.jpg")
+    );
+    // png wins when both exist, matching the Python handler's preference order.
+    std::fs::write(directory.join("logo.png"), b"png bytes").expect("the second fixture");
+    assert_eq!(
+        logo_path(None, Some(&stem), &directory),
+        directory.join("logo.png")
+    );
+    std::fs::remove_dir_all(&directory).ok();
+}
+
+#[test]
+fn a_logo_with_no_file_falls_back_to_the_vendored_asset() {
+    let directory = std::env::temp_dir().join(format!("ranking-empty-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).expect("a temporary directory");
+    let fallback = logo_path(None, Some(&directory.join("absent")), &directory);
+    assert_eq!(fallback, directory.join("img").join("logo.png"));
+    std::fs::remove_dir_all(&directory).ok();
 }

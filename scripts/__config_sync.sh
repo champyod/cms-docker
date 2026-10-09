@@ -230,6 +230,10 @@ generate_secret_for() {
     CMS_SECRET_KEY)      gen_hex32 ;;
     RPC_SECRET)          gen_hex32 ;;
     RANKING_PASSWORD)    echo "cms_ranking_$(gen_pw)" ;;
+    # WHY this secret is generated while the CAPTCHA secret is not: this one is ours
+    # to invent and only has to be unpredictable, whereas the CAPTCHA secret is issued
+    # by a provider and random hex can never authenticate against its API.
+    RANKING_SESSION_SECRET) gen_hex32 ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
     VAULT_TOKEN)         gen_hex32 ;;

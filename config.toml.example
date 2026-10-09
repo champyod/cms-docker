@@ -82,6 +82,7 @@ RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published
 RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
 RANKING_USERNAME = "admin"      # str; scoreboard auth username injected into cms.ranking.toml — guards the ranking UI and the ranking push
 RANKING_PASSWORD = ""           # secret; auto-generated if empty
+RANKING_SESSION_SECRET = ""     # secret; auto-generated if empty — signs the ranking console session cookie; empty makes the console refuse every login
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
 CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking" # str; reserved — no code reads it; the injector never sets log_dir in cms.ranking.toml
 CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path written as lib_dir into cms.ranking.toml and used by the logo hot-swap — must match the cms-ranking-data volume mount

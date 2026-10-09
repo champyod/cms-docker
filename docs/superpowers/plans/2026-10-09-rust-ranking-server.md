@@ -114,10 +114,12 @@
 
 ### Slice 8: Cutover
 
-- [ ] Change the ranking-web-server command to the Rust binary; keep container name, port, healthcheck and labels.
-- [ ] Amend docs/decisions/ranking-logo-storage.md rather than contradicting it, and update docs/QUICKREF.md, docs/SERVICE_GUIDE.md, docs/ACCESS-CONFIGURATION.md and docs/DB-ROTATION.md pass criteria.
-- [ ] Remove cmsRankingWebServer from the runtime path and record the retirement in the changelog; leave the Python source in the tree until the parity gate has run in production once.
-- **Verify:** docker compose config; the service answers all public routes on the fixture database; docs links resolve.
+- [x] The ranking-web-server command is the Rust binary; container name, port, profile, labels and the published mapping are unchanged.
+- [x] The environment is the service's own: DATABASE_URL, RANKING_BIND_ADDRESS, RANKING_STATIC_DIR, CMS_CREDITS_FILE, RANKING_LOGO_PATH, RANKING_SESSION_SECRET, RANKING_REDIS_URL and the five CAPTCHA keys. The Python-only cms.toml and cms_ranking.toml mounts are gone; the data volume stays mounted read-only for the logo the panel writes.
+- [x] The healthcheck reads /healthz rather than /, because the scoreboard route refuses without a database and a healthcheck that fails while the service is up is a restart loop.
+- [x] RANKING_LOGO_PATH points at the volume stem, and the service now probes the formats the Python handler negotiated over Accept, so a jpg upload is still served. RANKING_SESSION_SECRET was added to config.toml.example with a generator arm in scripts/__config_sync.sh.
+- [ ] Still open: the ADR amendment, the SERVICE_GUIDE / ACCESS-CONFIGURATION / DB-ROTATION updates, and recording the Python command's retirement.
+- **Verify:** docker-compose.yml parses with the expected command, healthcheck and twelve environment keys; bash -n clean; the config-sync suite passes 25/25; rust fmt, clippy -D warnings and seven suites pass. docker compose config cannot run without a daemon.
 - **Commit:** feat(deploy): cut the ranking server over to rust
 
 ### Slice 9: Acceptance
