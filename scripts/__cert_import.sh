@@ -38,10 +38,15 @@ cert_validate_supplied_certificate() {
     log_warn "this openssl cannot check host coverage — confirm the names cover ${ACME_HOST_NAMES} by hand"
     return 0
   fi
-  local domain
+  local domain verdict
   while read -r domain; do
-    openssl x509 -noout -checkhost "$domain" -in "$certificate" >/dev/null 2>&1 \
-      || uncovered+="${domain} "
+    # OpenSSL 3.0 (Ubuntu 24.04) prints the verdict but leaves the exit status at 0 —
+    # only newer versions fail the command — so the message is the portable signal.
+    verdict="$(openssl x509 -noout -checkhost "$domain" -in "$certificate" 2>&1)" \
+      || { uncovered+="${domain} "; continue; }
+    case "$verdict" in
+      *"does NOT match"*) uncovered+="${domain} " ;;
+    esac
   done < <(_configured_domains)
   if [[ -n "$uncovered" ]]; then
     log_warn "certificate does not cover: ${uncovered% }"
