@@ -23,6 +23,54 @@ pub struct RankingConfig {
     /// Signs the console cookie. Absent means the console cannot log anyone in, which
     /// is a refusal rather than an open door.
     pub session_secret: Option<String>,
+    pub captcha: CaptchaConfig,
+}
+
+/// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
+/// decided. `enabled` is the single switch: off means the console accepts a login
+/// without a challenge, which is what a development deployment wants.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptchaConfig {
+    pub enabled: bool,
+    pub provider: CaptchaProvider,
+    pub site_key: String,
+    pub secret_key: String,
+    pub threshold: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptchaProvider {
+    Turnstile,
+    HCaptcha,
+}
+
+impl CaptchaProvider {
+    pub fn endpoint(self) -> &'static str {
+        match self {
+            Self::Turnstile => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            Self::HCaptcha => "https://hcaptcha.com/siteverify",
+        }
+    }
+
+    fn from_wire(raw: &str) -> Self {
+        if raw.trim().eq_ignore_ascii_case("hcaptcha") {
+            Self::HCaptcha
+        } else {
+            Self::Turnstile
+        }
+    }
+}
+
+impl Default for CaptchaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            provider: CaptchaProvider::Turnstile,
+            site_key: String::new(),
+            secret_key: String::new(),
+            threshold: 3,
+        }
+    }
 }
 
 impl Default for RankingConfig {
@@ -34,6 +82,7 @@ impl Default for RankingConfig {
             credits_file: None,
             logo_path: None,
             session_secret: None,
+            captcha: CaptchaConfig::default(),
         }
     }
 }
@@ -66,6 +115,7 @@ impl RankingConfig {
             credits_file: read_path(&vars, "CMS_CREDITS_FILE", DEFAULT_CREDITS_FILE),
             logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
             session_secret: read_secret(&vars),
+            captcha: read_captcha(&vars),
         })
     }
 }
@@ -96,6 +146,41 @@ fn read_path(vars: &HashMap<String, String>, key: &str, fallback: &str) -> Optio
     } else {
         Some(PathBuf::from(raw))
     }
+}
+
+fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
+    CaptchaConfig {
+        enabled: read_flag(vars, "CAPTCHA_ENABLED"),
+        provider: CaptchaProvider::from_wire(
+            vars.get("CAPTCHA_PROVIDER")
+                .map(String::as_str)
+                .unwrap_or("turnstile"),
+        ),
+        site_key: read_trimmed(vars, "CAPTCHA_SITE_KEY"),
+        secret_key: read_trimmed(vars, "CAPTCHA_SECRET_KEY"),
+        threshold: read_threshold(vars, "CAPTCHA_THRESHOLD", 3),
+    }
+}
+
+/// Anything but 1/true is off: a half-written value must not enable a challenge the
+/// deployment has no keys for.
+fn read_flag(vars: &HashMap<String, String>, key: &str) -> bool {
+    matches!(
+        vars.get(key).map(|value| value.trim().to_ascii_lowercase()),
+        Some(ref value) if value == "1" || value == "true"
+    )
+}
+
+fn read_trimmed(vars: &HashMap<String, String>, key: &str) -> String {
+    vars.get(key)
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn read_threshold(vars: &HashMap<String, String>, key: &str, fallback: u32) -> u32 {
+    vars.get(key)
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(fallback)
 }
 
 /// The console cannot issue or verify a cookie without this, so an unset value is a
