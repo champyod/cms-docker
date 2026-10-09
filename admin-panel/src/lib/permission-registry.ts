@@ -93,7 +93,8 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },
-  { module: 'ranking', verb: 'snapshot' },
+  { module: 'ranking', verb: 'appearance' },
+  { module: 'ranking', verb: 'override' },
   { module: 'maintenance', verb: 'enable' },
   { module: 'maintenance', verb: 'disable' },
   // Why domain verbs, not a module: the backup subsystem does not map onto CRUD.

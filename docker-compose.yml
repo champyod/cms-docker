@@ -452,6 +452,8 @@ services:
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
       # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The console counts login failures in Redis; the panel reads and clears those keys.
+      REDIS_URL: redis://${REDIS_HOST:-redis-rate-limit}:${REDIS_PORT:-6379}
       AUTH_SECRET: ${AUTH_SECRET}
       # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
       RPC_SECRET: ${RPC_SECRET}
@@ -586,27 +588,45 @@ services:
       log-service:
         condition: service_healthy
     environment:
-      # `import cms` builds the config at import time (conf.make_config), so this
-      # service needs the main cms.toml too, not just the ranking one.
-      CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
-      CMS_RANKING_CONFIG: ${CMS_RANKING_CONFIG:-/usr/local/etc/cms_ranking.toml}
-      RANKING_LISTEN_PORT: ${RANKING_LISTEN_PORT:-8890}
+      # The Rust service reads the projection tables, so it takes the same database
+      # URL every other service takes rather than a ranking config file.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      RANKING_BIND_ADDRESS: 0.0.0.0:${RANKING_LISTEN_PORT:-8890}
+      # Where the image keeps the vendored page and the licence offer; both are image
+      # layout, so they are not operator configuration.
+      RANKING_STATIC_DIR: /home/cmsuser/src/src/cmsranking/static
+      CMS_CREDITS_FILE: /home/cmsuser/cms/credits.json
+      # The panel writes the logo into this volume; the service only reads it, and a
+      # path with no extension makes it probe the known image extensions.
+      RANKING_LOGO_PATH: /var/local/lib/cms/ranking/logo
+      # Signs the console cookie. Empty means the console refuses every login, which
+      # is why ./cms config sync generates one.
+      RANKING_SESSION_SECRET: ${RANKING_SESSION_SECRET:-}
+      # The same Redis the contest login counters use, under a ranking namespace.
+      RANKING_REDIS_URL: redis://${LOGIN_RATE_LIMIT_REDIS_HOST:-redis-rate-limit}:${LOGIN_RATE_LIMIT_REDIS_PORT:-6379}
+      # Every CAPTCHA key stays in config.toml, as decided; the service only reads them.
+      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
     volumes:
-      - ./config/cms.toml:/usr/local/etc/cms.toml:ro
-      - ./config/cms_ranking.toml:/usr/local/etc/cms_ranking.toml:ro
       - cms-logs:/var/local/log/cms
-      - cms-ranking-data:/var/local/lib/cms/ranking
+      # Kept read-only for the logo: the panel writes it, this service only serves it.
+      - cms-ranking-data:/var/local/lib/cms/ranking:ro
     networks:
       - cms-network
     ports:
       - "0.0.0.0:${RANKING_PORT_EXTERNAL:-8890}:${RANKING_LISTEN_PORT:-8890}"
-    command: ["cmsRankingWebServer"]
+    command: ["cms-ranking"]
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-ranking.rule=Host(`${RANKING_DOMAIN:-ranking.cms.local}`)"
       - "traefik.http.services.cms-ranking.loadbalancer.server.port=${RANKING_LISTEN_PORT:-8890}"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${RANKING_LISTEN_PORT:-8890}/"]
+      # /healthz, not /: the scoreboard route refuses without a database, and a
+      # healthcheck that fails while the service is up is a restart loop.
+      test: ["CMD", "curl", "-f", "http://localhost:${RANKING_LISTEN_PORT:-8890}/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -850,6 +870,9 @@ volumes:
     name: cms-cache
   cms-data:
     name: cms-data
+  # Holds the ranking logo the panel writes, and the host mirror the config sync copies.
+  # The JSON store this volume was created for is retired: the proxy writes the projection
+  # tables and the service reads them, so nothing here is ranking data any more.
   cms-ranking-data:
     name: cms-ranking-data
   cms-submissions:

@@ -1,0 +1,19 @@
+{
+  "derived_by": "tools/cms-ranking/tests/fixtures/parity/score_oracle.py",
+  "source_module": "src/cmsranking/Scoring.py (ScoringStore + Score), executed, not transcribed",
+  "seed": "seed.json",
+  "shim": "score_oracle.py installs a minimal gevent.lock.RLock substitute because Scoring reaches it transitively through cmsranking.Store; the real service needs the full gevent stack",
+  "corrects": "The hand-derived draft of seed.json claimed /history carried a change to 0.0 for u1/t0. Score.append_change only appends when the computed score differs from the current one, so no such entry exists.",
+  "decimals": "Floats are written with a decimal point on purpose: this file records what the Python scorer printed, and a reader must be able to tell 100.0 (a score) from 100 (an integer field).",
+  "score_modes": {
+    "max": "max of the submission scores, defaulting to 0.0 when there are none; a negative score survives",
+    "max_subtask": "element-wise max over each submission extra list (or [score] when it is empty), summed",
+    "max_tokened_last": "max of NumberSet.query() over the released scores and the last submission score; query() is max(values + [0.0]) so it never goes negative"
+  },
+  "scores": { "u0": { "t0": 100.0 }, "u1": { "t1": 30.0 } },
+  "history": [
+    ["u0", "t0", 1700001000, 50.0],
+    ["u0", "t0", 1700002000, 100.0],
+    ["u1", "t1", 1700003100, 30.0]
+  ]
+}

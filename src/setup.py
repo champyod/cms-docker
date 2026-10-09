@@ -151,7 +151,6 @@ setup(
             "cmsImportTask=cmscontrib.ImportTask:main",
             "cmsImportTeam=cmscontrib.ImportTeam:main",
             "cmsImportUser=cmscontrib.ImportUser:main",
-            "cmsRWSHelper=cmscontrib.RWSHelper:main",
             "cmsRemoveContest=cmscontrib.RemoveContest:main",
             "cmsRemoveParticipation=cmscontrib.RemoveParticipation:main",
             "cmsRemoveSubmissions=cmscontrib.RemoveSubmissions:main",

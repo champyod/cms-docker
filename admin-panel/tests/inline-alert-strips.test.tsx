@@ -11,7 +11,6 @@ import { ParticipationModal } from '@/components/contests/ParticipationModal';
 import { TeamBulkAddModal } from '@/components/contests/TeamBulkAddModal';
 import { GroupDeleteDialog } from '@/components/groups/GroupDeleteDialog';
 import { GroupFormDialog } from '@/components/groups/GroupFormDialog';
-import { RankingConnectionCard } from '@/components/ranking/RankingConnectionCard';
 import { AttachmentModal } from '@/components/tasks/AttachmentModal';
 import { DatasetGeneralForm } from '@/components/tasks/DatasetGeneralForm';
 import { StatementModal } from '@/components/tasks/StatementModal';
@@ -139,8 +138,6 @@ const FAILURE_CASES = [
     <GroupDeleteDialog open setOpen={NOOP} dict={en.groups} error="Group is still referenced" deleteReason="" setDeleteReason={NOOP} loading={false} onDelete={NOOP} />, REGULAR_SCALE),
   stripping('dataset form', 'Dataset description is required',
     <DatasetGeneralForm formData={DATASET_FORM} onChange={NOOP} onSubmit={NOOP} error="Dataset description is required" scoreParamsError="" taskParamsError="" onScoreParamsChange={NOOP} onScoreParamsError={NOOP} onTaskParamsTextChange={NOOP} />, PAGE_SCALE),
-  stripping('ranking connect', 'Ranking server unreachable',
-    <RankingConnectionCard baseUrl="" username="" password="" connected={false} loadingSession={false} errorMessage="Ranking server unreachable" onBaseUrl={NOOP} onUsername={NOOP} onPassword={NOOP} onConnect={NOOP} canManage={false} />, PAGE_SCALE),
   stripping('admin create', 'Name and Username are required',
     <AdminModal isOpen onClose={NOOP} onSuccess={NOOP} initialData={null} callerPermissions={['admin:create']} canRevealPassword={false} />, REGULAR_SCALE, submitForm),
   stripping('user create', 'Save failed',

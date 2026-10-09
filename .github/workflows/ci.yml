@@ -46,6 +46,7 @@ jobs:
       monitor: ${{ steps.filter.outputs.monitor }}
       scheduler: ${{ steps.filter.outputs.scheduler }}
       rust: ${{ steps.filter.outputs.rust }}
+      rust_ranking: ${{ steps.filter.outputs.rust_ranking }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -75,6 +76,9 @@ jobs:
             rust:
               - 'tools/cms-tui/**'
               - '.tools/cms-tui/**'
+              - '.github/workflows/ci.yml'
+            rust_ranking:
+              - 'tools/cms-ranking/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -373,6 +377,89 @@ jobs:
       - name: Test
         working-directory: tools/cms-tui
         run: cargo test
+
+  # WHY a second Rust job rather than an extra step in the one above: the two
+  # crates have different targets and different rebuild triggers, and the
+  # ranking service is a server whose failure mode is an empty scoreboard in
+  # front of an audience, so it earns its own signal.
+  rust-ranking:
+    name: Rust ranking (fmt, clippy, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust_ranking == 'true'
+    # WHY a service: three tests in this crate need a database, and an ignored
+    # test is a claim nobody checks. The service makes the SQL path real, so a
+    # query that no longer matches the schema fails here instead of in a contest.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ranking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # The failure counters live in Redis, as they do in the stack's own
+      # redis-rate-limit service, so the counter tests need one too.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RANKING_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ranking_test
+      RANKING_TEST_REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tools/cms-ranking/target
+          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('tools/cms-ranking/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-ranking-
+
+      # All three, in order: the CreateTable, the RLS pair the repository generates,
+      # and the notify triggers the live stream depends on. Applying fewer would
+      # test a schema no deployment has.
+      - name: Apply the ranking migrations
+        run: |
+          for migration in \
+            admin-panel/prisma/migrations/20261009150000_ranking_tables \
+            admin-panel/prisma/migrations/20261009150100_ranking_tables_rls \
+            admin-panel/prisma/migrations/20261009160000_ranking_notify; do
+            psql "$RANKING_TEST_DATABASE_URL" -f "$migration/migration.sql"
+          done
+
+      - name: Format check
+        working-directory: tools/cms-ranking
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: tools/cms-ranking
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: tools/cms-ranking
+        run: cargo test --all-targets -- --include-ignored
 
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it

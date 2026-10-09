@@ -53,6 +53,14 @@ const CATALOG = [
   // Roots. Nothing the catalog selects above these resolves through one of them,
   // and three content tables name `admins` as the author of a row, so it leads.
   { name: 'admins', label: 'Admins', pk: ['id'], sensitive: true },
+  // The ranking console's own accounts, restored with the panel's own.
+  //
+  // WHY not flagged sensitive yet: the flag is what GRANT_TABLES derives from, and
+  // that derived list is read as "privileges travel with this selection". These rows
+  // hold no privileges, so flagging them here would put a false claim in the restore
+  // report. Splitting the flag into credential and grant material is the follow-up;
+  // until then a restore replaces console credentials without a specific warning.
+  { name: 'ranking_console_users', label: 'Ranking Console Users', pk: ['id'] },
   { name: 'permissions', label: 'Permissions', pk: ['id'], sensitive: true },
   { name: 'groups', label: 'Groups', pk: ['id'], sensitive: true },
   { name: 'contests', label: 'Contests', pk: ['id'] },
@@ -90,6 +98,11 @@ const CATALOG = [
   { name: 'admin_permission_overrides', label: 'Admin Permission Overrides', pk: ['id'], sensitive: true },
   { name: 'backup_schedules', label: 'Backup Schedules', pk: ['id'] },
   { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
+  // Ranking control tables. Nothing references them and they reference nothing,
+  // so their place among the roots is free; they are selected because the
+  // appearance and override rows exist only in the panel.
+  { name: 'ranking_settings', label: 'Ranking Settings', pk: ['id'] },
+  { name: 'ranking_overrides', label: 'Ranking Overrides', pk: ['id'] },
   { name: 'fsobjects', label: 'File System Objects', pk: ['digest'], needsLargeObjects: true },
 ] as const satisfies readonly BackupTable[];
 

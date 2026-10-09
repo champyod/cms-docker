@@ -27,7 +27,7 @@ The Core stack must be healthy before any other services can function properly.
 | :--- | :--- | :--- |
 | `admin-panel-next` (:8891) | `database` | Modern Next.js Management Panel — manage everything here. |
 | `admin-web-server` (:8889) | `database`, `log-service` | Legacy Python admin UI. |
-| `ranking-web-server` (:8890) | `database`, `log-service` | Real-time public rankings. |
+| `ranking-web-server` (:8890) | `database`, `log-service`, `redis-rate-limit` | Real-time public rankings, served by the Rust `cms-ranking` binary. |
 
 ### 3. Contest Stack
 | Service | Depends On | Purpose |
@@ -111,3 +111,26 @@ graph TD
 
     WORKER -.->|CORE_SERVICES_HOST RPC| LOG
 ```
+
+### Ranking web server
+
+The scoreboard runs the Rust `cms-ranking` binary (`tools/cms-ranking`), not the Python
+`cmsRankingWebServer`. It reads the projection tables the proxy writes into PostgreSQL and
+takes its login failure counters from the same Redis the contest login counters use, under a
+`cms:ranking:login:` namespace so a clearance here cannot forgive a brute force against the
+contest surface.
+
+| Variable | Purpose |
+| :--- | :--- |
+| `DATABASE_URL` | the projection tables it reads |
+| `RANKING_BIND_ADDRESS` | listen address; `0.0.0.0:8890` in compose |
+| `RANKING_STATIC_DIR` | the vendored page it serves |
+| `CMS_CREDITS_FILE` | the licence offer `/credits` returns |
+| `RANKING_LOGO_PATH` | a stem; png, jpg, jpeg, gif and bmp are probed in that order |
+| `RANKING_SESSION_SECRET` | signs the console cookie; empty refuses every login |
+| `RANKING_REDIS_URL` | the failure counters; absent means no login is accepted |
+| `CAPTCHA_*` | the login challenge, configured only in `config.toml` |
+
+`GET /healthz` answers 200 only while the database answers `SELECT 1`. Every other route,
+including `/events`, refuses with 503 rather than drawing an empty scoreboard, and `/login`
+stays reachable so an operator can get in while the rest refuses.

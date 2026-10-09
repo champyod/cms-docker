@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+
+# The ranking web server is a Rust binary. It is built in a stage of its own
+# because the runtime image must not carry a compiler: the same image also
+# runs untrusted submission tooling, and a toolchain there would widen what
+# a sandbox escape can reach.
+FROM rust:1-bookworm AS ranking-build
+WORKDIR /build
+COPY tools/cms-ranking/ ./
+RUN cargo build --release
+
 # Supported combinations: ubuntu:noble, debian:bookworm.
 #
 # Base-image policy: digests are bumped manually (dependabot-style PRs), never
@@ -185,6 +195,9 @@ EOF
 # Use the install script from src/
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 python3 src/install.py venv
 ENV PATH="/home/cmsuser/cms/bin:$PATH"
+
+# Built in the ranking-build stage; the runtime layer stays toolchain-free.
+COPY --from=ranking-build --chown=cmsuser:cmsuser /build/target/release/cms-ranking /home/cmsuser/cms/bin/cms-ranking
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
