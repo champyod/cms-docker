@@ -100,12 +100,13 @@
 - [x] Deliberately NOT ranking:update: api/ranking/logo/route.ts still uses it for the logo upload the service serves, so that key and right stay.
 - [x] docs/ACCESS-CONFIGURATION.md needs no change: its ranking content is the bind address, external port and vhost, all of which the Rust service keeps.
 
-- [ ] Add the appearance editor (all six approved groups) as a permissioned, audited server action plus API route and a page section under the ranking area.
-- [ ] Add the override editor: list, add, end. Every mutation records actor, reason and timestamp; no row is hard-deleted.
-- [ ] Add the login toggle (public or login-required) and the lockout view with an unblock action; CAPTCHA keys stay in config.toml and are not editable here.
-- [ ] Render the compact credits text in the scoreboard footer and edit the full credit list on /credits, with the non-removable source-offer line in both.
-- [ ] Dictionary keys in en.json and th.json for every new label.
-- **Verify:** tsc, vitest, and a manual pass that the panel preview matches the served page; permission tests cover the new keys.
+- [x] The appearance editor: ranking:appearance, a server action reading through ranking:read and writing through the new key, audited, on the module page as a plain server form.
+- [x] The override editor: list, add and end, with the action list closed so an unknown verb is refused, and ending keeping the row's history while the reason goes to the audit log.
+- [x] The login toggle (access_mode: public or protected) and the lockout view with an unblock, plus the Redis client and REDIS_URL the clearance needs. CAPTCHA keys stay in config.toml and are not editable here.
+- [x] Dictionary labels in en.json and th.json for every label the three sections render.
+- [x] The dead credential path is retired: RankingClient, RankingConnectionCard, RankingScoreboard, useRankingRows, ranking-session, the auth and snapshot routes, and ranking:snapshot with its grant.
+- [ ] Still open: the service serves credits_text and the compact footer, but the panel has no editor for the full credit list on /credits yet.
+- **Verify:** tsc clean; the full panel suite green except the two known certificate ENOENT fixtures; permission coverage and the route wiring tests updated with the changes rather than loosened.
 - **Commit:** feat(panel): control ranking appearance and overrides
 
 ### Slice 7: Move the push path
