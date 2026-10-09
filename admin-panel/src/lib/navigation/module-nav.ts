@@ -10,21 +10,14 @@ import { AuthorizationError } from '@/lib/server/authorization';
 
 type ModuleGroupId = NavigationGroupDescriptor['id'];
 
-/** One permitted rail entry: the registry id, its dictionary label, and its localized href. */
-export interface ModuleRailItem {
+/** One navigable field of a module: its registry id, dictionary label, and localized href. */
+export interface ModuleFieldItem {
   readonly id: RouteId;
   readonly label: string;
   readonly href: string;
 }
 
-/**
- * The one label resolver behind every module rail.
- *
- * Why shared: a module shell must not decide a label on its own, and a rail that
- * read the dictionary differently from its sibling would show the same route under
- * two names. The registry owns the key, so a missing label is a manifest defect
- * and fails the render rather than shipping an empty tab.
- */
+/** Resolves a descriptor's dictionary label, throwing when it is missing or blank. */
 export function labelForDescriptor(dict: Dictionary, descriptor: RouteDescriptor): string {
   const label = descriptor.labelKey.split('.').reduce<unknown>((value, key) => {
     if (typeof value !== 'object' || value === null) return undefined;
@@ -36,14 +29,16 @@ export function labelForDescriptor(dict: Dictionary, descriptor: RouteDescriptor
   return label;
 }
 
-// Why: a route the reader may not open is omitted rather than rendered disabled,
-// so the module rail never advertises a tab that answers 404.
-export function permittedNavItems(
+/**
+ * The module's fields in group order, so a reader who may not open one is never
+ * offered it rather than handed a 404.
+ */
+export function buildModuleFields(
   groupId: ModuleGroupId,
   locale: string,
   dict: Dictionary,
   effective: ReadonlySet<string>,
-): ModuleRailItem[] {
+): ModuleFieldItem[] {
   const group = NAVIGATION_GROUPS.find((item) => item.id === groupId);
   return (group?.routeIds ?? []).flatMap((id) => {
     const descriptor = ROUTE_REGISTRY.find((route) => route.id === id);
@@ -56,9 +51,7 @@ export function permittedNavItems(
   });
 }
 
-// Why conceal: the shell loads permissions to build its own rail, so a caller
-// whose permissions fail closed must not learn the module exists. A 401 and any
-// unexpected storage failure keep propagating.
+/** Effective keys for a module shell; a caller who fails closed is concealed as 404. */
 export async function concealedPermissions(): Promise<ReadonlySet<string>> {
   try {
     return await getRoutePermissions();

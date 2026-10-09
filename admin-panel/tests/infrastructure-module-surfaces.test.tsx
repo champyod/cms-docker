@@ -13,21 +13,19 @@ const PANEL_PATHS = [
   'src/components/ranking/RankingClient.tsx',
 ] as const;
 
-describe('Infrastructure module tab shell composition', () => {
+describe('Infrastructure module field shell composition', () => {
   it.each(PANEL_PATHS)('%s renders panel content only', (relativePath) => {
     const source = readSource(relativePath);
-    // Why the absences: the title, description, and trail of an infrastructure tab are
-    // the module layout's, so a panel that still carried them would render a second
-    // header row above the tabs the layout already drew.
+    // The title, description, and trail belong to the layout; a panel carrying them would double the header.
     expect(source).not.toContain('<PageSurface');
     expect(source).not.toContain('breadcrumbs=');
     expect(source).not.toContain('copy.title');
   });
 
-  it('keeps every infrastructure tab behind the one module layout shell', () => {
+  it('keeps every infrastructure field behind the one module layout shell', () => {
     const layout = readSource('src/app/[locale]/(authenticated)/infrastructure/layout.tsx');
-    expect(layout).toContain('<ModuleTabShell');
-    expect(layout).toContain('buildModuleTabs(GROUP_ID, locale, dict, effective)');
-    expect(layout).toContain('listBreadcrumbs(locale, GROUP_ID, DEPLOYMENTS_TAB_ID, dict)');
+    expect(layout).toContain('<ModuleShell');
+    expect(layout).toContain('buildModuleFields(GROUP_ID, locale, dict, effective)');
+    expect(layout).toContain('listBreadcrumbs(locale, GROUP_ID, DEPLOYMENTS_FIELD_ID, dict)');
   });
 });

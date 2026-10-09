@@ -14,7 +14,7 @@ import { listAdminsAccessSummary, type AdminAccessSummary } from '@/app/actions/
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { cn } from '@/lib/utils';
 import { AdminModal } from './AdminModal';
@@ -118,7 +118,7 @@ export function AdminList({
 
   // Why published from here: the create button opens this panel's one AdminModal, so a copy of
   // it in the header would be a second modal holding its own open state over the same list.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'administration.admins',
     capabilities.canCreate ? (
       <Button variant="positive" icon={Plus} onClick={() => { setEditingAdmin(null); setIsModalOpen(true); }}>

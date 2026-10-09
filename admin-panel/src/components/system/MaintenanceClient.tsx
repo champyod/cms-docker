@@ -7,7 +7,7 @@ import { Stack } from '@/components/core/Layout';
 import { SurfaceState } from '@/components/core/SurfaceState';
 import { MaintenanceBackupsCard } from '@/components/system/MaintenanceBackupsCard';
 import { MaintenanceNotificationsCard } from '@/components/system/MaintenanceNotificationsCard';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useMaintenanceController } from '@/components/system/useMaintenanceController';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { Locale } from '@/lib/locales';
@@ -28,7 +28,7 @@ export function MaintenanceClient({
   // Why published from here and withdrawn while loading: the pending state the Save labels
   // itself with belongs to this controller, and the loading surface below replaces the panel
   // body before those settings have been read at all.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'system.maintenance',
     canConfigure && !loading ? (
       <Button variant="positive" onClick={() => void handleSave()} loading={saving}>

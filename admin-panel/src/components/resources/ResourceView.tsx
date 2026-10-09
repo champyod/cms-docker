@@ -9,7 +9,7 @@ import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { SurfaceState } from '@/components/core/SurfaceState';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
@@ -45,7 +45,7 @@ export function ResourceView(): React.JSX.Element {
 
   // Why the indicator is published from here and withdrawn while loading: the stream status
   // is this hook's own, and the loading surface below replaces the panel body entirely.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'infrastructure.resources',
     awaitingFirstFrame ? null : <LiveIndicator status={status} />,
   );

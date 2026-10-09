@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('server-only', () => ({}));
 
 import en from '@/dictionaries/en.json';
-import { buildModuleTabs } from '@/lib/navigation/module-tabs';
+import { buildModuleFields } from '@/lib/navigation/module-nav';
 import { NAVIGATION_GROUPS, ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { NavigationGroupDescriptor } from '@/lib/navigation/types';
 
@@ -24,7 +24,7 @@ const MODULE_LAYOUTS: readonly { readonly groupId: ModuleGroupId; readonly layou
 ];
 
 const DESCRIPTIONS_DECLARATION = /const\s+\w*escriptions\b[^=]*=\s*{/;
-const TAB_ID_CONSTANT = /^[ \t]*const\s+([A-Z][A-Z0-9_]*)\s*=\s*'([^']*)';/gm;
+const FIELD_ID_CONSTANT = /^[ \t]*const\s+([A-Z][A-Z0-9_]*)\s*=\s*'([^']*)';/gm;
 const MAP_ENTRY_KEY = /^\s*(?:\[([A-Z][A-Z0-9_]*)\]|'([^']*)')\s*:/;
 
 function readSource(relativePath: string): string {
@@ -44,14 +44,12 @@ function objectBody(source: string, declarationIndex: number): string {
   return source.slice(start + 1);
 }
 
-// Why read the layout instead of importing it: the map is built from the locale dictionary
-// inside a server component, so the only reachable statement of which tabs it covers is its
-// own source — and an entry only counts as covered when it sits inside that map.
-function describedTabIds(source: string): readonly string[] {
+// The map lives in a server component, so its own source is the only reachable record of what it covers.
+function describedFieldIds(source: string): readonly string[] {
   const declarationIndex = source.search(DESCRIPTIONS_DECLARATION);
   if (declarationIndex === -1) return [];
   const constants = new Map<string, string>();
-  for (const declaration of source.matchAll(TAB_ID_CONSTANT)) {
+  for (const declaration of source.matchAll(FIELD_ID_CONSTANT)) {
     constants.set(declaration[1], declaration[2]);
   }
   const ids: string[] = [];
@@ -63,8 +61,7 @@ function describedTabIds(source: string): readonly string[] {
   return ids;
 }
 
-// Why saturate: hasEffectivePermission grants a key the set names literally, so holding every
-// requirement the group's descriptors declare makes the rail render its whole group.
+// Saturating the set makes every field in the group open, so the whole group renders.
 function permissionsPermitting(groupId: ModuleGroupId): ReadonlySet<string> {
   const group = NAVIGATION_GROUPS.find((item) => item.id === groupId);
   if (!group) throw new Error(`Missing navigation group: ${groupId}`);
@@ -78,44 +75,42 @@ function permissionsPermitting(groupId: ModuleGroupId): ReadonlySet<string> {
   return granted;
 }
 
-describe('module tab description coverage', () => {
-  it.each(MODULE_LAYOUTS)('$groupId describes every tab its rail can render', (module) => {
-    const tabs = buildModuleTabs(
+describe('module field description coverage', () => {
+  it.each(MODULE_LAYOUTS)('$groupId describes every field its shell can render', (module) => {
+    const fields = buildModuleFields(
       module.groupId,
       'en',
       en,
       permissionsPermitting(module.groupId),
     );
-    expect(tabs.length).toBeGreaterThan(0);
-    const described = new Set(describedTabIds(readSource(module.layoutPath)));
-    const uncovered = tabs.filter((tab) => !described.has(tab.id)).map((tab) => tab.id);
+    expect(fields.length).toBeGreaterThan(0);
+    const described = new Set(describedFieldIds(readSource(module.layoutPath)));
+    const uncovered = fields.filter((field) => !described.has(field.id)).map((field) => field.id);
     expect(uncovered).toEqual([]);
   });
 
-  it('reports a tab whose description line is no longer in the map', () => {
-    // The shape of the administration layout minus its audit line: the id is still declared
-    // and still on the rail, but nothing in the map names it.
+  it('reports a field whose description line is no longer in the map', () => {
     const sourceWithoutAudit = `
-      const ADMINS_TAB_ID = 'administration.admins';
-      const GROUPS_TAB_ID = 'administration.groups';
-      const AUDIT_TAB_ID = 'administration.audit';
-      const descriptions: ModuleTabDescriptions = {
-        [ADMINS_TAB_ID]: dict.permissions.subtitle,
-        [GROUPS_TAB_ID]: dict['navigation']['administration']['groups']['description'],
+      const ADMINS_FIELD_ID = 'administration.admins';
+      const GROUPS_FIELD_ID = 'administration.groups';
+      const AUDIT_FIELD_ID = 'administration.audit';
+      const descriptions: ModuleDescriptions = {
+        [ADMINS_FIELD_ID]: dict.permissions.subtitle,
+        [GROUPS_FIELD_ID]: dict['navigation']['administration']['groups']['description'],
       };
     `;
-    const described = new Set(describedTabIds(sourceWithoutAudit));
-    const uncovered = buildModuleTabs('administration', 'en', en, permissionsPermitting('administration'))
-      .filter((tab) => !described.has(tab.id))
-      .map((tab) => tab.id);
+    const described = new Set(describedFieldIds(sourceWithoutAudit));
+    const uncovered = buildModuleFields('administration', 'en', en, permissionsPermitting('administration'))
+      .filter((field) => !described.has(field.id))
+      .map((field) => field.id);
     expect(uncovered).toEqual(['administration.audit']);
   });
 
-  it('reports every tab when the layout carries no descriptions map at all', () => {
-    const described = new Set(describedTabIds('export default function SystemLayout() {}'));
-    const uncovered = buildModuleTabs('system', 'en', en, permissionsPermitting('system'))
-      .filter((tab) => !described.has(tab.id))
-      .map((tab) => tab.id);
+  it('reports every field when the layout carries no descriptions map at all', () => {
+    const described = new Set(describedFieldIds('export default function SystemLayout() {}'));
+    const uncovered = buildModuleFields('system', 'en', en, permissionsPermitting('system'))
+      .filter((field) => !described.has(field.id))
+      .map((field) => field.id);
     expect(uncovered).toEqual([
       'system.appearance',
       'system.maintenance',

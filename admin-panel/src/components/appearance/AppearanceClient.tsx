@@ -10,7 +10,7 @@ import { Button } from '@/components/core/Button';
 import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 
 type TabKey = 'branding' | 'services' | 'display';
 
@@ -183,7 +183,7 @@ export function AppearanceClient(): React.JSX.Element {
   // Why published only over Branding: the fields this Save writes belong to the Branding
   // panel, so the same control shown over Services or Display would offer to save edits the
   // reader cannot see on screen.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'system.appearance',
     active === 'branding' ? (
       <Button size="sm" icon={Save} loading={saving} onClick={() => void handleSave()}>

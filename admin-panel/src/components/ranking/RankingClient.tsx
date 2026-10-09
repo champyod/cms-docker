@@ -10,7 +10,7 @@ import { BrandingCard } from './BrandingCard';
 import { RankingConnectionCard } from './RankingConnectionCard';
 import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
@@ -147,7 +147,7 @@ export function RankingClient({ permissionKeys }: RankingClientProps): React.JSX
 
   // Why these two buttons travel together: the snapshot read and the session that authorizes it
   // are this panel's state, so the header cannot offer either without this component.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'infrastructure.ranking',
     <Stack direction="row" gap={2}>
       {canSnapshot && (

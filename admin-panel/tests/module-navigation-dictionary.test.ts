@@ -91,15 +91,15 @@ describe('module navigation dictionary parity', () => {
   it.each([
     [
       'src/app/[locale]/(authenticated)/administration/layout.tsx',
-      'buildModuleTabs(GROUP_ID, locale, dict, effective)',
+      'buildModuleFields(GROUP_ID, locale, dict, effective)',
     ],
     [
       'src/app/[locale]/(authenticated)/infrastructure/layout.tsx',
-      'buildModuleTabs(GROUP_ID, locale, dict, effective)',
+      'buildModuleFields(GROUP_ID, locale, dict, effective)',
     ],
     [
       'src/app/[locale]/(authenticated)/system/layout.tsx',
-      'buildModuleTabs(GROUP_ID, locale, dict, effective)',
+      'buildModuleFields(GROUP_ID, locale, dict, effective)',
     ],
   ])('%s wires its group to the shared module rail', (relativePath, railCall) => {
     const source = readSource(relativePath);

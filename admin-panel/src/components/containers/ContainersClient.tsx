@@ -16,7 +16,7 @@ import { StatsCard } from '@/components/containers/StatsCard';
 import { ContainerStackControls } from '@/components/containers/ContainerStackControls';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { useContainersController } from '@/components/containers/useContainersController';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -41,7 +41,7 @@ export function ContainersClient(): React.JSX.Element {
   // Why one controller serves both places: these controls read the compose action, the stream
   // status, and the refresh the controller just ran, so they are published from the panel that
   // owns it rather than rebuilt from a second instance in the header.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'infrastructure.containers',
     <div className="flex items-center gap-3">
       <LiveIndicator status={controller.status} />

@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
@@ -64,7 +64,7 @@ export function GroupList({
 
   // Why published from here: the create button opens the one group form this hook owns, and a
   // copy of it above would be a second form driven by a second group list.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'administration.groups',
     list.canCreate ? (
       <Button variant="positive" icon={Plus} onClick={list.handleOpenCreate}>

@@ -14,7 +14,7 @@ import { ContestSettingsForm } from '@/components/deployments/ContestSettingsFor
 import { WorkersPanel } from '@/components/deployments/WorkersPanel';
 import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
-import { usePublishModuleTabActions } from '@/components/navigation/ModuleTabActionSlot';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useDictionary } from '@/hooks/useDictionary';
 
 export function DeploymentsClient(): React.JSX.Element {
@@ -61,7 +61,7 @@ export function DeploymentsClient(): React.JSX.Element {
 
   // Why the refresh is withdrawn while loading: the panel body is the loading surface during
   // that read, and loadData is the read it would restart underneath itself.
-  usePublishModuleTabActions(
+  usePublishModuleActions(
     'infrastructure.deployments',
     snapshot.loading ? null : (
       <Button

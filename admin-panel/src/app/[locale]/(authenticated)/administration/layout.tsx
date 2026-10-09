@@ -1,17 +1,12 @@
-import {
-  ModuleTabShell,
-  type ModuleTabActions,
-  type ModuleTabDescriptions,
-} from '@/components/navigation/ModuleTabShell';
+import { ModuleShell, type ModuleActions, type ModuleDescriptions } from '@/components/navigation/ModuleShell';
 import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
-import { concealedPermissions } from '@/lib/navigation/module-nav';
-import { buildModuleTabs } from '@/lib/navigation/module-tabs';
+import { buildModuleFields, concealedPermissions } from '@/lib/navigation/module-nav';
 
 const GROUP_ID = 'administration';
-const ADMINS_TAB_ID = 'administration.admins';
-const GROUPS_TAB_ID = 'administration.groups';
-const AUDIT_TAB_ID = 'administration.audit';
+const ADMINS_FIELD_ID = 'administration.admins';
+const GROUPS_FIELD_ID = 'administration.groups';
+const AUDIT_FIELD_ID = 'administration.audit';
 
 export default async function AdministrationLayout({
   children,
@@ -25,27 +20,24 @@ export default async function AdministrationLayout({
     getDictionary(locale),
     concealedPermissions(),
   ]);
-  const tabs = buildModuleTabs(GROUP_ID, locale, dict, effective);
-  // Why one line per tab: the title spans every administration page, so only the dictionary
-  // knows which of them the URL opened and what that page is for.
-  const descriptions: ModuleTabDescriptions = {
-    [ADMINS_TAB_ID]: dict.permissions.subtitle,
-    [GROUPS_TAB_ID]: dict['navigation']['administration']['groups']['description'],
-    [AUDIT_TAB_ID]: dict.audit.subtitle,
+  const fields = buildModuleFields(GROUP_ID, locale, dict, effective);
+  // Only the dictionary knows which page the URL opened and what it is for.
+  const descriptions: ModuleDescriptions = {
+    [ADMINS_FIELD_ID]: dict.permissions.subtitle,
+    [GROUPS_FIELD_ID]: dict['navigation']['administration']['groups']['description'],
+    [AUDIT_FIELD_ID]: dict.audit.subtitle,
   };
-  // Why the map stays empty: both administration panels own the state their create control
-  // acts on — the one admin modal, the one group form — so each publishes that control into the
-  // title slot instead of the layout rebuilding a second copy above it.
-  const actionsMap: ModuleTabActions = {};
+  // Each panel owns the state its create control acts on, so it publishes its own.
+  const actionsMap: ModuleActions = {};
   return (
-    <ModuleTabShell
-      breadcrumbs={listBreadcrumbs(locale, GROUP_ID, ADMINS_TAB_ID, dict)}
-      title={dict['navigation']['groups'][GROUP_ID]}
-      tabs={tabs}
+    <ModuleShell
+      breadcrumbs={listBreadcrumbs(locale, GROUP_ID, ADMINS_FIELD_ID, dict)}
+      fields={fields}
       descriptions={descriptions}
       actionsMap={actionsMap}
+      fallbackTitle={dict['navigation']['groups'][GROUP_ID]}
     >
       {children}
-    </ModuleTabShell>
+    </ModuleShell>
   );
 }

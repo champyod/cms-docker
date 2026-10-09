@@ -20,7 +20,7 @@ import type { Dictionary } from '@/lib/dictionary';
 import {
   concealedPermissions,
   labelForDescriptor,
-  permittedNavItems,
+  buildModuleFields,
 } from '@/lib/navigation/module-nav';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
@@ -81,17 +81,17 @@ describe('labelForDescriptor', () => {
   });
 });
 
-describe('permittedNavItems', () => {
-  it('builds the administration rail in group order with localized labels', () => {
-    expect(permittedNavItems('administration', 'en', en, ADMIN_READER)).toEqual([
+describe('buildModuleFields', () => {
+  it('builds the administration fields in group order with localized labels', () => {
+    expect(buildModuleFields('administration', 'en', en, ADMIN_READER)).toEqual([
       { id: 'administration.admins', label: en.navigation.administration.admins.label, href: '/en/administration/admins' },
       { id: 'administration.groups', label: en.navigation.administration.groups.label, href: '/en/administration/groups' },
       { id: 'administration.audit', label: en.navigation.administration.audit.label, href: '/en/administration/audit' },
     ]);
   });
 
-  it('builds the infrastructure rail from the same helper', () => {
-    const items = permittedNavItems(
+  it('builds the infrastructure fields from the same helper', () => {
+    const items = buildModuleFields(
       'infrastructure',
       'en',
       en,
@@ -102,12 +102,12 @@ describe('permittedNavItems', () => {
   });
 
   it('keeps the locale prefix in every href', () => {
-    const items = permittedNavItems('administration', 'th', th, ADMIN_READER);
+    const items = buildModuleFields('administration', 'th', th, ADMIN_READER);
     expect(items.every((item) => item.href.startsWith('/th/'))).toBe(true);
   });
 
   it('omits a route the reader may not open rather than rendering it disabled', () => {
-    const items = permittedNavItems(
+    const items = buildModuleFields(
       'administration',
       'en',
       en,
@@ -116,8 +116,8 @@ describe('permittedNavItems', () => {
     expect(items.map((item) => item.id)).toEqual(['administration.admins']);
   });
 
-  it('builds the system rail from the same helper, Docs then About last', () => {
-    expect(permittedNavItems('system', 'en', en, new Set(['all:all']))).toEqual([
+  it('builds the system fields from the same helper, Docs then About last', () => {
+    expect(buildModuleFields('system', 'en', en, new Set(['all:all']))).toEqual([
       { id: 'system.appearance', label: en.navigation.system.appearance.label, href: '/en/system/appearance' },
       { id: 'system.maintenance', label: en.navigation.system.maintenance.label, href: '/en/system/maintenance' },
       { id: 'system.backup-restore', label: en.navigation.system['backup-restore'].label, href: '/en/system/backup-restore' },
@@ -128,7 +128,7 @@ describe('permittedNavItems', () => {
   });
 
   it('omits a gated system route the reader may not open while keeping the public routes', () => {
-    const items = permittedNavItems('system', 'en', en, new Set(['backup:create']));
+    const items = buildModuleFields('system', 'en', en, new Set(['backup:create']));
     expect(items.map((item) => item.id)).toEqual(['system.maintenance', 'system.backup-restore', 'system.docs', 'system.about']);
   });
 });
