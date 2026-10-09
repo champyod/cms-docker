@@ -116,7 +116,25 @@ fn clone_or_empty(value: Option<&String>) -> String {
     value.cloned().unwrap_or_default()
 }
 
+/// Whether this run asked for the cert-renewal timer to be installed.
+fn install_timer_requested(sub: &DomainCmd) -> bool {
+    match sub {
+        DomainCmd::Setup(args) => args.timer.install_timer,
+        DomainCmd::Renew(args) => args.timer.install_timer,
+        _ => false,
+    }
+}
+
+/// WHY `--install-timer` is intercepted here instead of forwarded: `__domain.sh` has no
+/// such option and dies with `unknown option: --install-timer` on one, so emitting it in
+/// the argv would turn a working install into a failure. It also short-circuits the verb
+/// rather than running alongside it — the flag installs, enables, and exits — because
+/// `renew` is dry-run by default, and writing systemd units inside a dry run would
+/// contradict what the operator asked for.
 fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
+    if install_timer_requested(sub) {
+        return (DispatchKey::DomainCertTimerInstall, Vec::new());
+    }
     match sub {
         DomainCmd::Setup(_) => (
             DispatchKey::DomainSetup,
@@ -131,7 +149,7 @@ fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
             domain_setup_args("proxy", &domain_setup_from(sub)),
         ),
         DomainCmd::Status => (DispatchKey::DomainStatus, vec!["status".into()]),
-        DomainCmd::Renew => (DispatchKey::DomainRenew, vec!["renew".into()]),
+        DomainCmd::Renew(_) => (DispatchKey::DomainRenew, vec!["renew".into()]),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
         DomainCmd::CheckExpiry { days } => {
             let mut args = vec!["check-expiry".into()];

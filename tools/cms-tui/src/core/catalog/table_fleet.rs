@@ -1,7 +1,8 @@
 use super::{
     CommandSpec, ARGS_DOMAIN_SETUP, ARGS_DOMAIN_VERB, ARGS_FUNNEL, ARGS_NONE, ARGS_TAILSCALE,
-    ARGS_WORKER, SCRIPT_CONFIG_SYNC, SCRIPT_CREATE_CONTESTS, SCRIPT_DOMAIN, SCRIPT_FUNNEL,
-    SCRIPT_TAILSCALE_SERVE, SCRIPT_UPDATE_SERVER, SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
+    ARGS_WORKER, MAKE_CERT_TIMER_INSTALL, SCRIPT_CONFIG_SYNC, SCRIPT_CREATE_CONTESTS,
+    SCRIPT_DOMAIN, SCRIPT_FUNNEL, SCRIPT_TAILSCALE_SERVE, SCRIPT_UPDATE_SERVER,
+    SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
 };
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 
@@ -182,6 +183,15 @@ pub const FLEET_CATALOG: &[CommandSpec] = &[
         target: DispatchTarget::Script(SCRIPT_DOMAIN),
         args: ARGS_DOMAIN_VERB,
         about: "Domain renew",
+        requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
+    },
+    CommandSpec {
+        key: DispatchKey::DomainCertTimerInstall,
+        target: DispatchTarget::Make(MAKE_CERT_TIMER_INSTALL),
+        args: ARGS_NONE,
+        about: "Install the cert-renewal timer",
         requires_tty: true,
         requires_sudo: false,
         capture_output: false,

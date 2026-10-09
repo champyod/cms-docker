@@ -4,7 +4,7 @@ pub mod commands;
 mod resolve;
 pub mod setup_args;
 
-pub use setup_args::DomainSetupArgs;
+pub use setup_args::{DomainRenewArgs, DomainSetupArgs};
 
 /// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
 #[derive(ValueEnum, Clone, Debug)]
@@ -64,7 +64,8 @@ pub enum FunnelSub {
 /// `scripts/__domain.sh`, so flags typed after `./cms domain <verb>` reach the script
 /// instead of being rejected by clap. The payload is boxed because 23 flags make it
 /// ~320 bytes, which would otherwise inflate this enum and the outer `Commands` enum
-/// that holds it.
+/// that holds it. `Renew` is boxed for the same reason: it is a separate payload today
+/// only so it does not drag the full flag set in ahead of the step that gives it one.
 #[derive(Subcommand, Clone, Debug)]
 pub enum DomainCmd {
     /// Configure domains, TLS certificates, and render nginx config.
@@ -76,7 +77,7 @@ pub enum DomainCmd {
     /// Show DNS resolution, cert expiry, renewal timer, connectivity.
     Status,
     /// Force-renew LE certs or swap provided certificates.
-    Renew,
+    Renew(Box<DomainRenewArgs>),
     /// 9-check connectivity matrix.
     Preflight,
     /// Report certificates expiring within the threshold.

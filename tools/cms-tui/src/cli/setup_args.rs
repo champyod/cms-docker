@@ -5,10 +5,10 @@
 //! `DomainCmd` and the outer `Commands` enum up to that size. One box keeps every
 //! enum pointer-sized.
 //!
-//! WHY the flags arrive in five flattened groups rather than as one flat list: each
-//! group is a decision the operator makes together, and a flat list of eleven bare
-//! booleans gives no way to see which flags belong to which decision. Flattening keeps
-//! the command line byte-for-byte identical while making the grouping visible in the
+//! WHY the flags arrive in six flattened groups rather than as one flat list: each
+//! group is a decision the operator makes together, and a flat list of bare booleans
+//! gives no way to see which flags belong to which decision. Flattening keeps the
+//! command line byte-for-byte identical while making the grouping visible in the
 //! struct, which is where the projection in `cli::resolve` reads it.
 
 use clap::Args;
@@ -75,6 +75,17 @@ pub struct DomainStoreArgs {
     /// End a live run by forcing a renewal.
     #[arg(long, default_value_t = false)]
     pub auto_renew: bool,
+}
+
+/// The one flag this group holds is consumed by the CLI and is never forwarded to
+/// `scripts/__domain.sh`: the script has no `--install-timer` option and exits with
+/// `unknown option` on one, so the projection in `cli::resolve` has to drop it rather
+/// than emit it alongside the script's own flags.
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct DomainTimerArgs {
+    /// Install and enable the hourly cert-renewal timer, then stop.
+    #[arg(long, default_value_t = false)]
+    pub install_timer: bool,
 }
 
 /// Every flag `scripts/__domain.sh setup` accepts, as parsed from argv.
@@ -148,4 +159,17 @@ pub struct DomainSetupArgs {
     pub run: DomainRunArgs,
     #[command(flatten)]
     pub store: DomainStoreArgs,
+    #[command(flatten)]
+    pub timer: DomainTimerArgs,
+}
+
+/// The payload `domain renew` accepts.
+///
+/// WHY this is deliberately minimal: step 3 of this epic gives `renew` the full flag
+/// set. Until then this carries only `--install-timer`, so adding it now does not
+/// pre-empt that work or duplicate the encoder it will replace.
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct DomainRenewArgs {
+    #[command(flatten)]
+    pub timer: DomainTimerArgs,
 }

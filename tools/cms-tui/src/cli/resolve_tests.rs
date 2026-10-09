@@ -158,3 +158,70 @@ fn revoke_forwards_the_reason() {
     assert_eq!(key, crate::core::dispatch::DispatchKey::DomainRevoke);
     assert_eq!(args, vec!["revoke", "--reason", "keycompromise"]);
 }
+
+// Both verbs reach the same key because the operator types the flag where they already
+// are; there is no separate `domain install-timer` verb to remember instead.
+#[test]
+fn install_timer_reaches_the_timer_key_from_either_verb() {
+    for verb in ["setup", "renew"] {
+        let (key, args) = parse(&["cms", "domain", verb, "--install-timer"]).expect("resolves");
+        assert_eq!(
+            key,
+            crate::core::dispatch::DispatchKey::DomainCertTimerInstall,
+            "{verb} --install-timer installs the timer"
+        );
+        assert!(args.is_empty(), "{verb} forwarded {args:?} to the script");
+    }
+}
+
+// The script has no --install-timer option, so emitting it would end in
+// `unknown option: --install-timer` rather than an install.
+#[test]
+fn install_timer_is_never_forwarded_to_the_domain_script() {
+    for verb in ["setup", "renew"] {
+        let (_, args) = parse(&["cms", "domain", verb, "--install-timer"]).expect("resolves");
+        assert!(
+            !args.iter().any(|arg| arg == "--install-timer"),
+            "{verb} leaked the flag into the script argv: {args:?}"
+        );
+    }
+}
+
+// The install replaces the verb rather than joining it: `renew` is dry-run by default,
+// and writing systemd units inside a dry run would contradict the flag.
+#[test]
+fn install_timer_short_circuits_the_verb_it_was_typed_after() {
+    let (key, args) = parse(&["cms", "domain", "renew", "--install-timer"]).expect("resolves");
+    assert_eq!(
+        key,
+        crate::core::dispatch::DispatchKey::DomainCertTimerInstall
+    );
+    assert!(
+        !args.contains(&"renew".to_string()),
+        "renew still ran alongside the install: {args:?}"
+    );
+}
+
+// A setup payload typed with the flag must not leak into the install either — the argv
+// is empty, so none of the domain flags can ride along.
+#[test]
+fn install_timer_ignores_the_setup_payload_typed_next_to_it() {
+    let (key, args) = parse(&[
+        "cms",
+        "domain",
+        "setup",
+        "--install-timer",
+        "--domain",
+        "grader.example.org",
+        "--apply",
+    ])
+    .expect("resolves");
+    assert_eq!(
+        key,
+        crate::core::dispatch::DispatchKey::DomainCertTimerInstall
+    );
+    assert!(
+        args.is_empty(),
+        "setup flags rode along with the install: {args:?}"
+    );
+}

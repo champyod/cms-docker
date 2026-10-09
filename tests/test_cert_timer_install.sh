@@ -149,5 +149,22 @@ else
   no "the missing timer is named"
 fi
 
+# WHY the argv path is asserted against the CLI source rather than by running ./cms:
+# ./cms execs the vendored binary under .tools/, which is only rebuilt as its own step,
+# so a run here would exercise a stale build. Reading the CLI's own resolve module keeps
+# this suite honest about the code that ships.
+RESOLVE_RS="${REPO_ROOT}/tools/cms-tui/src/cli/resolve.rs"
+echo "the CLI intercepts --install-timer instead of forwarding it"
+if grep -q 'DispatchKey::DomainCertTimerInstall' "${RESOLVE_RS}"; then
+  ok "resolve.rs dispatches the timer install"
+else
+  no "resolve.rs dispatches the timer install"
+fi
+if grep -q -- '--install-timer' "${REPO_ROOT}/scripts/__domain.sh"; then
+  no "__domain.sh still has no --install-timer option"
+else
+  ok "__domain.sh still has no --install-timer option"
+fi
+
 printf '\n%s passed, %s failed\n' "${pass}" "${fail}"
 (( fail == 0 ))

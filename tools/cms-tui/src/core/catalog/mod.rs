@@ -29,6 +29,7 @@ pub(crate) const MAKE_DB_CLEAN: &str = "db-clean";
 pub(crate) const MAKE_PRISMA_SYNC: &str = "prisma-sync";
 pub(crate) const MAKE_ADMIN_CREATE: &str = "admin-create";
 pub(crate) const MAKE_BACKUP: &str = "backup";
+pub(crate) const MAKE_CERT_TIMER_INSTALL: &str = "cert-timer-install";
 
 /// Describes a single accepted argument for documentation and TUI rendering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

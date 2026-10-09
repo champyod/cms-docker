@@ -90,6 +90,8 @@ pub enum DispatchKey {
     DomainStatus,
     /// `./cms domain renew`
     DomainRenew,
+    /// `./cms domain setup --install-timer`
+    DomainCertTimerInstall,
     /// `./cms domain preflight`
     DomainPreflight,
     /// `./cms domain check-expiry`
@@ -161,6 +163,7 @@ mod tests {
         DispatchKey::DomainProxy,
         DispatchKey::DomainStatus,
         DispatchKey::DomainRenew,
+        DispatchKey::DomainCertTimerInstall,
         DispatchKey::DomainPreflight,
         DispatchKey::DomainCheckExpiry,
         DispatchKey::DomainRevoke,
