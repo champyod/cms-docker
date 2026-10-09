@@ -90,7 +90,6 @@ Options:
 
 Audited secrets:
   - POSTGRES_PASSWORD (.env) — both file + inline
-  - RANKING_PASSWORD (.env)
   - CMS_SECRET_KEY (.env / cms.toml)
   - AUTH_SECRET (.env)
   - SECRET_KEY (admin-panel/.env)
@@ -113,10 +112,6 @@ cmd_audit() {
 
   # POSTGRES_PASSWORD in .env
   _audit_env_key ".env" "POSTGRES_PASSWORD" && ((weak++))
-  ((total++))
-
-  # RANKING_PASSWORD in .env
-  _audit_env_key ".env" "RANKING_PASSWORD" && ((weak++))
   ((total++))
 
   # AUTH_SECRET in .env
@@ -244,9 +239,8 @@ cmd_generate() {
   log_info "Generating new secrets to $outfile"
 
   # Generate secrets
-  local postgres_password ranking_password cms_secret auth_secret secret_key
+  local postgres_password cms_secret auth_secret secret_key
   postgres_password="$(openssl rand -base64 24 | tr -dc 'a-zA-Z0-9' | head -c 32)"
-  ranking_password="$(openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 16)"
   cms_secret="$(openssl rand -hex 32)"
   auth_secret="$(openssl rand -hex 32)"
   secret_key="$(openssl rand -hex 32)"
@@ -268,9 +262,6 @@ cmd_generate() {
 
 # Database password (.env)
 POSTGRES_PASSWORD=${postgres_password}
-
-# Ranking password (.env)
-RANKING_PASSWORD=${ranking_password}
 
 # CMS secret key (config/cms.toml)
 CMS_SECRET_KEY=${cms_secret}
@@ -326,9 +317,6 @@ cmd_apply() {
   local toml_updated=0
   if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
     _update_config_toml "POSTGRES_PASSWORD" "$POSTGRES_PASSWORD" && toml_updated=1
-  fi
-  if [[ -n "${RANKING_PASSWORD:-}" ]]; then
-    _update_config_toml "RANKING_PASSWORD" "$RANKING_PASSWORD" && toml_updated=1
   fi
   if [[ -n "${AUTH_SECRET:-}" ]]; then
     _update_config_toml "AUTH_SECRET" "$AUTH_SECRET" && toml_updated=1

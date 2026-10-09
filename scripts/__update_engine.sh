@@ -162,53 +162,6 @@ ensure_worker_cgroup_setup() {
     fi
 }
 
-configure_ranking_auth() {
-    echo ""
-    print_step "Contest & Ranking Authentication"
-
-    local existing_ranking_username
-    local existing_ranking_password
-
-    existing_ranking_username=$(get_var "[admin]" RANKING_USERNAME)
-    existing_ranking_password=$(get_var "[admin]" RANKING_PASSWORD)
-
-    if [ "$MODE" = "fix" ]; then
-        if [ -n "$existing_ranking_username" ] && ! is_default_secret "$existing_ranking_password"; then
-            print_info "Ranking credentials present — nothing to fix."
-            return 0
-        fi
-        RANKING_USERNAME_INPUT="${existing_ranking_username:-admin}"
-        RANKING_PASSWORD_INPUT=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-16)
-        print_info "RANKING_PASSWORD: <generated>"
-    else
-        read -r -p "Ranking username [${existing_ranking_username:-admin}]: " RANKING_USERNAME_INPUT
-        RANKING_USERNAME_INPUT=${RANKING_USERNAME_INPUT:-${existing_ranking_username:-admin}}
-
-        read -r -s -p "Ranking password [hidden, leave blank to keep current]: " RANKING_PASSWORD_INPUT
-        echo ""
-        if [ -z "$RANKING_PASSWORD_INPUT" ]; then
-            RANKING_PASSWORD_INPUT=$existing_ranking_password
-        fi
-        if is_default_secret "$RANKING_PASSWORD_INPUT"; then
-            RANKING_PASSWORD_INPUT=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-16)
-            print_info "RANKING_PASSWORD: <generated>"
-        fi
-    fi
-
-    if [ "$DRY_RUN" = "true" ]; then
-        echo "DRY-RUN: Would update config.toml [admin]: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
-        echo "DRY-RUN: Would update config.toml [admin]: RANKING_PASSWORD=<hidden>"
-        echo "DRY-RUN: Would run: make env"
-        echo "DRY-RUN: Would run: ./scripts/__inject_config.sh"
-        return
-    fi
-
-    update_toml_var "[admin]" "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
-    update_toml_var "[admin]" "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
-    propagate_generated
-    print_success "Ranking credentials updated in config.toml [admin], .env, config/cms.toml, and config/cms_ranking.toml"
-}
-
 propagate_generated() {
     if [ ! -f Makefile ]; then
         print_warning "No Makefile here — skipping derived-file propagation (make env / inject_config)."
@@ -673,7 +626,6 @@ VAR_SPECS=(
   "Core & Network|[core]|CERT_EMAIL|str||"
   "Core & Network|[core]|ACME_CERTBOT_IMAGE|str||certbot/certbot"
   "Core & Network|[core]|TLS_CERTRESOLVER|str||letsencrypt"
-  "Core & Network|[core]|CMS_RANKING_CONFIG|str||/usr/local/etc/cms_ranking.toml"
   "Admin Panel|[admin]|DEPLOYMENT_TYPE|enum:img,src||img"
   "Admin Panel|[admin]|ADMIN_NEXT_PORT_EXTERNAL|port||8891"
   "Admin Panel|[admin]|ADMIN_PORT_EXTERNAL|port||8889"
@@ -686,8 +638,6 @@ VAR_SPECS=(
   "Admin Panel|[admin]|RANKING_BIND_IP|str||127.0.0.1"
   "Admin Panel|[admin]|RANKING_LISTEN_PORT|port||8890"
   "Admin Panel|[admin]|RANKING_DOMAIN|str||ranking.cms.local"
-  "Admin Panel|[admin]|RANKING_USERNAME|str||admin"
-  "Admin Panel|[admin]|RANKING_PASSWORD|secret||"
   "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"
   "Admin Panel|[admin]|AUTH_SECRET|secret||hex32"
   "Admin Panel|[admin]|COOKIE_SECURE|bool||false"
@@ -710,7 +660,6 @@ VAR_SPECS=(
   "Admin Panel|[admin]|REDIS_RATE_LIMIT|num||0"
   "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
   "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
-  "Admin Panel|[admin]|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
   "Admin Panel|[admin]|RANKING_LOGO_PATH|str||"
   "Admin Panel|[admin]|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
   "Admin Panel|[admin]|DOMAIN_NGINX_HTTP_PORT|port||80"
@@ -913,9 +862,6 @@ run_fix_mode() {
         fi
         apply_var "$section" "$key" "$newval" generated
     done
-    if [ "$unfixable" -eq 0 ]; then
-        configure_ranking_auth
-    fi
     print_summary
     exit $unfixable
 }
@@ -1000,5 +946,4 @@ else
     done
 fi
 
-configure_ranking_auth
 print_summary

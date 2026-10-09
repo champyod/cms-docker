@@ -24,9 +24,7 @@ new_sandbox() {
     /^\[/                                        { skip = 0 }
     !skip                                         { print }
   ' "$SAMPLE" > "${1}/config/cms.toml"
-  [[ -f "${REPO_ROOT}/config/cms_ranking.toml" ]] \
-    && cp "${REPO_ROOT}/config/cms_ranking.toml" "${1}/config/"
-  printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\n' > "${1}/.env"
+  printf 'POSTGRES_DB=cmsdb\n' > "${1}/.env"
 }
 
 parses() {
@@ -293,7 +291,7 @@ cp -R "${REPO_ROOT}/scripts/__lib" "${PROP}/scripts/__lib"
 # differs from the shipped default so only a real propagation can produce it.
 cat >"${PROP}/Makefile" <<'MK'
 env:
-	@printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\nSUBMIT_LOCAL_COPY=false\n' > .env
+	@printf 'SUBMIT_LOCAL_COPY=false\n' > .env
 MK
 {
   printf 'set -eu\nDRY_RUN=false\nprint_warning(){ echo "[!] $1"; }\n'

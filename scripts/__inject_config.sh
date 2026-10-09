@@ -12,8 +12,6 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 ENV_FILE=".env"
 WORKER_ENV_FILE=".env"
 CONFIG_FILE="config/cms.toml"
-RANKING_CONFIG_FILE="config/cms_ranking.toml"
-SKIP_RANKING=false
 
 echo "Running configuration injection script..."
 
@@ -24,10 +22,6 @@ fi
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Error: $CONFIG_FILE not found."
   exit 1
-fi
-if [[ ! -f "$RANKING_CONFIG_FILE" ]]; then
-  echo "Info: $RANKING_CONFIG_FILE not found, skipping ranking injection."
-  SKIP_RANKING=true
 fi
 
 # Parse state of the config as it arrived, recorded before any writer runs so the
@@ -148,18 +142,6 @@ echo "  - DB Name: $DB_NAME"
 
 export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR INNER_IP CORE_SERVICES_IP
 
-# Scoreboard auth for the ranking push and the ranking web UI — exact-match reads
-# (never grep regex) from the merged .env. A missing value aborts the run: a built-in
-# fallback would publish default credentials on a live ranking service.
-R_USER="$(get_env_val "RANKING_USERNAME")"
-R_PASS="$(get_env_val "RANKING_PASSWORD")"
-if [[ -z "$R_USER" || -z "$R_PASS" ]]; then
-  echo "Error: RANKING_USERNAME / RANKING_PASSWORD missing from $ENV_FILE." >&2
-  echo "Fix: set them in config.toml [admin], then run: ./cms config sync" >&2
-  exit 1
-fi
-export R_USER R_PASS
-
 # Perform replacements using Python for robustness — secrets via env, never argv.
 python3 - << 'PY'
 import os
@@ -224,9 +206,6 @@ else:
 cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
     text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{toml_escape(cms_secret)}"', text, flags=re.MULTILINE)
-
-r_user = os.environ["R_USER"]
-r_pass = os.environ["R_PASS"]
 
 # config.toml [contest] -> cms.toml [contest_web_server] (previously never synced,
 # so config.toml edits like NUM_PROXIES_USED never reached the CMS).
@@ -297,29 +276,6 @@ def _set_login_rate_limit(section):
 _set_login_rate_limit('admin_web_server.captcha')
 _set_login_rate_limit('contest_web_server.captcha')
 
-# Push target for score feed: same-network service by default. A remote
-# ranking node is only assumed when RANKING_REMOTE=1 (then RANKING_PUSH_HOST
-# or INNER_IP supplies the address). Port 8890 is always enforced.
-ranking_host = os.environ.get("RANKING_PUSH_HOST", "").strip()
-if os.environ.get("RANKING_REMOTE", "").strip() == "1" and not ranking_host:
-    ranking_host = os.environ.get("INNER_IP", "").strip()
-if not ranking_host:
-    ranking_host = "cms-ranking-web-server"
-if ":" not in ranking_host.split("/")[-1]:
-    ranking_host += ":8890"
-
-updated_lines = []
-for line in text.splitlines():
-    if line.startswith('rankings = ["http://'):
-        m = re.match(r'^(rankings = \["http://)([^:"]+):([^@"]+)@([^/"]+)(.*)$', line)
-        if m:
-            r_user_q = _up.quote(r_user, safe='')
-            r_pass_q = _up.quote(r_pass, safe='')
-            line = f'{m.group(1)}{r_user_q}:{r_pass_q}@{ranking_host}{m.group(5)}'
-    updated_lines.append(line)
-
-text = "\n".join(updated_lines) + ("\n" if text.endswith("\n") else "")
-
 # Global replacements — idempotent after first run.
 text = text.replace('"127.0.0.1"', '"0.0.0.0"')
 text = text.replace('["127.0.0.1"]', '["0.0.0.0"]')
@@ -359,53 +315,6 @@ if re.search(r'^\[rpc\]', text, re.MULTILINE):
 
 config_path.write_text(text)
 PY
-
-# Update Ranking Config File — safe write via env (no argv exposure), idempotent.
-if [[ "$SKIP_RANKING" != "true" ]]; then
-  R_USER="$R_USER" R_PASS="$R_PASS" RANKING_CONFIG_FILE="$RANKING_CONFIG_FILE" python3 - << 'PY'
-import os, re
-from pathlib import Path
-p = Path(os.environ["RANKING_CONFIG_FILE"])
-if p.exists():
-    t = p.read_text()
-    u = os.environ.get("R_USER", "")
-    pw = os.environ.get("R_PASS", "")
-    def toml_escape(v): return v.replace("\\", "\\\\").replace('"', '\\"')
-    t = re.sub(r'^username = ".*"', lambda m: f'username = "{toml_escape(u)}"', t, flags=re.MULTILINE)
-    t = re.sub(r'^password = ".*"', lambda m: f'password = "{toml_escape(pw)}"', t, flags=re.MULTILINE)
-    # Sync RANKING_LOGO_PATH -> container-side logo_path (if host file set)
-    admin_logo = ""
-    try:
-        for line in Path(".env").read_text().splitlines():
-            if line.startswith("RANKING_LOGO_PATH="):
-                admin_logo = line.split("=",1)[1].strip().strip('"').strip("'")
-                break
-    except: pass
-    lib_dir = "/var/local/lib/cms/ranking"
-    try:
-        for line in Path(".env").read_text().splitlines():
-            if line.startswith("CMS_RANKING_LIB_DIR="):
-                lib_dir = line.split("=",1)[1].strip().strip('"').strip("'") or lib_dir
-                break
-    except: pass
-    t = re.sub(r'^\s*(#\s*)?lib_dir\s*=.*', f'lib_dir = "{lib_dir}"', t, flags=re.MULTILINE)
-    if admin_logo:
-        ext = admin_logo.rsplit(".",1)[-1].lower() if "." in admin_logo else "png"
-        if ext == "jpeg": ext = "jpg"
-        if ext not in ("png","jpg","gif","bmp"): ext = "png"
-        container_logo = f"{lib_dir}/logo.{ext}"
-        if re.search(r'^logo_path\s*=', t, re.MULTILINE):
-            t = re.sub(r'^logo_path\s*=.*', lambda m: f'logo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE)
-        else:
-            if re.search(r'^lib_dir\s*=', t, re.MULTILINE):
-                t = re.sub(r'^(lib_dir\s*=.*)', lambda m: m.group(1) + f'\nlogo_path = "{toml_escape(container_logo)}"', t, flags=re.MULTILINE, count=1)
-            else:
-                t = "lib_dir = \"{}\"\nlogo_path = \"{}\"\n{}".format(lib_dir, container_logo, t)
-    else:
-        t = re.sub(r'^logo_path\s*=.*\n?', '', t, flags=re.MULTILINE)
-    p.write_text(t)
-PY
-fi
 
 # Build ContestWebServer array from CONTESTS_DEPLOY_CONFIG
 echo "Building contest web server configuration..."

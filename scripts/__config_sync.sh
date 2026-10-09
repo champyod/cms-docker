@@ -229,7 +229,6 @@ generate_secret_for() {
     SECRET_KEY)          gen_hex32 ;;
     CMS_SECRET_KEY)      gen_hex32 ;;
     RPC_SECRET)          gen_hex32 ;;
-    RANKING_PASSWORD)    echo "cms_ranking_$(gen_pw)" ;;
     # WHY this secret is generated while the CAPTCHA secret is not: this one is ours
     # to invent and only has to be unpredictable, whereas the CAPTCHA secret is issued
     # by a provider and random hex can never authenticate against its API.
@@ -1210,11 +1209,6 @@ main() {
   migrate_missing_keys
 
   parse_toml "$TOML_PARSE_SOURCE"
-
-  # Ensure ranking config exists from sample (needed for logo_path injection)
-  if [[ ! -f "config/cms_ranking.toml" && -f "config/cms.ranking.sample.toml" ]]; then
-    cp "config/cms.ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
-  fi
 
   # Ensure CMS config exists from sample — __inject_config.sh modifies but
   # never creates it, and __config_sync must be self-sufficient on first run.

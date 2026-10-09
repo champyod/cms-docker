@@ -6,7 +6,7 @@
 # config.toml before the remote re-syncs — no manual copy, no drift.
 
 # Keys a worker box must share with main to reach its DB and RPC.
-SHARED_WORKER_SECRETS="POSTGRES_PASSWORD POSTGRES_BACKUP_PASSWORD AUTH_SECRET SECRET_KEY CMS_SECRET_KEY RANKING_PASSWORD"
+SHARED_WORKER_SECRETS="POSTGRES_PASSWORD POSTGRES_BACKUP_PASSWORD AUTH_SECRET SECRET_KEY CMS_SECRET_KEY"
 
 # Print KEY="value" lines for the shared secrets present in $1 (.env).
 build_secrets_fragment() {

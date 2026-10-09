@@ -70,15 +70,17 @@ exercises the served scoreboard against a live database.
 ## 5. Rollback
 
 The Python command is **still installed** in the image on purpose: the parity capture and the
-rollback path need it. To go back, restore the compose command and the Python configuration mounts
-for `ranking-web-server`:
+rollback path need it. To go back, restore the compose command and mount a ranking config for
+`ranking-web-server`:
 
 ```yaml
     command: ["cmsRankingWebServer"]
 ```
 
-and redeploy the stack. The tables keep the pushed data, so a rollback loses nothing; the console
-accounts and the appearance row stay in the database for the next attempt.
+The deployment no longer generates `config/cms_ranking.toml`, so a rollback must copy
+`config/cms.ranking.sample.toml` to that path and mount it as `CMS_RANKING_CONFIG` before
+redeploying. The tables keep the pushed data, so a rollback loses nothing; the console accounts and
+the appearance row stay in the database for the next attempt.
 
 ## 6. Known gaps at the time of writing
 

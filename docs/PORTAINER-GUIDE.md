@@ -94,7 +94,6 @@ Deploy stacks in this order:
 
    ```
    CMS_CONFIG=/usr/local/etc/cms.toml
-   CMS_RANKING_CONFIG=/usr/local/etc/cms_ranking.toml
    ADMIN_LISTEN_ADDRESS=0.0.0.0
    ADMIN_LISTEN_PORT=8889
    ADMIN_PORT_EXTERNAL=8889

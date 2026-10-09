@@ -33,7 +33,6 @@ DB_BIND_IP = "127.0.0.1"                # str; address postgres publishes 5432 o
 CERT_EMAIL = ""                         # str; Let's Encrypt registration email
 ACME_CERTBOT_IMAGE = "certbot/certbot"  # str; certbot image; set certbot/dns-cloudflare for DNS-01
 TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
-CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml" # container path of the generated cms_ranking.toml the ranking web server reads
 
 [db_default]
 POSTGRES_HOST = "database"      # str; postgres host the services dial — the injector pins "database" (the compose service) into the main server's cms.toml
@@ -80,12 +79,9 @@ LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port; port of the shared Redis the login co
 RANKING_LISTEN_PORT = 8890      # port; container port the ranking web server listens on — service env, publish map, and proxy target
 RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published on (RANKING_BIND_IP:RANKING_PORT_EXTERNAL:RANKING_LISTEN_PORT)
 RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
-RANKING_USERNAME = "admin"      # str; scoreboard auth username injected into cms.ranking.toml — guards the ranking UI and the ranking push
-RANKING_PASSWORD = ""           # secret; auto-generated if empty
 RANKING_SESSION_SECRET = ""     # secret; auto-generated if empty — signs the ranking console session cookie; empty makes the console refuse every login
 RANKING_LOGO_PATH = ""          # str; host path to ranking logo (png/jpg/gif/bmp) e.g. "./config/assets/logo.png" — synced to ranking volume on ./cms config sync (hot-swap, overwrites old)
-CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking" # str; reserved — no code reads it; the injector never sets log_dir in cms.ranking.toml
-CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path written as lib_dir into cms.ranking.toml and used by the logo hot-swap — must match the cms-ranking-data volume mount
+CMS_RANKING_LIB_DIR = "/var/local/lib/cms/ranking" # str; container path of the ranking logo volume the logo hot-swap writes into — must match the cms-ranking-data volume mount
 DOMAIN_NAME = ""                # str; primary FQDN (e.g. grader.example.org); empty=cms.local
 CERT_LINEAGE_DOMAIN = ""        # str; certbot lineage name under config/letsencrypt/live, and the certbot --cert-name; empty=derived from DOMAIN_NAME (same as scripts/__domain.sh)
 DOMAIN_CERT_METHOD = "letsencrypt" # enum:letsencrypt,provided,selfsigned; how the primary domain certificate is obtained
@@ -117,8 +113,6 @@ ACME_RENEW_BEFORE_DAYS = 7 # num; days of validity left before a tls-alpn-01 cer
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
 MAX_TESTCASE_UPLOAD_BYTES = 52428800 # num; bytes; total size of one bulk testcase upload the panel accepts, 50 MB. WHY it sits beside PROXY_MAX_BODY_SIZE ([infra]): a request the proxy refuses never reaches the panel, so an upload between the two caps dies as a bare nginx 413 with nothing from the panel explaining it. Keep this at or below the proxy limit — ./cms preflight warns when it is not.
-BACKUP_LOCATIONS = ""       # str; JSON array of the backup destinations the panel offers, e.g. [{"id":"nas","label":"NAS","path":"/mnt/nas/backups"}]; empty offers the single implicit location the container writes to
-BACKUP_DEFAULT_LOCATION = "" # str; id from BACKUP_LOCATIONS preselected in the switcher and on new schedules; empty picks the first entry, never an id the list lacks
 BACKUP_DIR = "/app/backups"   # str; path INSIDE the monitor and admin-panel containers where archives live — one value for both, since they mount the same host directory; change it only alongside the compose volumes that back it
 SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
 MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)

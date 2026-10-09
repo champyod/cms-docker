@@ -201,7 +201,7 @@ check_env() {
     record_result "env: core" "PASS" "skipped (--stack ${STACK})"
   fi
 
-  # ---- admin: AUTH_SECRET, RANKING_PASSWORD ----
+  # ---- admin: AUTH_SECRET ----
   if should_validate_stack "admin"; then
     local admin_issues=()
     local v
@@ -211,19 +211,13 @@ check_env() {
     elif is_default_secret "$v"; then
       admin_issues+=("AUTH_SECRET is default/placeholder")
     fi
-    v="${RANKING_PASSWORD:-}"
-    if [[ -z "$v" ]]; then
-      admin_issues+=("RANKING_PASSWORD empty")
-    elif is_default_secret "$v"; then
-      admin_issues+=("RANKING_PASSWORD is default/placeholder")
-    fi
     if [[ ${#admin_issues[@]} -gt 0 ]]; then
       local msg
       msg=$(IFS='; '; echo "${admin_issues[*]}")
       printf '[FAIL] admin env: %s\n' "$msg" >&2
       record_result "env: admin" "FAIL" "$msg"
     else
-      record_result "env: admin" "PASS" "AUTH_SECRET, RANKING_PASSWORD set"
+      record_result "env: admin" "PASS" "AUTH_SECRET set"
     fi
   else
     record_result "env: admin" "PASS" "skipped (--stack ${STACK})"
