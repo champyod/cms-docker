@@ -9,9 +9,55 @@ readonly ACME_TLS_PORT=443
 readonly ACME_PORT_RELEASE_POLL_S=1
 readonly ACME_HANDOVER_TIMEOUT_DEFAULT=60
 
-# The container the handover stopped, so exactly that one is put back. Empty means nothing
-# to undo, which is what makes the restore safe to call twice.
-ACME_PROXY_TO_RESTORE=""
+# The containers the handover stopped, so exactly those are put back. Empty means nothing to
+# undo, which is what makes the restore safe to call twice.
+ACME_PORT443_STOPPED=()
+
+# Whether one container's published-port list contains host TCP :443. docker prints bindings
+# as "host:port->container/proto", comma-separated, where host is "0.0.0.0", "[::]" or a bare
+# address, and the port half may be a range; so the host port is whatever follows the last
+# colon before "->", and a range counts as holding :443 when it spans it. Only /tcp is read,
+# because that is the protocol the challenge binds.
+_acme_publishes_443() {
+  local binding host published low high
+  while IFS= read -r binding; do
+    binding="${binding#"${binding%%[![:space:]]*}"}"
+    binding="${binding%"${binding##*[![:space:]]}"}"
+    [[ "$binding" == *'/tcp' ]] || continue
+    host="${binding%%->*}"
+    published="${host##*:}"
+    low="${published%%-*}"
+    high="${published#*-}"
+    [[ "$high" == "$published" ]] && high="$low"
+    if [[ "$low" =~ ^[0-9]+$ && "$high" =~ ^[0-9]+$ ]] \
+      && (( low <= ACME_TLS_PORT && ACME_TLS_PORT <= high )); then
+      return 0
+    fi
+  done < <(printf '%s\n' "${1:-}" | tr ',' '\n')
+  return 1
+}
+
+# The running containers publishing host :443, one name per line. Discovered rather than
+# named, because which one holds :443 is a deployment choice: WAF_PORT=443 puts grader-waf
+# in front and the proxy moves to 8443, so a hardcoded proxy would be stopped while the WAF
+# kept the port the challenge has to bind.
+#
+# A row whose bindings cannot be read is treated as a holder, because the failure this
+# handover exists to prevent is silently carrying on while :443 is still taken.
+_acme_port443_holders() {
+  local rows row name status=0
+  rows="$(docker ps --format '{{.Names}}|{{.Ports}}' 2>/dev/null)" || status=$?
+  (( status == 0 )) || return 1
+  while IFS= read -r row; do
+    [[ -n "$row" ]] || continue
+    name="${row%%|*}"
+    [[ -n "$name" ]] || continue
+    if [[ "$row" != *'|'* ]] || _acme_publishes_443 "${row#*|}"; then
+      printf '%s\n' "$name"
+    fi
+  done <<< "$rows"
+  return 0
+}
 
 # Waits for host :443 to stop answering; docker can return while the listener still closes.
 acme_wait_for_port_free() {
@@ -37,20 +83,26 @@ acme_is_port_bound() {
   return 1
 }
 
-# Gives up :443 for the length of the challenge. The restore target is recorded only after
-# a successful stop: a stop that failed left the proxy running, and starting it again
+# Gives up :443 for the length of the challenge. Each holder is recorded only after its own
+# stop succeeded: a stop that failed left that container running, and starting it again
 # would restart a container nobody stopped.
 acme_release_port443() {
-  local container
-  container="$(_running_domain_proxy)"
-  if [[ -z "$container" ]]; then
+  local rows="" holders=() holder
+  rows="$(_acme_port443_holders)" \
+    || log_die "could not list the running containers, so :443 cannot be given up safely" 1
+  if [[ -n "$rows" ]]; then
+    mapfile -t holders <<< "$rows"
+  fi
+  if [[ "${#holders[@]}" -eq 0 ]]; then
     log_info "no domain proxy is running — :443 is already free for the challenge"
     return 0
   fi
-  log_warn "releasing :443 — ${container} is stopped for the length of the TLS-ALPN-01 challenge"
-  docker stop "$container" >/dev/null \
-    || log_die "could not stop ${container}, so :443 is still held by the proxy" 1
-  ACME_PROXY_TO_RESTORE="$container"
+  log_warn "releasing :443 — ${holders[*]} stopped for the length of the TLS-ALPN-01 challenge"
+  for holder in "${holders[@]}"; do
+    docker stop "$holder" >/dev/null \
+      || log_die "could not stop ${holder}, so :443 is still held by it" 1
+    ACME_PORT443_STOPPED+=("$holder")
+  done
   acme_wait_for_port_free
   return 0
 }
@@ -58,14 +110,17 @@ acme_release_port443() {
 # Puts back what acme_release_port443 took; a second call finds nothing and does nothing,
 # so the exit trap and the normal path can both call it.
 acme_restore_port443() {
-  local container="${ACME_PROXY_TO_RESTORE:-}"
-  ACME_PROXY_TO_RESTORE=""
-  [[ -n "$container" ]] || return 0
-  if docker start "$container" >/dev/null; then
-    log_info "${container} restarted"
-  else
-    log_warn "could not restart ${container} — start it by hand"
-  fi
+  local pending=() holder
+  pending=(${ACME_PORT443_STOPPED[@]+"${ACME_PORT443_STOPPED[@]}"})
+  ACME_PORT443_STOPPED=()
+  [[ "${#pending[@]}" -gt 0 ]] || return 0
+  for holder in "${pending[@]}"; do
+    if docker start "$holder" >/dev/null; then
+      log_info "${holder} restarted"
+    else
+      log_warn "could not restart ${holder} — start it by hand"
+    fi
+  done
   return 0
 }
 
@@ -129,7 +184,7 @@ acme_issue_tls_alpn() {
   lego_path="${cert_dir}/lego"
   mkdir -p "$lego_path"
 
-  ACME_PROXY_TO_RESTORE=""
+  ACME_PORT443_STOPPED=()
   trap 'acme_restore_port443' EXIT
   acme_release_port443
   if docker run --rm --network host -v "${lego_path}:/lego" \
