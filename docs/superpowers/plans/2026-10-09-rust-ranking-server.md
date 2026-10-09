@@ -67,9 +67,10 @@
 - [x] Ported cmsranking.Scoring into src/scoring.rs and verified it against the shipping Python scorer: the fixture values are executed output, not a reading.
 - [x] src/store.rs reads the projection over sqlx; /scores, /history and /config serve it. A missing database, an unreachable one and an unknown score mode all answer 503, because an empty board during a contest is worse than an error.
 - [x] Three database-backed tests are ignored without a live PostgreSQL, so the CI job now runs a postgres service, applies the CreateTable migration and passes --include-ignored. An ignored test nobody runs is a claim, not a check.
-- [ ] Still open in this slice: /, /logo and /credits (the vendored page, the logo and the compact credit text) and the page-side patch for the new /config fields.
+- [x] /, /logo and /credits serve: the vendored page with the panel title and theme injected server-side, so the vendored assets stay unpatched; the logo resolved panel-then-host-then-static; the credits JSON keeping the project and license names the Python route used.
+- [x] A theme value that could close its CSS declaration is dropped instead of injected, and a missing credits file refuses rather than serving an empty licence offer.
 - [ ] The HTTP-level parity gate needs capture.sh run where the Python service is up.
-- **Verify:** scoring parity green (2 tests), clippy silent, the ignored tests compile; full HTTP parity still pending.
+- **Verify:** scoring parity green (2 tests), surface tests green (7), config tests green (6), clippy silent, the ignored database tests compile. Full HTTP parity still pending.
 - **Commit:** feat(ranking): serve scores and history from postgres
 
 ### Slice 4: Live events

@@ -3,6 +3,7 @@ pub mod db;
 pub mod http;
 pub mod scoring;
 pub mod store;
+pub mod surface;
 
 use std::sync::Arc;
 
@@ -16,27 +17,34 @@ pub struct AppState {
 
 struct AppStateInner {
     db: Option<db::Db>,
+    config: RankingConfig,
 }
 
 impl AppState {
-    pub fn new(db: Option<db::Db>) -> Self {
+    pub fn new(db: Option<db::Db>, config: RankingConfig) -> Self {
         Self {
-            inner: Arc::new(AppStateInner { db }),
+            inner: Arc::new(AppStateInner { db, config }),
         }
     }
 
+    /// For the tests that exercise the refusals: no database at all, whatever the
+    /// environment happens to hold.
     pub fn without_db() -> Self {
-        Self::new(None)
+        Self::new(None, RankingConfig::from_env().unwrap_or_default())
     }
 
     pub fn db(&self) -> Option<&db::Db> {
         self.inner.db.as_ref()
     }
 
-    /// Reports whether the service can serve real ranking data. A missing
-    /// database is not something a caller may paper over: every read route
-    /// treats it as a refusal, so a misconfigured deployment shows nothing
-    /// rather than an empty scoreboard.
+    pub fn config(&self) -> &RankingConfig {
+        &self.inner.config
+    }
+
+    /// Reports whether the service can serve real ranking data. A missing database
+    /// is not something a caller may paper over: every read route treats it as a
+    /// refusal, so a misconfigured deployment shows nothing rather than an empty
+    /// scoreboard.
     pub async fn is_ready(&self) -> bool {
         match self.db() {
             Some(db) => db.is_ready().await.is_ok(),
@@ -70,7 +78,7 @@ pub async fn run() -> Result<(), StartupError> {
             address: config.bind,
             source,
         })?;
-    axum::serve(listener, router(AppState::new(db)))
+    axum::serve(listener, router(AppState::new(db, config.clone())))
         .await
         .map_err(|source| StartupError::Listen {
             address: config.bind,

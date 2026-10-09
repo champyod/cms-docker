@@ -1,11 +1,13 @@
 use axum::extract::State;
-use axum::http::{HeaderValue, StatusCode};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
-use axum::routing::get;
+use axum::routing::{any, get};
 use axum::Router;
 use serde::Serialize;
+use tower_http::services::ServeDir;
 
 use crate::store::{load_appearance, load_ledger, Appearance};
+use crate::surface::{credits_from_file, logo_path, read_page, render_page};
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -19,7 +21,7 @@ pub struct Health {
 #[derive(Serialize)]
 pub struct PublicConfig {
     pub show_id_column: bool,
-    pub source_url: &'static str,
+    pub source_url: String,
     pub title: Option<String>,
     pub subtitle: Option<String>,
     pub organisation: Option<String>,
@@ -37,14 +39,33 @@ pub struct PublicConfig {
 /// a deployment someone can reach.
 const DEFAULT_SOURCE_URL: &str = "https://github.com/champyod/cms-docker";
 
+/// Why the reason is a value and not a Response: clippy::result_large_err is right
+/// that a Response in the Err slot makes every call site pay for the failure path.
+struct Refusal(String);
+
+impl Refusal {
+    fn response(self) -> Response {
+        refuse(&self.0)
+    }
+}
+
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    let router = Router::new()
         .route("/healthz", get(health))
+        .route("/", get(root))
         .route("/scores", get(scores))
         .route("/history", get(history))
         .route("/config", get(config))
-        .fallback(unavailable)
-        .with_state(state)
+        .route("/logo", get(logo))
+        .route("/credits", get(credits));
+    match state.config().static_dir.clone() {
+        // The vendored page asks for its stylesheet, scripts and images by name at
+        // the root, so the directory is the fallback rather than one route.
+        Some(directory) => router
+            .fallback_service(ServeDir::new(directory).fallback(any(unavailable)))
+            .with_state(state),
+        None => router.fallback(unavailable).with_state(state),
+    }
 }
 
 async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
@@ -60,9 +81,23 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
     }
 }
 
+async fn root(State(state): State<AppState>) -> Response {
+    let Some(directory) = state.config().static_dir.as_ref() else {
+        return refuse("no RANKING_STATIC_DIR is configured");
+    };
+    let appearance = match appearance_of(&state).await {
+        Ok(appearance) => appearance,
+        Err(refusal) => return refusal.response(),
+    };
+    match read_page(&directory.join("Ranking.html")) {
+        Ok(html) => html_response(&render_page(&html, appearance.as_ref())),
+        Err(error) => refuse(&error.to_string()),
+    }
+}
+
 async fn scores(State(state): State<AppState>) -> Response {
     let Some(db) = state.db() else {
-        return unavailable_json();
+        return refuse("no database is configured");
     };
     match load_ledger(db.pool()).await {
         Ok(ledger) => {
@@ -74,60 +109,79 @@ async fn scores(State(state): State<AppState>) -> Response {
         }
         // A refusal, never a partial or empty board: a page that renders an empty
         // scoreboard during a contest is worse than one that renders an error.
-        Err(error) => {
-            eprintln!("cms-ranking: /scores refused: {error}");
-            unavailable_json()
-        }
+        Err(error) => refuse(&error.to_string()),
     }
 }
 
 async fn history(State(state): State<AppState>) -> Response {
     let Some(db) = state.db() else {
-        return unavailable_json();
+        return refuse("no database is configured");
     };
     match load_ledger(db.pool()).await {
         Ok(ledger) => Json(ledger.history().to_vec()).into_response(),
-        Err(error) => {
-            eprintln!("cms-ranking: /history refused: {error}");
-            unavailable_json()
-        }
+        Err(error) => refuse(&error.to_string()),
     }
 }
 
 async fn config(State(state): State<AppState>) -> Response {
-    let appearance = match state.db() {
-        Some(db) => match load_appearance(db.pool()).await {
-            Ok(row) => row,
-            Err(error) => {
-                eprintln!("cms-ranking: /config refused: {error}");
-                return unavailable_json();
-            }
-        },
-        None => None,
+    let appearance = match appearance_of(&state).await {
+        Ok(appearance) => appearance,
+        Err(refusal) => return refusal.response(),
     };
     Json(public_config(appearance)).into_response()
 }
 
+async fn logo(State(state): State<AppState>) -> Response {
+    let Some(directory) = state.config().static_dir.as_ref() else {
+        return refuse("no RANKING_STATIC_DIR is configured");
+    };
+    let appearance = match appearance_of(&state).await {
+        Ok(appearance) => appearance,
+        Err(refusal) => return refusal.response(),
+    };
+    let path = logo_path(
+        appearance.as_ref(),
+        state.config().logo_path.as_deref(),
+        directory,
+    );
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => ([(header::CONTENT_TYPE, content_type_for(&path))], bytes).into_response(),
+        Err(error) => refuse(&format!("{}: {error}", path.display())),
+    }
+}
+
+async fn credits(State(state): State<AppState>) -> Response {
+    let appearance = match appearance_of(&state).await {
+        Ok(appearance) => appearance,
+        Err(refusal) => return refusal.response(),
+    };
+    let text = appearance.and_then(|row| row.credits_text);
+    let Some(path) = state.config().credits_file.as_ref() else {
+        return refuse("no credits file is configured");
+    };
+    match credits_from_file(path, text) {
+        Ok(credits) => Json(credits).into_response(),
+        Err(error) => refuse(&error.to_string()),
+    }
+}
+
+/// Resolves the appearance, or the refusal the caller must return. The database is
+/// required here too: a page rendered without it would show a board with no scores
+/// and no way to tell why.
+async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> {
+    let Some(db) = state.db() else {
+        return Err(Refusal("no database is configured".to_string()));
+    };
+    load_appearance(db.pool())
+        .await
+        .map_err(|error| Refusal(error.to_string()))
+}
+
 fn public_config(appearance: Option<Appearance>) -> PublicConfig {
-    match appearance {
-        Some(row) => PublicConfig {
-            show_id_column: row.show_id_column(),
-            source_url: DEFAULT_SOURCE_URL,
-            title: row.title,
-            subtitle: row.subtitle,
-            organisation: row.organisation,
-            logo_asset: row.logo_asset,
-            favicon_asset: row.favicon_asset,
-            theme: row.theme,
-            columns: row.columns,
-            score_format: row.score_format,
-            footer_text: row.footer_text,
-            credits_text: row.credits_text,
-            access_mode: row.access_mode,
-        },
-        None => PublicConfig {
+    let Some(row) = appearance else {
+        return PublicConfig {
             show_id_column: false,
-            source_url: DEFAULT_SOURCE_URL,
+            source_url: DEFAULT_SOURCE_URL.to_string(),
             title: None,
             subtitle: None,
             organisation: None,
@@ -139,7 +193,31 @@ fn public_config(appearance: Option<Appearance>) -> PublicConfig {
             footer_text: None,
             credits_text: None,
             access_mode: "public".to_string(),
-        },
+        };
+    };
+    PublicConfig {
+        show_id_column: row.show_id_column(),
+        source_url: DEFAULT_SOURCE_URL.to_string(),
+        title: row.title,
+        subtitle: row.subtitle,
+        organisation: row.organisation,
+        logo_asset: row.logo_asset,
+        favicon_asset: row.favicon_asset,
+        theme: row.theme,
+        columns: row.columns,
+        score_format: row.score_format,
+        footer_text: row.footer_text,
+        credits_text: row.credits_text,
+        access_mode: row.access_mode,
+    }
+}
+
+fn content_type_for(path: &std::path::Path) -> &'static str {
+    match path.extension().and_then(std::ffi::OsStr::to_str) {
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("bmp") => "image/bmp",
+        _ => "image/png",
     }
 }
 
@@ -152,7 +230,16 @@ fn now_stamp() -> String {
     }
 }
 
-fn unavailable_json() -> Response {
+fn html_response(html: &str) -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        html.to_string(),
+    )
+        .into_response()
+}
+
+fn refuse(reason: &str) -> Response {
+    eprintln!("cms-ranking: refused: {reason}");
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(Health {
