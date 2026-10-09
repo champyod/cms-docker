@@ -131,6 +131,81 @@ else
   no "json reports a lego lineage as managed (got: $out)"
 fi
 
+echo "a lego certificate says who will evaluate the window"
+dir="$(sandbox)"
+install_cert "$dir" 30 lego
+out="$(run_domain "$dir" status)"
+if grep -qF -- "Renewal timer: none installed" <<<"$out"; then
+  ok "a lego certificate with nothing scheduled says so"
+else
+  no "a lego certificate with nothing scheduled says so (got: $out)"
+fi
+if grep -qF -- "./cms domain setup --install-timer" <<<"$out"; then
+  ok "the absent timer names the command that installs one"
+else
+  no "the absent timer names the command that installs one (got: $out)"
+fi
+if grep -qF -- "Renewal timer: grader-cert-renew.timer is enabled" <<<"$out"; then
+  no "an unscheduled window is not credited with a timer"
+else
+  ok "an unscheduled window is not credited with a timer"
+fi
+
+echo "a lego certificate names the timer that will evaluate the window"
+dir="$(sandbox)"
+install_cert "$dir" 30 lego
+cat > "${dir}/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+case "${2:-}" in
+  grader-cert-renew.timer) printf 'enabled\n' ;;
+esac
+exit 0
+STUB
+chmod +x "${dir}/bin/systemctl"
+out="$(run_domain "$dir" status)"
+if grep -qF -- "Renewal timer: grader-cert-renew.timer is enabled" <<<"$out"; then
+  ok "an installed timer is named"
+else
+  no "an installed timer is named (got: $out)"
+fi
+if grep -qF -- "Renewal timer: none installed" <<<"$out"; then
+  no "an installed timer is not also reported as missing"
+else
+  ok "an installed timer is not also reported as missing"
+fi
+
+echo "a timer installed in the user manager is still found"
+# The stub above answers on ${2} and exits 0 whatever it is asked, so it reports the
+# same answer for both managers and cannot tell this case apart. This one models what
+# systemd actually does: the system manager cannot see a user unit at all. Probed on a
+# real enabled user timer — `systemctl --user is-enabled` printed "enabled" while the
+# bare form printed "not-found" with exit 4 — so a check that asks only the system
+# manager reports an installed timer as absent, which is the one answer this line must
+# never give.
+dir="$(sandbox)"
+install_cert "$dir" 30 lego
+cat > "${dir}/bin/systemctl" <<'STUB'
+#!/usr/bin/env bash
+# WHY the branch on $1: this repo's units are installed with `systemctl --user enable`,
+# so only the user manager knows about them.
+if [[ "${1:-}" == "--user" && "${2:-}" == "is-enabled" ]]; then
+  case "${3:-}" in
+    grader-cert-renew.timer) printf 'enabled\n'; exit 0 ;;
+  esac
+  printf 'not-found\n'
+  exit 4
+fi
+printf 'not-found\n'
+exit 4
+STUB
+chmod +x "${dir}/bin/systemctl"
+out="$(run_domain "$dir" status)"
+if grep -qF -- "Renewal timer: grader-cert-renew.timer is enabled" <<<"$out"; then
+  ok "a user-manager timer is detected, not reported missing"
+else
+  no "a user-manager timer is detected, not reported missing (got: $out)"
+fi
+
 echo "json reports an unmanaged certificate as not managed"
 dir="$(sandbox)"
 install_cert "$dir" 30

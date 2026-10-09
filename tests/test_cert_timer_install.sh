@@ -226,8 +226,16 @@ if grep -q 'DispatchKey::DomainCertTimerInstall' "${RESOLVE_RS}"; then
 else
   no "resolve.rs dispatches the timer install"
 fi
-if grep -q -- '--install-timer' "${REPO_ROOT}/scripts/__domain.sh"; then
-  no "__domain.sh still has no --install-timer option"
+# WHY the check is for an option and not the bare string: the CLI intercepts
+# --install-timer and never forwards it, so the script must not grow a case arm or an
+# argv pass-through for it — `__domain.sh` would die on `unknown option`. The status
+# output may still NAME the flag, because that is the command an operator has to type,
+# and this repo's own docs print it. Matching the bare string instead would force the
+# warning to stop telling the operator how to fix the thing it is warning about.
+if grep -qE -- '(^|[[:space:]])--install-timer\)' "${REPO_ROOT}/scripts/__domain.sh"; then
+  no "__domain.sh has no --install-timer option"
+elif grep -qE -- '--install-timer[[:space:]]*\)' "${REPO_ROOT}/scripts/__domain.sh"; then
+  no "__domain.sh has no --install-timer option"
 else
   ok "__domain.sh still has no --install-timer option"
 fi

@@ -278,6 +278,10 @@ readonly CERT_DIR_NAME="letsencrypt"
 readonly CERT_BACKUP_KEEP=5
 readonly DOMAIN_LOCK_FILE=".domain.lock"
 readonly DOMAIN_PROXY_CONTAINER="grader-nginx-proxy"
+# The timer unit this repo installs. WHY a constant rather than a literal at each site:
+# the name is also the value scripts/__cert_timer.sh enables, and a spelling that drifted
+# between the installer and the status probe would report an installed timer as missing.
+readonly CERT_RENEW_TIMER_UNIT="grader-cert-renew.timer"
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -1257,6 +1261,23 @@ EOF
 # ---------------------------------------------------------------------------
 # Nginx config validation
 # ---------------------------------------------------------------------------
+# Whether a systemd timer is enabled, checking the USER manager first and falling back
+# to the system one.
+#
+# WHY the user manager comes first: this repo's own units are installed by
+# __cert_timer.sh with `systemctl --user enable --now` and are enabled for a user unit,
+# so the system manager cannot see them at all. Probed on a real enabled user timer:
+# `systemctl --user is-enabled` returns "enabled", while the bare form returns
+# "not-found" with exit 4. Asking only the system manager therefore reported an
+# installed timer as absent — the one false answer this status line must never give.
+# The fallback keeps a host where the unit was installed system-wide still readable.
+_timer_is_enabled() {
+  local unit="$1"
+  systemctl --user is-enabled "$unit" 2>/dev/null | grep -q '^enabled$' && return 0
+  systemctl is-enabled "$unit" 2>/dev/null | grep -q '^enabled$' && return 0
+  return 1
+}
+
 # The domain proxy by exact container name, or empty when it is down. The contest
 # front door is also an nginx container, so "the first nginx one" is the wrong proxy.
 _running_domain_proxy() {
@@ -1403,13 +1424,35 @@ _status_cert_expiry() {
 
 _status_renewal_timer() {
   case "$(_renewal_mechanism)" in
-    grader-cert-renew.timer) log_info "Renewal timer: grader-cert-renew.timer is enabled" ;;
+    "${CERT_RENEW_TIMER_UNIT}") log_info "Renewal timer: ${CERT_RENEW_TIMER_UNIT} is enabled" ;;
     certbot.timer)           log_info "Renewal timer: certbot.timer is enabled" ;;
     certbot-container)       log_info "Renewal timer: certbot container is running" ;;
-    lego)                    acme_report_lego_renewal ;;
+    lego)                    _report_lego_certificate_renewal ;;
     external)                _report_unmanaged_certificate ;;
     *)                       log_warn "No renewal mechanism detected (grader-cert-renew.timer, certbot.timer or certbot container)" ;;
   esac
+}
+
+# The renewal status of a certificate lego owns: the handover window, then whatever will
+# evaluate it. WHY both: ownership answers who issued the certificate, scheduling answers
+# whether the window is ever looked at, and the second question had no answer on the
+# status line until a timer could be installed to answer it.
+#
+# WHY the timer unit name comes from CERT_RENEW_TIMER_UNIT rather than a literal: the
+# same name is what scripts/__cert_timer.sh enables, and a spelling that drifted between
+# the installer and this probe would report an installed timer as missing.
+#
+# WHY only the repo's own timer counts: certbot owns no renewal config for this lineage,
+# so an enabled certbot.timer would never look at this certificate — crediting it would
+# repeat the false reassurance this line replaces.
+_report_lego_certificate_renewal() {
+  acme_report_lego_renewal
+  if _timer_is_enabled "$CERT_RENEW_TIMER_UNIT"; then
+    log_info "Renewal timer: ${CERT_RENEW_TIMER_UNIT} is enabled"
+  else
+    log_warn "Renewal timer: none installed — nothing will evaluate the lego handover window"
+    log_warn "  install one with: ./cms domain setup --install-timer"
+  fi
 }
 
 _status_connectivity() {
@@ -1452,9 +1495,9 @@ _renewal_mechanism() {
     fi
     return 0
   fi
-  if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
-    printf 'grader-cert-renew.timer'
-  elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
+  if _timer_is_enabled "$CERT_RENEW_TIMER_UNIT"; then
+    printf '%s' "$CERT_RENEW_TIMER_UNIT"
+  elif _timer_is_enabled certbot.timer; then
     printf 'certbot.timer'
   elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
     printf 'certbot-container'
