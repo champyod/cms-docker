@@ -10,7 +10,7 @@ const PANEL_PATHS = [
   'src/components/deployments/DeploymentsClient.tsx',
   'src/components/containers/ContainersClient.tsx',
   'src/components/resources/ResourceView.tsx',
-  'src/components/ranking/RankingClient.tsx',
+  'src/components/ranking/RankingLogoCard.tsx',
 ] as const;
 
 describe('Infrastructure module field shell composition', () => {

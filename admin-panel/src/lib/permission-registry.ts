@@ -93,7 +93,6 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },
-  { module: 'ranking', verb: 'snapshot' },
   { module: 'ranking', verb: 'appearance' },
   { module: 'ranking', verb: 'override' },
   { module: 'maintenance', verb: 'enable' },
