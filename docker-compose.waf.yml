@@ -107,7 +107,29 @@ services:
     depends_on:
       - grader-nginx-proxy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/healthz 2>/dev/null || wget --no-verbose --tries=1 --spider http://localhost:8080/ 2>/dev/null || exit 1"]
+      # WHY this probe shape, and why nothing is added to nginx to serve it:
+      #   - /healthz already exists. The image's own
+      #     nginx/templates/includes/location_common.conf.template ships
+      #     `location /healthz { return 200 "OK"; }` at server level in both the
+      #     HTTP and HTTPS server blocks, so there is no endpoint to add and no
+      #     config to mount — the probe only has to reach the one that is there.
+      #   - 127.0.0.1, not localhost. nginx in this image binds IPv4 only, while
+      #     localhost commonly resolves to ::1 first. The WAF is healthy while
+      #     this probe reports it dead, and every service_healthy gate behind it
+      #     then blocks forever.
+      #   - a real GET, not --spider. --spider discards the response body, so a
+      #     probe built on it can pass without nginx ever serving /healthz. -O
+      #     /dev/null retrieves it and throws it away, so the check still costs
+      #     no output. Both flags sit in busybox wget's unconditional option
+      #     string (cqSO:o:P:Y:U:T:+), whereas --tries and --no-verbose are
+      #     IF_DESKTOP-only in busybox and are silently ignored when absent.
+      #   - one request, no fallback on /. / is reverse-proxied to the backend,
+      #     so a fallback probe there would turn a backend outage red against
+      #     the WAF. This probe answers one question — is nginx serving /healthz —
+      #     and a dependency being down is a different failure with a different
+      #     owner. A fallback that cannot report the intended condition is worse
+      #     than none, because it implies the first probe failing is survivable.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 3
