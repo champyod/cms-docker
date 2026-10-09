@@ -86,7 +86,7 @@ handover is what drives a consecutive-failure run into a multi-month issuance pa
 
 ### When the unattended renewal fires
 
-`./cms domain renew --due` (what the timer runs) takes :443 only when **both** hold:
+`renew --due` takes :443 only when **both** hold:
 
 - `days_left <= ACME_RENEW_BEFORE_DAYS`, and
 - the current UTC time has reached `ACME_RENEW_AT_UTC`.
@@ -95,14 +95,33 @@ So the first day the margin is reached is the day it fires, at the hour you conf
 and never outside it. `ACME_RENEW_AT_UTC = ""` disables the unattended handover entirely
 and leaves renewal to you.
 
+The timer's `ExecStart` is `scripts/__domain.sh renew --due --apply`, run out of the
+checkout the unit was installed from. It calls the script directly rather than `./cms`
+because it is not an operator command: there is nobody there to answer a prompt, and
+`--due` is the only authority the scheduled run needs.
+
 ```sh
+./cms domain setup --install-timer  # install + enable the hourly renewal timer, then stop
 ./cms domain status                 # shows the window, the expiry and the mechanism
 ./cms domain renew --apply          # reissue now, ignoring the window
-./cms domain renew --due --apply    # what the timer runs
+./cms domain renew --due --apply    # what the timer's ExecStart runs
 ```
+
+`--install-timer` short-circuits: it installs and stops, so `setup` does not also run.
+`./cms domain renew --install-timer` installs the same units.
 
 `grader-cert-renew.timer` ticks hourly, because a twelve-hour tick would pass
 `ACME_RENEW_AT_UTC` and miss it by twelve.
+
+### Where the timer is installed
+
+The units are written to `~/.config/systemd/user` and enabled with `systemctl --user`, so
+no root and no system-wide service is involved. A user manager only exists while that
+account has a session, which on a headless host means the timer never fires at all. The
+install therefore runs `loginctl enable-linger "$(id -un)"`, which keeps the user manager
+alive with no one logged in. That needs authorization the installer may not have, so it
+warns and prints the command rather than failing an install whose units are already in
+place; a timer on a host without lingering stays dormant until an operator runs it.
 
 ## Importing an externally issued certificate
 
