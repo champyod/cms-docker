@@ -196,8 +196,42 @@
     "refresh": "Refresh"
   },
   "ranking": {
-    "refreshSnapshot": "Refresh Snapshot",
-    "disconnect": "Disconnect"
+    "appearance": {
+      "title": "Scoreboard appearance",
+      "titleField": "Title",
+      "subtitleField": "Subtitle",
+      "organisationField": "Organisation",
+      "accessField": "Access",
+      "accessPublic": "Public",
+      "accessProtected": "Sign-in required",
+      "showIdColumn": "Show the id column",
+      "footerField": "Footer text",
+      "creditsField": "Credits text",
+      "save": "Save appearance"
+    },
+    "overrides": {
+      "title": "Manual ranking overrides",
+      "hint": "A row here changes what the scoreboard shows without touching the contest data. Ending one keeps its history.",
+      "contestId": "Contest id",
+      "target": "Target",
+      "targetKey": "Target key",
+      "action": "Action",
+      "actionHide": "hide the row",
+      "actionGuest": "add a guest row",
+      "actionPin": "pin a rank",
+      "actionRename": "rename the display name",
+      "actionScore": "override the shown score",
+      "value": "Value (rank, name or score)",
+      "reason": "Reason",
+      "add": "Add override",
+      "end": "End"
+    },
+    "lockouts": {
+      "title": "Console lockouts",
+      "failures": "failures",
+      "remaining": "left",
+      "clear": "Clear"
+    }
   },
   "settings": {
     "title": "System Settings",
