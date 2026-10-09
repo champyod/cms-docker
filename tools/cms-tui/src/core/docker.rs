@@ -79,12 +79,20 @@ impl DockerClient {
                 .unwrap_or_else(|err| log_spawn_error(&target, &err));
             report.steps.push((target, code));
         }
-        if matches!(stack, "contest" | "all") && report.is_success() {
+        if report.is_success() {
+            if matches!(stack, "contest" | "all") {
+                let code = self
+                    .runner
+                    .run_sh("__contest_dns_refresh.sh", &[])
+                    .unwrap_or_else(|err| log_spawn_error("nginx-refresh", &err));
+                report.steps.push(("nginx-refresh".to_string(), code));
+            }
+            // Any stack can recreate a backend grader-nginx-proxy caches by address.
             let code = self
                 .runner
-                .run_sh("__contest_dns_refresh.sh", &[])
-                .unwrap_or_else(|err| log_spawn_error("nginx-refresh", &err));
-            report.steps.push(("nginx-refresh".to_string(), code));
+                .run_sh("__domain_proxy_reload.sh", &[])
+                .unwrap_or_else(|err| log_spawn_error("domain-proxy-reload", &err));
+            report.steps.push(("domain-proxy-reload".to_string(), code));
         }
         Ok(report)
     }
