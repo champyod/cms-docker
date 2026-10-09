@@ -47,9 +47,39 @@ capture_body() {
         --output "${OUT_DIR}/${name}.body" "${BASE_URL}${path}"
 }
 
-capture_events() {
+# The store keys are the host's own data, so read one back from the list body
+# instead of guessing a key that may not exist.
+capture_entity() {
+    local list_name="$1" prefix="$2" target="$3" key
+    key="$(python3 - "${OUT_DIR}/${list_name}.body" <<'PY'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as handle:
+        entities = json.load(handle)
+except (OSError, ValueError):
+    sys.exit(0)
+
+if isinstance(entities, dict) and entities:
+    print(next(iter(entities)))
+PY
+)"
+    if [ -n "$key" ]; then
+        capture_body "$target" "${prefix}${key}"
+    fi
+}
+
+# Subscribe before the first write: the service replays only events a subscriber
+# has not seen, so a stream opened after seeding would miss every seed event.
+start_events() {
     timeout "${EVENTS_SECONDS}" curl --silent --no-buffer \
-        --output "${OUT_DIR}/events.stream" "${BASE_URL}/events" || true
+        --output "${OUT_DIR}/events.stream" "${BASE_URL}/events" &
+    EVENTS_PID=$!
+}
+
+stop_events() {
+    wait "${EVENTS_PID}" || true
 }
 
 docker_image() {
@@ -58,10 +88,14 @@ docker_image() {
 }
 
 write_manifest() {
+    local seed_sha=""
+    if [ "$SEED" = 1 ] && [ -f "${HERE}/seed.json" ]; then
+        seed_sha="$(sha256sum "${HERE}/seed.json" | cut -d' ' -f1)"
+    fi
     {
         printf 'captured_at=%s\n' "$(date -Iseconds)"
         printf 'base_url=%s\n' "${BASE_URL}"
-        printf 'seed_sha256=%s\n' "$(sha256sum "${HERE}/seed.json" | cut -d' ' -f1)"
+        printf 'seed_sha256=%s\n' "${seed_sha}"
         printf 'repo_head=%s\n' "$(git -C "${HERE}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
         printf 'image=%s\n' "$(docker_image || printf 'unknown')"
     } >"${OUT_DIR}/MANIFEST.txt"
@@ -83,13 +117,15 @@ done
 # Everything to stdout and nothing left on disk: the output is meant to be pasted back,
 # so the files exist only while this runs.
 emit_stdout() {
-    local name
-    for name in root scores history config credits logo users_list user_one; do
+    local body name
+    for body in "${OUT_DIR}"/*.body; do
+        [ -e "$body" ] || continue
+        name="$(basename "$body" .body)"
         echo
         echo "===== $name (status + headers) ====="
-        cat "$OUT_DIR/$name.headers" 2>/dev/null || true
+        cat "${OUT_DIR}/${name}.headers" 2>/dev/null || true
         echo "===== $name (body) ====="
-        cat "$OUT_DIR/$name.body" 2>/dev/null || true
+        cat "$body"
     done
     echo
     echo "===== events (first $EVENTS_SECONDS s) ====="
@@ -105,6 +141,7 @@ main() {
     require_command curl
     require_command python3
     mkdir -p "${OUT_DIR}"
+    start_events
     if [ "$SEED" = 1 ]; then
         seed_store
     fi
@@ -115,8 +152,16 @@ main() {
     capture_body credits /credits
     capture_body logo /logo
     capture_body users_list /users/
-    capture_body user_one /users/u0
-    capture_events
+    capture_body contests_list /contests/
+    capture_body tasks_list /tasks/
+    capture_body teams_list /teams/
+    capture_entity users_list /users/ user_one
+    capture_entity contests_list /contests/ contest_one
+    capture_entity tasks_list /tasks/ task_one
+    capture_entity teams_list /teams/ team_one
+    capture_entity users_list /face/ face
+    capture_entity users_list /submissions/ submissions
+    stop_events
     write_manifest
     if [ "$STDOUT_ONLY" = 1 ]; then
         emit_stdout
