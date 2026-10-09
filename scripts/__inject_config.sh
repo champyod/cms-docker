@@ -195,16 +195,18 @@ _set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
 # nothing keeps logging in exactly as before.
 def _set_captcha(section):
     global text
-    for key, env_var in (('enabled', 'CAPTCHA_ENABLED'),
-                         ('provider', 'CAPTCHA_PROVIDER'),
-                         ('site_key', 'CAPTCHA_SITE_KEY'),
-                         ('secret_key', 'CAPTCHA_SECRET_KEY'),
-                         ('threshold', 'CAPTCHA_THRESHOLD'),
-                         ('ban_threshold', 'CAPTCHA_BAN_THRESHOLD')):
+    # Strings are quoted: a bare value is not TOML and makes the loader refuse the file.
+    for key, env_var, quoted in (('enabled', 'CAPTCHA_ENABLED', False),
+                                 ('provider', 'CAPTCHA_PROVIDER', True),
+                                 ('site_key', 'CAPTCHA_SITE_KEY', True),
+                                 ('secret_key', 'CAPTCHA_SECRET_KEY', True),
+                                 ('threshold', 'CAPTCHA_THRESHOLD', False),
+                                 ('ban_threshold', 'CAPTCHA_BAN_THRESHOLD', False)):
         raw = os.environ.get(env_var, "").strip()
         if raw:
             value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
-            text = set_section_key(text, section, key, value)
+            text = set_section_key(text, section, key,
+                                   f'"{toml_escape(value)}"' if quoted else value)
 
 _set_captcha('admin_web_server.captcha')
 _set_captcha('contest_web_server.captcha')

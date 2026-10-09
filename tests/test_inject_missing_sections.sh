@@ -62,6 +62,22 @@ else
   no "LOGIN_RATE_LIMIT_REDIS_ENABLED=1 reached contest_web_server.captcha"
 fi
 
+echo "the injected strings are quoted and the file still loads"
+for pair in "provider=recaptcha" "site_key=site" "secret_key=secret"; do
+  key="${pair%%=*}"
+  value="${pair#*=}"
+  if grep -A6 '^\[admin_web_server\.captcha\]' "$INJECTED" | grep -qF "${key} = \"${value}\""; then
+    ok "${key} is written as a TOML string"
+  else
+    no "${key} is written as a TOML string"
+  fi
+done
+if python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$INJECTED" 2>/dev/null; then
+  ok "the injected config parses as TOML"
+else
+  no "the injected config parses as TOML"
+fi
+
 echo "creating a table never duplicated one that already existed"
 for section in contest_web_server admin_web_server; do
   count="$(grep -c "^\[${section}\]$" "$INJECTED" || true)"
