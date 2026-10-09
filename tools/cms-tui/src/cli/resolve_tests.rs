@@ -144,6 +144,177 @@ fn retry_forever_reaches_the_script_as_an_unlimited_attempt_cap() {
     assert_eq!(attempts[1], "0");
 }
 
+// Why these four exist together: `renew` was payload-free, so every flag below used to
+// fail with `unexpected argument`, and `cmd_renew` returns on its dry-run line before
+// touching the store — a `renew` with no `--apply` could never have renewed anything.
+#[test]
+fn renew_forwards_due_and_apply() {
+    let (key, args) = parse(&["cms", "domain", "renew", "--due", "--apply"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainRenew);
+    assert_eq!(args, vec!["renew", "--due", "--apply"]);
+}
+
+#[test]
+fn renew_without_flags_is_only_the_verb() {
+    let (key, args) = parse(&["cms", "domain", "renew"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainRenew);
+    assert_eq!(args, vec!["renew"]);
+}
+
+// `--lock` is the flag the run-lock comment on `_acquire_run_lock` is written for, and it
+// was unreachable from the CLI because `renew` accepted no flags at all.
+#[test]
+fn renew_forwards_the_run_lock_flag() {
+    let (_, args) = parse(&["cms", "domain", "renew", "--lock"]).expect("resolves");
+    assert_eq!(args, vec!["renew", "--lock"]);
+}
+
+#[test]
+fn renew_forwards_every_flag_the_script_parses() {
+    let (key, args) = parse(&[
+        "cms",
+        "domain",
+        "renew",
+        "--cert",
+        "letsencrypt",
+        "--domain",
+        "grader.example.org",
+        "--admin-domain",
+        "admin.example.org",
+        "--oj-domain",
+        "oj.example.org",
+        "--ranking-domain",
+        "rank.example.org",
+        "--email",
+        "ops@example.org",
+        "--challenge",
+        "tls-alpn-01",
+        "--ca",
+        "zerossl",
+        "--acme-server",
+        "https://acme.example.org/directory",
+        "--acme-client",
+        "lego",
+        "--tls-address",
+        "0.0.0.0:443",
+        "--dns",
+        "cloudflare",
+        "--dns-credentials",
+        "/tmp/cf.ini",
+        "--extra-domains",
+        "a.example.org",
+        "--wait-port80",
+        "60",
+        "--deploy-hook",
+        "systemctl reload nginx",
+        "--auto-retry",
+        "--retry-attempts",
+        "20",
+        "--retry-interval",
+        "30",
+        "--staging",
+        "--force",
+        "--backup-certs",
+        "--lock",
+        "--due",
+        "--apply",
+    ])
+    .expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainRenew);
+    assert_eq!(
+        args,
+        vec![
+            "renew",
+            "--cert",
+            "letsencrypt",
+            "--domain",
+            "grader.example.org",
+            "--admin-domain",
+            "admin.example.org",
+            "--oj-domain",
+            "oj.example.org",
+            "--ranking-domain",
+            "rank.example.org",
+            "--email",
+            "ops@example.org",
+            "--wait-port80",
+            "60",
+            "--extra-domains",
+            "a.example.org",
+            "--dns",
+            "cloudflare",
+            "--dns-credentials",
+            "/tmp/cf.ini",
+            "--challenge",
+            "tls-alpn-01",
+            "--ca",
+            "zerossl",
+            "--acme-server",
+            "https://acme.example.org/directory",
+            "--acme-client",
+            "lego",
+            "--tls-address",
+            "0.0.0.0:443",
+            "--deploy-hook",
+            "systemctl reload nginx",
+            "--auto-retry",
+            "--retry-attempts",
+            "20",
+            "--retry-interval",
+            "30",
+            "--due",
+            "--staging",
+            "--force",
+            "--backup-certs",
+            "--lock",
+            "--apply",
+        ]
+    );
+}
+
+#[test]
+fn renew_reaches_the_script_as_an_unlimited_attempt_cap_for_retry_forever() {
+    let (_, args) = parse(&["cms", "domain", "renew", "--retry-forever"]).expect("resolves");
+    assert!(args.contains(&"--auto-retry".to_string()));
+    let attempts = args
+        .windows(2)
+        .find(|w| w[0] == "--retry-attempts")
+        .expect("emits an attempt cap");
+    assert_eq!(attempts[1], "0");
+}
+
+#[test]
+fn status_forwards_json() {
+    let (key, args) = parse(&["cms", "domain", "status", "--json"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainStatus);
+    assert_eq!(args, vec!["status", "--json"]);
+}
+
+#[test]
+fn status_without_json_keeps_its_original_shape() {
+    let (key, args) = parse(&["cms", "domain", "status"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DomainStatus);
+    assert_eq!(args, vec!["status"]);
+}
+
+// The scope is the verb on this side too. A renew that could name `--cert-only` would
+// be asking `cmd_renew` to skip nginx, which it never does and has no flag for.
+#[test]
+fn renew_cannot_name_a_setup_scope() {
+    for flag in ["--cert-only", "--proxy-only"] {
+        let parsed =
+            <crate::Args as clap::Parser>::try_parse_from(["cms", "domain", "renew", flag]);
+        assert!(
+            parsed.is_err(),
+            "renew accepted {flag}, which no renew path can honour"
+        );
+    }
+    let (_, args) = parse(&["cms", "domain", "renew", "--due", "--apply"]).expect("resolves");
+    for flag in ["--cert-only", "--proxy-only", "--install-timer"] {
+        assert!(!args.iter().any(|arg| arg == flag), "{flag} came back");
+    }
+}
+
 #[test]
 fn check_expiry_forwards_the_day_threshold() {
     let (key, args) = parse(&["cms", "domain", "check-expiry", "--days", "30"]).expect("resolves");
@@ -223,5 +394,29 @@ fn install_timer_ignores_the_setup_payload_typed_next_to_it() {
     assert!(
         args.is_empty(),
         "setup flags rode along with the install: {args:?}"
+    );
+}
+
+// The renew payload grew after the timer flag was added, so the short-circuit has to
+// still be checked before argv is built — otherwise `renew --install-timer --apply`
+// would start installing units and renewing in the same run.
+#[test]
+fn install_timer_ignores_the_renew_payload_typed_next_to_it() {
+    let (key, args) = parse(&[
+        "cms",
+        "domain",
+        "renew",
+        "--install-timer",
+        "--due",
+        "--apply",
+    ])
+    .expect("resolves");
+    assert_eq!(
+        key,
+        crate::core::dispatch::DispatchKey::DomainCertTimerInstall
+    );
+    assert!(
+        args.is_empty(),
+        "renew flags rode along with the install: {args:?}"
     );
 }

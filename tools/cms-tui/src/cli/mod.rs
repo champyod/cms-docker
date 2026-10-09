@@ -1,10 +1,12 @@
-use clap::{Subcommand, ValueEnum};
+use clap::{Args, Subcommand, ValueEnum};
 
 pub mod commands;
+mod renew_args;
 mod resolve;
 pub mod setup_args;
 
-pub use setup_args::{DomainRenewArgs, DomainSetupArgs};
+pub use renew_args::DomainRenewArgs;
+pub use setup_args::DomainSetupArgs;
 
 /// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
 #[derive(ValueEnum, Clone, Debug)]
@@ -58,14 +60,22 @@ pub enum FunnelSub {
     Status,
 }
 
+/// Every flag `domain status` accepts.
+#[derive(Args, Clone, Copy, Debug, Default)]
+pub struct DomainStatusArgs {
+    /// Emit the status report as JSON instead of the human-readable table.
+    #[arg(long, default_value_t = false)]
+    pub json: bool,
+}
+
 /// Domain subcommands (`domain <setup|cert|proxy|status|renew|preflight|check-expiry|revoke>`).
 ///
-/// `Setup`, `Cert` and `Proxy` carry the full flag set accepted by
-/// `scripts/__domain.sh`, so flags typed after `./cms domain <verb>` reach the script
-/// instead of being rejected by clap. The payload is boxed because 23 flags make it
-/// ~320 bytes, which would otherwise inflate this enum and the outer `Commands` enum
-/// that holds it. `Renew` is boxed for the same reason: it is a separate payload today
-/// only so it does not drag the full flag set in ahead of the step that gives it one.
+/// `Setup`, `Cert`, `Proxy`, `Renew` and `Status` all carry the flag set
+/// `scripts/__domain.sh` accepts for them, so flags typed after `./cms domain <verb>`
+/// reach the script instead of being rejected by clap. The payloads are boxed because
+/// 23 flags make `setup` ~320 bytes and `renew` nearly as wide, which would otherwise
+/// inflate this enum and the outer `Commands` enum that holds it; `status` is boxed for
+/// the same reason at its size — a flag added later would grow every variant that is not.
 #[derive(Subcommand, Clone, Debug)]
 pub enum DomainCmd {
     /// Configure domains, TLS certificates, and render nginx config.
@@ -75,7 +85,7 @@ pub enum DomainCmd {
     /// Render, validate and reload nginx only; the certificate store is untouched.
     Proxy(Box<DomainSetupArgs>),
     /// Show DNS resolution, cert expiry, renewal timer, connectivity.
-    Status,
+    Status(Box<DomainStatusArgs>),
     /// Force-renew LE certs or swap provided certificates.
     Renew(Box<DomainRenewArgs>),
     /// 9-check connectivity matrix.

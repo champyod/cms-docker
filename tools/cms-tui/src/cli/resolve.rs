@@ -1,4 +1,5 @@
 use crate::core::dispatch::DispatchKey;
+use crate::core::domain_renew::{domain_renew_args, DomainRenewRequest};
 use crate::core::domain_setup::{
     domain_setup_args, scope_from, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy,
     DomainSwitches,
@@ -112,6 +113,51 @@ fn domain_setup_from(cmd: &DomainCmd) -> DomainSetupRequest {
     }
 }
 
+/// Projects clap's parsed `renew` flags onto the shared [`DomainRenewRequest`] struct.
+///
+/// WHY a projection of its own rather than a narrowed [`DomainSetupRequest`]: `renew` has
+/// no scope to project, and filling a setup request here would mean carrying
+/// `--cert-only`/`--proxy-only` — the two flags `cmd_renew` must never be able to emit.
+fn domain_renew_from(cmd: &DomainCmd) -> DomainRenewRequest {
+    let DomainCmd::Renew(args) = cmd else {
+        return DomainRenewRequest::default();
+    };
+    let args = args.as_ref();
+
+    DomainRenewRequest {
+        cert: clone_or_empty(args.acme.cert.as_ref()),
+        domain: clone_or_empty(args.names.domain.as_ref()),
+        admin_domain: clone_or_empty(args.names.admin_domain.as_ref()),
+        oj_domain: clone_or_empty(args.names.oj_domain.as_ref()),
+        ranking_domain: clone_or_empty(args.names.ranking_domain.as_ref()),
+        email: clone_or_empty(args.acme.email.as_ref()),
+        wait_port80: args.acme.wait_port80,
+        extra_domains: clone_or_empty(args.acme.extra_domains.as_ref()),
+        dns: clone_or_empty(args.acme.dns.as_ref()),
+        dns_credentials: clone_or_empty(args.acme.dns_credentials.as_ref()),
+        challenge: clone_or_empty(args.acme.challenge.as_ref()),
+        ca: clone_or_empty(args.acme.ca.as_ref()),
+        acme_server: clone_or_empty(args.acme.acme_server.as_ref()),
+        acme_client: clone_or_empty(args.acme.acme_client.as_ref()),
+        tls_address: clone_or_empty(args.acme.tls_address.as_ref()),
+        switches: DomainSwitches {
+            is_staging: args.run.staging,
+            is_force: args.run.force,
+            is_lock: args.run.lock,
+        },
+        retry: DomainRetryPolicy {
+            is_auto_retry: args.retry.auto_retry,
+            is_retry_forever: args.retry.retry_forever,
+            attempts: args.retry.retry_attempts,
+            interval: args.retry.retry_interval,
+        },
+        deploy_hook: clone_or_empty(args.acme.deploy_hook.as_ref()),
+        is_due: args.due,
+        is_apply: args.execution.apply,
+        is_backup_certs: args.store.backup_certs,
+    }
+}
+
 fn clone_or_empty(value: Option<&String>) -> String {
     value.cloned().unwrap_or_default()
 }
@@ -148,8 +194,17 @@ fn domain_dispatch(sub: &DomainCmd) -> (DispatchKey, Vec<String>) {
             DispatchKey::DomainProxy,
             domain_setup_args("proxy", &domain_setup_from(sub)),
         ),
-        DomainCmd::Status => (DispatchKey::DomainStatus, vec!["status".into()]),
-        DomainCmd::Renew(_) => (DispatchKey::DomainRenew, vec!["renew".into()]),
+        DomainCmd::Status(args) => {
+            let mut status_args = vec!["status".to_string()];
+            if args.json {
+                status_args.push("--json".to_string());
+            }
+            (DispatchKey::DomainStatus, status_args)
+        }
+        DomainCmd::Renew(_) => (
+            DispatchKey::DomainRenew,
+            domain_renew_args(&domain_renew_from(sub)),
+        ),
         DomainCmd::Preflight => (DispatchKey::DomainPreflight, vec!["preflight".into()]),
         DomainCmd::CheckExpiry { days } => {
             let mut args = vec!["check-expiry".into()];

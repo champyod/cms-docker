@@ -10,6 +10,10 @@
 //! gives no way to see which flags belong to which decision. Flattening keeps the
 //! command line byte-for-byte identical while making the grouping visible in the
 //! struct, which is where the projection in `cli::resolve` reads it.
+//!
+//! WHY [`DomainRetryArgs`], [`DomainRunArgs`] and [`DomainTimerArgs`] are not private to
+//! this file: `cli::renew_args` flattens the same three groups into the `renew` payload,
+//! because the script offers the same flags on both verbs.
 
 use clap::Args;
 
@@ -159,17 +163,6 @@ pub struct DomainSetupArgs {
     pub run: DomainRunArgs,
     #[command(flatten)]
     pub store: DomainStoreArgs,
-    #[command(flatten)]
-    pub timer: DomainTimerArgs,
-}
-
-/// The payload `domain renew` accepts.
-///
-/// WHY this is deliberately minimal: step 3 of this epic gives `renew` the full flag
-/// set. Until then this carries only `--install-timer`, so adding it now does not
-/// pre-empt that work or duplicate the encoder it will replace.
-#[derive(Args, Clone, Copy, Debug, Default)]
-pub struct DomainRenewArgs {
     #[command(flatten)]
     pub timer: DomainTimerArgs,
 }
