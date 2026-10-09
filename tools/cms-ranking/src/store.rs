@@ -9,6 +9,8 @@ pub enum StoreError {
     Database(#[from] sqlx::Error),
     #[error(transparent)]
     Score(#[from] ScoreError),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
 }
 
 /// One console account. The password is verified by the auth module, not here, so

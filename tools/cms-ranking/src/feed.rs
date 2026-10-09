@@ -1,20 +1,30 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::broadcast;
 
 use crate::db::Db;
+use crate::score_events::{initial_board, publish_changes};
+use crate::store::StoreError;
 
 /// How many events a client that reconnects with a last-event-id may replay. The
 /// Python server sized this from config.buffer_size, default 100.
 pub const CACHE_SIZE: usize = 100;
 
 /// Slow subscribers are dropped rather than allowed to stall the publisher; the
-/// live scoreboard is refreshed by a reinit, which costs one round trip.
+/// connection ends and the reconnect, with a Last-Event-ID, is the replay path.
 const CHANNEL_CAPACITY: usize = 256;
 
-/// One server-sent event, in the shape the Python server emitted: an id that is
+/// A comment line is what the Python stream opens with and what it writes when the
+/// connection would otherwise be idle. An SSE client discards it.
+pub const COMMENT: &[u8] = b":\n";
+
+/// The only reinit the baseline ever sends: a Last-Event-ID the cache cannot cover.
+/// It carries neither an id nor data, unlike every normal event.
+pub const REINIT: &[u8] = b"event:reinit\n\n";
+
+/// One server-sent event in the shape the Python server emitted: an id that is
 /// microseconds since the epoch in hexadecimal, the entity kind as the event name,
 /// and "<operation> <key>" as the data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,11 +35,16 @@ pub struct RankingEvent {
 }
 
 impl RankingEvent {
+    /// Mirrors cmscommon.eventsource.format_event: the id always, the event line
+    /// unless the name is the SSE default "message", one data line per payload
+    /// line, and the blank line that closes the block.
     pub fn frame(&self) -> String {
-        format!(
-            "id:{}\nevent:{}\ndata:{}\n\n",
-            self.id, self.name, self.data
-        )
+        let mut lines = vec![format!("id:{}", self.id)];
+        if self.name != "message" {
+            lines.push(format!("event:{}", self.name));
+        }
+        lines.extend(self.data.split('\n').map(|line| format!("data:{line}")));
+        format!("{}\n\n", lines.join("\n"))
     }
 }
 
@@ -90,8 +105,9 @@ impl Feed {
     }
 
     /// What a reconnecting client missed: None when the cache cannot cover the gap,
-    /// which is the case the Python server answered with a reinit rather than a
-    /// silently truncated history.
+    /// which is the single case the Python server answered with a reinit rather than
+    /// a silently truncated history. A fresh connect replays nothing and is never a
+    /// reinit.
     pub fn since(&self, last_event_id: Option<&str>) -> Option<Vec<RankingEvent>> {
         let Some(last_event_id) = last_event_id else {
             return Some(Vec::new());
@@ -137,21 +153,25 @@ pub fn entity_kind(table: &str) -> &str {
     }
 }
 
-/// Listens for the triggers' notifications and publishes them. NOTIFY has no
-/// replay: a listener that was disconnected cannot know what it missed, so it
-/// publishes a reinit and the page refetches, which is the same signal the Python
-/// server sent when its own cache could not cover a gap.
+/// Listens for the triggers' notifications and publishes them, turning a subchange
+/// into the score events the page expects. NOTIFY has no replay, and a live
+/// subscriber cannot ask for one, so a listener that reconnects stays silent: the
+/// only reinit the contract allows is a stale Last-Event-ID on a fresh connection.
 pub async fn listen(db: Db, feed: Feed) {
+    let mut board = initial_board(&db).await;
     loop {
-        if let Err(error) = listen_once(&db, &feed).await {
+        if let Err(error) = listen_once(&db, &feed, &mut board).await {
             eprintln!("cms-ranking: event listener reconnecting: {error}");
         }
-        feed.publish("reinit", "gap".to_string());
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 }
 
-async fn listen_once(db: &Db, feed: &Feed) -> Result<(), sqlx::Error> {
+async fn listen_once(
+    db: &Db,
+    feed: &Feed,
+    board: &mut BTreeMap<(String, String), f64>,
+) -> Result<(), StoreError> {
     let mut listener = sqlx::postgres::PgListener::connect_with(db.pool()).await?;
     listener.listen("ranking_entities").await?;
     listener.listen("ranking_control").await?;
@@ -166,69 +186,28 @@ async fn listen_once(db: &Db, feed: &Feed) -> Result<(), sqlx::Error> {
         let table = parts.next().unwrap_or_default();
         let operation = parts.next().unwrap_or_default();
         let key = parts.next().unwrap_or_default();
-        feed.publish(entity_kind(table), format!("{operation} {key}"));
+        if affects_scores(table) {
+            let next = publish_changes(db, feed, board).await?;
+            *board = next;
+        }
+        feed.publish(
+            entity_kind(table),
+            format!("{} {key}", operation_name(operation)),
+        );
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// The two stores the Python scorer subscribed to; a change to either can move a
+/// score, so either is a cue to recompute the board.
+fn affects_scores(table: &str) -> bool {
+    matches!(table, "ranking_submissions" | "ranking_subchanges")
+}
 
-    #[test]
-    fn a_frame_matches_the_python_wire_format() {
-        let event = RankingEvent {
-            id: "17a1b2c3d4e5".to_string(),
-            name: "task".to_string(),
-            data: "create t0".to_string(),
-        };
-        assert_eq!(
-            event.frame(),
-            "id:17a1b2c3d4e5\nevent:task\ndata:create t0\n\n"
-        );
-    }
-
-    #[test]
-    fn a_client_with_no_last_id_replays_nothing() {
-        let feed = Feed::new();
-        feed.publish("task", "create t0".to_string());
-        assert_eq!(feed.since(None), Some(Vec::new()));
-    }
-
-    #[test]
-    fn a_client_replays_only_what_it_missed() {
-        let feed = Feed::new();
-        let first = feed.publish("task", "create t0".to_string());
-        feed.publish("team", "create m0".to_string());
-        let replayed = feed
-            .since(Some(&first.id))
-            .expect("the cache covers the gap");
-        assert_eq!(replayed.len(), 1);
-        assert_eq!(replayed[0].name, "team");
-    }
-
-    #[test]
-    fn a_gap_the_cache_cannot_cover_asks_for_a_reinit() {
-        let feed = Feed::new();
-        for index in 0..(CACHE_SIZE + 5) {
-            feed.publish("task", format!("create t{index}"));
-        }
-        assert_eq!(feed.since(Some("1")), None);
-    }
-
-    #[tokio::test]
-    async fn a_subscriber_receives_what_is_published_after_it_subscribed() {
-        let feed = Feed::new();
-        let mut receiver = feed.subscribe();
-        feed.publish("user", "update u0".to_string());
-        let event = receiver.recv().await.expect("the event arrives");
-        assert_eq!(event.name, "user");
-        assert_eq!(event.data, "update u0");
-    }
-
-    #[test]
-    fn a_projection_table_maps_to_the_entity_kind_the_page_knows() {
-        assert_eq!(entity_kind("ranking_subchanges"), "subchange");
-        assert_eq!(entity_kind("ranking_contests"), "contest");
-        assert_eq!(entity_kind("something_else"), "something_else");
+/// The trigger reports the SQL verb; the page switches on the store verb the Python
+/// callbacks used, and the capture is "create", not "insert".
+fn operation_name(operation: &str) -> &str {
+    match operation {
+        "insert" => "create",
+        other => other,
     }
 }

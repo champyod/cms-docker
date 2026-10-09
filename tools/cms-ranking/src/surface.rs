@@ -4,16 +4,14 @@ use serde::Serialize;
 
 use crate::store::Appearance;
 
-/// The licence offer plus the panel-editable text. project and license keep the
-/// names the Python /credits route used so an existing consumer still reads them.
+/// The licence offer, in the shape the vendored credits.html reads: project and
+/// license are objects (name, url, spdx_id), not strings, and surface is the asset
+/// list for the ranking surface. Field order is sorted, matching json.dumps
+/// sort_keys=True on the Python route.
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Credits {
-    pub project: String,
-    pub license: String,
-    pub source_url: String,
-    pub text: Option<String>,
-    /// The full asset list for the ranking surface, straight from credits.json. The
-    /// footer shows the compact line; this keeps the route itself a complete offer.
+    pub license: serde_json::Value,
+    pub project: serde_json::Value,
     pub surface: serde_json::Value,
 }
 
@@ -30,33 +28,17 @@ pub enum SurfaceError {
 /// cosmetic one: every caller refuses instead of serving an empty offer.
 pub fn credits_from_file(
     path: &Path,
-    text: Option<String>,
     panel_list: Option<serde_json::Value>,
 ) -> Result<Credits, SurfaceError> {
     let raw = std::fs::read_to_string(path)
         .map_err(|error| SurfaceError::Credits(format!("{}: {error}", path.display())))?;
     let parsed: serde_json::Value = serde_json::from_str(&raw)
         .map_err(|error| SurfaceError::Credits(format!("{}: {error}", path.display())))?;
-    let project = parsed
-        .get("project")
-        .and_then(|value| value.get("name"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("CMS")
-        .to_string();
-    let license = parsed
-        .get("license")
-        .and_then(|value| value.get("id"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("AGPL-3.0")
-        .to_string();
-    let source_url = parsed
-        .get("project")
-        .and_then(|value| value.get("url"))
-        .and_then(serde_json::Value::as_str)
-        .unwrap_or("https://github.com/champyod/cms-docker")
-        .to_string();
-    // The panel's list wins when it has one; the vendored file is the fallback. The source
-    // offer is never taken from either, because the licence requires it to stay ours.
+    // A named offer that flattens the licence to a string is what the page cannot
+    // read, so a file that lacks either object is refused rather than half-served.
+    let project = required_object(&parsed, "project", path)?;
+    let license = required_object(&parsed, "license", path)?;
+    // The panel's list wins when it has one; the vendored file is the fallback.
     let surface = panel_list.unwrap_or_else(|| {
         parsed
             .get("surfaces")
@@ -65,12 +47,27 @@ pub fn credits_from_file(
             .unwrap_or(serde_json::Value::Null)
     });
     Ok(Credits {
-        project,
         license,
-        source_url,
-        text,
+        project,
         surface,
     })
+}
+
+fn required_object(
+    parsed: &serde_json::Value,
+    name: &str,
+    path: &Path,
+) -> Result<serde_json::Value, SurfaceError> {
+    parsed
+        .get(name)
+        .filter(|value| value.is_object())
+        .cloned()
+        .ok_or_else(|| {
+            SurfaceError::Credits(format!(
+                "{}: the {name} entry is not an object",
+                path.display()
+            ))
+        })
 }
 
 pub fn read_page(path: &Path) -> Result<String, SurfaceError> {

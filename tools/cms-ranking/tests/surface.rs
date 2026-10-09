@@ -59,25 +59,27 @@ fn a_page_without_a_head_is_returned_untouched() {
     assert_eq!(rendered, "<html><body>bare</body></html>");
 }
 
+/// The vendored credits.html reads project["name"], license["name"], license["url"]
+/// and license["spdx_id"], so the route must serve objects, not the flattened strings
+/// the port used to emit.
 #[test]
-fn credits_keep_the_names_the_python_route_used() {
+fn project_and_license_are_served_as_objects() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
-    let credits =
-        credits_from_file(&path, Some("Compact text".to_string()), None).expect("the sample reads");
-    assert_eq!(credits.project, "CMS Docker");
-    assert_eq!(credits.license, "AGPL-3.0");
-    assert_eq!(credits.source_url, "https://example.invalid/fork");
-    assert_eq!(credits.text.as_deref(), Some("Compact text"));
+    let credits = credits_from_file(&path, None).expect("the sample reads");
+    assert_eq!(credits.project["name"], "CMS Docker");
+    assert_eq!(credits.project["url"], "https://example.invalid/fork");
+    assert_eq!(credits.license["id"], "AGPL-3.0");
+    assert!(credits.project.is_object() && credits.license.is_object());
 }
 
-/// The Python route served the whole asset list for its surface. The route has to stay a
-/// complete offer even though the footer only shows the compact line.
+/// The Python route served the whole asset list for its surface, so the route has to
+/// stay a complete offer and not just the licence line.
 #[test]
 fn the_full_ranking_credit_list_is_served() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
-    let credits = credits_from_file(&path, None, None).expect("the sample reads");
+    let credits = credits_from_file(&path, None).expect("the sample reads");
     assert_eq!(credits.surface["title"], "Ranking");
 }
 
@@ -88,7 +90,7 @@ fn a_credits_file_without_a_ranking_surface_serves_null() {
     let path = std::env::temp_dir().join(format!("credits-{}.json", std::process::id()));
     let body = r#"{ "project": { "name": "CMS Docker", "url": "https://example.invalid" }, "license": { "id": "AGPL-3.0" } }"#;
     std::fs::write(&path, body).expect("the fixture is written");
-    let credits = credits_from_file(&path, None, None).expect("it reads");
+    let credits = credits_from_file(&path, None).expect("it reads");
     assert_eq!(credits.surface, serde_json::Value::Null);
     std::fs::remove_file(&path).ok();
 }
@@ -96,7 +98,18 @@ fn a_credits_file_without_a_ranking_surface_serves_null() {
 #[test]
 fn a_missing_credits_file_is_refused_rather_than_emptied() {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/absent.json");
-    assert!(credits_from_file(&path, None, None).is_err());
+    assert!(credits_from_file(&path, None).is_err());
+}
+
+/// A file whose project or license is a bare string is what the old port emitted and
+/// what credits.html cannot read, so it is refused rather than half-served.
+#[test]
+fn a_flattened_credit_entry_is_refused() {
+    let path = std::env::temp_dir().join(format!("credits-flat-{}.json", std::process::id()));
+    let body = r#"{ "project": "CMS Docker", "license": "AGPL-3.0" }"#;
+    std::fs::write(&path, body).expect("the fixture is written");
+    assert!(credits_from_file(&path, None).is_err());
+    std::fs::remove_file(&path).ok();
 }
 
 /// The panel stores one file per format and removes the others, so the configured path
@@ -136,10 +149,10 @@ fn the_panels_credit_list_wins_over_the_vendored_one() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/parity/credits-sample.json");
     let panel = serde_json::json!([{ "name": "Panel Asset" }]);
-    let credits = credits_from_file(&path, None, Some(panel.clone())).expect("the sample reads");
+    let credits = credits_from_file(&path, Some(panel.clone())).expect("the sample reads");
     assert_eq!(credits.surface, panel);
     assert_eq!(
-        credits.license, "AGPL-3.0",
+        credits.license["id"], "AGPL-3.0",
         "the licence is never taken from the panel"
     );
 }

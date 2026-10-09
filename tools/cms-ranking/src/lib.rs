@@ -1,9 +1,15 @@
 pub mod auth;
 pub mod config;
 pub mod db;
+pub mod entities;
+pub mod entity_routes;
+pub mod events;
 pub mod feed;
 pub mod http;
+pub mod json;
 pub mod login;
+pub mod public_config;
+pub mod score_events;
 pub mod scoring;
 pub mod store;
 pub mod surface;

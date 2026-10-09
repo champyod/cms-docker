@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use serde::Serialize;
+
 /// The score modes the CMS scorer implements (src/cmscommon/constants.py).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScoreMode {
@@ -160,6 +162,23 @@ impl Score {
         }
     }
 
+    /// The per-submission state /sublist needs, in the field order the Python
+    /// entity's __dict__ produced.
+    fn entries(&self, user: &str, task: &str) -> Vec<SubmissionEntry> {
+        self.submissions
+            .iter()
+            .map(|(key, state)| SubmissionEntry {
+                user: user.to_string(),
+                task: task.to_string(),
+                time: state.time,
+                key: key.clone(),
+                score: state.score,
+                token: state.token,
+                extra: state.extra.clone(),
+            })
+            .collect()
+    }
+
     /// Element-wise maximum across the submissions' score vectors, summed.
     /// A submission with no extra list contributes its own score as a one-element
     /// vector, which is what `s.extra or [s.score]` does in Python.
@@ -214,11 +233,27 @@ fn remove_one(values: &mut Vec<f64>, target: f64) {
     }
 }
 
+/// One submission as /sublist serves it. WHY this carries more than Submission:
+/// the Python SubListHandler serialises Submission.__dict__ directly, so the store
+/// key and the scorer's per-submission score, token and extra cross the wire even
+/// though Submission.get() would have dropped them.
+#[derive(Debug, Clone, Serialize)]
+pub struct SubmissionEntry {
+    pub user: String,
+    pub task: String,
+    pub time: i64,
+    pub key: String,
+    pub score: f64,
+    pub token: bool,
+    pub extra: Vec<f64>,
+}
+
 /// The scoreboard, assembled from the projection.
 #[derive(Debug, Default, Clone)]
 pub struct Ledger {
     scores: BTreeMap<String, BTreeMap<String, f64>>,
     history: Vec<(String, String, i64, f64)>,
+    submissions: Vec<SubmissionEntry>,
     skipped_subchanges: usize,
 }
 
@@ -234,6 +269,24 @@ impl Ledger {
 
     pub fn skipped_subchanges(&self) -> usize {
         self.skipped_subchanges
+    }
+
+    /// One user's submissions, ordered by (task, time) the way the Python
+    /// SubListHandler sorted them. A user with none yields an empty list, which is
+    /// the route's honest answer rather than a 404.
+    pub fn sublist(&self, user: &str) -> Vec<&SubmissionEntry> {
+        let mut entries: Vec<&SubmissionEntry> = self
+            .submissions
+            .iter()
+            .filter(|entry| entry.user == user)
+            .collect();
+        entries.sort_by(|left, right| {
+            left.task
+                .cmp(&right.task)
+                .then_with(|| left.time.cmp(&right.time))
+                .then_with(|| left.key.cmp(&right.key))
+        });
+        entries
     }
 }
 
@@ -306,6 +359,7 @@ fn finish(scores: BTreeMap<(String, String), Score>, skipped: usize) -> Ledger {
         for (time, change) in score.history() {
             merged.push((user.clone(), task.clone(), *time, *change));
         }
+        ledger.submissions.extend(score.entries(user, task));
     }
     merged.sort_by(|left, right| {
         left.2
