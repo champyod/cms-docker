@@ -94,7 +94,10 @@
 - **Commit:** feat(ranking): verify console credentials and count failures
 
 ### Slice 6: Panel control surfaces
-- [ ] Decided for the lockout surface: Redis is the shared counter store, so the panel gets its own client plus REDIS_URL to list and clear the cms:ranking:login: namespace, recording an audit entry for each clearance. The panel's Basic-credential files (ranking-session.ts and the auth and snapshot routes) go with it.
+- [x] Redis is the shared counter store: the panel has its own client plus REDIS_URL, lists and clears the cms:ranking:login: namespace, and records an audit entry per clearance (src/lib/ranking-lockouts.ts, actions/rankingLockouts.ts, the page section, the compose environment).
+- [ ] Still open: retire the dead Basic-credential pair — lib/ranking-session.ts, api/ranking/auth/route.ts, api/ranking/snapshot/route.ts — with RankingConnectionCard, useRankingRows and the part of RankingClient that drives them, and drop ranking:snapshot from the registry with its count assertion.
+- [x] Deliberately NOT ranking:update: api/ranking/logo/route.ts still uses it for the logo upload the service serves, so that key and right stay.
+- [x] docs/ACCESS-CONFIGURATION.md needs no change: its ranking content is the bind address, external port and vhost, all of which the Rust service keeps.
 
 - [ ] Add the appearance editor (all six approved groups) as a permissioned, audited server action plus API route and a page section under the ranking area.
 - [ ] Add the override editor: list, add, end. Every mutation records actor, reason and timestamp; no row is hard-deleted.
