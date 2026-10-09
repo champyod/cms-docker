@@ -1,0 +1,40 @@
+{
+  "derived_by": "tools/cms-ranking/tests/fixtures/parity/score_oracle.py",
+  "source_module": "src/cmsranking/Scoring.py (ScoringStore + Score), executed, not transcribed",
+  "seed": "seed.json",
+  "shim": "score_oracle.py installs a minimal gevent.lock.RLock substitute because Scoring reaches it transitively through cmsranking.Store; the real service needs the full gevent stack",
+  "corrects": "The hand-derived expectation for /history in the first draft of seed.json was wrong: it listed the u1/t0 change to 0.0 at 1700003000. Score.append_change only appends to the history when the computed score differs from the current one, so a change that leaves the score at 0.0 produces no history entry.",
+  "scores": {
+    "u0": {
+      "t0": 100
+    },
+    "u1": {
+      "t1": 30
+    }
+  },
+  "history": [
+    [
+      "u0",
+      "t0",
+      1700001000,
+      50
+    ],
+    [
+      "u0",
+      "t0",
+      1700002000,
+      100
+    ],
+    [
+      "u1",
+      "t1",
+      1700003100,
+      30
+    ]
+  ],
+  "score_modes": {
+    "max": "max of the submission scores",
+    "max_subtask": "element-wise max over each submission's extra list, summed",
+    "max_tokened_last": "max of the released scores and the last submission's score"
+  }
+}
