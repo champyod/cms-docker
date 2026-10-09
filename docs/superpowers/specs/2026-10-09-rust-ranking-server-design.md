@@ -46,7 +46,7 @@ The ranking server never reads PostgreSQL. ProxyService pushes every entity to i
 | Push target is a URL in the CMS config | config/cms.toml:167 rankings = ["http://admin:...@cms-ranking-web-server:8890/"] |
 | Push is a PUT of a JSON body with Basic auth | src/cms/service/ProxyService.py:73-97 safe_put_data |
 | One executor per ranking URL, retried | src/cms/service/ProxyService.py ProxyExecutor and ProxyService.__init__ |
-| External tool exists for manual pushes | src/cmscontrib/RWSHelper.py (cmsRWSHelper) |
+| External tool exists for manual pushes | src/cmscontrib/RWSHelper.py (cmsRWSHelper) — retired with the HTTP push path |
 
 Consequence: the current freshness path is HTTP, not SQL. Section 4.4 states what changes.
 
@@ -225,7 +225,7 @@ client and a skipped repoint would otherwise look like a ranking outage rather t
 
 | Plane | Caller | Credential | Surface |
 |---|---|---|---|
-| Machine | ProxyService, cmsRWSHelper | a single provisioned token from config.toml, compared in constant time | the data CRUD routes only |
+| Machine | (retired) | The HTTP push path and cmsRWSHelper went with the file store, so there is no machine plane to authenticate; the proxy writes the tables directly as the application role. | — |
 | Human | an operator in a browser | the panel account model: bcrypt password, adaptive CAPTCHA, lockout, HTTP-only session cookie | appearance, overrides, access mode |
 
 A CAPTCHA cannot be solved by a robot, so separating the planes is what makes "protected login like

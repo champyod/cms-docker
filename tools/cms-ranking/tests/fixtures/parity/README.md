@@ -42,4 +42,4 @@ service running; run it before Slice 3 and commit its output under `captured/<ti
 | Event framing | `src/cmscommon/eventsource.py` |
 | Score and history assembly | `src/cmsranking/Scoring.py` (`Score.get_score`, `ScoringStore.get_global_history`) |
 | Public configuration shape | `src/cmsranking/Config.py` (`PublicConfig`) |
-| Push payloads | `src/cms/service/ProxyService.py`, `src/cmscontrib/RWSHelper.py` |
+| Push payloads | `src/cms/service/ProxyService.py` and `src/cms/service/ranking_projection.py` |

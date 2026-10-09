@@ -108,7 +108,9 @@
 - [x] ProxyService's send path writes the projection tables instead of PUTting to a ranking URL: src/cms/service/ranking_projection.py maps the unchanged wire payloads onto the columns, with an ON CONFLICT upsert per resource and one transaction per batch.
 - [x] The mapping refuses a payload missing a required field rather than writing NULL, and binds an absent optional jsonb field as SQL NULL rather than the JSON text 'null' — a defect its own test caught.
 - [x] A batch failure is re-raised as CannotSendError, so the executor's existing retry loop keeps working unchanged.
-- [ ] Still open in this slice: retire cmsRWSHelper and the panel's ranking Basic credentials, and document cms-ranking-data as legacy.
+- [x] cmsRWSHelper and its setup.py entry are gone: nothing pushes over HTTP any more, so the tool had no job. cmsRankingWebServer stays on purpose — it is the rollback path and what capture.sh drives.
+- [x] The data volume now holds only the logo; the compose comment records that the JSON store it was created for is retired.
+- [ ] Still open in this slice: the panel's stored ranking Basic credentials (ranking-session.ts and the auth and snapshot routes) move with Slice 6, which reworks those surfaces.
 - **Verify:** 8 projection tests pass under a bare interpreter, with no gevent; ProxyService compiles; the HTTP push function and its requests dependency are gone. Running the suite that imports cms needs the service dependency set, so that part is CI's.
 - **Commit:** feat(proxy): write ranking rows to postgres
 

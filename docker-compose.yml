@@ -837,6 +837,9 @@ volumes:
     name: cms-cache
   cms-data:
     name: cms-data
+  # Holds the ranking logo the panel writes, and the host mirror the config sync copies.
+  # The JSON store this volume was created for is retired: the proxy writes the projection
+  # tables and the service reads them, so nothing here is ranking data any more.
   cms-ranking-data:
     name: cms-ranking-data
   cms-submissions:
