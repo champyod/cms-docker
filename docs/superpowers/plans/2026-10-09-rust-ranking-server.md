@@ -95,7 +95,8 @@
 
 ### Slice 6: Panel control surfaces
 - [x] Redis is the shared counter store: the panel has its own client plus REDIS_URL, lists and clears the cms:ranking:login: namespace, and records an audit entry per clearance (src/lib/ranking-lockouts.ts, actions/rankingLockouts.ts, the page section, the compose environment).
-- [ ] Still open: retire the dead Basic-credential pair — lib/ranking-session.ts, api/ranking/auth/route.ts, api/ranking/snapshot/route.ts — with RankingConnectionCard, useRankingRows and the part of RankingClient that drives them, and drop ranking:snapshot from the registry with its count assertion.
+- [ ] This is a BROKEN UI, not a cleanup: the ranking module renders RankingClient, whose scoreboard card polls api/ranking/snapshot, and that route needs /contests/, /tasks/, /teams/, /users/ and /scores against the old Python service. The Rust service implements none of those — its own page is the scoreboard — so the card cannot work on any deployment since the cutover.
+- [ ] The fix, in order: extract the logo upload out of RankingClient into its own client card (BrandingCard plus handleLogoUpload, buildLogoUrl, usePublishModuleActions and the ranking:update gate — that is a LIVE feature the service serves from the volume, and it must outlive the retirement); render that card plus a link to the live board on the module page; then delete RankingClient, RankingConnectionCard, RankingScoreboard, useRankingRows, lib/ranking-session.ts, api/ranking/auth/route.ts and api/ranking/snapshot/route.ts; then drop ranking:snapshot from the registry with its count assertion and the parity test line.
 - [x] Deliberately NOT ranking:update: api/ranking/logo/route.ts still uses it for the logo upload the service serves, so that key and right stay.
 - [x] docs/ACCESS-CONFIGURATION.md needs no change: its ranking content is the bind address, external port and vhost, all of which the Rust service keeps.
 
