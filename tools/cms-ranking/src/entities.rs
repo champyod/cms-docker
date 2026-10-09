@@ -55,17 +55,6 @@ pub enum Kind {
     User,
 }
 
-impl Kind {
-    fn exists_sql(self) -> &'static str {
-        match self {
-            Self::Contest => "SELECT 1 FROM ranking_contests WHERE key = $1",
-            Self::Task => "SELECT 1 FROM ranking_tasks WHERE key = $1",
-            Self::Team => "SELECT 1 FROM ranking_teams WHERE key = $1",
-            Self::User => "SELECT 1 FROM ranking_users WHERE key = $1",
-        }
-    }
-}
-
 const CONTESTS_LIST: &str =
     "SELECT key, name, begin, \"end\", score_precision FROM ranking_contests ORDER BY key";
 const CONTESTS_ONE: &str =
@@ -115,16 +104,6 @@ pub async fn one_body(pool: &PgPool, kind: Kind, key: &str) -> Result<Option<Vec
 pub async fn sublist_body(pool: &PgPool, user: &str) -> Result<Vec<u8>, StoreError> {
     let ledger = crate::store::load_ledger(pool).await?;
     encode(&ledger.sublist(user))
-}
-
-/// Whether the projection holds this key. The image routes are the only readers
-/// that need the row to exist without handing the row itself back.
-pub async fn exists(pool: &PgPool, kind: Kind, key: &str) -> Result<bool, StoreError> {
-    let row: Option<(i32,)> = sqlx::query_as(kind.exists_sql())
-        .bind(key)
-        .fetch_optional(pool)
-        .await?;
-    Ok(row.is_some())
 }
 
 fn map_by_key<T: Keyed>(rows: Vec<T>) -> BTreeMap<String, T> {
