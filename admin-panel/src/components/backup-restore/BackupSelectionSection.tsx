@@ -1,14 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCheck, Eraser, Layers } from 'lucide-react';
+import { AlertTriangle, CheckCheck, Eraser, Layers, Lock } from 'lucide-react';
 
 import { triggerSelectiveBackup } from '@/app/actions/backups';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
+import { BACKUP_TABLES, isLargeObjectDependency, validateTableSelection, withRequiredTables } from '@/lib/backup-table-catalog';
 import type { BackupTable } from '@/lib/backup-table-catalog';
 
 export interface BackupRunStatus {
@@ -30,22 +30,33 @@ interface TableRowProps {
     readonly table: BackupTable;
     readonly selected: boolean;
     readonly disabled: boolean;
+    /** True when the row is in the selection because a consumer pulled it in. */
+    readonly locked: boolean;
     readonly onToggle: (name: string) => void;
 }
 
-function TableRow({ table, selected, disabled, onToggle }: TableRowProps) {
+function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps) {
     return (
         <label className="flex items-center gap-2 rounded-md px-2 py-1 cursor-pointer hover:bg-muted/50">
             <input
                 type="checkbox"
                 checked={selected}
-                disabled={disabled}
+                disabled={disabled || locked}
                 onChange={() => onToggle(table.name)}
-                className="size-4 accent-primary shrink-0"
+                className="size-4 accent-primary shrink-0 disabled:opacity-60"
             />
             <span className="text-sm text-white truncate">{table.label}</span>
             <span className="text-xs font-mono text-muted-foreground truncate">{table.name}</span>
-            {table.needsLargeObjects === true && (
+            {locked && (
+                <span
+                    title="Pulled in because a selected table stores a digest that resolves into it; removing it would make those rows unrestorable."
+                    className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-sky-300 shrink-0"
+                >
+                    <Lock className="size-3" />
+                    Required
+                </span>
+            )}
+            {!locked && table.needsLargeObjects === true && (
                 <span
                     title="Rows reference large objects, so fsobjects must be in the same dump."
                     className="ml-auto text-[10px] font-bold uppercase tracking-widest text-amber-400 shrink-0"
@@ -63,17 +74,18 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
     const [status, setStatus] = useState<BackupRunStatus | null>(null);
 
     const handleToggle = (name: string) => {
-        setSelected((current) =>
-            current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name],
-        );
+        setSelected((current) => {
+            const next = current.includes(name) ? current.filter((entry) => entry !== name) : [...current, name];
+            // Required tables come back automatically, so deselecting the last consumer
+            // of the large-object subtree is not a two-step act the user has to know about.
+            return withRequiredTables(next);
+        });
     };
 
-    // Catalog order is parent-before-child, so it is also the order the server hands to pg_dump.
-    const orderedSelection = useMemo(
-        () => BACKUP_TABLES.filter((table) => selected.includes(table.name)).map((table) => table.name),
-        [selected],
-    );
-    const validation = useMemo(() => validateTableSelection(orderedSelection), [orderedSelection]);
+    // The dump the server runs is this list, the required tables included: what the
+    // confirmation dialog names and what pg_dump receives are the same set.
+    const orderedSelection = useMemo(() => withRequiredTables(selected), [selected]);
+    const validation = useMemo(() => validateTableSelection([...orderedSelection]), [orderedSelection]);
 
     const handleTrigger = async () => {
         if (!validation.valid) {
@@ -88,7 +100,7 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
         setIsRunning(true);
         setStatus(null);
         try {
-            const result = await triggerSelectiveBackup(orderedSelection, locationId);
+            const result = await triggerSelectiveBackup([...orderedSelection], locationId);
             if (result.success) {
                 setStatus({ tone: 'started', message: result.message ?? `Selective backup of ${orderedSelection.length} table(s) started in the background.` });
                 onBackupComplete();
@@ -147,6 +159,7 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
                             table={table}
                             selected={selected.includes(table.name)}
                             disabled={isRunning}
+                            locked={isLargeObjectDependency(table.name, selected)}
                             onToggle={handleToggle}
                         />
                     ))}
@@ -165,6 +178,29 @@ export function BackupSelectionSection({ onBackupComplete, locationId }: BackupS
                                 <li key={warning}>{warning}</li>
                             ))}
                         </ul>
+                    </Stack>
+                )}
+
+                {isRunning && (
+                    <Stack gap={3} role="status" aria-live="polite"
+                        className="p-4 bg-sky-500/10 rounded-xl border border-sky-500/30">
+                        <Stack direction="row" align="center" gap={2}>
+                            <Text variant="label" className="text-sky-300">
+                                Backup running
+                            </Text>
+                        </Stack>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-sky-500/20">
+                            <div className="h-full w-1/3 animate-pulse rounded-full bg-sky-400" />
+                        </div>
+                        <Text variant="small" className="text-sky-200/90">
+                            Dumping {orderedSelection.length} table(s) inside the monitor container: {orderedSelection.join(', ')}.
+                            A large database takes a while and this bar does not track a percentage, because the dump
+                            runs detached and reports none.
+                        </Text>
+                        <Text variant="small" className="text-sky-200/90">
+                            The run continues server-side, so closing this page does not stop it. Watch for the new dump
+                            in the archive list, or the verdict in the Discord channel.
+                        </Text>
                     </Stack>
                 )}
 

@@ -9,8 +9,8 @@ import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Text } from '@/components/core/Typography';
+import { BACKUP_TABLES, withRequiredTables } from '@/lib/backup-table-catalog';
 import { SelectableGridTable } from '@/components/backup-restore/SelectableGridTable';
-import { BACKUP_TABLES } from '@/lib/backup-table-catalog';
 import type { BackupTable } from '@/lib/backup-table-catalog';
 
 /** The endpoint the browser downloads from; the dump streams and nothing is kept server-side. */
@@ -52,7 +52,13 @@ export function SaveToFileFlow(): React.JSX.Element {
 
     const toggle = (name: string) => {
         setStarted(false);
-        setSelection((previous) => (previous.includes(name) ? previous.filter((entry) => entry !== name) : [...previous, name]));
+        setSelection((previous) => {
+            const toggled = previous.includes(name) ? previous.filter((entry) => entry !== name) : [...previous, name];
+            // Same rule as the backup panel: a table that stores a digest resolving into
+            // fsobjects brings fsobjects along, because an export without it restores
+            // rows whose content cannot be resolved.
+            return withRequiredTables(toggled);
+        });
     };
 
     const save = () => {
@@ -62,7 +68,6 @@ export function SaveToFileFlow(): React.JSX.Element {
         // browser at it saves the file without navigating this page away.
         window.location.assign(exportUrl(selection));
     };
-
     return (
         <Card className="p-6">
             <Stack gap={6}>
@@ -76,9 +81,24 @@ export function SaveToFileFlow(): React.JSX.Element {
                     The download can be uploaded back on the From File tab to restore it.
                 </Text>
                 {started && (
-                    <Text variant="small" role="status" aria-live="polite" color="text-muted-foreground">
-                        {`Started a dump of ${selection.length} table(s); the browser is saving it now. A large database takes a while, and the file is incomplete if the download stops early.`}
-                    </Text>
+                    <Stack gap={3} role="status" aria-live="polite"
+                        className="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/30">
+                        <Text variant="label" className="text-emerald-300">
+                            Preparing your download
+                        </Text>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-emerald-500/20">
+                            <div className="h-full w-1/3 animate-pulse rounded-full bg-emerald-400" />
+                        </div>
+                        <Text variant="small" className="text-emerald-200/90">
+                            {`Dumping ${selection.length} table(s): ${selection.join(', ')}.`}
+                        </Text>
+                        <Text variant="small" className="text-emerald-200/90">
+                            The server streams the archive as it produces it, so there is no size to report in
+                            advance and no percentage to track — the bar only says the request is in flight.
+                            Leaving this page ends the download, and because the server keeps no copy the dump
+                            has to be started again.
+                        </Text>
+                    </Stack>
                 )}
                 <SelectableGridTable
                     rows={BACKUP_TABLES}

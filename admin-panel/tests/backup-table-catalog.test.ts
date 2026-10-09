@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ADMIN_TABLE, BACKUP_TABLE_NAMES, BACKUP_TABLES, GRANT_TABLES, SCHEDULE_TABLE, validateTableSelection } from '@/lib/backup-table-catalog';
+import { ADMIN_TABLE, BACKUP_TABLE_NAMES, BACKUP_TABLES, GRANT_TABLES, SCHEDULE_TABLE, isLargeObjectDependency, validateTableSelection, withRequiredTables } from '@/lib/backup-table-catalog';
 
 const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)), 'utf8');
 
@@ -415,5 +415,47 @@ describe('the empty-selection warning', () => {
   it('is reached only by the empty selection, never by a selection that passed', () => {
     expect(validateTableSelection(['contests']).warnings).not.toContain(warning);
     expect(validateTableSelection([...BACKUP_TABLE_NAMES]).warnings).not.toContain(warning);
+  });
+});
+describe('withRequiredTables', () => {
+  it('pulls fsobjects in when a consumer of the large-object subtree is selected', () => {
+    expect(withRequiredTables(['submissions'])).toContain('fsobjects');
+  });
+
+  it('does not pull fsobjects in for a table with no large object of its own', () => {
+    expect(withRequiredTables(['admins', 'admin_groups'])).not.toContain('fsobjects');
+  });
+
+  it('releases fsobjects again once the last consumer is deselected', () => {
+    expect(withRequiredTables(['admins'])).not.toContain('fsobjects');
+  });
+
+  it('returns catalog order, so the dump still restores parents first', () => {
+    const result = withRequiredTables(['files', 'submissions']);
+    expect(result).toContain('submissions');
+    expect(result).toContain('fsobjects');
+    expect(result).toContain('files');
+    expect(result.indexOf('submissions')).toBeLessThan(result.indexOf('files'));
+  });
+
+  it('leaves a selection untouched when no dependency applies', () => {
+    expect(withRequiredTables(['contests', 'tasks'])).toEqual(
+      BACKUP_TABLES.filter((table) => ['contests', 'tasks'].includes(table.name)).map((table) => table.name),
+    );
+  });
+
+  it('never drops a table the caller already selected', () => {
+    expect(withRequiredTables(BACKUP_TABLE_NAMES)).toEqual(BACKUP_TABLE_NAMES);
+  });
+});
+
+describe('isLargeObjectDependency', () => {
+  it('reports fsobjects as a dependency only while a consumer is selected', () => {
+    expect(isLargeObjectDependency('fsobjects', ['submissions'])).toBe(true);
+    expect(isLargeObjectDependency('fsobjects', ['admins'])).toBe(false);
+  });
+
+  it('is false for every other table, dependency or not', () => {
+    expect(isLargeObjectDependency('submissions', ['submissions'])).toBe(false);
   });
 });

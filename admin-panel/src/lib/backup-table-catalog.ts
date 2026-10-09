@@ -138,6 +138,43 @@ export const GRANT_TABLES: readonly string[] = CATALOG.filter((table) => 'sensit
 
 const LARGE_OBJECT_TABLE = 'fsobjects';
 
+/** The tables whose content is unresolvable without `fsobjects` in the same dump. */
+const LARGE_OBJECT_CONSUMERS: ReadonlySet<string> = new Set(
+  CATALOG.filter((table) => 'needsLargeObjects' in table && table.needsLargeObjects === true)
+    .map((table) => table.name),
+);
+
+/**
+ * Add the tables a selection cannot be dumped without: `fsobjects`, when a selected
+ * table stores a digest that resolves into it.
+ *
+ * WHY this exists rather than a warning: a dump of such a table without `fsobjects`
+ * restores rows whose content cannot be resolved, so the selection was never usable.
+ * The warning this replaces told the operator what would break; this makes the break
+ * impossible instead, which is the same trade `--due` and `--force` already make on
+ * the domain renew verb.
+ *
+ * WHY the nullable-reference parents are deliberately NOT pulled in: a NULL-ed
+ * reference on restore is survivable and sometimes what the operator wants, so those
+ * stay a warning. Only this subtree, where content is lost outright, is enforced.
+ */
+export function withRequiredTables(selected: readonly string[]): readonly string[] {
+  const next = new Set(selected);
+  for (const entry of next) {
+    if (LARGE_OBJECT_CONSUMERS.has(entry)) {
+      next.add(LARGE_OBJECT_TABLE);
+      break;
+    }
+  }
+  return BACKUP_TABLES.filter((table) => next.has(table.name)).map((table) => table.name);
+}
+
+/** Whether `fsobjects` is in this selection because a consumer pulled it in. */
+export function isLargeObjectDependency(name: string, selected: readonly string[]): boolean {
+  if (name !== LARGE_OBJECT_TABLE) return false;
+  return [...selected].some((entry) => LARGE_OBJECT_CONSUMERS.has(entry));
+}
+
 /**
  * Every path that can be handed an empty selection reads this one string, and
  * they disagree about what to do about it: the manual-run, export and restore
