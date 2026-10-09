@@ -8,6 +8,8 @@ Type=oneshot
 WorkingDirectory=@CMS_DIR@
 # One command for every certificate in the store, and --due so a timer never reissues one that is fine.
 ExecStart=/usr/bin/env bash -c '"@CMS_DIR@/scripts/__domain.sh" renew --due --apply'
-ExecStartPost=/usr/bin/env bash -c 'test -f .env && . .env && test -n "${DISCORD_WEBHOOK_URL:-}" && curl -sS -X POST "${DISCORD_WEBHOOK_URL}" -H "Content-Type: application/json" -d "{\"content\":\":lock: SSL cert renewed on $(hostname)\"}" || true'
+# WHY a bare script path: systemd expands environment-variable references and percent
+# specifiers in a command line itself, and splits that line on unescaped whitespace.
+ExecStartPost=/usr/bin/env bash @CMS_DIR@/scripts/__cert_notify.sh
 # Seconds a TLS-ALPN-01 handover may take: stop the proxy, issue, start it again.
 TimeoutStartSec=600
