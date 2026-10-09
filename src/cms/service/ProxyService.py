@@ -28,18 +28,18 @@
 
 """
 
-import json
 import logging
 import string
-from urllib.parse import urljoin, urlsplit
+from urllib.parse import urlsplit
 
 import gevent
 import gevent.queue
-import requests
-import requests.exceptions
-from sqlalchemy import not_
+from sqlalchemy import not_, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from cms import config
+from cms.service.ranking_projection import rows as projection_rows, \
+    upsert_statement
 from cms.db import SessionGen, Contest, Participation, Task, Submission, \
     get_submissions
 from cms.io import Executor, QueueItem, TriggeredService, rpc_method
@@ -70,33 +70,36 @@ def encode_id(entity_id: str) -> str:
     return encoded_id
 
 
-def safe_put_data(ranking: str, resource: str, data: dict, operation: str):
-    """Send some data to ranking using a PUT request.
+def write_projection(resource: str, payloads: dict, operation: str):
+    """Write a batch of entities into the ranking projection.
 
-    ranking: the URL of ranking server.
-    resource: the relative path of the entity.
-    data: the data to JSON-encode and send.
-    operation: a human-readable description of the operation
-        we're performing (to produce log messages).
+    WHY one session and one commit for the batch: the executor retries the whole batch
+    after a failure, so a partial write would be re-sent anyway, and committing once
+    keeps a retry from publishing half a contest.
 
-    raise (CannotSendError): in case of communication errors.
+    WHY the failures are re-raised as CannotSendError: the retry loop keys on that type,
+    so a refused payload and an unreachable database must look to it exactly as a failed
+    request did.
+
+    resource: the plural entity name, which names the projection table.
+    payloads: entity key to payload, in the wire format.
+    operation: a human-readable description for the log.
+
+    raise (CannotSendError): if the projection refuses the batch.
 
     """
+    statement = text(upsert_statement(resource))
     try:
-        url = urljoin(ranking, resource)
-        # XXX With requests-1.2 auth is automatically extracted from
-        # the URL: there is no need for this.
-        auth = urlsplit(url)
-        res = requests.put(url, json.dumps(data),
-                           auth=(auth.username, auth.password),
-                           headers={'content-type': 'application/json'},
-                           verify=config.proxy_service.https_certfile)
-    except requests.exceptions.RequestException as error:
+        with SessionGen() as session:
+            for parameters in projection_rows(resource, payloads):
+                session.execute(statement, parameters)
+            session.commit()
+    except SQLAlchemyError as error:
         msg = "%s while %s: %s." % (type(error).__name__, operation, error)
         logger.warning(msg)
         raise CannotSendError(msg)
-    if 400 <= res.status_code < 600:
-        msg = "Status %s while %s." % (res.status_code, operation)
+    except ValueError as error:
+        msg = "Invalid %s payload while %s: %s." % (resource, operation, error)
         logger.warning(msg)
         raise CannotSendError(msg)
 
@@ -218,8 +221,7 @@ class ProxyExecutor(Executor[ProxyOperation]):
                                     name, self._visible_ranking)
 
                     logger.debug(operation.capitalize())
-                    safe_put_data(
-                        self._ranking, "%s/" % name, data[i], operation)
+                    write_projection(name, data[i], operation)
                     data[i].clear()
 
         except CannotSendError:

@@ -105,10 +105,11 @@
 
 ### Slice 7: Move the push path
 
-- [ ] Rewrite ProxyService's send path to write the ranking rows with parameterised SQL on the application connection, keeping the retry behaviour and the "already sent" bookkeeping.
-- [ ] Retire the HTTP pusher at once: remove the Basic-authenticated CRUD routes, drop cmsRWSHelper from the documented workflow, and stop the panel storing ranking Basic credentials.
-- [ ] Stop writing the JSON store; document the volume as legacy in the compose file and the service guide.
-- **Verify:** a submission scored in a rehearsal produces the same rows the PUT path produced, checked by a fixture comparison; python unit tests still pass.
+- [x] ProxyService's send path writes the projection tables instead of PUTting to a ranking URL: src/cms/service/ranking_projection.py maps the unchanged wire payloads onto the columns, with an ON CONFLICT upsert per resource and one transaction per batch.
+- [x] The mapping refuses a payload missing a required field rather than writing NULL, and binds an absent optional jsonb field as SQL NULL rather than the JSON text 'null' — a defect its own test caught.
+- [x] A batch failure is re-raised as CannotSendError, so the executor's existing retry loop keeps working unchanged.
+- [ ] Still open in this slice: retire cmsRWSHelper and the panel's ranking Basic credentials, and document cms-ranking-data as legacy.
+- **Verify:** 8 projection tests pass under a bare interpreter, with no gevent; ProxyService compiles; the HTTP push function and its requests dependency are gone. Running the suite that imports cms needs the service dependency set, so that part is CI's.
 - **Commit:** feat(proxy): write ranking rows to postgres
 
 ### Slice 8: Cutover
