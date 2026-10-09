@@ -452,6 +452,8 @@ services:
       PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
       # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The console counts login failures in Redis; the panel reads and clears those keys.
+      REDIS_URL: redis://${REDIS_HOST:-redis-rate-limit}:${REDIS_PORT:-6379}
       AUTH_SECRET: ${AUTH_SECRET}
       # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
       RPC_SECRET: ${RPC_SECRET}

@@ -1,5 +1,6 @@
 import { RankingClient } from '@/components/ranking/RankingClient';
 import { getRankingAppearance, submitRankingAppearance } from '@/app/actions/rankingAppearance';
+import { clearRankingLockout, getRankingLockouts } from '@/app/actions/rankingLockouts';
 import { endRankingOverride, getRankingOverrides, saveRankingOverride } from '@/app/actions/rankingOverrides';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
@@ -17,6 +18,11 @@ export default async function InfrastructureRankingPage(): Promise<React.JSX.Ele
   const overrides = await getRankingOverrides();
   const canEdit = effective.has("ranking:appearance");
   const canOverride = effective.has("ranking:override");
+  // Guarded on the read key, not only the button: the action enforces it too, and an
+  // unguarded call would throw for a contest manager who may not see lockouts at all.
+  const canSeeLockouts = effective.has("lockout:read");
+  const lockoutState = canSeeLockouts ? await getRankingLockouts() : null;
+  const canClearLockouts = effective.has("lockout:unlock");
   return (
     <div className="space-y-6">
       {canEdit ? (
@@ -133,6 +139,39 @@ export default async function InfrastructureRankingPage(): Promise<React.JSX.Ele
           ))}
         </ul>
       </section>
+
+      {lockoutState === null ? null : (
+        <section className={CARD_CLASS}>
+          <h2 className="text-lg font-semibold text-white">Console lockouts</h2>
+          {lockoutState.ok ? (
+            <ul className="divide-y divide-white/10 text-sm text-white/80">
+              {lockoutState.lockouts.map((lockout) => (
+                <li key={lockout.key} className="flex flex-wrap items-center gap-3 py-2">
+                  <span>{lockout.subject}</span>
+                  <span className="text-white/50">{lockout.count} failures</span>
+                  <span className="text-white/50">{lockout.retryAfterSeconds}s left</span>
+                  {canClearLockouts ? (
+                    <form action={clearRankingLockout} className="ml-auto flex items-center gap-2">
+                      <input type="hidden" name="key" value={lockout.key} />
+                      <input
+                        name="reason"
+                        required
+                        placeholder="reason"
+                        className="rounded-lg border border-white/5 bg-black/40 px-2 py-1 text-white"
+                      />
+                      <button type="submit" className="rounded-lg bg-amber-500/20 px-3 py-1 text-amber-300">
+                        Clear
+                      </button>
+                    </form>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-amber-300">{lockoutState.error}</p>
+          )}
+        </section>
+      )}
 
       <RankingClient permissionKeys={[...effective]} />
     </div>

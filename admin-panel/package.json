@@ -33,6 +33,7 @@
     "prisma": "^6.19.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "redis": "^6.3.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.4.0"
   },
