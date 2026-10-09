@@ -85,7 +85,10 @@ describe('Infrastructure ownership and wiring', () => {
     [
       'src/app/[locale]/(authenticated)/infrastructure/ranking/page.tsx',
       'infrastructure.ranking',
-      '<RankingClient',
+      // The page's client component is the logo card now: the scoreboard it used to render is
+      // served by the ranking service itself, and the appearance, override and lockout
+      // sections around it are server forms.
+      '<RankingLogoCard',
     ],
   ])('%s authorizes and delegates to %s', (relativePath, routeId, clientTag) => {
     const source = readSource(relativePath);
