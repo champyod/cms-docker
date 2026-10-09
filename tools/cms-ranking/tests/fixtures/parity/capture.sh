@@ -8,7 +8,7 @@ set -euo pipefail
 
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly BASE_URL="${RANKING_URL:-http://127.0.0.1:8890}"
-OUT_DIR="${HERE}/captured/$(date +%Y%m%dT%H%M%S)}"
+OUT_DIR="${HERE}/captured/$(date +%Y%m%dT%H%M%S)"
 readonly EVENTS_SECONDS="${EVENTS_SECONDS:-5}"
 
 require_command() {

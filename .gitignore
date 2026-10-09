@@ -84,3 +84,6 @@ cms-waf-logs/
 
 # Rust build artifacts for the ranking service
 tools/cms-ranking/target/
+
+# Generated parity captures: the script writes here by default.
+tools/cms-ranking/tests/fixtures/parity/captured/
