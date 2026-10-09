@@ -30,6 +30,60 @@ if [[ ! -f "$RANKING_CONFIG_FILE" ]]; then
   SKIP_RANKING=true
 fi
 
+# Parse state of the config as it arrived, recorded before any writer runs so the
+# gate below can tell a file this run broke from one that arrived broken.
+#
+# WHY the state is a three-valued answer rather than a boolean: "did not parse" and
+# "no TOML parser is installed" are different facts, and conflating them would let an
+# unvalidatable run pass as a clean one.
+CONFIG_PARSED_BEFORE=false
+CONFIG_VALIDATION_AVAILABLE=false
+toml_parse_state() {
+  CONFIG_PATH="$1" python3 - << 'PY'
+import os
+import sys
+from pathlib import Path
+
+path = Path(os.environ["CONFIG_PATH"])
+if not path.exists():
+    print("absent")
+    sys.exit(0)
+try:
+    import tomllib
+except ModuleNotFoundError:
+    try:
+        import tomli as tomllib
+    except ModuleNotFoundError:
+        print("unavailable")
+        sys.exit(0)
+try:
+    with path.open("rb") as handle:
+        tomllib.load(handle)
+except tomllib.TOMLDecodeError as exc:
+    # The loader's own wording, which names the line it refused: an operator handed a
+    # 400-line file needs the position, not merely the fact that it is broken.
+    print("invalid: {}".format(exc))
+    sys.exit(0)
+print("valid")
+PY
+}
+
+CONFIG_STATE_BEFORE="$(toml_parse_state "$CONFIG_FILE")"
+case "$CONFIG_STATE_BEFORE" in
+  valid)
+    CONFIG_PARSED_BEFORE=true
+    CONFIG_VALIDATION_AVAILABLE=true
+    ;;
+  unavailable)
+    # Loud rather than silent: a run that cannot check its own output must not read as
+    # a run that checked it and found nothing wrong.
+    log_warn "no TOML parser available (needs python3 >= 3.11 or tomli) — $CONFIG_FILE cannot be validated after injection"
+    ;;
+  invalid*)
+    log_warn "$CONFIG_FILE already did not parse before this run; it will not be treated as a regression below"
+    ;;
+esac
+
 # Exact key match via awk -F= (avoids regex metachars in key). Values are passed
 # through env_unquote because __config_sync quotes any value containing whitespace or
 # a shell metacharacter — without it a quoted password would be injected into
@@ -522,5 +576,37 @@ PY
 else
   echo "No workers configured. Existing Worker block removed if present."
 fi
+
+# ---------------------------------------------------------------------------
+# Validate what was written. This is the last writer above, so the answer describes
+# the file the services will actually read.
+#
+# WHY this gate exists: every writer here is a regex substitution into someone else's
+# TOML, and a substitution that produces a bare value writes a file every service
+# refuses to load — they then crash-loop on "Invalid value (at line N)" and a deploy
+# fails on whichever dependency restarts first. Nothing here warned about that.
+# ---------------------------------------------------------------------------
+CONFIG_STATE_AFTER="$(toml_parse_state "$CONFIG_FILE")"
+case "$CONFIG_STATE_AFTER" in
+  absent)
+    # A run that removed the config was told to; there is nothing left to invalidate.
+    log_info "$CONFIG_FILE is absent after injection — nothing to validate"
+    ;;
+  unavailable)
+    log_warn "no TOML parser available — $CONFIG_FILE was written but could not be validated"
+    ;;
+  valid)
+    log_info "$CONFIG_FILE parses cleanly after injection"
+    ;;
+  invalid*)
+    if [[ "$CONFIG_PARSED_BEFORE" == true ]]; then
+      log_die "$CONFIG_FILE did not parse before this run and does not now — this run broke it. ${CONFIG_STATE_AFTER#invalid: }"
+    fi
+    # WHY a warning and not a failure here: the file arrived unreadable, so this run
+    # did not break it, and refusing to finish would block every later run against the
+    # same tree with no way to make progress. The break still has to be named.
+    log_warn "$CONFIG_FILE did not parse after injection, but it already did not parse before this run: ${CONFIG_STATE_AFTER#invalid: }"
+    ;;
+esac
 
 echo "Configuration injection complete."

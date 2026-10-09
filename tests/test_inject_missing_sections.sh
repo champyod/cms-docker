@@ -14,17 +14,26 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
-mkdir -p "${SANDBOX}/config"
+
 # The regression is a write into a table the config lacks, so the captcha tables are
 # stripped; a copy that already had them would only exercise the update path.
-awk '
-  /^\[(admin|contest)_web_server\.captcha\]$/ { skip = 1; next }
-  /^\[/                                        { skip = 0 }
-  !skip                                         { print }
-' "$SAMPLE" > "${SANDBOX}/config/cms.toml"
-[[ -f "${REPO_ROOT}/config/cms_ranking.toml" ]] \
-  && cp "${REPO_ROOT}/config/cms_ranking.toml" "${SANDBOX}/config/"
-printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\n' > "${SANDBOX}/.env"
+new_sandbox() {
+  mkdir -p "${1}/config"
+  awk '
+    /^\[(admin|contest)_web_server\.captcha\]$/ { skip = 1; next }
+    /^\[/                                        { skip = 0 }
+    !skip                                         { print }
+  ' "$SAMPLE" > "${1}/config/cms.toml"
+  [[ -f "${REPO_ROOT}/config/cms_ranking.toml" ]] \
+    && cp "${REPO_ROOT}/config/cms_ranking.toml" "${1}/config/"
+  printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=secret\n' > "${1}/.env"
+}
+
+parses() {
+  python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$1" 2>/dev/null
+}
+
+new_sandbox "$SANDBOX"
 
 echo "run the real injector with a flag an operator would set"
 if ! (cd "$SANDBOX" \
@@ -72,7 +81,7 @@ for pair in "provider=recaptcha" "site_key=site" "secret_key=secret"; do
     no "${key} is written as a TOML string"
   fi
 done
-if python3 -c 'import sys, tomllib; tomllib.load(open(sys.argv[1], "rb"))' "$INJECTED" 2>/dev/null; then
+if parses "$INJECTED"; then
   ok "the injected config parses as TOML"
 else
   no "the injected config parses as TOML"
@@ -95,6 +104,110 @@ if [[ "$count" -eq 1 ]]; then
   ok "num_proxies_used is written once in [contest_web_server]"
 else
   no "num_proxies_used is written once in [contest_web_server] (found $count)"
+fi
+
+echo "the injector checks the file it just wrote"
+# Every case below runs the real injector in its own sandbox, so a fault in one
+# cannot leak into the next and none of them can reach the repository's own
+# config/cms.toml.
+REAL_PYTHON="$(command -v python3)"
+
+# A stand-in for the writer under test: the real interpreter runs first, and this
+# then produces the defect a broken writer produces — a bare, unquoted value the
+# loader refuses, or a file that is gone. Which writer is targeted is decided by
+# the payload itself rather than by a line number, so the stub survives any edit
+# to the injector that moves a write.
+stub_python() {
+  mkdir -p "${1}/bin"
+  cat >"${1}/bin/python3" <<'SH'
+#!/usr/bin/env bash
+payload="$(cat)"
+status=0
+"${CMS_TEST_PYTHON}" "$@" <<<"${payload}" || status=$?
+if [[ "${status}" -eq 0 && "${payload}" == *'p.write_text(t)'* && "${payload}" == *'Worker = '* ]]; then
+  case "${CMS_TEST_FAULT}" in
+    malformed) printf 'site_key = 0x4AAAA-broken\n' >> config/cms.toml ;;
+    removed)   rm -f config/cms.toml ;;
+  esac
+fi
+exit "${status}"
+SH
+  chmod +x "${1}/bin/python3"
+}
+
+run_injector() {
+  CASE_OUT="$(cd "$1" && PATH="${1}/bin:${PATH}" \
+    CMS_TEST_PYTHON="${REAL_PYTHON}" CMS_TEST_FAULT="${2:-none}" \
+    bash "$SCRIPT" 2>&1)"
+  CASE_RC=$?
+  printf '%s\n' "$CASE_OUT" > "${1}/injector.out"
+}
+
+CLEAN="${SANDBOX}/clean"
+new_sandbox "$CLEAN"
+run_injector "$CLEAN"
+if [[ "$CASE_RC" -eq 0 ]] && parses "${CLEAN}/config/cms.toml"; then
+  ok "a clean run ends with a config that still parses"
+else
+  no "a clean run ends with a config that still parses (exit ${CASE_RC})"
+fi
+if [[ "$CASE_OUT" != *"[FAIL]"* ]]; then
+  ok "a clean run reports no failure"
+else
+  no "a clean run reports no failure"
+fi
+
+MALFORMED="${SANDBOX}/malformed-write"
+new_sandbox "$MALFORMED"
+# WORKER_N makes the injector reach its final writer, which is the one stubbed.
+printf 'WORKER_1=10.0.0.9:2222\n' >> "${MALFORMED}/.env"
+stub_python "$MALFORMED"
+run_injector "$MALFORMED" malformed
+if [[ "$CASE_RC" -ne 0 ]]; then
+  ok "a writer that emits malformed TOML ends the injector non-zero"
+else
+  no "a writer that emits malformed TOML ends the injector non-zero"
+fi
+if [[ "$CASE_OUT" == *"[FAIL]"* && "$CASE_OUT" =~ [Ll]ine\ [0-9]+ ]]; then
+  ok "the failure names the parse error and the line it is on"
+else
+  no "the failure names the parse error and the line it is on"
+fi
+if [[ "$CASE_OUT" == *"Configuration injection complete."* ]]; then
+  no "an aborted run does not claim completion"
+else
+  ok "an aborted run does not claim completion"
+fi
+
+PRE_BROKEN="${SANDBOX}/already-broken"
+new_sandbox "$PRE_BROKEN"
+printf 'broken = [1, 2\n' >> "${PRE_BROKEN}/config/cms.toml"
+run_injector "$PRE_BROKEN"
+if [[ "$CASE_RC" -eq 0 ]]; then
+  ok "a config that already failed to parse does not abort the run"
+else
+  no "a config that already failed to parse does not abort the run (exit ${CASE_RC})"
+fi
+if [[ "$CASE_OUT" == *"[WARN]"* && "$CASE_OUT" == *"already did not parse"* ]]; then
+  ok "pre-existing breakage is reported as a warning"
+else
+  no "pre-existing breakage is reported as a warning"
+fi
+
+GONE="${SANDBOX}/removed"
+new_sandbox "$GONE"
+printf 'WORKER_1=10.0.0.9:2222\n' >> "${GONE}/.env"
+stub_python "$GONE"
+run_injector "$GONE" removed
+if [[ "$CASE_RC" -eq 0 ]]; then
+  ok "a run whose config is gone at the end exits 0"
+else
+  no "a run whose config is gone at the end exits 0 (exit ${CASE_RC})"
+fi
+if [[ "$CASE_OUT" != *"[WARN]"* && "$CASE_OUT" != *"[FAIL]"* ]]; then
+  ok "an absent config raises no warning"
+else
+  no "an absent config raises no warning"
 fi
 
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
