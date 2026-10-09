@@ -1,6 +1,7 @@
 pub mod config;
 pub mod db;
 pub mod http;
+pub mod scoring;
 
 use std::sync::Arc;
 
