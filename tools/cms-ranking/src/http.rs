@@ -316,3 +316,65 @@ async fn unavailable() -> (StatusCode, Json<Health>) {
         }),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn appearance(columns: Option<serde_json::Value>, access_mode: &str) -> Appearance {
+        Appearance {
+            title: Some("IOI 2026".to_string()),
+            subtitle: Some("Day 2".to_string()),
+            organisation: None,
+            logo_asset: None,
+            favicon_asset: None,
+            theme: Some(serde_json::json!({ "accent": "#00A3DA" })),
+            columns,
+            score_format: None,
+            footer_text: Some("footer".to_string()),
+            credits_text: Some("credits".to_string()),
+            access_mode: access_mode.to_string(),
+        }
+    }
+
+    /// What the panel writes has to arrive at the page, because /config is the only
+    /// channel it has: the vendored page reads it before it draws anything.
+    #[test]
+    fn the_panel_row_reaches_the_page() {
+        let columns = Some(serde_json::json!({ "show_id_column": true }));
+        let published = public_config(Some(appearance(columns, "protected")));
+        assert_eq!(published.title.as_deref(), Some("IOI 2026"));
+        assert_eq!(published.subtitle.as_deref(), Some("Day 2"));
+        assert_eq!(published.access_mode, "protected");
+        assert_eq!(published.footer_text.as_deref(), Some("footer"));
+        assert!(published.show_id_column);
+    }
+
+    /// A row that does not exist yet must publish the documented defaults rather than
+    /// nothing: the page falls back to the vendored behaviour only if it can read them.
+    #[test]
+    fn a_missing_row_publishes_the_defaults() {
+        let published = public_config(None);
+        assert!(!published.show_id_column);
+        assert_eq!(published.access_mode, "public");
+        assert!(published.title.is_none());
+        assert_eq!(published.source_url, DEFAULT_SOURCE_URL);
+    }
+
+    /// The id column is a privacy switch, so only a real boolean turns it on: a string
+    /// or a number from a hand-edited row must leave it off.
+    #[test]
+    fn the_id_column_needs_a_real_boolean() {
+        for columns in [
+            serde_json::json!({ "show_id_column": "true" }),
+            serde_json::json!({ "show_id_column": 1 }),
+            serde_json::json!({}),
+        ] {
+            let published = public_config(Some(appearance(Some(columns), "public")));
+            assert!(
+                !published.show_id_column,
+                "a mistyped value must not show ids"
+            );
+        }
+    }
+}
