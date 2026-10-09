@@ -125,7 +125,15 @@ export const GRANT_TABLES: readonly string[] = CATALOG.filter((table) => 'sensit
 
 const LARGE_OBJECT_TABLE = 'fsobjects';
 
-const EMPTY_SELECTION_WARNING = 'No tables selected: pg_dump with zero -t flags dumps the entire database, so an empty selection is rejected.';
+/**
+ * Every path that can be handed an empty selection reads this one string, and
+ * they disagree about what to do about it: the manual-run, export and restore
+ * paths refuse it, while the schedule path accepts it and resolves the whole
+ * catalog at the argv boundary. Only the consequence is common to all of them, so
+ * the text states the consequence and stops there — a wording that also claimed a
+ * rejection would be false on the success toast of a schedule that was created.
+ */
+const EMPTY_SELECTION_WARNING = 'No tables selected: pg_dump with no -t flags dumps the entire database, so this covers every table.';
 
 /**
  * Direct foreign-key parents, read from schema.prisma `@relation(fields:)` lines.

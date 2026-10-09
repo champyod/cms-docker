@@ -234,6 +234,18 @@ describe('a schedule that names no table means every table', () => {
     expect(result.warnings.join(' ')).toContain('entire database');
   });
 
+  it('does not tell the operator that the selection it just accepted was rejected', () => {
+    const result = validateScheduleInput(scheduleInput({ tables: [] }));
+    const toast = `Created schedule ${result.schedule?.name}. ${result.warnings.join(' ')}`;
+    expect(toast).not.toMatch(/reject/i);
+    expect(toast).toContain('entire database');
+  });
+
+  it('carries the catalog own warning, so every path tells the operator the same thing', () => {
+    const result = validateScheduleInput(scheduleInput({ tables: [] }));
+    expect(result.warnings).toEqual(validateTableSelection([]).warnings);
+  });
+
   it('still rejects a table outside the catalog, so relaxing empty did not relax the allowlist', () => {
     const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'monitor_targets'] }));
     expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);

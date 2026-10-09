@@ -119,7 +119,6 @@ export interface SchedulerDeps {
 }
 
 const REJECTED_UNKNOWN_TABLES = 'Not in the backup table catalog';
-const REJECTED_EMPTY_SELECTION = 'At least one table must be selected.';
 const REJECTED_NOT_A_LIST = 'Table selection must be a list of names.';
 
 /** The `ix_backup_schedules_enabled_next_run_at` index answers exactly this predicate. */
@@ -213,7 +212,6 @@ export function buildBackupArgv(tables: readonly string[], writeRoot: string | n
   const requested = resolveSelection(tables);
   const validation = validateTableSelection([...requested]);
   if (validation.unknown.length > 0) return rejection(`${REJECTED_UNKNOWN_TABLES}: ${validation.unknown.join(', ')}`);
-  if (!validation.valid) return rejection(REJECTED_EMPTY_SELECTION);
   const selection = orderSelection(requested);
   return {
     valid: true,

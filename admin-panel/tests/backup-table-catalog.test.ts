@@ -362,3 +362,38 @@ describe('sensitivity warnings', () => {
     expect(result.warnings.join(' ')).not.toContain('who may act');
   });
 });
+
+/**
+ * One warning serves every path that can be handed an empty selection, and the
+ * paths disagree about what to do about it: the manual run, export and restore
+ * paths refuse, while the schedule path now accepts it and resolves the whole
+ * catalog at the argv boundary. Only the consequence is common, so only the
+ * consequence may be in the text.
+ */
+describe('the empty-selection warning', () => {
+  const warning = validateTableSelection([]).warnings[0];
+
+  it('claims the whole database, which every path that reads it agrees on', () => {
+    expect(warning).toContain('entire database');
+  });
+
+  it('does not claim an empty selection is rejected, which the schedule path no longer does', () => {
+    expect(warning).not.toMatch(/reject/i);
+  });
+
+  it('keeps the pg_dump mechanism the manual, export and restore operator needs', () => {
+    expect(warning).toContain('-t');
+  });
+
+  it('still returns valid === false for the paths that depend on the refusal', () => {
+    const result = validateTableSelection([]);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual([]);
+    expect(result.warnings).toEqual([warning]);
+  });
+
+  it('is reached only by the empty selection, never by a selection that passed', () => {
+    expect(validateTableSelection(['contests']).warnings).not.toContain(warning);
+    expect(validateTableSelection([...BACKUP_TABLE_NAMES]).warnings).not.toContain(warning);
+  });
+});
