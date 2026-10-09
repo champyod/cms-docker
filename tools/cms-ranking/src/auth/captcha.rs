@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::config::{CaptchaConfig, CaptchaProvider};
+use crate::config::CaptchaConfig;
 
 /// How many failures pass before a solved challenge is demanded. The panel uses three,
 /// so the console does too; this is the CAPTCHA_THRESHOLD value.
@@ -70,6 +70,7 @@ pub async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::CaptchaProvider;
 
     fn config(enabled: bool, keys: bool) -> CaptchaConfig {
         CaptchaConfig {
