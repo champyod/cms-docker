@@ -647,3 +647,26 @@ model audit_log {
   @@index([entity], map: "ix_audit_log_entity")
   @@index([timestamp], map: "ix_audit_log_timestamp")
 }
+
+/// One security block event — a fail2ban ban, a login lockout or a WAF block.
+/// A row is written per event, never per failed attempt: the login counter stays
+/// in memory so a brute-force run cannot amplify into database writes.
+model security_blocks {
+  id         BigInt    @id @default(autoincrement())
+  kind       String    @db.VarChar
+  source     String    @db.VarChar
+  ip         String?   @db.VarChar
+  subject    String?   @db.VarChar
+  detail     Json?
+  started_at DateTime  @default(now())
+  expires_at DateTime?
+  ended_at   DateTime?
+  ended_by   Int?
+  active     Boolean   @default(true)
+  created_at DateTime  @default(now())
+
+  @@index([active, kind], map: "ix_security_blocks_active_kind")
+  @@index([ip], map: "ix_security_blocks_ip")
+  @@index([started_at], map: "ix_security_blocks_started_at")
+  @@map("security_blocks")
+}

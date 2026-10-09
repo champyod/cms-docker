@@ -24,7 +24,7 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * because a restore that carried no privileges would land every admin with an
  * empty permission set, which is a panel nobody can operate.
  */
-const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set(['monitor_targets', 'audit_log']);
+const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set(['monitor_targets', 'audit_log', 'security_blocks']);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */
 const UNSATISFIABLE_EDGES: ReadonlyArray<readonly [string, string]> = [['tasks', 'datasets']];
