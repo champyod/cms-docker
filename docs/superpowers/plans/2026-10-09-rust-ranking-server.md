@@ -87,9 +87,10 @@
 - [x] The machine plane is gone, and not by omission: you retired the HTTP push path, so the CRUD routes it authenticated no longer exist and nothing is left to authenticate with a token.
 - [x] The console keeps its own accounts (ranking_console_users, migration 20261009170000) in the panel's bcrypt:/plaintext: format, and signs its own cookie with RANKING_SESSION_SECRET — your two decisions from this slice.
 - [x] A malformed credential row is an error, never a wrong password. The lockout is a pure function (5 attempts, 15 minutes, one account key and one address key) with counters in the stack's own Redis under a ranking namespace, so an unblock here cannot forgive a contest-surface brute force.
-- [ ] Still open: the login and logout routes, the gate when ranking_settings.access_mode is protected, and CAPTCHA verification, which waits on the transport decision recorded below.
+- [x] The login and logout routes, a self-contained sign-in page, and one gate middleware reading ranking_settings.access_mode, so protected mode covers the page and the data together and a panel change applies on the next request.
+- [x] CAPTCHA verification over reqwest + rustls, configured only from config.toml; no test calls the provider, per the note about the production key.
 - [ ] The ranking permission subset generation moved with the panel surfaces to Slice 6.
-- **Verify:** 42 tests green (31 in-crate, covering password, lockout and session), clippy silent, 5 ignored tests that CI runs with postgres and redis services.
+- **Verify:** 47 tests green across six suites, clippy -D warnings silent, 5 ignored tests that CI runs with postgres and redis services.
 - **Commit:** feat(ranking): verify console credentials and count failures
 
 ### Slice 6: Panel control surfaces
