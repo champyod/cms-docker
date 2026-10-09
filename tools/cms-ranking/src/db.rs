@@ -16,6 +16,10 @@ impl Db {
         Ok(Self { pool })
     }
 
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
     pub async fn is_ready(&self) -> Result<(), sqlx::Error> {
         sqlx::query("SELECT 1")
             .fetch_one(&self.pool)

@@ -6,12 +6,12 @@ edition = "2021"
 [dependencies]
 axum = "0.8"
 serde = { version = "1", features = ["derive"] }
-sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = ["derive", "json", "postgres", "runtime-tokio"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
 
 [dev-dependencies]
-serde_json = "1"
 tower = { version = "0.5", features = ["util"] }
 
 [profile.release]

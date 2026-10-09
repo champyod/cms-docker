@@ -2,6 +2,7 @@ pub mod config;
 pub mod db;
 pub mod http;
 pub mod scoring;
+pub mod store;
 
 use std::sync::Arc;
 
@@ -28,12 +29,16 @@ impl AppState {
         Self::new(None)
     }
 
+    pub fn db(&self) -> Option<&db::Db> {
+        self.inner.db.as_ref()
+    }
+
     /// Reports whether the service can serve real ranking data. A missing
     /// database is not something a caller may paper over: every read route
     /// treats it as a refusal, so a misconfigured deployment shows nothing
     /// rather than an empty scoreboard.
     pub async fn is_ready(&self) -> bool {
-        match &self.inner.db {
+        match self.db() {
             Some(db) => db.is_ready().await.is_ok(),
             None => false,
         }
