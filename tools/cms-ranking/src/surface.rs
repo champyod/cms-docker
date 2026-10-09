@@ -6,12 +6,15 @@ use crate::store::Appearance;
 
 /// The licence offer plus the panel-editable text. project and license keep the
 /// names the Python /credits route used so an existing consumer still reads them.
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Credits {
     pub project: String,
     pub license: String,
     pub source_url: String,
     pub text: Option<String>,
+    /// The full asset list for the ranking surface, straight from credits.json. The
+    /// footer shows the compact line; this keeps the route itself a complete offer.
+    pub surface: serde_json::Value,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -48,11 +51,17 @@ pub fn credits_from_file(path: &Path, text: Option<String>) -> Result<Credits, S
         .and_then(serde_json::Value::as_str)
         .unwrap_or("https://github.com/champyod/cms-docker")
         .to_string();
+    let surface = parsed
+        .get("surfaces")
+        .and_then(|surfaces| surfaces.get("ranking"))
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
     Ok(Credits {
         project,
         license,
         source_url,
         text,
+        surface,
     })
 }
 
