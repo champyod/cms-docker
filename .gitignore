@@ -81,3 +81,6 @@ config/modsecurity/modsec_audit.log
 config/modsecurity/modsec_debug.log
 waf-logs/
 cms-waf-logs/
+
+# Rust build artifacts for the ranking service
+tools/cms-ranking/target/

@@ -1,0 +1,18 @@
+[package]
+name = "cms-ranking"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+sqlx = { version = "0.9", default-features = false, features = ["postgres", "runtime-tokio"] }
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+strip = true
+lto = true
