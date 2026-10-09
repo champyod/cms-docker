@@ -70,13 +70,41 @@ write_manifest() {
 # The capture is read-only with --no-seed: nothing is written to the service, which is what
 # makes it safe to run against a live deployment whose data is already the one to compare.
 SEED=1
+STDOUT_ONLY=0
 for arg in "$@"; do
     case "$arg" in
         --no-seed) SEED=0 ;;
-        -h|--help) printf 'usage: capture.sh [--no-seed] [output-dir]\n'; exit 0 ;;
+        --stdout) STDOUT_ONLY=1 ;;
+        -h|--help) printf 'usage: capture.sh [--no-seed] [--stdout] [output-dir]\n'; exit 0 ;;
         *) OUT_DIR="$arg" ;;
     esac
 done
+
+# Everything to stdout and nothing left on disk: the output is meant to be pasted back,
+# so the files exist only while this runs.
+emit_stdout() {
+    local name
+    for name in root scores history config credits logo users_list user_one; do
+        printf '
+===== %s (status + headers) =====
+' "$name"
+        cat "$OUT_DIR/$name.headers" 2>/dev/null || true
+        printf '===== %s (body) =====
+' "$name"
+        cat "$OUT_DIR/$name.body" 2>/dev/null || true
+    done
+    printf '
+===== events (first %s s) =====
+' "$EVENTS_SECONDS"
+    cat "$OUT_DIR/events.stream" 2>/dev/null || true
+    printf '
+===== manifest =====
+'
+    cat "$OUT_DIR/MANIFEST.txt" 2>/dev/null || true
+    printf '
+===== end of capture =====
+'
+}
 
 main() {
     require_command curl
@@ -95,6 +123,10 @@ main() {
     capture_body user_one /users/u0
     capture_events
     write_manifest
+    if [ "$STDOUT_ONLY" = 1 ]; then
+        emit_stdout
+        rm -rf "$OUT_DIR"
+    fi
     printf 'captured into %s\n' "${OUT_DIR}"
 }
 
