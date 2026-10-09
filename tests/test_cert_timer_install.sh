@@ -140,14 +140,80 @@ else
   no "--nope is refused"
 fi
 
+echo "a host without systemd is refused before any unit is written"
+# WHY PATH is reduced to the sandbox bin rather than the stub just being deleted: the
+# host's own systemctl sits later on the inherited PATH, and `command -v systemctl`
+# would keep finding it. Linking only the utilities the script actually shells out to
+# makes "systemd is absent" true for the run, which is the condition under test.
+# Before the guard was hoisted out of apply_units this run exited non-zero holding two
+# orphaned unit files and nothing enabled.
+dir="$(sandbox)"
+rm -f "${dir}/bin/systemctl"
+for tool in bash dirname grep mkdir mktemp mv rm id; do
+  ln -s "$(command -v "${tool}")" "${dir}/bin/${tool}"
+done
+out="$(PATH="${dir}/bin" HOME="${dir}/home" "${dir}/bin/bash" "${dir}/scripts/__cert_timer.sh" --apply 2>&1)"
+status=$?
+if [[ "${status}" -ne 0 ]] && grep -q 'systemctl not found' <<<"${out}"; then
+  ok "the missing systemctl is named and the run exits non-zero"
+else
+  no "the missing systemctl is named and the run exits non-zero (status ${status}: ${out})"
+fi
+if [[ -d "${dir}/home/.config/systemd/user" ]]; then
+  no "no unit directory is created on a host without systemd"
+else
+  ok "no unit directory is created on a host without systemd"
+fi
+
 echo "a missing source unit stops the install instead of writing half a pair"
 dir="$(sandbox)"
 rm -f "${dir}/config/systemd/grader-cert-renew.timer"
-if grep -q 'missing source unit' <<<"$(run_in "${dir}" --apply)"; then
-  ok "the missing timer is named"
+out="$(run_in "${dir}" --apply)"
+status=$?
+unit_dir="${dir}/home/.config/systemd/user"
+if [[ "${status}" -ne 0 ]] && grep -q 'missing source unit' <<<"${out}"; then
+  ok "the missing timer is named and the run exits non-zero"
 else
-  no "the missing timer is named"
+  no "the missing timer is named and the run exits non-zero (status ${status}: ${out})"
 fi
+# The name in the message was never the claim under test; writing nothing was. Before
+# the temp-file install the first unit was already in place when the second was refused.
+for unit in grader-cert-renew.service grader-cert-renew.timer; do
+  if [[ -e "${unit_dir}/${unit}" ]]; then
+    no "no unit survives a refused install (${unit} was written)"
+  else
+    ok "no unit survives a refused install (${unit})"
+  fi
+done
+if [[ -n "$(find "${dir}/home" -name '.grader-cert-renew.*' 2>/dev/null)" ]]; then
+  no "the refused install left no temp file behind"
+else
+  ok "the refused install left no temp file behind"
+fi
+
+echo "a checkout path a unit could not read literally is refused"
+# WHY these five characters: `'` closes the quoted ExecStart command, `$` and `\` reach
+# the shell that `bash -c` hands the path to, `%` is a systemd specifier in
+# WorkingDirectory=, and a newline ends the directive. Each one changes what the timer
+# runs without failing at install time.
+for bad_char in "'" '%' '$' '\' $'\n'; do
+  dir="$(sandbox)"
+  unsafe="${dir}we${bad_char}ird"
+  mv "${dir}" "${unsafe}"
+  SANDBOXES=("${SANDBOXES[@]:0:${#SANDBOXES[@]}-1}" "${unsafe}")
+  out="$(run_in "${unsafe}" --apply)"
+  status=$?
+  if [[ "${status}" -ne 0 ]] && grep -q 'would not read literally' <<<"${out}"; then
+    ok "a path carrying $(printf '%q' "${bad_char}") is refused"
+  else
+    no "a path carrying $(printf '%q' "${bad_char}") is refused (status ${status}: ${out})"
+  fi
+  if [[ -d "${unsafe}/home/.config/systemd/user" ]]; then
+    no "a refused path wrote no unit directory"
+  else
+    ok "a refused path wrote no unit directory"
+  fi
+done
 
 # WHY the argv path is asserted against the CLI source rather than by running ./cms:
 # ./cms execs the vendored binary under .tools/, which is only rebuilt as its own step,
@@ -164,6 +230,28 @@ if grep -q -- '--install-timer' "${REPO_ROOT}/scripts/__domain.sh"; then
   no "__domain.sh still has no --install-timer option"
 else
   ok "__domain.sh still has no --install-timer option"
+fi
+
+# WHY proxy is checked here and not left to the Rust suite alone: the refusal is a clap
+# payload decision, so it has to be visible in the same place the rest of this suite
+# reads the CLI. `Proxy` carrying its own args type is what makes clap reject the flag.
+CLI_MOD_RS="${REPO_ROOT}/tools/cms-tui/src/cli/mod.rs"
+if grep -q 'Proxy(Box<DomainProxyArgs>)' "${CLI_MOD_RS}"; then
+  ok "proxy carries a payload without the timer flag"
+else
+  no "proxy carries a payload without the timer flag"
+fi
+if grep -q 'DomainCmd::Cert(args) => args.timer.install_timer' "${RESOLVE_RS}"; then
+  ok "cert --install-timer routes to the timer install"
+else
+  no "cert --install-timer routes to the timer install"
+fi
+
+echo "the timer unit name is written once"
+if [[ "$(grep -c "grader-cert-renew.timer'" "${CERT_TIMER}")" -eq 1 ]]; then
+  ok "the timer unit name appears exactly once in the script"
+else
+  no "the timer unit name appears exactly once in the script"
 fi
 
 printf '\n%s passed, %s failed\n' "${pass}" "${fail}"

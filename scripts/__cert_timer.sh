@@ -22,7 +22,10 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 DRY_RUN=1
 readonly PLACEHOLDER='@CMS_DIR@'
 readonly TIMER_UNIT='grader-cert-renew.timer'
-readonly UNITS=('grader-cert-renew.service' 'grader-cert-renew.timer')
+# WHY derived rather than written out: the timer name is the one place this script
+# decides what the unit is called. Spelling the pair again here meant a rename could
+# leave `systemctl --user enable --now` pointing at a unit this script never wrote.
+readonly UNITS=("grader-cert-renew.service" "${TIMER_UNIT}")
 
 usage() {
   printf 'usage: %s [--dry-run|--apply]\n' "${0##*/}"
@@ -39,12 +42,27 @@ repo_root() {
   local dir="${SCRIPT_DIR}"
   while [[ "${dir}" != '/' ]]; do
     if [[ -f "${dir}/Makefile" && -x "${dir}/cms" ]]; then
+      validate_checkout_path "${dir}"
       printf '%s' "${dir}"
       return 0
     fi
     dir="$(dirname -- "${dir}")"
   done
   log_die "no ancestor of ${SCRIPT_DIR} holds both Makefile and cms — run this from a CMS checkout"
+}
+
+# WHY validated once here rather than escaped on the way into the unit: the checkout
+# reaches two parsers this script does not own — single-quoted inside ExecStart's
+# `bash -c`, and bare in WorkingDirectory= where systemd expands `%` specifiers. A
+# path carrying any of these characters silently changes what the timer runs, and the
+# failure surfaces at fire time, not here. Refusing up front keeps the escaping
+# decision in one place rather than teaching render_unit two grammars.
+validate_checkout_path() {
+  local path="$1"
+  if [[ "${path}" == *"'"* || "${path}" == *'%'* || "${path}" == *'$'* \
+     || "${path}" == *'\'* || "${path}" == *$'\n'* ]]; then
+    log_die "checkout path carries a character a systemd unit would not read literally: ${path}"
+  fi
 }
 
 # render_unit <source_unit> <dest> <checkout>
@@ -61,8 +79,25 @@ render_unit() {
   done < "${source_unit}"
 }
 
+# Pending renders, and their destinations, kept until every unit has rendered.
+TMP_UNITS=()
+declare -a TMP_DESTS=()
+
+# WHY a trap rather than a cleanup call: the path being defended is a `log_die` on the
+# second unit, which exits before any call site would reach a hand-written cleanup.
+cleanup() {
+  [[ "${#TMP_UNITS[@]}" -gt 0 ]] && rm -f "${TMP_UNITS[@]}"
+  return 0
+}
+trap cleanup EXIT
+
+# WHY each unit renders into a temp file and only then moves into place: writing the
+# destination directly meant an interrupted run left a truncated unit, and the pair was
+# installed one member at a time, so a failure on the second left the first in place and
+# systemd reloading a half-installed pair. Rendering every unit first and moving only
+# once all of them are valid makes the install all-or-nothing.
 install_units() {
-  local repo="$1" dest_dir="$2" unit source_unit dest
+  local repo="$1" dest_dir="$2" unit source_unit dest index
   for unit in "${UNITS[@]}"; do
     source_unit="${repo}/config/systemd/${unit}"
     [[ -f "${source_unit}" ]] || log_die "missing source unit: ${source_unit}"
@@ -72,15 +107,30 @@ install_units() {
       continue
     fi
     mkdir -p "${dest_dir}"
-    render_unit "${source_unit}" "${dest}" "${repo}"
+    TMP_UNITS+=("$(mktemp "${dest_dir}/.grader-cert-renew.XXXXXX")")
+    render_unit "${source_unit}" "${TMP_UNITS[-1]}" "${repo}"
     # WHY re-reading the file rather than trusting the substitution: a unit whose
     # placeholder sits somewhere this pass does not reach installs as a unit
     # systemd refuses to parse, which fails far from this script.
-    if grep -q "${PLACEHOLDER}" "${dest}"; then
+    if grep -q "${PLACEHOLDER}" "${TMP_UNITS[-1]}"; then
       log_die "${dest} still carries ${PLACEHOLDER} after substitution"
     fi
-    log_info "wrote ${dest}"
+    TMP_DESTS+=("${dest}")
   done
+
+  if [[ "${DRY_RUN}" -eq 1 ]]; then
+    return 0
+  fi
+
+  index=0
+  for unit in "${UNITS[@]}"; do
+    mv -f "${TMP_UNITS[index]}" "${TMP_DESTS[index]}"
+    log_info "wrote ${TMP_DESTS[index]}"
+    TMP_UNITS[index]=''
+    index=$((index + 1))
+  done
+  TMP_UNITS=()
+  TMP_DESTS=()
 }
 
 apply_units() {
@@ -91,8 +141,6 @@ apply_units() {
     return 0
   fi
 
-  command -v systemctl >/dev/null 2>&1 \
-    || log_die "systemctl not found — these are systemd user units and cannot be installed without it"
   systemctl --user daemon-reload
   systemctl --user enable --now "${TIMER_UNIT}"
 
@@ -118,6 +166,15 @@ main() {
       *)         log_die "unknown option: $1" 2 ;;
     esac
   done
+
+  # WHY the systemctl precondition is here and not inside apply_units: apply_units runs
+  # after install_units has already written both units, so a host without systemd exited
+  # non-zero holding two orphaned files and nothing enabled. Every precondition is
+  # established before the first side effect.
+  if [[ "${DRY_RUN}" -eq 0 ]]; then
+    command -v systemctl >/dev/null 2>&1 \
+      || log_die "systemctl not found — these are systemd user units and cannot be installed without it"
+  fi
 
   repo="$(repo_root)"
   dest_dir="${HOME}/.config/systemd/user"
