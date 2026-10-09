@@ -87,8 +87,8 @@ describe('applyConfigTomlUpdates', () => {
 
 describe('extractConfigTomlValues', () => {
   it('reports an absent key as empty', () => {
-    expect(extractConfigTomlValues(TOML, [{ section: 'core', key: 'RANKING_USERNAME' }])).toEqual({
-      RANKING_USERNAME: '',
+    expect(extractConfigTomlValues(TOML, [{ section: 'admin', key: 'RANKING_SESSION_SECRET' }])).toEqual({
+      RANKING_SESSION_SECRET: '',
     });
   });
 

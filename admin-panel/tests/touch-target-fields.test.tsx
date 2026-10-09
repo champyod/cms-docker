@@ -29,7 +29,7 @@ describe('raw form field touch targets', () => {
   it('gives all appearance branding inputs a 44px touch target', () => {
     const markup = renderToStaticMarkup(<AppearanceClient />);
 
-    expect(getInputTouchHeightCount(markup)).toBe(3);
+    expect(getInputTouchHeightCount(markup)).toBe(1);
   });
 
   it('gives each environment settings input a 44px touch target', () => {

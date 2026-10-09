@@ -22,8 +22,6 @@ const TABS: { key: TabKey; label: string }[] = [
 
 interface BrandingFields {
   rankingLogoPath: string;
-  rankingUsername: string;
-  rankingPassword: string;
 }
 
 const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
@@ -82,23 +80,6 @@ function BrandingTab({
               className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
             />
           </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">RANKING_USERNAME</span>
-            <input
-              value={branding.rankingUsername}
-              onChange={(e) => onFieldChange('rankingUsername', e.target.value)}
-              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">RANKING_PASSWORD</span>
-            <input
-              value={branding.rankingPassword}
-              onChange={(e) => onFieldChange('rankingPassword', e.target.value)}
-              type="password"
-              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
-            />
-          </label>
         </div>
       </Card>
     </div>
@@ -132,7 +113,7 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
 export function AppearanceClient(): React.JSX.Element {
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
-  const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
+  const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '' });
   const [saving, setSaving] = useState(false);
   const [logoPreview] = useState<string>(() => `/api/ranking/logo?ts=${Date.now()}`);
 
@@ -145,8 +126,6 @@ export function AppearanceClient(): React.JSX.Element {
         setValues(result.values);
         setBranding({
           rankingLogoPath: (result.values['RANKING_LOGO_PATH'] ?? '').replace(/^"|"$/g, ''),
-          rankingUsername: (result.values['RANKING_USERNAME'] ?? '').replace(/^"|"$/g, ''),
-          rankingPassword: (result.values['RANKING_PASSWORD'] ?? '').replace(/^"|"$/g, ''),
         });
       }
     }
@@ -165,8 +144,6 @@ export function AppearanceClient(): React.JSX.Element {
     try {
       const updates: Record<string, string> = {};
       updates['RANKING_LOGO_PATH'] = `"${branding.rankingLogoPath}"`;
-      updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
-      updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
       const result = await updateConfigToml(updates);
       if (result.success) {
         toast.success('Saved', { description: 'config.toml updated. Run config sync to apply.' });

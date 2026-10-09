@@ -73,8 +73,8 @@ async function updateConfigToml(ext: string | null): Promise<void> {
 
   if (/^\s*RANKING_LOGO_PATH\s*=.*$/m.test(content)) {
     content = content.replace(/^\s*RANKING_LOGO_PATH\s*=.*$/m, newLine);
-  } else if (/^\s*RANKING_PASSWORD\s*=.*$/m.test(content)) {
-    content = content.replace(/^\s*RANKING_PASSWORD\s*=.*$/m, (match) => `${match}\n${newLine}`);
+  } else if (/^\s*RANKING_SESSION_SECRET\s*=.*$/m.test(content)) {
+    content = content.replace(/^\s*RANKING_SESSION_SECRET\s*=.*$/m, (match) => `${match}\n${newLine}`);
   } else {
     content = `${content.trimEnd()}\n${newLine}\n`;
   }

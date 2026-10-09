@@ -48,14 +48,6 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
     filename: CONFIG_TOML_FILE,
     fields: [
       { key: 'ADMIN_LISTEN_PORT', tomlSection: 'admin', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
-    ]
-  },
-  {
-    title: 'Ranking Settings',
-    filename: CONFIG_TOML_FILE,
-    fields: [
-      { key: 'RANKING_USERNAME', tomlSection: 'admin', label: 'Ranking Username', description: 'Auth for scoreboard.' },
-      { key: 'RANKING_PASSWORD', tomlSection: 'admin', label: 'Ranking Password', description: 'Auth for scoreboard.' },
       { key: 'ADMIN_COOKIE_DURATION', tomlSection: 'admin', label: 'Admin Session', description: 'Admin panel session length.' },
     ]
   }
