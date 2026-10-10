@@ -473,16 +473,7 @@ services:
       # default no matter what the operator configures.
       MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
 
-      # Backup destinations the panel offers, and the one preselected. Both were read from
-      # process.env by the panel with nothing putting them in the container, so every
-      # deployment saw the single implicit default no matter what was configured. Empty
-      # means "the one implicit location", which is what the panel already falls back to.
-      BACKUP_LOCATIONS: ${BACKUP_LOCATIONS:-}
-      BACKUP_DEFAULT_LOCATION: ${BACKUP_DEFAULT_LOCATION:-}
-      # WHY the same value the monitor gets: the panel already reads BACKUP_DIR as the
-      # fallback when BACKUP_LOCATIONS is empty, and it is given the identical mount so
-      # one configured path means one directory in both containers rather than two
-      # spellings of the same host folder that can drift apart.
+      # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
       BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
 
       # WHY the panel receives these: discord-webhook.ts reads them for the alerts the
