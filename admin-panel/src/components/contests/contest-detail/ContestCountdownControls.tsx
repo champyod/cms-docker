@@ -2,7 +2,7 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeftIcon, EarthIcon, MaximizeIcon, MinimizeIcon, type EarthIconHandle } from 'lucide-animated';
+import { ArrowLeftIcon, EarthIcon, MaximizeIcon, MinimizeIcon, PauseIcon, PlayIcon, type EarthIconHandle } from 'lucide-animated';
 import {
   COUNTDOWN_THRESHOLD_UNITS,
   listTimezones,
@@ -208,9 +208,11 @@ interface ToolbarProps {
   onTimezoneChange: (timeZone: string) => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  isPaused: boolean;
+  onTogglePaused: () => void;
 }
 
-/** Page chrome: leave, warn window, zone, full screen. */
+/** Page chrome: leave, warn window, zone, motion, full screen. */
 export const CountdownToolbar = memo(function CountdownToolbar({
   onBack,
   threshold,
@@ -219,6 +221,8 @@ export const CountdownToolbar = memo(function CountdownToolbar({
   onTimezoneChange,
   isFullscreen,
   onToggleFullscreen,
+  isPaused,
+  onTogglePaused,
 }: ToolbarProps): React.JSX.Element {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -228,6 +232,9 @@ export const CountdownToolbar = memo(function CountdownToolbar({
       <div className="flex flex-wrap items-center justify-end gap-2">
         <CountdownThresholdField threshold={threshold} onChange={onThresholdChange} />
         <ContestCountdownTimezoneMenu value={timezone} onChange={onTimezoneChange} />
+        <CountdownIconButton label={isPaused ? 'Resume motion' : 'Pause motion'} onClick={onTogglePaused}>
+          {isPaused ? <PlayIcon size={18} animateOnHover /> : <PauseIcon size={18} animateOnHover />}
+        </CountdownIconButton>
         <CountdownIconButton label={isFullscreen ? 'Exit full screen' : 'Full screen'} onClick={onToggleFullscreen}>
           {isFullscreen ? <MinimizeIcon size={18} animateOnHover /> : <MaximizeIcon size={18} animateOnHover />}
         </CountdownIconButton>

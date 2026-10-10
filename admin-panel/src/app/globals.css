@@ -1,6 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* The panic at the threshold is animate.css's own shakeX, driven through the
+   library's animated/infinite classes. Its _base.css also carries the
+   reduced-motion handling the shake needs, so a reader who asked for stillness
+   gets a still timer. */
+@import "animate.css/source/_vars.css";
+@import "animate.css/source/_base.css";
+@import "animate.css/source/attention_seekers/shakeX.css";
+
 @custom-variant dark (&:is(.dark *));
 @custom-variant density (&:where(.density-compact, .density-compact *));
 @custom-variant high-contrast (&:where(.high-contrast, .high-contrast *));
@@ -434,6 +442,16 @@
   font-weight: 700;
   letter-spacing: 0.32em;
   text-transform: uppercase;
+}
+
+/* The panic target. animate.css's shakeX owns the transform in its keyframes, so
+   nothing else may animate this element's transform while it runs. */
+.countdown-clock-panic {
+  animation-duration: var(--animate-duration);
+}
+
+.countdown-clock-panic.shakeX {
+  transform-origin: 50% 50%;
 }
 
 /* Sizes track the viewport so the ask scales with the surface, like the digits. */

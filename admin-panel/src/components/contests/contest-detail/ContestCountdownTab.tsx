@@ -2,6 +2,7 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils';
 import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
   DEFAULT_COUNTDOWN_THRESHOLD,
@@ -20,12 +21,23 @@ import { ContestCountdownClock } from './ContestCountdownClock';
 import { CountdownToolbar } from './ContestCountdownControls';
 import { ContestCountdownRunner } from './ContestCountdownRunner';
 import {
+  useContestMotion,
   useCountdownThreshold,
   useCountdownTiming,
   useCountdownTimezone,
   useElementFullscreen,
   usePhaseNotifications,
 } from './useContestCountdown';
+import {
+  DEFAULT_CONTEST_PANIC_CONFIG,
+  panicClassNames,
+  shouldPanic,
+} from '@/lib/contest-panic';
+
+/** The panic pace as a custom property, so animate.css's own base rule reads it. */
+function panicStyle(): React.CSSProperties & Record<'--animate-duration', string> {
+  return { '--animate-duration': `${DEFAULT_CONTEST_PANIC_CONFIG.durationSeconds}s` };
+}
 
 const DEFAULT_HURRY_MS = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
 
@@ -50,12 +62,14 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
   const { timezone, setTimezone } = useCountdownTimezone();
   const { threshold, setThreshold } = useCountdownThreshold();
   const { isFullscreen, toggle: toggleFullscreen } = useElementFullscreen(surfaceRef);
+  const { isPaused, togglePaused } = useContestMotion();
 
   const phase = resolveContestPhase(timing, now);
   const target = countdownTarget(timing, phase);
   const remainingMs = target ? target.getTime() - now.getTime() : null;
   const windowMs = countdownPhaseWindowMs(timing, phase, DEFAULT_HURRY_MS);
   const stage = resolveCountdownStage(phase, remainingMs, resolveHurryThresholdMs(threshold, windowMs));
+  const isPanicking = shouldPanic(stage, isPaused);
   usePhaseNotifications(timing.name, phase);
 
   const goBack = useCallback((): void => router.back(), [router]);
@@ -84,11 +98,15 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
           onTimezoneChange={setTimezone}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          isPaused={isPaused}
+          onTogglePaused={togglePaused}
         />
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
-        <ContestCountdownClock remainingMs={remainingMs} />
+        <div className={cn('countdown-clock-panic', ...panicClassNames(isPanicking))} style={panicStyle()}>
+          <ContestCountdownClock remainingMs={remainingMs} />
+        </div>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
           <span className="text-sm text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>
