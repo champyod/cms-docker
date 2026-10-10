@@ -5,6 +5,8 @@ import {
   COUNTDOWN_MIN_FONT_PX,
   DEFAULT_COUNTDOWN_THRESHOLD,
   DEFAULT_COUNTDOWN_TIMEZONE,
+  RUNNER_MAX_SPEED_PX_PER_SECOND,
+  RUNNER_MIN_SPEED_PX_PER_SECOND,
   countdownPhaseWindowMs,
   countdownTarget,
   fitCountdownFontPx,
@@ -14,6 +16,7 @@ import {
   resolveContestPhase,
   resolveCountdownStage,
   resolveHurryThresholdMs,
+  resolveRunnerSpeedPxPerSecond,
   toCountdownSegments,
   zoneOffsetLabel,
   zoneOffsetMap,
@@ -209,6 +212,29 @@ describe('resolveCountdownStage', () => {
   it('stays calm when there is no target to run out', () => {
     expect(resolveCountdownStage('not_started', null, HURRY_MS)).toBe('waiting');
     expect(resolveCountdownStage('running', null, HURRY_MS)).toBe('running');
+  });
+});
+
+describe('resolveRunnerSpeedPxPerSecond', () => {
+  const WINDOW = 3_600_000;
+
+  it('runs at its slowest when the full window remains', () => {
+    expect(resolveRunnerSpeedPxPerSecond(WINDOW, WINDOW)).toBe(RUNNER_MIN_SPEED_PX_PER_SECOND);
+  });
+
+  it('reaches its top speed as the target arrives', () => {
+    expect(resolveRunnerSpeedPxPerSecond(0, WINDOW)).toBe(RUNNER_MAX_SPEED_PX_PER_SECOND);
+  });
+
+  it('accelerates as the remaining time falls', () => {
+    const early = resolveRunnerSpeedPxPerSecond(WINDOW * 0.75, WINDOW);
+    const late = resolveRunnerSpeedPxPerSecond(WINDOW * 0.25, WINDOW);
+    expect(late).toBeGreaterThan(early);
+  });
+
+  it('ignores the window and stays slow when there is no target', () => {
+    expect(resolveRunnerSpeedPxPerSecond(null, WINDOW)).toBe(RUNNER_MIN_SPEED_PX_PER_SECOND);
+    expect(resolveRunnerSpeedPxPerSecond(1000, 0)).toBe(RUNNER_MIN_SPEED_PX_PER_SECOND);
   });
 });
 

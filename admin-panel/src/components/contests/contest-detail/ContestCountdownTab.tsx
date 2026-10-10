@@ -12,11 +12,13 @@ import {
   resolveContestPhase,
   resolveCountdownStage,
   resolveHurryThresholdMs,
+  resolveRunnerSpeedPxPerSecond,
   type ContestPhase,
   type ContestTimingWindow,
 } from '@/lib/contest-countdown';
 import { ContestCountdownClock } from './ContestCountdownClock';
 import { CountdownToolbar } from './ContestCountdownControls';
+import { ContestCountdownRunner } from './ContestCountdownRunner';
 import {
   useCountdownThreshold,
   useCountdownTiming,
@@ -62,6 +64,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
     <div
       ref={surfaceRef}
       data-stage={stage}
+      data-phase={phase}
       className="countdown-surface relative isolate flex min-h-[62vh] flex-col gap-6 overflow-hidden"
     >
       <div aria-hidden className="countdown-backdrop">
@@ -70,7 +73,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
         <span className="countdown-blob" />
       </div>
       {stage === 'hurry' ? <div aria-hidden className="countdown-warning" /> : null}
-      <div aria-hidden className="countdown-runner" />
+      <ContestCountdownRunner speedPxPerSecond={resolveRunnerSpeedPxPerSecond(remainingMs, windowMs)} />
 
       <div className="relative z-10">
         <CountdownToolbar

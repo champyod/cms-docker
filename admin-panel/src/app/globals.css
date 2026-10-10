@@ -327,52 +327,78 @@
   }
 }
 
-/* A small comet lapping the frame: it sits on the perimeter, so it is half over the edge at
-   every point and slips past the corners before coming back round the other side. Percent
-   left/top keep the lap relative to the surface; one 3vmin element is not worth a
-   compositor trick that would need the surface size measured in JS. */
+/* A stickman runs a random edge to a random edge for as long as something counts
+   down. The field is clipped by the surface, so every leg starts and ends half
+   over the edge, and the limbs beat faster as the pace quickens. */
+.countdown-runner-field {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+
+.countdown-surface[data-phase='not_started'] .countdown-runner-field,
+.countdown-surface[data-phase='running'] .countdown-runner-field {
+  opacity: 1;
+}
+
+/* Negative margins centre the figure on its point; only the transform moves it. */
 .countdown-runner {
   position: absolute;
-  z-index: 0;
-  width: 3vmin;
-  height: 3vmin;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: hsl(var(--countdown-hue) 92% 64%);
-  box-shadow: 0 0 2.4vmin 0.5vmin hsl(var(--countdown-hue) 92% 56% / 0.45);
-  opacity: var(--countdown-backdrop-opacity);
-  transition: opacity 420ms ease;
-  pointer-events: none;
+  top: 0;
+  left: 0;
+  width: 7vmin;
+  margin-top: -3.5vmin;
+  margin-left: -3.5vmin;
+  will-change: transform;
 }
 
-.countdown-surface[data-stage='waiting'] .countdown-runner {
-  animation: countdown-lap 15s linear infinite;
+.countdown-stickman {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  fill: none;
+  stroke: hsl(var(--countdown-hue) 92% 72%);
+  stroke-width: 3.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 0.7vmin hsl(var(--countdown-hue) 92% 58% / 0.55));
 }
 
-.countdown-surface[data-stage='hurry'] .countdown-runner {
-  animation: countdown-lap 5.5s linear infinite;
+.countdown-limb {
+  transform-box: fill-box;
+  transform-origin: 50% 0%;
 }
 
-@keyframes countdown-lap {
-  0% {
-    top: 100%;
-    left: 0%;
-  }
-  25% {
-    top: 100%;
-    left: 100%;
+.countdown-limb-a {
+  animation: countdown-stride var(--countdown-stride, 0.5s) ease-in-out infinite;
+}
+
+.countdown-limb-b {
+  animation: countdown-stride-alt var(--countdown-stride, 0.5s) ease-in-out infinite;
+}
+
+@keyframes countdown-stride {
+  0%,
+  100% {
+    transform: rotate(26deg);
   }
   50% {
-    top: 0%;
-    left: 100%;
+    transform: rotate(-26deg);
   }
-  75% {
-    top: 0%;
-    left: 0%;
-  }
+}
+
+@keyframes countdown-stride-alt {
+  0%,
   100% {
-    top: 100%;
-    left: 0%;
+    transform: rotate(-26deg);
+  }
+  50% {
+    transform: rotate(26deg);
   }
 }
 

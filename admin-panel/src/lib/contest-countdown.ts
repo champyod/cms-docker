@@ -79,6 +79,31 @@ export function resolveCountdownStage(phase: ContestPhase, remainingMs: number |
   return isHurrying ? 'hurry' : 'waiting';
 }
 
+export const RUNNER_MIN_SPEED_PX_PER_SECOND = 110;
+export const RUNNER_MAX_SPEED_PX_PER_SECOND = 640;
+
+/**
+ * Pace for the running figure: the fuller the window, the slower it moves, and it reaches its
+ * top speed as the target arrives. Scaled by the window alone, so the hurry threshold never
+ * touches it.
+ */
+export function resolveRunnerSpeedPxPerSecond(remainingMs: number | null, windowMs: number): number {
+  if (remainingMs === null || windowMs <= 0) return RUNNER_MIN_SPEED_PX_PER_SECOND;
+  const fullness = Math.min(1, Math.max(0, remainingMs / windowMs));
+  const range = RUNNER_MAX_SPEED_PX_PER_SECOND - RUNNER_MIN_SPEED_PX_PER_SECOND;
+  return RUNNER_MIN_SPEED_PX_PER_SECOND + range * (1 - fullness);
+}
+
+export const RUNNER_STRIDE_SLOW_SECONDS = 0.8;
+export const RUNNER_STRIDE_FAST_SECONDS = 0.26;
+
+/** Limb beat for the runner: quicker as the pace quickens, so a fast run does not read as sliding. */
+export function resolveRunnerStrideSeconds(speedPxPerSecond: number): number {
+  const range = RUNNER_MAX_SPEED_PX_PER_SECOND - RUNNER_MIN_SPEED_PX_PER_SECOND;
+  const progress = Math.min(1, Math.max(0, (speedPxPerSecond - RUNNER_MIN_SPEED_PX_PER_SECOND) / range));
+  return RUNNER_STRIDE_SLOW_SECONDS + (RUNNER_STRIDE_FAST_SECONDS - RUNNER_STRIDE_SLOW_SECONDS) * progress;
+}
+
 // Only reached by a runtime that predates Intl.supportedValuesOf.
 const FALLBACK_TIMEZONES: readonly string[] = [
   'UTC',
