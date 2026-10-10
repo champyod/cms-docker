@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -14,6 +14,20 @@ export interface UserCapabilities {
   readonly canManage: boolean;
   readonly canDelete: boolean;
 }
+
+interface UserDialogsState {
+  readonly isOpen: boolean;
+  readonly isBulkCreateOpen: boolean;
+  readonly isBulkEditOpen: boolean;
+  readonly selectedUser: UsersPageRow | null;
+}
+
+const CLOSED_DIALOGS: UserDialogsState = {
+  isOpen: false,
+  isBulkCreateOpen: false,
+  isBulkEditOpen: false,
+  selectedUser: null,
+};
 
 export interface UserDialogs {
   readonly isOpen: boolean;
@@ -38,22 +52,68 @@ export function useUserCapabilities(permissionKeys: readonly string[]): UserCapa
   };
 }
 
-// Why the dialog state is its own hook: the three dialogs are opened by
-// unrelated controls, so their open/close pairs do not belong to the data hook.
+// Why a module handle, exactly like the refresh handle: the create and edit
+// dialogs are opened by the table's rows in one client tree and by the page
+// header's buttons in another, so neither can own the state the other opens.
+// One handle serves both, and every consumer reads the same flags.
+let dialogsState: UserDialogsState = CLOSED_DIALOGS;
+const dialogListeners = new Set<() => void>();
+
+function setDialogsState(next: UserDialogsState): void {
+  dialogsState = next;
+  dialogListeners.forEach((listener) => listener());
+}
+
+function subscribeDialogs(listener: () => void): () => void {
+  dialogListeners.add(listener);
+  return (): void => {
+    dialogListeners.delete(listener);
+  };
+}
+
 export function useUserDialogs(): UserDialogs {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isBulkCreateOpen, setIsBulkCreateOpen] = useState(false);
-  const [isBulkEditOpen, setIsBulkEditOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<UsersPageRow | null>(null);
+  const state = useSyncExternalStore(subscribeDialogs, () => dialogsState);
+
+  const openCreate = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS, isOpen: true });
+  }, []);
+
+  const openEdit = useCallback((user: UsersPageRow): void => {
+    setDialogsState({ ...CLOSED_DIALOGS, isOpen: true, selectedUser: user });
+  }, []);
+
+  const close = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS, isBulkCreateOpen: dialogsState.isBulkCreateOpen, isBulkEditOpen: dialogsState.isBulkEditOpen });
+  }, []);
+
+  const openBulkCreate = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS, isBulkCreateOpen: true });
+  }, []);
+
+  const closeBulkCreate = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS });
+  }, []);
+
+  const openBulkEdit = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS, isBulkEditOpen: true });
+  }, []);
+
+  const closeBulkEdit = useCallback((): void => {
+    setDialogsState({ ...CLOSED_DIALOGS });
+  }, []);
+
   return {
-    isOpen, isBulkCreateOpen, isBulkEditOpen, selectedUser,
-    openCreate: () => { setSelectedUser(null); setIsOpen(true); },
-    openEdit: (user: UsersPageRow) => { setSelectedUser(user); setIsOpen(true); },
-    close: () => { setIsOpen(false); setSelectedUser(null); },
-    openBulkCreate: () => { setIsBulkCreateOpen(true); },
-    closeBulkCreate: () => { setIsBulkCreateOpen(false); },
-    openBulkEdit: () => { setIsBulkEditOpen(true); },
-    closeBulkEdit: () => { setIsBulkEditOpen(false); },
+    isOpen: state.isOpen,
+    isBulkCreateOpen: state.isBulkCreateOpen,
+    isBulkEditOpen: state.isBulkEditOpen,
+    selectedUser: state.selectedUser,
+    openCreate,
+    openEdit,
+    close,
+    openBulkCreate,
+    closeBulkCreate,
+    openBulkEdit,
+    closeBulkEdit,
   };
 }
 
