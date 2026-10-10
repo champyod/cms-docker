@@ -45,7 +45,7 @@ export interface DueScheduleRow {
   readonly intervalMins: number;
   readonly enabled: boolean;
   readonly nextRunAt: Date;
-  /** Config location id; null targets the configured default, as every pre-location row does. */
+  /** Config location id; null targets the system row, as every pre-location row does. */
   readonly locationId: string | null;
 }
 
@@ -113,8 +113,8 @@ export interface ScheduleLauncher {
 export interface SchedulerDeps {
   readonly store: SchedulerStore;
   readonly launcher: ScheduleLauncher;
-  /** Resolves where a due schedule writes; injected so config env stays out of this module. */
-  readonly resolveWriteRoot: (locationId: string | null) => WriteRootResolution;
+  /** Resolves where a due schedule writes; injected so this module holds no Prisma import. */
+  readonly resolveWriteRoot: (locationId: string | null) => Promise<WriteRootResolution>;
   readonly shouldStop: () => boolean;
 }
 
@@ -314,7 +314,7 @@ async function launchSchedule(schedule: DueScheduleRow, argv: BackupArgvResult, 
  * rather than silently redirected to the default tree.
  */
 export async function fireSchedule(schedule: DueScheduleRow, now: Date, deps: SchedulerDeps): Promise<void> {
-  const writeRoot = deps.resolveWriteRoot(schedule.locationId);
+  const writeRoot = await deps.resolveWriteRoot(schedule.locationId);
   if (!writeRoot.ok) {
     await rejectSchedule(schedule, { valid: false, tables: [], args: [], error: writeRoot.error }, now, deps);
     return;

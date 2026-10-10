@@ -2,11 +2,14 @@ import path from 'node:path';
 
 import { getBackupRoot } from '@/lib/backup-archives';
 import { getRepoRoot } from '@/lib/repo-root';
+import { prisma } from '@/lib/prisma';
 
 /**
- * A named backup target the Backup & Restore page switches between. `path` is
- * the configured string, unresolved: a relative one points at the legacy tree,
- * which is the only directory both containers see under one name.
+ * A named archive tree the Backup & Restore page offers. Locations are
+ * rows now, so a schedule's reference is a real FK. `path` is the
+ * configured string, unresolved: the system row carries an empty one
+ * because the tree it names is whatever BACKUP_DIR mounts, not a
+ * configured path.
  */
 export interface BackupLocation {
   readonly id: string;
@@ -20,123 +23,100 @@ export type ReadRootResolution =
 
 /**
  * A resolved write root. `root: null` means "write with the monitor's own
- * BACKUP_DIR and pass no --root flag": the legacy single-tree contract that
- * every pre-locations deployment and every relative path relies on.
+ * BACKUP_DIR and pass no --root flag": the contract every relative path
+ * and the system row rely on, because the monitor knows that tree under
+ * its own mount (/app/backups).
  */
 export type WriteRootResolution =
   | { readonly ok: true; readonly root: string | null }
   | { readonly ok: false; readonly error: string };
-
-const DEFAULT_LOCATION_ID = 'default';
-const DEFAULT_LOCATION_LABEL = 'Primary volume';
-const LOCATION_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const MAX_LOCATIONS = 16;
-
-/** The location the switcher and new schedules preselect. */
-export function getDefaultLocationId(): string {
-  const configured = process.env.BACKUP_DEFAULT_LOCATION?.trim();
-  return configured !== undefined && configured.length > 0 ? configured : DEFAULT_LOCATION_ID;
-}
-
-function parseLocationEntry(entry: unknown): BackupLocation | null {
-  if (typeof entry !== 'object' || entry === null) return null;
-  const { id, label, path: rawPath } = entry as { id?: unknown; label?: unknown; path?: unknown };
-  if (typeof id !== 'string' || !LOCATION_ID_PATTERN.test(id)) return null;
-  if (typeof label !== 'string' || label.trim().length === 0) return null;
-  if (typeof rawPath !== 'string' || rawPath.trim().length === 0) return null;
-  return { id, label: label.trim(), path: rawPath.trim() };
-}
 
 function isLegacyTreePath(configuredPath: string): boolean {
   return path.resolve(getRepoRoot(), configuredPath) === getBackupRoot();
 }
 
 /**
- * Returns null on ANY violation so the caller falls back to the single
- * implicit location rather than operating on a partial list where one entry
- * writes somewhere another entry cannot read.
+ * The archive tree a location's configured path names, or null when the
+ * path names no tree both containers see. The system row's empty path is
+ * the legacy tree. A relative path is admitted only in the one spelling
+ * both containers share — the panel resolves it against the repo root,
+ * the monitor against its own mount — because any other relative path
+ * would point the two at different trees.
  */
-export function parseBackupLocations(raw: string): readonly BackupLocation[] | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > MAX_LOCATIONS) return null;
-  const seenIds = new Set<string>();
-  const locations: BackupLocation[] = [];
-  for (const entry of parsed) {
-    const location = parseLocationEntry(entry);
-    if (location === null || seenIds.has(location.id)) return null;
-    seenIds.add(location.id);
-    locations.push(location);
-  }
-  const hasInvalidRelativePath = locations.some(
-    (location) => !path.isAbsolute(location.path) && !isLegacyTreePath(location.path),
-  );
-  return hasInvalidRelativePath ? null : locations;
+function resolveConfiguredPath(locationPath: string): string | null {
+  if (locationPath.length === 0) return getBackupRoot();
+  if (path.isAbsolute(locationPath)) return path.resolve(locationPath);
+  return isLegacyTreePath(locationPath) ? getBackupRoot() : null;
 }
 
-/** The configured location list, read from env per call; invalid or absent env yields the single implicit default location. */
-export function listBackupLocations(): readonly BackupLocation[] {
-  const raw = process.env.BACKUP_LOCATIONS?.trim();
-  if (raw !== undefined && raw.length > 0) {
-    const parsed = parseBackupLocations(raw);
-    if (parsed !== null) return parsed;
-  }
-  return [{ id: DEFAULT_LOCATION_ID, label: DEFAULT_LOCATION_LABEL, path: getBackupRoot() }];
+function toLocation(row: { id: string; label: string; path: string }): BackupLocation {
+  return { id: row.id, label: row.label, path: row.path };
 }
 
-/** The configured default when the list carries it, otherwise the first entry's id — never an id the list lacks. */
-export function resolveDefaultLocationId(locations: readonly BackupLocation[]): string {
-  const preferred = getDefaultLocationId();
-  if (locations.some((location) => location.id === preferred)) return preferred;
-  return locations[0]?.id ?? DEFAULT_LOCATION_ID;
+/** Every location row, the system row first, so a picker offers the default where it was. */
+export async function listBackupLocations(): Promise<readonly BackupLocation[]> {
+  const rows = await prisma.backup_locations.findMany({ orderBy: [{ isSystem: 'desc' }, { createdAt: 'asc' }] });
+  return rows.map(toLocation);
+}
+
+/** The seeded system row: the default location every absent id names. */
+export async function findDefaultLocation(): Promise<BackupLocation | null> {
+  const row = await prisma.backup_locations.findFirst({ where: { isSystem: true } });
+  return row === null ? null : toLocation(row);
 }
 
 /**
- * An absent id is not a fourth location: it is the configured default, which
- * config.toml documents as the target when no other is chosen. An id the list
- * does not carry resolves to null so both resolvers fail closed instead of
- * silently reading or writing a different tree.
+ * The location an id names, or the system row when the id is absent.
+ * Null when the id names no row: an unknown id is drift to report,
+ * never a silent redirect to another tree.
  */
-function findEffectiveLocation(locationId?: string | null): BackupLocation | null {
-  const locations = listBackupLocations();
+async function findEffectiveLocation(locationId?: string | null): Promise<BackupLocation | null> {
   if (locationId !== undefined && locationId !== null) {
-    return locations.find((location) => location.id === locationId) ?? null;
+    const row = await prisma.backup_locations.findUnique({ where: { id: locationId } });
+    return row === null ? null : toLocation(row);
   }
-  const defaultId = resolveDefaultLocationId(locations);
-  return locations.find((location) => location.id === defaultId) ?? null;
+  return findDefaultLocation();
 }
 
 /**
- * Resolves a read root. An absent id reads whatever the configured default
- * names — with no [backup] config that is getBackupRoot(), exactly the legacy
+ * The tree an id names, or the error to fail closed with. Shared by both
+ * resolvers so the read and write paths can never disagree about what an
+ * id points at.
+ */
+async function resolveNamedTree(
+  locationId?: string | null,
+): Promise<{ readonly ok: true; readonly tree: string } | { readonly ok: false; readonly error: string }> {
+  const location = await findEffectiveLocation(locationId);
+  if (location === null) return { ok: false, error: `Unknown backup location: ${locationId ?? 'default'}` };
+  const tree = resolveConfiguredPath(location.path);
+  if (tree === null) {
+    return { ok: false, error: `Backup location ${location.id} names a path only one container sees` };
+  }
+  return { ok: true, tree };
+}
+
+/**
+ * Resolves a read root. An absent id reads whatever the system row names —
+ * with no [backup] config that is getBackupRoot(), exactly the legacy
  * behaviour every pre-locations caller depended on.
  */
-export function resolveReadRoot(locationId?: string | null): ReadRootResolution {
-  const location = findEffectiveLocation(locationId);
-  if (location === null) return { ok: false, error: `Unknown backup location: ${locationId}` };
-  const root = path.isAbsolute(location.path) ? path.resolve(location.path) : path.resolve(getRepoRoot(), location.path);
-  return { ok: true, root };
+export async function resolveReadRoot(locationId?: string | null): Promise<ReadRootResolution> {
+  const resolved = await resolveNamedTree(locationId);
+  return resolved.ok ? { ok: true, root: resolved.tree } : { ok: false, error: resolved.error };
 }
 
 /**
- * Resolves the `--root` argument for a monitor dump: null whenever the target
- * directory is the one the monitor already writes — a relative path or a path
- * equal to getBackupRoot() — because the monitor knows that tree under its own
- * mount (/app/backups), and handing it the panel's view would point the
- * container at a path its filesystem does not have. Any other absolute path is
- * passed verbatim; it must be bind-mounted at the same path in BOTH
- * cms-monitor (write) and cms-admin-next (read), the contract stated next to
- * the location list in config.toml.example.
+ * Resolves the `--root` argument for a monitor dump: null whenever the
+ * target tree is the one the monitor already writes — the system row, a
+ * relative path naming it, or a configured path equal to getBackupRoot() —
+ * because handing the monitor the panel's view of its own mount would
+ * point the container at a path its filesystem does not have. Any other
+ * tree is passed verbatim; it must be bind-mounted at the same path in
+ * BOTH cms-monitor (write) and cms-admin-next (read), the contract every
+ * non-system location carries.
  */
-export function resolveWriteRoot(locationId?: string | null): WriteRootResolution {
-  const location = findEffectiveLocation(locationId);
-  if (location === null) return { ok: false, error: `Unknown backup location: ${locationId}` };
-  if (!path.isAbsolute(location.path)) return { ok: true, root: null };
-  const root = path.resolve(location.path);
-  if (root === path.resolve(getBackupRoot())) return { ok: true, root: null };
-  return { ok: true, root };
+export async function resolveWriteRoot(locationId?: string | null): Promise<WriteRootResolution> {
+  const resolved = await resolveNamedTree(locationId);
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+  return { ok: true, root: resolved.tree === getBackupRoot() ? null : resolved.tree };
 }

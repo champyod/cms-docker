@@ -28,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ name
 
   const { name } = await params;
   const locationId = req.nextUrl.searchParams.get('location') ?? undefined;
-  const readTarget = resolveReadRoot(locationId);
+  const readTarget = await resolveReadRoot(locationId);
   if (!readTarget.ok) return apiError({ message: readTarget.error, status: 400 });
   const archivePath = await resolveArchivePath(name, readTarget.root);
   if (archivePath === null) return apiError({ message: 'Archive not found', status: 404 });

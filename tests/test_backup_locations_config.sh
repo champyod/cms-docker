@@ -5,13 +5,15 @@
 # replaced by a DB table, so the retirement has to be a deliberate act rather than a
 # silent drift. Every assertion below is one the removal has to break on purpose: a
 # registry row, a documented default, a compose line carrying the value into the panel,
-# the resolver's fail-closed behaviour, and the duplicate-key invariant that caught a real
-# defect when this pair was briefly registered twice.
+# the resolver's data source, and the duplicate-key invariant that caught a real defect
+# when this pair was briefly registered twice.
 #
-# Why the resolver is imported rather than restated: parseBackupLocations' contract (max 16
-# entries, unique ids, absolute or legacy-tree paths, null on any violation) is the part an
-# operator is most likely to break, and a copy of it here would drift from the code it
-# claims to test.
+# Why the resolver is checked structurally: locations are rows now, so the resolver
+# imports Prisma and cannot be driven from a bare `bun -e` the way the env parser
+# could. Its fail-closed contract (an unknown id, a path only one container sees) is
+# pinned by admin-panel/tests/backup-locations.test.ts; what is pinned here is the
+# half that would silently regress: that resolution reads the table and never the
+# retired env pair again.
 set -uo pipefail
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -68,38 +70,19 @@ for key in "${KEYS[@]}"; do
   fi
 done
 
-echo "the resolver is fail-closed on anything it cannot parse"
-resolver_call() {
-  local raw="$1"
-  PANEL_ENV_JSON="${raw}" bun -e '
-    process.env.BACKUP_LOCATIONS = process.env.PANEL_ENV_JSON;
-    const mod = await import(process.env.PANEL_RESOLVER_PATH);
-    console.log(JSON.stringify(mod.parseBackupLocations(process.env.PANEL_ENV_JSON)));
-  ' 2>/dev/null
-}
-export PANEL_RESOLVER_PATH="${RESOLVER}"
-if command -v bun >/dev/null 2>&1; then
-  ok "bun is available, so the resolver is imported directly"
-  valid='[{"id":"nas","label":"NAS","path":"/mnt/nas/backups"}]'
-  if [[ "$(resolver_call "${valid}")" == *'"id":"nas"'* ]]; then
-    ok "a well-formed list parses"
-  else
-    no "a well-formed list parses (got: $(resolver_call "${valid}"))"
-  fi
-  # Each of these is a shape that would silently pick the wrong tree if it were accepted:
-  # a partial list is one where one entry writes somewhere another entry cannot read.
-  for bad in 'not json' '[]' '{"id":"a","label":"A","path":"/x"}' '[{"id":"a","label":"","path":"/x"}]' \
-             '[{"id":"a","label":"A","path":"/x"},{"id":"a","label":"B","path":"/y"}]' \
-             '[{"id":"a","label":"A","path":"nope/elsewhere"}]'; do
-    result="$(resolver_call "${bad}")"
-    if [[ "${result}" == 'null' ]]; then
-      ok "rejects ${bad:0:44}"
-    else
-      no "rejects ${bad:0:44} (got: ${result})"
-    fi
-  done
+echo "the resolver reads the table, not the environment"
+# WHY: locations are rows now, so the resolver must query them and must not
+# consult the retired env pair — a module that read the env again would
+# silently resolve a list the database does not know.
+if grep -q 'backup_locations' "${RESOLVER}"; then
+  ok "the resolver queries the backup_locations table"
 else
-  no "bun is available, so the resolver is imported directly"
+  no "the resolver queries the backup_locations table"
+fi
+if grep -qE 'BACKUP_LOCATIONS|BACKUP_DEFAULT_LOCATION' "${RESOLVER}"; then
+  no "the resolver still reads the retired env pair"
+else
+  ok "the resolver no longer reads the retired env pair"
 fi
 
 echo "no key is declared twice in the same config.toml section"

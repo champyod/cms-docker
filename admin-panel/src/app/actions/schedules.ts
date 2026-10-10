@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
-import { listBackupLocations, resolveDefaultLocationId } from '@/lib/backup-locations';
+import { findDefaultLocation, listBackupLocations } from '@/lib/backup-locations';
 import { computeNextRun, validateScheduleInput } from '@/lib/backup-schedules';
 import type { ScheduleInput } from '@/lib/backup-schedules';
 import { prisma } from '@/lib/prisma';
@@ -121,15 +121,15 @@ export async function listSchedules(): Promise<ScheduleListResult> {
   }
 }
 
-/** The schedule form's location choices: the configured list, which read the form preselects from. */
+/** The schedule form's location choices: the rows, with the system row the form preselects. */
 export async function listBackupLocationOptions(): Promise<LocationOptionsResult> {
   await ensurePermission('backup:schedule');
   try {
-    const locations = listBackupLocations();
+    const [locations, defaultLocation] = await Promise.all([listBackupLocations(), findDefaultLocation()]);
     return {
       success: true,
       options: locations.map((location) => ({ id: location.id, label: location.label })),
-      defaultId: resolveDefaultLocationId(locations),
+      defaultId: defaultLocation?.id ?? locations[0]?.id,
     };
   } catch (error) {
     return { success: false, error: describeFailure(error) };
@@ -138,7 +138,8 @@ export async function listBackupLocationOptions(): Promise<LocationOptionsResult
 
 export async function createSchedule(input: ScheduleInput): Promise<ScheduleMutationResult> {
   await ensurePermission('backup:schedule');
-  const validation = validateScheduleInput(input, listBackupLocations().map((location) => location.id));
+  const knownLocationIds = (await listBackupLocations()).map((location) => location.id);
+  const validation = validateScheduleInput(input, knownLocationIds);
   if (!validation.valid || validation.schedule === null) {
     return { success: false, error: validation.errors.join(' ') };
   }
@@ -176,6 +177,7 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
   try {
     const existing = await prisma.backup_schedules.findUnique({ where: { id } });
     if (existing === null) return { success: false, error: `Schedule not found: ${id}` };
+    const knownLocationIds = (await listBackupLocations()).map((location) => location.id);
     const validation = validateScheduleInput(
       {
         name: update.name ?? existing.name,
@@ -183,7 +185,7 @@ export async function updateSchedule(id: string, update: ScheduleUpdate): Promis
         intervalMins: update.intervalMins ?? existing.intervalMins,
         locationId: update.locationId !== undefined ? update.locationId : existing.locationId,
       },
-      listBackupLocations().map((location) => location.id),
+      knownLocationIds,
     );
     if (!validation.valid || validation.schedule === null) {
       return { success: false, error: validation.errors.join(' ') };

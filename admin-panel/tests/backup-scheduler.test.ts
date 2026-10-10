@@ -185,7 +185,7 @@ function fakeDeps(options: FakeOptions = {}): {
     deps: {
       store,
       launcher,
-      resolveWriteRoot: () => options.writeRoot ?? { ok: true, root: null },
+      resolveWriteRoot: async () => options.writeRoot ?? { ok: true, root: null },
       shouldStop: () => options.stopped === true,
     },
   };

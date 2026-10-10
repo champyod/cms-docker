@@ -75,7 +75,7 @@ export async function triggerSelectiveBackup(tables: string[], locationId?: stri
   if (!validation.valid) {
     return { success: false, started: false, error: describeInvalidSelection(validation), warnings: [] };
   }
-  const writeTarget = resolveWriteRoot(locationId);
+  const writeTarget = await resolveWriteRoot(locationId);
   if (!writeTarget.ok) {
     return { success: false, started: false, error: writeTarget.error, warnings: validation.warnings };
   }
@@ -97,7 +97,7 @@ export async function triggerSelectiveBackup(tables: string[], locationId?: stri
 
 export async function listArchives(locationId?: string): Promise<ArchiveListResult> {
   await ensurePermission('backup:list');
-  const readTarget = resolveReadRoot(locationId);
+  const readTarget = await resolveReadRoot(locationId);
   if (!readTarget.ok) return { success: false, error: readTarget.error };
   try {
     return { success: true, archives: await readArchiveFiles(readTarget.root) };
@@ -109,7 +109,7 @@ export async function listArchives(locationId?: string): Promise<ArchiveListResu
 export async function deleteArchive(name: string, locationId?: string): Promise<ArchiveMutationResult> {
   await ensurePermission('backup:delete');
   if (typeof name !== 'string') return { success: false, error: 'Archive name must be a string.' };
-  const readTarget = resolveReadRoot(locationId);
+  const readTarget = await resolveReadRoot(locationId);
   if (!readTarget.ok) return { success: false, error: readTarget.error };
   const archivePath = await resolveArchivePath(name, readTarget.root);
   if (archivePath === null) return { success: false, error: `Archive not found: ${name}` };
