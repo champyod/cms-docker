@@ -240,11 +240,14 @@ $(document).ready(init);
           </div>
         {% endif %}
 {% endif %}
-        {# WHY the offer is spelled out here and not only linked: section 13 asks for
-   a prominent offer, so the corresponding source has to be reachable as visible
-   text on the page itself. Kept to one compact block because the sidebar is
-   staff-only chrome whose vertical space belongs to the navigation. #}
-        <div class="cr_notice">{{ credits.project.name }} is released under the <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>. Under section 13 of that licence the corresponding source of the software running here is offered at <a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ config.global_.source_url }}</a>. <a href="{{ url("credits") }}">Credits</a> lists the third-party software it bundles.</div>
+        {# WHY a byline and not the licence offer: this line is read at a glance,
+   so it names the project, its author and its lineage and nothing else. The
+   section 13 offer is visible text on the credits page, which the service keeps
+   one click away. The href is the configured source URL — the project's own
+   address — so the single link is also the source. Kept to one compact block
+   because the sidebar is staff-only chrome whose vertical space belongs to the
+   navigation. #}
+        <div class="cr_notice"><a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ credits.project.name }}{% if credits.project.author %} by {{ credits.project.author }}{% endif %} &middot; a fork of CMS</a></div>
       </div>
 
       <div id="border"></div>

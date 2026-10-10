@@ -88,18 +88,26 @@ class CreditsPageTest(unittest.TestCase):
         self.assertIn(self.credits_file["license"]["spdx_id"], text)
 
     def test_it_offers_the_configured_source(self):
-        offer = self.soup.find("a", href=config.global_.source_url)
-        self.assertIsNotNone(
-            offer,
+        source_url = config.global_.source_url
+        # Every anchor carrying the address counts: the byline in the sidebar and
+        # the offer on the page both point at it, and what section 13 needs is one
+        # of them spelling the address out as readable text.
+        offers = self.soup.find_all("a", href=source_url)
+        self.assertTrue(
+            offers,
             "the page offers no corresponding source at the configured URL")
-        self.assertIn(config.global_.source_url, offer.get_text())
+        self.assertTrue(
+            any(source_url in offer.get_text() for offer in offers),
+            "the configured source appears only as a link target, never as text")
 
     def test_it_attributes_the_upstream_project(self):
+        # WHY wording and not an anchor carrying its own address: the byline
+        # credits the lineage in one line, so what has to survive is the claim
+        # itself being readable on the page rather than a URL behind a link.
+        text = self.soup.get_text(" ", strip=True)
         for line in get_surface(SURFACE)["attribution"]:
-            with self.subTest(url=line["url"]):
-                anchor = self.soup.find("a", href=line["url"])
-                self.assertIsNotNone(anchor)
-                self.assertIn(line["url"], anchor.get_text())
+            with self.subTest(text=line["text"]):
+                self.assertIn(line["text"], text)
 
     def test_it_writes_no_source_url_into_the_markup(self):
         # WHY: a fork has to be able to point the offer at its own repository,
@@ -138,28 +146,28 @@ class NoticeTest(unittest.TestCase):
         # a table of the credits.
         self.assertEqual(self.notice.find(["table", "ul", "ol"]), None)
 
-    def test_the_offer_is_visible_text_and_not_only_a_link(self):
-        # WHY section 13 asks for a prominent offer: the source has to be
-        # readable on the page, not merely reachable by following a link.
+    def test_the_notice_carries_the_credit_line_and_no_licence_prose(self):
+        # WHY the licence moved out: this line is read at a glance, so it names
+        # the project, its author and its lineage and nothing else. The section 13
+        # offer is visible text on the credits page, not a footer nobody reads.
         text = " ".join(self.notice.get_text().split())
-        licence = self.credits_file["license"]["name"]
-        self.assertIn(licence, text)
-        self.assertIn("corresponding source", text)
-        self.assertIn("section 13", text)
         self.assertIn(self.credits_file["project"]["name"], text)
+        if self.credits_file["project"].get("author"):
+            self.assertIn(self.credits_file["project"]["author"], text)
+        self.assertNotIn(self.credits_file["license"]["name"], text)
+        self.assertNotIn("section 13", text)
 
-    def test_the_notice_offers_the_configured_source_url_as_text(self):
-        source_url = config.global_.source_url
-        anchor = self.notice.find("a", href=source_url)
-        self.assertIsNotNone(
-            anchor,
-            "the sidebar notice links no configured source URL")
-        self.assertIn(source_url, " ".join(anchor.get_text().split()))
+    def test_the_notice_links_the_configured_source_as_its_one_link(self):
+        anchors = self.notice.find_all("a")
+        self.assertEqual(
+            len(anchors), 1,
+            "the byline carries more than the one project link")
+        self.assertEqual(anchors[0].get("href"), config.global_.source_url)
 
-    def test_it_points_at_the_credits_page_for_the_full_list(self):
-        self.assertIsNotNone(
+    def test_the_notice_leaves_the_full_list_to_the_credits_page(self):
+        self.assertIsNone(
             self.notice.find("a", href="/credits"),
-            "the notice does not offer the full asset list")
+            "the byline is not a second navigation for the credits page")
 
     def test_it_no_longer_offers_the_upstream_repo_as_its_own_source(self):
         # WHY: linking upstream's repository was the defect this notice had,

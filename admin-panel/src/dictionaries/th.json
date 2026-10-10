@@ -327,7 +327,14 @@
     "attribution": "การให้เครดิต",
     "firstParty": "ไฟล์ของโครงการเอง",
     "transitiveDependencies": "การพึ่งพาโดยอ้อม",
-    "softwareCount": "ซอฟต์แวร์บุคคลที่สาม ({count})",
+    "contributors": {
+      "title": "ผู้ร่วมพัฒนา",
+      "name": "ชื่อ",
+      "contribution": "ส่วนที่ร่วมสร้าง",
+      "maintainer": "ผู้ดูแลโปรเจกต์นี้",
+      "upstream": "โปรเจกต์ต้นทางที่ fork มา"
+    },
+    "softwareCount": "องค์ประกอบ ({count})",
     "columns": {
       "name": "ซอฟต์แวร์",
       "version": "รุ่น",

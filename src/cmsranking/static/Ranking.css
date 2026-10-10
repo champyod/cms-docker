@@ -76,6 +76,12 @@ abbr {
     box-shadow: 0 0 2px 0 gray;
     z-index: 8;
     padding: 0;
+    /* The graph used to take the whole panel and the byline was left to hang past
+       bottom: 30px, which grew the document by a line once the notice was legible.
+       A column now shares the fixed panel height: the graph takes what is left and
+       the byline keeps its own, so neither can push the page into scrolling. */
+    display: flex;
+    flex-direction: column;
 }
 
 #InnerFrame {
@@ -235,7 +241,8 @@ abbr {
 
 #Overview {
     position: relative;
-    height: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
     width: 100%;
 }
 

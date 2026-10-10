@@ -25,6 +25,11 @@
                 margin-top: 1.5em;
                 color: black;
             }
+            #Credits .Credits_byline {
+                font-size: 16px;
+                color: #444444;
+                margin-top: 0.5em;
+            }
             #Credits a {
                 color: #00A3DA;
             }
@@ -54,6 +59,15 @@
                 border-radius: 3px;
                 padding: 0 0.25em;
             }
+            /* The licence offer is one line at the foot, not the subject of the page:
+               who built what comes first, and section 13 still gets its statement. */
+            #Credits .Credits_licence {
+                margin-top: 2em;
+                padding-top: 0.75em;
+                border-top: 1px #D0D0D2 solid;
+                font-size: 0.9em;
+                color: #666666;
+            }
         </style>
     </head>
     <body>
@@ -68,7 +82,8 @@ var Credits = new function () {
 
     self.CREDITS_URL = "credits";
     self.CONFIG_URL = "config";
-    self.COLUMNS = ["Software", "Copyright holder", "Licence", "Licence text"];
+    self.CONTRIBUTOR_COLUMNS = ["Name", "Contribution"];
+    self.COMPONENT_COLUMNS = ["Software", "Holder", "Licence"];
 
     self.el = function (tag, text) {
         var element = document.createElement(tag);
@@ -78,110 +93,123 @@ var Credits = new function () {
         return element;
     };
 
-    self.link = function (text, url) {
+    self.link = function (text, url, rel) {
         var element = self.el("a", text);
         element.href = url;
         element.target = "_blank";
-        element.rel = "license noreferrer";
+        element.rel = rel || "noopener noreferrer";
         return element;
     };
 
-    self.paragraph = function (parts) {
-        var element = self.el("p");
-        for (var i = 0; i < parts.length; i += 1) {
-            element.appendChild(parts[i]);
+    // A cell is either plain text or {text, url}; the table builders never have to
+    // know which, so a row reads as its data rather than as markup.
+    self.cell = function (value) {
+        if (value !== null && typeof value === "object") {
+            return self.td_link(value);
         }
-        return element;
+        return self.el("td", value === undefined || value === null ? "" : String(value));
     };
 
-    self.licence_paragraph = function (data) {
-        return self.paragraph([
-            self.el("span", data.project["name"] + " is released under the "),
-            self.link(data.license["name"], data.license["url"]),
-            self.el("span", " ("),
-            self.el("code", data.license["spdx_id"]),
-            self.el("span", ").")
-        ]);
+    self.td_link = function (value) {
+        var td = self.el("td");
+        td.appendChild(self.link(value.text, value.url, value.rel));
+        return td;
     };
 
-    self.source_paragraph = function (config) {
-        var url = config["source_url"];
-        return self.paragraph([
-            self.el("span", "As required by section 13 of that licence, the "
-                + "corresponding source of the software running here is offered at "),
-            self.link(url, url),
-            self.el("span", ".")
-        ]);
-    };
-
-    self.attribution_paragraphs = function (lines) {
-        var paragraphs = [];
-        for (var i = 0; i < lines.length; i += 1) {
-            paragraphs.push(self.paragraph([
-                self.el("span", "This ranking web is " + lines[i]["text"] + ": "),
-                self.link(lines[i]["url"], lines[i]["url"]),
-                self.el("span", ".")
-            ]));
-        }
-        return paragraphs;
-    };
-
-    self.head_row = function () {
-        var row = self.el("tr");
-        for (var i = 0; i < self.COLUMNS.length; i += 1) {
-            row.appendChild(self.el("th", self.COLUMNS[i]));
-        }
-        var head = self.el("thead");
-        head.appendChild(row);
-        return head;
-    };
-
-    self.licence_cell = function (urls) {
-        var cell = self.el("td");
-        for (var i = 0; i < urls.length; i += 1) {
-            if (i > 0) {
-                cell.appendChild(self.el("br"));
-            }
-            cell.appendChild(self.link(urls[i], urls[i]));
-        }
-        return cell;
-    };
-
-    self.asset_row = function (asset) {
-        var row = self.el("tr");
-        row.appendChild(self.el("td", asset["name"]));
-        row.appendChild(self.el("td", asset["holder"]));
-        row.appendChild(self.el("td", asset["license_id"]));
-        row.appendChild(self.licence_cell(asset["license_urls"]));
-        return row;
-    };
-
-    self.asset_table = function (assets) {
+    self.table = function (columns, rows) {
         var table = self.el("table");
-        table.appendChild(self.head_row());
+        var head = self.el("thead");
+        var headRow = self.el("tr");
+        for (var c = 0; c < columns.length; c += 1) {
+            headRow.appendChild(self.el("th", columns[c]));
+        }
+        head.appendChild(headRow);
+        table.appendChild(head);
         var body = self.el("tbody");
-        for (var i = 0; i < assets.length; i += 1) {
-            body.appendChild(self.asset_row(assets[i]));
+        for (var r = 0; r < rows.length; r += 1) {
+            var row = self.el("tr");
+            for (var i = 0; i < rows[r].length; i += 1) {
+                row.appendChild(self.cell(rows[r][i]));
+            }
+            body.appendChild(row);
         }
         table.appendChild(body);
         return table;
     };
 
+    // The same words the sidebar carries, expanded with the upstream name: the page
+    // is read at leisure, so the full lineage is worth spelling out here.
+    self.byline_text = function (data) {
+        var project = data.project;
+        var text = project["name"];
+        if (project["author"]) {
+            text += " by " + project["author"];
+        }
+        var attribution = data.surface["attribution"] || [];
+        if (attribution.length > 0) {
+            text += " · " + attribution[0]["text"];
+        }
+        return text;
+    };
+
+    self.contributor_rows = function (data) {
+        var rows = [];
+        var project = data.project;
+        if (project["author"]) {
+            rows.push([
+                { text: project["author"], url: project["url"] },
+                "Maintainer of this project"
+            ]);
+        }
+        if (project["upstream"]) {
+            rows.push([
+                { text: project["upstream"]["name"], url: project["upstream"]["url"] },
+                "Upstream project this forks"
+            ]);
+        }
+        return rows;
+    };
+
+    self.component_rows = function (assets) {
+        var rows = [];
+        for (var i = 0; i < assets.length; i += 1) {
+            var asset = assets[i];
+            var licence = asset["license_id"];
+            if (asset["license_urls"] && asset["license_urls"].length > 0) {
+                licence = { text: asset["license_id"], url: asset["license_urls"][0], rel: "license noreferrer" };
+            }
+            rows.push([asset["name"], asset["holder"], licence]);
+        }
+        return rows;
+    };
+
+    // One line, kept because section 13 of the licence requires the offer — but it is
+    // a footnote under the contributors, not the opening of the page.
+    self.licence_line = function (data, config) {
+        var line = self.el("p");
+        line.className = "Credits_licence";
+        line.appendChild(self.el("span", data.project["name"] + " is released under the "));
+        line.appendChild(self.link(data.license["name"], data.license["url"], "license noreferrer"));
+        line.appendChild(self.el("span", " (" + data.license["spdx_id"] + "). Corresponding source: "));
+        line.appendChild(self.link(config["source_url"], config["source_url"], "license noreferrer"));
+        line.appendChild(self.el("span", "."));
+        return line;
+    };
+
     self.render = function (data, config) {
         var body = document.getElementById("Credits_body");
-        var paragraphs = self.attribution_paragraphs(data.surface["attribution"]);
-        body.appendChild(self.licence_paragraph(data));
-        body.appendChild(self.source_paragraph(config));
-        for (var i = 0; i < paragraphs.length; i += 1) {
-            body.appendChild(paragraphs[i]);
-        }
-        body.appendChild(self.el("h2", "Third-party software"));
-        body.appendChild(self.asset_table(data.surface["assets"]));
+        var byline = self.el("p", self.byline_text(data));
+        byline.className = "Credits_byline";
+        body.appendChild(byline);
+        body.appendChild(self.el("h2", "Contributors"));
+        body.appendChild(self.table(self.CONTRIBUTOR_COLUMNS, self.contributor_rows(data)));
+        body.appendChild(self.el("h2", "Components"));
+        body.appendChild(self.table(self.COMPONENT_COLUMNS, self.component_rows(data["surface"]["assets"])));
+        body.appendChild(self.licence_line(data, config));
     };
 
     self.report_failure = function (error) {
-        console.error("Error while loading the credits of this scoreboard:",
-                      error);
+        console.error("Error while loading the credits of this scoreboard:", error);
         document.getElementById("Credits_body").appendChild(
             self.el("p", "The credits of this scoreboard could not be loaded."));
     };

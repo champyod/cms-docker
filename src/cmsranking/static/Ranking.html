@@ -51,8 +51,8 @@ if (!("EventSource" in window)) {
             </div>
             <div id="SidePanel">
                 <div id="Overview"></div>
-                <div id="LicenseNotice" style="color: #999; text-align: center; font-size: 12px; padding-top: 5px;">
-                    Powered by <a style="color: #00A3DA; text-decoration: none;" href="https://cms-dev.github.io/" target="_blank">CMS</a> &middot; <a id="LicenseNotice_source" style="color: #00A3DA; text-decoration: none;" target="_blank" rel="license noreferrer">AGPL-3.0 source</a> &middot; <a id="LicenseNotice_credits" style="color: #00A3DA; text-decoration: none;" href="credits.html">credits</a>
+                <div id="LicenseNotice" style="color: #999; text-align: center; font-size: 16px; padding-top: 5px; flex: 0 0 auto;">
+                    <a id="LicenseNotice_project" style="color: #00A3DA; text-decoration: none;" target="_blank" rel="noopener noreferrer">CMS Docker by CCYod &middot; a fork of CMS</a>
                 </div>
             </div>
             <div id="InnerFrame">
@@ -117,7 +117,7 @@ if (!("EventSource" in window)) {
 // into PublicConfig synchronously, so the offer only has to be copied onto
 // the link before the scoreboard is shown to an audience.
 (function () {
-    var link = document.getElementById("LicenseNotice_source");
+    var link = document.getElementById("LicenseNotice_project");
     var url = PublicConfig["source_url"];
     if (link !== null && typeof url === "string" && url !== "") {
         link.href = url;

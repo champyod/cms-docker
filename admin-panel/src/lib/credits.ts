@@ -43,6 +43,8 @@ export interface ProjectUpstream {
 
 export interface PanelCreditsPage {
   readonly projectName: string;
+  /** The person the byline credits; absent on a credits file that names none. */
+  readonly projectAuthor: string | null;
   readonly sourceUrl: string;
   readonly upstream: ProjectUpstream;
   readonly license: ProjectLicense;
@@ -147,6 +149,7 @@ function parsePanelCreditsPage(value: unknown): PanelCreditsPage {
   const upstream = asRecord(project['upstream'], 'project.upstream');
   return {
     projectName: requiredString(project, 'name', 'project'),
+    projectAuthor: optionalString(project, 'author', 'project'),
     sourceUrl: requiredString(project, 'url', 'project'),
     upstream: {
       name: requiredString(upstream, 'name', 'project.upstream'),

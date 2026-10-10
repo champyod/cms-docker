@@ -327,7 +327,14 @@
     "attribution": "Attribution",
     "firstParty": "First-party files",
     "transitiveDependencies": "Transitive dependencies",
-    "softwareCount": "Third-party software ({count})",
+    "contributors": {
+      "title": "Contributors",
+      "name": "Name",
+      "contribution": "Contribution",
+      "maintainer": "Maintainer of this project",
+      "upstream": "Upstream project this forks"
+    },
+    "softwareCount": "Components ({count})",
     "columns": {
       "name": "Software",
       "version": "Version",
