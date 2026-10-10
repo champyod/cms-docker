@@ -3,14 +3,17 @@ import {
   COUNTDOWN_BASE_FONT_PX,
   COUNTDOWN_MAX_FONT_PX,
   COUNTDOWN_MIN_FONT_PX,
+  DEFAULT_COUNTDOWN_THRESHOLD,
   DEFAULT_COUNTDOWN_TIMEZONE,
+  countdownPhaseWindowMs,
   countdownTarget,
   fitCountdownFontPx,
-  formatCountdown,
   formatZoneTime,
   isSupportedTimezone,
   listTimezones,
   resolveContestPhase,
+  resolveCountdownStage,
+  resolveHurryThresholdMs,
   toCountdownSegments,
   zoneOffsetLabel,
   zoneOffsetMap,
@@ -84,26 +87,18 @@ describe('countdownTarget', () => {
   });
 });
 
-describe('formatCountdown', () => {
-  it('renders hours, minutes, and seconds with padding', () => {
-    expect(formatCountdown(4 * 3600 * 1000 + 11 * 60 * 1000 + 9 * 1000)).toBe('04:11:09');
-    expect(formatCountdown(5 * 1000)).toBe('00:00:05');
-  });
-
-  it('prefixes days once the span reaches one', () => {
-    expect(formatCountdown(26 * 3600 * 1000)).toBe('1d 02:00:00');
-  });
-
-  it('clamps negative spans to zero', () => {
-    expect(formatCountdown(-5000)).toBe('00:00:00');
-  });
-});
-
 describe('toCountdownSegments', () => {
   it('splits the clock into one segment per number group', () => {
     const segments = toCountdownSegments(4 * 3600 * 1000 + 11 * 60 * 1000 + 9 * 1000);
     expect(segments.map((segment) => segment.glyphs.map((glyph) => glyph.char).join('')))
       .toEqual(['04:', '11:', '09']);
+  });
+
+  it('drops a zero leading unit instead of showing it', () => {
+    expect(toCountdownSegments(11 * 60 * 1000 + 9 * 1000).map((segment) => segment.glyphs.map((glyph) => glyph.char).join('')))
+      .toEqual(['11:', '09']);
+    expect(toCountdownSegments(9 * 1000).map((segment) => segment.glyphs.map((glyph) => glyph.char).join('')))
+      .toEqual(['09']);
   });
 
   it('prefixes a day segment once the span reaches one', () => {
@@ -190,5 +185,62 @@ describe('timezone helpers', () => {
   it('shifts the rendered hour by the zone offset', () => {
     const bangkok = formatZoneTime(new Date('2026-01-01T00:00:00Z'), 'Asia/Bangkok');
     expect(bangkok).toContain('07:00:00');
+  });
+});
+
+describe('resolveCountdownStage', () => {
+  const HURRY_MS = 60_000;
+
+  it('hurries within the window before the start', () => {
+    expect(resolveCountdownStage('not_started', 59_000, HURRY_MS)).toBe('hurry');
+    expect(resolveCountdownStage('not_started', 61_000, HURRY_MS)).toBe('waiting');
+  });
+
+  it('hurries within the window before the end', () => {
+    expect(resolveCountdownStage('running', 30_000, HURRY_MS)).toBe('hurry');
+    expect(resolveCountdownStage('running', 90_000, HURRY_MS)).toBe('running');
+  });
+
+  it('keeps analysis and ended off the hurry path', () => {
+    expect(resolveCountdownStage('analysis', 5_000, HURRY_MS)).toBe('analysis');
+    expect(resolveCountdownStage('ended', 0, HURRY_MS)).toBe('ended');
+  });
+
+  it('stays calm when there is no target to run out', () => {
+    expect(resolveCountdownStage('not_started', null, HURRY_MS)).toBe('waiting');
+    expect(resolveCountdownStage('running', null, HURRY_MS)).toBe('running');
+  });
+});
+
+describe('resolveHurryThresholdMs', () => {
+  it('scales each fixed unit to milliseconds', () => {
+    expect(resolveHurryThresholdMs({ amount: 30, unit: 'seconds' }, 0)).toBe(30_000);
+    expect(resolveHurryThresholdMs({ amount: 5, unit: 'minutes' }, 0)).toBe(300_000);
+    expect(resolveHurryThresholdMs({ amount: 2, unit: 'hours' }, 0)).toBe(7_200_000);
+  });
+
+  it('measures a percent against the window it is given', () => {
+    expect(resolveHurryThresholdMs({ amount: 5, unit: 'percent' }, 3_600_000)).toBe(180_000);
+  });
+
+  it('falls back to the default amount for a cleared or invalid value', () => {
+    const fallback = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
+    expect(resolveHurryThresholdMs({ amount: 0, unit: 'minutes' }, 0)).toBe(fallback);
+    expect(resolveHurryThresholdMs({ amount: Number.NaN, unit: 'minutes' }, 0)).toBe(fallback);
+  });
+});
+
+describe('countdownPhaseWindowMs', () => {
+  it('uses the contest span while running', () => {
+    expect(countdownPhaseWindowMs(timing(), 'running', 1)).toBe(8 * 3_600_000);
+  });
+
+  it('uses the analysis span during analysis', () => {
+    expect(countdownPhaseWindowMs(timing(), 'analysis', 1)).toBe(2 * 3_600_000);
+  });
+
+  it('falls back when the columns a phase needs are absent', () => {
+    expect(countdownPhaseWindowMs(timing({ stop: null }), 'running', 1234)).toBe(1234);
+    expect(countdownPhaseWindowMs(timing(), 'ended', 1234)).toBe(1234);
   });
 });

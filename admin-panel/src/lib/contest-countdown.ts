@@ -16,6 +16,69 @@ export const PHASE_LABELS: Readonly<Record<ContestPhase, string>> = {
   ended: 'Ended',
 };
 
+export type CountdownStage = 'waiting' | 'running' | 'analysis' | 'hurry' | 'ended';
+
+export const STAGE_LABELS: Readonly<Record<CountdownStage, string>> = {
+  waiting: 'Waiting',
+  running: 'Running',
+  analysis: 'Analysis',
+  hurry: 'Get Ready',
+  ended: 'Ended',
+};
+
+export type CountdownThresholdUnit = 'seconds' | 'minutes' | 'hours' | 'percent';
+
+export interface CountdownThreshold {
+  readonly amount: number;
+  readonly unit: CountdownThresholdUnit;
+}
+
+export const COUNTDOWN_THRESHOLD_UNITS: readonly CountdownThresholdUnit[] = ['seconds', 'minutes', 'hours', 'percent'];
+
+export const DEFAULT_COUNTDOWN_THRESHOLD: CountdownThreshold = { amount: 5, unit: 'minutes' };
+
+const MILLISECONDS_PER_SECOND = 1_000;
+const MILLISECONDS_PER_MINUTE = 60 * MILLISECONDS_PER_SECOND;
+const MILLISECONDS_PER_HOUR = 60 * MILLISECONDS_PER_MINUTE;
+const PERCENT_DIVISOR = 100;
+
+/** Warning window the threshold means; a percent is measured against the span it is given. */
+export function resolveHurryThresholdMs(threshold: CountdownThreshold, windowMs: number): number {
+  const amount = Number.isFinite(threshold.amount) && threshold.amount > 0
+    ? threshold.amount
+    : DEFAULT_COUNTDOWN_THRESHOLD.amount;
+  switch (threshold.unit) {
+    case 'seconds': return amount * MILLISECONDS_PER_SECOND;
+    case 'minutes': return amount * MILLISECONDS_PER_MINUTE;
+    case 'hours': return amount * MILLISECONDS_PER_HOUR;
+    case 'percent': return (amount / PERCENT_DIVISOR) * windowMs;
+  }
+}
+
+/** Span a percent threshold scales to: the window the current phase runs across, or the fallback. */
+export function countdownPhaseWindowMs(timing: ContestTimingWindow, phase: ContestPhase, fallbackMs: number): number {
+  const start = toDate(timing.start);
+  const stop = toDate(timing.stop);
+  const analysisStart = toDate(timing.analysis_start);
+  const analysisStop = toDate(timing.analysis_stop);
+  if (phase === 'analysis' && analysisStart && analysisStop) {
+    return Math.max(0, analysisStop.getTime() - analysisStart.getTime());
+  }
+  if (phase !== 'ended' && start && stop) {
+    return Math.max(0, stop.getTime() - start.getTime());
+  }
+  return fallbackMs;
+}
+
+/** Hurry once the target is within the window, so both the start and the end earn it. */
+export function resolveCountdownStage(phase: ContestPhase, remainingMs: number | null, hurryMs: number): CountdownStage {
+  if (phase === 'ended') return 'ended';
+  if (phase === 'analysis') return 'analysis';
+  const isHurrying = remainingMs !== null && remainingMs <= hurryMs;
+  if (phase === 'running') return isHurrying ? 'hurry' : 'running';
+  return isHurrying ? 'hurry' : 'waiting';
+}
+
 // Only reached by a runtime that predates Intl.supportedValuesOf.
 const FALLBACK_TIMEZONES: readonly string[] = [
   'UTC',
@@ -85,16 +148,17 @@ const SECONDS_PER_DAY = 86400;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 
-/** `HH:MM:SS`, prefixed with the day count once the span reaches one. */
-export function formatCountdown(totalMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+/** Only the significant units, so a zero hour is dropped rather than shown as 00. */
+function countdownRuns(totalSeconds: number): readonly string[] {
+  const pad = (value: number): string => String(value).padStart(2, '0');
   const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
   const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
   const seconds = totalSeconds % SECONDS_PER_MINUTE;
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  const clock = `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
-  return days > 0 ? `${days}d ${clock}` : clock;
+  if (days > 0) return [`${days}d`, `${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)];
+  if (hours > 0) return [`${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)];
+  if (minutes > 0) return [`${pad(minutes)}:`, pad(seconds)];
+  return [pad(seconds)];
 }
 
 export interface CountdownGlyph {
@@ -107,27 +171,18 @@ export interface CountdownSegment {
   readonly glyphs: readonly CountdownGlyph[];
 }
 
-/** Splits the countdown at the only breakable points: between number groups, never inside one. */
+/** Breakable points only: between number groups, never inside one, and no zero leading unit. */
 export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {
   const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
-  const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
-  const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
-  const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
-  const seconds = totalSeconds % SECONDS_PER_MINUTE;
-  const pad = (value: number): string => String(value).padStart(2, '0');
-  const runs = days > 0
-    ? [`${days}d`, `${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)]
-    : [`${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)];
-
   let index = 0;
-  return runs.map((run) => ({
+  return countdownRuns(totalSeconds).map((run) => ({
     glyphs: [...run].map((char) => ({ char, index: index++ })),
   }));
 }
 
 export const COUNTDOWN_BASE_FONT_PX = 100;
 export const COUNTDOWN_MIN_FONT_PX = 16;
-export const COUNTDOWN_MAX_FONT_PX = 360;
+export const COUNTDOWN_MAX_FONT_PX = 480;
 
 /** Font size at which content measured at the base size fills the box on both axes. */
 export function fitCountdownFontPx(params: {
