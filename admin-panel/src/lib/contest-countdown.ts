@@ -51,8 +51,6 @@ export function isSupportedTimezone(timeZone: string): boolean {
   return listTimezones().includes(timeZone);
 }
 
-export const COUNTDOWN_TIMEZONES: readonly string[] = listTimezones();
-
 let cachedZoneOffsets: ReadonlyMap<string, string> | null = null;
 
 /** Zone to offset label; one formatter per zone, so the map is memoized. */
