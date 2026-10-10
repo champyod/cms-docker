@@ -1,6 +1,7 @@
 {
   "project": {
     "name": "CMS Docker",
+    "author": "CCYod",
     "upstream": {
       "name": "CMS (cms-dev)",
       "url": "https://github.com/cms-dev/cms"
@@ -331,6 +332,18 @@
           ],
           "paths": [
             "admin-panel/node_modules/@radix-ui/react-tooltip"
+          ]
+        },
+        {
+          "name": "animate.css",
+          "holder": "Daniel Eden",
+          "version": "4.1.1",
+          "license_id": "MIT",
+          "license_urls": [
+            "https://opensource.org/licenses/MIT"
+          ],
+          "paths": [
+            "admin-panel/node_modules/animate.css"
           ]
         },
         {
