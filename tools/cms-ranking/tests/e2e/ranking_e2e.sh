@@ -8,7 +8,11 @@
 #
 # Usage:
 #   RANKING_E2E_DATABASE_URL=postgresql://cmsuser:pw@127.0.0.1:5432/cmsdb \
+#   RANKING_E2E_REDIS_URL=redis://127.0.0.1:6379 \
 #     bash tools/cms-ranking/tests/e2e/ranking_e2e.sh
+#
+# Both are required: the database carries the ranking tables this script applies, and
+# the console refuses every login when the Redis holding the failure counters is absent.
 #
 # Every seeded row is fixture data read from seed.json, never operator input.
 
@@ -19,10 +23,16 @@ readonly CRATE="$(cd "${HERE}/../.." && pwd)"
 readonly REPO="$(cd "${CRATE}/../.." && pwd)"
 readonly PARITY="${CRATE}/tests/fixtures/parity"
 readonly DATABASE_URL="${RANKING_E2E_DATABASE_URL:?set RANKING_E2E_DATABASE_URL to a database carrying the ranking tables}"
+readonly REDIS_URL="${RANKING_E2E_REDIS_URL:?set RANKING_E2E_REDIS_URL to the Redis the console counts failures in}"
 readonly BIN="${RANKING_E2E_BINARY:-${CRATE}/target/release/cms-ranking}"
 readonly PORT="${RANKING_E2E_PORT:-18890}"
 readonly BASE="http://127.0.0.1:${PORT}"
 readonly LOG="$(mktemp)"
+readonly WORK="$(mktemp -d)"
+
+# The surface assertions live in their own file so this driver stays readable.
+# shellcheck source=surface_checks.sh
+source "${HERE}/surface_checks.sh"
 
 fail() { printf "[FAIL] %s\n" "$1" >&2; exit 1; }
 pass() { printf "[PASS] %s\n" "$1"; }
@@ -33,6 +43,7 @@ cleanup() {
         wait "${SERVICE_PID}" 2>/dev/null || true
     fi
     rm -f "${LOG}"
+    rm -rf "${WORK}"
 }
 trap cleanup EXIT
 
@@ -44,18 +55,18 @@ require_tools() {
     [[ -d "${REPO}/src/cmsranking/static" ]] || fail "the vendored page is not in this checkout"
 }
 
+# Every ranking migration in timestamp order — the same glob CI applies — so a new one
+# is picked up here rather than quietly missing from the schema this rehearsal drives.
 apply_migrations() {
-    local migration
-    for migration in \
-        20261009150000_ranking_tables \
-        20261009150100_ranking_tables_rls \
-        20261009160000_ranking_notify \
-        20261009170000_ranking_console_users \
-        20261009170100_ranking_console_users_rls; do
-        psql "${DATABASE_URL}" -q -f "${REPO}/admin-panel/prisma/migrations/${migration}/migration.sql" \
-            >/dev/null || fail "migration ${migration} did not apply"
+    local migration applied=0
+    for migration in "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
+        [[ -d "${migration}" ]] || continue
+        psql "${DATABASE_URL}" -q -f "${migration}migration.sql" >/dev/null ||
+            fail "migration $(basename "${migration}") did not apply"
+        applied=$((applied + 1))
     done
-    pass "the five ranking migrations apply in order"
+    [[ "${applied}" -gt 0 ]] || fail "no ranking migration was found to apply"
+    pass "the ${applied} ranking migrations apply in order"
 }
 
 seed_rows() {
@@ -84,6 +95,7 @@ PY
 start_service() {
     RANKING_BIND_ADDRESS="127.0.0.1:${PORT}" \
         DATABASE_URL="${DATABASE_URL}" \
+        RANKING_REDIS_URL="${REDIS_URL}" \
         RANKING_STATIC_DIR="${REPO}/src/cmsranking/static" \
         CMS_CREDITS_FILE="${REPO}/credits.json" \
         "${BIN}" >"${LOG}" 2>&1 &
@@ -173,7 +185,16 @@ main() {
     start_service
     compare_to_oracle "/scores" "scores"
     compare_to_oracle "/history" "history"
+    entity_reads_match_the_captures
+    task_single_keeps_the_python_byte_style
+    public_config_is_exactly_two_keys
+    credits_nests_licence_project_and_surface
+    timestamps_land_where_python_put_them
+    image_routes_never_answer_a_404
+    unknown_entity_key_is_a_404
+    events_refuse_a_client_that_excludes_the_stream
     events_follow_a_write
+    a_stale_event_id_is_answered_with_a_reinit
     seed_console_user
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"

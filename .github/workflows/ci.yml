@@ -461,6 +461,22 @@ jobs:
         working-directory: tools/cms-ranking
         run: cargo test --all-targets -- --include-ignored
 
+      # The rehearsal drives the release binary over HTTP against a database of its own:
+      # this job's database already carries the schema, and these migrations are not
+      # idempotent, so a second one is created instead of re-applying them. It is the
+      # only place the whole surface — entity reads, byte framing, events, protected
+      # mode — runs end to end against a real Postgres and Redis.
+      - name: Build the release binary for the rehearsal
+        working-directory: tools/cms-ranking
+        run: cargo build --release
+
+      - name: Acceptance rehearsal
+        run: |
+          psql "${RANKING_TEST_DATABASE_URL%/*}/postgres" -c 'CREATE DATABASE ranking_e2e' || true
+          RANKING_E2E_DATABASE_URL="${RANKING_TEST_DATABASE_URL%/*}/ranking_e2e" \
+          RANKING_E2E_REDIS_URL="${RANKING_TEST_REDIS_URL}" \
+            bash tools/cms-ranking/tests/e2e/ranking_e2e.sh
+
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it
   # stays at whatever the last person committed, and a merged change to the CLI looks
