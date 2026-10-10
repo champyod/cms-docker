@@ -1,8 +1,3 @@
-// Why: the countdown tab derives every displayed value from the same
-// four timing columns the overview edits, so the derivations live here
-// as pure functions — unit-testable without a browser, and shared with
-// the overview status card so the two surfaces cannot disagree.
-
 export type ContestPhase = 'not_started' | 'running' | 'analysis' | 'ended';
 
 export interface ContestTimingWindow {
@@ -14,9 +9,16 @@ export interface ContestTimingWindow {
 
 export const DEFAULT_COUNTDOWN_TIMEZONE = 'Asia/Bangkok';
 
-// Why: a fixed picker list keeps the selector predictable for admins;
-// each entry is an IANA zone so Intl renders DST-correct offsets.
-export const COUNTDOWN_TIMEZONES: readonly string[] = [
+export const PHASE_LABELS: Readonly<Record<ContestPhase, string>> = {
+  not_started: 'Not Started',
+  running: 'Running',
+  analysis: 'Analysis Mode',
+  ended: 'Ended',
+};
+
+// Only reached by a runtime that predates Intl.supportedValuesOf.
+const FALLBACK_TIMEZONES: readonly string[] = [
+  'UTC',
   'Asia/Bangkok',
   'Asia/Ho_Chi_Minh',
   'Asia/Jakarta',
@@ -25,25 +27,41 @@ export const COUNTDOWN_TIMEZONES: readonly string[] = [
   'Asia/Dubai',
   'Asia/Tokyo',
   'Australia/Sydney',
-  'Pacific/Auckland',
-  'Europe/Moscow',
-  'Europe/Berlin',
   'Europe/London',
+  'Europe/Berlin',
   'America/New_York',
-  'America/Chicago',
-  'America/Denver',
   'America/Los_Angeles',
-  'UTC',
 ];
 
-export const PHASE_LABELS: Readonly<Record<ContestPhase, string>> = {
-  not_started: 'Not Started',
-  running: 'Running',
-  analysis: 'Analysis Mode',
-  ended: 'Ended',
-};
+let cachedTimezones: readonly string[] | null = null;
 
-/** Mirrors the overview status card: no start means not started yet. */
+/** Every IANA zone this runtime ships, so no external timezone database is needed. */
+export function listTimezones(): readonly string[] {
+  if (cachedTimezones) return cachedTimezones;
+  const supportedValuesOf = (Intl as typeof Intl & {
+    supportedValuesOf?: (key: 'timeZone') => string[];
+  }).supportedValuesOf;
+  const zones = typeof supportedValuesOf === 'function' ? supportedValuesOf('timeZone') : [];
+  const withUtc = zones.includes('UTC') ? zones : ['UTC', ...zones];
+  cachedTimezones = withUtc.length > 1 ? withUtc : FALLBACK_TIMEZONES;
+  return cachedTimezones;
+}
+
+export function isSupportedTimezone(timeZone: string): boolean {
+  return listTimezones().includes(timeZone);
+}
+
+export const COUNTDOWN_TIMEZONES: readonly string[] = listTimezones();
+
+let cachedZoneOffsets: ReadonlyMap<string, string> | null = null;
+
+/** Zone to offset label; one formatter per zone, so the map is memoized. */
+export function zoneOffsetMap(): ReadonlyMap<string, string> {
+  cachedZoneOffsets ??= new Map(listTimezones().map((zone) => [zone, zoneOffsetLabel(zone)]));
+  return cachedZoneOffsets;
+}
+
+/** No start time means not started, so a contest without one never reads as running. */
 export function resolveContestPhase(timing: ContestTimingWindow, now: Date): ContestPhase {
   const start = toDate(timing.start);
   const stop = toDate(timing.stop);
@@ -55,7 +73,7 @@ export function resolveContestPhase(timing: ContestTimingWindow, now: Date): Con
   return 'ended';
 }
 
-/** The instant the countdown runs out on: start before the contest, stop while running. */
+/** The instant the countdown runs out on for the given phase, or null when none applies. */
 export function countdownTarget(timing: ContestTimingWindow, phase: ContestPhase): Date | null {
   switch (phase) {
     case 'not_started': return toDate(timing.start);
@@ -69,7 +87,7 @@ const SECONDS_PER_DAY = 86400;
 const SECONDS_PER_HOUR = 3600;
 const SECONDS_PER_MINUTE = 60;
 
-/** Renders a remaining span as `HH:MM:SS`, prefixing days once it reaches one. */
+/** `HH:MM:SS`, prefixed with the day count once the span reaches one. */
 export function formatCountdown(totalMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
   const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
@@ -81,7 +99,52 @@ export function formatCountdown(totalMs: number): string {
   return days > 0 ? `${days}d ${clock}` : clock;
 }
 
-/** Renders an instant as a readable timestamp inside the chosen zone. */
+export interface CountdownGlyph {
+  readonly char: string;
+  /** Position in the whole countdown, so a changed digit keys a new element. */
+  readonly index: number;
+}
+
+export interface CountdownSegment {
+  readonly glyphs: readonly CountdownGlyph[];
+}
+
+/** Splits the countdown at the only breakable points: between number groups, never inside one. */
+export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {
+  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+  const days = Math.floor(totalSeconds / SECONDS_PER_DAY);
+  const hours = Math.floor((totalSeconds % SECONDS_PER_DAY) / SECONDS_PER_HOUR);
+  const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE);
+  const seconds = totalSeconds % SECONDS_PER_MINUTE;
+  const pad = (value: number): string => String(value).padStart(2, '0');
+  const runs = days > 0
+    ? [`${days}d`, `${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)]
+    : [`${pad(hours)}:`, `${pad(minutes)}:`, pad(seconds)];
+
+  let index = 0;
+  return runs.map((run) => ({
+    glyphs: [...run].map((char) => ({ char, index: index++ })),
+  }));
+}
+
+export const COUNTDOWN_BASE_FONT_PX = 100;
+export const COUNTDOWN_MIN_FONT_PX = 16;
+export const COUNTDOWN_MAX_FONT_PX = 360;
+
+/** Font size at which content measured at the base size fills the box on both axes. */
+export function fitCountdownFontPx(params: {
+  availableWidth: number;
+  availableHeight: number;
+  naturalWidth: number;
+  naturalHeight: number;
+}): number {
+  const { availableWidth, availableHeight, naturalWidth, naturalHeight } = params;
+  if (naturalWidth <= 0 || naturalHeight <= 0) return COUNTDOWN_BASE_FONT_PX;
+  const scale = Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight);
+  if (!Number.isFinite(scale) || scale <= 0) return COUNTDOWN_BASE_FONT_PX;
+  return Math.min(COUNTDOWN_MAX_FONT_PX, Math.max(COUNTDOWN_MIN_FONT_PX, COUNTDOWN_BASE_FONT_PX * scale));
+}
+
 export function formatZoneTime(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-GB', {
     timeZone,
@@ -95,7 +158,6 @@ export function formatZoneTime(date: Date, timeZone: string): string {
   }).format(date);
 }
 
-/** Renders a zone's current offset, e.g. `UTC+07:00` for Asia/Bangkok. */
 export function zoneOffsetLabel(timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' }).formatToParts(new Date());
   const offset = parts.find((part) => part.type === 'timeZoneName')?.value ?? '';

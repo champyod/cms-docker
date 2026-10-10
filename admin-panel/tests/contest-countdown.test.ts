@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
-  COUNTDOWN_TIMEZONES,
+  COUNTDOWN_BASE_FONT_PX,
+  COUNTDOWN_MAX_FONT_PX,
+  COUNTDOWN_MIN_FONT_PX,
   DEFAULT_COUNTDOWN_TIMEZONE,
   countdownTarget,
+  fitCountdownFontPx,
   formatCountdown,
   formatZoneTime,
+  isSupportedTimezone,
+  listTimezones,
   resolveContestPhase,
+  toCountdownSegments,
   zoneOffsetLabel,
+  zoneOffsetMap,
 } from '@/lib/contest-countdown';
 
 const START = '2026-10-10T10:00:00Z';
@@ -92,17 +99,87 @@ describe('formatCountdown', () => {
   });
 });
 
+describe('toCountdownSegments', () => {
+  it('splits the clock into one segment per number group', () => {
+    const segments = toCountdownSegments(4 * 3600 * 1000 + 11 * 60 * 1000 + 9 * 1000);
+    expect(segments.map((segment) => segment.glyphs.map((glyph) => glyph.char).join('')))
+      .toEqual(['04:', '11:', '09']);
+  });
+
+  it('prefixes a day segment once the span reaches one', () => {
+    const segments = toCountdownSegments(26 * 3600 * 1000);
+    expect(segments.map((segment) => segment.glyphs.map((glyph) => glyph.char).join('')))
+      .toEqual(['1d', '02:', '00:', '00']);
+  });
+
+  it('ends every segment on its separator so a wrap never leads with a colon', () => {
+    for (const totalMs of [5 * 1000, 4 * 3600 * 1000, 50 * 3600 * 1000, 200 * 3600 * 1000]) {
+      for (const segment of toCountdownSegments(totalMs)) {
+        const text = segment.glyphs.map((glyph) => glyph.char).join('');
+        expect(text.startsWith(':')).toBe(false);
+      }
+    }
+  });
+
+  it('numbers every glyph by its position in the whole countdown', () => {
+    const segments = toCountdownSegments(4 * 3600 * 1000);
+    const indices = segments.flatMap((segment) => segment.glyphs.map((glyph) => glyph.index));
+    expect(indices).toEqual(indices.map((_, position) => position));
+  });
+});
+
+describe('fitCountdownFontPx', () => {
+  it('keeps the base size when the box matches the content', () => {
+    expect(fitCountdownFontPx({ availableWidth: 400, availableHeight: 100, naturalWidth: 400, naturalHeight: 100 }))
+      .toBe(COUNTDOWN_BASE_FONT_PX);
+  });
+
+  it('scales down to the tighter axis', () => {
+    expect(fitCountdownFontPx({ availableWidth: 200, availableHeight: 100, naturalWidth: 400, naturalHeight: 100 }))
+      .toBe(COUNTDOWN_BASE_FONT_PX / 2);
+  });
+
+  it('scales up to fill a larger box', () => {
+    expect(fitCountdownFontPx({ availableWidth: 800, availableHeight: 200, naturalWidth: 400, naturalHeight: 100 }))
+      .toBe(COUNTDOWN_BASE_FONT_PX * 2);
+  });
+
+  it('clamps to the readable range', () => {
+    expect(fitCountdownFontPx({ availableWidth: 40, availableHeight: 10, naturalWidth: 4000, naturalHeight: 1000 }))
+      .toBe(COUNTDOWN_MIN_FONT_PX);
+    expect(fitCountdownFontPx({ availableWidth: 40_000, availableHeight: 10_000, naturalWidth: 40, naturalHeight: 10 }))
+      .toBe(COUNTDOWN_MAX_FONT_PX);
+  });
+
+  it('falls back to the base size when there is nothing to measure', () => {
+    expect(fitCountdownFontPx({ availableWidth: 400, availableHeight: 100, naturalWidth: 0, naturalHeight: 0 }))
+      .toBe(COUNTDOWN_BASE_FONT_PX);
+  });
+});
+
 describe('timezone helpers', () => {
   it('defaults to UTC+7', () => {
     expect(DEFAULT_COUNTDOWN_TIMEZONE).toBe('Asia/Bangkok');
-    expect(COUNTDOWN_TIMEZONES[0]).toBe(DEFAULT_COUNTDOWN_TIMEZONE);
     expect(zoneOffsetLabel(DEFAULT_COUNTDOWN_TIMEZONE)).toBe('UTC+07:00');
   });
 
-  it('lists only IANA zones and UTC', () => {
-    for (const zone of COUNTDOWN_TIMEZONES) {
-      expect(() => zoneOffsetLabel(zone)).not.toThrow();
-    }
+  it('lists the full zone set the runtime knows, including the default and UTC', () => {
+    const zones = listTimezones();
+    expect(zones.length).toBeGreaterThan(50);
+    expect(zones).toContain('UTC');
+    expect(zones).toContain(DEFAULT_COUNTDOWN_TIMEZONE);
+  });
+
+  it('answers support for a known zone and rejects an unknown one', () => {
+    expect(isSupportedTimezone('Asia/Bangkok')).toBe(true);
+    expect(isSupportedTimezone('Not/AZone')).toBe(false);
+  });
+
+  it('maps every listed zone to an offset label', () => {
+    const offsets = zoneOffsetMap();
+    const zones = listTimezones();
+    expect(offsets.size).toBe(zones.length);
+    expect(offsets.get(DEFAULT_COUNTDOWN_TIMEZONE)).toBe('UTC+07:00');
   });
 
   it('renders a zone time deterministically for UTC', () => {
