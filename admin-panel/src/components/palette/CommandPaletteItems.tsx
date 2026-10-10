@@ -4,6 +4,9 @@ import { Check, LogOut, PlusCircle, Repeat } from 'lucide-react';
 import { CommandGroup, CommandItem } from '@/components/core/Command';
 import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import type { EntityHit } from '@/components/palette/entity-searchers';
+import { filterPaletteRows, labelMatches } from './palette-filter';
+
+const SWITCH_CONTEST_LIMIT = 5;
 
 export function NavigationItems({
   items,
@@ -39,25 +42,33 @@ export function EntityItems({ loading, hasQuery, hits, onSelect }: { loading: bo
   );
 }
 
-export function ActionItems({ contestsEnabled, availableContests, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element {
+export function ActionItems({ contestsEnabled, availableContests, needle, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; needle: string; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element | null {
+  const contestRows = filterPaletteRows(availableContests, needle, (contest) => contest.name).slice(0, SWITCH_CONTEST_LIMIT);
+  const showCreateContest = contestsEnabled && labelMatches('Create Contest', needle);
+  const showSignOut = labelMatches('Sign Out', needle);
+
+  if (!showCreateContest && !showSignOut && contestRows.length === 0) return null;
+
   return (
     <CommandGroup heading="Actions">
-      {contestsEnabled && (
+      {showCreateContest && (
         <CommandItem value="action-create-contest" onSelect={onCreateContest}>
           <PlusCircle className="text-muted-foreground" />
           <span>Create Contest</span>
         </CommandItem>
       )}
-      {contestsEnabled && availableContests.slice(0, 5).map((contest) => (
+      {contestRows.map((contest) => (
         <CommandItem key={`action-switch-${contest.id}`} value={`action-switch-contest-${contest.id}`} onSelect={() => onSwitchContest(contest.id)}>
           {contest.is_active ? <Check /> : <Repeat className="text-muted-foreground" />}
           <span>{contest.is_active ? `Active: ${contest.name}` : `Switch to ${contest.name}`}</span>
         </CommandItem>
       ))}
-      <CommandItem value="action-sign-out" onSelect={onSignOut}>
-        <LogOut className="text-muted-foreground" />
-        <span>Sign Out</span>
-      </CommandItem>
+      {showSignOut && (
+        <CommandItem value="action-sign-out" onSelect={onSignOut}>
+          <LogOut className="text-muted-foreground" />
+          <span>Sign Out</span>
+        </CommandItem>
+      )}
     </CommandGroup>
   );
 }
