@@ -69,8 +69,8 @@ describe('parseExportSelection', () => {
   });
 
   it('refuses a name the catalog does not know', () => {
-    const result = parseExportSelection('users,monitor_targets');
-    expect(result.ok === false && result.error).toContain('monitor_targets');
+    const result = parseExportSelection('users,audit_log');
+    expect(result.ok === false && result.error).toContain('audit_log');
   });
 
   it('carries the catalog warnings for a selection that needs them', () => {

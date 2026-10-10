@@ -306,11 +306,11 @@ describe('buildBackupArgv', () => {
   });
 
   it('rejects a table outside the catalog instead of passing it to pg_dump', () => {
-    const result = buildBackupArgv(['contests', 'monitor_targets']);
+    const result = buildBackupArgv(['contests', 'audit_log']);
     expect(result.valid).toBe(false);
     expect(result.args).toEqual([]);
     expect(result.tables).toEqual([]);
-    expect(result.error).toBe('Not in the backup table catalog: monitor_targets');
+    expect(result.error).toBe('Not in the backup table catalog: audit_log');
   });
 
   it('rejects a name that could smuggle a shell metacharacter through', () => {
@@ -328,7 +328,7 @@ describe('buildBackupArgv', () => {
   });
 
   it('never leaves an error null on a rejected selection', () => {
-    expect(buildBackupArgv(['contests', 'monitor_targets']).error).not.toBeNull();
+    expect(buildBackupArgv(['contests', 'audit_log']).error).not.toBeNull();
     expect(buildBackupArgv(['nope']).error).not.toBeNull();
   });
 
@@ -390,9 +390,9 @@ describe('a schedule that names no table backs up every table', () => {
   });
 
   it('still rejects an explicitly named table outside the catalog', () => {
-    const result = buildBackupArgv(['contests', 'monitor_targets']);
+    const result = buildBackupArgv(['contests', 'audit_log']);
     expect(result.valid).toBe(false);
-    expect(result.error).toBe('Not in the backup table catalog: monitor_targets');
+    expect(result.error).toBe('Not in the backup table catalog: audit_log');
   });
 
   it('does not let the default excuse a name that smuggled in alongside nothing else', () => {
@@ -571,7 +571,7 @@ describe('fireSchedule on a launch', () => {
 });
 
 describe('fireSchedule on a selection that left the catalog', () => {
-  const LEFT_THE_CATALOG = schedule({ tables: ['contests', 'monitor_targets'] });
+  const LEFT_THE_CATALOG = schedule({ tables: ['contests', 'audit_log'] });
 
   it('advances the cadence on the schedule interval instead of leaving it due-past', async () => {
     const { calls, store, deps } = fakeDeps();
@@ -592,12 +592,12 @@ describe('fireSchedule on a selection that left the catalog', () => {
     const { launcher, deps } = fakeDeps();
     await fireSchedule(LEFT_THE_CATALOG, REFERENCE, deps);
     expect(launcher.alerts).toEqual([
-      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: monitor_targets It will be retried on its own interval until its configuration is fixed.' },
+      { title: 'Scheduled Backup Rejected', body: 'Schedule **nightly** was skipped: Not in the backup table catalog: audit_log It will be retried on its own interval until its configuration is fixed.' },
     ]);
   });
 
   it('retries on cadence, not on every tick, and launches once the selection is fixed', async () => {
-    const row = mutableSchedule({ tables: ['contests', 'monitor_targets'] });
+    const row = mutableSchedule({ tables: ['contests', 'audit_log'] });
     const { store, launcher, deps } = fakeDeps();
     store.rows.push(row);
     await fireDueSchedules(store.rows, REFERENCE, deps);

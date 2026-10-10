@@ -24,6 +24,7 @@ export function findAdminTarget(adminId: number) {
     select: {
       id: true,
       enabled: true,
+      username: true,
       admin_groups: { select: { groups: { select: { id: true, name: true } } } },
     },
   });

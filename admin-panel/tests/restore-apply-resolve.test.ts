@@ -66,7 +66,7 @@ describe('requests refused before anything is written', () => {
   });
 
   it('refuses a table outside the catalog', async () => {
-    const result = await resolvePreviewConflict(input({ table: 'monitor_targets' }));
+    const result = await resolvePreviewConflict(input({ table: 'audit_log' }));
     expect(result.error).toMatch(/not in the backup table catalog/);
     expect(harness.dockerCalls).toEqual([]);
   });

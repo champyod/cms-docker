@@ -8,21 +8,12 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
 /**
  * schema.prisma models the catalog leaves out on purpose.
  *
- * `monitor_targets` is infrastructure: it describes which external URLs the
- * panel probes and at which interval, so it is monitor configuration that this
- * host owns rather than competition data it serves. A restore that carried it
- * would repoint the panel's alerting at endpoints the archive happened to name.
- *
  * `audit_log` is the append-only, hash-chained record of what was authorized and
  * by whom. Its rows are only meaningful as the ordered result of real events, so
  * replaying them into a restore would put actions in the trail that never
  * happened, and replaying only part of it would break the chain outright. It is
  * never restored; a restore is written to the trail by the actions it performs,
  * which is the only honest way for it to appear there.
- *
- * Everything else in the schema is selectable: the RBAC grant tables are here
- * because a restore that carried no privileges would land every admin with an
- * empty permission set, which is a panel nobody can operate.
  *
  * The six ranking_* projection tables are excluded for the same reason as
  * `audit_log`: they hold what the proxy pushed to the scoreboard, which is
@@ -35,7 +26,6 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * in the catalog.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
-  'monitor_targets',
   'audit_log',
   'security_blocks',
   'ranking_contests',
@@ -113,6 +103,10 @@ describe('BACKUP_TABLES', () => {
 
   it('orders user_test_results before user_test_executables, which references it', () => {
     expect(positionOf('user_test_results')).toBeLessThan(positionOf('user_test_executables'));
+  });
+
+  it('orders backup_locations before backup_schedules, which references it', () => {
+    expect(positionOf('backup_locations')).toBeLessThan(positionOf(SCHEDULE_TABLE));
   });
 
   it('places admins before every table that names it as the row author', () => {
@@ -310,6 +304,13 @@ describe('validateTableSelection', () => {
     }
   });
 
+  it('warns that a schedule selected without its location loses the reference, not the row', () => {
+    const warnings = missingParentWarnings(validateTableSelection([SCHEDULE_TABLE]).warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('backup_locations');
+    expect(warnings[0]).toContain('set to NULL');
+  });
+
   it('warns about both grant parents of a grant table selected alone', () => {
     const result = validateTableSelection(['admin_groups']);
     expect(result.valid).toBe(true);
@@ -372,8 +373,8 @@ describe('sensitivity warnings', () => {
   it('says a restored enabled schedule resumes firing under the poller', () => {
     const result = validateTableSelection([SCHEDULE_TABLE]);
     expect(result.valid).toBe(true);
-    const warning = result.warnings.find((entry) => entry.includes(SCHEDULE_TABLE));
-    expect(warning).toContain('resumes firing');
+    const warning = result.warnings.find((entry) => entry.includes('resumes firing'));
+    expect(warning).toContain(SCHEDULE_TABLE);
     expect(warning).toContain('interval');
   });
 

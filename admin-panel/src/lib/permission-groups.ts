@@ -5,6 +5,16 @@ import { PERMISSION_REGISTRY, type GroupDefinition } from './permission-registry
 // reference this path directly so there is no registry↔groups cycle.
 export type { GroupDefinition };
 
+/**
+ * The system actor that owns every script-side action: the seeded `root` admin
+ * and the group that carries every registry key for it. Name-keyed like
+ * Superadmin, and for the same reason — the guards that refuse deleting or
+ * editing the actor anchor on these strings, so the audit trail keeps an
+ * attribution target that cannot be destroyed through the panel.
+ */
+export const ROOT_ACTOR_USERNAME = 'root';
+export const ROOT_ACTOR_GROUP_NAME = 'root';
+
 function crud(moduleName: string): string[] {
   return ['list', 'create', 'read', 'update', 'delete'].map((verb) => `${moduleName}:${verb}`);
 }

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { recordAudit, assertReasonForDestructive } from '@/lib/audit';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
+import { ROOT_ACTOR_GROUP_NAME } from '@/lib/permission-groups';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -125,6 +126,16 @@ export async function updateGroup(
       };
     }
 
+    // Why: the root actor group is seed-maintained grant material — reshaping it
+    // would strip the attribution identity every script-side action logs under,
+    // the same way removing all:all from Superadmin would strip superadmins.
+    if (existing.name === ROOT_ACTOR_GROUP_NAME) {
+      return {
+        success: false,
+        error: 'Cannot edit the root actor group — the seed maintains it, and script-action attribution resolves through it',
+      };
+    }
+
     const beforeKeys = existing.group_permissions.map((link) => link.permissions.key);
     const permissionIds = await resolvePermissionIds(permissionKeys);
     await prisma.$transaction(async (tx) => {
@@ -179,6 +190,16 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
       return {
         success: false,
         error: 'Cannot delete the Superadmin group — it is name-keyed and anchors superadmin detection',
+      };
+    }
+
+    // Why: the root actor group is the system actor's grant material. Deleting it
+    // (or its links, which the delete cascades) would leave every script-side
+    // action attributed to an admin with no permissions — insert-only by design.
+    if (existing.name === ROOT_ACTOR_GROUP_NAME) {
+      return {
+        success: false,
+        error: 'Cannot delete the root actor group — the system actor attribution resolves through it',
       };
     }
 

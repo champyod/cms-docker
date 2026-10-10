@@ -41,9 +41,9 @@ describe('normalizeStrategies', () => {
   });
 
   it('refuses a table outside the catalog and a value outside the strategies', () => {
-    const unknownTable = normalizeStrategies({ monitor_targets: 'merge' } as unknown as ApplyStrategies);
+    const unknownTable = normalizeStrategies({ audit_log: 'merge' } as unknown as ApplyStrategies);
     expect(unknownTable.ok).toBe(false);
-    expect(unknownTable.unknown).toEqual(['monitor_targets']);
+    expect(unknownTable.unknown).toEqual(['audit_log']);
     const badValue = normalizeStrategies({ contests: 'truncate' } as unknown as ApplyStrategies);
     expect(badValue.ok).toBe(false);
     expect(badValue.unknown).toEqual(['contests']);

@@ -159,7 +159,7 @@ describe('sequenceResetSql', () => {
     expect(catalogPrimaryKeys('user_test_results')).toEqual(['user_test_id', 'dataset_id']);
     expect(catalogPrimaryKeys('contests')).toEqual(['id']);
     expect(catalogPrimaryKeys('admins')).toEqual(['id']);
-    expect(catalogPrimaryKeys('monitor_targets')).toEqual([]);
+    expect(catalogPrimaryKeys('audit_log')).toEqual([]);
   });
 
   it('asks the live database which key owns a sequence instead of assuming one', () => {

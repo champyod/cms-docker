@@ -27,6 +27,7 @@ import {
   DEFAULT_PASSWORD_KIND,
   type PasswordKind,
 } from '@/lib/password-format';
+import { ROOT_ACTOR_USERNAME } from '@/lib/permission-groups';
 import { handleAdminUpdateWrite } from './admin-update-helpers';
 
 interface ActionResult {
@@ -139,6 +140,13 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
     return { success: false, error: 'Cannot demote your own superadmin account' };
   }
 
+  // Why: the system actor's enabled flag is what keeps the passwordless row
+  // unloginnable. Re-enabling it would hand a root login attempt to the
+  // verifier, and the attribution identity has no operator-controlled state.
+  if (target?.username === ROOT_ACTOR_USERNAME && allowed.enabled !== undefined) {
+    return { success: false, error: 'Cannot change the enabled flag of the system actor' };
+  }
+
   // WHY: prevent the last superadmin from being demoted or disabled
   if (isCurrentlySuperadmin(target) && removesSuperadminStatusViaGroups(target, data)) {
     if (await wouldRemoveLastSuperadmin(adminId)) {
@@ -171,9 +179,15 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   if (mutationError) return mutationError;
 
   const target = await findAdminTarget(adminId);
-  // WHY: deleting a superadmin removes superadmin status — block if this is the last one
+  // Why: deleting a superadmin removes superadmin status — block if this is the last one
   if (isCurrentlySuperadmin(target) && await wouldRemoveLastSuperadmin(adminId)) {
     return { success: false, error: 'Cannot remove the last superadmin' };
+  }
+
+  // Why: the system actor is attribution infrastructure — every script-side
+  // action logs under its id, so the row is insert-only and no delete path exists.
+  if (target?.username === ROOT_ACTOR_USERNAME) {
+    return { success: false, error: 'Cannot delete the system actor — script-side action attribution resolves through it' };
   }
 
   try {

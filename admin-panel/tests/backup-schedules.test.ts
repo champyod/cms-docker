@@ -150,10 +150,10 @@ describe('validateScheduleInput', () => {
   });
 
   it('rejects a table outside the catalog', () => {
-    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'monitor_targets'] }));
+    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'audit_log'] }));
     expect(result.valid).toBe(false);
     expect(result.schedule).toBeNull();
-    expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);
+    expect(result.errors).toEqual(['Not in the backup table catalog: audit_log']);
   });
 
   it('rejects a selection that is not a list of names', () => {
@@ -247,8 +247,8 @@ describe('a schedule that names no table means every table', () => {
   });
 
   it('still rejects a table outside the catalog, so relaxing empty did not relax the allowlist', () => {
-    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'monitor_targets'] }));
-    expect(result.errors).toEqual(['Not in the backup table catalog: monitor_targets']);
+    const result = validateScheduleInput(scheduleInput({ tables: ['contests', 'audit_log'] }));
+    expect(result.errors).toEqual(['Not in the backup table catalog: audit_log']);
     expect(result.schedule).toBeNull();
   });
 

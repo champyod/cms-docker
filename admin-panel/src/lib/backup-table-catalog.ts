@@ -87,15 +87,16 @@ const CATALOG = [
   { name: 'user_test_files', label: 'User Test Files', pk: ['id'], needsLargeObjects: true },
   { name: 'user_test_managers', label: 'User Test Managers', pk: ['id'], needsLargeObjects: true },
   { name: 'user_test_executables', label: 'User Test Executables', pk: ['id'], needsLargeObjects: true },
-  // No table in this catalog references any of these five, so they sit together
-  // after everything that consumes them rather than among the content tables:
-  // the three grant tables resolve through the roots above, and the two backup
-  // tables have no relation to anything at all — `backup_runs.scheduleId` is a
-  // bare string on purpose, because run history must outlive the schedule it
-  // came from.
+  // No table in this catalog references any of these beyond one edge: the three
+  // grant tables resolve through the roots above, `backup_schedules` resolves
+  // through `backup_locations`, and the other three have no relation to
+  // anything — `backup_runs.scheduleId` is a bare string on purpose, because
+  // run history must outlive the schedule it came from.
   { name: 'group_permissions', label: 'Group Permissions', pk: ['id'], sensitive: true },
   { name: 'admin_groups', label: 'Admin Groups', pk: ['id'], sensitive: true },
   { name: 'admin_permission_overrides', label: 'Admin Permission Overrides', pk: ['id'], sensitive: true },
+  { name: 'monitor_targets', label: 'Monitor Targets', pk: ['id'] },
+  { name: 'backup_locations', label: 'Backup Locations', pk: ['id'] },
   { name: 'backup_schedules', label: 'Backup Schedules', pk: ['id'] },
   { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
   // Ranking control tables. Nothing references them and they reference nothing,
@@ -231,6 +232,7 @@ const NULLABLE_PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly
   announcements: [ADMIN_TABLE],
   messages: [ADMIN_TABLE],
   questions: [ADMIN_TABLE],
+  backup_schedules: ['backup_locations'],
 };
 
 function buildMissingParentWarnings(selected: ReadonlySet<string>): string[] {

@@ -482,6 +482,23 @@ model monitor_targets {
   @@map("monitor_targets")
 }
 
+/// One named archive tree the Backup & Restore page offers. Locations are rows,
+/// not config, so a schedule's reference is a real FK and Restrict keeps a
+/// referenced tree from disappearing under a schedule that still names it. The
+/// seeded system row stands for the legacy single tree: its `path` is empty
+/// because that tree is whatever BACKUP_DIR mounts, not a configured path.
+model backup_locations {
+  id        String             @id @default(cuid())
+  label     String
+  path      String
+  isSystem  Boolean            @default(false)
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  schedules backup_schedules[]
+
+  @@map("backup_locations")
+}
+
 /// One archived run of a backup schedule, or of a backup an admin triggered by
 /// hand. `scheduleId` stays NULL for manual runs and is deliberately not a
 /// relation: run history outlives the schedule it came from, so deleting a
@@ -505,20 +522,21 @@ model backup_runs {
 /// against the clock, so it is indexed together with `enabled`: every poll asks
 /// for exactly `enabled = true AND nextRunAt <= now`.
 model backup_schedules {
-  id           String    @id @default(cuid())
-  name         String    @unique
-  tables       String[]  @db.VarChar
+  id           String            @id @default(cuid())
+  name         String            @unique
+  tables       String[]          @db.VarChar
   intervalMins Int
-  enabled      Boolean   @default(true)
+  enabled      Boolean           @default(true)
   lastRunAt    DateTime?
   nextRunAt    DateTime
-  /// Backup location id from config.toml's [backup] list. Deliberately a bare
-  /// string, not a relation: locations are config, not rows, so they cannot be
-  /// foreign-keyed. NULL means the default tree — every row that predates
-  /// locations reads it that way, which keeps the migration a no-op.
+  /// Backup location this schedule dumps into. A relation now that locations
+  /// are rows; Restrict refuses deleting one a schedule still names. NULL
+  /// targets the seeded system location — the meaning every row that predates
+  /// locations already read into it.
   locationId   String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  location     backup_locations? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
 
   @@index([enabled, nextRunAt], map: "ix_backup_schedules_enabled_next_run_at")
   @@map("backup_schedules")
@@ -798,15 +816,15 @@ model ranking_settings {
 /// One manual change to what the scoreboard shows. A row is ended, never
 /// deleted, so "who hid this row and why" outlives the correction.
 model ranking_overrides {
-  id          BigInt   @id @default(autoincrement())
+  id          BigInt    @id @default(autoincrement())
   contest_id  Int
-  target_kind String   @db.VarChar
-  target_key  String   @db.VarChar
-  action      String   @db.VarChar
+  target_kind String    @db.VarChar
+  target_key  String    @db.VarChar
+  action      String    @db.VarChar
   payload     Json?
-  reason      String?  @db.VarChar
-  active      Boolean  @default(true)
-  created_at  DateTime @default(now())
+  reason      String?   @db.VarChar
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now())
   created_by  Int?
   ended_at    DateTime?
   ended_by    Int?
