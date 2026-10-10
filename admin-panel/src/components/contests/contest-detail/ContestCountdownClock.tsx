@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import {
   COUNTDOWN_BASE_FONT_PX,
   fitCountdownFontPx,
@@ -13,10 +13,24 @@ const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLa
 
 const EMPTY_SEGMENTS: readonly CountdownSegment[] = [{ glyphs: [{ char: '—', index: 0 }] }];
 
+interface FitMetrics {
+  layoutKey: string;
+  width: number;
+  height: number;
+}
+
 /** Width signature of the countdown, which changes only when its shape changes. */
 function layoutKeyOf(segments: readonly CountdownSegment[] | null): string {
   if (!segments) return 'none';
   return segments.map((segment) => segment.glyphs.length).join('.');
+}
+
+function measureNatural(line: HTMLDivElement, layoutKey: string): FitMetrics {
+  line.style.fontSize = `${COUNTDOWN_BASE_FONT_PX}px`;
+  line.style.whiteSpace = 'nowrap';
+  const metrics = { layoutKey, width: line.scrollWidth, height: line.scrollHeight };
+  line.style.whiteSpace = '';
+  return metrics;
 }
 
 interface Props {
@@ -27,39 +41,33 @@ interface Props {
 export function ContestCountdownClock({ remainingMs }: Props): React.JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
+  const metricsRef = useRef<FitMetrics | null>(null);
   const segments = remainingMs !== null ? toCountdownSegments(remainingMs) : null;
   const displaySegments = segments ?? EMPTY_SEGMENTS;
   const layoutKey = layoutKeyOf(segments);
 
-  // Measured at one base size, so a resize and a content change resolve alike.
-  const applyFit = useCallback((): void => {
+  // Natural size is measured once per shape and cached, so a resize costs one read and one write
+  // instead of a measure-write cycle that forces layout on every observer tick.
+  useBrowserLayoutEffect(() => {
     const box = boxRef.current;
     const line = lineRef.current;
     if (!box || !line) return;
-    line.style.fontSize = `${COUNTDOWN_BASE_FONT_PX}px`;
-    line.style.whiteSpace = 'nowrap';
-    const naturalWidth = line.scrollWidth;
-    const naturalHeight = line.scrollHeight;
-    line.style.whiteSpace = '';
-    line.style.fontSize = `${fitCountdownFontPx({
-      availableWidth: box.clientWidth,
-      availableHeight: box.clientHeight,
-      naturalWidth,
-      naturalHeight,
-    })}px`;
-  }, []);
-
-  useBrowserLayoutEffect(() => {
-    applyFit();
-  }, [applyFit, layoutKey]);
-
-  useEffect(() => {
-    const box = boxRef.current;
-    if (!box) return;
-    const observer = new ResizeObserver(() => applyFit());
+    const fit = (): void => {
+      const cached = metricsRef.current;
+      const metrics = cached && cached.layoutKey === layoutKey ? cached : measureNatural(line, layoutKey);
+      metricsRef.current = metrics;
+      line.style.fontSize = `${fitCountdownFontPx({
+        availableWidth: box.clientWidth,
+        availableHeight: box.clientHeight,
+        naturalWidth: metrics.width,
+        naturalHeight: metrics.height,
+      })}px`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
     observer.observe(box);
     return () => observer.disconnect();
-  }, [applyFit]);
+  }, [layoutKey]);
 
   return (
     <div className="countdown-shell flex min-h-0 flex-1 flex-col">

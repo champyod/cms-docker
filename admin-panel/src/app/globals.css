@@ -273,14 +273,16 @@
   }
 }
 
+/* Behind the digits and centred, so the character reads as the room, not a badge. */
 .countdown-character {
   position: absolute;
-  right: 3%;
-  bottom: 4%;
+  top: 50%;
+  left: 50%;
   z-index: 0;
-  width: 30vmin;
+  width: 46vmin;
   height: auto;
-  opacity: 0.55;
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
   pointer-events: none;
 }
 
