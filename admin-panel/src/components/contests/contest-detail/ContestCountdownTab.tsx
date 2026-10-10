@@ -2,7 +2,6 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
   DEFAULT_COUNTDOWN_THRESHOLD,
@@ -25,9 +24,6 @@ import {
   useElementFullscreen,
   usePhaseNotifications,
 } from './useContestCountdown';
-
-// Drop licensed character art in public/ and point this at it; empty renders no character.
-const CHARACTER_SRC = '';
 
 const DEFAULT_HURRY_MS = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
 
@@ -74,9 +70,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
         <span className="countdown-blob" />
       </div>
       {stage === 'hurry' ? <div aria-hidden className="countdown-warning" /> : null}
-      {CHARACTER_SRC ? (
-        <Image aria-hidden className="countdown-character" src={CHARACTER_SRC} alt="" width={512} height={512} />
-      ) : null}
+      <div aria-hidden className="countdown-character" />
 
       <div className="relative z-10">
         <CountdownToolbar

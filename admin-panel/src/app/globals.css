@@ -327,17 +327,46 @@
   }
 }
 
-/* Behind the digits and centred, so the character reads as the room, not a badge. */
+/* CC0 1.0 art: Pablo Stanley's Open Peeps, generated with DiceBear — see
+   public/contest-countdown/README.md. The stage picks the expression, and the beat
+   quickens with it. */
 .countdown-character {
   position: absolute;
   top: 50%;
   left: 50%;
   z-index: 0;
   width: 46vmin;
-  height: auto;
+  height: 46vmin;
   transform: translate(-50%, -50%);
-  opacity: 0.5;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.55;
   pointer-events: none;
+}
+
+.countdown-surface[data-stage='waiting'] .countdown-character {
+  background-image: url('/contest-countdown/waiting.svg');
+  animation: countdown-bob 4s ease-in-out infinite;
+}
+
+.countdown-surface[data-stage='hurry'] .countdown-character {
+  background-image: url('/contest-countdown/hurry.svg');
+  animation: countdown-bob 0.9s ease-in-out infinite;
+}
+
+.countdown-surface[data-stage='ended'] .countdown-character {
+  background-image: url('/contest-countdown/ended.svg');
+}
+
+@keyframes countdown-bob {
+  0%,
+  100% {
+    transform: translate(-50%, -50%);
+  }
+  50% {
+    transform: translate(-50%, -55%);
+  }
 }
 
 .countdown-stage-label {
