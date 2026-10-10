@@ -40,6 +40,15 @@ export type ContestSettingsFields = {
   score_precision: number; start: string | null; stop: string | null; analysis_start: string | null; analysis_stop: string | null;
 };
 
+export type ContestCountdownData = {
+  id: number;
+  name: string;
+  start: string | null;
+  stop: string | null;
+  analysis_start: string | null;
+  analysis_stop: string | null;
+};
+
 export type ContestSettingsData = { contestId: number; fields: ContestSettingsFields; permissionKeys: readonly string[] };
 
 type ParticipationEntry = {
@@ -73,6 +82,21 @@ export async function getContestOverview(contestId: number): Promise<ContestOver
   const contest = await getContestDetailSummary(contestId);
   if (!contest) return null;
   return { contest, permissionKeys: contest.permissionKeys };
+}
+
+// Why: the countdown tab polls this narrow timing projection so an
+// edited start or stop time reaches the page without a reload.
+export async function getContestCountdown(contestId: number): Promise<ContestCountdownData | null> {
+  const summary = await getContestDetailSummary(contestId);
+  if (!summary) return null;
+  return {
+    id: summary.id,
+    name: summary.name,
+    start: summary.start,
+    stop: summary.stop,
+    analysis_start: summary.analysis_start,
+    analysis_stop: summary.analysis_stop,
+  };
 }
 
 function toContestTaskRow(row: { id: number; name: string; title: string; num: number | null }, permissions: ReadonlySet<string>): ContestTaskRow {

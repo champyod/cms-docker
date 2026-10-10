@@ -10,6 +10,7 @@ export type RouteId =
   | 'contests.tabs.participants'
   | 'contests.tabs.communications'
   | 'contests.tabs.settings'
+  | 'contests.tabs.countdown'
   | 'tasks.list'
   | 'tasks.record'
   | 'tasks.tabs.overview'
@@ -43,7 +44,11 @@ export type RouteId =
   | 'infrastructure.deployments'
   | 'infrastructure.containers'
   | 'infrastructure.resources'
-  | 'infrastructure.ranking'
+  | 'ranking.board'
+  | 'ranking.settings'
+  | 'ranking.appearance'
+  | 'ranking.lockouts'
+  | 'ranking.credits'
   | 'system.appearance'
   | 'system.maintenance'
   | 'system.backup-restore'
@@ -86,7 +91,7 @@ export interface RouteDescriptor {
 }
 
 export interface NavigationGroupDescriptor {
-  readonly id: 'direct' | 'people' | 'evaluation' | 'administration' | 'security' | 'infrastructure' | 'system';
+  readonly id: 'direct' | 'people' | 'evaluation' | 'administration' | 'security' | 'infrastructure' | 'ranking' | 'system';
   readonly labelKey: string;
   readonly routeIds: readonly RouteId[];
 }

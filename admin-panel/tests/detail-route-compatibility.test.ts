@@ -10,6 +10,7 @@ const contestKeys = [
   'contests.tabs.participants',
   'contests.tabs.communications',
   'contests.tabs.settings',
+  'contests.tabs.countdown',
 ] as const;
 const taskKeys = ['tasks.tabs.overview', 'tasks.tabs.datasets', 'tasks.tabs.files', 'tasks.tabs.settings'] as const;
 

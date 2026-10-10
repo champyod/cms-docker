@@ -196,6 +196,10 @@
     "refresh": "Refresh"
   },
   "ranking": {
+    "board": {
+      "title": "Public scoreboard",
+      "hint": "What a visitor sees first on the ranking page, and the logo it is served with."
+    },
     "appearance": {
       "title": "Scoreboard appearance",
       "titleField": "Title",
@@ -227,8 +231,10 @@
       "end": "End"
     },
     "credits": {
+      "title": "Credit list",
       "field": "Full credit list (JSON)",
-      "hint": "Leave empty to serve the vendored credits.json. The licence source line is added by the service and cannot be removed here."
+      "hint": "Leave empty to serve the vendored credits.json. The licence source line is added by the service and cannot be removed here.",
+      "save": "Save credit list"
     },
     "lockouts": {
       "title": "Console lockouts",
@@ -579,7 +585,7 @@
     "users": "User actions"
   },
   "navigation": {
-    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "security": "Security", "infrastructure": "Infrastructure", "system": "System" },
+    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "security": "Security", "infrastructure": "Infrastructure", "ranking": "Ranking", "system": "System" },
     "home": { "label": "Dashboard" },
     "security": {
       "overview": { "label": "Security overview", "description": "Posture of the WAF, blocked addresses, lockouts and certificates." },
@@ -595,7 +601,8 @@
         "tasks": { "label": "Tasks" },
         "participants": { "label": "Participants" },
         "communications": { "label": "Communications" },
-        "settings": { "label": "Settings" }
+        "settings": { "label": "Settings" },
+        "countdown": { "label": "Countdown" }
       }
     },
     "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
@@ -605,8 +612,14 @@
     "infrastructure": {
       "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },
       "containers": { "label": "Containers", "description": "Manage and monitor Docker services in real time." },
-      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." },
-      "ranking": { "label": "Ranking", "description": "Manage the protected ranking session, snapshot, and scoreboard." }
+      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." }
+    },
+    "ranking": {
+      "board": { "label": "Board", "description": "Review what the public scoreboard opens with and set the logo it carries." },
+      "settings": { "label": "Settings", "description": "Apply manual ranking overrides without touching the contest data." },
+      "appearance": { "label": "Appearance", "description": "Set the scoreboard title, subtitle, access mode and footer text." },
+      "lockouts": { "label": "Lockouts", "description": "Review and clear ranking console lockouts." },
+      "credits": { "label": "Credits", "description": "Edit the credit list the scoreboard attributes its licences to." }
     },
     "system": {
       "appearance": { "label": "Appearance", "description": "Configure branding, service previews, and display density." },

@@ -78,3 +78,9 @@ export async function getActiveContest(): Promise<Awaited<ReturnType<typeof cont
 export async function getContestEditData(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestEditData>>> {
   return contestDetail.getContestEditData(id);
 }
+
+// Why: the countdown tab polls this to hot-reload timing config edits
+// made in Overview or Settings without a manual browser refresh.
+export async function getContestCountdown(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestCountdown>>> {
+  return contestDetail.getContestCountdown(id);
+}
