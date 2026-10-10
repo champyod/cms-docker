@@ -1,10 +1,10 @@
--- 20261010000100_contestant_username_rls/migration.sql — GENERATED — do not hand-edit
+-- 20261010150427_contestant_username_rls/migration.sql — GENERATED — do not hand-edit
 -- Source: admin-panel/prisma/schema.prisma
--- Generator: scripts/__generate_rls_sql.sh
+-- Generator: scripts/__generate_rls_sql.sh --write=contestant_username_rls
 -- WHY GENERATED: ENABLE/FORCE plus the cmsuser_all policy per table, all mechanical from schema.prisma.
 -- WHY the policy: FORCE makes the table owner subject to RLS too, and every service connects as cmsuser (the owner), so the permissive policy rides along in the same guarded block.
 -- WHY DO $$ with to_regclass guard: prisma db push --accept-data-loss can drop/rename a table; an unguarded ALTER TABLE would abort the entire apply (ON_ERROR_STOP=1) and leave roles half-applied.
--- To regenerate: bash scripts/__generate_rls_sql.sh
+-- To regenerate: bash scripts/__generate_rls_sql.sh --write=contestant_username_rls
 -- To verify freshness (CI): bash scripts/__generate_rls_sql.sh --check
 
 DO $$ BEGIN
