@@ -71,8 +71,15 @@ function subscribeDialogs(listener: () => void): () => void {
   };
 }
 
+// Why a constant: a dialog is opened by a click, never by a render, so the
+// server has nothing open and every server snapshot must agree on one value —
+// returning the live store here would hydrate another request's open dialog.
+function getServerDialogsSnapshot(): UserDialogsState {
+  return CLOSED_DIALOGS;
+}
+
 export function useUserDialogs(): UserDialogs {
-  const state = useSyncExternalStore(subscribeDialogs, () => dialogsState);
+  const state = useSyncExternalStore(subscribeDialogs, () => dialogsState, getServerDialogsSnapshot);
 
   const openCreate = useCallback((): void => {
     setDialogsState({ ...CLOSED_DIALOGS, isOpen: true });
