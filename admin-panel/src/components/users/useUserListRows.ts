@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
@@ -11,6 +12,7 @@ import { writeListQuery, type ListQueryState } from '@/lib/list-state';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
 const AUTO_REFRESH_INTERVAL_MS = 60000;
+const SEARCH_DEBOUNCE_MS = 300;
 
 type UserTableState = ReturnType<typeof useTable>;
 
@@ -33,6 +35,7 @@ export interface UserListRows {
   // a bulk action still needs its full row, so selections resolve by id.
   readonly userCache: Readonly<Record<number, UsersPageRow>>;
   readonly fetchUsers: (query?: UserListQuery) => Promise<void>;
+  readonly searchUsers: (value: string) => void;
 }
 
 export interface UserListRowsInput {
@@ -131,8 +134,17 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
 
   useTableAutoRefresh({ enabled: true, intervalMs: AUTO_REFRESH_INTERVAL_MS, onRefresh: () => fetchUsers() });
 
+  const fetchUsersRef = useRef(fetchUsers);
+  useEffect(() => { fetchUsersRef.current = fetchUsers; }, [fetchUsers]);
+
+  const searchUsers = useDebouncedSearch({
+    value: searchDraft,
+    delayMs: SEARCH_DEBOUNCE_MS,
+    onApply: (search) => fetchUsersRef.current({ page: 1, search }),
+  });
+
   return {
     users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, pageInput, setPageInput,
-    table, userCache, fetchUsers,
+    table, userCache, fetchUsers, searchUsers,
   };
 }

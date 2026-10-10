@@ -52,7 +52,13 @@ export function AuditFilters({
     'h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
   return (
     <Card className="p-4">
-      <div className="flex flex-wrap items-end gap-3">
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onApply();
+        }}
+      >
         <div className="min-w-40">
           <label className="block text-xs font-medium text-muted-foreground mb-1">{dict.filters.entity}</label>
           <select
@@ -121,14 +127,14 @@ export function AuditFilters({
           />
         </div>
         <div className="flex gap-2 pb-0.5">
-          <Button variant="positive" size="sm" onClick={onApply} icon={Search}>
+          <Button variant="positive" size="sm" type="submit" icon={Search}>
             {dict.filters.apply}
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClear}>
+          <Button variant="ghost" size="sm" type="button" onClick={onClear}>
             {dict.filters.clear}
           </Button>
         </div>
-      </div>
+      </form>
     </Card>
   );
 }

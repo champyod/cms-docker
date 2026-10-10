@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { TablePaginationControls } from '@/components/core/TablePaginationControls';
@@ -89,7 +90,16 @@ export function AuditTable({
     [entityFilter, verbFilter, actorIdFilter, resultFilter, searchFilter, fromDateFilter, toDateFilter, router],
   );
 
-  const handleApplyFilters = () => navigateWithFilters();
+  const applySearch = useDebouncedSearch({
+    value: searchFilter,
+    delayMs: 300,
+    onApply: (search) => navigateWithFilters({ search }),
+  });
+
+  const handleApplyFilters = () => {
+    applySearch(searchFilter);
+  };
+
   const handleClearFilters = () => {
     setEntityFilter('');
     setVerbFilter('');
