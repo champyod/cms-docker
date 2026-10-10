@@ -70,7 +70,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
         <span className="countdown-blob" />
       </div>
       {stage === 'hurry' ? <div aria-hidden className="countdown-warning" /> : null}
-      <div aria-hidden className="countdown-character" />
+      <div aria-hidden className="countdown-runner" />
 
       <div className="relative z-10">
         <CountdownToolbar

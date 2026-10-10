@@ -327,45 +327,52 @@
   }
 }
 
-/* CC0 1.0 art: Pablo Stanley's Open Peeps, generated with DiceBear — see
-   public/contest-countdown/README.md. The stage picks the expression, and the beat
-   quickens with it. */
-.countdown-character {
+/* A small comet lapping the frame: it sits on the perimeter, so it is half over the edge at
+   every point and slips past the corners before coming back round the other side. Percent
+   left/top keep the lap relative to the surface; one 3vmin element is not worth a
+   compositor trick that would need the surface size measured in JS. */
+.countdown-runner {
   position: absolute;
-  top: 50%;
-  left: 50%;
   z-index: 0;
-  width: 46vmin;
-  height: 46vmin;
+  width: 3vmin;
+  height: 3vmin;
+  border-radius: 50%;
   transform: translate(-50%, -50%);
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: contain;
-  opacity: 0.55;
+  background: hsl(var(--countdown-hue) 92% 64%);
+  box-shadow: 0 0 2.4vmin 0.5vmin hsl(var(--countdown-hue) 92% 56% / 0.45);
+  opacity: var(--countdown-backdrop-opacity);
+  transition: opacity 420ms ease;
   pointer-events: none;
 }
 
-.countdown-surface[data-stage='waiting'] .countdown-character {
-  background-image: url('/contest-countdown/waiting.svg');
-  animation: countdown-bob 4s ease-in-out infinite;
+.countdown-surface[data-stage='waiting'] .countdown-runner {
+  animation: countdown-lap 15s linear infinite;
 }
 
-.countdown-surface[data-stage='hurry'] .countdown-character {
-  background-image: url('/contest-countdown/hurry.svg');
-  animation: countdown-bob 0.9s ease-in-out infinite;
+.countdown-surface[data-stage='hurry'] .countdown-runner {
+  animation: countdown-lap 5.5s linear infinite;
 }
 
-.countdown-surface[data-stage='ended'] .countdown-character {
-  background-image: url('/contest-countdown/ended.svg');
-}
-
-@keyframes countdown-bob {
-  0%,
-  100% {
-    transform: translate(-50%, -50%);
+@keyframes countdown-lap {
+  0% {
+    top: 100%;
+    left: 0%;
+  }
+  25% {
+    top: 100%;
+    left: 100%;
   }
   50% {
-    transform: translate(-50%, -55%);
+    top: 0%;
+    left: 100%;
+  }
+  75% {
+    top: 0%;
+    left: 0%;
+  }
+  100% {
+    top: 100%;
+    left: 0%;
   }
 }
 
