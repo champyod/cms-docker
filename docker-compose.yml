@@ -472,6 +472,14 @@ services:
       # the value reaches .env and stops there, and the panel keeps its built-in
       # default no matter what the operator configures.
       MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
+      # The per-file half of the testcase cap, plus the cap for every other upload the
+      # panel accepts. All of them are read from process.env, so compose is what puts
+      # them in the container — without these lines the value reaches .env and stops.
+      MAX_TESTCASE_FILE_BYTES: ${MAX_TESTCASE_FILE_BYTES:-2097152}
+      MAX_LOGO_UPLOAD_BYTES: ${MAX_LOGO_UPLOAD_BYTES:-5242880}
+      MAX_AVATAR_UPLOAD_BYTES: ${MAX_AVATAR_UPLOAD_BYTES:-2097152}
+      MAX_STATEMENT_UPLOAD_BYTES: ${MAX_STATEMENT_UPLOAD_BYTES:-10485760}
+      MAX_ATTACHMENT_UPLOAD_BYTES: ${MAX_ATTACHMENT_UPLOAD_BYTES:-10485760}
 
       # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
       BACKUP_DIR: ${BACKUP_DIR:-/app/backups}

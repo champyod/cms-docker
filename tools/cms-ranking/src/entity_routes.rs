@@ -9,8 +9,9 @@ use crate::http::{not_found, refuse};
 use crate::json::{bytes_response, stamped};
 use crate::AppState;
 
-/// Which bundled fallback a route serves. The projection carries no per-entity
-/// image, so an entity that exists gets this dummy while an unknown key is a 404.
+/// Which bundled fallback a route serves when no uploaded image matches. The
+/// projection itself carries no per-entity image, so this dummy — never a 404 — is
+/// what an entity with no face or flag gets.
 #[derive(Debug, Clone, Copy)]
 enum Fallback {
     Face,
@@ -96,8 +97,58 @@ async fn sublist(State(state): State<AppState>, Path(user): Path<String>) -> Res
 /// fallback whenever nothing matches, so a key naming nothing gets the same dummy as an entity
 /// with no image. It needs no database for the same reason, and a 404 here would be a divergence
 /// from the service being replaced rather than a stricter check.
-async fn image(state: AppState, _key: &str, fallback: Fallback) -> Response {
-    bundled(&state, fallback).await
+///
+/// An uploaded face or flag is preferred when one exists. The directory is read on every
+/// request, so replacing a file is the whole update — no restart and no cache to
+/// invalidate, the same no-downtime swap the logo already has.
+async fn image(state: AppState, key: &str, fallback: Fallback) -> Response {
+    match uploaded(&state, key).await {
+        Some(response) => response,
+        None => bundled(&state, fallback).await,
+    }
+}
+
+/// The extensions the upload surface accepts, in probe order. The panel normalises a
+/// `.jpeg` to `.jpg`, so both spellings are tried before the bundled dummy, and `gif`
+/// is here because the shared upload policy accepts it for both image surfaces.
+const UPLOADED_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "gif", "bmp"];
+
+fn mime_for_extension(extension: &str) -> &'static str {
+    match extension {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        _ => "image/bmp",
+    }
+}
+
+async fn uploaded(state: &AppState, key: &str) -> Option<Response> {
+    let directory = state.config().avatar_dir.as_ref()?;
+    // A key arrives from the URL, so it is used as one filename component only. Any
+    // separator or traversal would let a reader name a file outside the directory, and a
+    // malformed key is answered with the dummy rather than probed at all.
+    if !key
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '-')
+    {
+        return None;
+    }
+    for extension in UPLOADED_EXTENSIONS {
+        let path = directory.join(format!("{key}.{extension}"));
+        // A miss is the normal case while probing, so it falls through to the next
+        // spelling; the bundled dummy below is what a real failure still answers.
+        let Ok(bytes) = tokio::fs::read(&path).await else {
+            continue;
+        };
+        return Some(
+            (
+                [(header::CONTENT_TYPE, mime_for_extension(extension))],
+                bytes,
+            )
+                .into_response(),
+        );
+    }
+    None
 }
 
 async fn bundled(state: &AppState, fallback: Fallback) -> Response {

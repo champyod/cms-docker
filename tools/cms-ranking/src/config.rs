@@ -13,6 +13,12 @@ pub const DEFAULT_STATIC_DIR: &str = "/home/cmsuser/src/src/cmsranking/static";
 /// even when nothing is set in the environment.
 pub const DEFAULT_CREDITS_FILE: &str = "/home/cmsuser/cms/credits.json";
 
+/// Where the panel writes contestant faces, on the volume both containers already share
+/// for the logo. It is a default rather than operator configuration: a directory that is
+/// absent simply yields the bundled dummy, so a deployment that uploads no faces pays
+/// only a probe that misses.
+pub const DEFAULT_AVATAR_DIR: &str = "/var/local/lib/cms/ranking/avatars";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RankingConfig {
     pub bind: SocketAddr,
@@ -20,6 +26,10 @@ pub struct RankingConfig {
     pub static_dir: Option<PathBuf>,
     pub credits_file: Option<PathBuf>,
     pub logo_path: Option<PathBuf>,
+    /// The directory uploaded contestant faces live in, read on every request so a
+    /// replacement takes effect with no restart. A blank value turns faces off, which
+    /// leaves every one of them the bundled dummy the service being replaced served.
+    pub avatar_dir: Option<PathBuf>,
     /// Signs the console cookie. Absent means the console cannot log anyone in, which
     /// is a refusal rather than an open door.
     pub session_secret: Option<String>,
@@ -84,6 +94,7 @@ impl Default for RankingConfig {
             static_dir: None,
             credits_file: None,
             logo_path: None,
+            avatar_dir: None,
             session_secret: None,
             captcha: CaptchaConfig::default(),
             redis_url: None,
@@ -118,6 +129,7 @@ impl RankingConfig {
             static_dir: read_path(&vars, "RANKING_STATIC_DIR", DEFAULT_STATIC_DIR),
             credits_file: read_path(&vars, "CMS_CREDITS_FILE", DEFAULT_CREDITS_FILE),
             logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
+            avatar_dir: read_path(&vars, "RANKING_AVATAR_DIR", DEFAULT_AVATAR_DIR),
             session_secret: read_secret(&vars),
             captcha: read_captcha(&vars),
             redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
@@ -261,6 +273,27 @@ mod tests {
             Some(std::path::Path::new(DEFAULT_CREDITS_FILE))
         );
         assert_eq!(config.logo_path, None);
+        assert_eq!(
+            config.avatar_dir.as_deref(),
+            Some(std::path::Path::new(DEFAULT_AVATAR_DIR))
+        );
+    }
+
+    #[test]
+    fn an_avatar_directory_turns_on_uploaded_faces() {
+        let config = RankingConfig::from_pairs(pairs(&[("RANKING_AVATAR_DIR", "/data/faces")]))
+            .expect("a directory is tolerated");
+        assert_eq!(
+            config.avatar_dir.as_deref(),
+            Some(std::path::Path::new("/data/faces"))
+        );
+    }
+
+    #[test]
+    fn a_blank_avatar_directory_falls_back_to_the_dummy_face() {
+        let config = RankingConfig::from_pairs(pairs(&[("RANKING_AVATAR_DIR", "  ")]))
+            .expect("blank is tolerated");
+        assert_eq!(config.avatar_dir, None);
     }
 
     #[test]

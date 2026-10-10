@@ -370,7 +370,7 @@ done
 # key writes can only be set by hand-editing .env, which the next config sync discards.
 #
 # WHY the section is not named: asserting one would demand a second registration of a key that already has one elsewhere — a duplicate key, the exact failure the TOML write gate catches. Any section is correct so long as there is exactly one.
-for var in MAX_TESTCASE_UPLOAD_BYTES; do
+for var in MAX_TESTCASE_UPLOAD_BYTES MAX_TESTCASE_FILE_BYTES MAX_LOGO_UPLOAD_BYTES MAX_AVATAR_UPLOAD_BYTES MAX_STATEMENT_UPLOAD_BYTES MAX_ATTACHMENT_UPLOAD_BYTES; do
   if grep -qE "\|\[[a-z_]+\]\|${var}\|" "${UPDATE_ENGINE}"; then
     ok "${var} is registered under some section"
   else

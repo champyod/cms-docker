@@ -3,35 +3,21 @@ import path from 'path';
 
 import { NextRequest, NextResponse } from 'next/server';
 
+import {
+  IMAGE_EXTENSIONS,
+  imageMime,
+  normalizeImageExtension,
+  validateAssetSize,
+  type ImageExtension,
+} from '@/lib/asset-upload';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 
 const RANKING_LIB_DIR = '/var/local/lib/cms/ranking';
-const MAX_BYTES = 5 * 1024 * 1024;
 
-const ALLOWED_EXTS = ['png', 'jpg', 'gif', 'bmp'] as const;
-type AllowedExt = (typeof ALLOWED_EXTS)[number];
-
-const MIME_MAP: Record<AllowedExt, string> = {
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  gif: 'image/gif',
-  bmp: 'image/bmp',
-};
-
-function normalizeExt(raw: string): AllowedExt | null {
-  const lower = raw.toLowerCase();
-  const mapped = lower === 'jpeg' ? 'jpg' : lower;
-  return (ALLOWED_EXTS as readonly string[]).includes(mapped) ? (mapped as AllowedExt) : null;
-}
-
-function mimeForExt(ext: AllowedExt): string {
-  return MIME_MAP[ext];
-}
-
-async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: AllowedExt } | null> {
-  for (const ext of ALLOWED_EXTS) {
+async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: ImageExtension } | null> {
+  for (const ext of IMAGE_EXTENSIONS) {
     const candidate = path.join(dir, `logo.${ext}`);
     try {
       await fs.access(candidate);
@@ -42,8 +28,8 @@ async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: Allo
   return null;
 }
 
-async function removeOtherLogos(dir: string, keepExt: AllowedExt | null): Promise<void> {
-  for (const ext of ALLOWED_EXTS) {
+async function removeOtherLogos(dir: string, keepExt: ImageExtension | null): Promise<void> {
+  for (const ext of IMAGE_EXTENSIONS) {
     if (keepExt !== null && ext === keepExt) continue;
     const target = path.join(dir, `logo.${ext}`);
     try {
@@ -82,10 +68,10 @@ async function updateConfigToml(ext: string | null): Promise<void> {
   await fs.writeFile(tomlPath, content, 'utf-8');
 }
 
-async function serveImageFile(filePath: string, ext: AllowedExt): Promise<NextResponse> {
+async function serveImageFile(filePath: string, ext: ImageExtension): Promise<NextResponse> {
   const data = await fs.readFile(filePath);
   const stat = await fs.stat(filePath);
-  const mime = mimeForExt(ext);
+  const mime = imageMime(ext);
   return new NextResponse(new Uint8Array(data), {
     status: 200,
     headers: {
@@ -121,18 +107,12 @@ export async function GET(): Promise<NextResponse> {
   }
 }
 
-function extractExt(fileName: string): AllowedExt | null {
+function extractExt(fileName: string): ImageExtension | null {
   const rawExt = fileName.includes('.') ? (fileName.split('.').pop() ?? '') : '';
-  return normalizeExt(rawExt);
+  return normalizeImageExtension(rawExt);
 }
 
-function validateFileSize(file: File): string | null {
-  if (file.size === 0) return 'Empty file';
-  if (file.size > MAX_BYTES) return 'File too large — max 5MB';
-  return null;
-}
-
-async function writeLogoToDir(dir: string, buffer: Buffer, ext: AllowedExt): Promise<void> {
+async function writeLogoToDir(dir: string, buffer: Buffer, ext: ImageExtension): Promise<void> {
   await ensureDir(dir);
   await removeOtherLogos(dir, null);
   const target = path.join(dir, `logo.${ext}`);
@@ -152,7 +132,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return apiError({ status: 400, message: 'Missing file field "logo"' });
     }
 
-    const sizeError = validateFileSize(file);
+    const sizeError = validateAssetSize('logo', file.size);
     if (sizeError) return apiError({ status: 400, message: sizeError });
 
     const ext = extractExt(file.name || 'logo');
