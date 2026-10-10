@@ -67,7 +67,7 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
     reason,
     result: 'success',
   });
-  revalidatePath('/[locale]/infrastructure/ranking');
+  revalidatePath('/[locale]/ranking/settings');
 }
 
 /**
@@ -95,7 +95,7 @@ export async function endRankingOverride(formData: FormData): Promise<void> {
     reason,
     result: 'success',
   });
-  revalidatePath('/[locale]/infrastructure/ranking');
+  revalidatePath('/[locale]/ranking/settings');
 }
 
 function toOverride(row: {

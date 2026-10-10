@@ -11,7 +11,8 @@ import { prisma } from '@/lib/prisma';
 // The appearance lives in one row, keyed so a second can never be written by accident.
 const SETTINGS_ID = 1;
 
-export interface RankingAppearance {
+/** The appearance columns the board reads. The credit list is edited on its own. */
+export interface AppearanceFields {
   title: string;
   subtitle: string;
   organisation: string;
@@ -19,6 +20,9 @@ export interface RankingAppearance {
   showIdColumn: boolean;
   footerText: string;
   creditsText: string;
+}
+
+export interface RankingAppearance extends AppearanceFields {
   /// The full credit list, pretty-printed for the textarea. Empty means the vendored
   /// credits.json is still the list.
   credits: string;
@@ -69,7 +73,7 @@ export async function saveRankingAppearance(formData: FormData): Promise<{ succe
       afterValues: { ...appearance },
       result: 'success',
     });
-    revalidatePath('/[locale]/infrastructure/ranking');
+    revalidatePath('/[locale]/ranking/appearance');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -85,6 +89,43 @@ export async function submitRankingAppearance(formData: FormData): Promise<void>
   const result = await saveRankingAppearance(formData);
   if (!result.success) {
     throw new Error(result.error ?? 'the appearance could not be saved');
+  }
+}
+
+/**
+ * The credit list is saved apart from the appearance columns because the two now live on
+ * separate pages: one form saving both means the field a page no longer posts writes an
+ * empty list over the one already stored, and for a licence offer that is worse than a refusal.
+ */
+export async function saveRankingCredits(formData: FormData): Promise<{ success: boolean; error?: string }> {
+  await ensurePermission('ranking:appearance');
+  try {
+    const raw = String(formData.get('credits') ?? '');
+    const credits = parseCredits(raw);
+    await prisma.ranking_settings.upsert({
+      where: { id: SETTINGS_ID },
+      create: { id: SETTINGS_ID, credits },
+      update: { credits },
+    });
+    await recordAudit({
+      verb: 'ranking:credits:update',
+      entity: 'ranking',
+      entityId: String(SETTINGS_ID),
+      afterValues: { credits: raw },
+      result: 'success',
+    });
+    revalidatePath('/[locale]/ranking/credits');
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/** The credit list's form-shaped entry point, mirroring submitRankingAppearance. */
+export async function submitRankingCredits(formData: FormData): Promise<void> {
+  const result = await saveRankingCredits(formData);
+  if (!result.success) {
+    throw new Error(result.error ?? 'the credit list could not be saved');
   }
 }
 
@@ -127,11 +168,10 @@ function readShowIdColumn(columns: unknown): boolean {
   return value === true;
 }
 
-function readForm(formData: FormData): RankingAppearance {
+function readForm(formData: FormData): AppearanceFields {
   const text = (name: string) => String(formData.get(name) ?? '').trim();
   return {
     title: text("title"),
-    credits: String(formData.get("credits") ?? ''),
     subtitle: text("subtitle"),
     organisation: text("organisation"),
     accessMode: formData.get("accessMode") === "protected" ? "protected" : "public",
@@ -141,16 +181,14 @@ function readForm(formData: FormData): RankingAppearance {
   };
 }
 
-function toRow(appearance: RankingAppearance) {
+function toRow(appearance: AppearanceFields) {
   return {
     title: appearance.title || null,
     subtitle: appearance.subtitle || null,
     organisation: appearance.organisation || null,
     access_mode: appearance.accessMode,
     columns: { show_id_column: appearance.showIdColumn },
-    credits: parseCredits(appearance.credits),
     footer_text: appearance.footerText || null,
     credits_text: appearance.creditsText || null,
   };
 }
-

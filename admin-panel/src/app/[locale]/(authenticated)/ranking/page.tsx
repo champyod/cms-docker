@@ -1,29 +1,53 @@
-import { notFound, redirect } from 'next/navigation';
+import { getRankingAppearance } from '@/app/actions/rankingAppearance';
+import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
+import { getDictionary } from '@/i18n';
+import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-import { getRoutePermissions } from '@/lib/navigation/page-authorization';
-import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
-import { AuthorizationError } from '@/lib/server/authorization';
+const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
+const TERM_CLASS = 'text-xs font-bold uppercase text-white/50';
 
-const LEGACY_PATH = '/ranking';
-
-/**
- * Why this route still exists: the Secure Ranking screen keeps its old address so
- * existing bookmarks, chord history, and links land on the canonical module
- * route. Only a reader whose permissions fail closed is concealed; a 401 and any
- * unexpected storage failure keep propagating.
- */
-export default async function RankingRedirectPage({
+/** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
+export default async function RankingBoardPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}): Promise<never> {
-  try {
-    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
-    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
-    if (target === null) notFound();
-    redirect(target);
-  } catch (error: unknown) {
-    if (error instanceof AuthorizationError && error.status === 403) notFound();
-    throw error;
-  }
+}): Promise<React.JSX.Element> {
+  const [{ locale }, effective] = await Promise.all([
+    params,
+    authorizeRoutePage('ranking.board'),
+  ]);
+  const copy = (await getDictionary(locale)).ranking;
+  const appearance = await getRankingAppearance();
+  return (
+    <div className="space-y-6">
+      <section className={CARD_CLASS}>
+        <h2 className="text-lg font-semibold text-white">{copy.board.title}</h2>
+        <p className="text-sm text-white/60">{copy.board.hint}</p>
+        <dl className="grid gap-3 md:grid-cols-2 text-sm">
+          <div>
+            <dt className={TERM_CLASS}>{copy.appearance.titleField}</dt>
+            <dd className="text-white/80">{appearance.title || '—'}</dd>
+          </div>
+          <div>
+            <dt className={TERM_CLASS}>{copy.appearance.subtitleField}</dt>
+            <dd className="text-white/80">{appearance.subtitle || '—'}</dd>
+          </div>
+          <div>
+            <dt className={TERM_CLASS}>{copy.appearance.organisationField}</dt>
+            <dd className="text-white/80">{appearance.organisation || '—'}</dd>
+          </div>
+          <div>
+            <dt className={TERM_CLASS}>{copy.appearance.accessField}</dt>
+            <dd className="text-white/80">
+              {appearance.accessMode === 'protected'
+                ? copy.appearance.accessProtected
+                : copy.appearance.accessPublic}
+            </dd>
+          </div>
+        </dl>
+      </section>
+
+      <RankingLogoCard canManage={effective.has('ranking:update')} />
+    </div>
+  );
 }

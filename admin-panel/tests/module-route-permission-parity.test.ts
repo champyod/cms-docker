@@ -40,7 +40,23 @@ const ROUTE_CASES = [
     requiredKeys: ['resource:list', 'resource:read'],
   },
   {
-    routeId: 'infrastructure.ranking',
+    routeId: 'ranking.board',
+    requiredKeys: ['ranking:list', 'ranking:read'],
+  },
+  {
+    routeId: 'ranking.settings',
+    requiredKeys: ['ranking:list', 'ranking:read'],
+  },
+  {
+    routeId: 'ranking.appearance',
+    requiredKeys: ['ranking:list', 'ranking:read'],
+  },
+  {
+    routeId: 'ranking.lockouts',
+    requiredKeys: ['ranking:list', 'ranking:read'],
+  },
+  {
+    routeId: 'ranking.credits',
     requiredKeys: ['ranking:list', 'ranking:read'],
   },
   {
@@ -64,7 +80,11 @@ const MODULE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
   'infrastructure.resources',
-  'infrastructure.ranking',
+  'ranking.board',
+  'ranking.settings',
+  'ranking.appearance',
+  'ranking.lockouts',
+  'ranking.credits',
   'system.appearance',
   'system.maintenance',
   'system.settings',
@@ -102,7 +122,7 @@ describe('module tab and route permission parity', () => {
     expect(routePermits('administration.groups', new Set(['group:assign']))).toBe(false);
     expect(routePermits('infrastructure.deployments', new Set(['deployment:deploy']))).toBe(false);
     expect(routePermits('infrastructure.containers', new Set(['container:control']))).toBe(false);
-    expect(routePermits('infrastructure.ranking', new Set(['ranking:snapshot']))).toBe(false);
+    expect(routePermits('ranking.board', new Set(['ranking:snapshot']))).toBe(false);
     expect(routePermits('system.appearance', new Set(['appearance:update']))).toBe(false);
     expect(routePermits('system.settings', new Set(['env:update']))).toBe(false);
     expect(routePermits('system.settings', new Set(['settings:update']))).toBe(false);

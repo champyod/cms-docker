@@ -19,16 +19,14 @@ function readSource(relativePath: string): string {
 }
 
 describe('Infrastructure target registry', () => {
-  it('enables the approved four routes in order', () => {
+  it('enables the approved three routes in order', () => {
     expect(buildRoute('en', 'infrastructure.deployments')).toBe('/en/infrastructure/deployments');
     expect(buildRoute('en', 'infrastructure.containers')).toBe('/en/infrastructure/containers');
     expect(buildRoute('en', 'infrastructure.resources')).toBe('/en/infrastructure/resources');
-    expect(buildRoute('en', 'infrastructure.ranking')).toBe('/en/infrastructure/ranking');
     for (const id of [
       'infrastructure.deployments',
       'infrastructure.containers',
       'infrastructure.resources',
-      'infrastructure.ranking',
     ] as const) expect(route(id).enabled).toBe(true);
   });
 
@@ -39,7 +37,7 @@ describe('Infrastructure target registry', () => {
   });
 
   it('keeps Ranking all-of because page and registry already agree', () => {
-    const ranking = route('infrastructure.ranking');
+    const ranking = route('ranking.board');
     expect(isRoutePermitted(ranking, new Set(['ranking:list']))).toBe(false);
     expect(isRoutePermitted(ranking, new Set(['ranking:read']))).toBe(false);
     expect(isRoutePermitted(ranking, new Set(['ranking:list', 'ranking:read']))).toBe(true);
@@ -54,11 +52,13 @@ describe('Infrastructure legacy redirects', () => {
       .toBe('/th/infrastructure/containers');
     expect(resolveLegacyRedirect('th', '/resources', new Set(['resource:list', 'resource:read'])))
       .toBe('/th/infrastructure/resources');
-    expect(resolveLegacyRedirect('th', '/ranking', new Set(['ranking:list', 'ranking:read'])))
-      .toBe('/th/infrastructure/ranking');
+    expect(resolveLegacyRedirect('th', '/infrastructure/ranking', new Set(['ranking:list', 'ranking:read'])))
+      .toBe('/th/ranking');
+    // /ranking is canonical now, so no descriptor claims it as a legacy path.
+    expect(resolveLegacyRedirect('th', '/ranking', new Set(['ranking:list', 'ranking:read']))).toBeNull();
   });
 
-  it('uses Deployments, Containers, Resources, Ranking fallback order', () => {
+  it('uses Deployments, Containers, Resources fallback order', () => {
     expect(resolveLegacyRedirect('en', '/containers', new Set(['resource:list', 'resource:read'])))
       .toBe('/en/infrastructure/resources');
     expect(resolveLegacyRedirect('en', '/containers', new Set())).toBeNull();
@@ -81,14 +81,6 @@ describe('Infrastructure ownership and wiring', () => {
       'src/app/[locale]/(authenticated)/infrastructure/resources/page.tsx',
       'infrastructure.resources',
       '<ResourceView',
-    ],
-    [
-      'src/app/[locale]/(authenticated)/infrastructure/ranking/page.tsx',
-      'infrastructure.ranking',
-      // The page's client component is the logo card now: the scoreboard it used to render is
-      // served by the ranking service itself, and the appearance, override and lockout
-      // sections around it are server forms.
-      '<RankingLogoCard',
     ],
   ])('%s authorizes and delegates to %s', (relativePath, routeId, clientTag) => {
     const source = readSource(relativePath);

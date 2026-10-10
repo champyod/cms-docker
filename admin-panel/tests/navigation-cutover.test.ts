@@ -90,6 +90,7 @@ describe('final navigation cutover', () => {
       'administration',
       'security',
       'infrastructure',
+      'ranking',
       'system',
     ]);
     for (const surface of PRIMARY_SURFACES) {
