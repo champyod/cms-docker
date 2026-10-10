@@ -216,58 +216,111 @@
   min-height: 0;
 }
 
-/* Each stage names the colour its label and warning take. Nothing tints the surface at rest. */
+/* Each stage names the colour its label and backdrop take. */
 .countdown-surface[data-stage='waiting'] {
   --countdown-hue: 226;
-  --countdown-strength: 10%;
-  --countdown-breathe: 9s;
+  --countdown-backdrop-opacity: 1;
+  --countdown-blob-alpha: 0.5;
+  --countdown-drift: 18s;
 }
 
 .countdown-surface[data-stage='running'] {
   --countdown-hue: 150;
-  --countdown-strength: 12%;
-  --countdown-breathe: 6s;
+  --countdown-backdrop-opacity: 0;
+  --countdown-blob-alpha: 0.4;
+  --countdown-drift: 22s;
 }
 
 .countdown-surface[data-stage='analysis'] {
   --countdown-hue: 205;
-  --countdown-strength: 10%;
-  --countdown-breathe: 8s;
+  --countdown-backdrop-opacity: 0;
+  --countdown-blob-alpha: 0.4;
+  --countdown-drift: 20s;
 }
 
-/* The hurry is the same meaning at a higher temperature and a faster beat. */
+/* The hurry is the waiting screen at a higher temperature and a faster beat. */
 .countdown-surface[data-stage='hurry'] {
   --countdown-hue: 22;
-  --countdown-strength: 28%;
-  --countdown-breathe: 1.3s;
+  --countdown-backdrop-opacity: 1;
+  --countdown-blob-alpha: 0.6;
+  --countdown-drift: 5s;
 }
 
 .countdown-surface[data-stage='ended'] {
   --countdown-hue: 0;
-  --countdown-strength: 8%;
-  --countdown-breathe: 14s;
+  --countdown-backdrop-opacity: 0;
+  --countdown-blob-alpha: 0.4;
+  --countdown-drift: 26s;
 }
 
-/* Fixed to the viewport, so the warning adds no scroll and resizes nothing; mounted only
-   inside the hurry window, so the countdown sits plain until it actually matters. */
-.countdown-warning {
-  position: fixed;
+/* A drifting gradient, the way a live waiting screen sits behind its countdown.
+   Transform-only and blur-free, so it stays on the compositor. Being an in-flow-absolute
+   child of an overflow-hidden surface, it can neither scroll nor resize the page. */
+.countdown-backdrop {
+  position: absolute;
   inset: 0;
-  z-index: 40;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--countdown-backdrop-opacity);
+  transition: opacity 420ms ease;
+}
+
+.countdown-blob {
+  position: absolute;
+  width: 58vmax;
+  height: 58vmax;
+  border-radius: 50%;
+  background: radial-gradient(circle, hsl(var(--countdown-hue) 85% 50% / var(--countdown-blob-alpha)), transparent 68%);
+  animation: countdown-drift var(--countdown-drift) ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.countdown-blob:nth-child(1) {
+  top: -14%;
+  left: -10%;
+}
+
+.countdown-blob:nth-child(2) {
+  top: 6%;
+  right: -16%;
+  animation-delay: -4s;
+}
+
+.countdown-blob:nth-child(3) {
+  bottom: -18%;
+  left: 20%;
+  animation-delay: -9s;
+}
+
+@keyframes countdown-drift {
+  from {
+    transform: translate3d(-7%, -5%, 0) scale(1);
+  }
+  to {
+    transform: translate3d(7%, 5%, 0) scale(1.22);
+  }
+}
+
+/* Explicit escalation once the threshold is reached: an amber vignette over the gradient. */
+.countdown-warning {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
   overflow: hidden;
   pointer-events: none;
   background: radial-gradient(
     120% 100% at 50% 50%,
-    transparent 42%,
-    hsl(var(--countdown-hue) 90% 55% / var(--countdown-strength)) 100%
+    transparent 38%,
+    hsl(var(--countdown-hue) 95% 55% / 0.38) 100%
   );
-  animation: countdown-warn var(--countdown-breathe) ease-in-out infinite;
+  animation: countdown-warn 1.3s ease-in-out infinite;
 }
 
 @keyframes countdown-warn {
   0%,
   100% {
-    opacity: 0.5;
+    opacity: 0.45;
   }
   50% {
     opacity: 1;
