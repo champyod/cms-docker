@@ -1,7 +1,7 @@
 /** How long one figure holds the screen before another takes its turn. */
 export const RUNNER_SHAPE_ROTATION_MS = 600_000;
 
-export const RUNNER_SHAPE_IDS = ['spiky', 'tumbler', 'stickman', 'blob'] as const;
+export const RUNNER_SHAPE_IDS = ['tumbler', 'stickman', 'blob'] as const;
 
 export type RunnerShapeId = (typeof RUNNER_SHAPE_IDS)[number];
 

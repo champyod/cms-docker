@@ -370,10 +370,6 @@
   filter: drop-shadow(0 0 0.7vmin hsl(var(--countdown-hue) 92% 58% / 0.55));
 }
 
-.countdown-spiky {
-  animation: countdown-spin calc(var(--countdown-beat, 0.5s) * 3) linear infinite;
-}
-
 .countdown-tumbler {
   animation: countdown-spin calc(var(--countdown-beat, 0.5s) * 4) linear infinite;
 }

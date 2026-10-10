@@ -5,15 +5,6 @@ import type { RunnerShapeId } from '@/lib/contest-countdown-runner';
  * built here, so each takes the stage colour and none carries an asset licence.
  */
 export function ContestCountdownShape({ id }: { readonly id: RunnerShapeId }): React.JSX.Element {
-  if (id === 'spiky') {
-    return (
-      <svg className="countdown-shape countdown-spiky" viewBox="0 0 48 48">
-        <circle cx="24" cy="24" r="11" />
-        <path d="M24 4v7M24 37v7M4 24h7M37 24h7M10 10l5 5M33 33l5 5M38 10l-5 5M15 33l-5 5" />
-      </svg>
-    );
-  }
-
   if (id === 'tumbler') {
     return (
       <svg className="countdown-shape countdown-tumbler" viewBox="0 0 48 48">
