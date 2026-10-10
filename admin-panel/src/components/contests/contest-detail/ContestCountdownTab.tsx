@@ -66,9 +66,9 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
     <div
       ref={surfaceRef}
       data-stage={stage}
-      className="countdown-surface relative isolate flex min-h-[62vh] flex-col gap-6"
+      className="countdown-surface relative isolate flex min-h-[62vh] flex-col gap-6 overflow-hidden"
     >
-      <div aria-hidden className="countdown-ambient" />
+      {stage === 'hurry' ? <div aria-hidden className="countdown-warning" /> : null}
       {CHARACTER_SRC ? (
         <Image aria-hidden className="countdown-character" src={CHARACTER_SRC} alt="" width={512} height={512} />
       ) : null}
