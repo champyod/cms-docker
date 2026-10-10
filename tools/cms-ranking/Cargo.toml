@@ -19,6 +19,7 @@ thiserror = "2"
 tower-http = { version = "0.6", features = ["fs"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+askama = "0.16.1"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

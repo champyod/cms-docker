@@ -20,26 +20,34 @@ fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearan
     }
 }
 
-const PAGE: &str = "<html><head><title>Ranking</title></head><body>board</body></html>";
-
 #[test]
-fn the_panel_title_replaces_the_vendored_one() {
-    let rendered = render_page(PAGE, Some(&appearance(Some("IOI 2026"), None)));
+fn the_panel_title_replaces_the_default_one() {
+    let rendered =
+        render_page(Some(&appearance(Some("IOI 2026"), None))).expect("the page renders");
     assert!(rendered.contains("<title>IOI 2026</title>"));
     assert!(!rendered.contains("<title>Ranking</title>"));
 }
 
 #[test]
+fn the_default_title_is_kept_when_the_panel_names_none() {
+    let rendered = render_page(None).expect("the page renders");
+    assert!(rendered.contains("<title>Ranking</title>"));
+}
+
+#[test]
 fn a_title_is_escaped_rather_than_injected() {
-    let rendered = render_page(PAGE, Some(&appearance(Some("<script>x</script>"), None)));
+    let rendered =
+        render_page(Some(&appearance(Some("<script>x</script>"), None))).expect("the page renders");
     assert!(!rendered.contains("<script>x"));
-    assert!(rendered.contains("&lt;script&gt;"));
+    // Askama's HTML escaper spells the brackets as numeric entities; what matters
+    // is that the tag never reaches the document as markup.
+    assert!(rendered.contains("&#60;script&#62;"));
 }
 
 #[test]
 fn a_theme_becomes_custom_properties_before_the_head_closes() {
     let theme = serde_json::json!({ "accent": "#00A3DA", "background": "#101010" });
-    let rendered = render_page(PAGE, Some(&appearance(None, Some(theme))));
+    let rendered = render_page(Some(&appearance(None, Some(theme)))).expect("the page renders");
     assert!(rendered.contains("--ranking-accent: #00A3DA;"));
     assert!(rendered.contains("--ranking-background: #101010;"));
     assert!(rendered.contains("</style></head>"));
@@ -48,15 +56,18 @@ fn a_theme_becomes_custom_properties_before_the_head_closes() {
 #[test]
 fn a_theme_value_that_could_break_out_of_the_declaration_is_dropped() {
     let theme = serde_json::json!({ "accent": "#fff} body { display: none", "safe": "#123456" });
-    let rendered = render_page(PAGE, Some(&appearance(None, Some(theme))));
+    let rendered = render_page(Some(&appearance(None, Some(theme)))).expect("the page renders");
     assert!(!rendered.contains("display: none"));
     assert!(rendered.contains("--ranking-safe: #123456;"));
 }
 
+/// The template is compiled in, so unlike the vendored file it read before, the
+/// answer is always a whole document rather than whatever was on disk.
 #[test]
-fn a_page_without_a_head_is_returned_untouched() {
-    let rendered = render_page("<html><body>bare</body></html>", None);
-    assert_eq!(rendered, "<html><body>bare</body></html>");
+fn the_page_is_a_complete_document() {
+    let rendered = render_page(None).expect("the page renders");
+    assert!(rendered.starts_with("<!DOCTYPE html>"));
+    assert!(rendered.trim_end().ends_with("</html>"));
 }
 
 fn notice(footer: Option<&str>, credits: Option<&str>) -> Appearance {
@@ -67,16 +78,12 @@ fn notice(footer: Option<&str>, credits: Option<&str>) -> Appearance {
     }
 }
 
-const PAGE_WITH_NOTICE: &str = "<html><body><div id=\"LicenseNotice\">Powered by CMS</div><div id=\"InnerFrame\"></div></body></html>";
-
 /// /config carries only two keys, so the panel's footer and credit line must reach
 /// the page in the rendered HTML. They land inside the byline block it already has.
 #[test]
 fn the_panel_footer_lands_inside_the_license_notice() {
-    let rendered = render_page(
-        PAGE_WITH_NOTICE,
-        Some(&notice(Some("Hosted by ACME"), Some("Icons by Foo"))),
-    );
+    let rendered = render_page(Some(&notice(Some("Hosted by ACME"), Some("Icons by Foo"))))
+        .expect("the page renders");
     assert!(rendered.contains("<div id=\"ranking-footer\">Hosted by ACME</div>"));
     assert!(rendered.contains("<div id=\"ranking-credits\">Icons by Foo</div>"));
     let notice_at = rendered.find("LicenseNotice").expect("the notice is there");
@@ -89,18 +96,17 @@ fn the_panel_footer_lands_inside_the_license_notice() {
 
 #[test]
 fn a_footer_line_is_escaped_rather_than_injected() {
-    let rendered = render_page(
-        PAGE_WITH_NOTICE,
-        Some(&notice(Some("<script>x</script>"), None)),
-    );
+    let rendered =
+        render_page(Some(&notice(Some("<script>x</script>"), None))).expect("the page renders");
     assert!(!rendered.contains("<script>x"));
     assert!(rendered.contains("&lt;script&gt;"));
 }
 
 #[test]
-fn an_empty_footer_leaves_the_page_untouched() {
-    let rendered = render_page(PAGE_WITH_NOTICE, Some(&notice(Some("  "), None)));
-    assert_eq!(rendered, PAGE_WITH_NOTICE);
+fn an_empty_footer_adds_no_block() {
+    let rendered = render_page(Some(&notice(Some("  "), None))).expect("the page renders");
+    assert!(!rendered.contains("id=\"ranking-footer\""));
+    assert!(!rendered.contains("id=\"ranking-credits\""));
 }
 
 /// The vendored credits.html reads project["name"], license["name"], license["url"]

@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use askama::Template;
+
 use serde::Serialize;
 
 use crate::store::Appearance;
@@ -70,81 +72,72 @@ fn required_object(
         })
 }
 
-pub fn read_page(path: &Path) -> Result<String, SurfaceError> {
-    std::fs::read_to_string(path)
-        .map_err(|error| SurfaceError::Page(format!("{}: {error}", path.display())))
+/// The scoreboard page, owned by this crate rather than read from disk on every
+/// request. The vendored copy stays only for the Python service this one replaces,
+/// so the title, the theme and the byline are template values instead of splices
+/// into a file whose markup the injection used to depend on.
+#[derive(Debug, Template)]
+#[template(path = "ranking.html")]
+struct RankingPage<'a> {
+    title: &'a str,
+    theme_block: &'a str,
+    notice_extras: &'a str,
 }
 
-/// Applies what the panel owns to the vendored page: the title, the theme and the
-/// footer lines. /config carries only the two keys the capture records, so the rest
-/// reaches the page through the rendered HTML rather than through a wider object.
-pub fn render_page(html: &str, appearance: Option<&Appearance>) -> String {
-    let titled = apply_title(html, appearance.and_then(|row| row.title.as_deref()));
-    let themed = apply_theme(&titled, appearance.and_then(|row| row.theme.as_ref()));
-    apply_notice(&themed, appearance)
+/// The title the page ships with, used when the panel names none.
+const DEFAULT_TITLE: &str = "Ranking";
+
+/// Applies what the panel owns: the title, the theme and the footer lines.
+/// /config carries only the two keys the capture records, so the rest reaches the
+/// reader through the rendered HTML rather than through a wider object.
+pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceError> {
+    let title = appearance
+        .and_then(|row| row.title.as_deref())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(DEFAULT_TITLE);
+    let theme_block = theme_block(appearance.and_then(|row| row.theme.as_ref()));
+    let notice_extras = notice_extras(appearance);
+    RankingPage {
+        title,
+        theme_block: &theme_block,
+        notice_extras: &notice_extras,
+    }
+    .render()
+    .map_err(|error| SurfaceError::Page(error.to_string()))
 }
 
-/// The panel's footer and compact credit line land inside the vendored
-/// #LicenseNotice block, below the AGPL line: it is the one place the page already
-/// reserves for a byline, so nothing new has to be positioned. The div holds no
-/// nested div, so the first close after the id is its own.
-fn apply_notice(html: &str, appearance: Option<&Appearance>) -> String {
+/// The panel's footer and compact credit line land inside the byline block the page
+/// already reserves, so they are built as markup here and placed by the template.
+/// Every line is escaped before it is wrapped, so a value can never become an element.
+fn notice_extras(appearance: Option<&Appearance>) -> String {
     let Some(row) = appearance else {
-        return html.to_string();
+        return String::new();
     };
     let footer = present(row.footer_text.as_deref());
     let credits = present(row.credits_text.as_deref());
     if footer.is_none() && credits.is_none() {
-        return html.to_string();
+        return String::new();
     }
-    let Some(anchor) = html.find("id=\"LicenseNotice\"") else {
-        return html.to_string();
-    };
-    let Some(close) = html[anchor..].find("</div>") else {
-        return html.to_string();
-    };
     let mut block = String::new();
     for (id, text) in [("ranking-footer", footer), ("ranking-credits", credits)] {
         if let Some(text) = text {
             block.push_str(&format!("<div id=\"{id}\">{}</div>", escape_html(text)));
         }
     }
-    let position = anchor + close;
-    let mut rendered = String::with_capacity(html.len() + block.len());
-    rendered.push_str(&html[..position]);
-    rendered.push_str(&block);
-    rendered.push_str(&html[position..]);
-    rendered
+    block
 }
 
 fn present(value: Option<&str>) -> Option<&str> {
     value.filter(|text| !text.trim().is_empty())
 }
 
-fn apply_title(html: &str, title: Option<&str>) -> String {
-    let Some(title) = title.filter(|value| !value.trim().is_empty()) else {
-        return html.to_string();
-    };
-    let start = html.find("<title>");
-    let end = html.find("</title>");
-    match (start, end) {
-        (Some(start), Some(end)) if start < end => {
-            let mut rendered = String::with_capacity(html.len());
-            rendered.push_str(&html[..start + "<title>".len()]);
-            rendered.push_str(&escape_html(title));
-            rendered.push_str(&html[end..]);
-            rendered
-        }
-        _ => html.to_string(),
-    }
-}
-
 /// Theme values become CSS custom properties on the document. A value that could
-/// close the declaration or open a new one is refused, because this string lands
-/// in a page that anyone can load.
-fn apply_theme(html: &str, theme: Option<&serde_json::Value>) -> String {
+/// close the declaration or open a new one is dropped, because this string lands
+/// in a page that anyone can load. The caller marks the result safe only after
+/// this has filtered it.
+fn theme_block(theme: Option<&serde_json::Value>) -> String {
     let Some(theme) = theme.and_then(serde_json::Value::as_object) else {
-        return html.to_string();
+        return String::new();
     };
     let declarations: Vec<String> = theme
         .iter()
@@ -157,22 +150,12 @@ fn apply_theme(html: &str, theme: Option<&serde_json::Value>) -> String {
         })
         .collect();
     if declarations.is_empty() {
-        return html.to_string();
+        return String::new();
     }
-    let block = format!(
+    format!(
         "<style id=\"ranking-theme\">:root{{{}}}</style>",
         declarations.join("")
-    );
-    match html.find("</head>") {
-        Some(position) => {
-            let mut rendered = String::with_capacity(html.len() + block.len());
-            rendered.push_str(&html[..position]);
-            rendered.push_str(&block);
-            rendered.push_str(&html[position..]);
-            rendered
-        }
-        None => html.to_string(),
-    }
+    )
 }
 
 fn is_safe_css_value(value: &str) -> bool {

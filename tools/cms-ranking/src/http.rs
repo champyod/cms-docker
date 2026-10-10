@@ -9,7 +9,7 @@ use tower_http::services::ServeDir;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::public_config;
 use crate::store::{load_appearance, load_ledger, Appearance};
-use crate::surface::{credits_from_file, logo_path, read_page, render_page};
+use crate::surface::{credits_from_file, logo_path, render_page};
 use crate::AppState;
 
 #[derive(Serialize)]
@@ -70,15 +70,18 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
 }
 
 async fn root(State(state): State<AppState>) -> Response {
-    let Some(directory) = state.config().static_dir.as_ref() else {
+    // The page itself is a template now, but its stylesheet and scripts still come
+    // from this directory, so a deployment with none refuses rather than serving a
+    // bare document nothing can draw with.
+    if state.config().static_dir.is_none() {
         return refuse("no RANKING_STATIC_DIR is configured");
-    };
+    }
     let appearance = match appearance_of(&state).await {
         Ok(appearance) => appearance,
         Err(refusal) => return refusal.response(),
     };
-    match read_page(&directory.join("Ranking.html")) {
-        Ok(html) => html_response(&render_page(&html, appearance.as_ref())),
+    match render_page(appearance.as_ref()) {
+        Ok(html) => html_response(&html),
         Err(error) => refuse(&error.to_string()),
     }
 }
