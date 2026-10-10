@@ -144,17 +144,6 @@ export function useCountdownThreshold(): {
   return { threshold, setThreshold };
 }
 
-/**
- * Whether the surface's self-starting motion is stopped. The ambient field and the
- * shake both read it, so one control quiets the whole screen; the countdown itself
- * keeps ticking, because it reports a real deadline rather than decorating one.
- */
-export function useContestMotion(): { isPaused: boolean; togglePaused: () => void } {
-  const [isPaused, setIsPaused] = useState(false);
-  const togglePaused = useCallback((): void => setIsPaused((current) => !current), []);
-  return { isPaused, togglePaused };
-}
-
 export function useElementFullscreen<T extends HTMLElement>(
   elementRef: RefObject<T | null>,
 ): { isFullscreen: boolean; toggle: () => void } {

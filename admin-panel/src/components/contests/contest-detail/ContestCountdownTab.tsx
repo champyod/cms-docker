@@ -13,15 +13,14 @@ import {
   resolveContestPhase,
   resolveCountdownStage,
   resolveHurryThresholdMs,
-  resolveRunnerSpeedPxPerSecond,
   type ContestPhase,
   type ContestTimingWindow,
 } from '@/lib/contest-countdown';
 import { ContestCountdownClock } from './ContestCountdownClock';
 import { CountdownToolbar } from './ContestCountdownControls';
-import { ContestCountdownRunner } from './ContestCountdownRunner';
+import { ContestAmbientLayer } from './ContestAmbientLayer';
+import { useContestMotion } from './useContestMotion';
 import {
-  useContestMotion,
   useCountdownThreshold,
   useCountdownTiming,
   useCountdownTimezone,
@@ -68,8 +67,14 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
   const target = countdownTarget(timing, phase);
   const remainingMs = target ? target.getTime() - now.getTime() : null;
   const windowMs = countdownPhaseWindowMs(timing, phase, DEFAULT_HURRY_MS);
-  const stage = resolveCountdownStage(phase, remainingMs, resolveHurryThresholdMs(threshold, windowMs));
+  const hurryMs = resolveHurryThresholdMs(threshold, windowMs);
+  const stage = resolveCountdownStage(phase, remainingMs, hurryMs);
   const isPanicking = shouldPanic(stage, isPaused);
+  // Only the running phase is exempt from the idle layer: there, the panic is the visual.
+  const isIdle = phase !== 'running';
+  // The blur ramps from the start up to the threshold, so it is fully applied exactly when
+  // the threshold arrives. The threshold is what the toolbar sets, not the phase target.
+  const thresholdAtMs = target ? target.getTime() - hurryMs : null;
   usePhaseNotifications(timing.name, phase);
 
   const goBack = useCallback((): void => router.back(), [router]);
@@ -81,13 +86,13 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
       data-phase={phase}
       className="countdown-surface relative isolate flex min-h-[62vh] flex-col gap-6 overflow-hidden"
     >
-      <div aria-hidden className="countdown-backdrop">
-        <span className="countdown-blob" />
-        <span className="countdown-blob" />
-        <span className="countdown-blob" />
-      </div>
-      {stage === 'hurry' ? <div aria-hidden className="countdown-warning" /> : null}
-      <ContestCountdownRunner speedPxPerSecond={resolveRunnerSpeedPxPerSecond(remainingMs, windowMs)} />
+      <ContestAmbientLayer
+        isIdle={isIdle}
+        isPaused={isPaused}
+        nowMs={now.getTime()}
+        thresholdMs={thresholdAtMs}
+        rerollKey={`${phase}:${stage}`}
+      />
 
       <div className="relative z-10">
         <CountdownToolbar

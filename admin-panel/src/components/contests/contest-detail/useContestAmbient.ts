@@ -1,0 +1,144 @@
+'use client';
+
+import { useEffect, useMemo, useSyncExternalStore } from 'react';
+import { useReducedMotion } from 'motion/react';
+import {
+  DEFAULT_AMBIENT_CONFIG,
+  ambientBlurPx,
+  isAmbientFullyBlurred,
+  resolveAmbientBlurStep,
+  resolveAmbientProgress,
+  rollAmbient,
+  type AmbientConfig,
+  type AmbientRoll,
+} from '@/lib/contest-ambient';
+
+interface UseAmbientOptions {
+  /** The threshold instant, or null where the countdown has no target to measure to. */
+  readonly thresholdMs: number | null;
+  readonly nowMs: number;
+  readonly isPaused: boolean;
+  /** Changes when the surface's state changes, which triggers a fresh roll. */
+  readonly rerollKey: string;
+  readonly config?: AmbientConfig;
+}
+
+export interface AmbientView {
+  readonly roll: AmbientRoll;
+  readonly progress: number;
+  readonly blurStep: number;
+  readonly blurPx: number;
+  readonly isFullyBlurred: boolean;
+  readonly isAnimating: boolean;
+  /** False until the first roll has landed, so nothing paints a placeholder texture. */
+  readonly isRolled: boolean;
+}
+
+/**
+ * The current roll as an external store. Keeping it outside React is what lets the seed
+ * be drawn without a render-time Math.random — which Next.js fails the build on — and
+ * without a setState inside an effect, which cascades renders.
+ *
+ * The ramp anchor is deliberately separate from the roll. The roll changes often, for
+ * variety; the ramp is measured from the start of the state to the threshold, so it must
+ * survive every re-roll or it could never reach its last step.
+ */
+interface AmbientStore {
+  roll: AmbientRoll | null;
+  /** When the current blur ramp began: on entry, or when the state changed. */
+  rampAnchorMs: number | null;
+}
+
+let store: AmbientStore = { roll: null, rampAnchorMs: null };
+const listeners = new Set<() => void>();
+
+function emit(): void {
+  for (const listener of listeners) listener();
+}
+
+function subscribeAmbientRoll(onStoreChange: () => void): () => void {
+  listeners.add(onStoreChange);
+  return () => listeners.delete(onStoreChange);
+}
+
+function readAmbientRoll(): AmbientRoll | null {
+  return store.roll;
+}
+
+/**
+ * Draws a new roll. Called from effects and events, never during render. Restarting the
+ * ramp is for a state change, where the field's progress legitimately begins again.
+ */
+export function rollAmbientNow(restartRamp: boolean): void {
+  store = {
+    roll: rollAmbient(Math.random()),
+    rampAnchorMs: restartRamp || store.rampAnchorMs === null ? Date.now() : store.rampAnchorMs,
+  };
+  emit();
+}
+
+/** Reads the instant the blur ramp began, which is what its progress is measured from. */
+function readAmbientRampAnchor(): number | null {
+  return store.rampAnchorMs;
+}
+
+/**
+ * The roll and the blur schedule for the ambient field.
+ *
+ * A reader who is paused or who asked for reduced motion keeps the roll they have: the
+ * roll is what changes the colour and the texture, so redrawing it is the motion they
+ * declined. The blur still advances, because it reports the real deadline.
+ */
+export function useContestAmbient({
+  thresholdMs,
+  nowMs,
+  isPaused,
+  rerollKey,
+  config = DEFAULT_AMBIENT_CONFIG,
+}: UseAmbientOptions): AmbientView {
+  const prefersReducedMotion = useReducedMotion() ?? false;
+  const shouldHoldStill = isPaused || prefersReducedMotion;
+  const rollSeed = useSyncExternalStore(subscribeAmbientRoll, readAmbientRoll, () => null);
+  const rampAnchorMs = useSyncExternalStore(subscribeAmbientRoll, readAmbientRampAnchor, () => null);
+
+  // Roll on entry, and start the ramp here too. This writes to the external store rather
+  // than to React state, so the seed is never drawn during a render the server also runs.
+  useEffect(() => {
+    rollAmbientNow(true);
+  }, []);
+
+  // Roll again while time simply passes. The ramp is left alone, so the blur keeps its
+  // place: a fresh roll only changes which colour and texture carry it.
+  useEffect(() => {
+    if (shouldHoldStill) return;
+    const interval = window.setInterval(() => rollAmbientNow(false), config.rerollMs);
+    return () => window.clearInterval(interval);
+  }, [shouldHoldStill, config.rerollMs]);
+
+  // Roll on a state change, and restart the ramp with it, since the field's progress
+  // begins again from the new state.
+  useEffect(() => {
+    if (shouldHoldStill) return;
+    rollAmbientNow(true);
+  }, [rerollKey, shouldHoldStill]);
+
+  // The fallback is only ever seen for the first paint, before the entry roll lands.
+  const roll = useMemo(() => rollSeed ?? rollAmbient(0), [rollSeed]);
+  const progress = resolveAmbientProgress({
+    startedAtMs: rampAnchorMs,
+    completeAtMs: thresholdMs,
+    nowMs,
+    fallbackMs: config.fallbackProgressMs,
+  });
+  const blurStep = resolveAmbientBlurStep(progress);
+
+  return {
+    roll,
+    progress,
+    blurStep,
+    blurPx: ambientBlurPx(blurStep, config.maxBlurPx),
+    isFullyBlurred: isAmbientFullyBlurred(blurStep),
+    isAnimating: rollSeed !== null && !shouldHoldStill,
+    isRolled: rollSeed !== null,
+  };
+}

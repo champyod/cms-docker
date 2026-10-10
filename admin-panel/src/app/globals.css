@@ -227,212 +227,120 @@
 /* Each stage names the colour its label and backdrop take. */
 .countdown-surface[data-stage='waiting'] {
   --countdown-hue: 226;
-  --countdown-backdrop-opacity: 1;
-  --countdown-blob-alpha: 0.5;
-  --countdown-drift: 18s;
 }
 
 .countdown-surface[data-stage='running'] {
   --countdown-hue: 150;
-  --countdown-backdrop-opacity: 0;
-  --countdown-blob-alpha: 0.4;
-  --countdown-drift: 22s;
 }
 
 .countdown-surface[data-stage='analysis'] {
   --countdown-hue: 205;
-  --countdown-backdrop-opacity: 0;
-  --countdown-blob-alpha: 0.4;
-  --countdown-drift: 20s;
 }
 
 /* The hurry is the waiting screen at a higher temperature and a faster beat. */
 .countdown-surface[data-stage='hurry'] {
   --countdown-hue: 22;
-  --countdown-backdrop-opacity: 1;
-  --countdown-blob-alpha: 0.6;
-  --countdown-drift: 5s;
 }
 
 .countdown-surface[data-stage='ended'] {
   --countdown-hue: 0;
-  --countdown-backdrop-opacity: 0;
-  --countdown-blob-alpha: 0.4;
-  --countdown-drift: 26s;
 }
 
-/* A drifting gradient, the way a live waiting screen sits behind its countdown.
-   Transform-only and blur-free, so it stays on the compositor. Being an in-flow-absolute
-   child of an overflow-hidden surface, it can neither scroll nor resize the page. */
-.countdown-backdrop {
+/* The ambient field: one canvas per roll, stacked so a re-roll can cross-fade into
+   the next one instead of cutting. The fade and the blur live on the same element —
+   never on an ancestor of the backdrop-filter child below, which flickers in WebKit. */
+.countdown-ambient-layer {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
-  opacity: var(--countdown-backdrop-opacity);
-  transition: opacity 420ms ease;
 }
 
-.countdown-blob {
-  position: absolute;
-  width: 58vmax;
-  height: 58vmax;
-  border-radius: 50%;
-  background: radial-gradient(circle, hsl(var(--countdown-hue) 85% 50% / var(--countdown-blob-alpha)), transparent 68%);
-  animation: countdown-drift var(--countdown-drift) ease-in-out infinite alternate;
-  will-change: transform;
-}
-
-.countdown-blob:nth-child(1) {
-  top: -14%;
-  left: -10%;
-}
-
-.countdown-blob:nth-child(2) {
-  top: 6%;
-  right: -16%;
-  animation-delay: -4s;
-}
-
-.countdown-blob:nth-child(3) {
-  bottom: -18%;
-  left: 20%;
-  animation-delay: -9s;
-}
-
-@keyframes countdown-drift {
-  from {
-    transform: translate3d(-7%, -5%, 0) scale(1);
-  }
-  to {
-    transform: translate3d(7%, 5%, 0) scale(1.22);
-  }
-}
-
-/* Explicit escalation once the threshold is reached: an amber vignette over the gradient. */
-.countdown-warning {
+.countdown-ambient {
   position: absolute;
   inset: 0;
-  z-index: 30;
-  overflow: hidden;
-  pointer-events: none;
-  background: radial-gradient(
-    120% 100% at 50% 50%,
-    transparent 38%,
-    hsl(var(--countdown-hue) 95% 55% / 0.38) 100%
-  );
-  animation: countdown-warn 1.3s ease-in-out infinite;
+  width: 100%;
+  height: 100%;
+  /* Modest radius only: a very large blur radius has a multi-second paint stall. */
+  filter: blur(var(--countdown-ambient-blur, 0px));
+  opacity: var(--countdown-ambient-opacity, 1);
+  transition:
+    opacity var(--countdown-ambient-fade, 900ms) ease,
+    filter var(--countdown-ambient-fade, 900ms) ease,
+    transform var(--countdown-ambient-fade, 900ms) ease;
 }
 
-@keyframes countdown-warn {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
+/* The fade in, on first paint. @starting-style follows the base rule, as it must. */
+@starting-style {
+  .countdown-ambient {
+    opacity: 0;
+    transform: scale(1.04);
   }
 }
 
-/* A stickman runs a random edge to a random edge for as long as something counts
-   down. The field is clipped by the surface, so every leg starts and ends half
-   over the edge, and the limbs beat faster as the pace quickens. */
-.countdown-runner-field {
+/* The outgoing field of a re-roll. Declared here so a roll can fade both ways. */
+.countdown-ambient.is-leaving {
+  opacity: 0;
+  filter: blur(calc(var(--countdown-ambient-blur, 0px) + 8px));
+}
+
+/* The timer's own bed, shown only once the blur is fully applied. The discrete swap is
+   what keeps this from popping: allow-discrete is declared after the shorthand so the
+   opacity can also transition, and an exit needs the element kept mounted. */
+.countdown-timer-bed {
   position: absolute;
   inset: 0;
-  z-index: 0;
-  overflow: hidden;
+  z-index: 1;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 420ms ease;
+  display: none;
+  transition:
+    opacity 900ms ease,
+    display 900ms allow-discrete;
 }
 
-.countdown-surface[data-phase='not_started'] .countdown-runner-field,
-.countdown-surface[data-phase='running'] .countdown-runner-field {
+.countdown-timer-bed.is-shown {
   opacity: 1;
-}
-
-/* Negative margins centre the figure on its point; only the transform moves it. */
-.countdown-runner {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 7vmin;
-  margin-top: -3.5vmin;
-  margin-left: -3.5vmin;
-  will-change: transform;
-}
-
-/* Every figure is a stroke-only outline, so it takes the stage colour with no asset. */
-.countdown-shape {
   display: block;
-  width: 100%;
-  height: auto;
-  overflow: visible;
-  fill: none;
-  stroke: hsl(var(--countdown-hue) 92% 72%);
-  stroke-width: 3.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 0.7vmin hsl(var(--countdown-hue) 92% 58% / 0.55));
 }
 
-.countdown-tumbler {
-  animation: countdown-spin calc(var(--countdown-beat, 0.5s) * 4) linear infinite;
-}
-
-.countdown-blob {
-  transform-origin: 50% 100%;
-  animation: countdown-squash calc(var(--countdown-beat, 0.5s) * 2) ease-in-out infinite;
-}
-
-.countdown-limb {
-  transform-box: fill-box;
-  transform-origin: 50% 0%;
-}
-
-.countdown-limb-a {
-  animation: countdown-stride var(--countdown-beat, 0.5s) ease-in-out infinite;
-}
-
-.countdown-limb-b {
-  animation: countdown-stride-alt var(--countdown-beat, 0.5s) ease-in-out infinite;
-}
-
-@keyframes countdown-spin {
-  to {
-    transform: rotate(360deg);
+@starting-style {
+  .countdown-timer-bed.is-shown {
+    opacity: 0;
   }
 }
 
-@keyframes countdown-squash {
-  0%,
-  100% {
-    transform: scale(1, 1);
-  }
-  50% {
-    transform: scale(1.2, 0.8);
+/* A quiet wash behind the digits, tinted from the roll that owns this layer. */
+.countdown-timer-bed-surface {
+  position: absolute;
+  inset: 8% 6%;
+  border-radius: 32px;
+  background: radial-gradient(
+    90% 70% at 50% 45%,
+    hsl(var(--countdown-hue) 62% 46% / 0.34),
+    transparent 72%
+  );
+  backdrop-filter: blur(14px);
+  transition: opacity 900ms ease;
+}
+
+/* A reader who asked the system to stop moving gets the field without its motion. */
+@media (prefers-reduced-motion: reduce) {
+  .countdown-ambient {
+    transition-duration: 0.01ms;
   }
 }
 
-@keyframes countdown-stride {
-  0%,
-  100% {
-    transform: rotate(26deg);
+/* A reader who asked for less transparency keeps the digits fully opaque. */
+@media (prefers-reduced-transparency: reduce) {
+  .countdown-ambient {
+    opacity: 0.55;
   }
-  50% {
-    transform: rotate(-26deg);
-  }
-}
 
-@keyframes countdown-stride-alt {
-  0%,
-  100% {
-    transform: rotate(-26deg);
-  }
-  50% {
-    transform: rotate(26deg);
+  .countdown-timer-bed-surface {
+    backdrop-filter: none;
+    background: hsl(var(--countdown-hue) 45% 30% / 0.5);
   }
 }
 
