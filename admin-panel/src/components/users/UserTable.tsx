@@ -26,6 +26,8 @@ export function UserTable({
   onOpen,
   onEdit,
   onDelete,
+  sort = null,
+  onSortChange,
 }: UserTableProps) {
   const dict = useDictionary();
   const allSelected = users.length > 0 && users.every((user) => selectedIds.has(user.id));
@@ -111,6 +113,8 @@ export function UserTable({
       getRowProps={(row) => getUserRowProps(row, onOpen)}
       getRowClassName={getRowClassName}
       renderRowActions={renderRowActions}
+      sort={sort}
+      onSortChange={onSortChange}
       emptyState={
         <EmptyState icon={Users} title="No users found." description="Adjust your search or create a new user to get started." />
       }

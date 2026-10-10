@@ -1,3 +1,4 @@
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { Dictionary } from '@/lib/dictionary';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
@@ -12,6 +13,7 @@ export interface UserListProps {
   navigation: Dictionary['navigation'];
   permissionKeys: readonly string[];
   locale: 'en' | 'th';
+  initialSort?: ListSortInput;
 }
 
 export interface UserTableProps {
@@ -26,6 +28,8 @@ export interface UserTableProps {
   onOpen: (user: UsersPageRow) => void;
   onEdit: (user: UsersPageRow) => void;
   onDelete: (id: number) => void;
+  sort?: ListSortInput;
+  onSortChange?: (sort: ListSortInput) => void;
 }
 
 // Why: position is precomputed so the shared column model stays a pure

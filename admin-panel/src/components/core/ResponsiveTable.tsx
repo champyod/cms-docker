@@ -2,6 +2,7 @@ import React from 'react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+import { SortableHeader } from '@/components/core/SortableHeader';
 import {
   Table,
   TableBody,
@@ -11,6 +12,7 @@ import {
   TableRow,
 } from '@/components/core/Table';
 import { SHORTCUT_ROW_ATTRIBUTE } from '@/hooks/shortcut-rows';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { cn } from '@/lib/utils';
 
 // Why: one column definition drives both layouts, so callers stop
@@ -22,6 +24,9 @@ export interface ResponsiveColumn<Row> {
   // Why optional: alignment and width are per-list presentation, so a column
   // carries its own head class instead of the core guessing an alignment.
   headerClassName?: string;
+  // Why a key and not a callback: the table owns the header control, so a list
+  // opts into sorting by naming the server-side field its column stands for.
+  sortKey?: string;
   render: (row: Row) => React.ReactNode;
   mobileLabel?: string;
   hideOnMobile?: boolean;
@@ -48,6 +53,8 @@ export interface ResponsiveTableProps<Row> {
   getRowClassName?: (row: Row, index: number) => string | undefined;
   outerClassName?: string;
   className?: string;
+  sort?: ListSortInput;
+  onSortChange?: (sort: ListSortInput) => void;
 }
 
 // Why one class string for both layouts: the mobile card and the desktop cell
@@ -116,12 +123,25 @@ function renderDesktopHeader<Row>(
   columns: ResponsiveColumn<Row>[],
   hasActions: boolean,
   actionsHeader: React.ReactNode,
+  sort?: ListSortInput,
+  onSortChange?: (sort: ListSortInput) => void,
 ): React.ReactNode {
   return (
     <TableHeader>
       <TableRow>
         {columns.map((column) => (
-          <TableHead key={column.key} className={column.headerClassName}>{column.header}</TableHead>
+          <TableHead key={column.key} className={column.headerClassName}>
+            {column.sortKey && onSortChange ? (
+              <SortableHeader
+                label={labelFor(column)}
+                sortKey={column.sortKey}
+                sort={sort}
+                onSortChange={onSortChange}
+              />
+            ) : (
+              column.header
+            )}
+          </TableHead>
         ))}
         {hasActions ? <TableHead className="text-right">{actionsHeader ?? 'Actions'}</TableHead> : null}
       </TableRow>
@@ -154,7 +174,7 @@ function renderDesktopRows<Row>(props: ResponsiveTableProps<Row>): React.ReactNo
 }
 
 export function ResponsiveTable<Row>(props: ResponsiveTableProps<Row>): React.ReactElement {
-  const { rows, columns, emptyState, renderRowActions, actionsHeader, outerClassName, className } = props;
+  const { rows, columns, emptyState, renderRowActions, actionsHeader, outerClassName, className, sort, onSortChange } = props;
   if (rows.length === 0) {
     return <>{emptyState ?? <EmptyState title="No data available" description="Table has no rows to display" />}</>;
   }
@@ -162,7 +182,7 @@ export function ResponsiveTable<Row>(props: ResponsiveTableProps<Row>): React.Re
   // breakpoints, so a future breakpoint change stays in one place.
   return (
     <Table outerClassName={outerClassName} className={className} mobileCards={renderMobileCards(props)}>
-      {renderDesktopHeader(columns, typeof renderRowActions === 'function', actionsHeader)}
+      {renderDesktopHeader(columns, typeof renderRowActions === 'function', actionsHeader, sort, onSortChange)}
       {renderDesktopRows(props)}
     </Table>
   );

@@ -14,8 +14,8 @@ import { useRegisterUserListRefresh } from './useUserListRefresh';
 import { useUserListRows } from './useUserListRows';
 import { useUserSelection } from './useUserSelection';
 
-export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps): React.JSX.Element {
-  const rows = useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch });
+export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps): React.JSX.Element {
+  const rows = useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort });
   const selection = useUserSelection(rows.users, rows.userCache);
   const capabilities = useUserCapabilities(permissionKeys);
   const dialogs = useUserDialogs();

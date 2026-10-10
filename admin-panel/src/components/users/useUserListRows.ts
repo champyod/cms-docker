@@ -8,6 +8,7 @@ import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
+import { listSortQuery, readListSort, type ListSortInput } from '@/lib/list-sorting';
 import { writeListQuery, type ListQueryState } from '@/lib/list-state';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
@@ -20,6 +21,7 @@ export interface UserListQuery {
   readonly page?: number;
   readonly perPage?: number;
   readonly search?: string;
+  readonly sort?: ListSortInput;
 }
 
 export interface UserListRows {
@@ -28,6 +30,8 @@ export interface UserListRows {
   readonly loading: boolean;
   readonly searchDraft: string;
   readonly setSearchDraft: (value: string) => void;
+  readonly sort: ListSortInput;
+  readonly setSort: (sort: ListSortInput) => void;
   readonly pageInput: string;
   readonly setPageInput: (value: string) => void;
   readonly table: UserTableState;
@@ -44,12 +48,14 @@ export interface UserListRowsInput {
   readonly currentPage: number;
   readonly perPage: number;
   readonly initialSearch: string;
+  readonly initialSort: ListSortInput;
 }
 
 interface UserPageRequest {
   page: number;
   perPage: number;
   search: string;
+  sort: ListSortInput;
 }
 
 interface UserPageResponse {
@@ -58,6 +64,7 @@ interface UserPageResponse {
   currentPage?: number;
   perPage?: number;
   search?: string;
+  sort?: ListSortInput;
 }
 
 function mergeIntoCache(previous: Record<number, UsersPageRow>, rows: readonly UsersPageRow[]): Record<number, UsersPageRow> {
@@ -66,11 +73,12 @@ function mergeIntoCache(previous: Record<number, UsersPageRow>, rows: readonly U
   return next;
 }
 
-function resolveRequest(query: UserListQuery, table: UserTableState): UserPageRequest {
+function resolveRequest(query: UserListQuery, table: UserTableState, sort: ListSortInput): UserPageRequest {
   return {
     page: Math.max(query.page ?? table.page, 1),
     perPage: query.perPage ?? table.perPage,
     search: query.search ?? table.search,
+    sort: query.sort ?? sort,
   };
 }
 
@@ -81,17 +89,19 @@ async function requestUserPage(request: UserPageRequest): Promise<UserPageRespon
     page: String(request.page),
     perPage: String(request.perPage),
     search: request.search,
+    ...listSortQuery(request.sort),
   });
   const result = (await apiClient.get(`/api/users?${params.toString()}`)) as ApiResponse & UserPageResponse;
   return result.success ? result : null;
 }
 
-export function useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch }: UserListRowsInput): UserListRows {
+export function useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort }: UserListRowsInput): UserListRows {
   const [users, setUsers] = useState<UsersPageRow[]>([...initialUsers]);
   const [userCache, setUserCache] = useState<Record<number, UsersPageRow>>(() => mergeIntoCache({}, initialUsers));
   const [totalPagesState, setTotalPagesState] = useState(totalPages);
   const [loading, setLoading] = useState(false);
   const [searchDraft, setSearchDraft] = useState(initialSearch);
+  const [sort, setSort] = useState<ListSortInput>(initialSort ?? null);
   const [pageInput, setPageInput] = useState(String(currentPage));
   const table = useTable({ initialPage: currentPage, initialPerPage: perPage, initialSearch });
   const router = useAppRouter();
@@ -106,7 +116,7 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
 
   const fetchUsers = useCallback(async (query: UserListQuery = {}) => {
     const isNavigation = Object.keys(query).length > 0;
-    const request = resolveRequest(query, table);
+    const request = resolveRequest(query, table, initialSort);
     setLoading(true);
     try {
       const page = await requestUserPage(request);
@@ -119,18 +129,20 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
       const nextPage = page.currentPage ?? request.page;
       const nextPerPage = page.perPage ?? request.perPage;
       const nextSearch = page.search ?? request.search;
+      const nextSort = page.sort ?? request.sort;
       table.setPage(nextPage);
       table.setPerPage(nextPerPage);
       table.setSearch(nextSearch);
+      setSort(nextSort);
       setPageInput(String(nextPage));
       // Why only on navigation: the auto-refresh re-reads the page the reader is
       // already on, and pushing that same query would put an entry in history
       // every minute for a list nobody navigated.
-      if (isNavigation) syncQueryToUrl({ page: nextPage, perPage: nextPerPage, search: nextSearch });
+      if (isNavigation) syncQueryToUrl({ page: nextPage, perPage: nextPerPage, search: nextSearch, ...listSortQuery(nextSort) });
     } finally {
       setLoading(false);
     }
-  }, [syncQueryToUrl, table]);
+  }, [syncQueryToUrl, table, initialSort]);
 
   useTableAutoRefresh({ enabled: true, intervalMs: AUTO_REFRESH_INTERVAL_MS, onRefresh: () => fetchUsers() });
 
@@ -143,8 +155,13 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
     onApply: (search) => fetchUsersRef.current({ page: 1, search }),
   });
 
+  const applySort = useCallback((next: ListSortInput): void => {
+    setSort(next);
+    void fetchUsers({ page: 1, sort: next });
+  }, [fetchUsers]);
+
   return {
-    users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, pageInput, setPageInput,
+    users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
     table, userCache, fetchUsers, searchUsers,
   };
 }

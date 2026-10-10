@@ -17,7 +17,7 @@ export interface UserListTableProps {
 
 // Why the wiring lives here: the table contract has eleven props, and passing
 // them from the shell would bury the list's own composition.
-export function UserListTable({ rows, selection, permissionKeys, onOpen, onEdit, onDelete }: UserListTableProps): React.JSX.Element {
+export function UserListTable({ rows, selection, permissionKeys, onOpen, onEdit, onDelete }: UserListTableProps) {
   return (
     <UserTable
       users={rows.users}
@@ -31,6 +31,8 @@ export function UserListTable({ rows, selection, permissionKeys, onOpen, onEdit,
       onOpen={onOpen}
       onEdit={onEdit}
       onDelete={onDelete}
+      sort={rows.sort}
+      onSortChange={rows.setSort}
     />
   );
 }
