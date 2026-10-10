@@ -5,11 +5,11 @@ import { describe, expect, it } from 'vitest';
 
 import { EXPIRY_WARNING_DAYS, describeLineage } from '@/lib/security/cert-status';
 
-const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const LINEAGE_DIR = path.join(REPO_ROOT, 'config/letsencrypt/live');
+// WHY a flattened `.crt`: the live lineage is gitignored, and `*.local` + `*.pem` would ignore `admin.cms.local/fullchain.pem`.
+const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 function readLineagePem(lineage: string): string {
-  return fs.readFileSync(path.join(LINEAGE_DIR, lineage, 'fullchain.pem'), 'utf-8');
+  return fs.readFileSync(path.join(FIXTURES, `${lineage}.fullchain.crt`), 'utf-8');
 }
 
 describe('describeLineage', () => {

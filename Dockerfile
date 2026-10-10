@@ -1,5 +1,8 @@
 # syntax=docker/dockerfile:1
 
+# Base image (ubuntu:noble or debian:bookworm); pin by digest manually, never apt-upgraded in-build.
+ARG BASE_IMAGE=ubuntu:noble
+
 # The ranking web server is a Rust binary. It is built in a stage of its own
 # because the runtime image must not carry a compiler: the same image also
 # runs untrusted submission tooling, and a toolchain there would widen what
@@ -9,13 +12,6 @@ WORKDIR /build
 COPY tools/cms-ranking/ ./
 RUN cargo build --release
 
-# Supported combinations: ubuntu:noble, debian:bookworm.
-#
-# Base-image policy: digests are bumped manually (dependabot-style PRs), never
-# via in-build `apt-get upgrade`. To pin an immutable base, resolve the digest
-# (`docker buildx imagetools inspect ubuntu:noble`) and set:
-#   ARG BASE_IMAGE=ubuntu:noble@sha256:<digest>
-ARG BASE_IMAGE=ubuntu:noble
 FROM ${BASE_IMAGE}
 
 # Default mirror. Override with --build-arg APT_MIRROR=mirror.example.com
