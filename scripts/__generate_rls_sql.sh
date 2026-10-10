@@ -125,6 +125,14 @@ while IFS= read -r tbl; do
   printf "  IF to_regclass('public.%s') IS NOT NULL THEN\n" "$tbl"
   printf "    EXECUTE 'ALTER TABLE public.%s ENABLE ROW LEVEL SECURITY';\n" "$tbl"
   printf "    EXECUTE 'ALTER TABLE public.%s FORCE ROW LEVEL SECURITY';\n" "$tbl"
+  # WHY the policy rides along: FORCE makes the table owner subject to
+  # RLS too, and every service (CWS, admin panel) connects as cmsuser,
+  # the owner — without a permissive policy each access would be denied.
+  # The app has no per-user database principal to key a stricter policy
+  # on, so cmsuser_all is the only correct policy (same reasoning as the
+  # hand-authored 20260912000400_rls_policies for the RBAC tables).
+  printf "    EXECUTE 'DROP POLICY IF EXISTS cmsuser_all ON public.%s';\n" "$tbl"
+  printf "    EXECUTE 'CREATE POLICY cmsuser_all ON public.%s FOR ALL TO cmsuser USING (true) WITH CHECK (true)';\n" "$tbl"
   printf '  END IF;\n'
   printf 'END $$;\n'
 done < "$tmp_uncovered"

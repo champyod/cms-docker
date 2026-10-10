@@ -180,9 +180,11 @@ describe('PERMISSION_REGISTRY', () => {
   // restore, schedule, settle, delete), plus 2 lane keys, plus 2 platform-boundary
   // keys (waf:control, domain:control), plus 9 security-surface keys
   // (security:read, waf:read, waf:config, ban:read, ban:unban, lockout:read,
-  // lockout:unlock, tls:read, tls:renew) = 220.
-  it('holds exactly 220 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(221);
+  // lockout:unlock, tls:read, tls:renew), plus 5 contestant-group keys
+  // (contestant_group:list, read, create, update, delete), plus 3 username
+  // keys (username:policy:read, username:policy:update, username:set) = 228.
+  it('holds exactly 228 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(229);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {

@@ -56,6 +56,9 @@ __all__ = [
     "Contest", "Announcement",
     # user
     "User", "Team", "Participation", "Message", "Question",
+    # username config
+    "ContestantGroup", "ContestantGroupMembership",
+    "UsernamePolicy", "ContestUsername", "ContestUsernameHistory",
     # admin
     "Admin",
     # permissions
@@ -99,6 +102,8 @@ from .fsobject import FSObject, LargeObject
 from .admin import Admin
 from .contest import Contest, Announcement
 from .user import User, Team, Participation, Message, Question
+from .username import ContestantGroup, ContestantGroupMembership, \
+    UsernamePolicy, ContestUsername, ContestUsernameHistory
 from .task import Task, Statement, Attachment, Dataset, Manager, Testcase
 from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation

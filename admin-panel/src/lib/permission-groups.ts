@@ -84,6 +84,10 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'announcement:create',
       'announcement:update',
       'announcement:publish',
+      ...crud('contestant_group'),
+      'username:policy:read',
+      'username:policy:update',
+      'username:set',
     ],
   },
   {

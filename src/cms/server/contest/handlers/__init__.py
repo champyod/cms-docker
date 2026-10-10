@@ -49,6 +49,8 @@ from .main import \
     NotificationsHandler, \
     DocumentationHandler, \
     CreditsHandler
+from .username import \
+    UsernameHandler
 from .communication import \
     CommunicationHandler, \
     QuestionHandler
@@ -70,6 +72,7 @@ HANDLERS = [
     (r"/notifications", NotificationsHandler),
     (r"/documentation", DocumentationHandler),
     (r"/credits", CreditsHandler),
+    (r"/username", UsernameHandler),
 
     # Tasks
 

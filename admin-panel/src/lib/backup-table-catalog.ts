@@ -69,6 +69,14 @@ const CATALOG = [
   { name: 'teams', label: 'Teams', pk: ['id'] },
   { name: 'tasks', label: 'Tasks', pk: ['id'] },
   { name: 'participations', label: 'Participations', pk: ['id'] },
+  // Contestant display username configuration. The groups, their
+  // membership rows, the per-scope policies and the current aliases
+  // exist only in the panel and the contest web server, so they
+  // travel with a backup like any other contest data.
+  { name: 'contestant_groups', label: 'Contestant Groups', pk: ['id'] },
+  { name: 'contestant_group_memberships', label: 'Contestant Group Memberships', pk: ['id'] },
+  { name: 'username_policies', label: 'Username Policies', pk: ['id'] },
+  { name: 'contest_usernames', label: 'Contest Usernames', pk: ['id'] },
   { name: 'datasets', label: 'Datasets', pk: ['id'] },
   { name: 'statements', label: 'Statements', pk: ['id'], needsLargeObjects: true },
   { name: 'attachments', label: 'Attachments', pk: ['id'], needsLargeObjects: true },
@@ -199,6 +207,8 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   admin_permission_overrides: [ADMIN_TABLE, 'permissions'],
   announcements: ['contests', ADMIN_TABLE],
   attachments: ['tasks'],
+  contest_usernames: ['contests', 'participations', 'users', ADMIN_TABLE],
+  contestant_group_memberships: ['contestant_groups', 'users'],
   datasets: ['tasks'],
   evaluations: ['datasets', 'submission_results', 'submissions', 'testcases'],
   executables: ['datasets', 'submission_results', 'submissions'],
@@ -220,6 +230,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   user_test_managers: ['user_tests'],
   user_test_results: ['datasets', 'user_tests'],
   user_tests: ['participations', 'tasks'],
+  username_policies: [ADMIN_TABLE],
 };
 
 /**
@@ -230,9 +241,11 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
  */
 const NULLABLE_PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]>>> = {
   announcements: [ADMIN_TABLE],
+  contest_usernames: [ADMIN_TABLE],
   messages: [ADMIN_TABLE],
   questions: [ADMIN_TABLE],
   backup_schedules: ['backup_locations'],
+  username_policies: [ADMIN_TABLE],
 };
 
 function buildMissingParentWarnings(selected: ReadonlySet<string>): string[] {

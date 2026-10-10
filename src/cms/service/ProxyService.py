@@ -42,6 +42,7 @@ from cms.service.ranking_projection import rows as projection_rows, \
     upsert_statement
 from cms.db import SessionGen, Contest, Participation, Task, Submission, \
     get_submissions
+from cms.db.username import get_display_usernames, resolve_username_config
 from cms.io import Executor, QueueItem, TriggeredService, rpc_method
 from cms.io.priorityqueue import QueueEntry
 from cmscommon.datetime import make_timestamp
@@ -347,13 +348,35 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
             users = dict()
             teams = dict()
 
+            # WHY: the ranking shows the display username each
+            # contestant chose for this contest when the policy
+            # allows one; resolving every visible participant in
+            # a handful of queries keeps the push from issuing
+            # one query per user.
+            visible = [participation for participation
+                       in contest.participations
+                       if not participation.hidden]
+            username_allowed = resolve_username_config(
+                session, self.contest_id,
+                [participation.user_id
+                 for participation in visible])
+            display_usernames = get_display_usernames(
+                session, self.contest_id,
+                [participation.user_id
+                 for participation in visible])
+
             for participation in contest.participations:
                 user = participation.user
                 team = participation.team
                 if not participation.hidden:
+                    display_name = display_usernames.get(user.id) \
+                        if username_allowed.get(user.id) else None
                     users[encode_id(user.username)] = {
-                        "f_name": user.first_name,
-                        "l_name": user.last_name,
+                        "f_name": display_name
+                                  if display_name is not None
+                                  else user.first_name,
+                        "l_name": "" if display_name is not None
+                                  else user.last_name,
                         "team": encode_id(team.code)
                                 if team is not None else None,
                     }

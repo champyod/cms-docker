@@ -24,10 +24,16 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * The two ranking control tables are NOT excluded. The appearance row and the
  * override rows are operator decisions that exist nowhere else, so they belong
  * in the catalog.
+ *
+ * `contest_usernames_history` is excluded for the same reason as
+ * `audit_log`: it is the append-only trail of display username changes,
+ * and replaying it into a restore would put changes in the trail that
+ * never happened on the restored database.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log',
   'security_blocks',
+  'contest_usernames_history',
   'ranking_contests',
   'ranking_tasks',
   'ranking_teams',
@@ -110,7 +116,7 @@ describe('BACKUP_TABLES', () => {
   });
 
   it('places admins before every table that names it as the row author', () => {
-    for (const child of ['announcements', 'messages', 'questions', 'admin_groups', 'admin_permission_overrides']) {
+    for (const child of ['announcements', 'messages', 'questions', 'admin_groups', 'admin_permission_overrides', 'contest_usernames', 'username_policies']) {
       expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf(child));
     }
   });
