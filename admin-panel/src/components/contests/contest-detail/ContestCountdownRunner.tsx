@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { resolveRunnerStrideSeconds } from '@/lib/contest-countdown';
+import { RUNNER_SHAPE_ROTATION_MS, shapeForTurn } from '@/lib/contest-countdown-runner';
+import { ContestCountdownShape } from './ContestCountdownShape';
 
 type Edge = 'top' | 'right' | 'bottom' | 'left';
 
@@ -39,19 +41,27 @@ function place(figure: HTMLDivElement, point: Point, deltaX: number): void {
 }
 
 /**
- * A stickman that runs from a random edge to a random edge, for as long as
- * something counts down. Distance is covered per frame from the current pace,
- * so a change of speed is felt mid-leg rather than at the next leg boundary.
+ * A figure that runs from a random edge to a random edge, for as long as
+ * something counts down, changing its shape on a timer. Distance is covered per
+ * frame from the current pace, so a change of speed is felt mid-leg rather than
+ * at the next leg boundary.
  */
 export function ContestCountdownRunner({ speedPxPerSecond }: Props): React.JSX.Element {
   const fieldRef = useRef<HTMLDivElement>(null);
   const figureRef = useRef<HTMLDivElement>(null);
   const speedRef = useRef(speedPxPerSecond);
+  const [turn, setTurn] = useState(0);
 
-  // The limb beat quickens with the pace; once a second is all the countdown can change it.
+  // The figure changes on a timer, so a long wait is not spent watching one shape.
+  useEffect(() => {
+    const interval = window.setInterval(() => setTurn((current) => current + 1), RUNNER_SHAPE_ROTATION_MS);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  // The beat quickens with the pace; once a second is all the countdown can change it.
   useEffect(() => {
     speedRef.current = speedPxPerSecond;
-    figureRef.current?.style.setProperty('--countdown-stride', `${resolveRunnerStrideSeconds(speedPxPerSecond)}s`);
+    figureRef.current?.style.setProperty('--countdown-beat', `${resolveRunnerStrideSeconds(speedPxPerSecond)}s`);
   }, [speedPxPerSecond]);
 
   useEffect(() => {
@@ -98,14 +108,7 @@ export function ContestCountdownRunner({ speedPxPerSecond }: Props): React.JSX.E
   return (
     <div ref={fieldRef} aria-hidden className="countdown-runner-field">
       <div ref={figureRef} className="countdown-runner">
-        <svg className="countdown-stickman" viewBox="0 0 40 62">
-          <circle cx="20" cy="9" r="6.5" />
-          <path d="M20 16V40" />
-          <g className="countdown-limb countdown-limb-a"><path d="M20 20 7 33" /></g>
-          <g className="countdown-limb countdown-limb-b"><path d="M20 20 33 33" /></g>
-          <g className="countdown-limb countdown-limb-b"><path d="M20 40 11 60" /></g>
-          <g className="countdown-limb countdown-limb-a"><path d="M20 40 29 60" /></g>
-        </svg>
+        <ContestCountdownShape id={shapeForTurn(turn)} />
       </div>
     </div>
   );
