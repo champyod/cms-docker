@@ -216,6 +216,113 @@
   min-height: 0;
 }
 
+/* Each stage names the colour it means; the surface carries it, not a blinking pill. */
+.countdown-surface[data-stage='waiting'] {
+  --countdown-hue: 226;
+  --countdown-strength: 10%;
+  --countdown-breathe: 9s;
+}
+
+.countdown-surface[data-stage='running'] {
+  --countdown-hue: 150;
+  --countdown-strength: 12%;
+  --countdown-breathe: 6s;
+}
+
+.countdown-surface[data-stage='analysis'] {
+  --countdown-hue: 205;
+  --countdown-strength: 10%;
+  --countdown-breathe: 8s;
+}
+
+/* The hurry is the same meaning at a higher temperature and a faster beat. */
+.countdown-surface[data-stage='hurry'] {
+  --countdown-hue: 22;
+  --countdown-strength: 24%;
+  --countdown-breathe: 1.3s;
+}
+
+.countdown-surface[data-stage='ended'] {
+  --countdown-hue: 0;
+  --countdown-strength: 8%;
+  --countdown-breathe: 14s;
+}
+
+/* Only transform and opacity animate, so the breath stays on the compositor. */
+.countdown-ambient {
+  position: absolute;
+  inset: -15%;
+  z-index: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 55% at 50% 42%, hsl(var(--countdown-hue) 75% 48% / var(--countdown-strength)), transparent 70%),
+    radial-gradient(45% 45% at 22% 78%, hsl(var(--countdown-hue) 75% 42% / calc(var(--countdown-strength) * 0.75)), transparent 72%);
+  animation: countdown-breathe var(--countdown-breathe) ease-in-out infinite;
+}
+
+@keyframes countdown-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+.countdown-character {
+  position: absolute;
+  right: 3%;
+  bottom: 4%;
+  z-index: 0;
+  width: 30vmin;
+  height: auto;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.countdown-stage-label {
+  color: hsl(var(--countdown-hue) 70% 74%);
+  font-size: clamp(1rem, 2.4vmin, 1.75rem);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+/* Sizes track the viewport so the ask scales with the surface, like the digits. */
+.countdown-threshold {
+  display: inline-flex;
+  height: 44px;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0 0.6em;
+  border: 1px solid var(--input);
+  border-radius: 12px;
+}
+
+.countdown-threshold-input {
+  width: 5ch;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: clamp(0.875rem, 1.7vmin, 1.05rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  outline: none;
+}
+
+.countdown-threshold-unit {
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: clamp(0.875rem, 1.7vmin, 1.05rem);
+  outline: none;
+}
+
 /* Reduced motion: a reader who asked the system to stop moving gets the same
    layouts with the movement removed. The 0.01ms floor is deliberate — `none`
    would also cancel the delay an animation needs before its end state applies,

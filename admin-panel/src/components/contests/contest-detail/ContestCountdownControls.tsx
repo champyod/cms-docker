@@ -2,8 +2,15 @@
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { EarthIcon, type EarthIconHandle } from 'lucide-animated';
-import { listTimezones, zoneOffsetLabel, zoneOffsetMap } from '@/lib/contest-countdown';
+import { ArrowLeftIcon, EarthIcon, MaximizeIcon, MinimizeIcon, type EarthIconHandle } from 'lucide-animated';
+import {
+  COUNTDOWN_THRESHOLD_UNITS,
+  listTimezones,
+  zoneOffsetLabel,
+  zoneOffsetMap,
+  type CountdownThreshold,
+  type CountdownThresholdUnit,
+} from '@/lib/contest-countdown';
 import { cn } from '@/lib/utils';
 
 // The list runs to hundreds of zones, so a search box beats scrolling all of them.
@@ -49,8 +56,6 @@ interface TimezoneMenuProps {
   value: string;
   onChange: (timeZone: string) => void;
 }
-
-/** Animated globe opening a searchable list of every zone the runtime knows. */
 export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezoneMenu({
   value,
   onChange,
@@ -147,6 +152,86 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
           </motion.div>
         ) : null}
       </AnimatePresence>
+    </div>
+  );
+});
+
+const THRESHOLD_UNIT_LABELS: Readonly<Record<CountdownThresholdUnit, string>> = {
+  seconds: 'sec',
+  minutes: 'min',
+  hours: 'hr',
+  percent: '%',
+};
+
+interface ThresholdFieldProps {
+  threshold: CountdownThreshold;
+  onChange: (next: CountdownThreshold) => void;
+}
+
+/** Asks for the hurry window on the page itself: an amount plus sec/min/hr/%. */
+export const CountdownThresholdField = memo(function CountdownThresholdField({
+  threshold,
+  onChange,
+}: ThresholdFieldProps): React.JSX.Element {
+  const changeAmount = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    onChange({ ...threshold, amount: event.target.valueAsNumber });
+  };
+  const changeUnit = (event: React.ChangeEvent<HTMLSelectElement>): void => {
+    const unit = COUNTDOWN_THRESHOLD_UNITS.find((candidate) => candidate === event.target.value);
+    if (unit) onChange({ ...threshold, unit });
+  };
+  return (
+    <label className="countdown-threshold" title="Warn me this far ahead">
+      <span className="sr-only">Hurry warning window</span>
+      <input
+        type="number"
+        min={1}
+        inputMode="numeric"
+        value={Number.isFinite(threshold.amount) ? threshold.amount : ''}
+        onChange={changeAmount}
+        className="countdown-threshold-input"
+      />
+      <select value={threshold.unit} onChange={changeUnit} className="countdown-threshold-unit">
+        {COUNTDOWN_THRESHOLD_UNITS.map((unit) => (
+          <option key={unit} value={unit}>{THRESHOLD_UNIT_LABELS[unit]}</option>
+        ))}
+      </select>
+    </label>
+  );
+});
+
+interface ToolbarProps {
+  onBack: () => void;
+  threshold: CountdownThreshold;
+  onThresholdChange: (next: CountdownThreshold) => void;
+  timezone: string;
+  onTimezoneChange: (timeZone: string) => void;
+  isFullscreen: boolean;
+  onToggleFullscreen: () => void;
+}
+
+/** Page chrome: leave, warn window, zone, full screen. */
+export const CountdownToolbar = memo(function CountdownToolbar({
+  onBack,
+  threshold,
+  onThresholdChange,
+  timezone,
+  onTimezoneChange,
+  isFullscreen,
+  onToggleFullscreen,
+}: ToolbarProps): React.JSX.Element {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <CountdownIconButton label="Back" onClick={onBack}>
+        <ArrowLeftIcon size={18} animateOnHover />
+      </CountdownIconButton>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <CountdownThresholdField threshold={threshold} onChange={onThresholdChange} />
+        <ContestCountdownTimezoneMenu value={timezone} onChange={onTimezoneChange} />
+        <CountdownIconButton label={isFullscreen ? 'Exit full screen' : 'Full screen'} onClick={onToggleFullscreen}>
+          {isFullscreen ? <MinimizeIcon size={18} animateOnHover /> : <MaximizeIcon size={18} animateOnHover />}
+        </CountdownIconButton>
+      </div>
     </div>
   );
 });

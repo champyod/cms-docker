@@ -2,32 +2,34 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeftIcon, MaximizeIcon, MinimizeIcon } from 'lucide-animated';
+import Image from 'next/image';
 import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
-  PHASE_LABELS,
+  DEFAULT_COUNTDOWN_THRESHOLD,
+  STAGE_LABELS,
+  countdownPhaseWindowMs,
   countdownTarget,
   formatZoneTime,
   resolveContestPhase,
+  resolveCountdownStage,
+  resolveHurryThresholdMs,
   type ContestPhase,
   type ContestTimingWindow,
 } from '@/lib/contest-countdown';
-import { Badge } from '@/components/core/Badge';
 import { ContestCountdownClock } from './ContestCountdownClock';
-import { ContestCountdownTimezoneMenu, CountdownIconButton } from './ContestCountdownControls';
+import { CountdownToolbar } from './ContestCountdownControls';
 import {
+  useCountdownThreshold,
   useCountdownTiming,
   useCountdownTimezone,
   useElementFullscreen,
   usePhaseNotifications,
 } from './useContestCountdown';
 
-const PHASE_VARIANTS: Readonly<Record<ContestPhase, 'neutral' | 'success' | 'info' | 'destructive'>> = {
-  not_started: 'neutral',
-  running: 'success',
-  analysis: 'info',
-  ended: 'destructive',
-};
+// Drop licensed character art in public/ and point this at it; empty renders no character.
+const CHARACTER_SRC = '';
+
+const DEFAULT_HURRY_MS = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
 
 const PHASE_MOMENT_VERBS: Readonly<Record<ContestPhase, string>> = {
   not_started: 'Starts',
@@ -48,38 +50,45 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
   const surfaceRef = useRef<HTMLDivElement>(null);
   const { timing, now } = useCountdownTiming(data);
   const { timezone, setTimezone } = useCountdownTimezone();
+  const { threshold, setThreshold } = useCountdownThreshold();
   const { isFullscreen, toggle: toggleFullscreen } = useElementFullscreen(surfaceRef);
 
   const phase = resolveContestPhase(timing, now);
   const target = countdownTarget(timing, phase);
   const remainingMs = target ? target.getTime() - now.getTime() : null;
+  const windowMs = countdownPhaseWindowMs(timing, phase, DEFAULT_HURRY_MS);
+  const stage = resolveCountdownStage(phase, remainingMs, resolveHurryThresholdMs(threshold, windowMs));
   usePhaseNotifications(timing.name, phase);
 
   const goBack = useCallback((): void => router.back(), [router]);
 
   return (
-    <div ref={surfaceRef} className="countdown-surface flex min-h-[62vh] flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <CountdownIconButton label="Back" onClick={goBack}>
-          <ArrowLeftIcon size={18} animateOnHover />
-        </CountdownIconButton>
-        <div className="flex items-center gap-2">
-          <ContestCountdownTimezoneMenu value={timezone} onChange={setTimezone} />
-          <CountdownIconButton label={isFullscreen ? 'Exit full screen' : 'Full screen'} onClick={toggleFullscreen}>
-            {isFullscreen ? <MinimizeIcon size={18} animateOnHover /> : <MaximizeIcon size={18} animateOnHover />}
-          </CountdownIconButton>
-        </div>
+    <div
+      ref={surfaceRef}
+      data-stage={stage}
+      className="countdown-surface relative isolate flex min-h-[62vh] flex-col gap-6"
+    >
+      <div aria-hidden className="countdown-ambient" />
+      {CHARACTER_SRC ? (
+        <Image aria-hidden className="countdown-character" src={CHARACTER_SRC} alt="" width={512} height={512} />
+      ) : null}
+
+      <div className="relative z-10">
+        <CountdownToolbar
+          onBack={goBack}
+          threshold={threshold}
+          onThresholdChange={setThreshold}
+          timezone={timezone}
+          onTimezoneChange={setTimezone}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
       </div>
 
-      <div className="countdown-clock-fill flex flex-1 flex-col justify-center gap-4 text-center">
+      <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
         <ContestCountdownClock remainingMs={remainingMs} />
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Badge
-            variant={PHASE_VARIANTS[phase]}
-            className={phase === 'not_started' || phase === 'running' ? 'animate-pulse' : undefined}
-          >
-            {PHASE_LABELS[phase]}
-          </Badge>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+          <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
           <span className="text-sm text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>
         </div>
       </div>
