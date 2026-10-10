@@ -279,13 +279,15 @@ describe('buildBackupArgv', () => {
       '/usr/local/bin/cms-backup.sh',
       '--tables',
       'contests,users',
+      '--who',
+      'root',
     ]);
   });
 
   it('adds --large-objects when a selected table carries large objects', () => {
     const result = buildBackupArgv(['contests', 'fsobjects']);
     expect(result.valid).toBe(true);
-    expect(result.args).toEqual(['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests,fsobjects', '--large-objects']);
+    expect(result.args).toEqual(['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests,fsobjects', '--large-objects', '--who', 'root']);
   });
 
   it('omits --large-objects for a selection without a large-object table', () => {
@@ -336,11 +338,19 @@ describe('buildBackupArgv', () => {
     const result = buildBackupArgv(['contests'], '/mnt/offsite/cms-backups');
     expect(result.valid).toBe(true);
     expect(result.args).toContain('--root');
-    expect(result.args.at(-1)).toBe('/mnt/offsite/cms-backups');
+    expect(result.args.at(-3)).toBe('/mnt/offsite/cms-backups');
+    expect(result.args.at(-1)).toBe('root');
   });
 
   it('omits --root when the write root is null, keeping the monitor default', () => {
     expect(buildBackupArgv(['contests'], null).args).not.toContain('--root');
+  });
+
+  it('names the actor the run attributes to, the system actor by default', () => {
+    const result = buildBackupArgv(['contests'], null, 'nightwatch');
+    expect(result.args).toContain('--who');
+    expect(result.args.at(-1)).toBe('nightwatch');
+    expect(buildBackupArgv(['contests']).args.at(-1)).toBe('root');
   });
 
   it('rejects a relative write root that would resolve against the monitor cwd', () => {
@@ -369,6 +379,8 @@ describe('a schedule that names no table backs up every table', () => {
       '--tables',
       BACKUP_TABLE_NAMES.join(','),
       '--large-objects',
+      '--who',
+      'root',
     ]);
   });
 
@@ -420,7 +432,8 @@ describe('fireSchedule location handling', () => {
     await fireSchedule(schedule({ locationId: 'secondary' }), REFERENCE, deps);
     expect(launcher.launched).toHaveLength(1);
     expect(launcher.launched[0]).toContain('--root');
-    expect(launcher.launched[0]?.at(-1)).toBe('/mnt/offsite/cms-backups');
+    expect(launcher.launched[0]?.at(-3)).toBe('/mnt/offsite/cms-backups');
+    expect(launcher.launched[0]?.at(-1)).toBe('root');
   });
 
   it('launches with no --root when the root resolves to null', async () => {
@@ -428,6 +441,13 @@ describe('fireSchedule location handling', () => {
     await fireSchedule(schedule({ locationId: null }), REFERENCE, deps);
     expect(launcher.launched).toHaveLength(1);
     expect(launcher.launched[0]).not.toContain('--root');
+  });
+
+  it('names the system actor as the run the schedule fired on its behalf', async () => {
+    const { launcher, deps } = fakeDeps({ writeRoot: { ok: true, root: null } });
+    await fireSchedule(schedule({ locationId: null }), REFERENCE, deps);
+    expect(launcher.launched[0]).toContain('--who');
+    expect(launcher.launched[0]?.at(-1)).toBe('root');
   });
 });
 
@@ -606,7 +626,7 @@ describe('fireSchedule on a selection that left the catalog', () => {
     expect(row.nextRunAt).toEqual(at(60));
     row.tables = ['contests'];
     await fireDueSchedules(store.rows, at(60), deps);
-    expect(launcher.launched).toEqual([['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests']]);
+    expect(launcher.launched).toEqual([['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', 'contests', '--who', 'root']]);
     expect(launcher.alerts.map((alert) => alert.title)).toEqual(['Scheduled Backup Rejected', 'Scheduled Backup Launched']);
   });
 });

@@ -364,13 +364,17 @@ apply_rotation() {
 manifest_entry_json() {
   local ts="$1" db_sha="$2"
   local pg_ver="$3" db_bytes="$4" total_bytes="$5"
-  local kind="${6:-full}" tables_csv="${7:-}"
+  local kind="${6:-full}" tables_csv="${7:-}" requested_by="${8:-root}"
   # WHY tables is an array and not a joined string: a reader asks whether a table is
   # in the set, and split-on-comma in every reader is a second place to get it wrong.
+  # WHY requested_by defaults to root: a launch that names no admin is a script
+  # action, and every script action is attributable to the system actor, so the
+  # default is an identity rather than an empty string a reader cannot search for.
   jq -n \
     --arg ts "$ts" \
     --arg db_sha256 "$db_sha" \
     --arg pg_version "$pg_ver" \
+    --arg requested_by "$requested_by" \
     --arg kind "$kind" \
     --arg tables_csv "$tables_csv" \
     --argjson db_bytes "$db_bytes" \
@@ -380,6 +384,7 @@ manifest_entry_json() {
        db_dump: ("db/cmsdb-" + $ts + ".dump"),
        db_sha256: $db_sha256,
        pg_version: $pg_version,
+       requested_by: $requested_by,
        sizes: {db_bytes: $db_bytes, total_bytes: $total_bytes},
        kind: $kind,
        tables: ($tables_csv | split(",") | map(select(length > 0)))
@@ -412,7 +417,7 @@ manifest_seed() {
 }
 
 # manifest_append <manifest> <ts> <db_sha256> <pg_version> <db_bytes>
-#               <total_bytes> <kind> <tables_csv>
+#               <total_bytes> <kind> <tables_csv> <requested_by>
 manifest_append() {
   local manifest="$1"
   # WHY the ts is read before the shift: every alert below names the run it belongs to, and
@@ -687,7 +692,7 @@ run_backup() {
   # itself. Judged with the rest of the run's verdict below, it still reaches an exit code.
   local manifest_status=0
   manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$pg_ver" "$db_bytes" \
-    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" || manifest_status=$?
+    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" "$REQUESTED_BY" || manifest_status=$?
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 3) Rotation
@@ -777,13 +782,14 @@ run_stdout_dump() {
 BACKUP_MODE="full"
 BACKUP_ROOT_OVERRIDE=""  # --root <path>: retargets db/ and manifest.json
 BACKUP_STDOUT=0          # --stdout: stream the dump to the caller, archive nothing
+REQUESTED_BY="root"      # --who <name>: the admin that asked for this run
 SELECTED_TABLES=()   # validated table names in the order pg_dump must dump them
 PG_SELECTION_ARGS=()  # one -t per selected table, plus -b for large objects
 BACKUP_KIND="full"
 SELECTED_TABLES_CSV=""
 
 usage() {
-  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects] [--root <path>] [--stdout]"
+  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects] [--root <path>] [--stdout] [--who <name>]"
   echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
   echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* and POSTGRES_BACKUP_PASSWORD from .env"
   echo "Without --tables the whole database is dumped, exactly as before."
@@ -793,6 +799,8 @@ usage() {
   echo "  instead of BACKUP_DIR; also retargets --cleanup-only. Path is used as given."
   echo "--stdout streams the dump to stdout and archives nothing: no file, no manifest,"
   echo "  no rotation, no webhook. Log lines move to stderr so they cannot corrupt it."
+  echo "--who <name> records the admin that asked for this run in the manifest entry"
+  echo "  as requested_by; root when the flag is absent."
 }
 
 parse_args() {
@@ -840,6 +848,20 @@ parse_args() {
         ;;
       --cleanup-only)
         BACKUP_MODE="cleanup"
+        shift
+        ;;
+      --who)
+        if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+          log_die "--who requires a name"
+        fi
+        REQUESTED_BY="$2"
+        shift 2
+        ;;
+      --who=*)
+        REQUESTED_BY="${1#--who=}"
+        if [[ -z "$REQUESTED_BY" || "$REQUESTED_BY" == -* ]]; then
+          log_die "--who requires a name"
+        fi
         shift
         ;;
       --help|-h)

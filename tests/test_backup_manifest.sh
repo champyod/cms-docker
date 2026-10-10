@@ -114,6 +114,8 @@ check_eq "db_bytes stays a number" "true" \
 check_eq "total_bytes equals the dump, because the dump is all there is" \
   "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.db_bytes')" \
   "$(entry_field "$QUIET_MANIFEST" 0 '.sizes.total_bytes')"
+check_eq "a run no admin asked for names the system actor" "root" \
+  "$(entry_field "$QUIET_MANIFEST" 0 '.requested_by')"
 
 # ---------------------------------------------------------------------------
 # 4. The entry shape, asserted whole
@@ -124,17 +126,45 @@ check_eq "total_bytes equals the dump, because the dump is all there is" \
 # something no reader could ever find on disk.
 printf '\n== the entry carries exactly the database-only fields ==\n'
 check_eq "a complete entry has no key beyond the database-only set" \
-  "db_dump,db_sha256,kind,pg_version,sizes,tables,ts" \
+  "db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
   "$(entry_field "$QUIET_MANIFEST" 0 'keys | join(",")')"
 check_eq "the sizes object counts the dump alone" "db_bytes,total_bytes" \
   "$(entry_field "$QUIET_MANIFEST" 0 '.sizes | keys | join(",")')"
 check_eq "no stale volume key is left on the newest entry either" \
-  "db_dump,db_sha256,kind,pg_version,sizes,tables,ts" \
+  "db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
   "$(entry_field "$QUIET_MANIFEST" 1 'keys | join(",")')"
 
 LAST_TS="$(entry_field "$QUIET_MANIFEST" 1 '.ts')"
 check_eq "the newest entry still describes the dump it names" \
   "db/cmsdb-${LAST_TS}.dump" "$(entry_field "$QUIET_MANIFEST" 1 '.db_dump')"
+
+# ---------------------------------------------------------------------------
+# 4b. The actor channel: --who names the admin that asked, and a launch
+# that names none is the system actor, not an empty string
+# ---------------------------------------------------------------------------
+# The panel hands the session admin's username to the script through --who,
+# and every other launch path (the scheduler, the update safety run, the
+# drill) names no admin, so the manifest is the one record that says which
+# identity each archive belongs to.
+printf '\n== the entry names the admin that asked for the run ==\n'
+new_run_root who-channel
+WHO_MANIFEST="${RUN_ROOT}/backups/manifest.json"
+run_backup_flagged "$QUIET_PATH" --who nightwatch
+expect_exit "a run naming its actor still completes" "0"
+check_eq "the entry names the admin that asked" "nightwatch" \
+  "$(entry_field "$WHO_MANIFEST" 0 '.requested_by')"
+
+new_run_root who-channel-empty
+run_backup_flagged "$QUIET_PATH" --who=
+expect_exit "a run with an empty actor name is refused" "1"
+check_eq "the refusal names the flag" "yes" \
+  "$(grep_yes "$RUN_LOG" '--who requires a name')"
+
+new_run_root who-channel-flag
+run_backup_flagged "$QUIET_PATH" --who -tables
+expect_exit "a run whose actor name reads as a flag is refused" "1"
+check_eq "the refusal names the flag" "yes" \
+  "$(grep_yes "$RUN_LOG" '--who requires a name')"
 
 # ---------------------------------------------------------------------------
 # 5. A retired set is marked in the manifest, and its entry is kept

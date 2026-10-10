@@ -243,6 +243,11 @@ new_run_root() { # <name> — empty backup root for a single run
   : > "$WEBHOOK_LOG"
 }
 
+# Extra argv words handed to the staged script after its entry argument, so a
+# suite can drive a flag the default entry does not carry. Empty by default;
+# the ${VAR[@]+...} form keeps `set -u` happy on a bash with no words set.
+SCRIPT_EXTRA_ARGS=()
+
 # run_staged_backup <path> <script arg> [VAR=VAL ...] — the one invocation every runner
 # shares. It runs under `env -i`, so an inherited credential, a stale BACKUP_DIR or an
 # inherited PATH cannot reach the script, and the runner's own PATH comes first so the stubs
@@ -275,7 +280,7 @@ run_staged_backup() {
     STUB_REAL_RM="${HARNESS_REAL_TOOL[RM]}" \
     STUB_REAL_DF="${HARNESS_REAL_TOOL[DF]}" \
     "$@" \
-    "$BASH_BIN" "$HARNESS_SCRIPT" "$script_arg" >"$RUN_LOG" 2>&1
+    "$BASH_BIN" "$HARNESS_SCRIPT" "$script_arg" ${SCRIPT_EXTRA_ARGS[@]+"${SCRIPT_EXTRA_ARGS[@]}"} >"$RUN_LOG" 2>&1
   LAST_EXIT=$?
   # Only the helper invocations, so a suite can assert that no run ever asked for an
   # archive. `tar czf -` is how __backup.sh used to stream one onto stdout, so its absence
@@ -308,4 +313,15 @@ run_cleanup_on() { # <path> [VAR=VAL ...]
 
 run_backup() { # [VAR=VAL ...] — a run with the host's tools available
   run_backup_on "$HARNESS_PATH" "$@"
+}
+
+# run_backup_flagged <path> <arg>... — a run whose script argv carries the
+# named words after its entry argument, for a flag the default entry does not
+# carry. The words apply to the next staged run only.
+run_backup_flagged() { # <path> <arg>...
+  local run_path="$1"
+  shift
+  SCRIPT_EXTRA_ARGS=("$@")
+  run_backup_on "$run_path"
+  SCRIPT_EXTRA_ARGS=()
 }

@@ -17,6 +17,7 @@ import { isAbsolute } from 'node:path';
 import { BACKUP_TABLE_NAMES, BACKUP_TABLES, validateTableSelection } from '@/lib/backup-table-catalog';
 import { computeNextRun, isScheduleDue } from '@/lib/backup-schedules';
 import type { WriteRootResolution } from '@/lib/backup-locations';
+import { ROOT_ACTOR_USERNAME } from '@/lib/permission-groups';
 
 export const MONITOR_CONTAINER = 'cms-monitor';
 export const MONITOR_BACKUP_SCRIPT = '/usr/local/bin/cms-backup.sh';
@@ -187,10 +188,11 @@ function resolveSelection(tables: readonly string[]): readonly string[] {
   return tables.length === 0 ? BACKUP_TABLE_NAMES : tables;
 }
 
-function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null): string[] {
+function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null, who: string): string[] {
   const args = ['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', tables.join(',')];
   if (includeLargeObjects) args.push('--large-objects');
   if (writeRoot !== null) args.push('--root', writeRoot);
+  args.push('--who', who);
   return args;
 }
 
@@ -200,9 +202,15 @@ function buildArgv(tables: readonly string[], includeLargeObjects: boolean, writ
  * and is emitted as that explicit list, so `pg_dump` always receives `-t` names
  * and the archive records exactly which tables it carries. A non-null writeRoot
  * must be absolute: a relative one would resolve against the monitor's working
- * directory and silently land somewhere else.
+ * directory and silently land somewhere else. `who` names the actor the run
+ * attributes to: the system actor for a scheduled fire, an admin username when
+ * a panel action hands one in, so the manifest's requested_by is never empty.
  */
-export function buildBackupArgv(tables: readonly string[], writeRoot: string | null = null): BackupArgvResult {
+export function buildBackupArgv(
+  tables: readonly string[],
+  writeRoot: string | null = null,
+  who: string = ROOT_ACTOR_USERNAME,
+): BackupArgvResult {
   if (!Array.isArray(tables) || !tables.every((table) => typeof table === 'string')) {
     return rejection(REJECTED_NOT_A_LIST);
   }
@@ -216,7 +224,7 @@ export function buildBackupArgv(tables: readonly string[], writeRoot: string | n
   return {
     valid: true,
     tables: selection,
-    args: buildArgv(selection, selectionNeedsLargeObjects(selection), writeRoot),
+    args: buildArgv(selection, selectionNeedsLargeObjects(selection), writeRoot, who),
     error: null,
   };
 }

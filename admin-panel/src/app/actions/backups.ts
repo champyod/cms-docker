@@ -5,6 +5,7 @@ import { unlink } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { revalidatePath } from 'next/cache';
 
+import { getSession } from '@/lib/auth';
 import { orderSelection, selectionNeedsLargeObjects, validateTableSelection } from '@/lib/backup-table-catalog';
 import type { TableSelectionResult } from '@/lib/backup-table-catalog';
 import { listArchives as readArchiveFiles, resolveArchivePath } from '@/lib/backup-archives';
@@ -12,6 +13,7 @@ import type { BackupArchive } from '@/lib/backup-archives';
 import { resolveReadRoot, resolveWriteRoot } from '@/lib/backup-locations';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { ensurePermission } from '@/lib/permissions';
+import { prisma } from '@/lib/prisma';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,11 +61,28 @@ function describeFailure(error: unknown): string {
   return stderr.length > 0 ? `${error.message}: ${stderr}` : error.message;
 }
 
-async function startBackupInMonitor(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null): Promise<void> {
+async function startBackupInMonitor(tables: readonly string[], includeLargeObjects: boolean, writeRoot: string | null, who: string): Promise<void> {
   const args = ['exec', '-d', MONITOR_CONTAINER, 'bash', MONITOR_BACKUP_SCRIPT, '--tables', tables.join(',')];
   if (includeLargeObjects) args.push('--large-objects');
   if (writeRoot !== null) args.push('--root', writeRoot);
+  args.push('--who', who);
   await execFileAsync('docker', args, { timeout: BACKUP_START_TIMEOUT_MS, maxBuffer: BACKUP_MAX_OUTPUT_BYTES });
+}
+
+/**
+ * The username of the admin whose session asked for this action, or
+ * null when no admin can be named. The `--who` channel carries it
+ * into the manifest, so a manual run is attributed to the admin that
+ * triggered it; a launch that cannot name its admin is refused rather
+ * than attributed to an identity that did not ask.
+ */
+async function actingAdminUsername(): Promise<string | null> {
+  const session = await getSession();
+  if (session === null) return null;
+  const adminId = Number.parseInt(session.userId, 10);
+  if (!Number.isInteger(adminId)) return null;
+  const admin = await prisma.admins.findUnique({ where: { id: adminId }, select: { username: true } });
+  return admin?.username ?? null;
 }
 
 export async function triggerSelectiveBackup(tables: string[], locationId?: string): Promise<SelectiveBackupResult> {
@@ -79,10 +98,14 @@ export async function triggerSelectiveBackup(tables: string[], locationId?: stri
   if (!writeTarget.ok) {
     return { success: false, started: false, error: writeTarget.error, warnings: validation.warnings };
   }
+  const actor = await actingAdminUsername();
+  if (actor === null) {
+    return { success: false, started: false, error: 'No admin session to attribute this run to, so it was not started.', warnings: validation.warnings };
+  }
   const selection = orderSelection(tables);
   try {
     await logToDiscord('Selective Backup', `Admin triggered a selective backup of ${selection.length} table(s): ${selection.join(', ')}`);
-    await startBackupInMonitor(selection, selectionNeedsLargeObjects(selection), writeTarget.root);
+    await startBackupInMonitor(selection, selectionNeedsLargeObjects(selection), writeTarget.root, actor);
   } catch (error) {
     return { success: false, started: false, error: describeFailure(error), warnings: validation.warnings };
   }
