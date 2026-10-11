@@ -30,6 +30,10 @@ readonly DATABASE_URL="${RANKING_E2E_DATABASE_URL:?set RANKING_E2E_DATABASE_URL 
 # "readonly variable" in bash, which stopped the service from starting at all.
 export DATABASE_URL
 readonly REDIS_URL="${RANKING_E2E_REDIS_URL:?set RANKING_E2E_REDIS_URL to the Redis the console counts failures in}"
+# The console signs its cookie with this, so an absent value refuses the login route
+# rather than accepting a weaker one. It is a fixture rather than a credential: the run
+# mints it, uses it and discards it inside one rehearsal.
+readonly SESSION_SECRET="${RANKING_E2E_SESSION_SECRET:-ranking-e2e-session-secret}"
 readonly BIN="${RANKING_E2E_BINARY:-${CRATE}/target/release/cms-ranking}"
 readonly PORT="${RANKING_E2E_PORT:-18890}"
 readonly BASE="http://127.0.0.1:${PORT}"
@@ -101,6 +105,7 @@ PY
 start_service() {
     RANKING_BIND_ADDRESS="127.0.0.1:${PORT}" \
         RANKING_REDIS_URL="${REDIS_URL}" \
+        RANKING_SESSION_SECRET="${SESSION_SECRET}" \
         RANKING_STATIC_DIR="${REPO}/ranking-web/static" \
         CMS_CREDITS_FILE="${REPO}/credits.json" \
         "${BIN}" >"${LOG}" 2>&1 &
