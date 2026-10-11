@@ -37,6 +37,9 @@ fn widget_html(captcha: &CaptchaConfig) -> String {
         CaptchaProvider::HCaptcha => format!(
             "<div class=\"h-captcha\" data-sitekey=\"{key}\"></div><script src=\"https://js.hcaptcha.com/1/api.js\" async defer></script>"
         ),
+        CaptchaProvider::Recaptcha => format!(
+            "<div class=\"g-recaptcha\" data-sitekey=\"{key}\"></div><script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>"
+        ),
     }
 }
 

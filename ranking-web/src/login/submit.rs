@@ -171,6 +171,7 @@ fn captcha_token(fields: &HashMap<String, String>, provider: CaptchaProvider) ->
     let names: [&str; 2] = match provider {
         CaptchaProvider::Turnstile => ["cf-turnstile-response", "captcha"],
         CaptchaProvider::HCaptcha => ["h-captcha-response", "captcha"],
+        CaptchaProvider::Recaptcha => ["g-recaptcha-response", "captcha"],
     };
     names
         .iter()

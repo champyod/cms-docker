@@ -55,6 +55,7 @@ pub struct CaptchaConfig {
 pub enum CaptchaProvider {
     Turnstile,
     HCaptcha,
+    Recaptcha,
 }
 
 impl CaptchaProvider {
@@ -62,14 +63,15 @@ impl CaptchaProvider {
         match self {
             Self::Turnstile => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
             Self::HCaptcha => "https://hcaptcha.com/siteverify",
+            Self::Recaptcha => "https://www.google.com/recaptcha/api/siteverify",
         }
     }
 
     fn from_wire(raw: &str) -> Self {
-        if raw.trim().eq_ignore_ascii_case("hcaptcha") {
-            Self::HCaptcha
-        } else {
-            Self::Turnstile
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "hcaptcha" => Self::HCaptcha,
+            "recaptcha" => Self::Recaptcha,
+            _ => Self::Turnstile,
         }
     }
 }

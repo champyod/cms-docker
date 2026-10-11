@@ -12,6 +12,12 @@ import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import type { CaptchaProvider } from '@/lib/captcha';
 
+const CAPTCHA_SCRIPTS: Record<CaptchaProvider, string> = {
+  turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+  hcaptcha: 'https://hcaptcha.com/1/api.js',
+  recaptcha: 'https://www.google.com/recaptcha/api.js',
+};
+
 interface CaptchaUiState {
   required: boolean;
   enabled: boolean;
@@ -85,14 +91,14 @@ export default function LoginPage() {
   useEffect(() => {
     if (!showCaptcha || !activeSiteKey) return;
     const existing = document.querySelector<HTMLScriptElement>(
-      activeProvider === 'hcaptcha' ? 'script[data-captcha="hcaptcha"]' : 'script[data-captcha="turnstile"]'
+      `script[data-captcha="${activeProvider}"]`
     );
     if (existing) return;
     const script = document.createElement('script');
     script.async = true;
     script.defer = true;
-    script.dataset.captcha = activeProvider === 'hcaptcha' ? 'hcaptcha' : 'turnstile';
-    script.src = activeProvider === 'hcaptcha' ? 'https://hcaptcha.com/1/api.js' : 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.dataset.captcha = activeProvider;
+    script.src = CAPTCHA_SCRIPTS[activeProvider];
     document.head.appendChild(script);
   }, [showCaptcha, activeProvider, activeSiteKey]);
 

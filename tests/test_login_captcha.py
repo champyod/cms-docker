@@ -101,7 +101,7 @@ _log.set_detailed_logs = lambda *_args, **_kwargs: None
 sys.modules["cms.log"] = _log
 
 conf = _load("cms.conf", "cms/conf.py")
-_load("cms.server.captcha_provider", "cms/server/captcha_provider.py")
+provider = _load("cms.server.captcha_provider", "cms/server/captcha_provider.py")
 backend = _load("cms.server.login_counter_backend",
                 "cms/server/login_counter_backend.py")
 counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
@@ -559,16 +559,17 @@ class WidgetMarkupTest(unittest.TestCase):
     """The markup alone: the class, the callbacks, and the token field."""
 
     def test_the_widget_uses_the_class_the_provider_renders(self):
-        # The provider NAME is not the class its script scans for: `turnstile`
-        # and `hcaptcha` match nothing, so the container is ignored and the
-        # challenge never appears.
-        for provider, expected in (("turnstile", "cf-turnstile"),
-                                   ("hcaptcha", "h-captcha")):
-            with self.subTest(provider=provider):
-                widget = configured(provider=provider).widget_html()
+        # The provider NAME is not the class its script scans for: `turnstile`,
+        # `hcaptcha` and `recaptcha` all match nothing, so the container is
+        # ignored and the challenge never appears.
+        for name, expected in (("turnstile", "cf-turnstile"),
+                               ("hcaptcha", "h-captcha"),
+                               ("recaptcha", "g-recaptcha")):
+            with self.subTest(provider=name):
+                widget = configured(provider=name).widget_html()
 
                 self.assertIn('class="%s"' % expected, widget)
-                self.assertNotIn('class="%s"' % provider, widget)
+                self.assertNotIn('class="%s"' % name, widget)
 
     def test_the_widget_copies_the_token_into_the_form_field(self):
         # An element without a callback renders a challenge whose answer never
@@ -579,6 +580,19 @@ class WidgetMarkupTest(unittest.TestCase):
         self.assertIn('data-callback="onCaptchaSuccess"', widget)
         self.assertIn('input[name=captchaToken]', widget)
         self.assertIn("function onCaptchaSuccess(token)", widget)
+
+
+class ProviderTableTest(unittest.TestCase):
+    """The three provider tables must share one key set: a provider missing from
+    the class table renders a container its script never scans for, and one
+    missing from the endpoint table verifies against the wrong provider."""
+
+    def test_the_tables_agree_on_the_provider_set(self):
+        keys = set(provider.PROVIDER_SCRIPT)
+
+        self.assertEqual(keys, set(provider.PROVIDER_WIDGET_CLASS))
+        self.assertEqual(keys, set(provider.PROVIDER_VERIFY_URL))
+        self.assertEqual(keys, {"turnstile", "hcaptcha", "recaptcha"})
 
 
 class AdminFormWidgetTest(unittest.TestCase):

@@ -20,17 +20,30 @@ logger = logging.getLogger(__name__)
 # panel: captcha.ts posts to these, the login page loads these scripts.
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify"
+RECAPTCHA_VERIFY_URL = "https://www.google.com/recaptcha/api/siteverify"
 PROVIDER_SCRIPT = {
     "turnstile": "https://challenges.cloudflare.com/turnstile/v0/api.js",
     "hcaptcha": "https://hcaptcha.com/1/api.js",
+    "recaptcha": "https://www.google.com/recaptcha/api.js",
 }
 
 # The class each provider's script scans for when it auto-renders. The provider
-# NAME is not the class: Turnstile looks for `cf-turnstile` and hCaptcha for
-# `h-captcha`, so interpolating the name leaves the container inert.
+# NAME is not the class: Turnstile looks for `cf-turnstile`, hCaptcha for
+# `h-captcha` and reCAPTCHA for `g-recaptcha`, so interpolating the name leaves
+# the container inert.
 PROVIDER_WIDGET_CLASS = {
     "turnstile": "cf-turnstile",
     "hcaptcha": "h-captcha",
+    "recaptcha": "g-recaptcha",
+}
+
+# Each provider's own siteverify endpoint; every one takes `secret` and
+# `response` as a form POST, so only the URL differs. An unknown provider falls
+# back to Turnstile, matching how captcha.py's provider() resolves one.
+PROVIDER_VERIFY_URL = {
+    "turnstile": TURNSTILE_VERIFY_URL,
+    "hcaptcha": HCAPTCHA_VERIFY_URL,
+    "recaptcha": RECAPTCHA_VERIFY_URL,
 }
 
 # The panel's extractCaptchaToken accepts a token under any of these field
@@ -61,7 +74,7 @@ def verify_token(token: str, secret: str, config: CaptchaConfig) -> bool:
     if len(token) == 0:
         return False
     provider = (config.provider or "").strip().lower()
-    url = HCAPTCHA_VERIFY_URL if provider == "hcaptcha" else TURNSTILE_VERIFY_URL
+    url = PROVIDER_VERIFY_URL.get(provider, TURNSTILE_VERIFY_URL)
     payload = urllib.parse.urlencode({"secret": secret, "response": token})
     try:
         with urllib.request.urlopen(url, data=payload.encode("utf-8"),

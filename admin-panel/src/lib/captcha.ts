@@ -1,6 +1,6 @@
 import "server-only";
 
-export type CaptchaProvider = "turnstile" | "hcaptcha";
+export type CaptchaProvider = "turnstile" | "hcaptcha" | "recaptcha";
 
 export interface CaptchaEnv {
   enabled: boolean;
@@ -26,6 +26,7 @@ function parseThreshold(raw: string | undefined, fallback: number): number {
 function parseProvider(raw: string | undefined): CaptchaProvider {
   const normalized = raw?.trim().toLowerCase();
   if (normalized === "hcaptcha") return "hcaptcha";
+  if (normalized === "recaptcha") return "recaptcha";
   return "turnstile";
 }
 
@@ -69,37 +70,26 @@ export async function verifyCaptcha(token: string): Promise<boolean> {
   const trimmed = token.trim();
 
   try {
-    if (env.provider === "hcaptcha") {
-      return await verifyHCaptcha(trimmed, env.secretKey);
-    }
-    return await verifyTurnstile(trimmed, env.secretKey);
+    return await verifySiteVerify(VERIFY_URLS[env.provider], trimmed, env.secretKey);
   } catch {
     return false;
   }
 }
 
-async function verifyTurnstile(token: string, secret: string): Promise<boolean> {
+// Every provider takes the same secret/response form POST, so only the endpoint
+// and the widget differ; a shared call keeps the three in lockstep.
+const VERIFY_URLS: Record<CaptchaProvider, string> = {
+  turnstile: "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+  hcaptcha: "https://hcaptcha.com/siteverify",
+  recaptcha: "https://www.google.com/recaptcha/api/siteverify",
+};
+
+async function verifySiteVerify(url: string, token: string, secret: string): Promise<boolean> {
   const body = new URLSearchParams();
   body.set("secret", secret);
   body.set("response", token);
 
-  const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-
-  if (!response.ok) return false;
-  const data = (await response.json()) as { success?: boolean };
-  return data.success === true;
-}
-
-async function verifyHCaptcha(token: string, secret: string): Promise<boolean> {
-  const body = new URLSearchParams();
-  body.set("secret", secret);
-  body.set("response", token);
-
-  const response = await fetch("https://hcaptcha.com/siteverify", {
+  const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
