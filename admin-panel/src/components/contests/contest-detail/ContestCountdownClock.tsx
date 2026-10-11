@@ -149,13 +149,18 @@ export function ContestCountdownClock({
     ? visibleUnits(units)
     : { showDays: false, showHours: false };
 
+  // Count how many unit cards are visible (always 2–4).
+  // Used as a data attribute so CSS can scale font size per card count.
+  const unitCount =
+    2 + (showHours ? 1 : 0) + (showDays ? 1 : 0);
+
   return (
     <div className="yt-clock-shell">
       {units === null ? (
         /* Ended / unconfigured — invisible placeholder keeps the layout intact. */
         <div className="yt-clock-placeholder" aria-hidden />
       ) : (
-        <div className="yt-units-row">
+        <div className="yt-units-row" data-units={unitCount}>
           {showDays && (
             <>
               <UnitBlock value={pad2(units.days)} label="DAYS"

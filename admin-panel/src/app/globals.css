@@ -675,6 +675,51 @@
   font-size: clamp(1.8rem, min(14vw, 26vh), 11rem);
 }
 
+/*
+ * Per-unit-count scaling.
+ *
+ * When leading zero units are pruned the remaining cards should grow to fill
+ * the freed space.  The base size (defined on .yt-unit-digits above) is
+ * calibrated for 3 units (HH:MM:SS).  Multipliers for each count:
+ *
+ *   4 units (D:HH:MM:SS) — tighter fit, scale down so all four cards fit
+ *   3 units (HH:MM:SS)   — base, no override needed
+ *   2 units (MM:SS)      — ×1.35, noticeably larger
+ *
+ * The same ratio is applied to .yt-sep so the colon stays proportional.
+ * All three expressions stay inside their own clamp() bounds.
+ */
+.yt-units-row[data-units="4"] .yt-unit-digits {
+  font-size: clamp(1.5rem, min(15vw, 27vh), 11rem);
+}
+.yt-units-row[data-units="4"] .yt-sep {
+  font-size: clamp(0.9rem, min(10vw, 18vh), 7rem);
+}
+
+/* data-units="3" is the base — no override. */
+
+.yt-units-row[data-units="2"] .yt-unit-digits {
+  font-size: clamp(2.5rem, min(27vw, 48vh), 18rem);
+}
+.yt-units-row[data-units="2"] .yt-sep {
+  font-size: clamp(1.5rem, min(18vw, 32vh), 12rem);
+}
+
+/* Fullscreen variants mirror the base fullscreen size × the same multipliers. */
+.countdown-surface:fullscreen .yt-units-row[data-units="4"] .yt-unit-digits {
+  font-size: clamp(2rem, min(17vw, 30vh), 13rem);
+}
+.countdown-surface:fullscreen .yt-units-row[data-units="4"] .yt-sep {
+  font-size: clamp(1.2rem, min(11vw, 20vh), 9rem);
+}
+
+.countdown-surface:fullscreen .yt-units-row[data-units="2"] .yt-unit-digits {
+  font-size: clamp(3.5rem, min(30vw, 54vh), 22rem);
+}
+.countdown-surface:fullscreen .yt-units-row[data-units="2"] .yt-sep {
+  font-size: clamp(2rem, min(20vw, 36vh), 15rem);
+}
+
 /* Reduced motion: keep separator visible, stop the blink; respect digit animation rule above. */
 @media (prefers-reduced-motion: reduce) {
   .yt-sep          { animation: none; opacity: 0.55; }
