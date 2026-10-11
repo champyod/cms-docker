@@ -190,7 +190,7 @@ main() {
     start_service
     compare_to_oracle "/scores" "scores"
     compare_to_oracle "/history" "history"
-    entity_reads_match_the_captures
+    entity_lists_carry_the_seeded_values
     task_single_keeps_the_python_byte_style
     public_config_is_exactly_two_keys
     credits_nests_licence_project_and_surface

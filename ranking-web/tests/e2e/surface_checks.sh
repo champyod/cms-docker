@@ -4,9 +4,9 @@
 # enforced. Sourced by ranking_e2e.sh, so it defines functions only and reads the
 # WORK, PARITY, LOG, BASE and pass/fail helpers its caller already set.
 #
-# Every expectation is taken from tests/fixtures/parity/captured, which is the only
-# trustworthy contract: the deployed image is newer than any checkout, so the Python
-# source describes a service that is no longer running.
+# Every expectation is derived from seed.json — the rows this rehearsal seeds — or
+# asserted as a property of the response itself (spacing, headers, status), so nothing
+# here is pinned to one host's production data.
 #
 # The checks run as `python3 -c '…' || fail` on one logical line rather than a
 # heredoc, because a heredoc whose command ends in `||` leaves the shell guessing
@@ -17,37 +17,42 @@ request_has_header() {
   curl -sS -D - -o /dev/null "${BASE}$1" | grep -qi "^$2:"
 }
 
-entity_reads_match_the_captures() {
+entity_lists_carry_the_seeded_values() {
   curl -fsS "${BASE}/users/" >"${WORK}/users.json"
   curl -fsS "${BASE}/contests/" >"${WORK}/contests.json"
   curl -fsS "${BASE}/tasks/" >"${WORK}/tasks.json"
+  curl -fsS "${BASE}/teams/" >"${WORK}/teams.json"
   python3 -c '
 import json, sys
-for served, captured in ((sys.argv[1], sys.argv[2]), (sys.argv[3], sys.argv[4])):
-    if json.load(open(served)) != json.load(open(captured)):
-        raise SystemExit(served + " does not carry the values captured from Python")
-' "${WORK}/users.json" "${PARITY}/captured/users_list.json" \
-    "${WORK}/contests.json" "${PARITY}/captured/contests_list.json" ||
-    fail "an entity list does not match the captured Python values"
-  pass "the entity lists are objects keyed by key with the captured values"
+seed = json.load(open(sys.argv[1]))["entities"]
+for kind, served_path in (("users", sys.argv[2]), ("contests", sys.argv[3]),
+                          ("tasks", sys.argv[4]), ("teams", sys.argv[5])):
+    if json.load(open(served_path)) != seed[kind]:
+        raise SystemExit("/" + kind + "/ does not carry the seeded values")
+' "${PARITY}/seed.json" "${WORK}/users.json" "${WORK}/contests.json" \
+    "${WORK}/tasks.json" "${WORK}/teams.json" ||
+    fail "an entity list does not carry the seeded values"
+  pass "every entity list is an object keyed by key with the seeded values"
 }
 
 task_single_keeps_the_python_byte_style() {
   local key
-  key="$(python3 -c "import json,sys;d=json.load(open('${WORK}/tasks.json'));print(next(k for k,v in d.items() if v.get('short_name')=='aplusb'))")" ||
-    fail "the fixture task aplusb is missing from /tasks/"
+  key="$(python3 -c "import json;print(next(iter(json.load(open('${PARITY}/seed.json'))['entities']['tasks'])))")" ||
+    fail "seed.json carries no task to read back"
   curl -fsS "${BASE}/tasks/${key}" >"${WORK}/task_one.json"
   python3 -c '
 import json, sys
-served = open(sys.argv[1]).read()
-if "100.0" not in served:
+seed = json.load(open(sys.argv[1]))["entities"]["tasks"][sys.argv[2]]
+served = open(sys.argv[3]).read()
+if (json.dumps("max_score") + ": " + str(seed["max_score"])) not in served:
     raise SystemExit("max_score lost the Python float spelling: " + served)
 if "\", \"" not in served or "\": \"" not in served:
     raise SystemExit("the task is not serialised with Python separators: " + served)
-if not isinstance(json.loads(served).get("max_score"), float):
+if not isinstance(json.loads(served)["max_score"], float):
     raise SystemExit("max_score is not a JSON number")
-' "${WORK}/task_one.json" || fail "/tasks/${key} does not keep the Python byte style"
-  pass "/tasks/<aplusb> keeps 100.0 and the ', ' / ': ' separators"
+' "${PARITY}/seed.json" "${key}" "${WORK}/task_one.json" ||
+    fail "/tasks/${key} does not keep the Python byte style"
+  pass "/tasks/${key} keeps the Python float spelling and the ', ' / ': ' separators"
 }
 
 public_config_is_exactly_two_keys() {
