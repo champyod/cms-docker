@@ -36,7 +36,20 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 # ---------------------------------------------------------------------------
 JAIL_SOURCE="${REPO_ROOT}/config/fail2ban/jail.d/grader.conf"
 JAIL_DEST="/etc/fail2ban/jail.d/grader.conf"
-LOG_PATHS=("/var/log/nginx" "/var/log")
+# The nginx proxies write into named Docker volumes (cms-nginx-logs-domain,
+# cms-nginx-logs-contest), so the host path is under the Docker root and there
+# is no /var/log/nginx. The jail carries this placeholder; it is substituted at
+# apply/check time with the volumes' host glob.
+LOG_GLOB_PLACEHOLDER="__NGINX_LOG_GLOB__"
+DOCKER_VOLUME_GLOB="volumes/cms-nginx-logs-*/_data/*error*.log"
+
+docker_root() {
+  docker info --format '{{.DockerRootDir}}' 2>/dev/null || printf '/var/lib/docker'
+}
+
+nginx_log_glob() {
+  printf '%s/%s' "$(docker_root)" "$DOCKER_VOLUME_GLOB"
+}
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -53,7 +66,8 @@ Jails:
   nginx-http-auth   maxretry=5 bantime=1800 findtime=300
   nginx-limit-req   maxretry=10 bantime=300 findtime=300
 
-Log paths: /var/log/nginx/*error*.log (inside nginx-logs volume)
+Log path: the nginx logs inside the named Docker volumes (cms-nginx-logs-domain,
+          cms-nginx-logs-contest), resolved from the Docker root at run time.
 
 The config source is at config/fail2ban/jail.d/grader.conf.
 Deployed to /etc/fail2ban/jail.d/grader.conf on the host.
@@ -109,19 +123,28 @@ cmd_check() {
     ok=0
   fi
 
-  # Check log paths are writable
-  for log_path in "${LOG_PATHS[@]}"; do
-    printf '  %-40s' "Log path $log_path:"
-    if [[ -d "$log_path" ]]; then
-      if [[ -w "$log_path" ]] || [[ -O "$log_path" ]]; then
-        printf 'WRITABLE\n'
-      else
-        printf 'EXISTS (not writable by current user — sudo may be needed)\n'
-      fi
-    else
-      printf 'NOT FOUND (will be created by nginx container)\n'
-    fi
-  done
+  # Check the jail carries the placeholder the apply path substitutes
+  printf '  %-40s' "Placeholder present:"
+  if [[ -f "$JAIL_SOURCE" ]] && grep -q "$LOG_GLOB_PLACEHOLDER" "$JAIL_SOURCE"; then
+    printf 'YES (%s)\n' "$LOG_GLOB_PLACEHOLDER"
+  else
+    printf 'NO (the jail must carry %s)\n' "$LOG_GLOB_PLACEHOLDER"
+    ok=0
+  fi
+
+  # Check the resolved nginx log glob matches the volume logs
+  local glob matches
+  glob="$(nginx_log_glob)"
+  printf '  %-40s' "nginx log glob:"
+  printf '%s\n' "$glob"
+  printf '  %-40s' "  matches:"
+  # shellcheck disable=SC2086
+  matches="$(compgen -G "$glob" || true)"
+  if [[ -n "$matches" ]]; then
+    printf 'logs present\n'
+  else
+    printf 'NO MATCH (nginx not started yet, or the Docker root moved)\n'
+  fi
 
   # Check destination directory
   printf '  %-40s' "Target dir /etc/fail2ban/jail.d/:"
@@ -176,10 +199,14 @@ cmd_apply() {
   # Create target directory if needed
   sudo mkdir -p /etc/fail2ban/jail.d
 
-  # Deploy jail config
-  sudo cp -f "$JAIL_SOURCE" "$JAIL_DEST"
+  # Deploy the jail with the resolved volume log path
+  local rendered
+  rendered="$(mktemp)"
+  sed "s#${LOG_GLOB_PLACEHOLDER}#$(nginx_log_glob)#g" "$JAIL_SOURCE" > "$rendered"
+  sudo cp -f "$rendered" "$JAIL_DEST"
+  rm -f "$rendered"
   sudo chmod 644 "$JAIL_DEST"
-  log_info "deployed $JAIL_SOURCE -> $JAIL_DEST"
+  log_info "deployed $JAIL_SOURCE -> $JAIL_DEST (log path $(nginx_log_glob))"
 
   # Reload fail2ban
   if sudo fail2ban-client reload 2>/dev/null; then

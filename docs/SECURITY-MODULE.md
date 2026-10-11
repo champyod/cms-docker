@@ -52,6 +52,12 @@ The panel never runs fail2ban-client or certbot. It validates a request, writes 
     make security-unban JAIL=nginx-limit-req IP=203.0.113.7
     bash scripts/__security-agent.sh --check
 
+- The nginx jails are installed separately: `sudo make fail2ban` deploys
+  `config/fail2ban/jail.d/grader.conf` to `/etc/fail2ban/jail.d/`, substituting the volume
+  log path — the proxies log into `cms-nginx-logs-domain` / `cms-nginx-logs-contest`, so
+  there is no host `/var/log/nginx`. `make fail2ban-check` verifies it. fail2ban itself
+  comes from the host package manager.
+
 - Queue, results and state live under .security-agent/, which is gitignored and root-owned on
   a host install.
 - Requests are validated twice: the panel rejects an unknown jail, a malformed address or an

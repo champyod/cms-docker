@@ -350,6 +350,14 @@ security-unban:
 	@[ -n "$(JAIL)" ] && [ -n "$(IP)" ] || { echo "usage: make security-unban JAIL=<jail> IP=<address>" >&2; exit 2; }
 	@bash scripts/__security-agent.sh --unban "$(JAIL)" "$(IP)"
 
+# Install the fail2ban jails (nginx-http-auth, nginx-limit-req) with the log path
+# resolved to the nginx Docker volumes. Needs sudo and fail2ban installed.
+fail2ban:
+	@bash scripts/__fail2ban-setup.sh --apply
+
+fail2ban-check:
+	@bash scripts/__fail2ban-setup.sh --check
+
 waf-clean:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
 
