@@ -43,6 +43,9 @@ ${REDIS_LUA_PLACEHOLDER}
 # Built by __domain_routes.sh, which holds the only copy of the service mapping.
 ${ROUTE_RESOLVER}
 
+${SERVER_TOKENS_DIRECTIVE}
+${OCSP_STAPLING_DIRECTIVES}
+
 # ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
 # Always rendered. default_server answers for any Host, which is what lets a single
 # :80 forward validate every SAN on the certificate.
@@ -67,7 +70,8 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -107,6 +111,7 @@ server {
         proxy_pass http://${PRIMARY_UPSTREAM};
         expires 1d;
         add_header Cache-Control "public, immutable";
+        ${LOCATION_SECURITY_HEADERS}
     }
 
     access_log /var/log/nginx/grader_access.log;
@@ -123,7 +128,8 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -159,7 +165,8 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -189,7 +196,8 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
