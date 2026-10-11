@@ -66,7 +66,7 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
   rerollMs: 45_000,
   fallbackProgressMs: 600_000,
   driftExtentRatio: 0.12,   // increased from 0.045 — more visible 2-D motion
-  itemScale: 1.6,
+  itemScale: 2.5,
   growthGain: 0.35,
   markRevealMs: 2_600,
   textureId: 'auto',
