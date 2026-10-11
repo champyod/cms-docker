@@ -65,24 +65,18 @@ require_tools() {
     [[ -d "${REPO}/ranking-web/static" ]] || fail "the vendored page is not in this checkout"
 }
 
-# Every migration the rehearsal drives, in timestamp order — the same set CI applies — so a
-# new one is picked up here rather than quietly missing from the schema this rehearsal drives.
+# Every ranking migration in timestamp order — the same glob CI applies — so a new one
+# is picked up here rather than quietly missing from the schema this rehearsal drives.
 apply_migrations() {
     local migration applied=0
-    # CI applies the same history for its database tests, so a schema that is already
-    # there is the normal case rather than a second attempt at the same DDL.
-    if psql "${DATABASE_URL}" -tAc "SELECT to_regclass('public.ranking_subchanges') IS NOT NULL" | grep -q t; then
-        pass "the schema is already applied"
-        return 0
-    fi
-    for migration in "${REPO}"/admin-panel/prisma/migrations/*/; do
-        [[ -f "${migration}migration.sql" ]] || continue
+    for migration in "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
+        [[ -d "${migration}" ]] || continue
         psql "${DATABASE_URL}" -q -f "${migration}migration.sql" >/dev/null ||
             fail "migration $(basename "${migration}") did not apply"
         applied=$((applied + 1))
     done
-    [[ "${applied}" -gt 0 ]] || fail "no migration was found to apply"
-    pass "the ${applied} migrations apply in order"
+    [[ "${applied}" -gt 0 ]] || fail "no ranking migration was found to apply"
+    pass "the ${applied} ranking migrations apply in order"
 }
 
 seed_rows() {
@@ -154,6 +148,31 @@ events_follow_a_write() {
 # instead of a hash so the rehearsal needs no hashing tool. A second admin carries the
 # same password but no group, so the permission gate is exercised without confirming it.
 seed_console_admin() {
+    # The console reads the panel's own tables, which the CMS base schema creates and the
+    # ranking migrations do not. This rehearsal never runs cms-init, so it carries the five
+    # it needs, declared to match the Prisma models it authenticates through.
+    psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
+CREATE TABLE IF NOT EXISTS admins (
+    id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, username VARCHAR NOT NULL UNIQUE,
+    authentication VARCHAR NOT NULL, enabled BOOLEAN NOT NULL, last_login_at TIMESTAMP(3));
+CREATE TABLE IF NOT EXISTS permissions (
+    id SERIAL PRIMARY KEY, key VARCHAR NOT NULL UNIQUE, module VARCHAR NOT NULL,
+    verb VARCHAR NOT NULL, description VARCHAR);
+CREATE TABLE IF NOT EXISTS groups (
+    id SERIAL PRIMARY KEY, name VARCHAR NOT NULL UNIQUE, description VARCHAR,
+    is_seeded BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS group_permissions (
+    id SERIAL PRIMARY KEY,
+    group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    UNIQUE (group_id, permission_id));
+CREATE TABLE IF NOT EXISTS admin_groups (
+    id SERIAL PRIMARY KEY,
+    admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    UNIQUE (admin_id, group_id));
+SQL
     psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
 DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm');
 INSERT INTO admins (name, username, authentication, enabled) VALUES
