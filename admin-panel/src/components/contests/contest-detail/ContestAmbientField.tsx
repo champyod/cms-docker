@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { useAnimationFrame } from 'motion/react';
 import { createAmbientNoise } from '@/lib/contest-ambient-noise';
 import { buildAmbientField, paintAmbientField, type AmbientField } from '@/lib/contest-ambient-paint';
-import { ambientDriftOffset } from '@/lib/contest-ambient-sim';
+import { ambientDriftOffset, ambientDriftOffsetY } from '@/lib/contest-ambient-sim';
 import { createAmbientRandom, type AmbientConfig, type AmbientRoll } from '@/lib/contest-ambient';
 
 interface Props {
@@ -104,6 +104,8 @@ export function ContestAmbientField({
     }
 
     const driftPx = ambientDriftOffset(elapsedRef.current, roll.driftSeconds, bounds.width * config.driftExtentRatio);
+    // Vertical drift uses a smaller extent (height × ratio) so the field moves in an ellipse.
+    const driftPxY = ambientDriftOffsetY(elapsedRef.current, roll.driftSeconds, bounds.height * config.driftExtentRatio * 0.6);
 
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, bounds.width, bounds.height);
@@ -113,6 +115,7 @@ export function ContestAmbientField({
       // Each painter wraps this offset across its own width, which is what keeps the field
       // seamless: it is applied to the drawn geometry, never as a transform on a fixed box.
       driftPx,
+      driftPxY,
       progress,
       density,
       itemScale,

@@ -65,7 +65,13 @@ export function ContestAmbientLayer({
     return () => window.clearTimeout(timeout);
   }, [roll]);
 
-  if (!isIdle || !isRolled) return null;
+  /*
+   * Never render null while idle — that causes the brief blank page on reroll.
+   * `isRolled` is false for one render cycle before the entry effect fires; the
+   * fallback roll (seed 0) holds the canvas until the real seed arrives, so there
+   * is no blank frame.
+   */
+  if (!isIdle) return null;
 
   const layerStyle = {
     '--countdown-hue': `${roll.palette.glowHue}`,

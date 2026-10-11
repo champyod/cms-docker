@@ -17,7 +17,7 @@ function decompose(totalMs: number): TimeUnits {
   return {
     days:    Math.floor(total / 86400),
     hours:   Math.floor((total % 86400) / 3600),
-    minutes: Math.floor((total % 3600)  / 60),
+    minutes: Math.floor((total % 3600) / 60),
     seconds: total % 60,
   };
 }
@@ -38,14 +38,13 @@ interface DigitProps {
 }
 
 /**
- * One character that re-mounts (and plays its entry animation) whenever its
- * value changes.  The `key` on the parent element encodes both position and
- * character, so only the digit that actually changed triggers a new mount.
+ * One character.  Re-mounts (and plays the entry animation) whenever its value
+ * changes.  Key encodes both position and character so only changed digits fire.
  */
 function Digit({ char, index, isPanicking, panicTurn }: DigitProps): React.JSX.Element {
   return (
     <span
-      className="countdown-digit is-slot"
+      className="yt-digit"
       style={panicDigitStyle(isPanicking, index, panicTurn) as React.CSSProperties | undefined}
     >
       <span className={['countdown-panic-move', ...panicDigitClassNames(isPanicking)].join(' ')}>
@@ -55,31 +54,21 @@ function Digit({ char, index, isPanicking, panicTurn }: DigitProps): React.JSX.E
   );
 }
 
-// ── One time-unit card (e.g. "07 MINUTES") ───────────────────────────────────
+// ── One time-unit card  ───────────────────────────────────────────────────────
 
 interface UnitBlockProps {
-  /** Two-character padded string, e.g. "07". */
-  value: string;
+  value: string;      // always two characters, e.g. "07"
   label: string;
-  /** Index of the first digit in this block within the global sequence. */
-  startIndex: number;
+  startIndex: number; // first digit's global position, for panic stagger
   isPanicking: boolean;
   panicTurn: number;
 }
 
-function UnitBlock({
-  value,
-  label,
-  startIndex,
-  isPanicking,
-  panicTurn,
-}: UnitBlockProps): React.JSX.Element {
+function UnitBlock({ value, label, startIndex, isPanicking, panicTurn }: UnitBlockProps): React.JSX.Element {
   return (
     <div className="yt-unit-block">
-      {/* Digits */}
-      <div className="yt-unit-digits font-display font-bold leading-none tracking-tight">
+      <div className="yt-unit-digits font-display font-bold leading-none">
         {[...value].map((char, offset) => (
-          // Key encodes position + char so only a changed digit re-mounts.
           <Digit
             key={`${startIndex + offset}:${char}`}
             char={char}
@@ -89,8 +78,6 @@ function UnitBlock({
           />
         ))}
       </div>
-
-      {/* Unit label */}
       <span className="yt-unit-label">{label}</span>
     </div>
   );
@@ -98,13 +85,9 @@ function UnitBlock({
 
 // ── Colon separator ───────────────────────────────────────────────────────────
 
-/** Visual separator between unit blocks; pulses to signal each tick. */
+/** Vertically-centred separator that blinks once per second. */
 function Separator(): React.JSX.Element {
-  return (
-    <span className="yt-unit-sep" aria-hidden>
-      :
-    </span>
-  );
+  return <span className="yt-sep" aria-hidden>:</span>;
 }
 
 // ── Public component ──────────────────────────────────────────────────────────
@@ -114,26 +97,22 @@ interface Props {
   readonly remainingMs: number | null;
   /** Panic mode: every digit shakes independently at the hurry threshold. */
   readonly isPanicking?: boolean;
-  /** Increments each panic-animation cycle so each digit gets a fresh motion. */
+  /** Increments each panic cycle so digits get fresh motion. */
   readonly panicTurn?: number;
 }
 
-// Digit index offsets per unit — fixed positions so panic stagger is stable.
-const IDX_DAYS    = 0; // digits 0-1
-const IDX_HOURS   = 2; // digits 2-3
-const IDX_MINUTES = 4; // digits 4-5
-const IDX_SECONDS = 6; // digits 6-7
+// Fixed digit positions so panic stagger is always consistent.
+const IDX_DAYS    = 0;
+const IDX_HOURS   = 2;
+const IDX_MINUTES = 4;
+const IDX_SECONDS = 6;
 
 /**
- * YouTube Premiere-style countdown clock.
+ * YouTube Premiere-style countdown: DAYS · HOURS · MINUTES · SECONDS in labeled cards
+ * that fill 80 % of the viewport's tighter axis.
  *
- * Displays days, hours, minutes, and seconds each in a labeled card that
- * updates every second.  Days are hidden when the remaining time is under
- * 24 hours to avoid a leading "00 DAYS" card.
- *
- * All existing props are preserved: `remainingMs`, `isPanicking`, `panicTurn`.
- * The resize-observer font-scaling logic from the previous string-based renderer
- * is replaced by a fluid `clamp()` in CSS, which is sufficient for labeled units.
+ * Days card is suppressed when < 24 h remain so the display is never "00 DAYS".
+ * All three original props are preserved unchanged.
  */
 export function ContestCountdownClock({
   remainingMs,
@@ -144,59 +123,29 @@ export function ContestCountdownClock({
   const showDays = units !== null && units.days > 0;
 
   return (
-    <div className="countdown-shell flex min-h-0 flex-1 flex-col">
-      <div className="countdown-box yt-countdown-row flex min-h-[200px] w-full flex-1 items-center justify-center overflow-hidden">
-        {units === null ? (
-          // No timing configured — render a static em-dash placeholder.
-          <span
-            className="font-display font-bold text-muted-foreground"
-            style={{ fontSize: 'clamp(2rem, 8vmin, 6rem)' }}
-          >
-            —
-          </span>
-        ) : (
-          <div className="yt-units-row">
-            {showDays && (
-              <>
-                <UnitBlock
-                  value={pad2(units.days)}
-                  label="DAYS"
-                  startIndex={IDX_DAYS}
-                  isPanicking={isPanicking}
-                  panicTurn={panicTurn}
-                />
-                <Separator />
-              </>
-            )}
-
-            <UnitBlock
-              value={pad2(units.hours)}
-              label="HOURS"
-              startIndex={IDX_HOURS}
-              isPanicking={isPanicking}
-              panicTurn={panicTurn}
-            />
-            <Separator />
-
-            <UnitBlock
-              value={pad2(units.minutes)}
-              label="MINUTES"
-              startIndex={IDX_MINUTES}
-              isPanicking={isPanicking}
-              panicTurn={panicTurn}
-            />
-            <Separator />
-
-            <UnitBlock
-              value={pad2(units.seconds)}
-              label="SECONDS"
-              startIndex={IDX_SECONDS}
-              isPanicking={isPanicking}
-              panicTurn={panicTurn}
-            />
-          </div>
-        )}
-      </div>
+    <div className="yt-clock-shell">
+      {units === null ? (
+        /* Ended / unconfigured — invisible placeholder keeps the layout intact. */
+        <div className="yt-clock-placeholder" aria-hidden />
+      ) : (
+        <div className="yt-units-row">
+          {showDays && (
+            <>
+              <UnitBlock value={pad2(units.days)} label="DAYS"
+                startIndex={IDX_DAYS} isPanicking={isPanicking} panicTurn={panicTurn} />
+              <Separator />
+            </>
+          )}
+          <UnitBlock value={pad2(units.hours)} label="HOURS"
+            startIndex={IDX_HOURS} isPanicking={isPanicking} panicTurn={panicTurn} />
+          <Separator />
+          <UnitBlock value={pad2(units.minutes)} label="MINUTES"
+            startIndex={IDX_MINUTES} isPanicking={isPanicking} panicTurn={panicTurn} />
+          <Separator />
+          <UnitBlock value={pad2(units.seconds)} label="SECONDS"
+            startIndex={IDX_SECONDS} isPanicking={isPanicking} panicTurn={panicTurn} />
+        </div>
+      )}
     </div>
   );
 }

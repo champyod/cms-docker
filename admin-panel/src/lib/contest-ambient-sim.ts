@@ -285,10 +285,21 @@ export function buildAmbientParticles(
 }
 
 /**
- * The left-right drift the brief asks for: a sweep whose extent is measured against
- * the field, so the travel reads the same on any viewport. Returns an offset in pixels.
+ * Left-right drift offset in pixels. Returns a signed pixel value.
  */
 export function ambientDriftOffset(elapsedSeconds: number, periodSeconds: number, extentPx: number): number {
   if (periodSeconds <= 0) return 0;
   return Math.sin((elapsedSeconds / periodSeconds) * FULL_TURN) * extentPx;
+}
+
+/**
+ * Vertical drift offset in pixels.  Uses a phase-shifted sine (quarter turn ahead of
+ * the horizontal) so X and Y are always out of phase — the field travels in an ellipse
+ * rather than bouncing on a straight line, which reads as genuinely 2-D motion.
+ */
+export function ambientDriftOffsetY(elapsedSeconds: number, periodSeconds: number, extentPx: number): number {
+  if (periodSeconds <= 0) return 0;
+  // Quarter-period offset so Y is 90° ahead of X, giving elliptical motion.
+  const quarterPeriod = periodSeconds * 0.25;
+  return Math.sin(((elapsedSeconds + quarterPeriod) / periodSeconds) * FULL_TURN) * extentPx;
 }

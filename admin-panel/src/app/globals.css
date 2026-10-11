@@ -491,143 +491,191 @@
   outline: none;
 }
 
-/* ─── YouTube Premiere-style countdown layout ─────────────────────────────────
+/* ─── Countdown clock shell ───────────────────────────────────────────────────
  *
- * Four labeled cards: DAYS · HOURS · MINUTES · SECONDS.
+ * .yt-clock-shell  — the outer flex column that fills all available height from
+ *                    the plate/panic chain above it.
+ * .yt-units-row    — the horizontal flex row of unit cards.
+ * .yt-unit-block   — one column: digits card + label.
+ * .yt-unit-digits  — the pill card holding two digit spans.
+ * .yt-digit        — one character; re-mounts on change to play its entry animation.
+ * .yt-sep          — the blinking colon separator.
  *
  * SIZING STRATEGY
- * The digit font is driven by two viewport axes simultaneously so the cards
- * always fill most of the available space:
- *   • vw component — fills the width when the surface is wide (typical desktop).
- *   • vh component — fills the height when the surface is tall (typical mobile /
- *     fullscreen).  Using both axes means the clock is never small on either.
- * The clamp min keeps it readable on very small screens and the max prevents
- * it from becoming absurdly huge on ultra-wide displays.
+ * Target: cards should together span ~80 % of whichever viewport axis is tighter.
+ * Three cards + two colons across ≈ (3 × card-width) + (2 × sep-width).
+ * With three HH:MM:SS cards each card is ~22 % of viewport width on landscape
+ * and ~22 % of viewport height on portrait.  `min(22vw, 38vh)` picks whichever
+ * axis would overflow first, and a clamp() gives hard floor/ceiling guards.
  *
- * The countdown-box / countdown-shell flex chain must propagate height from the
- * surface down to the box; the overrides below ensure that chain is unbroken.
+ * WHY NOT ResizeObserver: the old clock needed it because a variable-width string
+ * font has no predictable advance width.  Two fixed digits in a card are a
+ * rectangle — CSS can size them accurately without measuring.
  * ─────────────────────────────────────────────────────────────────────────────── */
 
-/* Make the shell and box fill all available height from the flex parent. */
-.countdown-shell {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.countdown-box {
-  flex: 1 1 auto;
-  min-height: 0;
-  /* Remove the fixed min-h so the box can actually shrink on small viewports
-     without being forced to a specific pixel value. */
-  min-height: max(180px, 28vh) !important;
-  height: 100%;
-}
-
-/* The row of unit cards fills the box, centered on both axes. */
-.yt-units-row {
+/* Shell: grows to fill the plate that holds it. */
+.yt-clock-shell {
   display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
   align-items: center;
   justify-content: center;
-  /* Gap scales with the smaller viewport axis so cards don't crowd on portrait. */
-  gap: clamp(0.5rem, 2.5vmin, 2rem);
-  flex-wrap: wrap;
-  /* Ensure it takes the full height of its flex parent so it truly centers. */
   width: 100%;
-  padding: clamp(0.5rem, 2vmin, 1.5rem) 0;
+  /* Minimum so the shell never collapses to nothing on an empty flex parent. */
+  min-height: max(160px, 24vh);
 }
 
-/* One time-unit column: digit card on top, label below. */
+/* Invisible placeholder shown when stage=ended to preserve vertical layout space. */
+.yt-clock-placeholder {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Horizontal row of unit cards. */
+.yt-units-row {
+  display: flex;
+  flex-wrap: nowrap;          /* never wrap — the font shrinks before wrapping */
+  align-items: flex-end;      /* align baselines of all blocks at the bottom */
+  justify-content: center;
+  gap: clamp(0.4rem, 2vw, 1.8rem);
+  width: 100%;
+  padding: 0 clamp(0.5rem, 2vw, 2rem);
+}
+
+/* One column: digit card on top, label centred below. */
 .yt-unit-block {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.3rem, 1.2vmin, 0.7rem);
+  /* Gap between the card and its label scales with font size. */
+  gap: 0.35em;
+  /* Each block takes equal share so cards stay the same width regardless of value. */
+  flex: 0 0 auto;
 }
 
 /*
  * Digit card.
  *
- * Font size uses the min() of two fluid expressions so the card fills whichever
- * axis is tighter:
- *   min(11vw, 22vh)   → on a landscape desktop the width axis governs (vw);
- *                        on portrait or fullscreen the height axis governs (vh).
- * The outer clamp() sets hard lower/upper bounds so the result is always usable.
+ * Two digits side-by-side in a rounded pill.  Font size is the critical number:
+ *   clamp(2rem, min(20vw, 36vh), 14rem)
+ *
+ * • min(20vw, 36vh):  three cards + two colons across ~80 % of the tighter axis.
+ *     Landscape (e.g. 1200 × 700 px): min(20vw=240, 36vh=252) → 240 px → scales on width.
+ *     Portrait  (e.g. 400 × 900 px):  min(20vw=80,  36vh=324) → 80  px → scales on width.
+ *     Fullscreen (100vh tall):         min(20vw,    36vh)       → height governs nicely.
+ * • clamp low=2rem so it is always legible; high=14rem for very large screens.
+ *
+ * WHY font-size drives everything: padding, gap and border-radius are all in `em`
+ * units so they scale automatically with the font, keeping the card proportions
+ * correct at every size.
  */
 .yt-unit-digits {
   display: flex;
-  align-items: baseline;
-  font-size: clamp(2.5rem, min(11vw, 22vh), 11rem);
-  background: hsl(var(--countdown-hue, 226) 20% 14% / 0.55);
-  border: 1px solid hsl(var(--countdown-hue, 226) 40% 30% / 0.35);
-  border-radius: 0.35em;
-  padding: 0.1em 0.28em 0.06em;
+  align-items: center;        /* digits centred vertically inside the pill */
+  justify-content: center;    /* digits centred horizontally */
+  gap: 0.02em;                /* tiny gap between the two characters */
+  font-size: clamp(2rem, min(20vw, 36vh), 14rem);
+  /* Pill card */
+  background: hsl(var(--countdown-hue, 226) 18% 12% / 0.65);
+  border: 1px solid hsl(var(--countdown-hue, 226) 50% 36% / 0.4);
+  border-radius: 0.22em;
+  padding: 0.1em 0.22em;
   box-shadow:
-    0 4px 16px hsl(var(--countdown-hue, 226) 60% 8% / 0.5),
-    inset 0 1px 0 hsl(var(--countdown-hue, 226) 60% 60% / 0.1);
-  color: hsl(var(--countdown-hue, 226) 80% 92%);
-  text-shadow: 0 0 1.2em hsl(var(--countdown-hue, 226) 80% 65% / 0.6);
+    0 4px 24px hsl(var(--countdown-hue, 226) 60% 6% / 0.55),
+    inset 0 1px 0 hsl(var(--countdown-hue, 226) 70% 65% / 0.12);
+  /* Digit colour */
+  color: hsl(var(--countdown-hue, 226) 85% 94%);
+  text-shadow: 0 0 1em hsl(var(--countdown-hue, 226) 80% 70% / 0.5);
 }
 
-/* Each digit slot: wide enough for one character without resizing on each tick. */
-.yt-unit-digits .countdown-digit.is-slot {
-  width: 0.58ch;
+/*
+ * One digit span inside the card.
+ * Must be a fixed width so "0" and "1" take the same space — otherwise the card
+ * resizes on every tick.  `ch` is relative to the "0" character in the current
+ * font, which is exactly what we want.
+ */
+.yt-digit {
+  display: inline-block;
+  width: 0.6ch;
+  text-align: center;
+  /* Play the existing digit-in animation (defined earlier) on mount. */
+  animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
-/* Label below the digits. */
+/* Keep the panic-move wrapper a block so it does not affect the digit's own width. */
+.yt-digit .countdown-panic-move {
+  display: block;
+}
+
+/* Unit label below the card. */
 .yt-unit-label {
-  color: hsl(var(--countdown-hue, 226) 50% 65%);
-  font-size: clamp(0.55rem, min(1.8vw, 2vh), 1rem);
+  font-size: 0.18em;           /* relative to the digit font so it scales together */
   font-weight: 700;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
+  color: hsl(var(--countdown-hue, 226) 55% 62%);
+  white-space: nowrap;
 }
 
-/* Colon separator: vertically aligned with the top of the digit cards. */
-.yt-unit-sep {
-  font-size: clamp(1.8rem, min(8vw, 16vh), 7rem);
+/*
+ * Colon separator.
+ *
+ * Vertically centred with the digit cards by `align-self: center` on the flex
+ * row.  Its font size is ~65 % of the digit size so it reads as punctuation not
+ * as a fourth unit.  `padding-bottom` lifts it slightly above the mathematical
+ * centre to optically align with the digit numerals.
+ */
+.yt-sep {
+  font-size: clamp(1.2rem, min(13vw, 24vh), 9rem);
   font-weight: 700;
   line-height: 1;
-  color: hsl(var(--countdown-hue, 226) 50% 50% / 0.55);
-  /* Align with the digit baseline, leaving the label area free. */
-  align-self: flex-start;
-  /* Offset slightly so the colon sits at mid-digit height rather than the top. */
-  padding-top: 0.18em;
+  align-self: center;
+  padding-bottom: 0.28em;      /* lift to optical digit centre */
+  color: hsl(var(--countdown-hue, 226) 50% 52% / 0.6);
   animation: yt-sep-pulse 1s step-end infinite;
   user-select: none;
 }
 
 @keyframes yt-sep-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.25; }
+  0%, 100% { opacity: 1;    }
+  50%       { opacity: 0.2; }
 }
 
-/* Ended state: the clock renders a placeholder (em-dash) to preserve layout space
- * for the ornament overlay, but the placeholder itself must be invisible. */
-.countdown-surface[data-stage='ended'] .yt-units-row,
-.countdown-surface[data-stage='ended'] .countdown-box > span {
-  opacity: 0;
+/* Ended: hide the unit row — the ornament SVG is the visual on that stage. */
+.countdown-surface[data-stage='ended'] .yt-units-row {
+  visibility: hidden;
   pointer-events: none;
 }
 
-/* Fullscreen overrides — the box already grows via flex-1; just push fonts larger. */
+/*
+ * Ornament: run-in / run-out loop — no whole-element fade.
+ *
+ * The element is always visible; only the stroke-dashoffset animates.
+ * Keyframes walk: fully hidden (offset=1) → fully drawn (offset=0) → run out (offset=-1).
+ * The "run out" phase is what makes it look like the stroke exits the shape rather than
+ * simply disappearing, which is the key difference from a plain draw-in.
+ */
+@keyframes countdown-mark-draw {
+  0%   { stroke-dashoffset:  1; }  /* hidden — stroke starts off the right end */
+  40%  { stroke-dashoffset:  0; }  /* fully drawn */
+  70%  { stroke-dashoffset:  0; }  /* hold */
+  100% { stroke-dashoffset: -1; }  /* run out — stroke exits off the left end */
+}
+
+/* Fullscreen: push font a little larger since more screen is available. */
 .countdown-surface:fullscreen .yt-unit-digits {
-  font-size: clamp(4rem, min(14vw, 26vh), 16rem);
+  font-size: clamp(3rem, min(22vw, 40vh), 18rem);
 }
 
-.countdown-surface:fullscreen .yt-unit-sep {
-  font-size: clamp(3rem, min(10vw, 20vh), 11rem);
+.countdown-surface:fullscreen .yt-sep {
+  font-size: clamp(1.8rem, min(14vw, 26vh), 11rem);
 }
 
-.countdown-surface:fullscreen .yt-unit-label {
-  font-size: clamp(0.75rem, min(2.2vw, 2.5vh), 1.25rem);
-}
-
-/* Reduced motion: keep separator visible, stop the blink. */
+/* Reduced motion: keep separator visible, stop the blink; respect digit animation rule above. */
 @media (prefers-reduced-motion: reduce) {
-  .yt-unit-sep {
-    animation: none;
-    opacity: 0.6;
-  }
+  .yt-sep          { animation: none; opacity: 0.55; }
+  .yt-digit        { animation: none; }
 }
 
 /* Reduced motion: a reader who asked the system to stop moving gets the same

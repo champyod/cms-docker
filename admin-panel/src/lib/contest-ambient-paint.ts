@@ -55,6 +55,8 @@ export interface AmbientFrame {
   readonly palette: AmbientPalette;
   /** Left-right sweep of the whole field for this frame, in pixels. */
   readonly driftPx: number;
+  /** Up-down sweep of the whole field for this frame, in pixels. */
+  readonly driftPxY: number;
   readonly progress: number;
   /** Grows with the ramp: objects are drawn larger as the threshold nears. */
   readonly density: number;
@@ -198,23 +200,31 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
 }
 
 function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cells: readonly GlyphCell[]): void {
-  const { width } = frame.bounds;
+  const { width, height } = frame.bounds;
   // The glyphs grow with the ramp rather than dimming: bigger objects, never a fade.
   const size = GLYPH_FONT_PX * objectSize(frame);
   context.font = `${size}px ui-monospace, monospace`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  // Only the cells that are actually on the surface are drawn, and only a seam-width copy
-  // of the grid is repeated to cover the wrap, so the work scales with what is visible.
+  // Horizontal seam offsets (same as before).
   const seamXs = seamOffsets([0, width - minimumCellX(cells)], width, frame.driftPx);
+  // Vertical wrap: shift cells by driftPxY, wrapping on height.
+  const driftY = frame.driftPxY ?? 0;
+  const originY = ((driftY % height) + height) % height;
+  // Two vertical copies cover the seam opened by vertical drift.
+  const seamYOffsets = [originY, originY - height];
   for (const tileX of seamXs) {
-    for (const cell of cells) {
-      const drawnX = tileX + cell.x;
-      if (drawnX < -GLYPH_CELL_PX || drawnX > width + GLYPH_CELL_PX) continue;
-      const wave = 0.5 + 0.5 * Math.sin(cell.flickerPhase + frame.flickerPhase);
-      const flicker = GLYPH_FLICKER_FLOOR + (1 - GLYPH_FLICKER_FLOOR) * wave;
-      context.fillStyle = ambientColor(frame.palette, flicker * GLYPH_ALPHA, frame.palette.accentHue);
-      context.fillText(cell.glyph, drawnX, cell.y);
+    for (const tileY of seamYOffsets) {
+      for (const cell of cells) {
+        const drawnX = tileX + cell.x;
+        const drawnY = tileY + cell.y;
+        if (drawnX < -GLYPH_CELL_PX || drawnX > width + GLYPH_CELL_PX) continue;
+        if (drawnY < -GLYPH_CELL_PX || drawnY > height + GLYPH_CELL_PX) continue;
+        const wave = 0.5 + 0.5 * Math.sin(cell.flickerPhase + frame.flickerPhase);
+        const flicker = GLYPH_FLICKER_FLOOR + (1 - GLYPH_FLICKER_FLOOR) * wave;
+        context.fillStyle = ambientColor(frame.palette, flicker * GLYPH_ALPHA, frame.palette.accentHue);
+        context.fillText(cell.glyph, drawnX, drawnY);
+      }
     }
   }
 }
