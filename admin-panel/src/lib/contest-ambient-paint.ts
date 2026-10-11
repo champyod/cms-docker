@@ -56,6 +56,8 @@ export interface AmbientFrame {
   /** Left-right sweep of the whole field for this frame, in pixels. */
   readonly driftPx: number;
   readonly progress: number;
+  /** Grows with the ramp: objects are drawn larger as the threshold nears. */
+  readonly density: number;
   readonly deltaSeconds: number;
   readonly energy: number;
   /** Advances on a slow timer; the glyph flicker reads it instead of a per-frame random. */
@@ -182,7 +184,7 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
       context.stroke();
       if (run.hasPad) {
         context.beginPath();
-        context.arc(tileX + run.padX, run.padY, TRACE_PAD_RADIUS_PX, 0, Math.PI * 2);
+        context.arc(tileX + run.padX, run.padY, TRACE_PAD_RADIUS_PX * frame.density, 0, Math.PI * 2);
         context.fill();
       }
     }
@@ -191,8 +193,9 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
 
 function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cells: readonly GlyphCell[]): void {
   const { width } = frame.bounds;
-  const detail = Math.max(0, 1 - frame.progress);
-  context.font = `${GLYPH_FONT_PX}px ui-monospace, monospace`;
+  // The glyphs grow with the ramp rather than dimming: bigger objects, never a fade.
+  const size = GLYPH_FONT_PX * frame.density;
+  context.font = `${size}px ui-monospace, monospace`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
   const startX = wrapCoordinate(frame.driftPx, width);
@@ -201,7 +204,7 @@ function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cel
     for (const cell of cells) {
       const wave = 0.5 + 0.5 * Math.sin(cell.flickerPhase + frame.flickerPhase);
       const flicker = GLYPH_FLICKER_FLOOR + (1 - GLYPH_FLICKER_FLOOR) * wave;
-      context.fillStyle = ambientColor(frame.palette, flicker * detail * GLYPH_ALPHA, frame.palette.accentHue);
+      context.fillStyle = ambientColor(frame.palette, flicker * GLYPH_ALPHA, frame.palette.accentHue);
       context.fillText(cell.glyph, tileX + cell.x, cell.y);
     }
   }
@@ -218,12 +221,13 @@ function paintBoids(
 ): readonly AmbientAgent[] {
   const advanced = stepAmbientFlock(agents, frame.noiseAt, fieldParams(frame), frame.deltaSeconds, frame.bounds);
   context.strokeStyle = ambientColor(frame.palette, BOID_ALPHA);
-  context.lineWidth = BOID_LINE_WIDTH_PX;
+  context.lineWidth = BOID_LINE_WIDTH_PX * frame.density;
   context.lineCap = 'round';
+  const streak = BOID_STREAK_SECONDS * frame.density;
   for (const agent of advanced) {
     context.beginPath();
     context.moveTo(agent.x, agent.y);
-    context.lineTo(agent.x - agent.velocityX * BOID_STREAK_SECONDS, agent.y - agent.velocityY * BOID_STREAK_SECONDS);
+    context.lineTo(agent.x - agent.velocityX * streak, agent.y - agent.velocityY * streak);
     context.stroke();
   }
   return advanced;
@@ -239,7 +243,7 @@ function paintFlow(
   trails: readonly (readonly AmbientVector[])[],
 ): readonly (readonly AmbientVector[])[] {
   const advanced: (readonly AmbientVector[])[] = [];
-  context.lineWidth = FLOW_LINE_WIDTH_PX;
+  context.lineWidth = FLOW_LINE_WIDTH_PX * frame.density;
   context.lineCap = 'round';
   const dimColor = ambientColor(frame.palette, FLOW_DIM_ALPHA, frame.palette.accentHue);
   const headColor = ambientColor(frame.palette, FLOW_HEAD_ALPHA, frame.palette.accentHue);

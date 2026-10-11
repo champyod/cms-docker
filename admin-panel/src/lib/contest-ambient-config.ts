@@ -23,13 +23,8 @@ interface TuningSource {
   readonly max: number;
 }
 
-/**
- * The blur ceiling is 64px deliberately: a much larger radius has a measured
- * multi-second paint stall, so an operator cannot raise it into that range from config.
- */
 export const AMBIENT_TUNING_SOURCES: Readonly<Record<keyof AmbientConfig, TuningSource>> = {
   rerollMs: { key: 'COUNTDOWN_AMBIENT_REROLL_MS', fallback: DEFAULT_AMBIENT_CONFIG.rerollMs, min: 1_000, max: 3_600_000 },
-  maxBlurPx: { key: 'COUNTDOWN_AMBIENT_MAX_BLUR_PX', fallback: DEFAULT_AMBIENT_CONFIG.maxBlurPx, min: 0, max: 64 },
   fallbackProgressMs: {
     key: 'COUNTDOWN_AMBIENT_FALLBACK_PROGRESS_MS',
     fallback: DEFAULT_AMBIENT_CONFIG.fallbackProgressMs,
@@ -53,7 +48,6 @@ export function resolveAmbientTuning(source: TuningSource): number {
 export function resolveCountdownAmbientConfig(): AmbientConfig {
   return {
     rerollMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.rerollMs),
-    maxBlurPx: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.maxBlurPx),
     fallbackProgressMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.fallbackProgressMs),
     maxFramesPerSecond: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.maxFramesPerSecond),
     driftExtentRatio: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.driftExtentRatio),

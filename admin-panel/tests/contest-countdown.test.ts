@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   COUNTDOWN_BASE_FONT_PX,
+  COUNTDOWN_FILL_RATIO,
+  COUNTDOWN_FIT_MARGIN_RATIO,
   COUNTDOWN_MAX_FONT_PX,
   COUNTDOWN_MIN_FONT_PX,
   DEFAULT_COUNTDOWN_THRESHOLD,
@@ -124,19 +126,47 @@ describe('toCountdownSegments', () => {
 });
 
 describe('fitCountdownFontPx', () => {
-  it('keeps the base size when the box matches the content', () => {
-    expect(fitCountdownFontPx({ availableWidth: 400, availableHeight: 100, naturalWidth: 400, naturalHeight: 100 }))
-      .toBe(COUNTDOWN_BASE_FONT_PX);
+  it('sizes the content to the configured share of the box, not the whole box', () => {
+    const fitted = fitCountdownFontPx({ availableWidth: 400, availableHeight: 100, naturalWidth: 400, naturalHeight: 100 });
+    expect(fitted).toBe(COUNTDOWN_BASE_FONT_PX * COUNTDOWN_FILL_RATIO);
+    expect(COUNTDOWN_FILL_RATIO).toBe(0.9);
+  });
+
+  it('leaves the remainder as breathing room around the content', () => {
+    expect(COUNTDOWN_FIT_MARGIN_RATIO).toBeCloseTo(0.1, 10);
+    expect(COUNTDOWN_FILL_RATIO + COUNTDOWN_FIT_MARGIN_RATIO).toBeCloseTo(1, 10);
   });
 
   it('scales down to the tighter axis', () => {
     expect(fitCountdownFontPx({ availableWidth: 200, availableHeight: 100, naturalWidth: 400, naturalHeight: 100 }))
-      .toBe(COUNTDOWN_BASE_FONT_PX / 2);
+      .toBe((COUNTDOWN_BASE_FONT_PX * COUNTDOWN_FILL_RATIO) / 2);
   });
 
   it('scales up to fill a larger box', () => {
     expect(fitCountdownFontPx({ availableWidth: 800, availableHeight: 200, naturalWidth: 400, naturalHeight: 100 }))
-      .toBe(COUNTDOWN_BASE_FONT_PX * 2);
+      .toBe(COUNTDOWN_BASE_FONT_PX * 2 * COUNTDOWN_FILL_RATIO);
+  });
+
+  it('can be told a different share, so the fill stays a parameter', () => {
+    const tight = fitCountdownFontPx({ availableWidth: 400, availableHeight: 400, naturalWidth: 400, naturalHeight: 100, fillRatio: 0.5 });
+    const loose = fitCountdownFontPx({ availableWidth: 400, availableHeight: 400, naturalWidth: 400, naturalHeight: 100, fillRatio: 0.9 });
+    expect(loose).toBeGreaterThan(tight);
+  });
+
+  it('refuses an unusable share rather than emitting a broken size', () => {
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const fitted = fitCountdownFontPx({
+        availableWidth: 400, availableHeight: 400, naturalWidth: 400, naturalHeight: 100, fillRatio: bad,
+      });
+      expect(Number.isFinite(fitted)).toBe(true);
+      expect(fitted).toBeGreaterThan(0);
+    }
+  });
+
+  it('never exceeds the whole box, however large the share asked for', () => {
+    const whole = fitCountdownFontPx({ availableWidth: 400, availableHeight: 400, naturalWidth: 400, naturalHeight: 100, fillRatio: 1 });
+    const over = fitCountdownFontPx({ availableWidth: 400, availableHeight: 400, naturalWidth: 400, naturalHeight: 100, fillRatio: 9 });
+    expect(over).toBe(whole);
   });
 
   it('clamps to the readable range', () => {
@@ -144,6 +174,10 @@ describe('fitCountdownFontPx', () => {
       .toBe(COUNTDOWN_MIN_FONT_PX);
     expect(fitCountdownFontPx({ availableWidth: 40_000, availableHeight: 10_000, naturalWidth: 40, naturalHeight: 10 }))
       .toBe(COUNTDOWN_MAX_FONT_PX);
+  });
+
+  it('reaches well past the old ceiling, so a large screen is not left with small digits', () => {
+    expect(COUNTDOWN_MAX_FONT_PX).toBeGreaterThanOrEqual(900);
   });
 
   it('falls back to the base size when there is nothing to measure', () => {

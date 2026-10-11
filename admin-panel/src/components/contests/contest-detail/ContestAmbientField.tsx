@@ -10,12 +10,16 @@ import { createAmbientRandom, type AmbientConfig, type AmbientRoll } from '@/lib
 interface Props {
   readonly roll: AmbientRoll;
   readonly progress: number;
+  /** Grows with the ramp, so the field's objects enlarge as the threshold nears. */
+  readonly density: number;
   /** Falls as the countdown nears its threshold, so the field quiets instead of racing. */
   readonly energy: number;
   readonly isAnimating: boolean;
   readonly config: AmbientConfig;
   /** Set on the field that is fading out, so a re-roll fades both ways. */
   readonly isLeaving?: boolean;
+  /** Reports the frame's drift, so the surface can sweep the whole field with it. */
+  readonly onDrift?: (driftPx: number) => void;
 }
 
 const FLICKER_PERIOD_SECONDS = 2.6;
@@ -37,10 +41,12 @@ const MIN_FRAME_GAP_MS = 1000 / 60;
 export function ContestAmbientField({
   roll,
   progress,
+  density,
   energy,
   isAnimating,
   config,
   isLeaving = false,
+  onDrift,
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fieldRef = useRef<AmbientField | null>(null);
@@ -97,13 +103,19 @@ export function ContestAmbientField({
       );
     }
 
+    const driftPx = ambientDriftOffset(elapsedRef.current, roll.driftSeconds, bounds.width * config.driftExtentRatio);
+    onDrift?.(driftPx);
+
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, bounds.width, bounds.height);
     fieldRef.current = paintAmbientField(context, {
       bounds,
       palette: roll.palette,
-      driftPx: ambientDriftOffset(elapsedRef.current, roll.driftSeconds, bounds.width * config.driftExtentRatio),
+      // The content drifts with the sweep rather than against it, so the field reads as
+      // one object moving and not as two motions fighting.
+      driftPx,
       progress,
+      density,
       deltaSeconds: isAnimating ? deltaSeconds : 0,
       energy,
       flickerPhase: (elapsedRef.current / FLICKER_PERIOD_SECONDS) * Math.PI * 2,

@@ -182,20 +182,42 @@ export function toCountdownSegments(totalMs: number): readonly CountdownSegment[
 
 export const COUNTDOWN_BASE_FONT_PX = 100;
 export const COUNTDOWN_MIN_FONT_PX = 16;
-export const COUNTDOWN_MAX_FONT_PX = 480;
+export const COUNTDOWN_MAX_FONT_PX = 960;
 
-/** Font size at which content measured at the base size fills the box on both axes. */
+/**
+ * Share of the box the timer is sized to fill. The remainder is deliberate breathing
+ * room: sizing to the full box leaves the numerals touching their own edges, which reads
+ * as cramped and leaves nothing for the tick motion to move into.
+ */
+export const COUNTDOWN_FILL_RATIO = 0.9;
+export const COUNTDOWN_FIT_MARGIN_RATIO = 1 - COUNTDOWN_FILL_RATIO;
+
+/**
+ * Font size at which content measured at the base size fills the given share of the box
+ * on both axes. The tighter axis wins, so a long countdown stays inside the width just as
+ * a tall one stays inside the height.
+ */
 export function fitCountdownFontPx(params: {
   availableWidth: number;
   availableHeight: number;
   naturalWidth: number;
   naturalHeight: number;
+  fillRatio?: number;
 }): number {
   const { availableWidth, availableHeight, naturalWidth, naturalHeight } = params;
   if (naturalWidth <= 0 || naturalHeight <= 0) return COUNTDOWN_BASE_FONT_PX;
-  const scale = Math.min(availableWidth / naturalWidth, availableHeight / naturalHeight);
+  const fill = clampFillRatio(params.fillRatio);
+  const widthLimited = (availableWidth * fill) / naturalWidth;
+  const heightLimited = (availableHeight * fill) / naturalHeight;
+  const scale = Math.min(widthLimited, heightLimited);
   if (!Number.isFinite(scale) || scale <= 0) return COUNTDOWN_BASE_FONT_PX;
   return Math.min(COUNTDOWN_MAX_FONT_PX, Math.max(COUNTDOWN_MIN_FONT_PX, COUNTDOWN_BASE_FONT_PX * scale));
+}
+
+/** Guards the share against a caller passing nothing usable, or more than the whole box. */
+function clampFillRatio(fillRatio: number | undefined): number {
+  if (fillRatio === undefined || !Number.isFinite(fillRatio)) return COUNTDOWN_FILL_RATIO;
+  return Math.min(1, Math.max(0.1, fillRatio));
 }
 
 export function formatZoneTime(date: Date, timeZone: string): string {

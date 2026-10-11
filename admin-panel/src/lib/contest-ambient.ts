@@ -38,8 +38,6 @@ export const AMBIENT_PALETTES: readonly AmbientPalette[] = [
 ];
 
 export interface AmbientConfig {
-  /** Stays inside the 8-64px band that measures clean; a large radius paints for seconds. */
-  readonly maxBlurPx: number;
   readonly rerollMs: number;
   /** Span the blur climbs across where no countdown window applies, such as an ended contest. */
   readonly fallbackProgressMs: number;
@@ -50,7 +48,6 @@ export interface AmbientConfig {
 }
 
 export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
-  maxBlurPx: 40,
   rerollMs: 45_000,
   fallbackProgressMs: 600_000,
   driftExtentRatio: 0.045,
@@ -64,10 +61,14 @@ export const AMBIENT_TEXTURES: readonly AmbientTexture[] = [
   { id: 'flow', label: 'Flow field', driftSecondsRange: [36, 54], agentCount: 260 },
 ];
 
-/** The blur climbs in five 20% steps, and its last step lands on the threshold. */
-export const AMBIENT_BLUR_STEP_COUNT = 5;
+/**
+ * The ramp still completes in five 20% steps even though nothing blurs any more: the
+ * steps are what the field's own density and pace are scaled by on the way to the
+ * threshold, and the last one is where the timer's bed appears.
+ */
+export const AMBIENT_STEP_COUNT = 5;
 
-export const AMBIENT_STEP_FRACTION = 1 / AMBIENT_BLUR_STEP_COUNT;
+export const AMBIENT_STEP_FRACTION = 1 / AMBIENT_STEP_COUNT;
 
 export interface AmbientRoll {
   readonly seed: number;
@@ -135,20 +136,28 @@ export function resolveAmbientProgress(params: AmbientProgressParams): number {
   return clampFraction((nowMs - startedAtMs) / fallbackMs);
 }
 
-/** The progress quantised into the 20% steps the blur is applied in. */
-export function resolveAmbientBlurStep(progress: number): number {
-  const step = Math.floor(clampFraction(progress) * AMBIENT_BLUR_STEP_COUNT);
-  return Math.min(AMBIENT_BLUR_STEP_COUNT, Math.max(0, step));
+/** The progress quantised into the 20% steps the field's density is scaled by. */
+export function resolveAmbientStep(progress: number): number {
+  const step = Math.floor(clampFraction(progress) * AMBIENT_STEP_COUNT);
+  return Math.min(AMBIENT_STEP_COUNT, Math.max(0, step));
 }
 
-export function ambientBlurPx(step: number, maxBlurPx: number): number {
-  const bounded = Math.min(AMBIENT_BLUR_STEP_COUNT, Math.max(0, step));
-  return (bounded / AMBIENT_BLUR_STEP_COUNT) * Math.max(0, maxBlurPx);
+/**
+ * How strongly the field is drawn at a step. Objects are drawn *larger* as the ramp
+ * climbs rather than softened, which is what carries the sense of approach once the blur
+ * is gone.
+ */
+export function ambientDensityScale(step: number): number {
+  const bounded = Math.min(AMBIENT_STEP_COUNT, Math.max(0, step));
+  return 1 + (bounded / AMBIENT_STEP_COUNT) * AMBIENT_DENSITY_GAIN;
 }
 
-/** True only at the last step, where the blur is fully applied and the timer bed may show. */
-export function isAmbientFullyBlurred(step: number): boolean {
-  return step >= AMBIENT_BLUR_STEP_COUNT;
+/** Growth across the whole ramp; a third larger by the threshold reads without crowding. */
+export const AMBIENT_DENSITY_GAIN = 0.35;
+
+/** True only at the last step, where the field has fully arrived and the timer bed may show. */
+export function isAmbientRampComplete(step: number): boolean {
+  return step >= AMBIENT_STEP_COUNT;
 }
 
 export function ambientColor(palette: AmbientPalette, alpha: number, hue: number = palette.glowHue): string {

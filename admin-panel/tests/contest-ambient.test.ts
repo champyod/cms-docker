@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  AMBIENT_BLUR_STEP_COUNT,
   AMBIENT_PALETTES,
+  AMBIENT_STEP_COUNT,
   AMBIENT_TEXTURES,
   DEFAULT_AMBIENT_CONFIG,
-  ambientBlurPx,
   ambientColor,
+  ambientDensityScale,
   createAmbientRandom,
-  isAmbientFullyBlurred,
-  resolveAmbientBlurStep,
+  isAmbientRampComplete,
+  resolveAmbientStep,
   resolveAmbientProgress,
   rollAmbient,
 } from '@/lib/contest-ambient';
@@ -97,39 +97,55 @@ describe('resolveAmbientProgress', () => {
   });
 });
 
-describe('the 20% blur steps', () => {
+describe('the 20% ramp steps', () => {
   it('quantises progress into exactly five steps', () => {
-    expect(AMBIENT_BLUR_STEP_COUNT).toBe(5);
-    expect(resolveAmbientBlurStep(0)).toBe(0);
-    expect(resolveAmbientBlurStep(0.19)).toBe(0);
-    expect(resolveAmbientBlurStep(0.2)).toBe(1);
-    expect(resolveAmbientBlurStep(0.99)).toBe(4);
-    expect(resolveAmbientBlurStep(1)).toBe(5);
+    expect(AMBIENT_STEP_COUNT).toBe(5);
+    expect(resolveAmbientStep(0)).toBe(0);
+    expect(resolveAmbientStep(0.19)).toBe(0);
+    expect(resolveAmbientStep(0.2)).toBe(1);
+    expect(resolveAmbientStep(0.99)).toBe(4);
+    expect(resolveAmbientStep(1)).toBe(5);
   });
 
   it('never leaves the step range, however odd the progress', () => {
     for (const progress of [-5, -0.01, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const step = resolveAmbientBlurStep(progress);
+      const step = resolveAmbientStep(progress);
       expect(step).toBeGreaterThanOrEqual(0);
-      expect(step).toBeLessThanOrEqual(AMBIENT_BLUR_STEP_COUNT);
+      expect(step).toBeLessThanOrEqual(AMBIENT_STEP_COUNT);
     }
   });
 
-  it('climbs one twentieth of the max radius per step', () => {
-    expect(ambientBlurPx(0, 40)).toBe(0);
-    expect(ambientBlurPx(1, 40)).toBe(8);
-    expect(ambientBlurPx(5, 40)).toBe(40);
+  it('completes at the last step and at no earlier one', () => {
+    expect(isAmbientRampComplete(5)).toBe(true);
+    expect(isAmbientRampComplete(4)).toBe(false);
+    expect(isAmbientRampComplete(0)).toBe(false);
+  });
+});
+
+describe('ambientDensityScale', () => {
+  it('starts at the drawn size, so the first step changes nothing', () => {
+    expect(ambientDensityScale(0)).toBe(1);
   });
 
-  it('keeps the published radius inside the band that measures clean', () => {
-    expect(DEFAULT_AMBIENT_CONFIG.maxBlurPx).toBeGreaterThanOrEqual(8);
-    expect(DEFAULT_AMBIENT_CONFIG.maxBlurPx).toBeLessThanOrEqual(64);
+  it('grows monotonically, so the field never shrinks back', () => {
+    const scales = [0, 1, 2, 3, 4, 5].map(ambientDensityScale);
+    for (let index = 1; index < scales.length; index += 1) {
+      expect(scales[index]).toBeGreaterThan(scales[index - 1]);
+    }
   });
 
-  it('is fully applied at the last step and at no earlier one', () => {
-    expect(isAmbientFullyBlurred(5)).toBe(true);
-    expect(isAmbientFullyBlurred(4)).toBe(false);
-    expect(isAmbientFullyBlurred(0)).toBe(false);
+  it('stays modest at the last step, so the field does not crowd the digits', () => {
+    expect(ambientDensityScale(5)).toBeLessThan(1.5);
+  });
+
+  it('clamps a step outside the range instead of extrapolating', () => {
+    expect(ambientDensityScale(99)).toBe(ambientDensityScale(5));
+    expect(ambientDensityScale(-4)).toBe(ambientDensityScale(0));
+  });
+
+  it('still names a configurable frame cap and drift', () => {
+    expect(DEFAULT_AMBIENT_CONFIG.maxFramesPerSecond).toBeGreaterThan(0);
+    expect(DEFAULT_AMBIENT_CONFIG.driftExtentRatio).toBeGreaterThan(0);
   });
 });
 

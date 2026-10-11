@@ -4,10 +4,10 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   DEFAULT_AMBIENT_CONFIG,
-  ambientBlurPx,
-  isAmbientFullyBlurred,
-  resolveAmbientBlurStep,
+  ambientDensityScale,
+  isAmbientRampComplete,
   resolveAmbientProgress,
+  resolveAmbientStep,
   rollAmbient,
   type AmbientConfig,
   type AmbientRoll,
@@ -26,9 +26,11 @@ interface UseAmbientOptions {
 export interface AmbientView {
   readonly roll: AmbientRoll;
   readonly progress: number;
-  readonly blurStep: number;
-  readonly blurPx: number;
-  readonly isFullyBlurred: boolean;
+  /** 0 to 5, in 20% steps up to the threshold. */
+  readonly step: number;
+  /** Grows with the step, so the field's objects enlarge as the moment nears. */
+  readonly density: number;
+  readonly isRampComplete: boolean;
   readonly isAnimating: boolean;
   /** False until the first roll has landed, so nothing paints a placeholder texture. */
   readonly isRolled: boolean;
@@ -130,14 +132,14 @@ export function useContestAmbient({
     nowMs,
     fallbackMs: config.fallbackProgressMs,
   });
-  const blurStep = resolveAmbientBlurStep(progress);
+  const step = resolveAmbientStep(progress);
 
   return {
     roll,
     progress,
-    blurStep,
-    blurPx: ambientBlurPx(blurStep, config.maxBlurPx),
-    isFullyBlurred: isAmbientFullyBlurred(blurStep),
+    step,
+    density: ambientDensityScale(step),
+    isRampComplete: isAmbientRampComplete(step),
     isAnimating: rollSeed !== null && !shouldHoldStill,
     isRolled: rollSeed !== null,
   };

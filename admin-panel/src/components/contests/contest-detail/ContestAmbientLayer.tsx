@@ -23,9 +23,16 @@ const HANDOVER_MS = 900;
 /** The outgoing field keeps a little less energy than the live one, so the swap reads as a fade. */
 const OUTGOING_ENERGY = 0.6;
 
+/** The live field runs at full energy; the ramp is carried by density, not by pace. */
+const AMBIENT_LIVE_ENERGY = 1;
+
 /**
- * The ambient layer: the rolled field, the fade in, the 20% blur steps and the timer's
+ * The ambient layer: the rolled field, the fade in, the 20% ramp and the timer's
  * background.
+ *
+ * Nothing here blurs any more. The sense of approach is carried by the field's objects
+ * growing and by the drift sweep, which is a transform on this layer so both stacked
+ * fields move together as one object.
  *
  * While a roll changes, the outgoing field stays mounted under the incoming one so it
  * fades out rather than being cut. Both are inert to pointers and hidden from the
@@ -39,7 +46,7 @@ export function ContestAmbientLayer({
   rerollKey,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element | null {
-  const { roll, progress, blurPx, isFullyBlurred, isAnimating, isRolled } = useContestAmbient({
+  const { roll, progress, density, isRampComplete, isAnimating, isRolled } = useContestAmbient({
     thresholdMs,
     nowMs,
     isPaused,
@@ -47,6 +54,7 @@ export function ContestAmbientLayer({
     config: ambientConfig,
   });
   const [outgoing, setOutgoing] = useState<AmbientRoll | null>(null);
+  const [driftPx, setDriftPx] = useState(0);
   const previousRef = useRef<AmbientRoll | null>(null);
 
   // Hand the previous roll over to the fade-out slot when the seed changes, then release it.
@@ -62,8 +70,9 @@ export function ContestAmbientLayer({
   if (!isIdle || !isRolled) return null;
 
   const layerStyle = {
-    '--countdown-ambient-blur': `${blurPx}px`,
     '--countdown-hue': `${roll.palette.glowHue}`,
+    // The sweep the field drifts on. Transform only, so it never leaves the compositor.
+    '--countdown-ambient-drift': `${driftPx.toFixed(2)}px`,
   } as React.CSSProperties;
 
   return (
@@ -73,6 +82,7 @@ export function ContestAmbientLayer({
           key={`out-${outgoing.seed}`}
           roll={outgoing}
           progress={progress}
+          density={density}
           energy={OUTGOING_ENERGY}
           isAnimating={false}
           config={ambientConfig}
@@ -83,11 +93,13 @@ export function ContestAmbientLayer({
         key={`in-${roll.seed}`}
         roll={roll}
         progress={progress}
-        energy={1 - progress * 0.35}
+        density={density}
+        energy={AMBIENT_LIVE_ENERGY}
         isAnimating={isAnimating}
         config={ambientConfig}
+        onDrift={setDriftPx}
       />
-      <div className={isFullyBlurred ? 'countdown-timer-bed is-shown' : 'countdown-timer-bed'}>
+      <div className={isRampComplete ? 'countdown-timer-bed is-shown' : 'countdown-timer-bed'}>
         <span className="countdown-timer-bed-surface" />
       </div>
     </div>

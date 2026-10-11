@@ -181,16 +181,15 @@
 }
 
 /* Only a digit whose character changed re-mounts, so this plays on the tick that moved it. */
+/* A tick, not a fade: the digit drops in and overshoots slightly before settling, so a
+   changed second reads as a mechanical step. The overshoot is in the easing, not the
+   keyframes, which keeps it to transform only and off the paint path. */
 @keyframes countdown-digit-in {
   from {
-    opacity: 0;
-    transform: translateY(0.32em) scale(0.9);
-    filter: blur(4px);
+    transform: translateY(-0.22em) scale(1.06);
   }
   to {
-    opacity: 1;
     transform: translateY(0) scale(1);
-    filter: blur(0);
   }
 }
 
@@ -202,8 +201,15 @@
 
 .countdown-digit {
   display: inline-block;
-  animation: countdown-digit-in 0.34s cubic-bezier(0.22, 1, 0.36, 1) both;
-  will-change: transform, opacity, filter;
+  animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* The point of the tick: the digit is legible from the first frame, so the number never
+   blinks out while it is being read. */
+@media (prefers-reduced-motion: reduce) {
+  .countdown-digit {
+    animation: none;
+  }
 }
 
 /* Fullscreen: the surface fills the screen and the clock column takes the leftover height. */
@@ -266,12 +272,9 @@
   inset: 0;
   width: 100%;
   height: 100%;
-  /* Modest radius only: a very large blur radius has a multi-second paint stall. */
-  filter: blur(var(--countdown-ambient-blur, 0px));
   opacity: var(--countdown-ambient-opacity, 1);
   transition:
     opacity var(--countdown-ambient-fade, 900ms) ease,
-    filter var(--countdown-ambient-fade, 900ms) ease,
     transform var(--countdown-ambient-fade, 900ms) ease;
 }
 
@@ -286,7 +289,6 @@
 /* The outgoing field of a re-roll. Declared here so a roll can fade both ways. */
 .countdown-ambient.is-leaving {
   opacity: 0;
-  filter: blur(calc(var(--countdown-ambient-blur, 0px) + 8px));
 }
 
 /* The timer's own bed, shown only once the blur is fully applied. The discrete swap is
@@ -348,6 +350,13 @@
   }
 }
 
+/* The drift is what the field does instead of blurring: it sweeps left and right, so the
+   motion carries the sense of time passing. Transform only, so it stays composited. */
+.countdown-ambient-layer {
+  transform: translate3d(var(--countdown-ambient-drift, 0px), 0, 0);
+  transition: transform 1400ms ease;
+}
+
 .countdown-stage-label {
   color: hsl(var(--countdown-hue) 70% 74%);
   font-size: clamp(1rem, 2.4vmin, 1.75rem);
@@ -360,18 +369,27 @@
    else may animate this element's transform while it runs. */
 .countdown-clock-panic {
   animation-duration: var(--animate-duration);
-  /* Kept small so the digits move inside the plate below rather than out of it. */
-  padding: 0.04em;
+  /* Also part of the sizing chain: as a plain block this capped the clock at the box's
+     minimum height, which is what left the digits at a third of the width they could take. */
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
   transform-origin: 50% 50%;
 }
 
 /* The plate the panic moves: it holds still, and its own contrast is what keeps the
    digits readable while they shake over the blurred field. */
+/* Passes the flex chain through to the clock, so the digits still scale to fill the box;
+   as a plain block this element used to cap them at the box's minimum height. */
 .countdown-clock-plate {
   position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
   border-radius: 28px;
-  padding: 0.12em 0.2em;
-  transition: background-color 900ms ease, box-shadow 900ms ease;
+  transition: background-color 500ms ease, box-shadow 500ms ease;
 }
 
 /* Once the panic starts, a flat plate replaces the busy field behind the digits. */

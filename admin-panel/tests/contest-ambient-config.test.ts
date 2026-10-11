@@ -35,12 +35,6 @@ describe('resolveAmbientTuning', () => {
     expect(resolveAmbientTuning(AMBIENT_TUNING_SOURCES.rerollMs)).toBe(DEFAULT_AMBIENT_CONFIG.rerollMs);
   });
 
-  it('keeps the blur inside the band that measures clean, whatever config says', () => {
-    expect(AMBIENT_TUNING_SOURCES.maxBlurPx.max).toBeLessThanOrEqual(64);
-    process.env[AMBIENT_TUNING_SOURCES.maxBlurPx.key] = '200';
-    expect(resolveCountdownAmbientConfig().maxBlurPx).toBe(DEFAULT_AMBIENT_CONFIG.maxBlurPx);
-  });
-
   it('refuses a zero frame cap, which would freeze the field', () => {
     process.env[AMBIENT_TUNING_SOURCES.maxFramesPerSecond.key] = '0';
     expect(resolveCountdownAmbientConfig().maxFramesPerSecond).toBe(DEFAULT_AMBIENT_CONFIG.maxFramesPerSecond);
@@ -72,6 +66,6 @@ describe('resolveCountdownAmbientConfig', () => {
     const config = resolveCountdownAmbientConfig();
     expect(config.rerollMs).toBe(15_000);
     expect(config.maxFramesPerSecond).toBe(60);
-    expect(config.maxBlurPx).toBe(DEFAULT_AMBIENT_CONFIG.maxBlurPx);
+    expect(config.driftExtentRatio).toBe(DEFAULT_AMBIENT_CONFIG.driftExtentRatio);
   });
 });
