@@ -14,11 +14,13 @@ import { panicDigitClassNames, panicDigitStyle } from '@/lib/contest-panic';
 const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
 
 /** Numerals take a fixed slot so the row cannot resize as the seconds change. */
-function digitClassName(char: string, isPanicking: boolean): string {
-  const names = ['countdown-digit'];
-  if (isCountdownDigit(char)) names.push('is-slot');
-  if (isPanicking) names.push(...panicDigitClassNames(true));
-  return names.join(' ');
+function digitClassName(char: string): string {
+  return isCountdownDigit(char) ? 'countdown-digit is-slot' : 'countdown-digit';
+}
+
+/** The element that carries the panic transform; it holds nothing else. */
+function moverClassName(isPanicking: boolean): string {
+  return ['countdown-panic-move', ...panicDigitClassNames(isPanicking)].join(' ');
 }
 
 const EMPTY_SEGMENTS: readonly CountdownSegment[] = [{ glyphs: [{ char: '—', index: 0 }] }];
@@ -104,10 +106,10 @@ export function ContestCountdownClock({
               {segment.glyphs.map((glyph) => (
                 <span
                   key={`${glyph.index}:${glyph.char}`}
-                  className={digitClassName(glyph.char, isPanicking)}
+                  className={digitClassName(glyph.char)}
                   style={panicDigitStyle(isPanicking, glyph.index, panicTurn) as React.CSSProperties | undefined}
                 >
-                  {glyph.char}
+                  <span className={moverClassName(isPanicking)}>{glyph.char}</span>
                 </span>
               ))}
             </span>

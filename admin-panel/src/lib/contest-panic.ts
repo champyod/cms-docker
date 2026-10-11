@@ -13,17 +13,17 @@ import type { CountdownStage } from '@/lib/contest-countdown';
  * than translation: rotation, skew and scale are what make it read as an animated sequence
  * rather than a wobble.
  *
- * Scale variants above about 1.1 are left out. Each digit sits in a one-character slot, so a
- * 1.25x edition would overlap its neighbours and smear the row it is meant to be alarming.
+ * The cast is kept to motions that stay legible while they play. `wobble` and `tada` are
+ * left out: both displace by a share of the element and both scale past 1.1, which at this
+ * size reads as broken rather than urgent, and neither can be quietened without also
+ * disturbing the row's layout.
  */
 export const CONTEST_PANIC_ANIMATION_NAMES = [
+  'headShake',
+  'swing',
+  'jello',
   'shakeX',
   'shakeY',
-  'headShake',
-  'wobble',
-  'jello',
-  'tada',
-  'swing',
 ] as const;
 
 export type ContestPanicAnimationName = (typeof CONTEST_PANIC_ANIMATION_NAMES)[number];
@@ -135,7 +135,7 @@ export function panicDigitStyle(
   };
 }
 
-/** The classes a digit carries while panicking, or an empty list when it is at rest. */
+/** The classes the animating element carries while panicking, or none when it is at rest. */
 export function panicDigitClassNames(isPanicking: boolean): readonly string[] {
   return isPanicking ? ['animated', 'infinite', 'is-panicking'] : [];
 }

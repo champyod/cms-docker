@@ -204,6 +204,8 @@
 
 /* The slot is one character of the display face's widest digit, measured at 0.652em and
    rounded up. Every numeral gets the same width, so the row never resizes mid-count. */
+/* The slot each digit owns. Its width is one character of the display face's widest digit,
+   measured at 0.652em and rounded up, so the row cannot resize as the seconds change. */
 .countdown-digit {
   display: inline-block;
   animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
@@ -214,15 +216,33 @@
   text-align: center;
 }
 
+/* A separator takes a fraction of a slot rather than a whole one, so the colon does not
+   read as a gap. 0.36ch is the colon's own advance in the display face. */
+.countdown-digit:not(.is-slot) {
+  width: 0.36ch;
+}
+
+/* The animating element. It holds the transform and nothing else, so the slot above keeps
+   its width whatever the motion does. */
+.countdown-panic-move {
+  display: block;
+}
+
 /* A colon sits inside a narrower box so the row does not read as if it had a gap. */
 .countdown-digit:not(.is-slot) {
   margin-inline: 0.02em;
 }
 
 /* The panic, one digit at a time. Each digit names its own motion plus its own delay and
-   duration, so the block never beats as one unit. animation-name is read from a custom
-   property, which is what lets seven different library keyframe sets share one class. */
-.countdown-digit.is-panicking {
+   duration, so the row never beats as one unit. animation-name is read from a custom
+   property, which is what lets the seven library keyframe sets share one class.
+
+   The amplitude is dialled down by a single scale on the transform. Every motion library
+   here moves the transform first and everything else after it, so scaling the transform is
+   what halves the displacement, the rotation and the scale in one place. */
+.countdown-panic-move.is-panicking {
+  /* Added to the scale above rather than replacing it, so the amplitude survives. */
+  animation-composition: add;
   animation-name: var(--countdown-panic-name);
   animation-duration: var(--animate-duration, 0.62s);
   animation-delay: var(--countdown-panic-delay, 0s);
@@ -322,44 +342,10 @@
   opacity: 0;
 }
 
-/* The timer's own bed, shown only once the blur is fully applied. The discrete swap is
-   what keeps this from popping: allow-discrete is declared after the shorthand so the
-   opacity can also transition, and an exit needs the element kept mounted. */
+/* Nothing is drawn behind the digits at the threshold. The field itself is what fills that
+   band, at 90% of the box, so no background is laid over it. */
 .countdown-timer-bed {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  opacity: 0;
   display: none;
-  transition:
-    opacity 900ms ease,
-    display 900ms allow-discrete;
-}
-
-.countdown-timer-bed.is-shown {
-  opacity: 1;
-  display: block;
-}
-
-@starting-style {
-  .countdown-timer-bed.is-shown {
-    opacity: 0;
-  }
-}
-
-/* A quiet wash behind the digits, tinted from the roll that owns this layer. */
-.countdown-timer-bed-surface {
-  position: absolute;
-  inset: 8% 6%;
-  border-radius: 32px;
-  background: radial-gradient(
-    90% 70% at 50% 45%,
-    hsl(var(--countdown-hue) 62% 46% / 0.34),
-    transparent 72%
-  );
-  backdrop-filter: blur(14px);
-  transition: opacity 900ms ease;
 }
 
 /* A reader who asked the system to stop moving gets the field without its motion. */
@@ -373,11 +359,6 @@
 @media (prefers-reduced-transparency: reduce) {
   .countdown-ambient {
     opacity: 0.55;
-  }
-
-  .countdown-timer-bed-surface {
-    backdrop-filter: none;
-    background: hsl(var(--countdown-hue) 45% 30% / 0.5);
   }
 }
 
@@ -408,22 +389,14 @@
 
 /* The plate the panic moves: it holds still, and its own contrast is what keeps the
    digits readable while they shake over the blurred field. */
-/* Passes the flex chain through to the clock, so the digits still scale to fill the box;
-   as a plain block this element used to cap them at the box's minimum height. */
+/* Sizing only, and deliberately bare: no background and no border, so a panic animates the
+   digits themselves over the field rather than a plate. */
 .countdown-clock-plate {
   position: relative;
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   flex-direction: column;
-  border-radius: 28px;
-  transition: background-color 500ms ease, box-shadow 500ms ease;
-}
-
-/* Once the panic starts, a flat plate replaces the busy field behind the digits. */
-.countdown-clock-plate.is-panicking {
-  background: color-mix(in oklab, var(--background) 78%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
 }
 
 /* Sizes track the viewport so the ask scales with the surface, like the digits. */

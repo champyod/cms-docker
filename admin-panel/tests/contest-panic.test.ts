@@ -34,16 +34,20 @@ describe('shouldPanic', () => {
 });
 
 describe('the panic cast', () => {
-  it('spans translation, rotation, skew and scale, not translation alone', () => {
+  it('spans translation, rotation and skew, not translation alone', () => {
     expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('shakeX');
     expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('headShake');
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('wobble');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('swing');
     expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('jello');
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('tada');
+  });
+
+  it('leaves out the motions that displace or scale too far to stay legible', () => {
+    expect(CONTEST_PANIC_ANIMATION_NAMES).not.toContain('wobble');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).not.toContain('tada');
   });
 
   it('carries enough motions that neighbouring digits rarely coincide', () => {
-    expect(CONTEST_PANIC_ANIMATION_NAMES.length).toBeGreaterThanOrEqual(5);
+    expect(CONTEST_PANIC_ANIMATION_NAMES.length).toBeGreaterThanOrEqual(4);
   });
 });
 
@@ -124,7 +128,7 @@ describe('the per-digit duration', () => {
 });
 
 describe('panicDigitStyle', () => {
-  it('carries the motion, its delay and its duration for one digit', () => {
+  it('carries the motion, its delay, its amplitude and its duration for one digit', () => {
     const style = panicDigitStyle(true, 1, 2);
     expect(style).toBeDefined();
     expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(style?.['--countdown-panic-name']);

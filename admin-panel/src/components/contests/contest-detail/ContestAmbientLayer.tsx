@@ -30,9 +30,9 @@ const AMBIENT_LIVE_ENERGY = 1;
  * The ambient layer: the rolled field, the fade in, the 20% ramp and the timer's
  * background.
  *
- * Nothing here blurs any more. The sense of approach is carried by the field's objects
- * growing and by the drift sweep, which is a transform on this layer so both stacked
- * fields move together as one object.
+ * Nothing here blurs and nothing is drawn behind the digits. The sense of approach is
+ * carried by the field's objects growing and by the drift sweep, which is a transform on
+ * this layer so both stacked fields move together as one object.
  *
  * While a roll changes, the outgoing field stays mounted under the incoming one so it
  * fades out rather than being cut. Both are inert to pointers and hidden from the
@@ -46,7 +46,7 @@ export function ContestAmbientLayer({
   rerollKey,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element | null {
-  const { roll, progress, density, isRampComplete, isAnimating, isRolled } = useContestAmbient({
+  const { roll, progress, density, isAnimating, isRolled } = useContestAmbient({
     thresholdMs,
     nowMs,
     isPaused,
@@ -99,9 +99,6 @@ export function ContestAmbientLayer({
         config={ambientConfig}
         onDrift={setDriftPx}
       />
-      <div className={isRampComplete ? 'countdown-timer-bed is-shown' : 'countdown-timer-bed'}>
-        <span className="countdown-timer-bed-surface" />
-      </div>
     </div>
   );
 }
