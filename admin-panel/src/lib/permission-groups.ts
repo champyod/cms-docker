@@ -34,6 +34,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Contest Manager',
     description: 'Runs contests end to end, from creation through ranking.',
     permissions: [
+      'admin:login',
       ...crud('contest'),
       'contest:switch',
       'task:list',
@@ -90,6 +91,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Problem Setter',
     description: 'Authors tasks, datasets, statements and test data.',
     permissions: [
+      'admin:login',
       ...crud('task'),
       'task:switch_dataset',
       ...crud('dataset'),
@@ -112,6 +114,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Judge',
     description: 'Reviews and reprocesses submissions and evaluations.',
     permissions: [
+      'admin:login',
       'contest:list',
       'contest:read',
       'task:list',
@@ -149,6 +152,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Viewer',
     description: 'Read-only access to public contest data.',
     permissions: [
+      'admin:login',
       'contest:list',
       'contest:read',
       'task:list',
@@ -176,6 +180,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Data Correction',
     description: 'Repairs submissions, evaluations and participant records.',
     permissions: [
+      'admin:login',
       'contest:list',
       'contest:read',
       'submission:list',
@@ -214,6 +219,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Storage Admin',
     description: 'Manages files, objects and container/service infrastructure.',
     permissions: [
+      'admin:login',
       ...crud('file'),
       ...crud('fsobject'),
       ...crud('attachment'),
@@ -241,6 +247,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Security Admin',
     description: 'Runs the security surface: WAF, blocked addresses, lockouts and certificates.',
     permissions: [
+      'admin:login',
       'security:read',
       'waf:read',
       'waf:config',
@@ -257,6 +264,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
     name: 'Messaging',
     description: 'Handles clarifications, messages and announcements.',
     permissions: [
+      'admin:login',
       ...crud('message'),
       'message:send',
       ...crud('announcement'),
@@ -269,6 +277,20 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'user:read',
       'contest:list',
       'contest:read',
+    ],
+  },
+  {
+    name: 'Ranking Operator',
+    description: 'Operates the public ranking surface and cannot sign in to this web server.',
+    // Why no admin:login: the login gate requires it, so this group is the one way to
+    // hold ranking rights without opening the admin surface to its members.
+    permissions: [
+      'ranking:list',
+      'ranking:read',
+      'ranking:override',
+      'ranking:appearance',
+      'lockout:read',
+      'lockout:unlock',
     ],
   },
 ];

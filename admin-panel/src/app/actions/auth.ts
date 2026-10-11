@@ -7,6 +7,8 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 import { createSession, deleteSession, getSession } from '@/lib/auth';
+import { getFreshPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
@@ -115,9 +117,27 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly str
   await startAdminSession(admin);
   try {
     await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
-  } catch {
+  } catch (error) {
+    console.error('Could not record the last login time:', error);
   }
   clearBucket(bucketKeys);
+}
+
+/**
+ * Signing in is its own permission, so a group can hold ranking rights without opening
+ * this surface to its members. A refused sign-in is reported exactly like a wrong
+ * password: the account does exist, and saying so would confirm it to whoever probes.
+ */
+async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
+  const permissions = await getFreshPermissions(admin.id.toString());
+  return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
+}
+
+async function refuseLogin(bucketKeys: readonly string[], username: string): Promise<LoginActionState> {
+  await recordLoginFailure(bucketKeys, username);
+  const nextState: LoginActionState = { error: 'Invalid credentials' };
+  if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
+  return nextState;
 }
 
 export async function login(_prevState: LoginActionState | null, formData: FormData): Promise<LoginActionState> {
@@ -137,16 +157,13 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      await recordLoginFailure(bucketKeys, username);
-      const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
-      return nextState;
+      return refuseLogin(bucketKeys, username);
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      await recordLoginFailure(bucketKeys, username);
-      const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
-      return nextState;
+      return refuseLogin(bucketKeys, username);
+    }
+    if (!(await maySignIn(admin))) {
+      return refuseLogin(bucketKeys, username);
     }
     await completeLogin(admin, bucketKeys);
   } catch (error) {

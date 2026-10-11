@@ -180,9 +180,9 @@ describe('PERMISSION_REGISTRY', () => {
   // restore, schedule, settle, delete), plus 2 lane keys, plus 2 platform-boundary
   // keys (waf:control, domain:control), plus 9 security-surface keys
   // (security:read, waf:read, waf:config, ban:read, ban:unban, lockout:read,
-  // lockout:unlock, tls:read, tls:renew) = 220.
-  it('holds exactly 220 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(221);
+  // lockout:unlock, tls:read, tls:renew), plus admin:login.
+  it('holds exactly 222 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(222);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -215,8 +215,8 @@ describe('PERMISSION_REGISTRY', () => {
 describe('DEFAULT_GROUPS', () => {
   const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
 
-  it('defines exactly nine groups with unique names', () => {
-    expect(DEFAULT_GROUPS).toHaveLength(9);
+  it('defines exactly ten groups with unique names', () => {
+    expect(DEFAULT_GROUPS).toHaveLength(10);
     const names = DEFAULT_GROUPS.map((group) => group.name);
     expect(new Set(names).size).toBe(names.length);
   });
@@ -244,9 +244,10 @@ describe('DEFAULT_GROUPS', () => {
     expect(hasEffectivePermission(effective, 'contest:list')).toBe(true);
   });
 
-  it('grants the security surface to Security Admin and to Superadmin', () => {
+  it('grants Security Admin the security surface and admin:login', () => {
     const securityAdmin = DEFAULT_GROUPS.find((group) => group.name === 'Security Admin');
     expect(securityAdmin?.permissions).toEqual([
+      'admin:login',
       'security:read',
       'waf:read',
       'waf:config',
