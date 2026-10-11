@@ -1,136 +1,123 @@
 'use client';
 
-import { DEFAULT_AMBIENT_CONFIG, clampOrnamentRotationMs, rollOrnament, type AmbientOrnamentId, type AmbientConfig } from '@/lib/contest-ambient';
+import {
+  DEFAULT_AMBIENT_CONFIG,
+  clampMarkRevealMs,
+  rollOrnament,
+  type AmbientConfig,
+  type AmbientOrnamentId,
+} from '@/lib/contest-ambient';
 
 interface Props {
-  /** The seed the current roll came from; the ornament is drawn from it, not chosen. */
+  /** The seed the current roll came from; the mark is drawn from it, not chosen. */
   readonly seed: number;
   /** False while the surface is paused or the reader asked for reduced motion. */
-  readonly isTurning: boolean;
-  /** Resolved on the server, so an operator can retune the turn without a rebuild. */
+  readonly isRevealing: boolean;
+  /** Resolved on the server, so an operator can pin the mark without a rebuild. */
   readonly ambientConfig?: AmbientConfig;
 }
 
-/** Outer radius in the viewBox units every ornament is drawn in. */
-const ORNAMENT_RADIUS = 100;
+/** The mark is drawn in a 100-unit box, so every coordinate below is a share of it. */
+const MARK_SIZE = 100;
 
 /**
- * One ornament, drawn as stroke-only geometry so it takes the roll's colour with no asset.
- * Every part is a circle, a line or a regular polygon, so nothing here resembles a letter,
- * a numeral or a diagram.
+ * The mark's outline, as an ordered list of strokes.
+ *
+ * WHY ordered and separate: the reveal draws each stroke in turn, so the mark assembles
+ * rather than appearing at once. A single path would let the dash walk the whole shape in one
+ * sweep, which reads as a loader rather than as something being built.
  */
-function OrnamentShape({ id }: { readonly id: AmbientOrnamentId }): React.JSX.Element {
-  if (id === 'rings') {
-    return (
-      <>
-        {[0.42, 0.62, 0.82, 1].map((scale) => (
-          <circle key={scale} cx="0" cy="0" r={ORNAMENT_RADIUS * scale} />
-        ))}
-        {[0, 90, 180, 270].map((angle) => (
-          <line
-            key={angle}
-            x1="0"
-            y1={-ORNAMENT_RADIUS * 0.42}
-            x2="0"
-            y2={-ORNAMENT_RADIUS}
-            transform={`rotate(${angle})`}
-          />
-        ))}
-      </>
-    );
-  }
-
-  if (id === 'ticks') {
-    return (
-      <>
-        <circle cx="0" cy="0" r={ORNAMENT_RADIUS} />
-        {Array.from({ length: 48 }, (_unused, index) => {
-          const angle = (index / 48) * 360;
-          const isLong = index % 4 === 0;
-          return (
-            <line
-              key={angle}
-              x1="0"
-              y1={-ORNAMENT_RADIUS}
-              x2="0"
-              y2={-ORNAMENT_RADIUS * (isLong ? 0.82 : 0.9)}
-              transform={`rotate(${angle})`}
-            />
-          );
-        })}
-      </>
-    );
+function markStrokes(id: AmbientOrnamentId): readonly string[] {
+  if (id === 'nested') {
+    return [
+      'M20 20 H80 V80 H20 Z',
+      'M32 32 H68 V68 H32 Z',
+      'M44 44 H56 V56 H44 Z',
+    ];
   }
 
   if (id === 'spokes') {
-    return (
-      <>
-        <circle cx="0" cy="0" r={ORNAMENT_RADIUS} />
-        <circle cx="0" cy="0" r={ORNAMENT_RADIUS * 0.18} />
-        {Array.from({ length: 8 }, (_unused, index) => {
-          const angle = (index / 8) * 360;
-          return (
-            <line
-              key={angle}
-              x1="0"
-              y1={-ORNAMENT_RADIUS * 0.18}
-              x2="0"
-              y2={-ORNAMENT_RADIUS}
-              transform={`rotate(${angle})`}
-            />
-          );
-        })}
-      </>
-    );
+    return [
+      'M20 20 H80 V80 H20 Z',
+      'M20 50 H80',
+      'M50 20 V80',
+      'M20 20 L80 80',
+    ];
   }
 
-  return (
-    <>
-      <circle cx="0" cy="0" r={ORNAMENT_RADIUS} />
-      {[0, 1, 2].map((step) => {
-        const radius = ORNAMENT_RADIUS * (0.62 - step * 0.16);
-        const rotation = step * 30;
-        const points = Array.from({ length: 6 }, (_unused, corner) => {
-          const angle = ((corner / 6) * Math.PI * 2) + (rotation * Math.PI) / 180;
-          return `${(Math.cos(angle) * radius).toFixed(2)},${(Math.sin(angle) * radius).toFixed(2)}`;
-        }).join(' ');
-        return <polygon key={step} points={points} />;
-      })}
-    </>
-  );
+  if (id === 'ticks') {
+    return [
+      'M20 20 H80 V80 H20 Z',
+      'M20 28 H80',
+      'M20 36 H80',
+      'M20 44 H80',
+      'M20 52 H80',
+      'M20 60 H80',
+      'M20 68 H80',
+      'M20 76 H80',
+    ];
+  }
+
+  return [
+    'M20 20 H80 V80 H20 Z',
+    'M20 50 H80',
+    'M50 20 V80',
+  ];
 }
 
 /**
- * The ornament on the ended screen: one turning shape in the front layer, drawn from its own
- * set rather than the field's textures, so an ended contest reads as a different thing rather
- * than as the waiting screen with its timer removed.
+ * The front-layer mark: an outline on a square that draws itself on, stroke by stroke, then
+ * resets and draws again.
  *
- * It is a transform on a constant element, so the turn is composited rather than repainted,
- * and nothing animates on its ancestor — which is what keeps it from flickering in WebKit.
+ * A reveal rather than a turn: the reference this follows — LottieFiles' loading logo reveal —
+ * is an idle opener that assembles its mark, and a rotating graphic is a different verb. The
+ * draw is the classic dash technique, one dash equal to the path's own length walked from
+ * full offset to zero, so nothing here is a keyframe per stroke.
+ *
+ * It is drawn on one element with a constant geometry, so the animation is a stroke offset
+ * and nothing on it or its ancestors changes size — which is what keeps it from flickering in
+ * WebKit and from nudging the layout it sits over.
  */
 export function ContestEndedOrnament({
   seed,
-  isTurning,
+  isRevealing,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element {
   const { ornament, palette } = rollOrnament(seed, ambientConfig.ornamentId);
-  const turnSeconds = clampOrnamentRotationMs(ambientConfig.ornamentRotationMs) / 1000;
+  const strokes = markStrokes(ornament);
+  const revealSeconds = clampMarkRevealMs(ambientConfig.markRevealMs) / 1000;
+
   return (
     <div
       aria-hidden
-      className={isTurning ? 'countdown-ornament is-turning' : 'countdown-ornament'}
+      className={isRevealing ? 'countdown-mark is-revealing' : 'countdown-mark'}
       style={{
         '--countdown-hue': `${palette.glowHue}`,
-        '--countdown-ornament-turn': `${turnSeconds}s`,
+        '--countdown-mark-draw': `${revealSeconds}s`,
       } as React.CSSProperties}
     >
       <svg
-        className="countdown-ornament-shape"
-        viewBox="-120 -120 240 240"
+        className="countdown-mark-shape"
+        viewBox={`0 0 ${MARK_SIZE} ${MARK_SIZE}`}
         xmlns="http://www.w3.org/2000/svg"
       >
-        <OrnamentShape id={ornament} />
+        {strokes.map((stroke, index) => (
+          <path
+            key={stroke}
+            d={stroke}
+            // Every stroke is a single continuous path, so one dash covers it exactly and the
+            // offset can be walked from 1 to 0 without measuring anything in the browser.
+            pathLength={1}
+            style={{
+              // Staggered so the mark assembles in order instead of every stroke at once.
+              animationDelay: `${(index * STROKE_STAGGER_SECONDS).toFixed(2)}s`,
+            }}
+          />
+        ))}
       </svg>
     </div>
   );
 }
+
+/** Gap between one stroke starting and the next; with the draw time it sets the whole cycle. */
+const STROKE_STAGGER_SECONDS = 0.18;

@@ -52,8 +52,8 @@ export interface AmbientConfig {
   readonly itemScale: number;
   /** How much larger the objects grow across the ramp, as a fraction of their base size. */
   readonly growthGain: number;
-  /** Seconds one full turn of the ended screen's ornament takes. */
-  readonly ornamentRotationMs: number;
+  /** Seconds one full cycle of the ended screen's reveal takes. */
+  readonly markRevealMs: number;
   /** Pin the field's texture, or 'auto' to let the seed choose. */
   readonly textureId: AmbientTextureIdChoice;
   /** Pin the ended screen's ornament, or 'auto' to let the seed choose. */
@@ -68,7 +68,7 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
   driftExtentRatio: 0.045,
   itemScale: 1.6,
   growthGain: 0.35,
-  ornamentRotationMs: 26_000,
+  markRevealMs: 2_600,
   textureId: 'auto',
   ornamentId: 'auto',
   maxFramesPerSecond: 30,
@@ -78,7 +78,7 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
 /** Ceiling is 2.5: the field draws under the timer, so larger items would crowd it. */
 export const AMBIENT_ITEM_SCALE_RANGE: readonly [number, number] = [0.4, 2.5];
 export const AMBIENT_GROWTH_GAIN_RANGE: readonly [number, number] = [0, 2];
-export const AMBIENT_ORNAMENT_ROTATION_MS_RANGE: readonly [number, number] = [4_000, 180_000];
+export const AMBIENT_MARK_REVEAL_MS_RANGE: readonly [number, number] = [600, 20_000];
 
 /** 'auto' keeps the seeded roll; naming one pins it, so the screen is reproducible by request. */
 export type AmbientTextureIdChoice = AmbientTextureId | 'auto';
@@ -186,11 +186,11 @@ export function rollOrnament(seed: number, ornamentId: AmbientOrnamentIdChoice =
 /** Any offset that is not zero keeps the two draws independent. */
 const AMBIENT_ORNAMENT_SEED_OFFSET = 0.517;
 
-/** Bounds the turn, so a mistyped value cannot spin the ornament or freeze it. */
-export function clampOrnamentRotationMs(rotationMs: number): number {
-  if (!Number.isFinite(rotationMs)) return DEFAULT_AMBIENT_CONFIG.ornamentRotationMs;
-  const [fastest, slowest] = AMBIENT_ORNAMENT_ROTATION_MS_RANGE;
-  return Math.min(slowest, Math.max(fastest, rotationMs));
+/** Bounds the reveal, so a mistyped value cannot flash the mark or stall it. */
+export function clampMarkRevealMs(revealMs: number): number {
+  if (!Number.isFinite(revealMs)) return DEFAULT_AMBIENT_CONFIG.markRevealMs;
+  const [fastest, slowest] = AMBIENT_MARK_REVEAL_MS_RANGE;
+  return Math.min(slowest, Math.max(fastest, revealMs));
 }
 
 export interface AmbientProgressParams {

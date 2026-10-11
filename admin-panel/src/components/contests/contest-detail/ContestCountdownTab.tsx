@@ -103,7 +103,7 @@ export function ContestCountdownTab({
       />
       {isEnded ? <ContestEndedOrnament
           seed={ambientSeed}
-          isTurning={!isPaused && !prefersReducedMotion}
+          isRevealing={!isPaused && !prefersReducedMotion}
           ambientConfig={ambientConfig}
         /> : null}
 

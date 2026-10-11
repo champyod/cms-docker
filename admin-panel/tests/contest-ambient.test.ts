@@ -7,7 +7,7 @@ import {
   DEFAULT_AMBIENT_CONFIG,
   ambientColor,
   ambientDensityScale,
-  clampOrnamentRotationMs,
+  clampMarkRevealMs,
   rollOrnament,
   AMBIENT_ORNAMENT_IDS,
   createAmbientRandom,
@@ -215,11 +215,11 @@ describe('the ended ornament', () => {
     expect(new Set(AMBIENT_ORNAMENT_IDS).size).toBe(AMBIENT_ORNAMENT_IDS.length);
   });
 
-  it('keeps the turn inside the band that neither spins nor freezes', () => {
-    expect(clampOrnamentRotationMs(26_000)).toBe(26_000);
-    expect(clampOrnamentRotationMs(1)).toBe(4_000);
-    expect(clampOrnamentRotationMs(9_999_999)).toBe(180_000);
-    expect(clampOrnamentRotationMs(Number.NaN)).toBe(DEFAULT_AMBIENT_CONFIG.ornamentRotationMs);
+  it('keeps the reveal inside the band that neither flashes nor stalls', () => {
+    expect(clampMarkRevealMs(2_600)).toBe(2_600);
+    expect(clampMarkRevealMs(1)).toBe(600);
+    expect(clampMarkRevealMs(9_999_999)).toBe(20_000);
+    expect(clampMarkRevealMs(Number.NaN)).toBe(DEFAULT_AMBIENT_CONFIG.markRevealMs);
   });
 });
 
