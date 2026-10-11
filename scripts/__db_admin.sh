@@ -212,10 +212,11 @@ single_user_psql() {
 
   # --user postgres: the server refuses to run as root. --volumes-from reuses the exact
   # volume the container uses, so no volume name is guessed. One statement per line:
-  # single-user mode treats the newline as the terminator.
+  # single-user mode treats the newline as the terminator. exit_on_error makes a failed
+  # statement fatal, so it cannot exit 0 and be reported as a success.
   if ! printf '%s\n' "$sql" | docker run --rm -i \
         --volumes-from "$DB_CONTAINER" --user postgres \
-        --entrypoint postgres "$image" --single -D "$pgdata" postgres; then
+        --entrypoint postgres "$image" --single -c exit_on_error=on -D "$pgdata" postgres; then
     rc=1
   fi
 
@@ -295,6 +296,9 @@ cmd_create() {
   confirm_admin "create" "stop ${DB_CONTAINER}, then create database \"${name}\" OWNER \"${owner}\" in single-user mode"
   single_user_psql "$sql" \
     || log_die "CREATE DATABASE failed — see the single-user output above. ${DB_CONTAINER} was started again."
+  if ! db_exists "$name"; then
+    log_die "CREATE DATABASE reported success but \"${name}\" is absent in ${DB_CONTAINER} — the statement did not take effect. ${DB_CONTAINER} was started again." 1
+  fi
   log_info "created \"${name}\" owned by \"${owner}\" in ${DB_CONTAINER}."
   log_info "next: point the owning db_<profile> POSTGRES_DB at \"${name}\", then run: ./cms config sync"
 }
@@ -427,6 +431,10 @@ cmd_rename() {
   confirm_admin "rename" "stop ${DB_CONTAINER}, then rename database \"${old}\" to \"${new}\" in single-user mode"
   single_user_psql "$sql" \
     || log_die "ALTER DATABASE ... RENAME failed — see the single-user output above. ${DB_CONTAINER} was started again."
+
+  if db_exists "$old" || ! db_exists "$new"; then
+    log_die "the rename reported success but \"${old}\" is still present or \"${new}\" is absent — the name was not moved. ${DB_CONTAINER} was started again." 1
+  fi
 
   log_info "renamed \"${old}\" to \"${new}\" in ${DB_CONTAINER}."
   report_profiles_pointing_at "$old" "$new"
