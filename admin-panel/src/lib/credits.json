@@ -151,18 +151,18 @@
         }
       ],
       "first_party": [
-        "cmsranking/static/Ranking.css",
-        "cmsranking/static/Chart.js",
-        "cmsranking/static/Config.js",
-        "cmsranking/static/DataStore.js",
-        "cmsranking/static/HistoryStore.js",
-        "cmsranking/static/Overview.js",
-        "cmsranking/static/Ranking.js",
-        "cmsranking/static/Scoreboard.js",
-        "cmsranking/static/TeamSearch.js",
-        "cmsranking/static/TimeView.js",
-        "cmsranking/static/UserDetail.js",
-        "cmsranking/static/img/favicon.ico"
+        "ranking-web/static/Ranking.css",
+        "ranking-web/static/Chart.js",
+        "ranking-web/static/Config.js",
+        "ranking-web/static/DataStore.js",
+        "ranking-web/static/HistoryStore.js",
+        "ranking-web/static/Overview.js",
+        "ranking-web/static/Ranking.js",
+        "ranking-web/static/Scoreboard.js",
+        "ranking-web/static/TeamSearch.js",
+        "ranking-web/static/TimeView.js",
+        "ranking-web/static/UserDetail.js",
+        "ranking-web/static/img/favicon.ico"
       ],
       "assets": [
         {
@@ -173,7 +173,7 @@
             "https://opensource.org/licenses/MIT"
           ],
           "paths": [
-            "cmsranking/static/lib/jquery.js"
+            "ranking-web/static/lib/jquery.js"
           ]
         },
         {
@@ -184,7 +184,7 @@
             "https://rem.mit-license.org/"
           ],
           "paths": [
-            "cmsranking/static/lib/eventsource.js"
+            "ranking-web/static/lib/eventsource.js"
           ]
         },
         {
@@ -196,7 +196,7 @@
             "https://www.apache.org/licenses/LICENSE-2.0"
           ],
           "paths": [
-            "cmsranking/static/lib/raphael.js"
+            "ranking-web/static/lib/raphael.js"
           ]
         },
         {
@@ -207,7 +207,7 @@
             "https://www.apache.org/licenses/LICENSE-2.0"
           ],
           "paths": [
-            "cmsranking/static/lib/explorercanvas.js"
+            "ranking-web/static/lib/explorercanvas.js"
           ]
         },
         {
@@ -218,8 +218,7 @@
             "https://creativecommons.org/licenses/by-sa/3.0/"
           ],
           "paths": [
-            "cmsranking/images/*",
-            "cmsranking/static/img/*.png"
+            "ranking-web/static/img/*.png"
           ]
         }
       ]

@@ -42,7 +42,7 @@ PANEL_MANIFEST = REPO_ROOT / "admin-panel" / "package.json"
 SURFACE_ROOTS = {
     "contest": ("cms/server/contest/", "cms/server/static/"),
     "admin": ("cms/server/admin/", "cms/server/static/"),
-    "ranking": ("cmsranking/",),
+    "ranking": ("ranking-web/",),
     "panel": ("admin-panel/",),
 }
 
@@ -74,8 +74,8 @@ SURFACE_ENTRY_POINTS = {
         "jinja_static": True,
     },
     "ranking": {
-        "entry_point": SRC_ROOT / "ranking-web/static/Ranking.html",
-        "static_roots": [SRC_ROOT / "ranking-web/static"],
+        "entry_point": REPO_ROOT / "ranking-web/static/Ranking.html",
+        "static_roots": [REPO_ROOT / "ranking-web/static"],
         "jinja_static": False,
     },
 }
