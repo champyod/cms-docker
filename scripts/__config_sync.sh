@@ -156,6 +156,7 @@ toml_value() {
 parse_toml() {
   local file="$1" section="" line key val lineno=0 seen_key
   declare -A first_line=()
+  declare -A first_section=()
   while IFS= read -r line || [[ -n "$line" ]]; do
     lineno=$((lineno + 1))
     line="$(toml_trim "$line")"
@@ -165,6 +166,15 @@ parse_toml() {
     elif [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
       key="${BASH_REMATCH[1]}"
       val="$(toml_value "${BASH_REMATCH[2]}")"
+      # WHY a key in two sections keeps the FIRST section's value: the same key in two
+      # sections is one .env slot, and __TOML is keyed by section.key, so both were
+      # written and the .env carried the setting twice — the raw readers and the shell
+      # then disagreed on which won.
+      if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+        log_warn "duplicate key '${key}' in [${section}] at line ${lineno} — already defined in [${first_section[$key]}]; keeping that section's value, ignoring this one"
+        continue
+      fi
+      first_section["$key"]="$section"
       seen_key="${section}.${key}"
       # WHY a repeated key keeps the FIRST value instead of the last: TOML parsers
       # reject a duplicate key outright, but this reader does not, so the two
