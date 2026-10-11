@@ -65,18 +65,21 @@ require_tools() {
     [[ -d "${REPO}/ranking-web/static" ]] || fail "the vendored page is not in this checkout"
 }
 
-# Every ranking migration in timestamp order — the same glob CI applies — so a new one
-# is picked up here rather than quietly missing from the schema this rehearsal drives.
+# Every migration the rehearsal drives, in timestamp order — the same set CI applies — so a
+# new one is picked up here rather than quietly missing from the schema this rehearsal drives.
 apply_migrations() {
     local migration applied=0
-    for migration in "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
+    # The console authenticates a panel admin, so the rehearsal needs the panel's own
+    # admin, permission and group tables beside the ranking projection.
+    for migration in "${REPO}"/admin-panel/prisma/migrations/*_admin_panel_objects_/ \
+                     "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
         [[ -d "${migration}" ]] || continue
         psql "${DATABASE_URL}" -q -f "${migration}migration.sql" >/dev/null ||
             fail "migration $(basename "${migration}") did not apply"
         applied=$((applied + 1))
     done
-    [[ "${applied}" -gt 0 ]] || fail "no ranking migration was found to apply"
-    pass "the ${applied} ranking migrations apply in order"
+    [[ "${applied}" -gt 0 ]] || fail "no migration was found to apply"
+    pass "the ${applied} migrations apply in order"
 }
 
 seed_rows() {
