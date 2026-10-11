@@ -226,7 +226,16 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
           <div className="p-8">
             <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
               {error && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{error}</InlineAlert>}
-              {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'general' && (
+                <div className="space-y-6">
+                  {/* The type lives on the task's dataset, so a task dialog cannot show
+                      it as a field — say where the decision is made instead. */}
+                  <p className="text-xs text-muted-foreground">
+                    Task type is set on the task&apos;s dataset, not here — the dataset chooses Batch, Communication or TwoSteps.
+                  </p>
+                  <GeneralTab formData={formData} onChange={setFormData} />
+                </div>
+              )}
               {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
               {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
               {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
