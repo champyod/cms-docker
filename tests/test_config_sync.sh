@@ -63,6 +63,7 @@ setup_test_root() {
   mkdir -p "$TEST_ROOT/scripts"
   cp "$REPO_ROOT/cms" "$TEST_ROOT/cms"
   cp "$REPO_ROOT/scripts/__config_sync.sh" "$TEST_ROOT/scripts/"
+  cp "$REPO_ROOT/scripts/__db_use.sh" "$TEST_ROOT/scripts/"
   cp -r "$REPO_ROOT/scripts/__lib" "$TEST_ROOT/scripts/"
 }
 
