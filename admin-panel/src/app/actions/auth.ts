@@ -73,8 +73,8 @@ async function resolveBucketKeys(username: string): Promise<readonly string[]> {
 
 /** One ledger row per lockout, never per attempt; the counter itself stays in memory. */
 async function recordLoginFailure(bucketKeys: readonly string[], username: string): Promise<void> {
-  recordFailedAttempt(bucketKeys);
-  if (!isRateLimited(bucketKeys)) return;
+  await recordFailedAttempt(bucketKeys);
+  if (!(await isRateLimited(bucketKeys))) return;
   const ip = bucketKeys[0].split('|')[1] ?? 'local';
   await recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) });
 }
@@ -86,10 +86,10 @@ export async function getCaptchaState(username?: string): Promise<{ required: bo
   const active = await resolveActiveProvider(env);
   const configured = env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
   if (!configured) return { required: false, enabled: false, provider: active.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
-  pruneExpiredLoginBuckets();
+  await pruneExpiredLoginBuckets();
   const ip = await resolveClientIp();
-  let required = isCaptchaRequiredForIp(ip);
-  if (!required && username && username.trim().length > 0) required = shouldRequireCaptcha(`${username.trim()}|${ip}`);
+  let required = await isCaptchaRequiredForIp(ip);
+  if (!required && username && username.trim().length > 0) required = await shouldRequireCaptcha(`${username.trim()}|${ip}`);
   return { required, enabled: true, provider: active.provider, siteKey: active.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
 }
 
@@ -123,7 +123,7 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly str
   } catch (error) {
     console.error('Could not record the last login time:', error);
   }
-  clearBucket(bucketKeys);
+  await clearBucket(bucketKeys);
 }
 
 /**
@@ -139,7 +139,7 @@ async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
 async function refuseLogin(bucketKeys: readonly string[], username: string): Promise<LoginActionState> {
   await recordLoginFailure(bucketKeys, username);
   const nextState: LoginActionState = { error: 'Invalid credentials' };
-  if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
+  if (await shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
   return nextState;
 }
 
@@ -148,9 +148,9 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
   const bucketKeys = await resolveBucketKeys(username);
-  pruneExpiredLoginBuckets();
-  if (isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
-  if (shouldRequireCaptcha(bucketKeys[0])) {
+  await pruneExpiredLoginBuckets();
+  if (await isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
+  if (await shouldRequireCaptcha(bucketKeys[0])) {
     const token = extractCaptchaToken(formData);
     if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
     const valid = await verifyCaptcha(token, extractCaptchaProvider(formData));

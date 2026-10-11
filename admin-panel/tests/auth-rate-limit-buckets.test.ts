@@ -3,43 +3,50 @@ import { buildIpBucketKey, clearBucket, isRateLimited, loginBuckets, pruneExpire
 
 const MAX = 5;
 
-beforeEach(() => loginBuckets.clear());
+// The store falls back to this map when no shared Redis is configured, which is
+// the path under test: pin the URL off so an ambient value cannot switch it.
+beforeEach(() => {
+  vi.stubEnv('REDIS_URL', '');
+  loginBuckets.clear();
+});
+
+afterAll(() => vi.unstubAllEnvs());
 
 describe('per-IP bucket alongside per-username bucket', () => {
-  it('increments both families on one failed attempt', () => {
+  it('increments both families on one failed attempt', async () => {
     const keys = ['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')];
-    recordFailedAttempt(keys);
+    await recordFailedAttempt(keys);
     expect(loginBuckets.get('alice|1.2.3.4')?.count).toBe(1);
     expect(loginBuckets.get('ip#1.2.3.4')?.count).toBe(1);
   });
 
-  it('limits the IP even when the attacker rotates usernames', () => {
+  it('limits the IP even when the attacker rotates usernames', async () => {
     for (let i = 0; i < MAX; i++) {
-      recordFailedAttempt([`user${i}|1.2.3.4`, buildIpBucketKey('1.2.3.4')]);
+      await recordFailedAttempt([`user${i}|1.2.3.4`, buildIpBucketKey('1.2.3.4')]);
     }
     const freshUsernameKeys = ['brandnew|1.2.3.4', buildIpBucketKey('1.2.3.4')];
     expect(loginBuckets.get('brandnew|1.2.3.4')).toBeUndefined();
-    expect(isRateLimited(freshUsernameKeys)).toBe(true);
+    expect(await isRateLimited(freshUsernameKeys)).toBe(true);
   });
 
-  it('limits the username bucket independently of the IP bucket', () => {
+  it('limits the username bucket independently of the IP bucket', async () => {
     for (let i = 0; i < MAX; i++) {
-      recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
+      await recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
     }
-    expect(isRateLimited(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')])).toBe(true);
+    expect(await isRateLimited(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')])).toBe(true);
   });
 
-  it('does not limit an unrelated user from an unrelated address', () => {
-    recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
-    expect(isRateLimited(['bob|9.9.9.9', buildIpBucketKey('9.9.9.9')])).toBe(false);
+  it('does not limit an unrelated user from an unrelated address', async () => {
+    await recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
+    expect(await isRateLimited(['bob|9.9.9.9', buildIpBucketKey('9.9.9.9')])).toBe(false);
   });
 
-  it('clears both families on a successful login', () => {
+  it('clears both families on a successful login', async () => {
     const keys = ['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')];
-    for (let i = 0; i < MAX; i++) recordFailedAttempt(keys);
-    expect(isRateLimited(keys)).toBe(true);
-    clearBucket(keys);
-    expect(isRateLimited(keys)).toBe(false);
+    for (let i = 0; i < MAX; i++) await recordFailedAttempt(keys);
+    expect(await isRateLimited(keys)).toBe(true);
+    await clearBucket(keys);
+    expect(await isRateLimited(keys)).toBe(false);
     expect(loginBuckets.size).toBe(0);
   });
 });
@@ -57,10 +64,10 @@ describe('bucket key separation', () => {
     expect(`alice|${ip}`.endsWith(`|${ip}`)).toBe(true);
   });
 
-  it('keeps the IP bucket count separate from the username bucket counts', () => {
-    recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
-    recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
-    recordFailedAttempt(['bob|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
+  it('keeps the IP bucket count separate from the username bucket counts', async () => {
+    await recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
+    await recordFailedAttempt(['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
+    await recordFailedAttempt(['bob|1.2.3.4', buildIpBucketKey('1.2.3.4')]);
     expect(loginBuckets.get('alice|1.2.3.4')?.count).toBe(2);
     expect(loginBuckets.get('bob|1.2.3.4')?.count).toBe(1);
     expect(loginBuckets.get('ip#1.2.3.4')?.count).toBe(3);
@@ -68,25 +75,25 @@ describe('bucket key separation', () => {
 });
 
 describe('eviction under flood', () => {
-  it('never evicts a bucket that is at the limit', () => {
+  it('never evicts a bucket that is at the limit', async () => {
     const protectedKeys = ['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')];
-    for (let i = 0; i < MAX; i++) recordFailedAttempt(protectedKeys);
+    for (let i = 0; i < MAX; i++) await recordFailedAttempt(protectedKeys);
     for (let i = 0; i < 3000; i++) {
-      recordFailedAttempt([`flood${i}|8.8.8.8`, buildIpBucketKey('8.8.8.8')]);
+      await recordFailedAttempt([`flood${i}|8.8.8.8`, buildIpBucketKey('8.8.8.8')]);
     }
     expect(loginBuckets.get('alice|1.2.3.4')?.count).toBe(MAX);
     expect(loginBuckets.get('ip#1.2.3.4')?.count).toBe(MAX);
-    expect(isRateLimited(protectedKeys)).toBe(true);
+    expect(await isRateLimited(protectedKeys)).toBe(true);
   });
 
-  it('keeps the map bounded under flood', () => {
+  it('keeps the map bounded under flood', async () => {
     for (let i = 0; i < 5000; i++) {
-      recordFailedAttempt([`flood${i}|8.8.8.8`, buildIpBucketKey('8.8.8.8')]);
+      await recordFailedAttempt([`flood${i}|8.8.8.8`, buildIpBucketKey('8.8.8.8')]);
     }
     expect(loginBuckets.size).toBeLessThanOrEqual(1000);
   });
 
-  it('still evicts something when every bucket is at the limit', () => {
+  it('still evicts something when every bucket is at the limit', async () => {
     // Reaching the oldest-only fallback needs a full map whose every entry is
     // already at the limit, because the caller's own freshly created bucket is
     // itself under the limit and is always the preferred victim.
@@ -98,7 +105,7 @@ describe('eviction under flood', () => {
     // Re-entering the sentinel raises it past the limit and refreshes its
     // resetAt, so it is no longer the oldest and the fallback must drop a flood
     // bucket instead of the at-limit victim.
-    recordFailedAttempt(['sentinel|7.7.7.7']);
+    await recordFailedAttempt(['sentinel|7.7.7.7']);
     expect(loginBuckets.size).toBe(1000);
     expect(loginBuckets.has('sentinel|7.7.7.7')).toBe(true);
     expect(loginBuckets.get('sentinel|7.7.7.7')?.count).toBe(MAX + 1);
@@ -160,13 +167,13 @@ describe('bucket key selection by client address', () => {
 });
 
 describe('expiry', () => {
-  it('prunes expired buckets and stops reporting a limit', () => {
+  it('prunes expired buckets and stops reporting a limit', async () => {
     const keys = ['alice|1.2.3.4', buildIpBucketKey('1.2.3.4')];
-    for (let i = 0; i < MAX; i++) recordFailedAttempt(keys);
+    for (let i = 0; i < MAX; i++) await recordFailedAttempt(keys);
     loginBuckets.set('alice|1.2.3.4', { count: MAX, resetAt: Date.now() - 1 });
     loginBuckets.set('ip#1.2.3.4', { count: MAX, resetAt: Date.now() - 1 });
-    pruneExpiredLoginBuckets();
+    await pruneExpiredLoginBuckets();
     expect(loginBuckets.size).toBe(0);
-    expect(isRateLimited(keys)).toBe(false);
+    expect(await isRateLimited(keys)).toBe(false);
   });
 });
