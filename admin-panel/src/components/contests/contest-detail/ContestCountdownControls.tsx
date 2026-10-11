@@ -180,15 +180,23 @@ export const CountdownThresholdField = memo(function CountdownThresholdField({
     const unit = COUNTDOWN_THRESHOLD_UNITS.find((candidate) => candidate === event.target.value);
     if (unit) onChange({ ...threshold, unit });
   };
+  const selectAmount = (event: React.FocusEvent<HTMLInputElement>): void => {
+    event.currentTarget.select();
+  };
+  const selectAmountOnClick = (event: React.MouseEvent<HTMLInputElement>): void => {
+    const input = event.currentTarget;
+    if (input.selectionStart === input.selectionEnd) input.select();
+  };
   return (
     <label className="countdown-threshold" title="Warn me this far ahead">
       <span className="sr-only">Hurry warning window</span>
       <input
         type="number"
-        min={1}
         inputMode="numeric"
         value={Number.isFinite(threshold.amount) ? threshold.amount : ''}
         onChange={changeAmount}
+        onFocus={selectAmount}
+        onClick={selectAmountOnClick}
         className="countdown-threshold-input"
       />
       <select value={threshold.unit} onChange={changeUnit} className="countdown-threshold-unit">
