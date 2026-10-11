@@ -40,16 +40,6 @@ const GLYPH_FLICKER_FLOOR = 0.16;
 const GLYPH_ALPHA = 0.42;
 const GLYPH_ALPHABET = '0123456789ABCDEF';
 
-const HARMONOGRAPH_CELL_PX = 190;
-const HARMONOGRAPH_STEPS = 220;
-const HARMONOGRAPH_RENDER_SCALE = 0.38;
-const HARMONOGRAPH_LINE_WIDTH_PX = 1.1;
-const HARMONOGRAPH_ALPHA = 0.5;
-/** Integer frequency pairs, so every figure closes on itself and repeats exactly. */
-const HARMONOGRAPH_FREQUENCIES: readonly (readonly [number, number])[] = [
-  [3, 2], [5, 4], [5, 3], [7, 5], [4, 3], [7, 4],
-];
-
 const BOID_STREAK_SECONDS = 0.26;
 const BOID_LINE_WIDTH_PX = 2.2;
 const BOID_ALPHA = 0.8;
@@ -90,24 +80,6 @@ interface TraceRun {
   readonly padX: number;
   readonly padY: number;
   readonly hasPad: boolean;
-}
-
-/**
- * One closed Lissajous figure, as a list of points. Both frequencies are integers, so the
- * curve returns exactly to its start and the figure is periodic — which is what lets the
- * grid of them tile without a seam.
- */
-interface HarmonographFigure {
-  readonly x: number;
-  readonly y: number;
-  readonly phase: number;
-  readonly frequencies: readonly [number, number];
-}
-
-interface HarmonographCell {
-  readonly x: number;
-  readonly y: number;
-  readonly figure: HarmonographFigure;
 }
 
 interface GlyphCell {
@@ -174,65 +146,11 @@ function buildGlyphCells(bounds: AmbientBounds, random: () => number): readonly 
   return cells;
 }
 
-/**
- * A grid of closed Lissajous figures, one per cell, each read as a small mathematical
- * drawing rather than as decoration.
- */
-function buildHarmonographCells(bounds: AmbientBounds, random: () => number): readonly HarmonographCell[] {
-  const cells: HarmonographCell[] = [];
-  for (let y = HARMONOGRAPH_CELL_PX * 0.5; y < bounds.height + HARMONOGRAPH_CELL_PX; y += HARMONOGRAPH_CELL_PX) {
-    for (let x = HARMONOGRAPH_CELL_PX * 0.5; x < bounds.width + HARMONOGRAPH_CELL_PX; x += HARMONOGRAPH_CELL_PX) {
-      cells.push({
-        x,
-        y,
-        figure: {
-          x: HARMONOGRAPH_CELL_PX * HARMONOGRAPH_RENDER_SCALE,
-          y: HARMONOGRAPH_CELL_PX * HARMONOGRAPH_RENDER_SCALE,
-          phase: random() * Math.PI * 2,
-          frequencies: HARMONOGRAPH_FREQUENCIES[Math.floor(random() * HARMONOGRAPH_FREQUENCIES.length)],
-        },
-      });
-    }
-  }
-  return cells;
-}
-
-function paintHarmonograph(
-  context: CanvasRenderingContext2D,
-  frame: AmbientFrame,
-  cells: readonly HarmonographCell[],
-): void {
-  const { width } = frame.bounds;
-  context.lineWidth = HARMONOGRAPH_LINE_WIDTH_PX * objectSize(frame);
-  context.strokeStyle = ambientColor(frame.palette, HARMONOGRAPH_ALPHA, frame.palette.accentHue);
-  // Wrapped per cell, so a figure that crosses the edge reappears on the far side and the
-  // band the drift opens is filled rather than left blank.
-  const startX = wrapCoordinate(frame.driftPx, width);
-  for (let tile = -1; tile <= 1; tile += 1) {
-    const tileX = startX + tile * width;
-    for (const cell of cells) {
-      const centreX = tileX + cell.x;
-      if (centreX < -HARMONOGRAPH_CELL_PX || centreX > width + HARMONOGRAPH_CELL_PX) continue;
-      const { figure } = cell;
-      context.beginPath();
-      for (let step = 0; step <= HARMONOGRAPH_STEPS; step += 1) {
-        const t = (step / HARMONOGRAPH_STEPS) * Math.PI * 2;
-        const px = centreX + Math.sin(figure.frequencies[0] * t + figure.phase) * figure.x;
-        const py = cell.y + Math.sin(figure.frequencies[1] * t) * figure.y;
-        if (step === 0) context.moveTo(px, py);
-        else context.lineTo(px, py);
-      }
-      context.stroke();
-    }
-  }
-}
-
 export type AmbientField =
   | { readonly texture: 'traces'; readonly runs: readonly TraceRun[] }
   | { readonly texture: 'glyphs'; readonly cells: readonly GlyphCell[] }
   | { readonly texture: 'boids'; readonly agents: readonly AmbientAgent[] }
-  | { readonly texture: 'flow'; readonly trails: readonly (readonly AmbientVector[])[] }
-  | { readonly texture: 'harmonograph'; readonly cells: readonly HarmonographCell[] };
+  | { readonly texture: 'flow'; readonly trails: readonly (readonly AmbientVector[])[] };
 
 /** Geometry and starting state for one roll, rebuilt only when the size or seed changes. */
 export function buildAmbientField(
@@ -244,7 +162,6 @@ export function buildAmbientField(
   if (textureId === 'traces') return { texture: 'traces', runs: buildTraceRuns(bounds, random) };
   if (textureId === 'glyphs') return { texture: 'glyphs', cells: buildGlyphCells(bounds, random) };
   if (textureId === 'boids') return { texture: 'boids', agents: buildAmbientFlock(agentCount, bounds, random) };
-  if (textureId === 'harmonograph') return { texture: 'harmonograph', cells: buildHarmonographCells(bounds, random) };
   return {
     texture: 'flow',
     trails: buildAmbientParticles(agentCount, bounds, random).map((particle) => [particle]),
@@ -259,12 +176,11 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
   context.strokeStyle = ambientColor(frame.palette, TRACE_ALPHA);
   context.fillStyle = ambientColor(frame.palette, TRACE_PAD_ALPHA, frame.palette.accentHue);
 
-  // A run is drawn once per neighbouring tile, so a trace that leaves one side enters the
-  // other rather than stopping at a seam. The start is wrapped into the first tile so the
-  // copies line up regardless of where the drift has carried the field.
-  const startX = wrapCoordinate(frame.driftPx, width);
-  for (let tile = -1; tile <= 1; tile += 1) {
-    const tileX = startX + tile * width;
+  // A run that leaves one side is repeated into the other by exactly the band the seam
+  // occupies, rather than by a whole extra copy of the field. The band is the runs' own
+  // leftmost extent, so both copies together cover the width and no more.
+  const seamXs = seamOffsets(runs.map((run) => run.segments[0]?.fromX ?? 0), width, frame.driftPx);
+  for (const tileX of seamXs) {
     for (const run of runs) {
       context.beginPath();
       for (const segment of run.segments) {
@@ -288,14 +204,17 @@ function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cel
   context.font = `${size}px ui-monospace, monospace`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  const startX = wrapCoordinate(frame.driftPx, width);
-  for (let tile = -1; tile <= 1; tile += 1) {
-    const tileX = startX + tile * width;
+  // Only the cells that are actually on the surface are drawn, and only a seam-width copy
+  // of the grid is repeated to cover the wrap, so the work scales with what is visible.
+  const seamXs = seamOffsets([0, width - minimumCellX(cells)], width, frame.driftPx);
+  for (const tileX of seamXs) {
     for (const cell of cells) {
+      const drawnX = tileX + cell.x;
+      if (drawnX < -GLYPH_CELL_PX || drawnX > width + GLYPH_CELL_PX) continue;
       const wave = 0.5 + 0.5 * Math.sin(cell.flickerPhase + frame.flickerPhase);
       const flicker = GLYPH_FLICKER_FLOOR + (1 - GLYPH_FLICKER_FLOOR) * wave;
       context.fillStyle = ambientColor(frame.palette, flicker * GLYPH_ALPHA, frame.palette.accentHue);
-      context.fillText(cell.glyph, tileX + cell.x, cell.y);
+      context.fillText(cell.glyph, drawnX, cell.y);
     }
   }
 }
@@ -387,6 +306,31 @@ function drawTrail(
   context.stroke();
 }
 
+/**
+ * The x offsets one tiled texture needs drawn this frame.
+ *
+ * The pattern repeats with period `width`, so the visible window needs the copy whose own
+ * coordinates land on the surface, plus at most one more to cover the band the seam opens.
+ * That band is bounded by the runs' leftmost extent — a texture laid out from `-band` on —
+ * so `band` offsets are enough, and a caller that passes a band of zero (a grid whose cells
+ * already start at the origin) gets a single copy.
+ */
+function seamOffsets(bands: readonly number[], width: number, driftPx: number): readonly number[] {
+  if (width <= 0) return [driftPx];
+  const origin = wrapCoordinate(driftPx, width);
+  const widest = Math.max(0, ...bands);
+  if (widest <= 0) return [origin];
+  // Both the window starting at the origin and the one the seam opens a band before it.
+  return [origin, origin - width + widest];
+}
+
+/** Leftmost cell coordinate in the grid, which is the band the seam has to cover. */
+function minimumCellX(cells: readonly GlyphCell[]): number {
+  let leftmost = Number.POSITIVE_INFINITY;
+  for (const cell of cells) leftmost = Math.min(leftmost, cell.x);
+  return Number.isFinite(leftmost) ? leftmost : 0;
+}
+
 /** A step longer than this is a wrap, not travel, so the stroke is broken there. */
 const WRAP_BREAK_PX = 120;
 
@@ -407,8 +351,5 @@ export function paintAmbientField(
       return { texture: 'boids', agents: paintBoids(context, frame, field.agents) };
     case 'flow':
       return { texture: 'flow', trails: paintFlow(context, frame, field.trails) };
-    case 'harmonograph':
-      paintHarmonograph(context, frame, field.cells);
-      return field;
   }
 }
