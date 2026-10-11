@@ -442,16 +442,6 @@ jobs:
           key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
-      # Every migration the rehearsal drives, in timestamp order, so new ones auto-apply and the
-      # test sees a deployment's schema. The console authenticates a panel admin, so the panel's
-      # own admin, permission and group tables are part of that schema.
-      - name: Apply the migrations the rehearsal needs
-        run: |
-          for migration in admin-panel/prisma/migrations/*/; do
-            [ -f "${migration}migration.sql" ] || continue
-            psql "$RANKING_TEST_DATABASE_URL" -f "${migration}migration.sql"
-          done
-
       - name: Format check
         working-directory: ranking-web
         run: cargo fmt --check
