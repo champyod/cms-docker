@@ -482,23 +482,6 @@ model monitor_targets {
   @@map("monitor_targets")
 }
 
-/// One named archive tree the Backup & Restore page offers. Locations are rows,
-/// not config, so a schedule's reference is a real FK and Restrict keeps a
-/// referenced tree from disappearing under a schedule that still names it. The
-/// seeded system row stands for the legacy single tree: its `path` is empty
-/// because that tree is whatever BACKUP_DIR mounts, not a configured path.
-model backup_locations {
-  id        String             @id @default(cuid())
-  label     String
-  path      String
-  isSystem  Boolean            @default(false)
-  createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  schedules backup_schedules[]
-
-  @@map("backup_locations")
-}
-
 /// One archived run of a backup schedule, or of a backup an admin triggered by
 /// hand. `scheduleId` stays NULL for manual runs and is deliberately not a
 /// relation: run history outlives the schedule it came from, so deleting a
@@ -529,12 +512,9 @@ model backup_schedules {
   enabled      Boolean           @default(true)
   lastRunAt    DateTime?
   nextRunAt    DateTime
-  /// Backup location this schedule dumps into. A relation now that locations
-  /// are rows; Restrict refuses deleting one a schedule still names. NULL
-  /// targets the seeded system location — the meaning every row that predates
-  /// locations already read into it.
+  /// Legacy pointer kept as a plain column for the retired locations layer: the
+  /// one tree is whatever BACKUP_DIR mounts, so the value is always NULL/default.
   locationId   String?
-  location     backup_locations? @relation(fields: [locationId], references: [id], onDelete: Restrict)
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 

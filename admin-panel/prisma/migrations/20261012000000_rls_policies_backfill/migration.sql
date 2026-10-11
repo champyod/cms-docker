@@ -10,9 +10,6 @@ CREATE POLICY cmsuser_all ON public.backup_runs FOR ALL TO cmsuser USING (true) 
 DROP POLICY IF EXISTS cmsuser_all ON public.backup_schedules;
 CREATE POLICY cmsuser_all ON public.backup_schedules FOR ALL TO cmsuser USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS cmsuser_all ON public.backup_locations;
-CREATE POLICY cmsuser_all ON public.backup_locations FOR ALL TO cmsuser USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS cmsuser_all ON public.security_blocks;
 CREATE POLICY cmsuser_all ON public.security_blocks FOR ALL TO cmsuser USING (true) WITH CHECK (true);
 
