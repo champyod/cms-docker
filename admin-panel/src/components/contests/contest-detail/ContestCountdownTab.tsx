@@ -9,6 +9,7 @@ import {
   STAGE_LABELS,
   countdownPhaseWindowMs,
   countdownTarget,
+  formatZoneClockHHMM,
   formatZoneTime,
   resolveContestPhase,
   resolveCountdownStage,
@@ -119,6 +120,13 @@ export function ContestCountdownTab({
           isPaused={isPaused}
           onTogglePaused={togglePaused}
         />
+      </div>
+
+      <div
+        className="relative z-10 text-center text-sm tabular-nums text-muted-foreground"
+        aria-label={`Current time ${formatZoneTime(now, timezone)}`}
+      >
+        {formatZoneClockHHMM(now, timezone)}
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">

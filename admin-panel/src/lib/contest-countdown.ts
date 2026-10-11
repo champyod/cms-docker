@@ -243,6 +243,16 @@ export function formatZoneTime(date: Date, timeZone: string): string {
   }).format(date);
 }
 
+/** Wall-clock HH:MM in the given zone; the 24-hour form so 00:00 and 23:59 are both unambiguous. */
+export function formatZoneClockHHMM(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone,
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
+
 export function zoneOffsetLabel(timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' }).formatToParts(new Date());
   const offset = parts.find((part) => part.type === 'timeZoneName')?.value ?? '';

@@ -11,6 +11,7 @@ import {
   countdownPhaseWindowMs,
   countdownTarget,
   fitCountdownFontPx,
+  formatZoneClockHHMM,
   formatZoneTime,
   isSupportedTimezone,
   listTimezones,
@@ -245,6 +246,46 @@ describe('timezone helpers', () => {
   it('shifts the rendered hour by the zone offset', () => {
     const bangkok = formatZoneTime(new Date('2026-01-01T00:00:00Z'), 'Asia/Bangkok');
     expect(bangkok).toContain('07:00:00');
+  });
+});
+
+describe('formatZoneClockHHMM', () => {
+  it('renders only a zero-padded HH:MM, with no date or seconds', () => {
+    const clock = formatZoneClockHHMM(new Date('2026-01-01T08:07:09Z'), 'UTC');
+    expect(clock).toBe('08:07');
+    expect(clock).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it('reads midnight as 00:00 rather than 12:00 or 24:00', () => {
+    expect(formatZoneClockHHMM(new Date('2026-01-01T00:00:00Z'), 'UTC')).toBe('00:00');
+    expect(formatZoneClockHHMM(new Date('2026-01-01T23:59:59Z'), 'UTC')).toBe('23:59');
+  });
+
+  it('reads noon as 12:00, so the clock never exceeds 23:59', () => {
+    expect(formatZoneClockHHMM(new Date('2026-01-01T12:00:00Z'), 'UTC')).toBe('12:00');
+    expect(formatZoneClockHHMM(new Date('2026-01-01T13:00:00Z'), 'UTC')).toBe('13:00');
+  });
+
+  it('crosses midnight in a zone ahead of UTC without borrowing the previous day hour', () => {
+    expect(formatZoneClockHHMM(new Date('2026-01-01T17:00:00Z'), 'Asia/Bangkok')).toBe('00:00');
+    expect(formatZoneClockHHMM(new Date('2026-01-01T16:59:59Z'), 'Asia/Bangkok')).toBe('23:59');
+  });
+
+  it('crosses midnight backwards in a zone behind UTC', () => {
+    expect(formatZoneClockHHMM(new Date('2026-01-02T04:59:00Z'), 'America/New_York')).toBe('23:59');
+    expect(formatZoneClockHHMM(new Date('2026-01-02T05:00:00Z'), 'America/New_York')).toBe('00:00');
+  });
+
+  it('carries a half-hour offset into the minutes', () => {
+    expect(formatZoneClockHHMM(new Date('2026-01-01T00:00:00Z'), 'Asia/Kolkata')).toBe('05:30');
+  });
+
+  it('agrees with the full zone time on the clock it carries', () => {
+    const instant = new Date('2026-03-05T09:41:00Z');
+    for (const zone of ['UTC', 'Asia/Bangkok', 'Asia/Kolkata', 'America/New_York', 'Pacific/Auckland']) {
+      const full = formatZoneTime(instant, zone);
+      expect(full).toContain(formatZoneClockHHMM(instant, zone));
+    }
   });
 });
 
