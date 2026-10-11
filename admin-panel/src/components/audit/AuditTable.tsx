@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
@@ -30,6 +31,7 @@ export function AuditTable({
   currentPage,
   filters,
   dict,
+  sort,
 }: AuditTableProps): React.JSX.Element {
   const router = useAppRouter();
   const [isPending, startTransition] = useTransition();
@@ -112,6 +114,20 @@ export function AuditTable({
       router.push('?');
     });
   };
+
+  const applySort = useCallback((next: ListSortInput): void => {
+    const params = new URLSearchParams(window.location.search);
+    if (next !== null && next !== undefined) {
+      params.set('sort', next.key);
+      params.set('dir', next.direction);
+    } else {
+      params.delete('sort');
+      params.delete('dir');
+    }
+    params.set('page', '1');
+    const query = params.toString();
+    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+  }, [router]);
 
   const handlePageChange = (newPage: number) => {
     setPageInput(String(newPage));
@@ -205,6 +221,8 @@ export function AuditTable({
         getRowProps={getRowProps}
         renderRowActions={renderRowActions}
         actionsHeader={<span className="sr-only">{dict.expandedDetails}</span>}
+        sort={sort}
+        onSortChange={applySort}
         emptyState={<EmptyState icon={Filter} title={dict.noEntries} />}
       />
 

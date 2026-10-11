@@ -4,6 +4,9 @@ import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { buildUserSearchWhere, safeUserSelect, submissionsListInclude, usersPageSelect, type SafeUser, type UsersPageRow } from '@/lib/prisma-selects';
 import { requirePermission } from '@/lib/server/authorization';
+import { teamSortOrderBy } from '@/lib/team-sorting';
+import { submissionSortOrderBy } from '@/lib/submission-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
 import {
   collectHistory, toContestIdentity, toIso, toTeamIdentity, toTeamSummary, toUserIdentity, teamSummaryAccess,
   type ContestIdentity, type HistoryAccess, type ParticipationIntervalRow,
@@ -187,20 +190,20 @@ export async function getUsers(input: { page: number; search: string; perPage: n
   return { users, totalPages: Math.max(Math.ceil(total / safePerPage), 1), currentPage: safePage, perPage: safePerPage, total, effectivePermissions: permissions };
 }
 
-export async function getTeams(): Promise<TeamsPageResult> {
+export async function getTeams(sort?: ListSortInput | null): Promise<TeamsPageResult> {
   const permissions = await requirePermission('team:list');
   const access = teamSummaryAccess(permissions);
-  const rows = await prisma.teams.findMany({ select: { id: true, code: true, name: true, organization: true, leader_id: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } }, orderBy: { name: 'asc' } });
+  const rows = await prisma.teams.findMany({ select: { id: true, code: true, name: true, organization: true, leader_id: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } }, orderBy: teamSortOrderBy(sort ?? null) });
   return { teams: rows.map((row) => toTeamSummary(row, access)), effectivePermissions: permissions };
 }
 
-export async function getSubmissions(input: { page: number; contestId?: number; taskId?: number; userId?: number }): Promise<SubmissionsPageResult> {
+export async function getSubmissions(input: { page: number; contestId?: number; taskId?: number; userId?: number; sort?: ListSortInput | null }): Promise<SubmissionsPageResult> {
   const permissions = await requirePermission('submission:list');
   const safePage = Math.max(Number(input.page) || 1, 1);
   const participations: Record<string, number> = { ...(input.contestId ? { contest_id: input.contestId } : {}), ...(input.userId ? { user_id: input.userId } : {}) };
   const where: Prisma.submissionsWhereInput = { ...(input.taskId ? { task_id: input.taskId } : {}), ...(Object.keys(participations).length > 0 ? { participations: participations as Prisma.submissionsWhereInput['participations'] } : {}) };
   const [rows, total] = await Promise.all([
-    prisma.submissions.findMany({ where, skip: (safePage - 1) * SUBMISSIONS_PER_PAGE, take: SUBMISSIONS_PER_PAGE, orderBy: { timestamp: 'desc' }, include: submissionsListInclude }),
+    prisma.submissions.findMany({ where, skip: (safePage - 1) * SUBMISSIONS_PER_PAGE, take: SUBMISSIONS_PER_PAGE, orderBy: submissionSortOrderBy(input.sort ?? null), include: submissionsListInclude }),
     prisma.submissions.count({ where }),
   ]);
   // Why: relation rows the caller may not read are withheld while the list row keeps its shape.

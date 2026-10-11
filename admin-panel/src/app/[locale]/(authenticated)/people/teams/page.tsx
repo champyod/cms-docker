@@ -8,6 +8,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteDescriptor } from '@/lib/navigation/types';
 import { getTeams } from '@/lib/people-read-models';
 import type { TeamsPageResult } from '@/lib/people-read-model-types';
+import { readListSort, type ListSortInput } from '@/lib/list-sorting';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
 function labelForDescriptor(dictionary: Dictionary, descriptor: RouteDescriptor): string {
@@ -29,23 +30,26 @@ function teamsRouteDescriptor(): RouteDescriptor {
 
 // Why: a caller without team:list sees the concealed 404 surface, while a 401
 // or an unexpected failure keeps propagating to the session and error paths.
-async function loadTeamsListPage(): Promise<TeamsPageResult> {
+async function loadTeamsListPage(sort: ListSortInput): Promise<TeamsPageResult> {
   try {
     await requirePermission('team:list');
-    return await getTeams();
+    return await getTeams(sort);
   } catch (error: unknown) {
     if (error instanceof AuthorizationError && error.status === 403) notFound();
     throw error;
   }
 }
 
-export default async function PeopleTeamsPage({ params }: {
+export default async function PeopleTeamsPage({ params, searchParams }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ sort?: string; dir?: string }>;
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
+  const query = await searchParams;
   const dict = await getDictionary(locale);
   const teamsLabel = labelForDescriptor(dict, teamsRouteDescriptor());
-  const { teams, effectivePermissions } = await loadTeamsListPage();
+  const sort = readListSort({ sort: query.sort, dir: query.dir });
+  const { teams, effectivePermissions } = await loadTeamsListPage(sort);
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
@@ -58,6 +62,7 @@ export default async function PeopleTeamsPage({ params }: {
         navigation={dict.navigation}
         copy={dict.teams}
         docsLinkLabel={dict.docs.viewDocumentation}
+        initialSort={sort}
       />
     </PageSurface>
   );

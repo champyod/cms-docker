@@ -15,6 +15,7 @@ import {
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import type { OverrideEffect } from '@/lib/permission-engine';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { ActionResult, AdminAccess, AdminAccessSummary, GroupWithPermissions } from '@/lib/admin-access-types';
 
 export type {
@@ -205,12 +206,12 @@ export async function clearAdminOverride(
   }
 }
 
-export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWithPermissions[]>> {
+export async function listGroupsWithPermissions(sort?: ListSortInput): Promise<ActionResult<GroupWithPermissions[]>> {
   try {
     await ensurePermission('group:read');
     await ensurePermission('permission:read');
     await ensurePermission('group:list');
-    const data = await fetchGroupsWithPermissions();
+    const data = await fetchGroupsWithPermissions(sort ?? null);
     return { success: true, data };
   } catch (error) {
     return { success: false, error: (error as Error).message };

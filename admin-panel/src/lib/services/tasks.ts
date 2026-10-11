@@ -5,6 +5,8 @@ import { recordAudit } from '@/lib/audit';
 import { sanitize } from '@/lib/api-utils';
 import { buildDiagnosticsForLoadedTask, computeTaskDiagnostics } from '@/lib/task-diagnostics';
 import { addIntervalClause } from '@/lib/task-intervals';
+import { taskSortOrderBy } from '@/lib/task-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { Prisma } from '@prisma/client';
 export type { TaskDiagnostic } from '@/lib/task-diagnostics';
 export interface TaskData {
@@ -26,12 +28,12 @@ const NULLABLE_API_KEYS = new Set([...NULLABLE_TASK_KEYS, 'score_precision']);
 const ZERO_DEFAULT_KEYS = new Set(['score_precision', 'token_gen_initial', 'token_gen_number']);
 type MutationResult = { success: boolean; error?: string };
 type TasksListResult = { tasks: Array<Prisma.tasksGetPayload<{ include: { contests: { select: { id: true; name: true } }; statements: { select: { id: true } }; datasets_datasets_task_idTotasks: { select: { id: true; description: true; _count: { select: { testcases: true } } } }; _count: { select: { submissions: true } } } }> & { diagnostics: ReturnType<typeof buildDiagnosticsForLoadedTask> }>; totalPages: number; total: number; };
-export async function listTasks(params: { page?: number; search?: string } = {}): Promise<TasksListResult> {
+export async function listTasks(params: { page?: number; search?: string; sort?: ListSortInput } = {}): Promise<TasksListResult> {
   await requirePermission('task:list');
   const skip = ((params.page ?? 1) - 1) * TASKS_PER_PAGE;
   const where: Prisma.tasksWhereInput = params.search ? { OR: [{ name: { contains: params.search, mode: 'insensitive' } }, { title: { contains: params.search, mode: 'insensitive' } }] } : {};
   const [rawTasks, total] = await Promise.all([
-    prisma.tasks.findMany({ where, skip, take: TASKS_PER_PAGE, orderBy: { id: 'desc' }, include: { contests: { select: { id: true, name: true } }, statements: { select: { id: true } }, datasets_datasets_task_idTotasks: { select: { id: true, description: true, _count: { select: { testcases: true } } } }, _count: { select: { submissions: true } } } }),
+    prisma.tasks.findMany({ where, skip, take: TASKS_PER_PAGE, orderBy: taskSortOrderBy(params.sort ?? null), include: { contests: { select: { id: true, name: true } }, statements: { select: { id: true } }, datasets_datasets_task_idTotasks: { select: { id: true, description: true, _count: { select: { testcases: true } } } }, _count: { select: { submissions: true } } } }),
     prisma.tasks.count({ where }),
   ]);
   return { tasks: rawTasks.map((t) => ({ ...t, diagnostics: buildDiagnosticsForLoadedTask(t) })), totalPages: Math.ceil(total / TASKS_PER_PAGE), total };

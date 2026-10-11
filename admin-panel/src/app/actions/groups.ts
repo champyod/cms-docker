@@ -6,6 +6,8 @@ import { recordAudit, assertReasonForDestructive } from '@/lib/audit';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { ROOT_ACTOR_GROUP_NAME } from '@/lib/permission-groups';
+import type { ListSortInput } from '@/lib/list-sorting';
+import { groupSortOrderBy } from '@/lib/group-sorting';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 

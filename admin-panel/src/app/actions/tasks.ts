@@ -3,10 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import * as taskService from '@/lib/services/tasks';
 import * as taskDetail from '@/lib/queries/task-detail';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export type { TaskData, TaskDiagnostic } from '@/lib/services/tasks';
 
-export async function getTasks(params: { page?: number; search?: string } = {}): Promise<Awaited<ReturnType<typeof taskService.listTasks>>> {
+export async function getTasks(params: { page?: number; search?: string; sort?: ListSortInput } = {}): Promise<Awaited<ReturnType<typeof taskService.listTasks>>> {
   return taskService.listTasks(params);
 }
 

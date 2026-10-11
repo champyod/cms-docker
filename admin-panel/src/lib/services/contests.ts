@@ -11,10 +11,11 @@ import {
   mapContestDbError,
 } from '@/lib/contests-repo';
 import type { ContestData } from '@/lib/contests-repo';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export type { ContestData } from '@/lib/contests-repo';
 
-type ContestListParams = { page?: number; search?: string };
+type ContestListParams = { page?: number; search?: string; sort?: ListSortInput };
 type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };

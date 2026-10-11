@@ -11,11 +11,11 @@ export function leaderName(team: TeamSummary): string {
 // other. The hidden columns are the ones the mobile card never showed.
 export function buildTeamColumns(): ResponsiveColumn<TeamSummary>[] {
   return [
-    { key: 'id', header: 'ID', cellClassName: 'font-mono text-muted-foreground text-xs', hideOnMobile: true, render: (team) => <span>#{team.id}</span> },
-    { key: 'code', header: 'Code', cellClassName: 'font-mono text-primary text-sm', render: (team) => <span>{team.code ?? '—'}</span> },
-    { key: 'name', header: 'Name', cellClassName: 'font-medium', render: (team) => <span>{team.name ?? '—'}</span> },
-    { key: 'members', header: 'Members', cellClassName: 'text-muted-foreground text-sm', render: (team) => <span>{team.participationCount}</span> },
-    { key: 'organization', header: 'Organization', cellClassName: 'text-muted-foreground text-sm', hideOnMobile: true, render: (team) => <span>{team.organization ?? '—'}</span> },
+    { key: 'id', header: 'ID', sortKey: 'id', cellClassName: 'font-mono text-muted-foreground text-xs', hideOnMobile: true, render: (team) => <span>#{team.id}</span> },
+    { key: 'code', header: 'Code', sortKey: 'code', cellClassName: 'font-mono text-primary text-sm', render: (team) => <span>{team.code ?? '—'}</span> },
+    { key: 'name', header: 'Name', sortKey: 'name', cellClassName: 'font-medium', render: (team) => <span>{team.name ?? '—'}</span> },
+    { key: 'members', header: 'Members', sortKey: 'members', cellClassName: 'text-muted-foreground text-sm', render: (team) => <span>{team.participationCount}</span> },
+    { key: 'organization', header: 'Organization', sortKey: 'organization', cellClassName: 'text-muted-foreground text-sm', hideOnMobile: true, render: (team) => <span>{team.organization ?? '—'}</span> },
     { key: 'leader', header: 'Leader', cellClassName: 'text-muted-foreground text-sm', render: (team) => <span>{leaderName(team)}</span> },
   ];
 }

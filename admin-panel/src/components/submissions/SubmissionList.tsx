@@ -13,6 +13,7 @@ import { useDictionary } from '@/hooks/useDictionary';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Dictionary } from '@/lib/dictionary';
 import { buildRoute } from '@/lib/navigation/routes';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
@@ -22,6 +23,7 @@ export interface SubmissionListProps {
   readonly totalPages: number;
   readonly currentPage: number;
   readonly navigation: Dictionary['navigation'];
+  readonly initialSort?: ListSortInput;
 }
 
 function recordHref(locale: string, submission: SubmissionListItem): string {
@@ -46,7 +48,7 @@ function SubmissionListHeader({ locale, currentPage, totalPages }: {
   );
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation }: SubmissionListProps): React.JSX.Element {
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -58,6 +60,19 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
   const handlePageChange = (newPage: number): void => {
     const url = new URL(window.location.href);
     url.searchParams.set('page', newPage.toString());
+    router.push(url.toString());
+  };
+
+  const applySort = (next: ListSortInput): void => {
+    const url = new URL(window.location.href);
+    if (next !== null && next !== undefined) {
+      url.searchParams.set('sort', next.key);
+      url.searchParams.set('dir', next.direction);
+    } else {
+      url.searchParams.delete('sort');
+      url.searchParams.delete('dir');
+    }
+    url.searchParams.set('page', '1');
     router.push(url.toString());
   };
 
@@ -75,6 +90,8 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
         emptyState={
           <EmptyState icon={FileCode} title="No submissions found" description="Submissions will appear here once contestants start submitting." />
         }
+        sort={initialSort}
+        onSortChange={applySort}
       />
       <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
     </div>

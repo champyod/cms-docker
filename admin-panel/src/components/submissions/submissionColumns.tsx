@@ -58,8 +58,8 @@ function submissionScore(submission: SubmissionListItem): React.JSX.Element {
 // other.
 export function buildSubmissionColumns(): ResponsiveColumn<SubmissionListItem>[] {
   return [
-    { key: 'id', header: 'ID', headerClassName: 'w-24', cellClassName: 'font-mono text-muted-foreground text-xs', render: (row) => <span>#{row.id}</span> },
-    { key: 'time', header: 'Time', render: (row) => (
+    { key: 'id', header: 'ID', sortKey: 'id', headerClassName: 'w-24', cellClassName: 'font-mono text-muted-foreground text-xs', render: (row) => <span>#{row.id}</span> },
+    { key: 'time', header: 'Time', sortKey: 'timestamp', render: (row) => (
       <span className="flex items-center gap-2 text-sm">
         <Clock className="w-3 h-3 text-muted-foreground" />
         {formatSubmissionDate(row.timestamp)}
@@ -74,6 +74,6 @@ export function buildSubmissionColumns(): ResponsiveColumn<SubmissionListItem>[]
     ) },
     { key: 'language', header: 'Language', cellClassName: 'font-mono text-sm', render: (row) => <span>{row.language ?? '—'}</span> },
     { key: 'status', header: 'Status', render: (row) => submissionStatus(row) },
-    { key: 'score', header: 'Score', headerClassName: 'text-right', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row) },
+    { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row) },
   ];
 }

@@ -2,6 +2,7 @@ import { getAuditLog } from '@/app/actions/audit';
 import { AuditTable } from '@/components/audit/AuditTable';
 import { SurfaceState } from '@/components/core/SurfaceState';
 import { getDictionary } from '@/i18n';
+import { readListSort } from '@/lib/list-sorting';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 interface AuditSearchParams {
@@ -13,6 +14,8 @@ interface AuditSearchParams {
   search?: string;
   fromDate?: string;
   toDate?: string;
+  sort?: string;
+  dir?: string;
 }
 
 export default async function AuditPage({
@@ -27,6 +30,7 @@ export default async function AuditPage({
   const effective = await authorizeRoutePage('administration.audit');
   const query = await searchParams;
   const page = Number(query.page) || 1;
+  const sort = readListSort({ sort: query.sort, dir: query.dir });
   const result = await getAuditLog({
     page,
     entity: query.entity,
@@ -36,6 +40,7 @@ export default async function AuditPage({
     search: query.search,
     fromDate: query.fromDate,
     toDate: query.toDate,
+    sort,
   });
   if (!result.success) {
     return (
@@ -65,6 +70,7 @@ export default async function AuditPage({
       }}
       dict={dict.audit}
       permissionKeys={[...effective]}
+      sort={sort}
     />
   );
 }

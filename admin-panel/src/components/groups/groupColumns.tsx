@@ -12,11 +12,13 @@ export function buildColumns(
     {
       key: 'name',
       header: dict.name,
+      sortKey: 'name',
       render: (group) => <span className="font-medium">{group.name}</span>,
     },
     {
       key: 'description',
       header: dict.description,
+      sortKey: 'description',
       render: (group) => (
         <span className="block max-w-xs truncate">
           {group.description ?? '—'}
@@ -26,6 +28,7 @@ export function buildColumns(
     {
       key: 'isSeeded',
       header: dict.isSeeded,
+      sortKey: 'is_seeded',
       render: (group) =>
         group.is_seeded ? (
           <Badge variant="cyan">{dict.isSeeded}</Badge>
@@ -34,6 +37,7 @@ export function buildColumns(
     {
       key: 'permissions',
       header: dict.permissions,
+      sortKey: 'permissions',
       render: (group) => (
         <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
           {group.permissionKeys.length}

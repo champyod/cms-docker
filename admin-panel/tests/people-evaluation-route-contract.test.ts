@@ -100,7 +100,7 @@ describe('canonical People and Evaluation list pages', () => {
   it('conceals the team list before the reader runs for a missing team:list', async () => {
     denyEverything();
 
-    await expect(PeopleTeamsPage({ params: LIST_PARAMS })).rejects.toThrow('NEXT_NOT_FOUND');
+    await expect(PeopleTeamsPage({ params: LIST_PARAMS, searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_NOT_FOUND');
 
     expect(notFound).toHaveBeenCalled();
     expect(getTeams).not.toHaveBeenCalled();
@@ -167,7 +167,7 @@ describe('unconcealed authorization failures', () => {
   it('lets a 401 reach the session layout instead of the not-found boundary', async () => {
     vi.mocked(requirePermission).mockRejectedValue(new AuthorizationError(401));
 
-    await expect(PeopleTeamsPage({ params: LIST_PARAMS })).rejects.toThrow('Unauthorized: 401');
+    await expect(PeopleTeamsPage({ params: LIST_PARAMS, searchParams: Promise.resolve({}) })).rejects.toThrow('Unauthorized: 401');
 
     expect(notFound).not.toHaveBeenCalled();
   });

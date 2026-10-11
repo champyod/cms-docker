@@ -8,6 +8,7 @@ import {
   type ResponsiveRowProps,
 } from '@/components/core/ResponsiveTable';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export interface RecordListProps<Row> {
   readonly rows: readonly Row[];
@@ -17,6 +18,8 @@ export interface RecordListProps<Row> {
   readonly getRecordHref: (row: Row) => string;
   readonly renderRowActions?: (row: Row) => ReactNode;
   readonly emptyState: ReactNode;
+  readonly sort?: ListSortInput;
+  readonly onSortChange?: (sort: ListSortInput) => void;
 }
 
 // Why every activation lives here: a desktop row and its mobile card are the
@@ -46,6 +49,8 @@ export function RecordList<Row>({
   getRecordHref,
   renderRowActions,
   emptyState,
+  sort,
+  onSortChange,
 }: RecordListProps<Row>): React.JSX.Element {
   const router = useAppRouter();
   const openRecord = (href: string): void => {
@@ -59,6 +64,8 @@ export function RecordList<Row>({
       getRowProps={(row) => recordRowProps(row, getRowKey, getRecordHref, openRecord)}
       renderRowActions={renderRowActions}
       emptyState={emptyState}
+      sort={sort}
+      onSortChange={onSortChange}
     />
   );
 }

@@ -38,6 +38,7 @@ export function buildAuditColumns(
     {
       key: 'timestamp',
       header: dict.columns.timestamp,
+      sortKey: 'timestamp',
       render: (entry) => (
         <span className="font-mono text-xs text-muted-foreground md:whitespace-nowrap">
           {helpers.formatTimestamp(entry.timestamp)}
@@ -47,6 +48,7 @@ export function buildAuditColumns(
     {
       key: 'actor',
       header: dict.columns.actor,
+      sortKey: 'actor_id',
       render: (entry) => (
         <span className="font-mono text-xs text-indigo-400">
           {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : '—')}
@@ -56,11 +58,13 @@ export function buildAuditColumns(
     {
       key: 'verb',
       header: dict.columns.verb,
+      sortKey: 'verb',
       render: (entry) => <Badge variant="cyan">{entry.verb}</Badge>,
     },
     {
       key: 'entity',
       header: dict.columns.entity,
+      sortKey: 'entity',
       render: (entry) => <span className="text-sm text-foreground">{entry.entity}</span>,
     },
     {
@@ -75,6 +79,7 @@ export function buildAuditColumns(
     {
       key: 'result',
       header: dict.columns.result,
+      sortKey: 'result',
       render: (entry) => (
         <Badge variant={helpers.resultBadgeVariant(entry.result)}>{entry.result}</Badge>
       ),
