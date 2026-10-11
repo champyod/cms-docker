@@ -491,8 +491,8 @@ declare -A RETIRED_KEY_SECTION=()
 # key and moves its value onto the replacement, but nothing reads these any more, so there
 # is nothing to move — only the line goes, and the reason names what took the key's job.
 declare -A RETIRED_DEAD_REASON=(
-  [RANKING_USERNAME]="the ranking_console_users table and RANKING_SESSION_SECRET"
-  [RANKING_PASSWORD]="the ranking_console_users table and RANKING_SESSION_SECRET"
+  [RANKING_USERNAME]="an admin holding ranking:read, signed with RANKING_SESSION_SECRET"
+  [RANKING_PASSWORD]="an admin holding ranking:read, signed with RANKING_SESSION_SECRET"
   [CMS_RANKING_CONFIG]="the ranking service's own config file"
   [CMS_RANKING_LOG_DIR]="the ranking service's own log_dir setting"
 )

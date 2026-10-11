@@ -197,7 +197,7 @@ run_sync || sync_rc=$?
 assert_exit 0 "$sync_rc" "sync with retired no-successor keys exits 0"
 assert_grep "$TEST_ROOT/sync-output.log" 'removed retired RANKING_USERNAME' "the notice names the retired key"
 assert_grep "$TEST_ROOT/sync-output.log" 'no reader consumes it' "the notice says no reader consumes it"
-assert_grep "$TEST_ROOT/sync-output.log" 'ranking_console_users table and RANKING_SESSION_SECRET' "the notice names the ranking console replacement"
+assert_grep "$TEST_ROOT/sync-output.log" 'an admin holding ranking:read, signed with RANKING_SESSION_SECRET' "the notice names the ranking console replacement"
 [[ -f "$TEST_ROOT/.env" ]] || fail ".env was not created for the dead-key migration"
 for key in RANKING_USERNAME RANKING_PASSWORD CMS_RANKING_CONFIG CMS_RANKING_LOG_DIR; do
   assert_not_grep "$TEST_ROOT/config.toml" "^${key}" "config.toml ${key} line is gone"

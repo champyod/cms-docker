@@ -13,9 +13,6 @@ CREATE POLICY cmsuser_all ON public.backup_schedules FOR ALL TO cmsuser USING (t
 DROP POLICY IF EXISTS cmsuser_all ON public.security_blocks;
 CREATE POLICY cmsuser_all ON public.security_blocks FOR ALL TO cmsuser USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS cmsuser_all ON public.ranking_console_users;
-CREATE POLICY cmsuser_all ON public.ranking_console_users FOR ALL TO cmsuser USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS cmsuser_all ON public.ranking_contests;
 CREATE POLICY cmsuser_all ON public.ranking_contests FOR ALL TO cmsuser USING (true) WITH CHECK (true);
 
