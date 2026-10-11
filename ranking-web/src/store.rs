@@ -6,6 +6,13 @@ use sqlx::postgres::PgPool;
 use crate::overrides::{OverrideRow, Overrides};
 use crate::scoring::{self, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode};
 
+mod admin;
+
+pub use admin::{
+    load_admin_permissions, load_admin_user, touch_last_login, AdminPermissions, AdminUser,
+    RANKING_READ_PERMISSION,
+};
+
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
     #[error(transparent)]
@@ -14,15 +21,6 @@ pub enum StoreError {
     Score(#[from] ScoreError),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
-}
-
-/// One console account. The password is verified by the auth module, not here, so
-/// this stays a row and nothing more.
-#[derive(Debug, Clone, sqlx::FromRow)]
-pub struct ConsoleUser {
-    pub id: i32,
-    pub username: String,
-    pub password: String,
 }
 
 #[derive(sqlx::FromRow)]
@@ -94,29 +92,6 @@ pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
         &overrides,
         &teams,
     )?)
-}
-
-/// Only an enabled account is returned: a disabled row must read as no account, not
-/// as an account whose password happens to fail.
-pub async fn load_console_user(
-    pool: &PgPool,
-    username: &str,
-) -> Result<Option<ConsoleUser>, StoreError> {
-    let row = sqlx::query_as::<_, ConsoleUser>(
-        "SELECT id, username, password FROM ranking_console_users WHERE username = $1 AND enabled",
-    )
-    .bind(username)
-    .fetch_optional(pool)
-    .await?;
-    Ok(row)
-}
-
-pub async fn touch_last_login(pool: &PgPool, id: i32) -> Result<(), StoreError> {
-    sqlx::query("UPDATE ranking_console_users SET last_login_at = now() WHERE id = $1")
-        .bind(id)
-        .execute(pool)
-        .await?;
-    Ok(())
 }
 
 pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreError> {
