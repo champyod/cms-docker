@@ -234,9 +234,6 @@ def _set_captcha(section):
     global text
     # Strings are quoted: a bare value is not TOML and makes the loader refuse the file.
     for key, env_var, quoted in (('enabled', 'CAPTCHA_ENABLED', False),
-                                 ('provider', 'CAPTCHA_PROVIDER', True),
-                                 ('site_key', 'CAPTCHA_SITE_KEY', True),
-                                 ('secret_key', 'CAPTCHA_SECRET_KEY', True),
                                  ('threshold', 'CAPTCHA_THRESHOLD', False),
                                  ('ban_threshold', 'CAPTCHA_BAN_THRESHOLD', False)):
         raw = os.environ.get(env_var, "").strip()
@@ -244,6 +241,34 @@ def _set_captcha(section):
             value = 'true' if raw == "1" else ('false' if raw == "0" else raw)
             text = set_section_key(text, section, key,
                                    f'"{toml_escape(value)}"' if quoted else value)
+
+    # WHY a chain: CAPTCHA_PROVIDERS names providers in priority order and each
+    # gets its own CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY pair, written as the
+    # nested keys table captcha.py reads. CAPTCHA_PROVIDER/SITE_KEY/SECRET_KEY
+    # still write the legacy scalar form when no chain is set, so a deployment
+    # that predates the chain keeps working.
+    chain = [p.strip().lower() for p in
+             os.environ.get("CAPTCHA_PROVIDERS", "").split(",") if p.strip()]
+    if chain:
+        names = ", ".join(f'"{toml_escape(p)}"' for p in chain)
+        text = set_section_key(text, section, 'providers', f'[{names}]')
+        for provider in chain:
+            upper = provider.upper()
+            for key, env_var in (('site_key', f'CAPTCHA_{upper}_SITE_KEY'),
+                                 ('secret_key', f'CAPTCHA_{upper}_SECRET_KEY')):
+                raw = os.environ.get(env_var, "").strip()
+                if raw:
+                    text = set_section_key(text, f'{section}.keys.{provider}',
+                                           key, f'"{toml_escape(raw)}"')
+        return
+
+    for key, env_var, quoted in (('provider', 'CAPTCHA_PROVIDER', True),
+                                 ('site_key', 'CAPTCHA_SITE_KEY', True),
+                                 ('secret_key', 'CAPTCHA_SECRET_KEY', True)):
+        raw = os.environ.get(env_var, "").strip()
+        if raw:
+            text = set_section_key(text, section, key,
+                                   f'"{toml_escape(raw)}"' if quoted else raw)
 
 _set_captcha('admin_web_server.captcha')
 _set_captcha('contest_web_server.captcha')

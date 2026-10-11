@@ -68,9 +68,16 @@ ADMIN_COOKIE_DURATION = 36000   # num; seconds; reserved — no code reads it: t
 AUTH_SECRET = ""                # secret; auto-generated hex32 if empty; signs the admin panel's session JWT
 COOKIE_SECURE = false           # bool; sends the admin session cookie with the Secure attribute so browsers never transmit it over plain HTTP; set true whenever admin access is served over TLS
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
-CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha,recaptcha; only used if CAPTCHA_ENABLED=1
-CAPTCHA_SITE_KEY = ""           # str; public widget key from the provider dashboard — sent to the browser to render the challenge
-CAPTCHA_SECRET_KEY = ""         # secret; server-side key from the provider dashboard — deliberately never auto-generated
+CAPTCHA_PROVIDERS = ""          # str; comma list in priority order, e.g. "hcaptcha,turnstile"; each names CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY. Empty falls back to CAPTCHA_PROVIDER
+CAPTCHA_TURNSTILE_SITE_KEY = "" # str; Turnstile public key — free, a checkmark/invisible challenge
+CAPTCHA_TURNSTILE_SECRET_KEY = ""# secret; Turnstile secret — issued by the dashboard, never auto-generated
+CAPTCHA_HCAPTCHA_SITE_KEY = ""  # str; hCaptcha public key — presents a real image puzzle
+CAPTCHA_HCAPTCHA_SECRET_KEY = ""# secret; hCaptcha secret — issued by the dashboard, never auto-generated
+CAPTCHA_RECAPTCHA_SITE_KEY = "" # str; reCAPTCHA v2 public key — checkbox plus image puzzle
+CAPTCHA_RECAPTCHA_SECRET_KEY = ""# secret; reCAPTCHA secret — issued by the dashboard, never auto-generated
+CAPTCHA_PROVIDER = "turnstile"  # enum:turnstile,hcaptcha,recaptcha; legacy single provider, used only when CAPTCHA_PROVIDERS is empty
+CAPTCHA_SITE_KEY = ""           # str; legacy public key, used only when CAPTCHA_PROVIDERS is empty
+CAPTCHA_SECRET_KEY = ""         # secret; legacy secret, used only when CAPTCHA_PROVIDERS is empty
 CAPTCHA_THRESHOLD = 3           # num; failed logins on one account or address before the login form demands a solved challenge
 CAPTCHA_BAN_THRESHOLD = 5       # num; lockout threshold enforced by the classic/contest Python servers — the Next.js panel's own lockout is hardcoded (5 fails, 15 min)
 LOGIN_RATE_LIMIT_REDIS_ENABLED = 0  # enum:0,1; effect: keeps the login failure counters in a shared Redis so a lockout survives a web server restart
@@ -196,6 +203,25 @@ MAX_FILE_SIZE = 1048576         # num; KiB; reserved — compose exports it to t
 # nginx 413 before the panel could explain it. Set this above the largest upload the panel
 # accepts — it also raises the lever MAX_SUBMISSION_LENGTH (in [contest]) tells you to use.
 PROXY_MAX_BODY_SIZE = "100M"     # str; nginx size (K/M/G suffix or bare bytes); default 100M keeps every vhost at least as large as it was
+# Response hardening for every domain vhost — tuned here, never in the template.
+# CSP_*_SRC are space-separated source lists; an empty list drops that directive.
+# CSP is off by default: enable it, watch the report-only stream, then switch
+# CSP_MODE to enforce. OCSP stapling reuses the route resolver (no second one).
+SERVER_TOKENS_OFF = 1           # enum:0,1; 1 hides the exact server version string
+OCSP_STAPLING = 1               # enum:0,1; 1 staples OCSP responses
+CSP_ENABLED = 0                 # enum:0,1; 1 emits a Content-Security-Policy header
+CSP_MODE = "report-only"        # enum:report-only,enforce; report-only logs without blocking
+CSP_REPORT_URI = ""             # url; CSP report-uri target; empty sends no reports
+CSP_DEFAULT_SRC = "'self'"      # str; space-separated default-src sources
+CSP_SCRIPT_SRC = "'self'"       # str; space-separated script-src sources
+CSP_STYLE_SRC = "'self' 'unsafe-inline'"  # str; space-separated style-src sources
+CSP_IMG_SRC = "'self' data:"    # str; space-separated img-src sources
+CSP_FONT_SRC = "'self'"         # str; space-separated font-src sources
+CSP_CONNECT_SRC = "'self'"      # str; space-separated connect-src sources
+CSP_OBJECT_SRC = "'none'"       # str; space-separated object-src sources
+CSP_BASE_URI = "'self'"         # str; space-separated base-uri sources
+CSP_FORM_ACTION = "'self'"      # str; space-separated form-action sources
+CSP_FRAME_ANCESTORS = "'self'"  # str; space-separated frame-ancestors sources
 DISCORD_WEBHOOK_URL = ""        # url; Discord webhook the monitor and backup scripts POST alerts to — empty drops alerts with a warning
 DISCORD_ROLE_ID = ""            # str; Discord role id prepended as a <@&id> mention on monitor/backup alerts; empty = no mention
 MONITOR_CPU_THRESHOLD = 80      # num; percent; cpu usage above this triggers a Discord WARNING from the monitor
