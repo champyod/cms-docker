@@ -25,6 +25,10 @@ readonly CRATE="$(cd "${HERE}/../.." && pwd)"
 readonly REPO="$(cd "${CRATE}/.." && pwd)"
 readonly PARITY="${CRATE}/tests/fixtures/parity"
 readonly DATABASE_URL="${RANKING_E2E_DATABASE_URL:?set RANKING_E2E_DATABASE_URL to a database carrying the ranking tables}"
+# Exported, not re-assigned on the command line: the service reads DATABASE_URL from
+# its environment, but `DATABASE_URL=... cmd` against a readonly name is a fatal
+# "readonly variable" in bash, which stopped the service from starting at all.
+export DATABASE_URL
 readonly REDIS_URL="${RANKING_E2E_REDIS_URL:?set RANKING_E2E_REDIS_URL to the Redis the console counts failures in}"
 readonly BIN="${RANKING_E2E_BINARY:-${CRATE}/target/release/cms-ranking}"
 readonly PORT="${RANKING_E2E_PORT:-18890}"
@@ -96,7 +100,6 @@ PY
 
 start_service() {
     RANKING_BIND_ADDRESS="127.0.0.1:${PORT}" \
-        DATABASE_URL="${DATABASE_URL}" \
         RANKING_REDIS_URL="${REDIS_URL}" \
         RANKING_STATIC_DIR="${REPO}/ranking-web/static" \
         CMS_CREDITS_FILE="${REPO}/credits.json" \
