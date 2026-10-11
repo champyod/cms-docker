@@ -263,6 +263,48 @@
   }
 }
 
+/*
+ * The ended screen's ornament: one shape turning in front of the field.
+ *
+ * The position lives on the wrapper and the turn on the shape inside it. Putting both on one
+ * element would mean the rotation had to be written into the same transform, which makes the
+ * centring and the turn a single combined value that has to be recomputed every frame.
+ */
+.countdown-ornament {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: min(52vmin, 420px);
+  height: min(52vmin, 420px);
+  margin: calc(min(52vmin, 420px) / -2) 0 0 calc(min(52vmin, 420px) / -2);
+  pointer-events: none;
+}
+
+.countdown-ornament-shape {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: hsl(var(--countdown-hue) 88% 68%);
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.75;
+  filter: drop-shadow(0 0 1.4vmin hsl(var(--countdown-hue) 88% 56% / 0.5));
+}
+
+.countdown-ornament.is-turning .countdown-ornament-shape {
+  animation: countdown-ornament-turn var(--countdown-ornament-turn, 26s) linear infinite;
+}
+
+@keyframes countdown-ornament-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Fullscreen: the surface fills the screen and the clock column takes the leftover height. */
 .countdown-surface:fullscreen {
   display: flex;

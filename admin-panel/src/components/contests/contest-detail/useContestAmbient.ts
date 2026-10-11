@@ -5,6 +5,7 @@ import { useReducedMotion } from 'motion/react';
 import {
   DEFAULT_AMBIENT_CONFIG,
   ambientDensityScale,
+  clampItemScale,
   isAmbientRampComplete,
   resolveAmbientProgress,
   resolveAmbientStep,
@@ -30,6 +31,8 @@ export interface AmbientView {
   readonly step: number;
   /** Grows with the step, so the field's objects enlarge as the moment nears. */
   readonly density: number;
+  /** Base size of every object the field draws. */
+  readonly itemScale: number;
   readonly isRampComplete: boolean;
   readonly isAnimating: boolean;
   /** False until the first roll has landed, so nothing paints a placeholder texture. */
@@ -77,6 +80,15 @@ export function rollAmbientNow(restartRamp: boolean): void {
     rampAnchorMs: restartRamp || store.rampAnchorMs === null ? Date.now() : store.rampAnchorMs,
   };
   emit();
+}
+
+/**
+ * The seed the current roll came from, as an external store. The ended screen's ornament is
+ * drawn from it too, so one roll decides the whole screen rather than each layer rolling apart.
+ */
+export function useAmbientSeed(): number {
+  const roll = useSyncExternalStore(subscribeAmbientRoll, readAmbientRoll, () => null);
+  return roll?.seed ?? 0;
 }
 
 /** Reads the instant the blur ramp began, which is what its progress is measured from. */
@@ -138,8 +150,9 @@ export function useContestAmbient({
     roll,
     progress,
     step,
-    density: ambientDensityScale(step),
+    density: ambientDensityScale(step, config.growthGain),
     isRampComplete: isAmbientRampComplete(step),
+    itemScale: clampItemScale(config.itemScale),
     isAnimating: rollSeed !== null && !shouldHoldStill,
     isRolled: rollSeed !== null,
   };

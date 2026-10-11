@@ -58,6 +58,8 @@ export interface AmbientFrame {
   readonly progress: number;
   /** Grows with the ramp: objects are drawn larger as the threshold nears. */
   readonly density: number;
+  /** Base size of every object, as a multiple of each texture's own size. */
+  readonly itemScale: number;
   readonly deltaSeconds: number;
   readonly energy: number;
   /** Advances on a slow timer; the glyph flicker reads it instead of a per-frame random. */
@@ -164,8 +166,9 @@ export function buildAmbientField(
 
 function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, runs: readonly TraceRun[]): void {
   const { width } = frame.bounds;
+  const size = objectSize(frame);
   context.lineCap = 'round';
-  context.lineWidth = TRACE_LINE_WIDTH_PX;
+  context.lineWidth = TRACE_LINE_WIDTH_PX * size;
   context.strokeStyle = ambientColor(frame.palette, TRACE_ALPHA);
   context.fillStyle = ambientColor(frame.palette, TRACE_PAD_ALPHA, frame.palette.accentHue);
 
@@ -184,7 +187,7 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
       context.stroke();
       if (run.hasPad) {
         context.beginPath();
-        context.arc(tileX + run.padX, run.padY, TRACE_PAD_RADIUS_PX * frame.density, 0, Math.PI * 2);
+        context.arc(tileX + run.padX, run.padY, TRACE_PAD_RADIUS_PX * size, 0, Math.PI * 2);
         context.fill();
       }
     }
@@ -194,7 +197,7 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
 function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cells: readonly GlyphCell[]): void {
   const { width } = frame.bounds;
   // The glyphs grow with the ramp rather than dimming: bigger objects, never a fade.
-  const size = GLYPH_FONT_PX * frame.density;
+  const size = GLYPH_FONT_PX * objectSize(frame);
   context.font = `${size}px ui-monospace, monospace`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
@@ -210,6 +213,15 @@ function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cel
   }
 }
 
+/**
+ * One factor for every object size in the field: the base scale the reader chose, times the
+ * growth the ramp has reached. Keeping it in one place is what makes a single setting resize
+ * all four textures together.
+ */
+function objectSize(frame: AmbientFrame): number {
+  return frame.itemScale * frame.density;
+}
+
 function fieldParams(frame: AmbientFrame): AmbientFieldParams {
   return { driftX: frame.driftPx * AMBIENT_FLOW_SCALE, energy: frame.energy };
 }
@@ -221,9 +233,9 @@ function paintBoids(
 ): readonly AmbientAgent[] {
   const advanced = stepAmbientFlock(agents, frame.noiseAt, fieldParams(frame), frame.deltaSeconds, frame.bounds);
   context.strokeStyle = ambientColor(frame.palette, BOID_ALPHA);
-  context.lineWidth = BOID_LINE_WIDTH_PX * frame.density;
+  context.lineWidth = BOID_LINE_WIDTH_PX * objectSize(frame);
   context.lineCap = 'round';
-  const streak = BOID_STREAK_SECONDS * frame.density;
+  const streak = BOID_STREAK_SECONDS * objectSize(frame);
   for (const agent of advanced) {
     context.beginPath();
     context.moveTo(agent.x, agent.y);
@@ -243,7 +255,7 @@ function paintFlow(
   trails: readonly (readonly AmbientVector[])[],
 ): readonly (readonly AmbientVector[])[] {
   const advanced: (readonly AmbientVector[])[] = [];
-  context.lineWidth = FLOW_LINE_WIDTH_PX * frame.density;
+  context.lineWidth = FLOW_LINE_WIDTH_PX * objectSize(frame);
   context.lineCap = 'round';
   const dimColor = ambientColor(frame.palette, FLOW_DIM_ALPHA, frame.palette.accentHue);
   const headColor = ambientColor(frame.palette, FLOW_HEAD_ALPHA, frame.palette.accentHue);

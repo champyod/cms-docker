@@ -25,6 +25,14 @@ interface TuningSource {
 
 export const AMBIENT_TUNING_SOURCES: Readonly<Record<keyof AmbientConfig, TuningSource>> = {
   rerollMs: { key: 'COUNTDOWN_AMBIENT_REROLL_MS', fallback: DEFAULT_AMBIENT_CONFIG.rerollMs, min: 1_000, max: 3_600_000 },
+  itemScale: { key: 'COUNTDOWN_AMBIENT_ITEM_SCALE', fallback: DEFAULT_AMBIENT_CONFIG.itemScale, min: 0.4, max: 4 },
+  growthGain: { key: 'COUNTDOWN_AMBIENT_GROWTH_GAIN', fallback: DEFAULT_AMBIENT_CONFIG.growthGain, min: 0, max: 2 },
+  ornamentRotationMs: {
+    key: 'COUNTDOWN_ORNAMENT_ROTATION_MS',
+    fallback: DEFAULT_AMBIENT_CONFIG.ornamentRotationMs,
+    min: 4_000,
+    max: 180_000,
+  },
   fallbackProgressMs: {
     key: 'COUNTDOWN_AMBIENT_FALLBACK_PROGRESS_MS',
     fallback: DEFAULT_AMBIENT_CONFIG.fallbackProgressMs,
@@ -48,6 +56,9 @@ export function resolveAmbientTuning(source: TuningSource): number {
 export function resolveCountdownAmbientConfig(): AmbientConfig {
   return {
     rerollMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.rerollMs),
+    itemScale: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.itemScale),
+    growthGain: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.growthGain),
+    ornamentRotationMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.ornamentRotationMs),
     fallbackProgressMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.fallbackProgressMs),
     maxFramesPerSecond: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.maxFramesPerSecond),
     driftExtentRatio: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.driftExtentRatio),

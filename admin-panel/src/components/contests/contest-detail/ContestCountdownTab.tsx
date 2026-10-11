@@ -19,8 +19,11 @@ import {
 import { ContestCountdownClock } from './ContestCountdownClock';
 import { CountdownToolbar } from './ContestCountdownControls';
 import { ContestAmbientLayer } from './ContestAmbientLayer';
+import { ContestEndedOrnament } from './ContestEndedOrnament';
 import { useContestMotion } from './useContestMotion';
 import { usePanicTurn } from './usePanicTurn';
+import { useAmbientSeed } from './useContestAmbient';
+import { useReducedMotion } from 'motion/react';
 import type { AmbientConfig } from '@/lib/contest-ambient';
 import {
   useCountdownThreshold,
@@ -73,6 +76,9 @@ export function ContestCountdownTab({
   const panicTurn = usePanicTurn(isPanicking);
   // Only the running phase is exempt from the idle layer: there, the panic is the visual.
   const isIdle = phase !== 'running';
+  const isEnded = stage === 'ended';
+  const ambientSeed = useAmbientSeed();
+  const prefersReducedMotion = useReducedMotion() ?? false;
   // The blur ramps from the start up to the threshold, so it is fully applied exactly when
   // the threshold arrives. The threshold is what the toolbar sets, not the phase target.
   const thresholdAtMs = target ? target.getTime() - hurryMs : null;
@@ -95,6 +101,11 @@ export function ContestCountdownTab({
         rerollKey={`${phase}:${stage}`}
         ambientConfig={ambientConfig}
       />
+      {isEnded ? <ContestEndedOrnament
+          seed={ambientSeed}
+          isTurning={!isPaused && !prefersReducedMotion}
+          ambientConfig={ambientConfig}
+        /> : null}
 
       <div className="relative z-10">
         <CountdownToolbar
@@ -111,15 +122,18 @@ export function ContestCountdownTab({
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
-        <div className={isPanicking ? 'countdown-clock-plate is-panicking' : 'countdown-clock-plate'}>
-          <div className="countdown-clock-panic">
-            <ContestCountdownClock
-              remainingMs={remainingMs}
-              isPanicking={isPanicking}
-              panicTurn={panicTurn}
-            />
+        {/* An ended contest has nothing left to count, so there is no timer to show. */}
+        {isEnded ? null : (
+          <div className="countdown-clock-plate">
+            <div className="countdown-clock-panic">
+              <ContestCountdownClock
+                remainingMs={remainingMs}
+                isPanicking={isPanicking}
+                panicTurn={panicTurn}
+              />
+            </div>
           </div>
-        </div>
+        )}
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
           <span className="text-sm text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>

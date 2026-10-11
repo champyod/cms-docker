@@ -43,6 +43,12 @@ export interface AmbientConfig {
   readonly fallbackProgressMs: number;
   /** Pixels the field sweeps either side of centre, as a share of its width. */
   readonly driftExtentRatio: number;
+  /** Base size of every object the field draws, as a multiple of each texture's own size. */
+  readonly itemScale: number;
+  /** How much larger the objects grow across the ramp, as a fraction of their base size. */
+  readonly growthGain: number;
+  /** Seconds one full turn of the ended screen's ornament takes. */
+  readonly ornamentRotationMs: number;
   /** Frame cap, so a high-refresh display does not spend four times the work per second. */
   readonly maxFramesPerSecond: number;
 }
@@ -51,8 +57,16 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
   rerollMs: 45_000,
   fallbackProgressMs: 600_000,
   driftExtentRatio: 0.045,
+  itemScale: 1.6,
+  growthGain: 0.35,
+  ornamentRotationMs: 26_000,
   maxFramesPerSecond: 30,
 };
+
+/** Bounds on the size knobs, so a mistyped value cannot fill the surface or erase the field. */
+export const AMBIENT_ITEM_SCALE_RANGE: readonly [number, number] = [0.4, 4];
+export const AMBIENT_GROWTH_GAIN_RANGE: readonly [number, number] = [0, 2];
+export const AMBIENT_ORNAMENT_ROTATION_MS_RANGE: readonly [number, number] = [4_000, 180_000];
 
 export const AMBIENT_TEXTURES: readonly AmbientTexture[] = [
   { id: 'traces', label: 'Circuit traces', driftSecondsRange: [34, 52], agentCount: 0 },
@@ -116,6 +130,45 @@ function clampFraction(value: number): number {
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
 
+/**
+ * The ornaments the ended screen turns in its front layer.
+ *
+ * Deliberately a separate set from the field's textures: an ornament is a single object read
+ * as one shape, while a texture is a pattern read as a mass, and reusing the swarm's flock or
+ * flow as the ornament would read as the field having merely moved forward. All four are pure
+ * geometry, so none of them can hint at what the screen is for.
+ */
+export const AMBIENT_ORNAMENT_IDS = ['rings', 'ticks', 'spokes', 'nested'] as const;
+
+export type AmbientOrnamentId = (typeof AMBIENT_ORNAMENT_IDS)[number];
+
+export interface AmbientOrnamentRoll {
+  readonly ornament: AmbientOrnamentId;
+  readonly palette: AmbientPalette;
+}
+
+/**
+ * The ornament for a seed. Offsets the seed first, so the ornament a seed picks is not the
+ * texture that same seed picks — otherwise every roll would show a matching pair.
+ */
+export function rollOrnament(seed: number): AmbientOrnamentRoll {
+  const random = createAmbientRandom(seed + AMBIENT_ORNAMENT_SEED_OFFSET);
+  return {
+    ornament: pick(AMBIENT_ORNAMENT_IDS, random),
+    palette: pick(AMBIENT_PALETTES, random),
+  };
+}
+
+/** Any offset that is not zero keeps the two draws independent. */
+const AMBIENT_ORNAMENT_SEED_OFFSET = 0.517;
+
+/** Bounds the turn, so a mistyped value cannot spin the ornament or freeze it. */
+export function clampOrnamentRotationMs(rotationMs: number): number {
+  if (!Number.isFinite(rotationMs)) return DEFAULT_AMBIENT_CONFIG.ornamentRotationMs;
+  const [fastest, slowest] = AMBIENT_ORNAMENT_ROTATION_MS_RANGE;
+  return Math.min(slowest, Math.max(fastest, rotationMs));
+}
+
 export interface AmbientProgressParams {
   /** Null until the first roll, which only ever happens in an effect. */
   readonly startedAtMs: number | null;
@@ -147,13 +200,24 @@ export function resolveAmbientStep(progress: number): number {
  * climbs rather than softened, which is what carries the sense of approach once the blur
  * is gone.
  */
-export function ambientDensityScale(step: number): number {
+export function ambientDensityScale(step: number, growthGain: number = AMBIENT_DENSITY_GAIN): number {
   const bounded = Math.min(AMBIENT_STEP_COUNT, Math.max(0, step));
-  return 1 + (bounded / AMBIENT_STEP_COUNT) * AMBIENT_DENSITY_GAIN;
+  const gain = clampGrowthGain(growthGain);
+  return 1 + (bounded / AMBIENT_STEP_COUNT) * gain;
 }
 
-/** Growth across the whole ramp; a third larger by the threshold reads without crowding. */
+/** Default growth across the whole ramp; a third larger by the threshold reads without crowding. */
 export const AMBIENT_DENSITY_GAIN = 0.35;
+
+export function clampGrowthGain(gain: number): number {
+  if (!Number.isFinite(gain)) return AMBIENT_DENSITY_GAIN;
+  return Math.min(AMBIENT_GROWTH_GAIN_RANGE[1], Math.max(AMBIENT_GROWTH_GAIN_RANGE[0], gain));
+}
+
+export function clampItemScale(scale: number): number {
+  if (!Number.isFinite(scale)) return DEFAULT_AMBIENT_CONFIG.itemScale;
+  return Math.min(AMBIENT_ITEM_SCALE_RANGE[1], Math.max(AMBIENT_ITEM_SCALE_RANGE[0], scale));
+}
 
 /** True only at the last step, where the field has fully arrived and the timer bed may show. */
 export function isAmbientRampComplete(step: number): boolean {

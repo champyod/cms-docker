@@ -46,7 +46,7 @@ export function ContestAmbientLayer({
   rerollKey,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element | null {
-  const { roll, progress, density, isAnimating, isRolled } = useContestAmbient({
+  const { roll, progress, density, itemScale, isAnimating, isRolled } = useContestAmbient({
     thresholdMs,
     nowMs,
     isPaused,
@@ -83,6 +83,7 @@ export function ContestAmbientLayer({
           roll={outgoing}
           progress={progress}
           density={density}
+          itemScale={itemScale}
           energy={OUTGOING_ENERGY}
           isAnimating={false}
           config={ambientConfig}
@@ -94,6 +95,7 @@ export function ContestAmbientLayer({
         roll={roll}
         progress={progress}
         density={density}
+        itemScale={itemScale}
         energy={AMBIENT_LIVE_ENERGY}
         isAnimating={isAnimating}
         config={ambientConfig}

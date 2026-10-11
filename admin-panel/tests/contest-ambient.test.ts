@@ -7,6 +7,9 @@ import {
   DEFAULT_AMBIENT_CONFIG,
   ambientColor,
   ambientDensityScale,
+  clampOrnamentRotationMs,
+  rollOrnament,
+  AMBIENT_ORNAMENT_IDS,
   createAmbientRandom,
   isAmbientRampComplete,
   resolveAmbientStep,
@@ -146,6 +149,51 @@ describe('ambientDensityScale', () => {
   it('still names a configurable frame cap and drift', () => {
     expect(DEFAULT_AMBIENT_CONFIG.maxFramesPerSecond).toBeGreaterThan(0);
     expect(DEFAULT_AMBIENT_CONFIG.driftExtentRatio).toBeGreaterThan(0);
+  });
+
+  it('grows by the configured gain, so the reader chooses how much it changes', () => {
+    expect(ambientDensityScale(0, 1.5)).toBe(1);
+    expect(ambientDensityScale(5, 1.5)).toBeCloseTo(2.5, 6);
+    expect(ambientDensityScale(5, 0)).toBe(1);
+  });
+
+  it('clamps a growth gain outside the published range', () => {
+    expect(ambientDensityScale(5, 99)).toBe(ambientDensityScale(5, 2));
+    expect(ambientDensityScale(5, -5)).toBe(ambientDensityScale(5, 0));
+  });
+});
+
+describe('the ended ornament', () => {
+  it('is a set of its own, so it never matches the field it sits over', () => {
+    for (const id of AMBIENT_ORNAMENT_IDS) expect(AMBIENT_TEXTURES.map((t) => t.id)).not.toContain(id);
+  });
+
+  it('picks its shape and its colour from one seed', () => {
+    const first = rollOrnament(0.3);
+    expect(first).toStrictEqual(rollOrnament(0.3));
+    expect(AMBIENT_ORNAMENT_IDS).toContain(first.ornament);
+    expect(AMBIENT_PALETTES.map((palette) => palette.id)).toContain(first.palette.id);
+  });
+
+  it('reaches every ornament over a spread of seeds', () => {
+    const seen = new Set(Array.from({ length: 200 }, (_unused, index) => rollOrnament(index / 200).ornament));
+    expect(seen.size).toBe(AMBIENT_ORNAMENT_IDS.length);
+  });
+
+  it('does not pick the same shape the field would for that seed', () => {
+    let differed = 0;
+    for (let index = 0; index < 40; index += 1) {
+      const seed = index / 40;
+      if ((rollOrnament(seed).ornament as string) !== rollAmbient(seed).texture.id) differed += 1;
+    }
+    expect(differed).toBeGreaterThan(30);
+  });
+
+  it('keeps the turn inside the band that neither spins nor freezes', () => {
+    expect(clampOrnamentRotationMs(26_000)).toBe(26_000);
+    expect(clampOrnamentRotationMs(1)).toBe(4_000);
+    expect(clampOrnamentRotationMs(9_999_999)).toBe(180_000);
+    expect(clampOrnamentRotationMs(Number.NaN)).toBe(DEFAULT_AMBIENT_CONFIG.ornamentRotationMs);
   });
 });
 

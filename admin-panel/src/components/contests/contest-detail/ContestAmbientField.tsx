@@ -12,6 +12,8 @@ interface Props {
   readonly progress: number;
   /** Grows with the ramp, so the field's objects enlarge as the threshold nears. */
   readonly density: number;
+  /** Base size of every object, as a multiple of each texture's own size. */
+  readonly itemScale: number;
   /** Falls as the countdown nears its threshold, so the field quiets instead of racing. */
   readonly energy: number;
   readonly isAnimating: boolean;
@@ -42,6 +44,7 @@ export function ContestAmbientField({
   roll,
   progress,
   density,
+  itemScale,
   energy,
   isAnimating,
   config,
@@ -116,6 +119,7 @@ export function ContestAmbientField({
       driftPx,
       progress,
       density,
+      itemScale,
       deltaSeconds: isAnimating ? deltaSeconds : 0,
       energy,
       flickerPhase: (elapsedRef.current / FLICKER_PERIOD_SECONDS) * Math.PI * 2,
