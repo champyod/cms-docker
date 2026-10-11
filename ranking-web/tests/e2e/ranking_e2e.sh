@@ -144,13 +144,26 @@ events_follow_a_write() {
     pass "a write reaches an open event stream"
 }
 
-# A console account, seeded as plaintext instead of a hash: the password format supports
-# both, seeding a hash would need a hashing tool this script does not require, and the
-# plaintext branch is the one a fresh deployment starts with.
-seed_console_user() {
-    psql "${DATABASE_URL}" -q -c "DELETE FROM ranking_console_users WHERE username = 'e2e'" >/dev/null
-    psql "${DATABASE_URL}" -q -c "INSERT INTO ranking_console_users (username, password) VALUES ('e2e', 'plaintext:e2e-secret')" >/dev/null
-    pass "the console account is seeded"
+# The console authenticates a panel admin holding ranking:read, seeded as plaintext
+# instead of a hash so the rehearsal needs no hashing tool. A second admin carries the
+# same password but no group, so the permission gate is exercised without confirming it.
+seed_console_admin() {
+    psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
+DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm');
+INSERT INTO admins (name, username, authentication, enabled) VALUES
+    ('E2E Operator', 'e2e', 'plaintext:e2e-secret', true),
+    ('E2E No Permission', 'e2e-noperm', 'plaintext:e2e-secret', true);
+INSERT INTO permissions (key, module, verb)
+    VALUES ('ranking:read', 'ranking', 'read') ON CONFLICT (key) DO NOTHING;
+INSERT INTO groups (name) VALUES ('e2e-ranking') ON CONFLICT (name) DO NOTHING;
+INSERT INTO group_permissions (group_id, permission_id)
+    SELECT g.id, p.id FROM groups g JOIN permissions p ON p.key = 'ranking:read'
+    WHERE g.name = 'e2e-ranking' ON CONFLICT (group_id, permission_id) DO NOTHING;
+INSERT INTO admin_groups (admin_id, group_id)
+    SELECT a.id, g.id FROM admins a JOIN groups g ON g.name = 'e2e-ranking'
+    WHERE a.username = 'e2e' ON CONFLICT (admin_id, group_id) DO NOTHING;
+SQL
+    pass "the console admin and its ranking:read group are seeded"
 }
 
 console_login() {
@@ -163,7 +176,7 @@ console_login() {
     code="$(curl -sS -o /dev/null -w "%{http_code}" -b "${jar}" "${BASE}/scores")"
     [[ "${code}" == "200" ]] || fail "the session should open the scoreboard, got ${code}"
     rm -f "${jar}"
-    pass "a seeded console account signs in and reaches the scoreboard"
+    pass "a seeded admin signs in and reaches the scoreboard"
 }
 
 console_login_refuses_a_wrong_password() {
@@ -175,6 +188,15 @@ console_login_refuses_a_wrong_password() {
     pass "a wrong password is refused and sets no session"
 }
 
+console_login_refuses_an_admin_without_the_key() {
+    local headers
+    headers="$(curl -sS -D - -o /dev/null -d "username=e2e-noperm" -d "password=e2e-secret" "${BASE}/login")"
+    if grep -qi "^set-cookie:.*ranking_session" <<<"${headers}"; then
+        fail "an admin without ranking:read was handed a session"
+    fi
+    pass "an admin without ranking:read is refused and sets no session"
+}
+
 protected_mode_redirects() {
     psql "${DATABASE_URL}" -q -c \
         "INSERT INTO ranking_settings (id, access_mode) VALUES (1, 'protected') ON CONFLICT (id) DO UPDATE SET access_mode = 'protected'" \
@@ -184,6 +206,7 @@ protected_mode_redirects() {
     [[ "${code}" == "303" || "${code}" == "307" ]] || fail "expected a redirect to the sign-in page, got ${code}"
     console_login
     console_login_refuses_a_wrong_password
+    console_login_refuses_an_admin_without_the_key
     psql "${DATABASE_URL}" -q -c "UPDATE ranking_settings SET access_mode = 'public' WHERE id = 1" >/dev/null
     pass "protected mode sends an anonymous visitor to the sign-in page"
 }
@@ -205,7 +228,7 @@ main() {
     events_refuse_a_client_that_excludes_the_stream
     events_follow_a_write
     a_stale_event_id_is_answered_with_a_reinit
-    seed_console_user
+    seed_console_admin
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"
 }
