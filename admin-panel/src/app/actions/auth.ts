@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { createSession, deleteSession, getSession } from '@/lib/auth';
 import { getFreshPermissions } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
+import { getCaptchaEnv, resolveActiveProvider, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
@@ -81,13 +81,16 @@ async function recordLoginFailure(bucketKeys: readonly string[], username: strin
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
   const env = getCaptchaEnv();
-  const pub = getCaptchaPublicConfig();
-  if (!pub.enabled) return { required: false, enabled: false, provider: pub.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
+  // WHY health decides the rendered provider here: this is the panel's render
+  // path, so an unreachable primary must offer the next provider in the chain.
+  const active = await resolveActiveProvider(env);
+  const configured = env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
+  if (!configured) return { required: false, enabled: false, provider: active.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
   pruneExpiredLoginBuckets();
   const ip = await resolveClientIp();
   let required = isCaptchaRequiredForIp(ip);
   if (!required && username && username.trim().length > 0) required = shouldRequireCaptcha(`${username.trim()}|${ip}`);
-  return { required, enabled: true, provider: pub.provider, siteKey: pub.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
+  return { required, enabled: true, provider: active.provider, siteKey: active.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
 }
 
 function verifyPlaintextPassword(password: string, stored: string): boolean {

@@ -1,5 +1,7 @@
 import "server-only";
 
+import { isProviderHealthy, recordProviderFailure, recordProviderSuccess } from "@/lib/captcha-health";
+
 export type CaptchaProvider = "turnstile" | "hcaptcha" | "recaptcha";
 
 export const CAPTCHA_PROVIDERS: readonly CaptchaProvider[] = ["turnstile", "hcaptcha", "recaptcha"];
@@ -92,6 +94,25 @@ export function activeProvider(env: CaptchaEnv): { provider: CaptchaProvider; si
   return { provider: env.providers[0] ?? "turnstile", siteKey: "", secretKey: "" };
 }
 
+/** The first healthy provider with a complete key pair, else the first usable one. */
+export async function resolveActiveProvider(env: CaptchaEnv): Promise<{ provider: CaptchaProvider; siteKey: string; secretKey: string }> {
+  const usable = env.providers
+    .map((provider) => ({ provider, pair: env.keys[provider] }))
+    .filter((entry): entry is { provider: CaptchaProvider; pair: CaptchaKeyPair } =>
+      entry.pair !== undefined && entry.pair.siteKey.length > 0 && entry.pair.secretKey.length > 0);
+  for (const entry of usable) {
+    if (await isProviderHealthy(entry.provider)) {
+      return { provider: entry.provider, siteKey: entry.pair.siteKey, secretKey: entry.pair.secretKey };
+    }
+  }
+  // WHY still a usable provider when all are unhealthy: rendering nothing would
+  // leave the challenge unanswerable.
+  if (usable.length > 0) {
+    return { provider: usable[0].provider, siteKey: usable[0].pair.siteKey, secretKey: usable[0].pair.secretKey };
+  }
+  return { provider: env.providers[0] ?? "turnstile", siteKey: "", secretKey: "" };
+}
+
 export function isCaptchaConfigured(): boolean {
   const env = getCaptchaEnv();
   const active = activeProvider(env);
@@ -124,8 +145,12 @@ export async function verifyCaptcha(token: string, provider?: string): Promise<b
   const secret = pair && pair.secretKey.length > 0 ? pair.secretKey : active.secretKey;
 
   try {
-    return await verifySiteVerify(VERIFY_URLS[named], token.trim(), secret);
+    const verdict = await verifySiteVerify(VERIFY_URLS[named], token.trim(), secret);
+    await recordProviderSuccess(named);
+    return verdict;
   } catch {
+    // A transport failure is the failover signal; the attempt is still refused.
+    await recordProviderFailure(named);
     return false;
   }
 }
