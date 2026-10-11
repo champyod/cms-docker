@@ -26,6 +26,7 @@ pub(crate) const SCRIPT_CONFIG_SYNC: &str = "__config_sync.sh";
 pub(crate) const MAKE_CMS_INIT: &str = "cms-init";
 pub(crate) const MAKE_DB_RESET: &str = "db-reset";
 pub(crate) const MAKE_DB_CLEAN: &str = "db-clean";
+pub(crate) const MAKE_DB_MIGRATE: &str = "db-migrate";
 pub(crate) const MAKE_PRISMA_SYNC: &str = "prisma-sync";
 pub(crate) const MAKE_ADMIN_CREATE: &str = "admin-create";
 pub(crate) const MAKE_BACKUP: &str = "backup";

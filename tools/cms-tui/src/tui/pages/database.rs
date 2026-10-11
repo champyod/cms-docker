@@ -9,8 +9,8 @@ pub fn render(f: &mut Frame, area: Rect, app: &App) {
         area,
         app,
         &app.database_menu,
-        "Database — Initialize/Reset/Clean/Sync Schema",
-        "Manage database lifecycle: initialize, reset, clean, or sync Prisma schema. Use ↑/↓ or j/k to navigate, Enter to execute.",
+        "Database — Initialize/Reset/Clean/Sync/Migrate",
+        "Manage database lifecycle: initialize, reset, clean, sync Prisma schema, or migrate the active database (schema + roles + RLS). Use ↑/↓ or j/k to navigate, Enter to execute.",
         "[↑/↓/j/k] Navigate   [Enter] Execute   [1-9] Switch page   [Esc] Back   [q] Quit",
     );
 }

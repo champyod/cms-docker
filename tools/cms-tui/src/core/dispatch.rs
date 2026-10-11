@@ -26,6 +26,8 @@ pub enum DispatchKey {
     DbClean,
     /// `./cms db sync`
     DbSync,
+    /// `./cms db migrate`
+    DbMigrate,
     /// `./cms admin-create`
     AdminCreate,
     /// `./cms status`
@@ -131,6 +133,7 @@ mod tests {
         DispatchKey::DbReset,
         DispatchKey::DbClean,
         DispatchKey::DbSync,
+        DispatchKey::DbMigrate,
         DispatchKey::AdminCreate,
         DispatchKey::Status,
         DispatchKey::Monitor,
@@ -189,6 +192,14 @@ mod tests {
         assert_eq!(
             target(DispatchKey::DbInit),
             Some(&DispatchTarget::Make("cms-init"))
+        );
+    }
+
+    #[test]
+    fn db_migrate_target_is_make_db_migrate() {
+        assert_eq!(
+            target(DispatchKey::DbMigrate),
+            Some(&DispatchTarget::Make("db-migrate"))
         );
     }
 }

@@ -146,6 +146,11 @@ pub fn database_menu() -> ActionMenu {
         catalog_entry("Reset Database", DispatchKey::DbReset, &[]),
         catalog_entry("Clean Database", DispatchKey::DbClean, &[]),
         catalog_entry("Sync Schema (Prisma)", DispatchKey::DbSync, &[]),
+        catalog_entry(
+            "Migrate Database (schema + roles + RLS)",
+            DispatchKey::DbMigrate,
+            &[],
+        ),
     ])
 }
 

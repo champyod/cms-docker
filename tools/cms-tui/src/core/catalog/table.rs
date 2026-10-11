@@ -1,8 +1,9 @@
 use super::{
     CommandSpec, ARGS_ARCHIVE, ARGS_NONE, ARGS_SECRET_FLAG, MAKE_ADMIN_CREATE, MAKE_BACKUP,
-    MAKE_CMS_INIT, MAKE_DB_CLEAN, MAKE_DB_RESET, MAKE_PRISMA_SYNC, SCRIPT_BACKUP_DRILL,
-    SCRIPT_MONITOR, SCRIPT_OFFSITE_SYNC, SCRIPT_PREFLIGHT, SCRIPT_RESTORE, SCRIPT_SECRETS_ROTATE,
-    SCRIPT_SMOKE_TEST, SCRIPT_STATUS, SCRIPT_UPDATE_ENGINE, SCRIPT_UPDATE_SERVER,
+    MAKE_CMS_INIT, MAKE_DB_CLEAN, MAKE_DB_MIGRATE, MAKE_DB_RESET, MAKE_PRISMA_SYNC,
+    SCRIPT_BACKUP_DRILL, SCRIPT_MONITOR, SCRIPT_OFFSITE_SYNC, SCRIPT_PREFLIGHT, SCRIPT_RESTORE,
+    SCRIPT_SECRETS_ROTATE, SCRIPT_SMOKE_TEST, SCRIPT_STATUS, SCRIPT_UPDATE_ENGINE,
+    SCRIPT_UPDATE_SERVER,
 };
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 
@@ -75,6 +76,15 @@ pub const CORE_CATALOG: &[CommandSpec] = &[
         target: DispatchTarget::Make(MAKE_PRISMA_SYNC),
         args: ARGS_NONE,
         about: "Prisma sync",
+        requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
+    },
+    CommandSpec {
+        key: DispatchKey::DbMigrate,
+        target: DispatchTarget::Make(MAKE_DB_MIGRATE),
+        args: ARGS_NONE,
+        about: "Migrate database (schema + roles + RLS)",
         requires_tty: true,
         requires_sudo: false,
         capture_output: false,
