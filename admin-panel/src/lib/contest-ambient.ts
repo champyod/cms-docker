@@ -43,7 +43,12 @@ export interface AmbientConfig {
   readonly fallbackProgressMs: number;
   /** Pixels the field sweeps either side of centre, as a share of its width. */
   readonly driftExtentRatio: number;
-  /** Base size of every object the field draws, as a multiple of each texture's own size. */
+  /**
+   * Base size of every object the field draws, as a multiple of each texture's own size.
+   * Items are drawn across the whole surface including the middle, so this stays bounded:
+   * past the ceiling an item stops reading as background and starts competing with the
+   * timer that sits on top of it.
+   */
   readonly itemScale: number;
   /** How much larger the objects grow across the ramp, as a fraction of their base size. */
   readonly growthGain: number;
@@ -64,7 +69,8 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
 };
 
 /** Bounds on the size knobs, so a mistyped value cannot fill the surface or erase the field. */
-export const AMBIENT_ITEM_SCALE_RANGE: readonly [number, number] = [0.4, 4];
+/** Ceiling is 2.5: the field draws under the timer, so larger items would crowd it. */
+export const AMBIENT_ITEM_SCALE_RANGE: readonly [number, number] = [0.4, 2.5];
 export const AMBIENT_GROWTH_GAIN_RANGE: readonly [number, number] = [0, 2];
 export const AMBIENT_ORNAMENT_ROTATION_MS_RANGE: readonly [number, number] = [4_000, 180_000];
 

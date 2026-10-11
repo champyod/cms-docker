@@ -25,7 +25,7 @@ interface TuningSource {
 
 export const AMBIENT_TUNING_SOURCES: Readonly<Record<keyof AmbientConfig, TuningSource>> = {
   rerollMs: { key: 'COUNTDOWN_AMBIENT_REROLL_MS', fallback: DEFAULT_AMBIENT_CONFIG.rerollMs, min: 1_000, max: 3_600_000 },
-  itemScale: { key: 'COUNTDOWN_AMBIENT_ITEM_SCALE', fallback: DEFAULT_AMBIENT_CONFIG.itemScale, min: 0.4, max: 4 },
+  itemScale: { key: 'COUNTDOWN_AMBIENT_ITEM_SCALE', fallback: DEFAULT_AMBIENT_CONFIG.itemScale, min: 0.4, max: 2.5 },
   growthGain: { key: 'COUNTDOWN_AMBIENT_GROWTH_GAIN', fallback: DEFAULT_AMBIENT_CONFIG.growthGain, min: 0, max: 2 },
   ornamentRotationMs: {
     key: 'COUNTDOWN_ORNAMENT_ROTATION_MS',

@@ -124,10 +124,12 @@ export function ContestEndedOrnament({
         '--countdown-ornament-turn': `${turnSeconds}s`,
       } as React.CSSProperties}
     >
-      <svg className="countdown-ornament-shape" viewBox="-120 -120 240 240">
-        <g transform="translate(0, 0)">
-          <OrnamentShape id={ornament} />
-        </g>
+      <svg
+        className="countdown-ornament-shape"
+        viewBox="-120 -120 240 240"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <OrnamentShape id={ornament} />
       </svg>
     </div>
   );

@@ -89,6 +89,38 @@ export function ContestCountdownClock({
     return () => observer.disconnect();
   }, [layoutKey]);
 
+  // A cached measurement taken before the display face arrived is measured against the
+  // fallback font, which is a different width, so the row is fitted to the wrong size and
+  // overflows once the real face renders. Dropping the cache when fonts settle re-fits it.
+  useEffect(() => {
+    const fonts = document.fonts;
+    if (!fonts) return;
+    const refit = (): void => {
+      metricsRef.current = null;
+      lineRef.current?.dispatchEvent(new Event('countdown-refit'));
+    };
+    fonts.addEventListener('loadingdone', refit);
+    return () => fonts.removeEventListener('loadingdone', refit);
+  }, []);
+
+  useBrowserLayoutEffect(() => {
+    const box = boxRef.current;
+    const line = lineRef.current;
+    if (!box || !line) return;
+    const refit = (): void => {
+      const metrics = measureNatural(line, layoutKeyOf(segments));
+      metricsRef.current = metrics;
+      line.style.fontSize = `${fitCountdownFontPx({
+        availableWidth: box.clientWidth,
+        availableHeight: box.clientHeight,
+        naturalWidth: metrics.width,
+        naturalHeight: metrics.height,
+      })}px`;
+    };
+    line.addEventListener('countdown-refit', refit);
+    return () => line.removeEventListener('countdown-refit', refit);
+  }, [segments]);
+
   return (
     <div className="countdown-shell flex min-h-0 flex-1 flex-col">
       <div
@@ -99,7 +131,7 @@ export function ContestCountdownClock({
             display face has no tabular figures, so the slot is what holds the width. */}
         <div
           ref={lineRef}
-          className="flex flex-wrap items-baseline justify-center leading-none font-display font-bold tracking-tight"
+          className="flex flex-nowrap items-baseline justify-center leading-none font-display font-bold tracking-tight"
         >
           {displaySegments.map((segment, segmentIndex) => (
             <span key={segmentIndex} className="countdown-segment">
