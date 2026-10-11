@@ -167,6 +167,11 @@ CREATE TABLE IF NOT EXISTS group_permissions (
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
     UNIQUE (group_id, permission_id));
+CREATE TABLE IF NOT EXISTS admin_permission_overrides (
+    id SERIAL PRIMARY KEY,
+    admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
+    permission_id INTEGER NOT NULL REFERENCES permissions(id) ON DELETE CASCADE,
+    effect VARCHAR NOT NULL, reason VARCHAR, UNIQUE (admin_id, permission_id));
 CREATE TABLE IF NOT EXISTS admin_groups (
     id SERIAL PRIMARY KEY,
     admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE,
