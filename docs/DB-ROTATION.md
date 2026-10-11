@@ -1,6 +1,8 @@
 # Database creation and rotation
 
-`./cms db create <name>` and `./cms db rename <old> <new>` create and rename a PostgreSQL database inside the running `cms-database` container. Both are supported, both are documented here for the first time, and neither appears in `./cms help` or `./cms db --help` because the Rust TUI does not implement them: `cms` intercepts the two verbs in a bash shim (`cms`) and delegates to `scripts/__db_admin.sh`, which is the single authority for the container-side SQL, the authorisation policy and the exit codes.
+`./cms db create <name>` and `./cms db rename <old> <new>` create and rename a PostgreSQL database inside the running `cms-database` container; `./cms db migrate` then applies the full migration history to whichever database is active (§6.5). All three are listed in `./cms help`.
+
+The first two are implemented in bash: `cms` intercepts them in a shim and delegates to `scripts/__db_admin.sh`, which is the single authority for the container-side SQL, the authorisation policy and the exit codes, because the Rust TUI's `db` subcommand predates them. `db migrate` goes the other way — it is a real Rust verb that runs `make db-migrate`, which delegates to `scripts/__db_migrate.sh`.
 
 Read this document together with [`DB-MIGRATION-CUTOVER-RUNBOOK.md`](DB-MIGRATION-CUTOVER-RUNBOOK.md). That runbook owns schema, roles, RLS and the migration history; this one owns the database *name* and which profile points at it. Neither duplicates the other.
 
@@ -12,6 +14,7 @@ Read this document together with [`DB-MIGRATION-CUTOVER-RUNBOOK.md`](DB-MIGRATIO
 4. [Preconditions](#4-preconditions)
 5. [Rotation: rename the live database](#5-rotation-rename-the-live-database)
 6. [Provisioning: create a sibling database](#6-provisioning-create-a-sibling-database)
+   - [6.5 Migrate: apply the schema to the active database](#65-migrate-apply-the-schema-to-the-active-database)
 7. [Pass criteria](#7-pass-criteria)
 8. [When a step fails](#8-when-a-step-fails)
 9. [Known gaps](#9-known-gaps)
@@ -36,7 +39,7 @@ ALTER DATABASE "<new>" WITH ALLOW_CONNECTIONS true;
 
 Database names must match `^[a-z_][a-z0-9_]{0,50}$` — lower-case letters, digits and underscore, no leading digit, 51 characters maximum. The allowlist is stricter than the server because the name is interpolated into SQL and into a database URI. `template0`, `template1`, `postgres` and `all` are rejected: renaming onto any of them would break the cluster.
 
-Neither verb appears in `./cms db --help`. The usage block is also not reachable with a clean exit through `./cms`: any malformed invocation prints it to stderr and exits 1. Read it directly instead:
+`./cms db --help` is served by the Rust CLI, so it lists `init|reset|clean|sync|migrate` and not these two. The `__db_admin.sh` usage block is likewise not reachable with a clean exit through `./cms`: any malformed invocation prints it to stderr and exits 1. Read it directly instead:
 
 ```bash
 bash scripts/__db_admin.sh --help
@@ -188,11 +191,11 @@ Leave the secrets empty — `./cms config sync` generates them.
 
 This rewrites `[core] ACTIVE_DATABASE`, runs `./cms config sync`, and restacks whatever is currently running. It does not create a database and does not check that one exists: §6.1 must have run first. To go back, `./cms db use default`.
 
-### 6.4 Apply the schema — required, and not automatic
+### 6.4 Apply the schema — required
 
-**A created database is completely empty.** No tables, no migrations, no roles, no grants, and no row-level security. `db create` runs one statement and nothing else; there is no `cms db migrate` verb, and `scripts/__db_admin.sh` contains no migration invocation.
+**A created database is completely empty.** No tables, no migrations, no roles, no grants, and no row-level security. `db create` runs one statement and nothing else, and `scripts/__db_admin.sh` contains no migration invocation — the schema step is separate and must run before any service is pointed at the database.
 
-A fresh database needs the full migration history applied separately:
+`./cms db migrate` (§6.5) runs it for you. Underneath it is exactly this pair, in this order:
 
 ```bash
 make cms-init
@@ -202,6 +205,41 @@ make prisma-sync
 `make cms-init` runs `scripts/__cms-db-init.sh`, which on a genuinely empty database runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints) and applies `scripts/__fix_db_schema.sql`. `make prisma-sync` bootstraps the two roles and then runs `prisma migrate deploy` plus the permission seed. The two migrations that enable and force RLS on all 33 application tables run inside that history, so **a database that skipped them is not hardened** and must not be exposed.
 
 [`DB-MIGRATION-CUTOVER-RUNBOOK.md`](DB-MIGRATION-CUTOVER-RUNBOOK.md) §3 owns the detail of both steps, §4 the verification queries, §5 the failure handling. Do not treat §6.4 as optional: services pointed at an unmigrated database fail at connect time with a missing-relation error.
+
+### 6.5 Migrate: apply the schema to the active database
+
+`./cms db migrate` — also `make db-migrate`, or the **Migrate Database** row on the TUI Database page — runs §6.4 for you and then verifies the result. Its authority is `scripts/__db_migrate.sh`.
+
+It migrates the database `.env` describes: the active `[db_<profile>]` that `./cms db use <profile>` selects. It never writes `config.toml`, never creates or renames a database and never switches profiles. The full rotation flow is therefore:
+
+```bash
+./cms db create cmsdb_evaluate   # §6.1 — an empty database
+./cms db use evaluate            # §6.3 — repoint, config sync, restack
+./cms db migrate                 # §6.4 — schema, roles, RLS, permissions
+```
+
+`db use` has to come first: every step below reads `.env`.
+
+To see what it would run without running it, call the script directly — neither `make db-migrate` nor the Rust verb takes `--dry-run`:
+
+```bash
+bash scripts/__db_migrate.sh --dry-run
+```
+
+**Hard-fails**, each naming the command to run:
+
+| Refused because | Run |
+|---|---|
+| `.env` missing, or `POSTGRES_PASSWORD` empty | `./cms config sync` |
+| `cms-database` or `cms-log-service` not running | `make core` |
+| active profile has no `[db_<name>]` section, or that section has no `POSTGRES_DB` | `./cms db use <profile>`, or add the key then `./cms config sync` |
+| the database `.env` names does not exist | `./cms db create <name>`, then `./cms db use <profile>` |
+| no terminal and no `CONFIRM_DB_MIGRATE=yes` | re-run with `CONFIRM_DB_MIGRATE=yes` |
+| base schema absent, or a table missing enabled+forced RLS | fix the failing step above, then re-run |
+
+**Handled on its own**, because both steps are idempotent: an empty database (`cms-init` runs `cmsInitDB`), a partially built one (the P3005 baseline resolve), an already migrated one, the old `POSTGRES_*`-in-`[core]` layout and the new `[db_*]` layout, and any custom `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_PORT` — every step reads them from `.env`.
+
+The verdict is the result, not the exit code: `to_regclass('public.contests')` must be true, and the §7.6 query must return nothing but `_prisma_migrations`. Anything else exits 1 and prints the gap.
 
 ## 7. Pass criteria
 
@@ -273,10 +311,10 @@ Run from the repository root. Substitute your own names for `cmsdb` / `cmsdb_arc
 An operator must do these by hand. The tooling does not do them, and each one leaves the deployment broken if skipped.
 
 1. **The repoint.** Neither verb writes `config.toml` or `.env`. Every `[db_<profile>]` naming the old database must be repointed and `./cms config sync` re-run. Until then the stack is configured with a name that no longer exists.
-2. **The migrations.** `create` produces an empty database. The full `make cms-init` + `make prisma-sync` history — including the two RLS migrations — is a separate, required step (§6.4).
+2. **The migrations.** `create` produces an empty database and nothing in `create` or `rename` applies a schema. `./cms db migrate` now runs the full `make cms-init` + `make prisma-sync` history — including the two RLS migrations — and verifies it (§6.5), but it is still a separate, required step rather than part of creating or renaming.
 3. **The roles.** `cmsuser` and `cms_backup` are per-database. `make prisma-sync` creates them via `scripts/__apply_sql.sh --bootstrap-roles`; nothing in `create` or `rename` does.
 4. **The redeploy.** `config sync` rewrites files; it does not restart anything. Services keep the old `POSTGRES_DB` until they are recreated.
 5. **No drop.** There is no supported way to delete a database through `./cms`. Archive and rotate; remove by hand with `psql` only when the name is genuinely obsolete.
 6. **`rename` drops live sessions.** There is no online, zero-disruption path here. The connection pools are terminated and error until the repoint and redeploy complete.
 7. **The profile report reads `config.toml` only.** It cannot see a database that no profile points at, and it cannot detect a stale `POSTGRES_DB` that was never written as a plain quoted string. The grep in §4.6 is the manual cross-check.
-8. **Discovery.** Neither verb is in `./cms help` or `./cms db --help`; the Rust TUI does not implement them and `cms` intercepts them before the TUI runs. This document and the README table are the discovery path.
+8. **Discovery.** `./cms help` lists every db verb, and the Rust `./cms db --help` lists `init|reset|clean|sync|migrate`. Only `db create` and `db rename` stay out of the TUI, because `cms` intercepts them in the shim before it runs; their own usage block is read straight from `scripts/__db_admin.sh --help` (§1).
