@@ -15,12 +15,13 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 const ICON_INDENT = 'pl-10';
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, icon, ...props }, ref) => {
+  ({ className, label, error, icon, required, ...props }, ref) => {
     return (
       <div className="space-y-1.5 w-full">
         {label && (
           <label className="text-sm font-medium text-foreground ml-1">
             {label}
+            {required && <span className="text-destructive ml-0.5" aria-hidden="true">*</span>}
           </label>
         )}
         <div className="relative">
@@ -31,6 +32,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           )}
           <AdapterInput
             ref={ref}
+            required={required}
             aria-invalid={error ? true : undefined}
             className={cn(icon && ICON_INDENT, className)}
             {...props}

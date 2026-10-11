@@ -61,6 +61,7 @@ export function GroupFormDialog({
       {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <div className="space-y-4">
         <Input
+          required
           label={dict.name}
           value={formData.name}
           onChange={(e) =>
@@ -172,6 +173,7 @@ export function GroupFormDialog({
         </Card>
 
         <Input
+          required
           label="Reason"
           value={formData.reason}
           onChange={(e) =>
