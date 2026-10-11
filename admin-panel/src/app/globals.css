@@ -404,12 +404,9 @@
   }
 }
 
-/* The drift is what the field does instead of blurring: it sweeps left and right, so the
-   motion carries the sense of time passing. Transform only, so it stays composited. */
-.countdown-ambient-layer {
-  transform: translate3d(var(--countdown-ambient-drift, 0px), 0, 0);
-  transition: transform 1400ms ease;
-}
+/* No transform here on purpose. The layer is exactly the surface, so translating it would
+   slide the field off one edge and expose a gap on the other. Each painter applies the
+   drift to its own geometry and wraps it, which is what keeps the field seamless. */
 
 .countdown-stage-label {
   color: hsl(var(--countdown-hue) 70% 74%);

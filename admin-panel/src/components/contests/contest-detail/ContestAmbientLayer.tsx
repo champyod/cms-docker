@@ -31,8 +31,7 @@ const AMBIENT_LIVE_ENERGY = 1;
  * background.
  *
  * Nothing here blurs and nothing is drawn behind the digits. The sense of approach is
- * carried by the field's objects growing and by the drift sweep, which is a transform on
- * this layer so both stacked fields move together as one object.
+ * carried by the field's objects growing and by each painter's own drifting geometry.
  *
  * While a roll changes, the outgoing field stays mounted under the incoming one so it
  * fades out rather than being cut. Both are inert to pointers and hidden from the
@@ -54,7 +53,6 @@ export function ContestAmbientLayer({
     config: ambientConfig,
   });
   const [outgoing, setOutgoing] = useState<AmbientRoll | null>(null);
-  const [driftPx, setDriftPx] = useState(0);
   const previousRef = useRef<AmbientRoll | null>(null);
 
   // Hand the previous roll over to the fade-out slot when the seed changes, then release it.
@@ -71,8 +69,6 @@ export function ContestAmbientLayer({
 
   const layerStyle = {
     '--countdown-hue': `${roll.palette.glowHue}`,
-    // The sweep the field drifts on. Transform only, so it never leaves the compositor.
-    '--countdown-ambient-drift': `${driftPx.toFixed(2)}px`,
   } as React.CSSProperties;
 
   return (
@@ -99,7 +95,6 @@ export function ContestAmbientLayer({
         energy={AMBIENT_LIVE_ENERGY}
         isAnimating={isAnimating}
         config={ambientConfig}
-        onDrift={setDriftPx}
       />
     </div>
   );

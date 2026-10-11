@@ -20,8 +20,6 @@ interface Props {
   readonly config: AmbientConfig;
   /** Set on the field that is fading out, so a re-roll fades both ways. */
   readonly isLeaving?: boolean;
-  /** Reports the frame's drift, so the surface can sweep the whole field with it. */
-  readonly onDrift?: (driftPx: number) => void;
 }
 
 const FLICKER_PERIOD_SECONDS = 2.6;
@@ -49,7 +47,6 @@ export function ContestAmbientField({
   isAnimating,
   config,
   isLeaving = false,
-  onDrift,
 }: Props): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fieldRef = useRef<AmbientField | null>(null);
@@ -107,15 +104,14 @@ export function ContestAmbientField({
     }
 
     const driftPx = ambientDriftOffset(elapsedRef.current, roll.driftSeconds, bounds.width * config.driftExtentRatio);
-    onDrift?.(driftPx);
 
     context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     context.clearRect(0, 0, bounds.width, bounds.height);
     fieldRef.current = paintAmbientField(context, {
       bounds,
       palette: roll.palette,
-      // The content drifts with the sweep rather than against it, so the field reads as
-      // one object moving and not as two motions fighting.
+      // Each painter wraps this offset across its own width, which is what keeps the field
+      // seamless: it is applied to the drawn geometry, never as a transform on a fixed box.
       driftPx,
       progress,
       density,

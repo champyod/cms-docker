@@ -7,7 +7,7 @@
  * countdown is counting to.
  */
 
-export const AMBIENT_TEXTURE_IDS = ['traces', 'glyphs', 'boids', 'flow'] as const;
+export const AMBIENT_TEXTURE_IDS = ['traces', 'glyphs', 'boids', 'flow', 'harmonograph'] as const;
 
 export type AmbientTextureId = (typeof AMBIENT_TEXTURE_IDS)[number];
 
@@ -89,6 +89,7 @@ export const AMBIENT_TEXTURES: readonly AmbientTexture[] = [
   { id: 'glyphs', label: 'Glyph grid', driftSecondsRange: [26, 40], agentCount: 0 },
   { id: 'boids', label: 'Flock', driftSecondsRange: [30, 44], agentCount: 110 },
   { id: 'flow', label: 'Flow field', driftSecondsRange: [36, 54], agentCount: 260 },
+  { id: 'harmonograph', label: 'Harmonograph', driftSecondsRange: [30, 48], agentCount: 0 },
 ];
 
 /**

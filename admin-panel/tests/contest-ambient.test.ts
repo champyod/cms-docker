@@ -31,6 +31,10 @@ describe('rollAmbient', () => {
     expect(AMBIENT_PALETTES.map((palette) => palette.id)).toContain(roll.palette.id);
   });
 
+  it('includes a mathematical texture, not only simulated ones', () => {
+    expect(AMBIENT_TEXTURES.map((texture) => texture.id)).toContain('harmonograph');
+  });
+
   it('reaches every texture over a spread of seeds', () => {
     const seen = new Set(
       Array.from({ length: 200 }, (_unused, index) => rollAmbient(index / 200).texture.id),

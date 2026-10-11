@@ -40,6 +40,16 @@ const GLYPH_FLICKER_FLOOR = 0.16;
 const GLYPH_ALPHA = 0.42;
 const GLYPH_ALPHABET = '0123456789ABCDEF';
 
+const HARMONOGRAPH_CELL_PX = 190;
+const HARMONOGRAPH_STEPS = 220;
+const HARMONOGRAPH_RENDER_SCALE = 0.38;
+const HARMONOGRAPH_LINE_WIDTH_PX = 1.1;
+const HARMONOGRAPH_ALPHA = 0.5;
+/** Integer frequency pairs, so every figure closes on itself and repeats exactly. */
+const HARMONOGRAPH_FREQUENCIES: readonly (readonly [number, number])[] = [
+  [3, 2], [5, 4], [5, 3], [7, 5], [4, 3], [7, 4],
+];
+
 const BOID_STREAK_SECONDS = 0.26;
 const BOID_LINE_WIDTH_PX = 2.2;
 const BOID_ALPHA = 0.8;
@@ -82,6 +92,24 @@ interface TraceRun {
   readonly hasPad: boolean;
 }
 
+/**
+ * One closed Lissajous figure, as a list of points. Both frequencies are integers, so the
+ * curve returns exactly to its start and the figure is periodic — which is what lets the
+ * grid of them tile without a seam.
+ */
+interface HarmonographFigure {
+  readonly x: number;
+  readonly y: number;
+  readonly phase: number;
+  readonly frequencies: readonly [number, number];
+}
+
+interface HarmonographCell {
+  readonly x: number;
+  readonly y: number;
+  readonly figure: HarmonographFigure;
+}
+
 interface GlyphCell {
   readonly x: number;
   readonly y: number;
@@ -110,7 +138,7 @@ function buildTraceRun(width: number, random: () => number): TraceRun {
 
 function buildTraceRuns(bounds: AmbientBounds, random: () => number): readonly TraceRun[] {
   const runs: TraceRun[] = [];
-  for (let y = TRACE_GAP_PX * 0.5; y < bounds.height; y += TRACE_GAP_PX) {
+  for (let y = TRACE_GAP_PX * 0.5; y < bounds.height + TRACE_GAP_PX; y += TRACE_GAP_PX) {
     const run = buildTraceRun(bounds.width, random);
     runs.push({
       segments: run.segments.map((segment) => ({
@@ -129,8 +157,12 @@ function buildTraceRuns(bounds: AmbientBounds, random: () => number): readonly T
 
 function buildGlyphCells(bounds: AmbientBounds, random: () => number): readonly GlyphCell[] {
   const cells: GlyphCell[] = [];
-  for (let y = GLYPH_CELL_PX; y < bounds.height; y += GLYPH_CELL_PX) {
-    for (let x = GLYPH_CELL_PX; x < bounds.width; x += GLYPH_CELL_PX) {
+  const half = GLYPH_CELL_PX * 0.5;
+  // Half a cell beyond each edge, so the cells either side of the seam exist. Without them
+  // the drift opens a blank band at the left and right, because only whole cells inside the
+  // bounds were ever built.
+  for (let y = half; y < bounds.height + GLYPH_CELL_PX; y += GLYPH_CELL_PX) {
+    for (let x = half; x < bounds.width + GLYPH_CELL_PX; x += GLYPH_CELL_PX) {
       cells.push({
         x,
         y,
@@ -142,11 +174,65 @@ function buildGlyphCells(bounds: AmbientBounds, random: () => number): readonly 
   return cells;
 }
 
+/**
+ * A grid of closed Lissajous figures, one per cell, each read as a small mathematical
+ * drawing rather than as decoration.
+ */
+function buildHarmonographCells(bounds: AmbientBounds, random: () => number): readonly HarmonographCell[] {
+  const cells: HarmonographCell[] = [];
+  for (let y = HARMONOGRAPH_CELL_PX * 0.5; y < bounds.height + HARMONOGRAPH_CELL_PX; y += HARMONOGRAPH_CELL_PX) {
+    for (let x = HARMONOGRAPH_CELL_PX * 0.5; x < bounds.width + HARMONOGRAPH_CELL_PX; x += HARMONOGRAPH_CELL_PX) {
+      cells.push({
+        x,
+        y,
+        figure: {
+          x: HARMONOGRAPH_CELL_PX * HARMONOGRAPH_RENDER_SCALE,
+          y: HARMONOGRAPH_CELL_PX * HARMONOGRAPH_RENDER_SCALE,
+          phase: random() * Math.PI * 2,
+          frequencies: HARMONOGRAPH_FREQUENCIES[Math.floor(random() * HARMONOGRAPH_FREQUENCIES.length)],
+        },
+      });
+    }
+  }
+  return cells;
+}
+
+function paintHarmonograph(
+  context: CanvasRenderingContext2D,
+  frame: AmbientFrame,
+  cells: readonly HarmonographCell[],
+): void {
+  const { width } = frame.bounds;
+  context.lineWidth = HARMONOGRAPH_LINE_WIDTH_PX * objectSize(frame);
+  context.strokeStyle = ambientColor(frame.palette, HARMONOGRAPH_ALPHA, frame.palette.accentHue);
+  // Wrapped per cell, so a figure that crosses the edge reappears on the far side and the
+  // band the drift opens is filled rather than left blank.
+  const startX = wrapCoordinate(frame.driftPx, width);
+  for (let tile = -1; tile <= 1; tile += 1) {
+    const tileX = startX + tile * width;
+    for (const cell of cells) {
+      const centreX = tileX + cell.x;
+      if (centreX < -HARMONOGRAPH_CELL_PX || centreX > width + HARMONOGRAPH_CELL_PX) continue;
+      const { figure } = cell;
+      context.beginPath();
+      for (let step = 0; step <= HARMONOGRAPH_STEPS; step += 1) {
+        const t = (step / HARMONOGRAPH_STEPS) * Math.PI * 2;
+        const px = centreX + Math.sin(figure.frequencies[0] * t + figure.phase) * figure.x;
+        const py = cell.y + Math.sin(figure.frequencies[1] * t) * figure.y;
+        if (step === 0) context.moveTo(px, py);
+        else context.lineTo(px, py);
+      }
+      context.stroke();
+    }
+  }
+}
+
 export type AmbientField =
   | { readonly texture: 'traces'; readonly runs: readonly TraceRun[] }
   | { readonly texture: 'glyphs'; readonly cells: readonly GlyphCell[] }
   | { readonly texture: 'boids'; readonly agents: readonly AmbientAgent[] }
-  | { readonly texture: 'flow'; readonly trails: readonly (readonly AmbientVector[])[] };
+  | { readonly texture: 'flow'; readonly trails: readonly (readonly AmbientVector[])[] }
+  | { readonly texture: 'harmonograph'; readonly cells: readonly HarmonographCell[] };
 
 /** Geometry and starting state for one roll, rebuilt only when the size or seed changes. */
 export function buildAmbientField(
@@ -158,6 +244,7 @@ export function buildAmbientField(
   if (textureId === 'traces') return { texture: 'traces', runs: buildTraceRuns(bounds, random) };
   if (textureId === 'glyphs') return { texture: 'glyphs', cells: buildGlyphCells(bounds, random) };
   if (textureId === 'boids') return { texture: 'boids', agents: buildAmbientFlock(agentCount, bounds, random) };
+  if (textureId === 'harmonograph') return { texture: 'harmonograph', cells: buildHarmonographCells(bounds, random) };
   return {
     texture: 'flow',
     trails: buildAmbientParticles(agentCount, bounds, random).map((particle) => [particle]),
@@ -320,5 +407,8 @@ export function paintAmbientField(
       return { texture: 'boids', agents: paintBoids(context, frame, field.agents) };
     case 'flow':
       return { texture: 'flow', trails: paintFlow(context, frame, field.trails) };
+    case 'harmonograph':
+      paintHarmonograph(context, frame, field.cells);
+      return field;
   }
 }
