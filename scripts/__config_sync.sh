@@ -477,6 +477,22 @@ declare -a RETIRED_BIND_APPEND=()
 declare -A RETIRED_BIND_WRITTEN=()
 declare -A RETIRED_KEY_SECTION=()
 
+# Keys retired with NO successor. WHY a table of their own: RETIRED_KEY_TARGET renames a
+# key and moves its value onto the replacement, but nothing reads these any more, so there
+# is nothing to move — only the line goes, and the reason names what took the key's job.
+declare -A RETIRED_DEAD_REASON=(
+  [RANKING_USERNAME]="the ranking_console_users table and RANKING_SESSION_SECRET"
+  [RANKING_PASSWORD]="the ranking_console_users table and RANKING_SESSION_SECRET"
+  [CMS_RANKING_CONFIG]="the ranking service's own config file"
+  [CMS_RANKING_LOG_DIR]="the ranking service's own log_dir setting"
+)
+declare -a RETIRED_DEAD_KEYS=(
+  "RANKING_USERNAME"
+  "RANKING_PASSWORD"
+  "CMS_RANKING_CONFIG"
+  "CMS_RANKING_LOG_DIR"
+)
+
 # The POSTGRES_* keys that moved from [core] into [db_default] profiles (89d92c37).
 # WHY a dedicated array and not RETIRED_KEY_TARGET: that map pairs a retired key
 # NAME with a replacement key NAME (TAILSCALE_IP -> INNER_IP), but POSTGRES_* keys
@@ -748,6 +764,64 @@ migrate_retired_keys() {
     log_warn "could not write the retired-key migration into $TOML_FILE — $TOML_FILE left untouched, re-run './cms config sync'"
   fi
   return 0
+}
+
+# The one retirement sentence both the dry run and the real run emit, so they cannot differ.
+# Args: verb key section
+dead_key_notice() {
+  printf '%s retired %s from %s [%s] — no reader consumes it; use %s instead\n' \
+    "$1" "$2" "$TOML_FILE" "$3" "${RETIRED_DEAD_REASON[$2]}"
+}
+
+# Delete every RETIRED_DEAD_KEYS line, copying every other byte so comments, ordering and
+# blank lines survive. cat into the file keeps its inode and permissions (secrets: mode 600).
+apply_dead_key_removal() {
+  local tmp line trimmed key
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${RETIRED_DEAD_REASON[$key]:-}" ]]; then
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Remove keys with no successor, reporting what replaced each and moving nothing. WHY after
+# migrate_missing_keys (see main): deleting first would let a still-listed example copy the
+# key straight back in, and parse_toml must read the cleaned file or .env keeps exporting it.
+retire_dead_keys() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  local -a present=()
+  declare -A section_of=()
+  local key
+  for key in "${RETIRED_DEAD_KEYS[@]}"; do
+    toml_defines_key "$TOML_FILE" "$key" || continue
+    present+=("$key")
+    section_of["$key"]="$(toml_section_of_key "$TOML_FILE" "$key")"
+  done
+  (( ${#present[@]} > 0 )) || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    for key in "${present[@]}"; do
+      dead_key_notice "Would remove" "$key" "${section_of[$key]}"
+    done
+    return 0
+  fi
+  if ! apply_dead_key_removal; then
+    log_warn "could not remove retired keys from $TOML_FILE — left untouched, re-run './cms config sync'"
+    return 0
+  fi
+  for key in "${present[@]}"; do
+    log_info "$(dead_key_notice "removed" "$key" "${section_of[$key]}")"
+  done
 }
 
 # Move POSTGRES_* values still living in [core] onto the [db_default] profile and
@@ -1207,6 +1281,11 @@ main() {
   # secret generation — bootstrap only copies once, so updates would otherwise
   # never reach old worktrees and downstream .env would fallback to defaults.
   migrate_missing_keys
+
+  # WHY after migrate_missing_keys and before parse_toml: deleting a dead key before the
+  # merge would let a file the example still lists copy it straight back in, and parse_toml
+  # has to read the cleaned file or the generated .env keeps exporting the dead key.
+  retire_dead_keys
 
   parse_toml "$TOML_PARSE_SOURCE"
 
