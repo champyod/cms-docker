@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod board;
 pub mod config;
 pub mod db;
 pub mod entities;
@@ -8,7 +9,9 @@ pub mod feed;
 pub mod http;
 pub mod json;
 pub mod login;
+pub mod overrides;
 pub mod public_config;
+mod score;
 pub mod score_events;
 pub mod scoring;
 pub mod store;

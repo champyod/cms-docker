@@ -1,6 +1,9 @@
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use sqlx::postgres::PgPool;
 
+use crate::overrides::{OverrideRow, Overrides};
 use crate::scoring::{self, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode};
 
 #[derive(Debug, thiserror::Error)]
@@ -82,7 +85,15 @@ pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
     let tasks = load_tasks(pool).await?;
     let submissions = load_submissions(pool).await?;
     let subchanges = load_subchanges(pool).await?;
-    Ok(scoring::assemble(&tasks, &submissions, &subchanges)?)
+    let overrides = load_overrides(pool).await?;
+    let teams = load_team_membership(pool).await?;
+    Ok(scoring::assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        &overrides,
+        &teams,
+    )?)
 }
 
 /// Only an enabled account is returned: a disabled row must read as no account, not
@@ -181,4 +192,50 @@ fn to_scores(value: &serde_json::Value) -> Option<Vec<f64>> {
             .filter_map(serde_json::Value::as_f64)
             .collect()
     })
+}
+
+#[derive(sqlx::FromRow)]
+struct OverrideRowRecord {
+    target_kind: String,
+    target_key: String,
+    action: String,
+    payload: Option<serde_json::Value>,
+}
+
+/// The active overrides in one query, folded for the board assembly. Only active rows
+/// apply: an ended override keeps its history in the table but not on the board.
+async fn load_overrides(pool: &PgPool) -> Result<Overrides, StoreError> {
+    let rows = sqlx::query_as::<_, OverrideRowRecord>(
+        "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
+         WHERE active ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    let rows: Vec<OverrideRow> = rows
+        .into_iter()
+        .map(|row| OverrideRow {
+            target_kind: row.target_kind,
+            target_key: row.target_key,
+            action: row.action,
+            payload: row.payload,
+        })
+        .collect();
+    Ok(Overrides::fold(&rows))
+}
+
+#[derive(sqlx::FromRow)]
+struct TeamMemberRow {
+    key: String,
+    team: String,
+}
+
+/// Which team each user belongs to, so a team override reaches its members by lookup
+/// rather than by a query per board row.
+async fn load_team_membership(pool: &PgPool) -> Result<BTreeMap<String, String>, StoreError> {
+    let rows = sqlx::query_as::<_, TeamMemberRow>(
+        "SELECT key, team FROM ranking_users WHERE team IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|row| (row.key, row.team)).collect())
 }
