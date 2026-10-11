@@ -221,7 +221,7 @@ verify_migrated() {
     psql -U "$DB_USER" -d "$DB_NAME" -tAc \
     "SELECT (to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL)
        AND ((SELECT count(*) FROM _prisma_migrations) > 0)" 2>/dev/null || true)"
-  if [[ "$(printf '%s' "$marker" | tr -d '[:space:]')" != "tt" ]]; then
+  if [[ "$(printf '%s' "$marker" | tr -d '[:space:]')" != "t" ]]; then
     log_die "\"${DB_NAME}\" is missing the base schema marker or has no applied Prisma migrations recorded in _prisma_migrations. Re-run 'make prisma-sync' and inspect its output." 1
   fi
 
