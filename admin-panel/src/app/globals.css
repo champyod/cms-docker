@@ -574,13 +574,13 @@
   display: flex;
   align-items: center;        /* digits centred vertically inside the pill */
   justify-content: center;    /* digits centred horizontally */
-  gap: 0.02em;                /* tiny gap between the two characters */
+  /* No gap — digits are naturally spaced by the font's own advance widths. */
   font-size: clamp(2rem, min(20vw, 36vh), 14rem);
   /* Pill card */
   background: hsl(var(--countdown-hue, 226) 18% 12% / 0.65);
   border: 1px solid hsl(var(--countdown-hue, 226) 50% 36% / 0.4);
   border-radius: 0.22em;
-  padding: 0.1em 0.22em;
+  padding: 0.1em 0.3em;
   box-shadow:
     0 4px 24px hsl(var(--countdown-hue, 226) 60% 6% / 0.55),
     inset 0 1px 0 hsl(var(--countdown-hue, 226) 70% 65% / 0.12);
@@ -591,14 +591,21 @@
 
 /*
  * One digit span inside the card.
- * Must be a fixed width so "0" and "1" take the same space — otherwise the card
- * resizes on every tick.  `ch` is relative to the "0" character in the current
- * font, which is exactly what we want.
+ *
+ * WHY auto width: `0.6ch` was narrower than one character in the display font,
+ * causing digits to overlap.  Chakra Petch has proportional figures, so we rely
+ * on `font-variant-numeric: tabular-nums` to request equal-width digits (most
+ * modern fonts honour this even when not strictly monospaced), then let the
+ * browser size each span to its natural advance width.  `min-width: 0.55em`
+ * ensures a worst-case narrow glyph ("1") still contributes a readable slot.
  */
 .yt-digit {
   display: inline-block;
-  width: 0.6ch;
+  /* Natural width prevents overlap; tabular-nums minimises per-frame reflow. */
+  width: auto;
+  min-width: 0.55em;
   text-align: center;
+  font-variant-numeric: tabular-nums;
   /* Play the existing digit-in animation (defined earlier) on mount. */
   animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

@@ -181,7 +181,8 @@ function paintTraces(context: CanvasRenderingContext2D, frame: AmbientFrame, run
   // A run that leaves one side is repeated into the other by exactly the band the seam
   // occupies, rather than by a whole extra copy of the field. The band is the runs' own
   // leftmost extent, so both copies together cover the width and no more.
-  const seamXs = seamOffsets(runs.map((run) => run.segments[0]?.fromX ?? 0), width, frame.driftPx);
+  // Two copies one full period apart always cover the viewport with no gaps.
+  const seamXs = seamOffsets(width, frame.driftPx);
   for (const tileX of seamXs) {
     for (const run of runs) {
       context.beginPath();
@@ -206,8 +207,8 @@ function paintGlyphs(context: CanvasRenderingContext2D, frame: AmbientFrame, cel
   context.font = `${size}px ui-monospace, monospace`;
   context.textAlign = 'center';
   context.textBaseline = 'middle';
-  // Horizontal seam offsets (same as before).
-  const seamXs = seamOffsets([0, width - minimumCellX(cells)], width, frame.driftPx);
+  // Horizontal seam offsets: two copies one period apart always cover fully.
+  const seamXs = seamOffsets(width, frame.driftPx);
   // Vertical wrap: shift cells by driftPxY, wrapping on height.
   const driftY = frame.driftPxY ?? 0;
   const originY = ((driftY % height) + height) % height;
@@ -317,28 +318,18 @@ function drawTrail(
 }
 
 /**
- * The x offsets one tiled texture needs drawn this frame.
+ * The x offsets at which to draw one tiled texture this frame.
  *
- * The pattern repeats with period `width`, so the visible window needs the copy whose own
- * coordinates land on the surface, plus at most one more to cover the band the seam opens.
- * That band is bounded by the runs' leftmost extent — a texture laid out from `-band` on —
- * so `band` offsets are enough, and a caller that passes a band of zero (a grid whose cells
- * already start at the origin) gets a single copy.
+ * Two copies one full period (`width`) apart always cover the viewport completely,
+ * regardless of how far the drift has swept. `wrapCoordinate` keeps `origin`
+ * inside [0, width), so `origin - width` is always ≤ 0, meaning the two copies
+ * together span exactly [origin - width, origin + width] — the viewport is always
+ * inside that range.
  */
-function seamOffsets(bands: readonly number[], width: number, driftPx: number): readonly number[] {
+function seamOffsets(width: number, driftPx: number): readonly number[] {
   if (width <= 0) return [driftPx];
   const origin = wrapCoordinate(driftPx, width);
-  const widest = Math.max(0, ...bands);
-  if (widest <= 0) return [origin];
-  // Both the window starting at the origin and the one the seam opens a band before it.
-  return [origin, origin - width + widest];
-}
-
-/** Leftmost cell coordinate in the grid, which is the band the seam has to cover. */
-function minimumCellX(cells: readonly GlyphCell[]): number {
-  let leftmost = Number.POSITIVE_INFINITY;
-  for (const cell of cells) leftmost = Math.min(leftmost, cell.x);
-  return Number.isFinite(leftmost) ? leftmost : 0;
+  return [origin, origin - width];
 }
 
 /** A step longer than this is a wrap, not travel, so the stroke is broken there. */
