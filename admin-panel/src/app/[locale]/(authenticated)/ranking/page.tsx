@@ -3,8 +3,8 @@ import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
-const TERM_CLASS = 'text-xs font-bold uppercase text-white/50';
+const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
+const TERM_CLASS = 'text-xs font-bold uppercase text-muted-foreground';
 
 /** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
 export default async function RankingBoardPage({
@@ -21,24 +21,24 @@ export default async function RankingBoardPage({
   return (
     <div className="space-y-6">
       <section className={CARD_CLASS}>
-        <h2 className="text-lg font-semibold text-white">{copy.board.title}</h2>
-        <p className="text-sm text-white/60">{copy.board.hint}</p>
+        <h2 className="text-lg font-semibold text-foreground">{copy.board.title}</h2>
+        <p className="text-sm text-muted-foreground">{copy.board.hint}</p>
         <dl className="grid gap-3 md:grid-cols-2 text-sm">
           <div>
             <dt className={TERM_CLASS}>{copy.appearance.titleField}</dt>
-            <dd className="text-white/80">{appearance.title || '—'}</dd>
+            <dd className="text-foreground">{appearance.title || '—'}</dd>
           </div>
           <div>
             <dt className={TERM_CLASS}>{copy.appearance.subtitleField}</dt>
-            <dd className="text-white/80">{appearance.subtitle || '—'}</dd>
+            <dd className="text-foreground">{appearance.subtitle || '—'}</dd>
           </div>
           <div>
             <dt className={TERM_CLASS}>{copy.appearance.organisationField}</dt>
-            <dd className="text-white/80">{appearance.organisation || '—'}</dd>
+            <dd className="text-foreground">{appearance.organisation || '—'}</dd>
           </div>
           <div>
             <dt className={TERM_CLASS}>{copy.appearance.accessField}</dt>
-            <dd className="text-white/80">
+            <dd className="text-foreground">
               {appearance.accessMode === 'protected'
                 ? copy.appearance.accessProtected
                 : copy.appearance.accessPublic}

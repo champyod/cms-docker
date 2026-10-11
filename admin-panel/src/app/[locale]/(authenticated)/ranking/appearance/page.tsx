@@ -2,9 +2,9 @@ import { getRankingAppearance, submitRankingAppearance } from '@/app/actions/ran
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-white/5 bg-black/40 px-3 py-2 text-white';
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
-const LABEL_CLASS = 'block text-sm text-white/70';
+const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-foreground';
+const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
+const LABEL_CLASS = 'block text-sm text-muted-foreground';
 
 /**
  * Why a plain server form: the appearance writes one row and must work before
@@ -28,7 +28,7 @@ export default async function RankingAppearancePage({
     <div className="space-y-6">
       {canEdit ? (
         <form action={submitRankingAppearance} className={CARD_CLASS}>
-          <h2 className="text-lg font-semibold text-white">{copy.appearance.title}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{copy.appearance.title}</h2>
           <label className={LABEL_CLASS}>
             {copy.appearance.titleField}
             <input name="title" defaultValue={appearance.title} className={FIELD_CLASS} />
@@ -48,7 +48,7 @@ export default async function RankingAppearancePage({
               <option value="protected">{copy.appearance.accessProtected}</option>
             </select>
           </label>
-          <label className="flex items-center gap-2 text-sm text-white/70">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
             <input type="checkbox" name="showIdColumn" defaultChecked={appearance.showIdColumn} />
             {copy.appearance.showIdColumn}
           </label>

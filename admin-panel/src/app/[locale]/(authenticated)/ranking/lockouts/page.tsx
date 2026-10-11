@@ -2,7 +2,7 @@ import { clearRankingLockout, getRankingLockouts } from '@/app/actions/rankingLo
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
+const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
 
 export default async function RankingLockoutsPage({
   params,
@@ -23,16 +23,16 @@ export default async function RankingLockoutsPage({
     <div className="space-y-6">
       {lockoutState === null ? null : (
         <section className={CARD_CLASS}>
-          <h2 className="text-lg font-semibold text-white">{copy.lockouts.title}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{copy.lockouts.title}</h2>
           {lockoutState.ok ? (
-            <ul className="divide-y divide-white/10 text-sm text-white/80">
+            <ul className="divide-y divide-border text-sm text-foreground">
               {lockoutState.lockouts.map((lockout) => (
                 <li key={lockout.key} className="flex flex-wrap items-center gap-3 py-2">
                   <span>{lockout.subject}</span>
-                  <span className="text-white/50">
+                  <span className="text-muted-foreground">
                     {lockout.count} {copy.lockouts.failures}
                   </span>
-                  <span className="text-white/50">
+                  <span className="text-muted-foreground">
                     {lockout.retryAfterSeconds}s {copy.lockouts.remaining}
                   </span>
                   {canClearLockouts ? (
@@ -42,7 +42,7 @@ export default async function RankingLockoutsPage({
                         name="reason"
                         required
                         placeholder={copy.overrides.reason}
-                        className="rounded-lg border border-white/5 bg-black/40 px-2 py-1 text-white"
+                        className="rounded-lg border border-border bg-muted/40 px-2 py-1 text-foreground"
                       />
                       <button type="submit" className="rounded-lg bg-amber-500/20 px-3 py-1 text-amber-300">
                         {copy.lockouts.clear}
