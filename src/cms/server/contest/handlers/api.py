@@ -26,7 +26,7 @@ import logging
 from cms.db.submission import Submission
 from cms.db.user import Participation
 from cms.server import multi_contest
-from cms.server.captcha import extract_token
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
@@ -141,7 +141,8 @@ class ApiLoginHandler(ApiContestHandler):
         # authority on whether a captcha is demanded, so an attempt below the
         # threshold never reaches the provider at all.
         if captcha_demanded and not self.captcha.verify(
-                username, self.request.remote_ip, extract_token(self)):
+                username, self.request.remote_ip, extract_token(self),
+                extract_provider(self)):
             self.captcha.record_failure(username, self.request.remote_ip)
             self.json({"error": "Login failed"}, 403)
             return False

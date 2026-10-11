@@ -11,8 +11,6 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from cms.conf import CaptchaConfig
-
 
 logger = logging.getLogger(__name__)
 
@@ -62,19 +60,23 @@ TOKEN_FIELDS = (
 VERIFY_TIMEOUT = 10
 
 
-def verify_token(token: str, secret: str, config: CaptchaConfig) -> bool:
-    """Return whether *token* is a valid answer for the configured provider.
+def verify_token(token: str, secret: str, provider: str) -> bool:
+    """Return whether *token* is a valid answer for *provider*.
 
     The request and the fail-closed treatment of a network error follow
     `captcha.ts`: a POST of `secret` and `response` as form data, and any
     exception on the way out of the process returns False rather than
     letting an unverifiable token through.
 
+    *provider* names the siteverify endpoint, because a token is only
+    meaningful to the provider that issued it and the chain may have shifted
+    between the render that produced it and this call.
+
     """
     if len(token) == 0:
         return False
-    provider = (config.provider or "").strip().lower()
-    url = PROVIDER_VERIFY_URL.get(provider, TURNSTILE_VERIFY_URL)
+    normalized = (provider or "").strip().lower()
+    url = PROVIDER_VERIFY_URL.get(normalized, TURNSTILE_VERIFY_URL)
     payload = urllib.parse.urlencode({"secret": secret, "response": token})
     try:
         with urllib.request.urlopen(url, data=payload.encode("utf-8"),
@@ -84,9 +86,9 @@ def verify_token(token: str, secret: str, config: CaptchaConfig) -> bool:
         # WHY fail closed: an unreachable provider must not become a way to
         # skip the captcha, so this is logged loudly and refused.
         logger.warning("Could not reach the %s siteverify endpoint; refusing "
-                       "the login attempt.", provider or "turnstile")
+                       "the login attempt.", normalized or "turnstile")
         return False
-    return _is_successful_answer(body, provider)
+    return _is_successful_answer(body, normalized)
 
 
 def _is_successful_answer(body: bytes, provider: str) -> bool:

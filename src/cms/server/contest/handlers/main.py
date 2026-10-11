@@ -52,7 +52,7 @@ from cms.db import User, Participation, Team
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
 from cms.server import multi_contest
-from cms.server.captcha import extract_token
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
@@ -110,8 +110,9 @@ class RegistrationHandler(ContestHandler):
         # browser's jQuery handler to tell apart from a genuine credential
         # error. 429 also describes what actually happened, and the handler's
         # own script shows the widget again after it.
-        if not self.captcha.verify(self.get_argument("username", ""),
-                                   self.request.remote_ip, extract_token(self)):
+        if not self.captcha.verify(
+                self.get_argument("username", ""), self.request.remote_ip,
+                extract_token(self), extract_provider(self)):
             logger.info("CAPTCHA rejected on registration from IP %s.",
                         self.request.remote_ip)
             raise tornado.web.HTTPError(429)
@@ -284,7 +285,8 @@ class LoginHandler(ContestHandler):
         # worth anything to an attacker, so the credentials are not examined
         # until the captcha has passed.
         if not self.captcha.verify(
-                username, self.request.remote_ip, extract_token(self)):
+                username, self.request.remote_ip, extract_token(self),
+                extract_provider(self)):
             logger.info("CAPTCHA rejected for user %r from IP %s.", username,
                         self.request.remote_ip)
             return False

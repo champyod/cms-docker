@@ -380,13 +380,12 @@ class TokenFieldTest(unittest.TestCase):
 
 class VerifyTokenTest(unittest.TestCase):
     def test_an_empty_token_is_refused_without_a_request(self):
-        self.assertFalse(captcha.verify_token("", "secret", conf.CaptchaConfig()))
+        self.assertFalse(captcha.verify_token("", "secret", "turnstile"))
 
     def test_an_unreachable_provider_is_refused(self):
         # Fail closed: a provider that cannot be reached must not become a way
         # past the captcha, and must not raise into the login handler either.
-        self.assertFalse(
-            captcha.verify_token("t", "s", conf.CaptchaConfig(provider="turnstile")))
+        self.assertFalse(captcha.verify_token("t", "s", "turnstile"))
 
 
 class Attributes:
@@ -593,6 +592,79 @@ class ProviderTableTest(unittest.TestCase):
         self.assertEqual(keys, set(provider.PROVIDER_WIDGET_CLASS))
         self.assertEqual(keys, set(provider.PROVIDER_VERIFY_URL))
         self.assertEqual(keys, {"turnstile", "hcaptcha", "recaptcha"})
+
+
+def _chain(verify=None, **overrides):
+    """A captcha with two keyed providers and hcaptcha first in the chain."""
+    values = {
+        "enabled": True,
+        "providers": ["hcaptcha", "turnstile"],
+        "keys": {
+            "hcaptcha": conf.CaptchaKeys(site_key="h-site", secret_key="h-secret"),
+            "turnstile": conf.CaptchaKeys(site_key="t-site", secret_key="t-secret"),
+        },
+        "threshold": 3,
+        "ban_threshold": 5,
+    }
+    values.update(overrides)
+    return captcha.Captcha(conf.CaptchaConfig(**values),
+                           verify=verify if verify is not None
+                           else (lambda *_: True))
+
+
+class ProviderChainTest(unittest.TestCase):
+    """A service's provider priority list, and the token that names its provider."""
+
+    def test_the_first_configured_provider_is_used(self):
+        subject = _chain()
+
+        self.assertEqual(subject.provider(), "hcaptcha")
+        self.assertIn("h-site", subject.widget_html())
+        self.assertIn('class="h-captcha"', subject.widget_html())
+
+    def test_a_provider_without_keys_falls_through_to_the_next(self):
+        # First in the list but unkeyed: it must not disable the challenge while
+        # a usable provider remains.
+        subject = _chain(keys={
+            "turnstile": conf.CaptchaKeys(site_key="t-site", secret_key="t-secret"),
+        })
+
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_the_widget_names_the_provider_it_rendered(self):
+        widget = _chain().widget_html()
+
+        self.assertIn('name="captchaProvider" value="hcaptcha"', widget)
+
+    def test_a_token_is_verified_against_its_named_provider(self):
+        seen = []
+
+        def record(token, secret, provider):
+            seen.append((token, secret, provider))
+            return True
+
+        subject = _chain(verify=record)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        subject.verify(CONTESTANT, REMOTE_IP, "tok", "turnstile")
+
+        self.assertEqual(seen, [("tok", "t-secret", "turnstile")])
+
+    def test_an_unnamed_provider_verifies_against_the_active_one(self):
+        seen = []
+
+        def record(token, secret, provider):
+            seen.append((token, secret, provider))
+            return True
+
+        subject = _chain(verify=record)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        subject.verify(CONTESTANT, REMOTE_IP, "tok", "")
+
+        self.assertEqual(seen, [("tok", "h-secret", "hcaptcha")])
 
 
 class AdminFormWidgetTest(unittest.TestCase):
