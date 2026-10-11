@@ -39,7 +39,7 @@ Commands:
   setup                     first-time guided setup (fresh or update wizard)
   update                    interactive config update wizard (config only)
   fix                       non-interactive repair of missing/insecure config
-  deploy <stack> [--img]    make core|admin|contest|worker|infra [-img]; stack=all loops
+  deploy <stack> [--img]    make core|admin|contest|worker|infra|monitor [-img]; stack=all loops
   stop [stack]              stop one stack or all
   clean [stack]             clean one stack or all
   pull [stack]              pull images for one stack or all

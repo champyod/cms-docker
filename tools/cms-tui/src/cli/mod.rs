@@ -156,7 +156,9 @@ pub enum Commands {
     },
     /// Non-interactive repair of missing/insecure config.
     Fix,
-    /// Deploy a stack (`core|admin|contest|worker|infra|domain|waf|all`) with optional `--img`.
+    /// Deploy a stack (`core|admin|contest|worker|infra|monitor|domain|waf|all`) with optional `--img`.
+    ///
+    /// `monitor` is the profile's own name and resolves to the same `infra` targets.
     ///
     /// `domain` and `waf` are additive: they publish host ports and start
     /// certbot, so they are never part of `all`.
