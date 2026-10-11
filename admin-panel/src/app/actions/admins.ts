@@ -11,7 +11,7 @@ import {
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
-import { readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { type ListSortInput } from '@/lib/list-sorting';
 import { adminSortOrderBy } from '@/lib/admin-sorting';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';

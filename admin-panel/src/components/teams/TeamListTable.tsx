@@ -4,7 +4,6 @@ import { Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
-import { useAppRouter } from '@/hooks/useAppRouter';
 import type { ListSortInput } from '@/lib/list-sorting';
 import type { Dictionary } from '@/lib/dictionary';
 import type { TeamSummary } from '@/lib/people-read-model-types';

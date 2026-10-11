@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { ContestModalShell } from './contest-modal/ContestModalShell';
 import { useContestForm } from './contest-modal/useContestForm';
@@ -20,17 +20,18 @@ interface ContestModalWithPermsProps extends ContestModalProps {
 
 export function ContestModal(props: ContestModalWithPermsProps) {
   const [activeTab, setActiveTab] = useState<ContestModalTab>('general');
-  // The modal stays mounted across open/close, so without this reset it reopens on the
-  // tab the last edit ended on — a create would start on Analysis Mode, not General.
-  useEffect(() => {
-    if (props.isOpen) setActiveTab('general');
-  }, [props.isOpen]);
+  // Why: the modal stays mounted across open/close, so resetting the tab as it closes
+  // is what makes it reopen on General instead of the tab the last edit ended on.
+  const closeModal = (): void => {
+    setActiveTab('general');
+    props.onClose();
+  };
   const form = useContestForm(props.isOpen, props.contest);
   const { handleSubmit, loading } = useContestSubmit({
     contest: props.contest,
     formData: form.formData,
     onSuccess: props.onSuccess,
-    onClose: props.onClose,
+    onClose: closeModal,
     setActiveTab,
     setValidationErrors: form.setValidationErrors,
     setError: form.setError,
@@ -46,7 +47,7 @@ export function ContestModal(props: ContestModalWithPermsProps) {
   return (
     <FieldAccessContext.Provider value={fieldAccess}>
       <ContestModalShell
-        contest={props.contest} onClose={props.onClose} loading={loading} error={form.error}
+        contest={props.contest} onClose={closeModal} loading={loading} error={form.error}
         validationErrors={form.validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} onSubmit={handleSubmit}
       >
         <TabContentRouter

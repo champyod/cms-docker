@@ -2,7 +2,6 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
 import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
   DEFAULT_COUNTDOWN_THRESHOLD,

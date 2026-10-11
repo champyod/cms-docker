@@ -45,7 +45,7 @@ export function ContestAmbientLayer({
   rerollKey,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element | null {
-  const { roll, progress, density, itemScale, isAnimating, isRolled } = useContestAmbient({
+  const { roll, progress, density, itemScale, isAnimating } = useContestAmbient({
     thresholdMs,
     nowMs,
     isPaused,
@@ -65,12 +65,7 @@ export function ContestAmbientLayer({
     return () => window.clearTimeout(timeout);
   }, [roll]);
 
-  /*
-   * Never render null while idle — that causes the brief blank page on reroll.
-   * `isRolled` is false for one render cycle before the entry effect fires; the
-   * fallback roll (seed 0) holds the canvas until the real seed arrives, so there
-   * is no blank frame.
-   */
+  // Why: the fallback roll (seed 0) holds the canvas until the real seed arrives, so idle never flashes blank.
   if (!isIdle) return null;
 
   const layerStyle = {

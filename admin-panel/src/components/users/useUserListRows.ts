@@ -8,7 +8,7 @@ import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
 import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
-import { listSortQuery, readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { listSortQuery, type ListSortInput } from '@/lib/list-sorting';
 import { writeListQuery, type ListQueryState } from '@/lib/list-state';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 

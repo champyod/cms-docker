@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -37,7 +37,7 @@ export function AdminList({
   capabilities,
   actionLabels,
 }: AdminListProps) {
-  const [admins, setAdmins] = useSyncedState(initialAdmins);
+  const [admins] = useSyncedState(initialAdmins);
   const [accessSummary, setAccessSummary] = useState<Record<number, AdminAccessSummary>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
@@ -49,7 +49,6 @@ export function AdminList({
   // Why the pair: the Actions column and the row's own click both admit `updateAdmin`'s either
   // entry permission, so a caller holding only `admin:password:update` still reaches the form.
   const canEditRow = canUpdate || hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.setAdminPassword);
-  const canDelete = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.deleteAdmin);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,7 +80,7 @@ export function AdminList({
     if (result?.success) router.refresh();
   };
 
-  const handleToggleEnabled = async (admin: { id: number; enabled: boolean }) => {
+  const handleToggleEnabled = useCallback(async (admin: { id: number; enabled: boolean }): Promise<void> => {
     await runAction(
       {
         pending: admin.enabled ? 'Disabling admin...' : 'Enabling admin...',
@@ -91,7 +90,7 @@ export function AdminList({
       () => updateAdmin(admin.id, { enabled: !admin.enabled })
     );
     router.refresh();
-  };
+  }, [runAction, router]);
 
   const startEdit = (admin: AdminWithLogin) => {
     setEditingAdmin(admin);
@@ -101,21 +100,6 @@ export function AdminList({
   const handleClose = () => {
     setIsModalOpen(false);
     setEditingAdmin(null);
-  };
-
-  // Why the pair: the Edit/Delete controls are the Actions column, and `updateAdmin` admits
-  // either entry permission, so a password-only caller still gets the column.
-  const showRowActions = canEditRow || canDelete;
-  const columnCount = showRowActions ? 7 : 6;
-
-  const renderStatusToggle = (admin: AdminWithLogin) => {
-    const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-success/20 text-success high-contrast:bg-success high-contrast:text-success-foreground' : 'bg-destructive/20 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
-    if (!canUpdate) return badge;
-    return (
-      <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
-        {badge}
-      </Button>
-    );
   };
 
   // Why published from here: the create button opens this panel's one AdminModal, so a copy of
@@ -206,9 +190,17 @@ export function AdminList({
       key: 'status',
       header: 'Status',
       sortKey: 'enabled',
-      render: (admin) => renderStatusToggle(admin),
+      render: (admin) => {
+        const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-success/20 text-success high-contrast:bg-success high-contrast:text-success-foreground' : 'bg-destructive/20 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
+        if (!canUpdate) return badge;
+        return (
+          <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
+            {badge}
+          </Button>
+        );
+      },
     },
-  ], [accessSummary, canUpdate, dict]);
+  ], [accessSummary, canUpdate, handleToggleEnabled]);
 
   const table = (
     <ResponsiveTable

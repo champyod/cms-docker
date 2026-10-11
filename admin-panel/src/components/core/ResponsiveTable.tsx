@@ -12,7 +12,7 @@ import {
   TableRow,
 } from '@/components/core/Table';
 import { SHORTCUT_ROW_ATTRIBUTE } from '@/hooks/shortcut-rows';
-import type { ListSortInput } from '@/lib/list-sorting';
+import { ariaSortFor, type ListSortInput } from '@/lib/list-sorting';
 import { cn } from '@/lib/utils';
 
 // Why: one column definition drives both layouts, so callers stop
@@ -130,7 +130,11 @@ function renderDesktopHeader<Row>(
     <TableHeader>
       <TableRow>
         {columns.map((column) => (
-          <TableHead key={column.key} className={column.headerClassName}>
+          <TableHead
+            key={column.key}
+            className={column.headerClassName}
+            aria-sort={column.sortKey && onSortChange ? ariaSortFor(sort, column.sortKey) : undefined}
+          >
             {column.sortKey && onSortChange ? (
               <SortableHeader
                 label={labelFor(column)}

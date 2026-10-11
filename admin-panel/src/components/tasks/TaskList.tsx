@@ -93,10 +93,6 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
     setIsModalOpen(true);
   };
 
-  const handleSuccess = (): void => {
-    router.refresh();
-  };
-
   const handlePageChange = (next: number): void => {
     const url = new URL(window.location.href);
     url.searchParams.set('page', String(next));
