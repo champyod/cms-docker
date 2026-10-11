@@ -135,7 +135,11 @@ mod tests {
         captcha.keys.insert(
             CaptchaProvider::Turnstile,
             CaptchaKeys {
-                site_key: if keys { "site".to_string() } else { String::new() },
+                site_key: if keys {
+                    "site".to_string()
+                } else {
+                    String::new()
+                },
                 secret_key: if keys {
                     "secret".to_string()
                 } else {

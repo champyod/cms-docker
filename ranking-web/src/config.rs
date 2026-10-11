@@ -240,7 +240,13 @@ fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
             site_key = read_trimmed(vars, "CAPTCHA_SITE_KEY");
             secret_key = read_trimmed(vars, "CAPTCHA_SECRET_KEY");
         }
-        keys.insert(*provider, CaptchaKeys { site_key, secret_key });
+        keys.insert(
+            *provider,
+            CaptchaKeys {
+                site_key,
+                secret_key,
+            },
+        );
     }
     CaptchaConfig {
         enabled: read_flag(vars, "CAPTCHA_ENABLED"),
