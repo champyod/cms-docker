@@ -218,6 +218,8 @@
       "hint": "A row here changes what the scoreboard shows without touching the contest data. Ending one keeps its history.",
       "contestId": "Contest id",
       "target": "Target",
+      "targetUser": "user",
+      "targetTeam": "team",
       "targetKey": "Target key",
       "action": "Action",
       "actionHide": "hide the row",
@@ -241,6 +243,26 @@
       "failures": "failures",
       "remaining": "left",
       "clear": "Clear"
+    },
+    "users": {
+      "title": "Ranking users",
+      "hint": "Every participation in the contest, including the rows the public board hides. Open a row for its scores and overrides.",
+      "name": "User",
+      "team": "Team",
+      "total": "Total",
+      "rank": "Rank",
+      "hidden": "Hidden",
+      "hiddenYes": "hidden",
+      "hiddenNo": "visible",
+      "empty": "No ranking users yet.",
+      "identity": "Identity",
+      "username": "Username",
+      "taskScores": "Task scores",
+      "task": "Task",
+      "score": "Score",
+      "scoresEmpty": "No scored submissions yet.",
+      "activeOverrides": "Active overrides",
+      "overridesEmpty": "No overrides are active on this user."
     }
   },
   "settings": {
@@ -623,6 +645,7 @@
     },
     "ranking": {
       "board": { "label": "Board", "description": "Review what the public scoreboard opens with and set the logo it carries." },
+      "users": { "label": "Users", "description": "Every ranking user, including hidden participations, with their scores and overrides." },
       "settings": { "label": "Settings", "description": "Apply manual ranking overrides without touching the contest data." },
       "appearance": { "label": "Appearance", "description": "Set the scoreboard title, subtitle, access mode and footer text." },
       "lockouts": { "label": "Lockouts", "description": "Review and clear ranking console lockouts." },

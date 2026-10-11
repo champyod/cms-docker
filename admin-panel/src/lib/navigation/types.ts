@@ -45,6 +45,7 @@ export type RouteId =
   | 'infrastructure.containers'
   | 'infrastructure.resources'
   | 'ranking.board'
+  | 'ranking.users'
   | 'ranking.settings'
   | 'ranking.appearance'
   | 'ranking.lockouts'

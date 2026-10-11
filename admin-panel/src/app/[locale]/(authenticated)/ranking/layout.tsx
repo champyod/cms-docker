@@ -21,6 +21,7 @@ export default async function RankingLayout({
   const fields = buildModuleFields(GROUP_ID, locale, dict, effective);
   const descriptions: ModuleDescriptions = {
     'ranking.board': dict['navigation']['ranking']['board']['description'],
+    'ranking.users': dict['navigation']['ranking']['users']['description'],
     'ranking.settings': dict['navigation']['ranking']['settings']['description'],
     'ranking.appearance': dict['navigation']['ranking']['appearance']['description'],
     'ranking.lockouts': dict['navigation']['ranking']['lockouts']['description'],

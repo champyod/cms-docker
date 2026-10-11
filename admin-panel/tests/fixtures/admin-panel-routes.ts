@@ -63,6 +63,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'infrastructure.containers', path: '/infrastructure/containers', kind: 'page', tabIds: [], legacyPaths: ['/containers'], enabled: true },
   { id: 'infrastructure.resources', path: '/infrastructure/resources', kind: 'page', tabIds: [], legacyPaths: ['/resources'], enabled: true },
   { id: 'ranking.board', path: '/ranking', kind: 'page', tabIds: [], legacyPaths: ['/infrastructure/ranking'], enabled: true },
+  { id: 'ranking.users', path: '/ranking/users', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.settings', path: '/ranking/settings', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.appearance', path: '/ranking/appearance', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.lockouts', path: '/ranking/lockouts', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
@@ -122,6 +123,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'infrastructure.containers': { all: ['container:list', 'container:read'] },
   'infrastructure.resources': { all: ['resource:list', 'resource:read'] },
   'ranking.board': { all: ['ranking:list', 'ranking:read'] },
+  'ranking.users': { all: ['ranking:list', 'ranking:read'] },
   'ranking.settings': { all: ['ranking:list', 'ranking:read'] },
   'ranking.appearance': { all: ['ranking:list', 'ranking:read'] },
   'ranking.lockouts': { all: ['ranking:list', 'ranking:read'] },
@@ -143,6 +145,6 @@ export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = 
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },
   { id: 'security', labelKey: 'navigation.groups.security', routeIds: ['security.overview', 'security.waf', 'security.blocks', 'security.tls'] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources'] },
-  { id: 'ranking', labelKey: 'navigation.groups.ranking', routeIds: ['ranking.board', 'ranking.settings', 'ranking.appearance', 'ranking.lockouts', 'ranking.credits'] },
+  { id: 'ranking', labelKey: 'navigation.groups.ranking', routeIds: ['ranking.board', 'ranking.users', 'ranking.settings', 'ranking.appearance', 'ranking.lockouts', 'ranking.credits'] },
   { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

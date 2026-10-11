@@ -71,6 +71,7 @@ const MODULE_ROUTE_IDS = [
   'infrastructure.containers',
   'infrastructure.resources',
   'ranking.board',
+  'ranking.users',
   'ranking.settings',
   'ranking.appearance',
   'ranking.lockouts',

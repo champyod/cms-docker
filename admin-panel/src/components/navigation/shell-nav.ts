@@ -63,6 +63,7 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['infrastructure.containers', Box],
   ['infrastructure.resources', Activity],
   ['ranking.board', Globe],
+  ['ranking.users', Users],
   ['ranking.settings', Settings],
   ['ranking.appearance', Palette],
   ['ranking.lockouts', Lock],
