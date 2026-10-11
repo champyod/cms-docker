@@ -104,56 +104,56 @@ class TestAddSubmissionSingleSourceWithLanguage(
 
         self.session.commit()
 
-    def test_success(self):
+    def test_it_adds_the_submission_with_the_inferred_language(self):
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS,
             {"source.%l": self.get_path(_FILENAME_1)}, None))
         self.assertSubmissionInDb(_TS, self.task, _LANGUAGE_1,
                                   {"source.%l": _DIGEST_1})
 
-    def test_success_override_language(self):
+    def test_it_adds_the_submission_with_the_overridden_language(self):
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS,
             {"source.%l": self.get_path(_FILENAME_1)}, _LANGUAGE_1_ALT))
         self.assertSubmissionInDb(_TS, self.task, _LANGUAGE_1_ALT,
                                   {"source.%l": _DIGEST_1})
 
-    def test_fail_no_task(self):
+    def test_it_fails_when_the_task_is_missing(self):
         # We pass a non-existing task name.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name + "_wrong",
             _TS, {}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_no_user(self):
+    def test_it_fails_when_the_user_is_missing(self):
         # We pass a non-existing username.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username + "_wrong", self.task.name,
             _TS, {}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_no_contest(self):
+    def test_it_fails_when_the_contest_is_missing(self):
         # We pass a non-existing contest id.
         self.assertFalse(add_submission(
             self.contest.id + 100, self.user.username, self.task.name, _TS,
             {}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_task_not_in_contest(self):
+    def test_it_fails_when_the_task_is_not_in_the_contest(self):
         # We pass a contest that does not contain the task.
         self.assertFalse(add_submission(
             self.other_contest.id, self.user.username, self.task.name, _TS,
             {}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_no_language_inferrable_missing_source(self):
+    def test_it_fails_when_no_source_file_is_given(self):
         # Task requires a language, but we don't provide any file that
         # indicate it.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_no_language_inferrable_missing_extension(self):
+    def test_it_fails_when_the_file_has_no_inferrable_language(self):
         # Task requires a language, but the file we provide does not have
         # an extension defining the language.
         self.assertFalse(add_submission(
@@ -161,14 +161,14 @@ class TestAddSubmissionSingleSourceWithLanguage(
             {"source.%l": self.get_path(_FILENAME_2)}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_file_not_found(self):
+    def test_it_fails_when_the_source_file_is_missing_on_disk(self):
         # We provide a path, but the file does not exist.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS,
             {"source.%l": self.get_path("source_not_existing.c")}, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_file_not_in_submission_format(self):
+    def test_it_fails_when_the_file_is_not_in_the_submission_format(self):
         # We provide a file, but for the wrong filename.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS,
@@ -189,7 +189,7 @@ class TestAddSubmissionTwoSourcesWithLanguage(
 
         self.session.commit()
 
-    def test_success_many(self):
+    def test_it_adds_the_submission_with_both_sources(self):
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {
                 "source1.%l": self.get_path(_FILENAME_1),
@@ -200,7 +200,7 @@ class TestAddSubmissionTwoSourcesWithLanguage(
             "source2.%l": _DIGEST_1,
         })
 
-    def test_success_missing_file(self):
+    def test_it_accepts_a_missing_source_when_the_language_is_clear(self):
         # We allow submissions with missing files, as long as we can identify
         # the language.
         self.assertTrue(add_submission(
@@ -209,7 +209,7 @@ class TestAddSubmissionTwoSourcesWithLanguage(
         self.assertSubmissionInDb(_TS, self.task, _LANGUAGE_1,
                                   {"source1.%l": _DIGEST_1})
 
-    def test_fail_language_only_in_one(self):
+    def test_it_fails_when_only_one_source_has_an_inferrable_language(self):
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {
                 "source1.%l": self.get_path(_FILENAME_1),
@@ -217,7 +217,7 @@ class TestAddSubmissionTwoSourcesWithLanguage(
              }, None))
         self.assertSubmissionNotInDb(_TS)
 
-    def test_fail_inconsistent_language(self):
+    def test_it_fails_when_the_sources_have_inconsistent_languages(self):
         # Language for the two files is different.
         self.assertFalse(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {
@@ -240,7 +240,7 @@ class TestAddSubmissionTwoSourcesOneLanguage(
 
         self.session.commit()
 
-    def test_success_many(self):
+    def test_it_adds_the_submission_with_both_sources(self):
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {
                 "source1.%l": self.get_path(_FILENAME_1),
@@ -251,7 +251,7 @@ class TestAddSubmissionTwoSourcesOneLanguage(
             "source2": _DIGEST_2,
         })
 
-    def test_success_missing_source_without_language(self):
+    def test_it_accepts_a_missing_source_that_needs_no_language(self):
         # We allow submissions with missing files, as long as we can identify
         # the language.
         self.assertTrue(add_submission(
@@ -260,7 +260,7 @@ class TestAddSubmissionTwoSourcesOneLanguage(
         self.assertSubmissionInDb(_TS, self.task, _LANGUAGE_1,
                                   {"source1.%l": _DIGEST_1})
 
-    def test_fail_missing_source_with_language(self):
+    def test_it_fails_when_the_source_that_defines_the_language_is_missing(self):
         # We allow submissions with missing files, as long as we can identify
         # the language.
         self.assertFalse(add_submission(
@@ -281,13 +281,13 @@ class TestAddSubmissionOutputOnly(
 
         self.session.commit()
 
-    def test_success_no_language(self):
+    def test_it_adds_the_source_of_a_language_agnostic_task(self):
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS,
             {"source": self.get_path(_FILENAME_2)}, None))
         self.assertSubmissionInDb(_TS, self.task, None, {"source": _DIGEST_2})
 
-    def test_success_no_source(self):
+    def test_it_adds_an_empty_submission_of_a_language_agnostic_task(self):
         # Here we don't provide any file, but language is not required.
         self.assertTrue(add_submission(
             self.contest.id, self.user.username, self.task.name, _TS, {}, None))

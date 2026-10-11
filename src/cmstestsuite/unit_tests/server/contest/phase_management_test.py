@@ -180,7 +180,7 @@ test.__test__ = False
 class TestComputeActualPhase(unittest.TestCase):
 
     @staticmethod
-    def test_traditional():
+    def test_it_computes_the_phases_of_a_traditional_contest():
         # Test "traditional" contests. There's not much variability, so
         # we just test different delay_time/extra_time combinations.
         test("4", "12", None, None, None, None, "0", "0",
@@ -246,7 +246,7 @@ class TestComputeActualPhase(unittest.TestCase):
              ("4", -1, "9", 0, "14", 3, "16"))
 
     @staticmethod
-    def test_usaco_like():
+    def test_it_computes_the_phases_of_a_usaco_like_contest():
         # Test "USACO-like" contests, with known starting_time.
         # Consider cases where the active phase is entirely inside the
         # contest time as well as cases where it oversteps the end and

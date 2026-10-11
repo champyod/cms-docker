@@ -38,7 +38,7 @@ class TestLogService(unittest.TestCase):
     def setUp(self):
         self.service = LogService(0)
 
-    def test_last_messages(self):
+    def test_it_saves_high_severity_messages_and_drops_low_ones(self):
         for severity in ["CRITICAL",
                          "ERROR",
                          "WARNING"]:

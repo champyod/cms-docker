@@ -89,7 +89,7 @@ class TestImportDataset(DatabaseMixin, unittest.TestCase):
             self.assertEqual(d.description, description)
             self.assertEqual(d.task_type, task_type)
 
-    def test_clean_import(self):
+    def test_it_imports_a_new_dataset(self):
         # Completely new dataset for the existing task, import and attach it
         # to the contest. The description in the dataset is ignored in favor
         # of the one passed to the DatasetImporter.
@@ -104,7 +104,7 @@ class TestImportDataset(DatabaseMixin, unittest.TestCase):
         self.assertTrue(ret)
         self.assertDatasetInDb(self.task_id, desc, task_type)
 
-    def test_dataset_exists(self):
+    def test_it_refuses_to_update_an_existing_dataset(self):
         # Dataset already present, should not update.
         task_type = "new_task_type"
         task = self.get_task(name=self.task_name)
@@ -115,7 +115,7 @@ class TestImportDataset(DatabaseMixin, unittest.TestCase):
         self.assertFalse(ret)
         self.assertDatasetInDb(self.task_id, self.dataset_desc, self.task_type)
 
-    def test_task_does_not_exist(self):
+    def test_it_fails_when_the_task_is_missing(self):
         # Dataset for a task not in the DB.
         task_type = "new_task_type"
         task = self.get_task(name="new_name")

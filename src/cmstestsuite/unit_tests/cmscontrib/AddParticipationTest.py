@@ -63,35 +63,35 @@ class TestAddParticipation(DatabaseMixin, unittest.TestCase):
         else:
             self.assertEqual(p.team.code, team_code)
 
-    def test_success(self):
+    def test_it_adds_the_participation_for_the_user(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd")
 
-    def test_success_with_team(self):
+    def test_it_stores_the_team_code_on_the_participation(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, self.team.code, False, False))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd",
                                      team_code=self.team.code)
 
-    def test_user_not_found(self):
+    def test_it_fails_when_the_user_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username + "_", self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
 
-    def test_contest_not_found(self):
+    def test_it_fails_when_the_contest_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username, self.contest.id + 1, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
 
-    def test_team_not_found(self):
+    def test_it_fails_when_the_team_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, self.team.code + "_", False, False))
 
-    def test_already_exists(self):
+    def test_it_keeps_the_existing_participation_unchanged(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
@@ -103,7 +103,7 @@ class TestAddParticipation(DatabaseMixin, unittest.TestCase):
             "other_pwd", "plaintext", True, self.team.code, True, True))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd")
 
-    def test_other_values(self):
+    def test_it_stores_the_optional_participation_fields(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, "1.2.3.4", 60, 120,
             "pwd", "plaintext", True, None, True, True))

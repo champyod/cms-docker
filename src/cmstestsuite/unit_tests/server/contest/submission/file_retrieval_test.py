@@ -33,7 +33,7 @@ from cms.server.contest.submission import ReceivedFile, InvalidArchive, \
 
 class TestExtractFilesFromArchive(unittest.TestCase):
 
-    def test_zip(self):
+    def test_it_extracts_files_from_a_zip_archive(self):
         files = [ReceivedFile(None, "foo.c", b"some content"),
                  ReceivedFile(None, "foo", b"some other content"),
                  ReceivedFile(None, "foo.%l", b"more content")]
@@ -45,7 +45,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
         self.assertCountEqual(
             extract_files_from_archive(archive_data.getvalue()), files)
 
-    def test_tar_gz(self):
+    def test_it_extracts_files_from_a_tar_gz_archive(self):
         files = [ReceivedFile(None, "foo.c", b"some content"),
                  ReceivedFile(None, "foo", b"some other content"),
                  ReceivedFile(None, "foo.%l", b"more content")]
@@ -59,11 +59,11 @@ class TestExtractFilesFromArchive(unittest.TestCase):
         self.assertCountEqual(
             extract_files_from_archive(archive_data.getvalue()), files)
 
-    def test_failure(self):
+    def test_it_rejects_an_invalid_archive(self):
         with self.assertRaises(InvalidArchive):
             extract_files_from_archive(b"this is not a valid archive")
 
-    def test_directories(self):
+    def test_it_uses_only_the_basename_of_nested_paths(self):
         # Make sure we ignore the directory structure and only use the
         # trailing component of the path (i.e., the basename) in the
         # return value, even if it leads to duplicated filenames.
@@ -86,7 +86,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
     # They are here to show that we're fine (even if not always outright
     # happy) with the behaviors in those scenarios.
 
-    def test_filename_with_null(self):
+    def test_it_truncates_a_filename_at_a_null_byte(self):
         # This is an expected and most likely unproblematic behavior.
         archive_data = io.BytesIO()
         with zipfile.ZipFile(archive_data, "w") as f:
@@ -96,7 +96,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
             [ReceivedFile(None, "foo", b"some content")])
 
     @unittest.skipIf(sys.version_info < (3, 12), "this archive crashes zipfile before py3.12")
-    def test_empty_filename(self):
+    def test_it_extracts_a_file_with_an_empty_filename(self):
         archive_data = io.BytesIO()
         with zipfile.ZipFile(archive_data, "w") as f:
             # Need ZipInfo because of "bug" in writestr.
@@ -108,7 +108,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
         self.assertEqual(f.filename, "")
         self.assertEqual(f.content, b"some content")
 
-    def test_multiple_slashes_are_compressed(self):
+    def test_it_collapses_multiple_slashes_in_paths(self):
         # This is a (probably expected and) desirable behavior.
         archive_data = io.BytesIO()
         with zipfile.ZipFile(archive_data, "w") as f:
@@ -117,7 +117,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
             extract_files_from_archive(archive_data.getvalue()),
             [ReceivedFile(None, "bar", b"some content")])
 
-    def test_paths_that_might_escape(self):
+    def test_it_strips_paths_that_might_escape_the_directory(self):
         # This should check that the extracted files cannot "escape"
         # from the temporary directory where they're being extracted to.
         filenames = ["../foo/bar", "/foo/bar"]
@@ -129,7 +129,7 @@ class TestExtractFilesFromArchive(unittest.TestCase):
                 extract_files_from_archive(archive_data.getvalue()),
                 [ReceivedFile(None, "bar", b"some content")])
 
-    def test_zip_bomb_size_tarbz(self):
+    def test_it_rejects_a_tar_bz2_archive_that_exceeds_the_size_limit(self):
         # this test should finish almost instantly, instead of trying to
         # decompress the entire archive.
 
@@ -151,7 +151,7 @@ K2zE53bL9w7+gctbrLz"""))
         self.assertTrue(exc.exception.too_big)
 
 
-    def test_zip_bomb_count_tarbz(self):
+    def test_it_rejects_a_tar_bz2_archive_with_too_many_files(self):
         # this test should finish almost instantly, instead of trying to
         # decompress the entire archive.
 
@@ -168,7 +168,7 @@ OAVKmAVKnIKlTqCpU3BIofQVKnwFSpoFSpoFSpoFSp+BUqZBUqfw==""")
 
         self.assertTrue(exc.exception.too_many_files)
 
-    def test_zip_bomb_size_zip(self):
+    def test_it_rejects_a_zip_archive_that_exceeds_the_size_limit(self):
         # Similar to test_zip_bomb_size_tarbz. This test uses zip's
         # (little-used?) bzip2 mode, because bzip2 is the most efficient at
         # compressing large amounts of null bytes. It should be fine for the
@@ -187,7 +187,7 @@ ryIxJOSaHfqFfm2e9of4bjOI7jOI7jOI7jOI7jOI7jOI7jOI7jOI7jOI7jOI7jOI7j9/Pxb+9FOutrX
 
         self.assertTrue(exc.exception.too_big)
 
-    def test_zip_bomb_count_zip(self):
+    def test_it_rejects_a_zip_archive_with_too_many_files(self):
         # This test is not as extreme as the other zip-bomb ones, because zip
         # does not have metadata compression. Once we have a zip in memory (as
         # returned by tornado), constructing the file list is quite cheap, so
@@ -220,10 +220,10 @@ class TestExtractFilesFromTornado(unittest.TestCase):
         self.extract_files_from_archive = patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_empty(self):
+    def test_it_returns_nothing_for_an_empty_input(self):
         self.assertEqual(extract_files_from_tornado(dict()), list())
 
-    def test_success(self):
+    def test_it_returns_the_received_files(self):
         tornado_files = {
             "foo.%l": [MockHTTPFile("foo.py", b"some python stuff")],
             "bar.%l": [MockHTTPFile("bar.c", b"one file in C"),
@@ -235,7 +235,7 @@ class TestExtractFilesFromTornado(unittest.TestCase):
             ReceivedFile("bar.%l", "bar.c", b"one file in C"),
             ReceivedFile("bar.%l", "bar.cxx", b"the same file in C++")])
 
-    def test_not_archive_if_other_codenames(self):
+    def test_it_does_not_unpack_an_archive_alongside_other_codenames(self):
         tornado_files = {
             "submission": [MockHTTPFile("sub.zip", b"this is an archive")],
             "foo.%l": [MockHTTPFile("foo.c", b"this is something else")]}
@@ -243,7 +243,7 @@ class TestExtractFilesFromTornado(unittest.TestCase):
             ReceivedFile("submission", "sub.zip", b"this is an archive"),
             ReceivedFile("foo.%l", "foo.c", b"this is something else")])
 
-    def test_not_archive_if_other_files(self):
+    def test_it_does_not_unpack_an_archive_alongside_other_files(self):
         tornado_files = {
             "submission": [MockHTTPFile("sub.zip", b"this is an archive"),
                            MockHTTPFile("sub2.zip", b"this is another one")]}
@@ -251,7 +251,7 @@ class TestExtractFilesFromTornado(unittest.TestCase):
             ReceivedFile("submission", "sub.zip", b"this is an archive"),
             ReceivedFile("submission", "sub2.zip", b"this is another one")])
 
-    def test_good_archive(self):
+    def test_it_unpacks_a_lone_submission_archive(self):
         tornado_files = {
             "submission": [MockHTTPFile("archive.zip", b"this is an archive")]}
         self.assertIs(extract_files_from_tornado(tornado_files),
@@ -259,7 +259,7 @@ class TestExtractFilesFromTornado(unittest.TestCase):
         self.extract_files_from_archive.assert_called_once_with(
             b"this is an archive", None, None)
 
-    def test_bad_archive(self):
+    def test_it_propagates_an_invalid_archive(self):
         tornado_files = {
             "submission": [MockHTTPFile("archive.zip",
                                         b"this is not a valid archive")]}

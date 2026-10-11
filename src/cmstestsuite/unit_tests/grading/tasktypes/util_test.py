@@ -66,7 +66,7 @@ class TestIsManagerForCompilation(unittest.TestCase):
     def assertIsNotForCompilation(self, filename):
         self.assertFalse(is_manager_for_compilation(filename, self.lang))
 
-    def test_is_manager_for_compilation(self):
+    def test_it_accepts_a_file_with_a_known_extension(self):
         # Any file with an extension defined in the language is interesting.
         self.assertIsForCompilation("test.srcext1")
         self.assertIsForCompilation("test.srcext2")
@@ -75,16 +75,16 @@ class TestIsManagerForCompilation(unittest.TestCase):
         self.assertIsForCompilation("test.objext1")
         self.assertIsForCompilation("test.objext2")
 
-    def test_is_basename_empty(self):
+    def test_it_accepts_a_file_with_only_an_extension(self):
         self.assertIsForCompilation(".srcext2")
 
-    def test_is_not(self):
+    def test_it_rejects_an_unknown_or_extensionless_file(self):
         # Some easy cases.
         self.assertIsNotForCompilation("test.c")
         self.assertIsNotForCompilation("test")
         self.assertIsNotForCompilation("")
 
-    def test_is_not_extension_somewhere_else(self):
+    def test_it_rejects_an_extension_that_is_not_the_suffix(self):
         # Extension is in file but not at the right place
         self.assertIsNotForCompilation("srcext1")
         self.assertIsNotForCompilation("test.srcext1.c")

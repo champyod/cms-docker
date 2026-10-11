@@ -45,19 +45,19 @@ class TestAcceptQuestion(DatabaseMixin, unittest.TestCase):
         return accept_question(self.session, self.participation,
                                self.timestamp, subject, text)
 
-    def test_success(self):
+    def test_it_creates_the_question(self):
         q = self.call("mysubject", "mytext")
         self.assertIsNotNone(q)
         query = self.session.query(Question) \
             .filter(Question.subject == q.subject)
         self.assertIs(query.first(), q)
 
-    def test_questions_not_allowed(self):
+    def test_it_rejects_a_question_when_questions_are_disallowed(self):
         self.contest.allow_questions = False
         with self.assertRaises(QuestionsNotAllowed):
             self.call("mysubject", "mytext")
 
-    def test_question_too_long(self):
+    def test_it_rejects_a_subject_or_text_that_is_too_long(self):
         with self.assertRaises(UnacceptableQuestion):
             self.call("mysubject" + Question.MAX_SUBJECT_LENGTH * ".", "mytext")
         with self.assertRaises(UnacceptableQuestion):
@@ -140,10 +140,10 @@ class TestGetCommunications(DatabaseMixin, unittest.TestCase):
                     self.call(test_time_until, after=test_time_after),
                     res if test_time_after < ts <= test_time_until else [])
 
-    def test_no_elements(self):
+    def test_it_returns_nothing_when_there_are_no_communications(self):
         self.assertEqual(self.call(1), [])
 
-    def test_announcement(self):
+    def test_it_returns_only_announcements_of_this_contest(self):
         ts = 2
         d = self.add_announcement("subject for all", "text for all", ts)
         self.verify(ts, 5, [d])
@@ -154,7 +154,7 @@ class TestGetCommunications(DatabaseMixin, unittest.TestCase):
                               contest=other_contest)
         self.verify(ts, 5, [d])
 
-    def test_message(self):
+    def test_it_returns_only_messages_for_this_participation(self):
         ts = 2
         d = self.add_message("subject for you", "text for you", ts)
         self.verify(ts, 5, [d])
@@ -170,7 +170,7 @@ class TestGetCommunications(DatabaseMixin, unittest.TestCase):
                          participation=other_participation2)
         self.verify(ts, 5, [d])
 
-    def test_question(self):
+    def test_it_returns_answered_questions_and_their_answers(self):
         q_ts = 2
         q = self.add_question("question for admins", "text for admins", q_ts)
         self.verify(q_ts, 5, [])
@@ -200,7 +200,7 @@ class TestGetCommunications(DatabaseMixin, unittest.TestCase):
         d = self.set_answer(q, None, None, a_ts)
         self.verify(a_ts, 8, [d])
 
-    def test_all_together(self):
+    def test_it_returns_announcements_messages_and_answers_together(self):
         ts = 2
         a_d = self.add_announcement("subject for all", "text for all", ts)
         m_d = self.add_message("subject for you", "text for you", ts)

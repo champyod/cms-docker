@@ -148,14 +148,14 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         path = os.path.join(self.target, "files", digest)
         self.assertFalse(os.path.exists(path))
 
-    def test_dont_overwrite(self):
+    def test_it_refuses_to_overwrite_an_existing_target(self):
         with open(self.target, "wt", encoding="utf-8") as f:
             f.write("hello!")
         self.assertFalse(self.do_export(None))
         with open(self.target, "rt") as f:
             self.assertEqual(f.read(), "hello!")
 
-    def test_export_all(self):
+    def test_it_exports_every_object_and_its_files(self):
         """Test exporting everything.
 
         In addition to the checks for objects being present, this test also
@@ -192,7 +192,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
                                unattached_task_key, unattached_user_key])
         self.assertEqual(self.dump["_version"], version)
 
-    def test_export_single_contest(self):
+    def test_it_exports_only_the_requested_contest(self):
         """Test exporting a single contest."""
         self.assertTrue(self.do_export([self.contest.id]))
 
@@ -208,7 +208,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileInDump(self.exe_digest, self.exe_content)
         self.assertFileInDump(self.file_digest, self.file_content)
 
-    def test_export_single_contest_no_files(self):
+    def test_it_omits_the_files_of_other_contests(self):
         """Test exporting a contest does not export files of other contests."""
         self.assertTrue(self.do_export([self.other_contest.id]))
 
@@ -224,7 +224,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileNotInDump(self.exe_digest)
         self.assertFileNotInDump(self.file_digest)
 
-    def test_skip_files(self):
+    def test_it_skips_the_files_when_asked(self):
         """Test skipping files, generated or original."""
         self.assertTrue(self.do_export(None, dump_files=False))
 
@@ -234,7 +234,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileNotInDump(self.exe_digest)
         self.assertFileNotInDump(self.file_digest)
 
-    def test_skip_submissions(self):
+    def test_it_skips_the_submissions_and_their_dependents(self):
         """Test skipping submissions.
 
         Should not export submissions and depending objects, but still export
@@ -251,7 +251,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileNotInDump(self.exe_digest)
         self.assertFileNotInDump(self.file_digest)
 
-    def test_skip_generated(self):
+    def test_it_skips_the_generated_objects(self):
         """Test skipping generated file.
 
         Should not export results and executables, but still export the other
@@ -268,7 +268,7 @@ class TestDumpExporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertNotInDump(SubmissionResult)
         self.assertFileNotInDump(self.exe_digest)
 
-    def test_skip_users(self):
+    def test_it_skips_the_users_and_their_dependents(self):
         """Test skipping users.
 
         Should not export users and depending objects.

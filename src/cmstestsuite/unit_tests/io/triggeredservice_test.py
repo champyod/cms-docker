@@ -107,7 +107,7 @@ class TestTriggeredService(unittest.TestCase):
             self.service.add_executor(FakeExecutor(notifier))
         self.service.start_sweeper(timeout)
 
-    def test_success(self):
+    def test_it_notifies_each_executor_for_new_operations(self):
         """Test a simple success case."""
         self.setUpService()
         self.service.enqueue(FakeQueueItem('op 0'))
@@ -118,7 +118,7 @@ class TestTriggeredService(unittest.TestCase):
         for notifier in self.notifiers:
             self.assertEqual(notifier.get_notifications(), 2)
 
-    def test_sweeper(self):
+    def test_it_runs_operations_added_by_the_sweeper(self):
         """Test the sweeper.
 
         Test that operations added with _missing_operations are
@@ -132,7 +132,7 @@ class TestTriggeredService(unittest.TestCase):
         for notifier in self.notifiers:
             self.assertEqual(notifier.get_notifications(), 2)
 
-    def test_bad_executor(self):
+    def test_a_slow_executor_does_not_block_the_others(self):
         """Test that a slow executor does not block the others."""
         self.setUpService()
         # Adding an executor that takes 0.1s to perform anything.
@@ -157,7 +157,7 @@ class TestTriggeredService(unittest.TestCase):
         gevent.sleep(0.25)
         self.assertEqual(slow_notifier.get_notifications(), 2)
 
-    def test_batch(self):
+    def test_it_batches_operations_for_a_batch_executor(self):
         """Test a batch executor."""
         self.setUpService()
         batch_notifier = Notifier()

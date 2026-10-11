@@ -33,41 +33,41 @@ class TestWhiteDiff(unittest.TestCase):
         return _white_diff(
             BytesIO(s1.encode("utf-8")), BytesIO(s2.encode("utf-8")))[0]
 
-    def test_no_diff_one_token(self):
+    def test_it_reports_no_difference_for_equal_single_tokens(self):
         self.assertTrue(self._diff("", ""))
         self.assertTrue(self._diff("1", "1"))
         self.assertTrue(self._diff("a", "a"))
         self.assertTrue(self._diff("你好", "你好"))
 
-    def test_no_diff_one_token_and_whites(self):
+    def test_it_ignores_surrounding_whitespace(self):
         self.assertTrue(self._diff("1   ", "1"))
         self.assertTrue(self._diff("   1", "1"))
         self.assertTrue(self._diff("1" + TestWhiteDiff.WHITES_STR, "1"))
 
-    def test_no_diff_one_token_and_trailing_blank_lines(self):
+    def test_it_ignores_trailing_blank_lines(self):
         self.assertTrue(self._diff("1\n", "1"))
         self.assertTrue(self._diff("1\n\n\n\n", "1"))
         self.assertTrue(self._diff("1\n\n\n\n", "1\n"))
         self.assertTrue(self._diff("1\n\r\r \n  \n\n", "1   \n\r  "))
 
-    def test_no_diff_multiple_tokens(self):
+    def test_it_ignores_whitespace_between_tokens(self):
         self.assertTrue(self._diff("1 asd\n\n\n", "   1\tasd  \n"))
         self.assertTrue(self._diff("1 2\n\n\n", "1 2\n"))
         self.assertTrue(self._diff("1\t\r2", "1 2"))
         self.assertTrue(self._diff("1 2", "1 2" + TestWhiteDiff.WHITES_STR))
 
-    def test_diff_wrong_tokens(self):
+    def test_it_reports_a_difference_for_different_tokens(self):
         self.assertFalse(self._diff("1 2", "12"))
         self.assertFalse(self._diff("1 23", "12 3"))
         self.assertFalse(self._diff("1", "01"))
         self.assertFalse(self._diff("1.0", "1"))
 
-    def test_diff_wrong_line(self):
+    def test_it_reports_a_difference_for_different_line_breaks(self):
         self.assertFalse(self._diff("\n1", "1"))
         self.assertFalse(self._diff("1 2", "1\n2"))
         self.assertFalse(self._diff("1\n\n2", "1\n2"))
 
-    def test_diff_wrong_long_line(self):
+    def test_it_reports_a_difference_in_a_long_line(self):
         line1 = "1" * 1000
         line2 = line1 + "0"
         self.assertFalse(self._diff(line1, line2))

@@ -26,39 +26,39 @@ from cmscommon.mimetypes import get_icon_for_type, get_name_for_type, \
 
 class TestGetIconForType(unittest.TestCase):
 
-    def test_custom(self):
+    def test_it_returns_the_custom_icon(self):
         self.assertEqual(get_icon_for_type("application/x-tar"),
                          "package-x-generic")
 
-    def test_alias(self):
+    def test_it_resolves_an_aliased_mime_type(self):
         self.assertEqual(get_icon_for_type("application/x-tex"),
                          "text-x-generic")
 
-    def test_generic(self):
+    def test_it_falls_back_to_a_generic_icon(self):
         self.assertEqual(get_icon_for_type("video/x-foobar"),
                          "video-x-generic")
 
 
 class TestGetNameForType(unittest.TestCase):
 
-    def test_basic(self):
+    def test_it_returns_the_localised_name(self):
         self.assertEqual(get_name_for_type("application/pdf", "en", "en"),
                          "PDF document")
 
-    def test_alias(self):
+    def test_it_resolves_an_aliased_mime_type(self):
         self.assertEqual(get_name_for_type("text/x-octave", "en", "en"),
                          "MATLAB file")
 
 
 class TestGetTypeForFileName(unittest.TestCase):
 
-    def test_extension(self):
+    def test_it_uses_the_file_extension(self):
         self.assertEqual(get_type_for_file_name("foo.pdf"),
                          "application/pdf")
 
-    def test_filename(self):
+    def test_it_recognises_a_known_name_without_extension(self):
         self.assertEqual(get_type_for_file_name("Makefile"),
                          "text/x-makefile")
 
-    def test_unknown(self):
+    def test_it_returns_none_for_an_unknown_name(self):
         self.assertIsNone(get_type_for_file_name("foobar"))

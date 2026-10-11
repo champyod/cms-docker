@@ -98,13 +98,13 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.assertIsNone(authenticated_participation)
         self.assertIsNone(cookie)
 
-    def test_successful_login(self):
+    def test_it_authenticates_a_valid_username_and_password(self):
         self.assertSuccess("myuser", "mypass", "127.0.0.1")
 
-    def test_no_user(self):
+    def test_it_rejects_an_unknown_user(self):
         self.assertFailure("myotheruser", "mypass", "127.0.0.1")
 
-    def test_no_participation_for_user_in_contest(self):
+    def test_it_rejects_a_user_without_a_participation_in_the_contest(self):
         other_contest = self.add_contest(allow_password_authentication=True)
         other_user = self.add_user(
             username="myotheruser", password=build_password("mypass"))
@@ -112,38 +112,38 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
 
         self.assertFailure("myotheruser", "mypass", "127.0.0.1")
 
-    def test_participation_specific_password(self):
+    def test_the_participation_password_overrides_the_user_password(self):
         self.participation.password = build_password("myotherpass")
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
         self.assertSuccess("myuser", "myotherpass", "127.0.0.1")
 
-    def test_unallowed_password_authentication(self):
+    def test_it_rejects_password_login_when_it_is_disallowed(self):
         self.contest.allow_password_authentication = False
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_unallowed_hidden_participation(self):
+    def test_it_rejects_a_hidden_participation_when_they_are_blocked(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_invalid_password_stored_in_user(self):
+    def test_it_does_not_raise_on_an_invalid_user_password(self):
         # It's invalid, as it's not created by build_password.
         self.user.password = "mypass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_invalid_password_stored_in_participation(self):
+    def test_it_does_not_raise_on_an_invalid_participation_password(self):
         # It's invalid, as it's not created by build_password.
         self.participation.password = "myotherpass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "myotherpass", "127.0.0.1")
 
-    def test_ip_lock(self):
+    def test_it_enforces_the_participation_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
@@ -165,30 +165,30 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.participation.ip = None
         self.assertSuccess("myuser", "mypass", "10.0.0.1")
 
-    def test_deactivated_ip_lock(self):
+    def test_it_ignores_the_ip_restriction_when_disabled(self):
         self.contest.ip_restriction = False
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
         self.assertSuccess("myuser", "mypass", "10.0.1.1")
 
-    def test_successful_impersonation(self):
+    def test_it_impersonates_with_a_valid_admin_token(self):
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_unsuccessful_impersonation(self):
+    def test_it_rejects_impersonation_with_a_bad_admin_token(self):
         self.assertFailure("myuser", "", "127.0.0.1", "bad-admin-token")
 
-    def test_impersonation_overrides_unallowed_password_authentication(self):
+    def test_impersonation_overrides_the_password_authentication_block(self):
         self.contest.allow_password_authentication = False
 
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_impersonation_overrides_unallowed_hidden_participation(self):
+    def test_impersonation_overrides_the_hidden_participation_block(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
 
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_impersonation_overrides_ip_lock(self):
+    def test_impersonation_overrides_the_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
@@ -298,7 +298,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.assertIs(impersonated, False)
 
     @patch.object(config.contest_web_server, "cookie_duration", 10)
-    def test_cookie_contains_timestamp(self):
+    def test_the_cookie_authenticates_until_it_expires(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
 
@@ -317,7 +317,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
             timestamp=self.timestamp + timedelta(seconds=14),
             cookie=new_cookie)
 
-    def test_cookie_contains_password(self):
+    def test_the_cookie_is_validated_against_the_current_passwords(self):
         self.contest.ip_autologin = False
 
         # Cookies are of no use if one cannot login by password.
@@ -338,7 +338,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.password = build_password("newpass")
         self.assertFailure()
 
-    def test_ip_autologin(self):
+    def test_it_authenticates_by_ip_autologin(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
 
@@ -350,7 +350,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
         self.assertFailure()
 
-    def test_ip_autologin_with_ambiguous_addresses(self):
+    def test_it_refuses_ip_autologin_when_the_address_is_ambiguous(self):
         # If two users have the same IP address neither of them can autologin.
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
@@ -381,7 +381,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.contest.block_hidden_participations = False
         self.assertFailure()
 
-    def test_invalid_password_in_database(self):
+    def test_it_fails_on_an_invalid_stored_password(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.user.password = "not a valid password"
@@ -391,33 +391,33 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.password = "not a valid password"
         self.assertFailure()
 
-    def test_invalid_cookie(self):
+    def test_it_fails_on_an_invalid_or_missing_cookie(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.assertFailure(cookie=None)
         self.assertFailure(cookie="not a valid cookie")
 
-    def test_authorization_header(self):
+    def test_it_authenticates_with_the_authorization_header(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.assertSuccess(cookie=None, authorization=self.cookie)
 
-    def test_no_user(self):
+    def test_it_fails_when_the_user_no_longer_exists(self):
         self.session.delete(self.user)
         self.assertFailure(db_flush=False)
 
-    def test_no_participation_for_user_in_contest(self):
+    def test_it_fails_when_the_participation_no_longer_exists(self):
         self.session.delete(self.participation)
         self.assertFailure()
 
-    def test_hidden_user(self):
+    def test_it_fails_for_a_hidden_participation_when_blocked(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = True
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
         self.assertFailure()
 
-    def test_ip_lock(self):
+    def test_it_enforces_the_ip_restriction(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = True
         self.contest.ip_restriction = True
@@ -439,24 +439,24 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.ip = None
         self.assertSuccessAndCookieRefreshed()
 
-    def test_impersonate(self):
+    def test_it_impersonates_with_the_admin_cookie(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = False
         self.assertImpersonationSuccess()
 
-    def test_impersonate_overridden_by_ip_autologin(self):
+    def test_ip_autologin_takes_precedence_over_impersonation(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
 
         self.participation.ip = [ipaddress.ip_network("10.0.0.1/32")]
         self.assertSuccessAndCookieCleared(cookie=self.impersonated_cookie)
 
-    def test_impersonation_overrides_unallowed_hidden_participation(self):
+    def test_impersonation_overrides_the_hidden_participation_block(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
         self.assertImpersonationSuccess()
 
-    def test_impersonation_overrides_ip_lock(self):
+    def test_impersonation_overrides_the_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 

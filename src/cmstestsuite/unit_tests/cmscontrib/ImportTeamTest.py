@@ -78,7 +78,7 @@ class TestImportTeam(DatabaseMixin, unittest.TestCase):
             self.assertEqual(t.code, code)
             self.assertEqual(t.name, name)
 
-    def test_clean_import(self):
+    def test_it_imports_a_new_team(self):
         # Completely new team, import it.
         code = "new_code"
         name = "new_name"
@@ -88,7 +88,7 @@ class TestImportTeam(DatabaseMixin, unittest.TestCase):
         self.assertTrue(ret)
         self.assertTeamInDb(code, name)
 
-    def test_team_exists(self):
+    def test_it_refuses_to_update_an_existing_team(self):
         # Team already present, should not update.
         name = "new_name"
         new_team = self.get_team(code=self.code, name=name)

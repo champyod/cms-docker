@@ -37,13 +37,13 @@ class TestFlushingDict(unittest.TestCase):
             TestFlushingDict.SIZE, TestFlushingDict.FLUSH_LATENCY_SECONDS,
             self.callback)
 
-    def test_success_latency(self):
+    def test_it_flushes_after_the_latency_expires(self):
         self.d.add(0, 0)
         gevent.sleep(2 * TestFlushingDict.FLUSH_LATENCY_SECONDS)
         self.assertEqual(1, len(self.received_data))
         self.assertCountEqual([(0, 0)], self.received_data[0])
 
-    def test_success_size(self):
+    def test_it_flushes_when_the_size_is_reached(self):
         expected_data = []
         for i in range(TestFlushingDict.SIZE):
             self.d.add(i, i)
@@ -52,7 +52,7 @@ class TestFlushingDict(unittest.TestCase):
         self.assertEqual(1, len(self.received_data))
         self.assertCountEqual(expected_data, self.received_data[0])
 
-    def test_success_size_latency(self):
+    def test_it_flushes_on_size_then_on_latency(self):
         expected_data = []
         for i in range(TestFlushingDict.SIZE):
             self.d.add(i, i)
@@ -67,7 +67,7 @@ class TestFlushingDict(unittest.TestCase):
             [(TestFlushingDict.SIZE, TestFlushingDict.SIZE)],
             self.received_data[1])
 
-    def test_long_callback(self):
+    def test_it_does_not_lose_elements_while_the_callback_runs(self):
         self.d = FlushingDict(
             TestFlushingDict.SIZE, TestFlushingDict.FLUSH_LATENCY_SECONDS,
             self.long_callback)
@@ -87,7 +87,7 @@ class TestFlushingDict(unittest.TestCase):
         self.assertEqual(TestFlushingDict.SIZE + 1,
                          sum(len(data) for data in self.received_data))
 
-    def test_many_elements(self):
+    def test_it_flushes_many_elements_across_batches(self):
         expected_data = []
         for i in range(20):
             self.d.add(i, i)

@@ -51,11 +51,11 @@ class TestAddAdmin(DatabaseMixin, unittest.TestCase):
         self.assertEqual(a.enabled, enabled)
         self.assertTrue(any(ag.group.name == "Superadmin" for ag in a.admin_groups))
 
-    def test_success(self):
+    def test_it_creates_the_admin_in_the_database(self):
         self.assertTrue(add_admin("name", "pwd"))
         self.assertAdminInDb("name", "pwd", "name", True)
 
-    def test_dont_overwrite(self):
+    def test_it_refuses_to_overwrite_an_existing_admin(self):
         self.assertTrue(add_admin("name", "pwd"))
         self.assertFalse(add_admin("name", "other"))
         self.assertAdminInDb("name", "pwd", "name", True)

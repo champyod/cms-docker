@@ -168,66 +168,62 @@ class TestRPC(unittest.TestCase):
         self.disconnect_servers()
         self.sleep()
 
-    def test_method_not_existent(self):
+    def test_it_returns_an_error_for_an_unknown_method(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.not_existent()
         result.wait()
         self.assertFalse(result.successful())
         self.assertIsInstance(result.exception, RPCError)
 
-    def test_method_not_rpc_callable(self):
+    def test_it_returns_an_error_for_a_method_that_is_not_rpc_callable(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.not_rpc_callable()
         result.wait()
         self.assertFalse(result.successful())
         self.assertIsInstance(result.exception, RPCError)
 
-    def test_method_raise_exception(self):
+    def test_it_returns_an_error_when_the_method_raises(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.raise_exception()
         result.wait()
         self.assertFalse(result.successful())
         self.assertIsInstance(result.exception, RPCError)
 
-    def test_method_send_unencodable(self):
+    def test_it_returns_an_error_when_the_argument_is_unencodable(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.echo(value=RuntimeError())
         result.wait()
         self.assertFalse(result.successful())
         self.assertIsInstance(result.exception, RPCError)
 
-    # TODO Are we sure we want this to be the correct behavior? That
-    # means that if the server (by mistake?) sends unencodable data
-    # then the client will never get any data nor any error. It will
-    # get stuck until it goes in timeout.
-    def test_method_return_unencodable(self):
+    def test_it_never_resolves_when_the_result_is_unencodable(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.return_unencodable()
         result.wait(timeout=0.002)
         self.assertFalse(result.ready())
 
-    def test_method_return_bool(self):
+    def test_it_returns_a_boolean_result(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.echo(value=True)
         result.wait()
         self.assertTrue(result.successful())
         self.assertIs(result.value, True)
 
-    def test_method_return_int(self):
+    def test_it_returns_an_integer_result(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.echo(value=42)
         result.wait()
         self.assertTrue(result.successful())
         self.assertEqual(result.value, 42)
 
-    def test_method_return_string(self):
+    def test_it_returns_a_string_result(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.echo(value="Hello World")
         result.wait()
         self.assertTrue(result.successful())
         self.assertEqual(result.value, "Hello World")
 
-    def test_method_return_list(self):
+    def test_it_returns_a_list_result(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result = client.echo(value=["Hello", 42, "World"])
         result.wait()
@@ -236,7 +232,7 @@ class TestRPC(unittest.TestCase):
 
     @patch("cms.io.rpc.gevent.socket.socket")
     @patch("cms.io.rpc.gevent.socket.getaddrinfo")
-    def test_background_connect(self, getaddrinfo_mock, socket_mock):
+    def test_it_connects_without_blocking(self, getaddrinfo_mock, socket_mock):
         # Calling getaddrinfo breaks the mocking of the socket, so it is mocked
         # as well. It returns the addresses associated with the service, in
         # this case just one.
@@ -270,7 +266,7 @@ class TestRPC(unittest.TestCase):
                                                  type=socket.SOCK_STREAM)
         connect_mock.assert_called_once_with((self.host, self.port))
 
-    def test_autoreconnect1(self):
+    def test_it_reconnects_after_the_server_disconnects(self):
         client = self.get_client(ServiceCoord("Foo", 0), auto_retry=0.002)
         self.sleep()
         self.assertTrue(client.connected)
@@ -280,7 +276,7 @@ class TestRPC(unittest.TestCase):
                         "Autoreconnect didn't kick in "
                         "after server disconnected")
 
-    def test_autoreconnect2(self):
+    def test_it_reconnects_only_after_the_server_returns(self):
         client = self.get_client(ServiceCoord("Foo", 0), auto_retry=0.002)
         self.sleep()
         self.assertTrue(client.connected)
@@ -293,7 +289,7 @@ class TestRPC(unittest.TestCase):
         self.assertTrue(client.connected, "Autoreconnect didn't kick in "
                                           "after server came back online")
 
-    def test_autoreconnect3(self):
+    def test_it_does_not_reconnect_after_an_explicit_disconnect(self):
         client = self.get_client(ServiceCoord("Foo", 0), auto_retry=0.002)
         self.sleep()
         self.assertTrue(client.connected)
@@ -302,7 +298,7 @@ class TestRPC(unittest.TestCase):
         self.assertFalse(client.connected, "Autoreconnect still active "
                                            "after explicit disconnection")
 
-    def test_concurrency(self):
+    def test_a_slow_call_does_not_block_a_concurrent_call(self):
         client = self.get_client(ServiceCoord("Foo", 0))
         result1 = client.infinite()
         self.sleep()
@@ -316,7 +312,7 @@ class TestRPC(unittest.TestCase):
         self.assertFalse(result1.successful())
         self.assertIsInstance(result1.exception, RPCError)
 
-    def test_callbacks(self):
+    def test_it_calls_the_connect_and_disconnect_handlers(self):
         coord = ServiceCoord("Foo", 0)
         client = self.get_client(coord)
         self.sleep()
@@ -354,7 +350,7 @@ class TestRPC(unittest.TestCase):
         on_disconnect_handler.assert_called_once_with()
         on_disconnect_handler.reset_mock()
 
-    def test_reusability(self):
+    def test_it_can_reconnect_repeatedly(self):
         client = self.get_client(ServiceCoord("Foo", 0))
 
         on_connect_handler = Mock()
@@ -383,20 +379,20 @@ class TestRPC(unittest.TestCase):
         self.assertEqual(on_connect_handler.call_count, 10)
         self.assertEqual(on_disconnect_handler.call_count, 10)
 
-    def test_double_connect_client(self):
+    def test_connecting_an_already_connected_client_raises(self):
         # Check that asking an already-connected client to connect
         # again causes an error.
         client = self.get_client(ServiceCoord("Foo", 0))
         self.assertRaises(Exception, client.connect)
 
-    def test_double_connect_server(self):
+    def test_initializing_an_already_connected_server_raises(self):
         # Check that asking an already-connected server to initialize
         # again its connection causes an error.
         self.get_client(ServiceCoord("Foo", 0))
         self.sleep()
         self.assertRaises(Exception, self.servers[0].initialize, "foo")
 
-    def test_double_disconnect_client(self):
+    def test_disconnecting_a_client_is_idempotent(self):
         # Check that asking a non-connected client to disconnect is
         # harmless (i.e. disconnection is idempotent).
         client = self.get_client(ServiceCoord("Foo", 0))
@@ -405,7 +401,7 @@ class TestRPC(unittest.TestCase):
         client.disconnect()
         self.sleep()
 
-    def test_double_disconnect_server(self):
+    def test_disconnecting_a_server_is_idempotent(self):
         # Check that asking a non-connected server to disconnect is
         # harmless (i.e. disconnection is idempotent).
         self.get_client(ServiceCoord("Foo", 0))
@@ -415,7 +411,7 @@ class TestRPC(unittest.TestCase):
         self.servers[0].disconnect()
         self.sleep()
 
-    def test_send_invalid_json(self):
+    def test_it_closes_the_connection_on_malformed_json(self):
         sock = gevent.socket.create_connection((self.host, self.port))
         sock.sendall(b"foo\r\n")
         self.sleep()
@@ -423,7 +419,7 @@ class TestRPC(unittest.TestCase):
         self.assertFalse(self.servers[0].connected)
         sock.close()
 
-    def test_send_incomplete_json(self):
+    def test_it_closes_the_connection_on_incomplete_json(self):
         sock = gevent.socket.create_connection((self.host, self.port))
         sock.sendall(b'{"__id": "foo"}\r\n')
         self.sleep()
