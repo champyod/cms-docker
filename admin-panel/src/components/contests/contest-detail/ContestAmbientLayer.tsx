@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ContestAmbientField } from './ContestAmbientField';
 import { useContestAmbient } from './useContestAmbient';
-import { DEFAULT_AMBIENT_CONFIG, type AmbientRoll } from '@/lib/contest-ambient';
+import { DEFAULT_AMBIENT_CONFIG, type AmbientConfig, type AmbientRoll } from '@/lib/contest-ambient';
 
 interface Props {
   /** False in the running phase, where only the panic applies. */
@@ -13,6 +13,8 @@ interface Props {
   readonly thresholdMs: number | null;
   /** Changes when the surface's state changes, which triggers a fresh roll. */
   readonly rerollKey: string;
+  /** Resolved on the server from config.toml, so an operator can retune without a rebuild. */
+  readonly ambientConfig?: AmbientConfig;
 }
 
 /** Must match the field's own fade, so the outgoing field is unmounted when invisible. */
@@ -35,12 +37,14 @@ export function ContestAmbientLayer({
   nowMs,
   thresholdMs,
   rerollKey,
+  ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element | null {
   const { roll, progress, blurPx, isFullyBlurred, isAnimating, isRolled } = useContestAmbient({
     thresholdMs,
     nowMs,
     isPaused,
     rerollKey,
+    config: ambientConfig,
   });
   const [outgoing, setOutgoing] = useState<AmbientRoll | null>(null);
   const previousRef = useRef<AmbientRoll | null>(null);
@@ -71,7 +75,7 @@ export function ContestAmbientLayer({
           progress={progress}
           energy={OUTGOING_ENERGY}
           isAnimating={false}
-          config={DEFAULT_AMBIENT_CONFIG}
+          config={ambientConfig}
           isLeaving
         />
       ) : null}
@@ -81,7 +85,7 @@ export function ContestAmbientLayer({
         progress={progress}
         energy={1 - progress * 0.35}
         isAnimating={isAnimating}
-        config={DEFAULT_AMBIENT_CONFIG}
+        config={ambientConfig}
       />
       <div className={isFullyBlurred ? 'countdown-timer-bed is-shown' : 'countdown-timer-bed'}>
         <span className="countdown-timer-bed-surface" />

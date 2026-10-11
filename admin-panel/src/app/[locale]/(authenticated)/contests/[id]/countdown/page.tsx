@@ -6,6 +6,7 @@ import type { RouteId } from '@/lib/navigation/types';
 import { getContestCountdown } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { ContestCountdownTab } from '@/components/contests/contest-detail/ContestCountdownTab';
+import { resolveCountdownAmbientConfig } from '@/lib/contest-ambient-config';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
@@ -33,5 +34,7 @@ export default async function ContestCountdownPage({ params }: ContestRouteProps
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.countdown');
   const data = await readRecordOrNotFound(() => getContestCountdown(contestId));
-  return <ContestCountdownTab data={data} />;
+  // The tuning is read here rather than in the Client Component, so the values are the
+  // deployment's own and not a build-time constant baked into the browser bundle.
+  return <ContestCountdownTab data={data} ambientConfig={resolveCountdownAmbientConfig()} />;
 }

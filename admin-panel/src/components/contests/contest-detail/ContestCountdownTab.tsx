@@ -21,6 +21,7 @@ import { CountdownToolbar } from './ContestCountdownControls';
 import { ContestAmbientLayer } from './ContestAmbientLayer';
 import { useContestMotion } from './useContestMotion';
 import { usePanicTurn } from './usePanicTurn';
+import type { AmbientConfig } from '@/lib/contest-ambient';
 import {
   useCountdownThreshold,
   useCountdownTiming,
@@ -55,7 +56,14 @@ function describeMoment(timing: ContestTimingWindow, phase: ContestPhase, timeZo
   return `${PHASE_MOMENT_VERBS[phase]} ${formatZoneTime(instant, timeZone)}`;
 }
 
-export function ContestCountdownTab({ data }: { data: ContestCountdownData }): React.JSX.Element {
+export function ContestCountdownTab({
+  data,
+  ambientConfig,
+}: {
+  data: ContestCountdownData;
+  /** Resolved on the server; the defaults keep the component usable without it. */
+  ambientConfig?: AmbientConfig;
+}): React.JSX.Element {
   const router = useRouter();
   const surfaceRef = useRef<HTMLDivElement>(null);
   const { timing, now } = useCountdownTiming(data);
@@ -94,6 +102,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
         nowMs={now.getTime()}
         thresholdMs={thresholdAtMs}
         rerollKey={`${phase}:${stage}`}
+        ambientConfig={ambientConfig}
       />
 
       <div className="relative z-10">
