@@ -45,13 +45,20 @@ pub struct RankingConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptchaConfig {
     pub enabled: bool,
-    pub provider: CaptchaProvider,
-    pub site_key: String,
-    pub secret_key: String,
     pub threshold: u32,
+    /// The service's provider priority list; the first entry with a complete key
+    /// pair is the one that renders and verifies.
+    pub providers: Vec<CaptchaProvider>,
+    pub keys: HashMap<CaptchaProvider, CaptchaKeys>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptchaKeys {
+    pub site_key: String,
+    pub secret_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CaptchaProvider {
     Turnstile,
     HCaptcha,
@@ -67,12 +74,42 @@ impl CaptchaProvider {
         }
     }
 
-    fn from_wire(raw: &str) -> Self {
-        match raw.trim().to_ascii_lowercase().as_str() {
-            "hcaptcha" => Self::HCaptcha,
-            "recaptcha" => Self::Recaptcha,
-            _ => Self::Turnstile,
+    pub(crate) fn wire_name(self) -> &'static str {
+        match self {
+            Self::Turnstile => "turnstile",
+            Self::HCaptcha => "hcaptcha",
+            Self::Recaptcha => "recaptcha",
         }
+    }
+
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "turnstile" => Some(Self::Turnstile),
+            "hcaptcha" => Some(Self::HCaptcha),
+            "recaptcha" => Some(Self::Recaptcha),
+            _ => None,
+        }
+    }
+
+    fn from_wire(raw: &str) -> Self {
+        Self::parse(raw).unwrap_or(Self::Turnstile)
+    }
+}
+
+impl CaptchaConfig {
+    /// The first provider in the chain with a complete key pair.
+    pub fn active(&self) -> Option<(CaptchaProvider, &CaptchaKeys)> {
+        self.providers.iter().find_map(|provider| {
+            self.keys
+                .get(provider)
+                .filter(|keys| !keys.site_key.is_empty() && !keys.secret_key.is_empty())
+                .map(|keys| (*provider, keys))
+        })
+    }
+
+    /// Whether the challenge can be enforced at all.
+    pub fn is_usable(&self) -> bool {
+        self.enabled && self.active().is_some()
     }
 }
 
@@ -80,10 +117,9 @@ impl Default for CaptchaConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            provider: CaptchaProvider::Turnstile,
-            site_key: String::new(),
-            secret_key: String::new(),
             threshold: 3,
+            providers: Vec::new(),
+            keys: HashMap::new(),
         }
     }
 }
@@ -177,16 +213,40 @@ fn read_trimmed_optional(vars: &HashMap<String, String>, key: &str) -> Option<St
 }
 
 fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
+    let legacy = CaptchaProvider::from_wire(
+        vars.get("CAPTCHA_PROVIDER")
+            .map(String::as_str)
+            .unwrap_or("turnstile"),
+    );
+    let mut providers: Vec<CaptchaProvider> = Vec::new();
+    for part in read_trimmed(vars, "CAPTCHA_PROVIDERS").split(',') {
+        if let Some(provider) = CaptchaProvider::parse(part) {
+            if !providers.contains(&provider) {
+                providers.push(provider);
+            }
+        }
+    }
+    if providers.is_empty() {
+        providers.push(legacy);
+    }
+    let mut keys = HashMap::new();
+    for provider in &providers {
+        let prefix = format!("CAPTCHA_{}", provider.wire_name().to_ascii_uppercase());
+        let mut site_key = read_trimmed(vars, &format!("{prefix}_SITE_KEY"));
+        let mut secret_key = read_trimmed(vars, &format!("{prefix}_SECRET_KEY"));
+        // WHY the fallback: a deployment that still sets only the legacy scalar
+        // keys must keep working; they stand in for the legacy provider's entry.
+        if *provider == legacy && site_key.is_empty() && secret_key.is_empty() {
+            site_key = read_trimmed(vars, "CAPTCHA_SITE_KEY");
+            secret_key = read_trimmed(vars, "CAPTCHA_SECRET_KEY");
+        }
+        keys.insert(*provider, CaptchaKeys { site_key, secret_key });
+    }
     CaptchaConfig {
         enabled: read_flag(vars, "CAPTCHA_ENABLED"),
-        provider: CaptchaProvider::from_wire(
-            vars.get("CAPTCHA_PROVIDER")
-                .map(String::as_str)
-                .unwrap_or("turnstile"),
-        ),
-        site_key: read_trimmed(vars, "CAPTCHA_SITE_KEY"),
-        secret_key: read_trimmed(vars, "CAPTCHA_SECRET_KEY"),
         threshold: read_threshold(vars, "CAPTCHA_THRESHOLD", 3),
+        providers,
+        keys,
     }
 }
 

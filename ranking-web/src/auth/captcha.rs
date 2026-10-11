@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::config::CaptchaConfig;
+use crate::config::{CaptchaConfig, CaptchaProvider};
 
 /// How many failures pass before a solved challenge is demanded. The panel uses three,
 /// so the console does too; this is the CAPTCHA_THRESHOLD value.
@@ -33,25 +33,30 @@ pub async fn verify(
     client: &reqwest::Client,
     token: &str,
     remote_ip: Option<&str>,
+    requested: Option<CaptchaProvider>,
 ) -> Result<(), CaptchaError> {
     if !config.enabled {
         return Ok(());
     }
-    if config.secret_key.is_empty() || config.site_key.is_empty() {
-        return Err(CaptchaError::Unconfigured);
-    }
+    let active = config.active().ok_or(CaptchaError::Unconfigured)?;
+    // WHY the posted provider wins: a token is only meaningful to the provider
+    // that issued it, and the chain may have shifted between render and submit.
+    let (provider, keys) = requested
+        .and_then(|name| config.keys.get(&name).map(|keys| (name, keys)))
+        .filter(|(_, keys)| !keys.secret_key.is_empty())
+        .unwrap_or(active);
     if token.trim().is_empty() {
         return Err(CaptchaError::Refused);
     }
     let mut form = vec![
-        ("secret", config.secret_key.as_str()),
+        ("secret", keys.secret_key.as_str()),
         ("response", token.trim()),
     ];
     if let Some(address) = remote_ip {
         form.push(("remoteip", address));
     }
     let response = client
-        .post(config.provider.endpoint())
+        .post(provider.endpoint())
         .form(&form)
         .send()
         .await
@@ -70,24 +75,28 @@ pub async fn verify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::CaptchaProvider;
+    use crate::config::{CaptchaKeys, CaptchaProvider};
+    use std::collections::HashMap;
 
     fn config(enabled: bool, keys: bool) -> CaptchaConfig {
-        CaptchaConfig {
+        let mut captcha = CaptchaConfig {
             enabled,
-            provider: CaptchaProvider::Turnstile,
-            site_key: if keys {
-                "site".to_string()
-            } else {
-                String::new()
-            },
-            secret_key: if keys {
-                "secret".to_string()
-            } else {
-                String::new()
-            },
             threshold: 3,
-        }
+            providers: vec![CaptchaProvider::Turnstile],
+            keys: HashMap::new(),
+        };
+        captcha.keys.insert(
+            CaptchaProvider::Turnstile,
+            CaptchaKeys {
+                site_key: if keys { "site".to_string() } else { String::new() },
+                secret_key: if keys {
+                    "secret".to_string()
+                } else {
+                    String::new()
+                },
+            },
+        );
+        captcha
     }
 
     fn client() -> reqwest::Client {
@@ -110,7 +119,7 @@ mod tests {
     #[tokio::test]
     async fn a_disabled_provider_accepts_an_empty_token() {
         assert_eq!(
-            verify(&config(false, false), &client(), "", None).await,
+            verify(&config(false, false), &client(), "", None, None).await,
             Ok(())
         );
     }
@@ -118,7 +127,7 @@ mod tests {
     #[tokio::test]
     async fn an_enabled_provider_without_keys_fails_closed() {
         assert_eq!(
-            verify(&config(true, false), &client(), "token", None).await,
+            verify(&config(true, false), &client(), "token", None, None).await,
             Err(CaptchaError::Unconfigured)
         );
     }
@@ -126,7 +135,7 @@ mod tests {
     #[tokio::test]
     async fn an_enabled_provider_refuses_an_empty_token_without_calling_out() {
         assert_eq!(
-            verify(&config(true, true), &client(), "   ", None).await,
+            verify(&config(true, true), &client(), "   ", None, None).await,
             Err(CaptchaError::Refused)
         );
     }

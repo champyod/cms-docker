@@ -29,8 +29,11 @@ fn page_html(captcha: &CaptchaConfig, error: Option<&str>) -> String {
 }
 
 fn widget_html(captcha: &CaptchaConfig) -> String {
-    let key = captcha.site_key.replace('"', "");
-    match captcha.provider {
+    let Some((provider, keys)) = captcha.active() else {
+        return String::new();
+    };
+    let key = keys.site_key.replace('"', "");
+    let widget = match provider {
         CaptchaProvider::Turnstile => format!(
             "<div class=\"cf-turnstile\" data-sitekey=\"{key}\"></div><script src=\"https://challenges.cloudflare.com/turnstile/v0/api.js\" async defer></script>"
         ),
@@ -40,7 +43,11 @@ fn widget_html(captcha: &CaptchaConfig) -> String {
         CaptchaProvider::Recaptcha => format!(
             "<div class=\"g-recaptcha\" data-sitekey=\"{key}\"></div><script src=\"https://www.google.com/recaptcha/api.js\" async defer></script>"
         ),
-    }
+    };
+    format!(
+        "{widget}<input type=\"hidden\" name=\"captchaProvider\" value=\"{}\">",
+        provider.wire_name()
+    )
 }
 
 fn describe(code: &str) -> String {

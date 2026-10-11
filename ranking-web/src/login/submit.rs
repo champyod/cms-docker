@@ -73,9 +73,22 @@ async fn enforce_throttle(
         return Some(locked_response(&verdict));
     }
     if captcha::challenge_required(failures, state.config().captcha.threshold) {
-        let token = captcha_token(fields, state.config().captcha.provider);
-        let verified =
-            captcha::verify(&state.config().captcha, state.http(), &token, Some(address)).await;
+        let active = state.config().captcha.active().map(|(provider, _)| provider);
+        let requested = fields
+            .get("captchaProvider")
+            .and_then(|name| CaptchaProvider::parse(name))
+            .or(active);
+        let token = requested
+            .map(|provider| captcha_token(fields, provider))
+            .unwrap_or_default();
+        let verified = captcha::verify(
+            &state.config().captcha,
+            state.http(),
+            &token,
+            Some(address),
+            requested,
+        )
+        .await;
         if verified.is_err() {
             record_failure(counter, account_key, address_key).await;
             return Some(Redirect::to("/login?error=challenge").into_response());
