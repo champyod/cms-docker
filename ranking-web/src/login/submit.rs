@@ -8,7 +8,9 @@ use crate::auth::counter::Counter;
 use crate::auth::{captcha, lockout, password, session};
 use crate::config::CaptchaProvider;
 use crate::http::{refuse, Refusal};
-use crate::store::{load_console_user, touch_last_login, ConsoleUser};
+use crate::store::{
+    load_admin_permissions, load_admin_user, touch_last_login, AdminUser, RANKING_READ_PERMISSION,
+};
 use crate::AppState;
 
 use super::gate::client_address;
@@ -73,7 +75,9 @@ async fn enforce_throttle(
         return Some(locked_response(&verdict));
     }
     if captcha::challenge_required(failures, state.config().captcha.threshold) {
-        let active = state.config().captcha.active().map(|(provider, _)| provider);
+        let active = captcha::select_active(&state.config().captcha, state.counter())
+            .await
+            .map(|(provider, _)| provider);
         let requested = fields
             .get("captchaProvider")
             .and_then(|name| CaptchaProvider::parse(name))
@@ -87,6 +91,7 @@ async fn enforce_throttle(
             &token,
             Some(address),
             requested,
+            state.counter(),
         )
         .await;
         if verified.is_err() {
@@ -111,22 +116,32 @@ async fn authenticate(
     state: &AppState,
     username: &str,
     password: &str,
-) -> Result<Option<ConsoleUser>, Refusal> {
+) -> Result<Option<AdminUser>, Refusal> {
     let Some(db) = state.db() else {
         return Err(Refusal("no database is configured".to_string()));
     };
-    let user = load_console_user(db.pool(), username)
+    let user = load_admin_user(db.pool(), username)
         .await
         .map_err(|error| Refusal(error.to_string()))?;
     let Some(user) = user else {
         return Ok(None);
     };
-    match password::verify(&user.password, password) {
-        Ok(true) => Ok(Some(user)),
+    match password::verify(&user.authentication, password) {
+        Ok(true) => {}
         // A malformed stored row is not a wrong password, so it is refused loudly
         // rather than counted against the operator trying to get in.
-        Err(error) => Err(Refusal(error.to_string())),
-        Ok(false) => Ok(None),
+        Err(error) => return Err(Refusal(error.to_string())),
+        Ok(false) => return Ok(None),
+    }
+    let permissions = load_admin_permissions(db.pool(), user.id)
+        .await
+        .map_err(|error| Refusal(error.to_string()))?;
+    // An admin without the ranking key is refused exactly like a wrong password: the
+    // account exists, and saying so would confirm it to a prober.
+    if permissions.has_permission(RANKING_READ_PERMISSION) {
+        Ok(Some(user))
+    } else {
+        Ok(None)
     }
 }
 
@@ -134,7 +149,7 @@ async fn accept(
     state: &AppState,
     counter: &Counter,
     secret: &str,
-    user: ConsoleUser,
+    user: AdminUser,
     account_key: &str,
     address_key: &str,
 ) -> Response {
