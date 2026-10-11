@@ -47,6 +47,7 @@ ACME_CLIENT    = "lego"
 | `ACME_HANDOVER_TIMEOUT` | `60` | seconds to wait for :443 to free and to return |
 | `ACME_RENEW_AT_UTC` | `03:00` | HH:MM UTC an unattended `tls-alpn-01` renewal may take :443; `""` disables it |
 | `ACME_RENEW_BEFORE_DAYS` | `7` | days of validity left before a `tls-alpn-01` certificate counts as due |
+| `CERT_NOTIFY_ENABLED` | `1` | post a Discord embed on an actual renewal and once within the renewal window; `0` silences both |
 | `ACME_HTTP01_ON_443` | `0` | answer HTTP-01 on :443 and have :80 redirect everything there |
 | `DOMAIN_CERT_METHOD` | `letsencrypt` | `letsencrypt`, `provided`, `selfsigned` — how the certificate is obtained |
 
@@ -122,6 +123,25 @@ install therefore runs `loginctl enable-linger "$(id -un)"`, which keeps the use
 alive with no one logged in. That needs authorization the installer may not have, so it
 warns and prints the command rather than failing an install whose units are already in
 place; a timer on a host without lingering stays dormant until an operator runs it.
+
+## Renewal notifications
+
+The renew unit's `ExecStartPost` runs `scripts/__cert_notify.sh` after every tick. It posts
+to `DISCORD_WEBHOOK_URL` only when the certificate on disk actually changed:
+
+- a **first observation** of a certificate is recorded and posts nothing — there is no
+  earlier certificate to call a renewal;
+- a **changed fingerprint** posts one embed naming the host, the domain, the issuer and the
+  new expiry, which is what a rotation looks like;
+- an unchanged certificate within `ACME_RENEW_BEFORE_DAYS` of expiry posts a single
+  "expiring" embed, once per certificate;
+- every other tick logs that nothing is due and stays silent, so a real failure is not
+  buried in hourly noise.
+
+The last seen fingerprint and the expiry already warned about live in
+`config/letsencrypt/.cert-notify-state`, beside the certificate store they describe.
+`CERT_NOTIFY_ENABLED = 0` switches both alerts off without touching the webhook the monitor
+and backup alerts share.
 
 ## Importing an externally issued certificate
 
@@ -212,6 +232,7 @@ and a flag that changes a configured value says so:
 | `scripts/__acme.sh` | challenge, client and CA resolution; the renewal window; status verdicts |
 | `scripts/__acme_tls_alpn.sh` | lego issuance and the :443 handover |
 | `scripts/__cert_import.sh` | validating a `provided` certificate; retiring the flat layout |
+| `scripts/__cert_notify.sh` | the renewal and approaching-expiry Discord alerts, and the gate that keeps a no-op tick silent |
 | `scripts/__domain.sh` | the verbs, flags and dispatch that call into them |
 | `docker-compose.domain.yml` | the certbot container's own bootstrap and renew loop |
 

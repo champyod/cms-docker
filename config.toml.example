@@ -110,6 +110,7 @@ ACME_HTTP01_ON_443 = 0    # enum:0,1; 1 = serve the challenge on :443 and have :
 ACME_HANDOVER_TIMEOUT = 60 # num; seconds to wait for :443 to free after the proxy stops, and to return before it is restarted
 ACME_RENEW_AT_UTC = "03:00" # str; HH:MM UTC at which an unattended tls-alpn-01 renewal may take :443; empty disables it and leaves renewal to you
 ACME_RENEW_BEFORE_DAYS = 7 # num; days of validity left before a tls-alpn-01 certificate counts as due; the handover waits for ACME_RENEW_AT_UTC on the first such day
+CERT_NOTIFY_ENABLED = 1 # enum:0,1; post a Discord embed when the certificate is actually reissued, and one when it is within ACME_RENEW_BEFORE_DAYS of expiry; 0 silences both without touching DISCORD_WEBHOOK_URL
 DOMAIN_NGINX_BIND_IP = "" # str; address the domain nginx publishes 80/443 on; empty=engine wildcard on every interface (IPv4 and IPv6) — the public entry, set it to the box address to narrow it
 HSTS_MAX_AGE = 31536000        # num; seconds; Strict-Transport-Security max-age emitted on every domain nginx vhost; 1 year — lower it only while staging
 MAX_TESTCASE_UPLOAD_BYTES = 52428800 # num; bytes; total size of one bulk testcase upload the panel accepts, 50 MB. WHY it sits beside PROXY_MAX_BODY_SIZE ([infra]): a request the proxy refuses never reaches the panel, so an upload between the two caps dies as a bare nginx 413 with nothing from the panel explaining it. Keep this at or below the proxy limit — ./cms preflight warns when it is not.

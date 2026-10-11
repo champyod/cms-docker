@@ -759,6 +759,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|ACME_HANDOVER_TIMEOUT|num||60"
   "Admin Panel|[admin]|ACME_RENEW_AT_UTC|str||03:00"
   "Admin Panel|[admin]|ACME_RENEW_BEFORE_DAYS|num||7"
+  "Admin Panel|[admin]|CERT_NOTIFY_ENABLED|enum:0,1||1"
   "Admin Panel|[admin]|HSTS_MAX_AGE|num||31536000"
   "Admin Panel|[admin]|MAX_TESTCASE_UPLOAD_BYTES|num||52428800"
   "Admin Panel|[admin]|MAX_TESTCASE_FILE_BYTES|num||2097152"
