@@ -71,7 +71,7 @@ apply_migrations() {
     local migration applied=0
     # The console authenticates a panel admin, so the rehearsal needs the panel's own
     # admin, permission and group tables beside the ranking projection.
-    for migration in "${REPO}"/admin-panel/prisma/migrations/*_admin_panel_objects_/ \
+    for migration in "${REPO}"/admin-panel/prisma/migrations/*_admin_panel_objects*/ \
                      "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
         [[ -d "${migration}" ]] || continue
         psql "${DATABASE_URL}" -q -f "${migration}migration.sql" >/dev/null ||

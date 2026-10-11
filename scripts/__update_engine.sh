@@ -646,6 +646,13 @@ VAR_SPECS=(
   "Admin Panel|[admin]|CAPTCHA_PROVIDER|enum:turnstile,hcaptcha||turnstile"
   "Admin Panel|[admin]|CAPTCHA_SITE_KEY|str||"
   "Admin Panel|[admin]|CAPTCHA_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_PROVIDERS|str||"
+  "Admin Panel|[admin]|CAPTCHA_TURNSTILE_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_TURNSTILE_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_HCAPTCHA_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_HCAPTCHA_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_RECAPTCHA_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_RECAPTCHA_SECRET_KEY|secret||"
   "Admin Panel|[admin]|CAPTCHA_THRESHOLD|num||3"
   "Admin Panel|[admin]|CAPTCHA_BAN_THRESHOLD|num||5"
   # Login counters in the shared redis-rate-limit instance. Named apart from

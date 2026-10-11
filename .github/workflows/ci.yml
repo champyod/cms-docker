@@ -447,8 +447,9 @@ jobs:
       # own admin, permission and group tables are part of that schema.
       - name: Apply the migrations the rehearsal needs
         run: |
-          for migration in admin-panel/prisma/migrations/*_admin_panel_objects_/ \
+          for migration in admin-panel/prisma/migrations/*_admin_panel_objects*/ \
                            admin-panel/prisma/migrations/*_ranking_*/; do
+            [[ -d "${migration}" ]] || continue
             psql "$RANKING_TEST_DATABASE_URL" -f "${migration}migration.sql"
           done
 
