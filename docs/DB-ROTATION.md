@@ -202,7 +202,7 @@ make cms-init
 make prisma-sync
 ```
 
-`make cms-init` runs `scripts/__cms-db-init.sh`, which on a genuinely empty database runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints) and applies `scripts/__fix_db_schema.sql`. `make prisma-sync` bootstraps the two roles and then runs `prisma migrate deploy` plus the permission seed. The two migrations that enable and force RLS on all 33 application tables run inside that history, so **a database that skipped them is not hardened** and must not be exposed.
+`make cms-init` runs `scripts/__cms-db-init.sh`, which on a genuinely empty database runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints) and applies `scripts/__fix_db_schema.sql`. `make prisma-sync` bootstraps the two roles and then runs `prisma migrate deploy` plus the permission seed. The two migrations that enable and force RLS on every application table run inside that history, so **a database that skipped them is not hardened** and must not be exposed.
 
 [`DB-MIGRATION-CUTOVER-RUNBOOK.md`](DB-MIGRATION-CUTOVER-RUNBOOK.md) §3 owns the detail of both steps, §4 the verification queries, §5 the failure handling. Do not treat §6.4 as optional: services pointed at an unmigrated database fail at connect time with a missing-relation error.
 
@@ -270,13 +270,13 @@ Run from the repository root. Substitute your own names for `cmsdb` / `cmsdb_arc
    ```
    Expected: `1`. A connection refusal means the final `ALTER DATABASE ... ALLOW_CONNECTIONS true` did not run; the error names the statement to re-issue.
 
-5. **The schema is present** — for a database that went through §6.4, or for the renamed archive that already carried it.
+5. **The schema and the migration history are present** — for a database that went through §6.4, or for the renamed archive that already carried it.
    ```bash
    docker exec cms-database psql -U cmsuser -d cmsdb_evaluate -tAc \
-     "SELECT count(*) FROM information_schema.tables
-      WHERE table_schema='public' AND table_type='BASE TABLE';"
+     "SELECT to_regclass('public.contests') IS NOT NULL,
+             (SELECT count(*) FROM _prisma_migrations) > 0;"
    ```
-   Expected: `34` (26 `cmsInitDB` tables + 6 RBAC tables + `monitor_targets` + `_prisma_migrations`). Anything less means the migration history was not applied.
+   Expected: `t`, `t` — the base schema exists and the ledger holds applied migrations. A base-table *count* is deliberately not matched: every migration that adds a table moves it, so `scripts/__check_rls_coverage.sh` is the authority on how many there should be.
 
 6. **RLS is enabled and forced on every application table** — the check that distinguishes a properly migrated database from an empty one.
    ```bash
