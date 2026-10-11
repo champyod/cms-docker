@@ -202,20 +202,26 @@ class Captcha:
         *username* is whatever the client has typed so far, which is empty on a
         fresh page load: the page can then only know whether the *address* is
         over the threshold, which is the same limit the admin panel applies when
-        it has no username yet.
+        it has no username yet. A page reached from a refused login carries the
+        username in its query, so the account's own counter is read here too.
 
         The secret is deliberately absent: templates render the site key, which
         is public by definition, and never the secret, which is not.
 
         """
         enabled = self.is_enabled()
+        required = self.is_required(username, ip)
         return {
             "captcha_enabled": enabled,
-            "captcha_required": self.is_required(username, ip),
+            "captcha_required": required,
             "captcha_provider": self.provider(),
             "captcha_site_key": self.config.site_key if enabled else "",
             "captcha_script_url": self.widget_script(),
-            "captcha_widget": self.widget_html() if enabled else "",
+            # WHY the widget follows `required`, not `enabled`: the provider
+            # script and its token round trip are third-party cost paid on every
+            # page view, but the challenge is only ever demanded past the
+            # threshold, so below it the page keeps no dependency on the provider.
+            "captcha_widget": self.widget_html() if required else "",
         }
 
 

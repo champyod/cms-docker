@@ -55,7 +55,15 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
         self.render("login.html", **self.r_params)
 
     def post(self):
+        username: str = self.get_argument("username", "")
+        # WHY the username rides in the error redirect: the login page recomputes
+        # the captcha from the counters, and a loopback client has no address
+        # bucket to read, so without the username the account's own count would
+        # be invisible and the widget would stay away while the next attempt is
+        # refused for lacking its token.
         error_args = {"login_error": "true"}
+        if len(username) > 0:
+            error_args["username"] = username
         next_page: str = self.get_argument("next", None)
         if next_page is not None:
             error_args["next"] = next_page
@@ -67,7 +75,6 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
             next_page = self.url()
         error_page = self.url("login", **error_args)
 
-        username: str = self.get_argument("username", "")
         password: str = self.get_argument("password", "")
         client_ip: str = self.request.remote_ip
 

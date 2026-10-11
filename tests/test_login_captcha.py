@@ -517,6 +517,44 @@ class ContestFormWidgetTest(unittest.TestCase):
                 self.assertNotIn("captchaToken", page)
 
 
+class WidgetDemandTest(unittest.TestCase):
+    """The widget is withheld until the challenge can actually be demanded."""
+
+    def test_a_fresh_client_gets_no_widget(self):
+        # Below the threshold the provider script must not load: the challenge
+        # cannot be demanded yet, so its cost would be paid for nothing.
+        subject = configured()
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+
+        self.assertFalse(facts["captcha_required"])
+        self.assertEqual(facts["captcha_widget"], "")
+        page = _render("contest.html", _login_page_facts(facts))
+
+        self.assertNotIn("captchaToken", page)
+
+    def test_a_challenged_client_gets_the_widget(self):
+        subject = _over_threshold()
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+
+        self.assertTrue(facts["captcha_required"])
+        self.assertIn("captchaToken", facts["captcha_widget"])
+
+    def test_a_loopback_client_needs_its_username_to_be_seen(self):
+        # A loopback address holds no address bucket, so a page that only knows
+        # the address cannot see the account's own count. That is why a refused
+        # login carries the username into the redirect: without it the widget
+        # would stay away while the next attempt is refused for lacking a token.
+        subject = configured()
+        for _ in range(OVER_CAPTCHA_THRESHOLD):
+            subject.record_failure(CONTESTANT, "127.0.0.1")
+
+        named = subject.render_params(CONTESTANT, "127.0.0.1")
+        anonymous = subject.render_params("", "127.0.0.1")
+
+        self.assertIn("captchaToken", named["captcha_widget"])
+        self.assertEqual(anonymous["captcha_widget"], "")
+
+
 class WidgetMarkupTest(unittest.TestCase):
     """The markup alone: the class, the callbacks, and the token field."""
 

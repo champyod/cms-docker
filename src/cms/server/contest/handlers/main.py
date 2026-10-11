@@ -314,6 +314,14 @@ class LoginHandler(ContestHandler):
 
         """
         error_args = {"login_error": "true"}
+        # WHY the username rides in the error redirect: the login page recomputes
+        # the captcha from the counters, and a loopback client has no address
+        # bucket to read, so without the username the account's own count would
+        # be invisible and the widget would stay away while the next attempt is
+        # refused for lacking its token.
+        username = self.get_argument("username", "")
+        if len(username) > 0:
+            error_args["username"] = username
         next_page: str | None = self.get_argument("next", None)
         if next_page is not None:
             error_args["next"] = next_page

@@ -194,13 +194,13 @@ $(document).ready(function() {
                    widget again after the refusal, so the answer it asks for has to
                    be a field this form posts back.
 
-                   WHY the guard is on captcha_widget alone: that fact is filled with
-                   the provider's markup when the captcha is configured and left
-                   empty when it is not, so a deployment that sets no CAPTCHA_* key
-                   renders exactly the form it always did. Whether a captcha is
-                   demanded at all is the handler's adaptive decision, not the
-                   template's. The markup is built by cms.server.captcha so the field
-                   names stay the ones the registration client idiom already posts. #}
+                   WHY the guard is on captcha_widget alone: cms.server.captcha fills
+                   that fact only when this client is past the adaptive threshold, and
+                   leaves it empty below it, so the provider script is not loaded and
+                   no page view pays its cost until a challenge can actually be
+                   demanded. A deployment that sets no CAPTCHA_* key renders exactly
+                   the form it always did. The markup is built by cms.server.captcha so
+                   the field names stay the ones the registration client idiom posts. #}
                 {% if captcha_widget %}
                 <div class="control-group">
                     <div class="controls">
