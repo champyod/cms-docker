@@ -31,6 +31,11 @@ export function buildCaptchaRequiredState(): Pick<LoginActionState, 'captchaRequ
   return { captchaRequired: true, captchaProvider: pub.provider, captchaSiteKey: pub.siteKey };
 }
 
+export function extractCaptchaProvider(formData: FormData): string {
+  const value = formData.get('captchaProvider');
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
 export function extractCaptchaToken(formData: FormData): string {
   const candidates = [formData.get('captchaToken'), formData.get('cf-turnstile-response'), formData.get('h-captcha-response'), formData.get('g-recaptcha-response')];
   for (const value of candidates) if (typeof value === 'string' && value.trim().length > 0) return value.trim();

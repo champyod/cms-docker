@@ -169,6 +169,8 @@ export default function LoginPage() {
                 <input type="hidden" name="captchaToken" value={captchaToken} />
                 <input type="hidden" name="cf-turnstile-response" value={captchaToken} />
                 <input type="hidden" name="h-captcha-response" value={captchaToken} />
+                <input type="hidden" name="g-recaptcha-response" value={captchaToken} />
+                <input type="hidden" name="captchaProvider" value={activeProvider} />
               </>
             )}
 

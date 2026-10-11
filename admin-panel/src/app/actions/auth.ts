@@ -22,7 +22,7 @@ import {
   pruneExpiredLoginBuckets,
   recordFailedAttempt,
 } from '@/lib/auth-rate-limit';
-import { buildCaptchaRequiredState, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
+import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
@@ -150,7 +150,7 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   if (shouldRequireCaptcha(bucketKeys[0])) {
     const token = extractCaptchaToken(formData);
     if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
-    const valid = await verifyCaptcha(token);
+    const valid = await verifyCaptcha(token, extractCaptchaProvider(formData));
     if (!valid) return { success: false, error: 'CAPTCHA verification failed', ...buildCaptchaRequiredState() };
   }
   try {

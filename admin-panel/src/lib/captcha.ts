@@ -2,11 +2,17 @@ import "server-only";
 
 export type CaptchaProvider = "turnstile" | "hcaptcha" | "recaptcha";
 
-export interface CaptchaEnv {
-  enabled: boolean;
-  provider: CaptchaProvider;
+export const CAPTCHA_PROVIDERS: readonly CaptchaProvider[] = ["turnstile", "hcaptcha", "recaptcha"];
+
+export interface CaptchaKeyPair {
   siteKey: string;
   secretKey: string;
+}
+
+export interface CaptchaEnv {
+  enabled: boolean;
+  providers: readonly CaptchaProvider[];
+  keys: Partial<Record<CaptchaProvider, CaptchaKeyPair>>;
   threshold: number;
   banThreshold: number;
 }
@@ -23,43 +29,87 @@ function parseThreshold(raw: string | undefined, fallback: number): number {
   return parsed;
 }
 
-function parseProvider(raw: string | undefined): CaptchaProvider {
+function parseProvider(raw: string | undefined): CaptchaProvider | null {
   const normalized = raw?.trim().toLowerCase();
-  if (normalized === "hcaptcha") return "hcaptcha";
-  if (normalized === "recaptcha") return "recaptcha";
-  return "turnstile";
+  return CAPTCHA_PROVIDERS.find((provider) => provider === normalized) ?? null;
+}
+
+function parseChain(raw: string | undefined): CaptchaProvider[] {
+  const chain: CaptchaProvider[] = [];
+  for (const part of (raw ?? "").split(",")) {
+    const provider = parseProvider(part);
+    if (provider !== null && !chain.includes(provider)) chain.push(provider);
+  }
+  return chain;
+}
+
+function envName(provider: CaptchaProvider, suffix: "SITE_KEY" | "SECRET_KEY"): string {
+  return `CAPTCHA_${provider.toUpperCase()}_${suffix}`;
+}
+
+function readKeyPair(provider: CaptchaProvider, legacy: CaptchaProvider): CaptchaKeyPair {
+  const siteKey = process.env[envName(provider, "SITE_KEY")]?.trim();
+  const secretKey = process.env[envName(provider, "SECRET_KEY")]?.trim();
+  if (siteKey || secretKey) return { siteKey: siteKey ?? "", secretKey: secretKey ?? "" };
+  // WHY the fallback: a deployment that still sets only the legacy scalar keys
+  // must keep working; they stand in for the legacy provider's entry.
+  if (provider === legacy) {
+    return {
+      siteKey: process.env.CAPTCHA_SITE_KEY?.trim() ?? "",
+      secretKey: process.env.CAPTCHA_SECRET_KEY?.trim() ?? "",
+    };
+  }
+  return { siteKey: "", secretKey: "" };
 }
 
 export function getCaptchaEnv(): CaptchaEnv {
   const enabledRaw = process.env.CAPTCHA_ENABLED?.trim();
   const enabled = enabledRaw === "1" || enabledRaw?.toLowerCase() === "true";
-  const provider = parseProvider(process.env.CAPTCHA_PROVIDER);
-  const siteKey = process.env.CAPTCHA_SITE_KEY?.trim() ?? "";
-  const secretKey = process.env.CAPTCHA_SECRET_KEY?.trim() ?? "";
-  const threshold = parseThreshold(process.env.CAPTCHA_THRESHOLD, 3);
-  const banThreshold = parseThreshold(process.env.CAPTCHA_BAN_THRESHOLD, 5);
-  return { enabled, provider, siteKey, secretKey, threshold, banThreshold };
+  // An empty CAPTCHA_PROVIDERS falls back to the legacy scalar as a one-element
+  // chain, so a config generated before the chain existed still resolves.
+  const legacy = parseProvider(process.env.CAPTCHA_PROVIDER) ?? "turnstile";
+  const configured = parseChain(process.env.CAPTCHA_PROVIDERS);
+  const providers = configured.length > 0 ? configured : [legacy];
+  const keys: Partial<Record<CaptchaProvider, CaptchaKeyPair>> = {};
+  for (const provider of providers) keys[provider] = readKeyPair(provider, legacy);
+  return {
+    enabled,
+    providers,
+    keys,
+    threshold: parseThreshold(process.env.CAPTCHA_THRESHOLD, 3),
+    banThreshold: parseThreshold(process.env.CAPTCHA_BAN_THRESHOLD, 5),
+  };
+}
+
+/** The first provider in the chain with a complete key pair, else the first. */
+export function activeProvider(env: CaptchaEnv): { provider: CaptchaProvider; siteKey: string; secretKey: string } {
+  for (const provider of env.providers) {
+    const pair = env.keys[provider];
+    if (pair && pair.siteKey.length > 0 && pair.secretKey.length > 0) {
+      return { provider, siteKey: pair.siteKey, secretKey: pair.secretKey };
+    }
+  }
+  return { provider: env.providers[0] ?? "turnstile", siteKey: "", secretKey: "" };
 }
 
 export function isCaptchaConfigured(): boolean {
   const env = getCaptchaEnv();
-  return env.enabled && env.siteKey.length > 0 && env.secretKey.length > 0;
+  const active = activeProvider(env);
+  return env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
 }
 
 export function getCaptchaPublicConfig(): CaptchaPublicConfig {
   const env = getCaptchaEnv();
-  const configured = isCaptchaConfigured();
-  return {
-    enabled: configured,
-    provider: env.provider,
-    siteKey: configured ? env.siteKey : "",
-  };
+  const active = activeProvider(env);
+  const configured = env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
+  return { enabled: configured, provider: active.provider, siteKey: configured ? active.siteKey : "" };
 }
 
-export async function verifyCaptcha(token: string): Promise<boolean> {
+export async function verifyCaptcha(token: string, provider?: string): Promise<boolean> {
   const env = getCaptchaEnv();
+  const active = activeProvider(env);
 
-  if (!env.enabled || env.siteKey.length === 0 || env.secretKey.length === 0) {
+  if (!env.enabled || active.siteKey.length === 0 || active.secretKey.length === 0) {
     return true;
   }
 
@@ -67,17 +117,19 @@ export async function verifyCaptcha(token: string): Promise<boolean> {
     return false;
   }
 
-  const trimmed = token.trim();
+  // WHY the posted provider wins: a token is only meaningful to the provider
+  // that issued it, and the chain may have shifted between render and submit.
+  const named = parseProvider(provider) ?? active.provider;
+  const pair = env.keys[named];
+  const secret = pair && pair.secretKey.length > 0 ? pair.secretKey : active.secretKey;
 
   try {
-    return await verifySiteVerify(VERIFY_URLS[env.provider], trimmed, env.secretKey);
+    return await verifySiteVerify(VERIFY_URLS[named], token.trim(), secret);
   } catch {
     return false;
   }
 }
 
-// Every provider takes the same secret/response form POST, so only the endpoint
-// and the widget differ; a shared call keeps the three in lockstep.
 const VERIFY_URLS: Record<CaptchaProvider, string> = {
   turnstile: "https://challenges.cloudflare.com/turnstile/v0/siteverify",
   hcaptcha: "https://hcaptcha.com/siteverify",
