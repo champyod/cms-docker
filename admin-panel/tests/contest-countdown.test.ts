@@ -22,6 +22,10 @@ import {
   zoneOffsetLabel,
   zoneOffsetMap,
 } from '@/lib/contest-countdown';
+import {
+  parseCountdownThreshold,
+  serializeCountdownThreshold,
+} from '@/components/contests/contest-detail/useContestCountdown';
 
 const START = '2026-10-10T10:00:00Z';
 const STOP = '2026-10-10T18:00:00Z';
@@ -328,6 +332,31 @@ describe('resolveHurryThresholdMs', () => {
     const fallback = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
     expect(resolveHurryThresholdMs({ amount: 0, unit: 'minutes' }, 0)).toBe(fallback);
     expect(resolveHurryThresholdMs({ amount: Number.NaN, unit: 'minutes' }, 0)).toBe(fallback);
+  });
+});
+
+describe('countdown threshold store', () => {
+  it('reads a cleared field back as empty instead of the default amount', () => {
+    const cleared = parseCountdownThreshold(serializeCountdownThreshold({ amount: Number.NaN, unit: 'minutes' }));
+    expect(Number.isFinite(cleared.amount)).toBe(false);
+    expect(Number.isFinite(cleared.amount) ? String(cleared.amount) : '').toBe('');
+    expect(cleared.unit).toBe('minutes');
+  });
+
+  it('keeps warning five minutes ahead while the field is cleared', () => {
+    const cleared = parseCountdownThreshold(serializeCountdownThreshold({ amount: Number.NaN, unit: 'minutes' }));
+    expect(resolveHurryThresholdMs(cleared, 0)).toBe(5 * 60 * 1000);
+  });
+
+  it('reads a stored amount back unchanged', () => {
+    expect(parseCountdownThreshold(serializeCountdownThreshold({ amount: 30, unit: 'seconds' })))
+      .toEqual({ amount: 30, unit: 'seconds' });
+  });
+
+  it('falls back to the default for a payload that is absent or unusable', () => {
+    for (const raw of [null, '', 'not json', '"10"', '{"amount":10}', '{"amount":"10","unit":"minutes"}', '{"amount":null,"unit":"weeks"}']) {
+      expect(parseCountdownThreshold(raw)).toEqual(DEFAULT_COUNTDOWN_THRESHOLD);
+    }
   });
 });
 

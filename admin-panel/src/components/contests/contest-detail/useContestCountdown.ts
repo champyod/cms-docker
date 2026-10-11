@@ -95,12 +95,19 @@ export function useCountdownTimezone(): { timezone: string; setTimezone: (timeZo
 const THRESHOLD_STORAGE_KEY = 'contest-countdown-threshold';
 const THRESHOLD_EVENT = 'contest-countdown-threshold-change';
 
-function parseThreshold(raw: string | null): CountdownThreshold {
+/** Cleared fields persist as a non-finite amount, which JSON writes as null and back. */
+export function serializeCountdownThreshold(next: CountdownThreshold): string {
+  return JSON.stringify(next);
+}
+
+export function parseCountdownThreshold(raw: string | null): CountdownThreshold {
   if (!raw) return DEFAULT_COUNTDOWN_THRESHOLD;
   try {
     const parsed = JSON.parse(raw) as Partial<CountdownThreshold>;
     const unit = COUNTDOWN_THRESHOLD_UNITS.find((candidate) => candidate === parsed.unit);
-    if (unit && typeof parsed.amount === 'number') return { amount: parsed.amount, unit };
+    if (!unit) return DEFAULT_COUNTDOWN_THRESHOLD;
+    if (parsed.amount === null) return { amount: Number.NaN, unit };
+    if (typeof parsed.amount === 'number') return { amount: parsed.amount, unit };
     return DEFAULT_COUNTDOWN_THRESHOLD;
   } catch (error: unknown) {
     console.warn('Ignoring unreadable countdown threshold:', error);
@@ -116,7 +123,7 @@ function readThreshold(): CountdownThreshold {
   const raw = window.localStorage.getItem(THRESHOLD_STORAGE_KEY);
   if (raw !== cachedThresholdRaw) {
     cachedThresholdRaw = raw;
-    cachedThreshold = parseThreshold(raw);
+    cachedThreshold = parseCountdownThreshold(raw);
   }
   return cachedThreshold;
 }
@@ -137,7 +144,7 @@ export function useCountdownThreshold(): {
 } {
   const threshold = useSyncExternalStore(subscribeThreshold, readThreshold, () => DEFAULT_COUNTDOWN_THRESHOLD);
   const setThreshold = useCallback((next: CountdownThreshold): void => {
-    window.localStorage.setItem(THRESHOLD_STORAGE_KEY, JSON.stringify(next));
+    window.localStorage.setItem(THRESHOLD_STORAGE_KEY, serializeCountdownThreshold(next));
     window.dispatchEvent(new Event(THRESHOLD_EVENT));
   }, []);
   return { threshold, setThreshold };
