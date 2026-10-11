@@ -7,7 +7,11 @@
    gets a still timer. */
 @import "animate.css/source/_vars.css";
 @import "animate.css/source/_base.css";
+/* All three shakes are imported, not just shakeX: shakeY is what moves the timer on the
+   other axis and headShake what turns it, so the panic is not a single-axis metronome. */
 @import "animate.css/source/attention_seekers/shakeX.css";
+@import "animate.css/source/attention_seekers/shakeY.css";
+@import "animate.css/source/attention_seekers/headShake.css";
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant density (&:where(.density-compact, .density-compact *));
@@ -352,14 +356,28 @@
   text-transform: uppercase;
 }
 
-/* The panic target. animate.css's shakeX owns the transform in its keyframes, so
-   nothing else may animate this element's transform while it runs. */
+/* The panic target. animate.css's shake owns the transform in its keyframes, so nothing
+   else may animate this element's transform while it runs. */
 .countdown-clock-panic {
   animation-duration: var(--animate-duration);
+  /* Kept small so the digits move inside the plate below rather than out of it. */
+  padding: 0.04em;
+  transform-origin: 50% 50%;
 }
 
-.countdown-clock-panic.shakeX {
-  transform-origin: 50% 50%;
+/* The plate the panic moves: it holds still, and its own contrast is what keeps the
+   digits readable while they shake over the blurred field. */
+.countdown-clock-plate {
+  position: relative;
+  border-radius: 28px;
+  padding: 0.12em 0.2em;
+  transition: background-color 900ms ease, box-shadow 900ms ease;
+}
+
+/* Once the panic starts, a flat plate replaces the busy field behind the digits. */
+.countdown-clock-plate.is-panicking {
+  background: color-mix(in oklab, var(--background) 78%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--foreground) 8%, transparent);
 }
 
 /* Sizes track the viewport so the ask scales with the surface, like the digits. */

@@ -20,13 +20,14 @@ import { ContestCountdownClock } from './ContestCountdownClock';
 import { CountdownToolbar } from './ContestCountdownControls';
 import { ContestAmbientLayer } from './ContestAmbientLayer';
 import { useContestMotion } from './useContestMotion';
+import { usePanicTurn } from './usePanicTurn';
 import {
   useCountdownThreshold,
   useCountdownTiming,
   useCountdownTimezone,
-  useElementFullscreen,
   usePhaseNotifications,
 } from './useContestCountdown';
+import { useElementFullscreen } from './useElementFullscreen';
 import {
   DEFAULT_CONTEST_PANIC_CONFIG,
   panicClassNames,
@@ -70,6 +71,7 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
   const hurryMs = resolveHurryThresholdMs(threshold, windowMs);
   const stage = resolveCountdownStage(phase, remainingMs, hurryMs);
   const isPanicking = shouldPanic(stage, isPaused);
+  const panicTurn = usePanicTurn(isPanicking);
   // Only the running phase is exempt from the idle layer: there, the panic is the visual.
   const isIdle = phase !== 'running';
   // The blur ramps from the start up to the threshold, so it is fully applied exactly when
@@ -109,8 +111,13 @@ export function ContestCountdownTab({ data }: { data: ContestCountdownData }): R
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
-        <div className={cn('countdown-clock-panic', ...panicClassNames(isPanicking))} style={panicStyle()}>
-          <ContestCountdownClock remainingMs={remainingMs} />
+        <div className={isPanicking ? 'countdown-clock-plate is-panicking' : 'countdown-clock-plate'}>
+          <div
+            className={cn('countdown-clock-panic', ...panicClassNames(isPanicking, panicTurn))}
+            style={panicStyle()}
+          >
+            <ContestCountdownClock remainingMs={remainingMs} />
+          </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
