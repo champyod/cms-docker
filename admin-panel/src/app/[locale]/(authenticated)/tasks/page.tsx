@@ -37,7 +37,7 @@ export default async function TasksPage({
       title={dict.tasks.title}
       description={dict.tasks.subtitle}
     >
-      <TaskList initialTasks={tasks} totalPages={totalPages} permissionKeys={Array.from(permissions)} initialSort={sort} />
+      <TaskList initialTasks={tasks} totalPages={totalPages} currentPage={page} permissionKeys={Array.from(permissions)} initialSort={sort} />
     </PageSurface>
   );
 }
