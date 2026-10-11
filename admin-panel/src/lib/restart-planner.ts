@@ -19,24 +19,29 @@ export type RestartCommandPlan =
   | { skip: true; message: string }
   | { skip: false; command: string };
 
-/** The unified project the make targets and `./cms` deploy, plus the override they pick up with it. */
+/** The unified project the make targets and `./cms` deploy, plus the optional overlays they pick up. */
 export const COMPOSE_BASE_FILE = 'docker-compose.yml';
 export const COMPOSE_OVERRIDE_FILE = 'docker-compose.override.yml';
+export const COMPOSE_EXPOSE_FILE = 'docker-compose.expose.yml';
+
+/** The optional `-f` overlays, in the order the Makefile's wildcard lists them. */
+const COMPOSE_OPTIONAL_FILES = [COMPOSE_OVERRIDE_FILE, COMPOSE_EXPOSE_FILE] as const;
 
 /**
- * The `-f` list the Makefile builds with `$(wildcard docker-compose.yml docker-compose.override.yml)`.
- * Mirroring it matters for the override: passing any `-f` disables compose's automatic override
- * merge, so a list without a present override would silently drop the local configuration the rest
- * of the project applies. The override is optional, hence the existence check the wildcard performs.
- * `root` is a parameter so the override branch is testable without writing into the repository.
+ * The `-f` list the Makefile builds with `$(wildcard docker-compose.yml docker-compose.override.yml
+ * docker-compose.expose.yml)`. Mirroring it matters: passing any `-f` disables compose's automatic
+ * override merge, so a list missing a present overlay silently drops the binds and ports that
+ * overlay applies. Each overlay is optional, hence the per-file existence check the wildcard does.
+ * `root` is a parameter so the overlay branches are testable without writing into the repository.
  */
 export async function buildComposeFileFlags(root: string = getRepoRoot()): Promise<string> {
-  const hasOverride = await fs
-    .access(path.join(root, COMPOSE_OVERRIDE_FILE))
-    .then(() => true, () => false);
-  return [COMPOSE_BASE_FILE, ...(hasOverride ? [COMPOSE_OVERRIDE_FILE] : [])]
-    .map(file => `-f ${file}`)
-    .join(' ');
+  const presence = await Promise.all(
+    COMPOSE_OPTIONAL_FILES.map(file =>
+      fs.access(path.join(root, file)).then(() => true, () => false),
+    ),
+  );
+  const files = [COMPOSE_BASE_FILE, ...COMPOSE_OPTIONAL_FILES.filter((_, index) => presence[index])];
+  return files.map(file => `-f ${file}`).join(' ');
 }
 
 /** One compose invocation the panel runs, described the way the Makefile's stack targets are. */

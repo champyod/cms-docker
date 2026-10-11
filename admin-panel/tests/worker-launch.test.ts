@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { COMPOSE_BASE_FILE, COMPOSE_OVERRIDE_FILE, buildComposeFileFlags, buildRestartCommand } from '../src/lib/restart-planner';
+import { COMPOSE_BASE_FILE, COMPOSE_EXPOSE_FILE, COMPOSE_OVERRIDE_FILE, buildComposeFileFlags, buildRestartCommand } from '../src/lib/restart-planner';
 import type { DeploymentMode } from '../src/lib/deployment-mode';
 import type { HostComposeLocation } from '../src/lib/compose-location';
 
@@ -239,6 +239,15 @@ describe('compose file flags mirror the Makefile wildcard', () => {
     const root = await makeTmpRoot();
     await fs.writeFile(path.join(root, COMPOSE_OVERRIDE_FILE), 'services: {}\n');
     expect(await buildComposeFileFlags(root)).toBe(`-f ${COMPOSE_BASE_FILE} -f ${COMPOSE_OVERRIDE_FILE}`);
+  });
+
+  it('adds the generated expose override after the override file', async (): Promise<void> => {
+    const root = await makeTmpRoot();
+    await fs.writeFile(path.join(root, COMPOSE_OVERRIDE_FILE), 'services: {}\n');
+    await fs.writeFile(path.join(root, COMPOSE_EXPOSE_FILE), 'services: {}\n');
+    expect(await buildComposeFileFlags(root)).toBe(
+      `-f ${COMPOSE_BASE_FILE} -f ${COMPOSE_OVERRIDE_FILE} -f ${COMPOSE_EXPOSE_FILE}`,
+    );
   });
 });
 
