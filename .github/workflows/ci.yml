@@ -442,6 +442,15 @@ jobs:
           key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
+      # The database-backed tests and the rehearsal share this schema, so it is applied
+      # once here; the rehearsal sees it already present and does not repeat the DDL.
+      - name: Apply the migration history
+        run: |
+          for migration in admin-panel/prisma/migrations/*/; do
+            [ -f "${migration}migration.sql" ] || continue
+            psql "$RANKING_TEST_DATABASE_URL" -f "${migration}migration.sql"
+          done
+
       - name: Format check
         working-directory: ranking-web
         run: cargo fmt --check
