@@ -535,7 +535,9 @@ check_monitor_backup_access() {
     return 0
   fi
 
-  local backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"
+  # Host tree, not ${BACKUP_DIR}: that is the in-container path (/app/backups), which
+  # nothing is mounted at on the host — stat-ing it here names a stale root.
+  local backup_root="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
   local container_uid="${DOCKER_UID:-1000}"
   # WHY ${container_uid} and not ${DOCKER_GID:-999}: docker/monitor/Dockerfile
   # creates the monitor group with addgroup -g ${DOCKER_UID}, so the container gid
