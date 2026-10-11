@@ -7,9 +7,6 @@ import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
-import { STATEMENT_LANGUAGES } from '@/lib/constants';
-export { STATEMENT_LANGUAGES };
-
 export async function getStatements(taskId: number) {
   await ensurePermission('statement:list');
 
