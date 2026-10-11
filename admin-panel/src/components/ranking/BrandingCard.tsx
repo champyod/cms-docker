@@ -25,7 +25,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
       <button
         type="button"
         onClick={onClick}
-        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-black/20 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
       >
         No ranking logo — click to upload
       </button>
@@ -33,7 +33,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
   }
 
   return (
-    <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-black/20 p-4">
+    <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-muted/40 p-4">
       <Image alt="Ranking logo" src={previewUrl} width={320} height={128} className="max-h-32 w-auto object-contain" unoptimized />
     </button>
   );
@@ -41,7 +41,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
 
 function LoadingOverlay() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30 backdrop-blur-sm">
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-sm">
       <Loader2 className="h-8 w-8 animate-spin text-foreground" aria-label="Uploading" />
     </div>
   );

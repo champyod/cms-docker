@@ -30,7 +30,7 @@ export function MonitorTargetForm({
   onAdd,
 }: MonitorTargetFormProps): React.JSX.Element {
   return (
-    <div className="bg-black/40 border border-border rounded-xl p-4 space-y-4">
+    <div className="bg-muted/40 border border-border rounded-xl p-4 space-y-4">
       <h3 className="text-sm font-medium text-foreground">Add Target</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Input
@@ -45,7 +45,7 @@ export function MonitorTargetForm({
           <select
             value={interval}
             onChange={(e) => onIntervalChange(Number(e.target.value))}
-            className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm text-foreground"
           >
             <option value={30}>30</option>
             <option value={60}>60</option>
@@ -58,7 +58,7 @@ export function MonitorTargetForm({
           <select
             value={timeout}
             onChange={(e) => onTimeoutChange(Number(e.target.value))}
-            className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm text-foreground"
           >
             <option value={3}>3</option>
             <option value={5}>5</option>
@@ -71,7 +71,7 @@ export function MonitorTargetForm({
           <select
             value={expectedStatus}
             onChange={(e) => onExpectedStatusChange(Number(e.target.value))}
-            className="w-full h-10 px-3 bg-black/40 border border-border rounded-xl text-sm text-foreground"
+            className="w-full h-10 px-3 bg-muted/40 border border-border rounded-xl text-sm text-foreground"
           >
             <option value={200}>200</option>
             <option value={201}>201</option>

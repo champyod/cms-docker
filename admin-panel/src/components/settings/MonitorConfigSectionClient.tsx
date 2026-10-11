@@ -134,19 +134,19 @@ export function MonitorConfigSectionClient({
     <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
       <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
       {targets.length === 0 ? (
-        <p className="text-neutral-400 text-sm">No monitor targets configured.</p>
+        <p className="text-muted-foreground text-sm">No monitor targets configured.</p>
       ) : (
         <div className="space-y-3">
           {targets.map((target) => (
             <Card
               key={target.id}
-              className={`flex items-center gap-4 p-4 bg-black/40 border border-border rounded-xl ${
+              className={`flex items-center gap-4 p-4 bg-muted/40 border border-border rounded-xl ${
                 !target.enabled ? 'opacity-50' : ''
               }`}
             >
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground truncate font-mono">{target.url}</p>
-                <p className="text-xs text-neutral-400">
+                <p className="text-xs text-muted-foreground">
                   {target.interval}s interval · {target.timeout}s timeout · HTTP{' '}
                   {target.expectedStatus}
                 </p>
@@ -155,7 +155,7 @@ export function MonitorConfigSectionClient({
               <button
                 type="button"
                 onClick={() => handleToggle(target.id)}
-                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-neutral-400 hover:text-foreground transition-colors"
+                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
               >
                 {target.enabled ? (

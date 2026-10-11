@@ -30,7 +30,7 @@ export function BlocksPanel({ banned, lockouts }: BlocksPanelProps): React.JSX.E
     <div className="space-y-4">
       <Card>
         <Input label="Reason (required for every action)" value={reason} onChange={(event) => setReason(event.target.value)} />
-        {feedback !== null && <p className="mt-3 text-sm text-white/70">{feedback}</p>}
+        {feedback !== null && <p className="mt-3 text-sm text-muted-foreground">{feedback}</p>}
         {!banned.agentReported && (
           <p className="mt-3 text-sm text-amber-300">
             The host security agent has not reported state yet, so no unban can be queued.
@@ -41,11 +41,11 @@ export function BlocksPanel({ banned, lockouts }: BlocksPanelProps): React.JSX.E
       <Card>
         <h2 className="mb-3 text-lg font-semibold">Banned addresses</h2>
         {banned.bans.length === 0 ? (
-          <p className="text-sm text-white/60">No banned address is reported.</p>
+          <p className="text-sm text-muted-foreground">No banned address is reported.</p>
         ) : (
           <ul className="space-y-2">
             {banned.bans.map((ban) => (
-              <li key={`${ban.jail}/${ban.ip}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 p-3">
+              <li key={`${ban.jail}/${ban.ip}`} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
                 <span className="font-mono text-sm">
                   {ban.ip} · {ban.jail}
                 </span>
@@ -67,13 +67,13 @@ export function BlocksPanel({ banned, lockouts }: BlocksPanelProps): React.JSX.E
       <Card>
         <h2 className="mb-3 text-lg font-semibold">Login lockouts</h2>
         {lockouts.length === 0 ? (
-          <p className="text-sm text-white/60">No open lockout.</p>
+          <p className="text-sm text-muted-foreground">No open lockout.</p>
         ) : (
           <ul className="space-y-2">
             {lockouts.map((lockout) => (
               <li
                 key={lockout.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 p-3"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
               >
                 <span className="font-mono text-sm">
                   {lockout.subject ?? 'unknown'} · {lockout.ip ?? 'local'} · until{' '}

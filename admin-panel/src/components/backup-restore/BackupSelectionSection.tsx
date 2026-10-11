@@ -45,7 +45,7 @@ function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps
                 onChange={() => onToggle(table.name)}
                 className="size-4 accent-primary shrink-0 disabled:opacity-60"
             />
-            <span className="text-sm text-white truncate">{table.label}</span>
+            <span className="text-sm text-foreground truncate">{table.label}</span>
             <span className="text-xs font-mono text-muted-foreground truncate">{table.name}</span>
             {locked && (
                 <span

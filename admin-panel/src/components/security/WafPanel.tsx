@@ -49,15 +49,15 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
       <Card>
         <dl className="grid gap-3 sm:grid-cols-3">
           <div>
-            <dt className="text-sm text-white/60">Container</dt>
+            <dt className="text-sm text-muted-foreground">Container</dt>
             <dd className="font-mono text-sm">{state.containerStatus ?? 'not running'}</dd>
           </div>
           <div>
-            <dt className="text-sm text-white/60">Alerts parsed</dt>
+            <dt className="text-sm text-muted-foreground">Alerts parsed</dt>
             <dd className="font-mono text-sm">{state.alerts.length}</dd>
           </div>
           <div>
-            <dt className="text-sm text-white/60">Unparsed log lines</dt>
+            <dt className="text-sm text-muted-foreground">Unparsed log lines</dt>
             <dd className="font-mono text-sm">{state.skippedAlertLines}</dd>
           </div>
         </dl>
@@ -69,7 +69,7 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
           <label className="text-sm">
             Enabled
             <select
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground"
               value={form.enabled}
               onChange={(event) => setForm({ ...form, enabled: event.target.value })}
             >
@@ -80,7 +80,7 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
           <label className="text-sm">
             SecRuleEngine
             <select
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground"
               value={form.ruleEngine}
               onChange={(event) => setForm({ ...form, ruleEngine: event.target.value })}
             >
@@ -94,7 +94,7 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
           <label className="text-sm">
             SecResponseBodyAccess
             <select
-              className="mt-1 w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
+              className="mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm text-foreground"
               value={form.responseBodyAccess}
               onChange={(event) => setForm({ ...form, responseBodyAccess: event.target.value })}
             >
@@ -137,18 +137,18 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
             Restart WAF
           </Button>
         </div>
-        {feedback !== null && <p className="mt-3 text-sm text-white/70">{feedback}</p>}
+        {feedback !== null && <p className="mt-3 text-sm text-muted-foreground">{feedback}</p>}
       </Card>
 
       <Card>
         <h2 className="mb-3 text-lg font-semibold">Latest alerts</h2>
         {state.alerts.length === 0 ? (
-          <p className="text-sm text-white/60">No parsed alerts. The WAF writes JSON audit lines when it runs.</p>
+          <p className="text-sm text-muted-foreground">No parsed alerts. The WAF writes JSON audit lines when it runs.</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {state.alerts.map((alert) => (
-              <li key={alert.id} className="rounded-xl border border-white/10 p-3">
-                <p className="font-mono text-xs text-white/70">
+              <li key={alert.id} className="rounded-xl border border-border p-3">
+                <p className="font-mono text-xs text-muted-foreground">
                   {alert.clientIp ?? 'unknown ip'} → {alert.uri ?? 'unknown uri'}
                 </p>
                 <p className="mt-1">

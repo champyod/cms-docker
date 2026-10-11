@@ -29,11 +29,11 @@ export function TlsPanel({ state }: TlsPanelProps): React.JSX.Element {
       <Card>
         <dl className="grid gap-3 sm:grid-cols-2">
           <div>
-            <dt className="text-sm text-white/60">TLS proxy</dt>
+            <dt className="text-sm text-muted-foreground">TLS proxy</dt>
             <dd className="font-mono text-sm">{state.proxyStatus ?? 'not running'}</dd>
           </div>
           <div>
-            <dt className="text-sm text-white/60">Certbot</dt>
+            <dt className="text-sm text-muted-foreground">Certbot</dt>
             <dd className="font-mono text-sm">{state.certbotStatus ?? 'not running'}</dd>
           </div>
         </dl>
@@ -42,14 +42,14 @@ export function TlsPanel({ state }: TlsPanelProps): React.JSX.Element {
       <Card>
         <h2 className="mb-3 text-lg font-semibold">Certificate lineages</h2>
         {state.lineages.length === 0 ? (
-          <p className="text-sm text-white/60">No readable lineage under config/letsencrypt/live.</p>
+          <p className="text-sm text-muted-foreground">No readable lineage under config/letsencrypt/live.</p>
         ) : (
           <ul className="space-y-2">
             {state.lineages.map((lineage) => (
-              <li key={lineage.lineage} className="rounded-xl border border-white/10 p-3">
+              <li key={lineage.lineage} className="rounded-xl border border-border p-3">
                 <p className="font-mono text-sm">{lineage.lineage}</p>
-                <p className="text-xs text-white/70">{lineage.subject}</p>
-                <p className={lineage.expiresSoon ? 'mt-1 text-sm text-amber-300' : 'mt-1 text-sm text-white/70'}>
+                <p className="text-xs text-muted-foreground">{lineage.subject}</p>
+                <p className={lineage.expiresSoon ? 'mt-1 text-sm text-amber-300' : 'mt-1 text-sm text-muted-foreground'}>
                   expires {lineage.validTo} ({lineage.daysRemaining} days)
                 </p>
               </li>
@@ -68,8 +68,8 @@ export function TlsPanel({ state }: TlsPanelProps): React.JSX.Element {
             Queue certificate renewal
           </Button>
         </div>
-        {feedback !== null && <p className="mt-3 text-sm text-white/70">{feedback}</p>}
-        <p className="mt-3 text-xs text-white/50">
+        {feedback !== null && <p className="mt-3 text-sm text-muted-foreground">{feedback}</p>}
+        <p className="mt-3 text-xs text-muted-foreground">
           Renewal runs on the host through scripts/__domain.sh, on the security agent&apos;s next tick.
         </p>
       </Card>

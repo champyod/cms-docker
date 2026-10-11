@@ -66,13 +66,13 @@ export function PromoteProgressList({ progress, onRecheck }: { readonly progress
             <ul className="divide-y divide-border rounded-lg border border-border">
                 {progress.doneTables.map((table) => (
                     <li key={table} className="flex items-center gap-2 px-3 py-1.5">
-                        <span className="text-sm text-white">{table}</span>
+                        <span className="text-sm text-foreground">{table}</span>
                         <Badge variant="success">committed</Badge>
                     </li>
                 ))}
                 {progress.currentTable !== null && (
                     <li className="flex items-center gap-2 px-3 py-1.5">
-                        <span className="text-sm text-white">{progress.currentTable}</span>
+                        <span className="text-sm text-foreground">{progress.currentTable}</span>
                         <Badge variant="indigo">in progress</Badge>
                     </li>
                 )}
@@ -102,7 +102,7 @@ export function PromoteRecords({ report }: { readonly report: PromoteReport }) {
                     <li key={record.table} className="px-3 py-2">
                         <Stack gap={1}>
                             <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm text-white">{record.table}</span>
+                                <span className="text-sm text-foreground">{record.table}</span>
                                 <Badge variant={record.strategy === 'skip' ? 'neutral' : 'indigo'}>{record.strategy}</Badge>
                                 <Badge variant={STATUS_VARIANT[record.status]}>{record.status}</Badge>
                                 <span className="ml-auto text-xs text-muted-foreground">{recordCounts(record)}</span>

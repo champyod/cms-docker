@@ -100,7 +100,7 @@ function SecretField({ label, outcome, isOpen, isLoading, canReveal, onToggle }:
         value={isShown ? shownValue : ''}
         aria-label={label}
         placeholder="••••••••"
-        className="w-full rounded-lg border border-border bg-black/50 px-3 py-2 pr-14 font-mono text-sm text-emerald-300 focus:outline-none"
+        className="w-full rounded-lg border border-border bg-muted/40 px-3 py-2 pr-14 font-mono text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       />
       {canReveal && outcome.kind !== 'bcrypt' ? (
         <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -126,7 +126,7 @@ export function SavedSecretReveal({ label, canReveal, onReveal }: SavedSecretRev
 
   return (
     <div className="space-y-2">
-      <span className="text-xs uppercase tracking-wider text-neutral-500">{label}</span>
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
       <SecretField
         label={label}
         outcome={outcome}
@@ -136,7 +136,7 @@ export function SavedSecretReveal({ label, canReveal, onReveal }: SavedSecretRev
         onToggle={toggle}
       />
       {!canReveal && (
-        <p className="text-xs text-neutral-500">Read-only — you lack the reveal permission.</p>
+        <p className="text-xs text-muted-foreground">Read-only — you lack the reveal permission.</p>
       )}
       {outcome.kind === 'bcrypt' && (
         <p className="text-xs text-amber-400/80">Stored hashed — irreversible. Typing a new value replaces it.</p>

@@ -28,7 +28,7 @@ export function exportUrl(tables: readonly string[]): string {
 }
 
 const COLUMNS: readonly ResponsiveColumn<BackupTable>[] = [
-    { key: 'label', header: 'Table', render: (row) => <span className="text-sm font-medium text-white">{row.label}</span> },
+    { key: 'label', header: 'Table', render: (row) => <span className="text-sm font-medium text-foreground">{row.label}</span> },
     { key: 'name', header: 'Name', render: (row) => <span className="font-mono text-xs text-muted-foreground">{row.name}</span> },
     {
         key: 'largeObjects',

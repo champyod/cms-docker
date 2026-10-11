@@ -20,7 +20,7 @@ export async function MonitorConfigSection(): Promise<React.ReactElement> {
     return (
       <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6">
         <h2 className="text-lg font-semibold text-foreground mb-2">Monitor Configuration</h2>
-        <p className="text-neutral-400 text-sm">
+        <p className="text-muted-foreground text-sm">
           Monitor enhancement disabled (set MONITOR_ENHANCED=1 in .env).
         </p>
       </div>
