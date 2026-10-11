@@ -4,7 +4,7 @@
 
 **Goal:** replace the Python ranking web server with a Rust service whose data lives in PostgreSQL, whose public surface and event stream match today's output, and whose appearance, manual overrides and login are controlled from the Next.js admin panel.
 
-**Architecture:** one Rust crate (tools/cms-ranking) reading and writing the panel's Prisma schema over sqlx with the application role, so RLS stays binding; the Next.js panel remains the only editor of the control tables; ProxyService writes the pushed ranking rows directly, retiring the cms-ranking-data JSON store.
+**Architecture:** one Rust crate (ranking-web) reading and writing the panel's Prisma schema over sqlx with the application role, so RLS stays binding; the Next.js panel remains the only editor of the control tables; ProxyService writes the pushed ranking rows directly, retiring the cms-ranking-data JSON store.
 
 **Tech stack:** Rust (axum, tokio, sqlx, serde, chrono, thiserror, bcrypt, tower-http), PostgreSQL 16 with RLS, Next.js 16 / React 19 / Prisma 6 / Bun / vitest, Python CMS (SQLAlchemy + gevent) for the pusher.
 
@@ -25,7 +25,7 @@
 
 ## Verification commands
 
-    cd tools/cms-ranking   && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+    cd ranking-web   && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
     cd admin-panel         && bunx tsc --noEmit && bun run test && bun run lint
     bash scripts/__generate_rls_sql.sh --check
     make test              (shell and compose suites)
@@ -35,7 +35,7 @@
 
 ### Slice 0: Parity baseline before any code
 
-- [x] Derive the wire shapes and the endpoint contract from source (the src/cmsranking entity classes, the RankingWebServer.py handlers and dispatch mounts, src/cmscommon/eventsource.py, Scoring.py) into tools/cms-ranking/tests/fixtures/parity/{entities,endpoints,events,seed}.json.
+- [x] Derive the wire shapes and the endpoint contract from source (the src/cmsranking entity classes, the RankingWebServer.py handlers and dispatch mounts, src/cmscommon/eventsource.py, Scoring.py) into ranking-web/tests/fixtures/parity/{entities,endpoints,events,seed}.json.
 - [x] Ship capture.sh, which reproduces the golden bytes on a host where the Python service is running. Docker is absent in the authoring environment, so no capture has been taken and every derived expectation is labelled as derived.
 - [ ] Run capture.sh on the target host before Slice 3 and commit its captured/ output.
 - **Verify:** every JSON fixture parses, capture.sh passes bash -n, and the README states what is derived and what is captured.
@@ -43,7 +43,7 @@
 
 ### Slice 1: Scaffold the crate and its gates
 
-- [x] Created tools/cms-ranking (Cargo.toml, Cargo.lock, src/{main,lib,config,db,http}.rs, tests/fail_closed.rs) on edition 2021, depending only on what the code uses: axum, serde, sqlx (postgres, runtime-tokio), thiserror, tokio.
+- [x] Created ranking-web (Cargo.toml, Cargo.lock, src/{main,lib,config,db,http}.rs, tests/fail_closed.rs) on edition 2021, depending only on what the code uses: axum, serde, sqlx (postgres, runtime-tokio), thiserror, tokio.
 - [x] No .cargo/config.toml musl pin, unlike tools/cms-tui: the ranking service ships inside the image rather than as a checked-in standalone binary, so a musl target would drag a C toolchain into the build for no gain.
 - [x] Added the rust_ranking paths filter and the rust-ranking job (fmt, clippy -D warnings, test) to .github/workflows/ci.yml.
 - [x] Added the ranking-build stage to the Dockerfile and copied the binary to /home/cmsuser/cms/bin/cms-ranking, so the runtime layer carries no compiler next to the submission tooling.

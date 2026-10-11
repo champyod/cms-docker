@@ -1,0 +1,19 @@
+{
+  "derived_from": [
+    "src/cmsranking/RankingWebServer.py DataWatcher",
+    "src/cmscommon/eventsource.py format_event/Publisher"
+  ],
+  "route": "GET /events",
+  "content_type": "text/event-stream",
+  "event_name": "the entity kind, one of contest, task, team, user, submission, subchange",
+  "data": "the operation and the key, joined by a space: '<create|update|delete> <key>'",
+  "id": "hexadecimal microseconds since the epoch, assigned at publish time (Publisher.put)",
+  "warmup": "a subscriber that supplies last_event_id which the cache cannot cover receives 'event:reinit' first",
+  "keepalive": "a bare comment line immediately on connect, then a comment ping whenever the stream is idle; no retry line is sent (the retry hint is commented out in the source)",
+  "timeouts": { "ping_seconds": 15, "write_seconds": 30, "global_seconds": 600, "cache_entries": "config.buffer_size, default 100" },
+  "registration": "DataWatcher registers create, update and delete callbacks for every store, so the six kinds times three operations is the complete event vocabulary",
+  "derived_not_captured": [
+    "the ping interval and the retry value as they appear on the wire",
+    "the exact id of the first event after connect"
+  ]
+}

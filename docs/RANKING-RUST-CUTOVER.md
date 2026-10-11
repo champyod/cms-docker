@@ -1,6 +1,6 @@
 # Ranking server: the Rust cutover runbook
 
-The ranking scoreboard is served by `cms-ranking`, a Rust binary in `tools/cms-ranking`, reading the
+The ranking scoreboard is served by `cms-ranking`, a Rust binary in `ranking-web`, reading the
 projection tables the proxy writes. This runbook is what an operator runs before, during and after
 the switch, and what to do if it goes wrong. The design and its decisions are in
 [`superpowers/specs/2026-10-09-rust-ranking-server-design.md`](superpowers/specs/2026-10-09-rust-ranking-server-design.md).
@@ -40,7 +40,7 @@ the service needs to move.
    compose service already points `RANKING_REDIS_URL` at it.
 3. **Session secret.** `./cms config sync` generates `RANKING_SESSION_SECRET`. An empty value makes
    the console refuse every login rather than mint an unsigned one.
-4. **The page on disk.** `RANKING_STATIC_DIR` (the vendored `cmsranking/static` in the image) and
+4. **The page on disk.** `RANKING_STATIC_DIR` (the vendored `ranking-web/static` in the image) and
    `CMS_CREDITS_FILE` must exist; without them `/` and `/credits` refuse.
 5. **A console account.** `ranking_console_users` needs at least one enabled row, or nobody can reach
    the console when the scoreboard is set to `protected`. Passwords use the panel format:
@@ -59,7 +59,7 @@ the service needs to move.
 | :--- | :--- | :--- |
 | The service is up | `curl -fsS localhost:8890/healthz` | `200 {"status":"ok"}`; it is `503` until `SELECT 1` succeeds |
 | It refuses what it cannot serve | `curl -o /dev/null -w "%{http_code}" localhost:8890/config` with the database stopped | `503`, never an empty board |
-| The board matches the Python scorer | `RANKING_E2E_DATABASE_URL=... bash tools/cms-ranking/tests/e2e/ranking_e2e.sh` | every step prints `[PASS]` |
+| The board matches the Python scorer | `RANKING_E2E_DATABASE_URL=... bash ranking-web/tests/e2e/ranking_e2e.sh` | every step prints `[PASS]` |
 | Live events | the same script | a write reaches an open stream |
 | Protected mode | set `access_mode = protected`, open `/` anonymously | a redirect to `/login` |
 | Sign-in | sign in with a console account | the board opens; a wrong password sets no cookie |

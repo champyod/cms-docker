@@ -74,8 +74,8 @@ SURFACE_ENTRY_POINTS = {
         "jinja_static": True,
     },
     "ranking": {
-        "entry_point": SRC_ROOT / "cmsranking/static/Ranking.html",
-        "static_roots": [SRC_ROOT / "cmsranking/static"],
+        "entry_point": SRC_ROOT / "ranking-web/static/Ranking.html",
+        "static_roots": [SRC_ROOT / "ranking-web/static"],
         "jinja_static": False,
     },
 }

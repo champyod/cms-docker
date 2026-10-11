@@ -9,7 +9,7 @@ ARG BASE_IMAGE=ubuntu:noble
 # a sandbox escape can reach.
 FROM rust:1-bookworm AS ranking-build
 WORKDIR /build
-COPY tools/cms-ranking/ ./
+COPY ranking-web/ ./
 RUN cargo build --release
 
 FROM ${BASE_IMAGE}

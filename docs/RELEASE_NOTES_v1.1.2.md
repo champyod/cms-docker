@@ -13,13 +13,13 @@ This release fixes the **Ranking Web Server** not displaying the scoreboard prop
 
 ### Ranking Page Static Files Missing
 - **Issue:** The ranking scoreboard page showed a blank page with 404 errors for `raphael.js` and other JavaScript libraries
-- **Root Cause:** `.gitignore` had `lib/` which ignored ALL folders named `lib`, including `src/cmsranking/static/lib/` containing required JS files
+- **Root Cause:** `.gitignore` had `lib/` which ignored ALL folders named `lib`, including `ranking-web/static/lib/` containing required JS files
 - **Fix:** Changed `.gitignore` from `lib/` to `/lib/` to only ignore the root lib folder
 - **Files Added:**
-  - `src/cmsranking/static/lib/raphael.js`
-  - `src/cmsranking/static/lib/jquery.js`
-  - `src/cmsranking/static/lib/eventsource.js`
-  - `src/cmsranking/static/lib/explorercanvas.js`
+  - `ranking-web/static/lib/raphael.js`
+  - `ranking-web/static/lib/jquery.js`
+  - `ranking-web/static/lib/eventsource.js`
+  - `ranking-web/static/lib/explorercanvas.js`
 
 ### Configuration and Packaging Improvements
 - Added `[tool.setuptools.package-data]` to `pyproject.toml` for proper static file packaging

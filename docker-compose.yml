@@ -593,7 +593,7 @@ services:
       RANKING_BIND_ADDRESS: 0.0.0.0:${RANKING_LISTEN_PORT:-8890}
       # Where the image keeps the vendored page and the licence offer; both are image
       # layout, so they are not operator configuration.
-      RANKING_STATIC_DIR: /home/cmsuser/src/src/cmsranking/static
+      RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
       CMS_CREDITS_FILE: /home/cmsuser/cms/credits.json
       # The panel writes the logo into this volume; the service only reads it, and a
       # path with no extension makes it probe the known image extensions.

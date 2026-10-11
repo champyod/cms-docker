@@ -78,7 +78,7 @@ jobs:
               - '.tools/cms-tui/**'
               - '.github/workflows/ci.yml'
             rust_ranking:
-              - 'tools/cms-ranking/**'
+              - 'ranking-web/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -438,8 +438,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            tools/cms-ranking/target
-          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('tools/cms-ranking/Cargo.lock') }}
+            ranking-web/target
+          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
       # Every ranking migration in timestamp order, so new ones auto-apply and the test sees a deployment's schema.
@@ -450,15 +450,15 @@ jobs:
           done
 
       - name: Format check
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo fmt --check
 
       - name: Clippy
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo test --all-targets -- --include-ignored
 
       # The rehearsal drives the release binary over HTTP against a database of its own:
@@ -467,7 +467,7 @@ jobs:
       # only place the whole surface — entity reads, byte framing, events, protected
       # mode — runs end to end against a real Postgres and Redis.
       - name: Build the release binary for the rehearsal
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo build --release
 
       - name: Acceptance rehearsal
@@ -475,7 +475,7 @@ jobs:
           psql "${RANKING_TEST_DATABASE_URL%/*}/postgres" -c 'CREATE DATABASE ranking_e2e' || true
           RANKING_E2E_DATABASE_URL="${RANKING_TEST_DATABASE_URL%/*}/ranking_e2e" \
           RANKING_E2E_REDIS_URL="${RANKING_TEST_REDIS_URL}" \
-            bash tools/cms-ranking/tests/e2e/ranking_e2e.sh
+            bash ranking-web/tests/e2e/ranking_e2e.sh
 
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it
@@ -554,8 +554,8 @@ jobs:
       # fetching it at build time (no network dependency in the build).
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -609,8 +609,8 @@ jobs:
 
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

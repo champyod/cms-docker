@@ -24,7 +24,7 @@ Patched:
 2. **Admin permissions** — `cms/server/admin/**` + admin template/model. Commit `ed409b53` "enhance user and team management permissions".
 3. **Ranking logo/branding** — `cmsranking/Config.py` new `logo_path`; `RankingWebServer.py` `ImageHandler` + `/logo` rule + hot-swap.
 
-Plus: `src/install.py` constraints stripped from pip install; `cmsranking/static/lib/raphael.js` vendored.
+Plus: `src/install.py` constraints stripped from pip install; `ranking-web/static/lib/raphael.js` vendored.
 
 Note: `cmscommon/crypto.py` **untouched** — `bcrypt:`/`plaintext:` prefix logic is upstream, not fork work.
 

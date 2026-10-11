@@ -63,7 +63,7 @@ src/cms/server/credits.py.
 
 ### 2.4 The page
 
-The scoreboard is vendored static jQuery, 5 155 LOC in src/cmsranking/static: Ranking.html:128,
+The scoreboard is vendored static jQuery, 5 155 LOC in ranking-web/static: Ranking.html:128,
 Ranking.css:1171, DataStore.js:1209, Overview.js:596, Scoreboard.js:509, UserDetail.js:326,
 HistoryStore.js:312, Chart.js:202, TeamSearch.js:198, TimeView.js:151, Config.js:96, Ranking.js:49.
 
@@ -132,7 +132,7 @@ and access mode do not exist.
 
 ### 4.1 Crate and stack
 
-One new crate, tools/cms-ranking, a workspace member beside tools/cms-tui, so the existing rust CI
+One new crate, ranking-web, a workspace member beside tools/cms-tui, so the existing rust CI
 job and its musl convention extend to it instead of inventing a second Rust home.
 
 | Choice | Version basis | Why |
