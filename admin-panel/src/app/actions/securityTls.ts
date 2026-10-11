@@ -55,7 +55,11 @@ async function readLineage(pemPath: string, lineage: string): Promise<Certificat
   try {
     return describeLineage(lineage, await fs.readFile(pemPath, 'utf-8'));
   } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    const code = (error as NodeJS.ErrnoException).code;
+    // A missing OR unreadable lineage reads as "unreadable", not a crash: the cert
+    // store is root-owned on many hosts, so one lineage the panel cannot traverse
+    // must not take the whole TLS view down.
+    if (code === 'ENOENT' || code === 'EACCES' || code === 'EPERM') return null;
     throw error;
   }
 }
