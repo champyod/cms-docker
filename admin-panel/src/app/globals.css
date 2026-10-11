@@ -592,21 +592,17 @@
 /*
  * One digit span inside the card.
  *
- * WHY auto width: `0.6ch` was narrower than one character in the display font,
- * causing digits to overlap.  Chakra Petch has proportional figures, so we rely
- * on `font-variant-numeric: tabular-nums` to request equal-width digits (most
- * modern fonts honour this even when not strictly monospaced), then let the
- * browser size each span to its natural advance width.  `min-width: 0.55em`
- * ensures a worst-case narrow glyph ("1") still contributes a readable slot.
+ * `1ch` is defined as the advance width of the "0" glyph in the current font
+ * at the current font-size.  "0" is the widest digit in Chakra Petch Bold, so
+ * every digit slot is exactly as wide as the widest possible character — no
+ * clipping, no excess gap.  This works even on proportional fonts where
+ * tabular-nums produces no effect, because the slot is sized to the worst case.
  */
 .yt-digit {
   display: inline-block;
-  /* Natural width prevents overlap; tabular-nums minimises per-frame reflow. */
-  width: auto;
-  min-width: 0.55em;
+  width: 1ch;
   text-align: center;
-  font-variant-numeric: tabular-nums;
-  /* Play the existing digit-in animation (defined earlier) on mount. */
+  /* Entry animation on mount (keyframe defined earlier in this file). */
   animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 

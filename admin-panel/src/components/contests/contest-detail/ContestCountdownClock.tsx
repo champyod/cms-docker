@@ -101,17 +101,42 @@ interface Props {
   readonly panicTurn?: number;
 }
 
-// Fixed digit positions so panic stagger is always consistent.
+// Fixed digit positions so panic stagger is stable regardless of which units are visible.
 const IDX_DAYS    = 0;
 const IDX_HOURS   = 2;
 const IDX_MINUTES = 4;
 const IDX_SECONDS = 6;
 
 /**
- * YouTube Premiere-style countdown: DAYS · HOURS · MINUTES · SECONDS in labeled cards
- * that fill 80 % of the viewport's tighter axis.
+ * Left-prune zero leading units.
  *
- * Days card is suppressed when < 24 h remain so the display is never "00 DAYS".
+ * Rules (applied in order from most significant to least):
+ *  - Days are shown only when days > 0.
+ *  - Hours are shown only when days > 0 OR hours > 0.
+ *  - Minutes and seconds are always shown (the minimum display is MM:SS).
+ *
+ * This means:
+ *   3d 04h 05m 06s → 03:04:05:06
+ *      04h 05m 06s →    04:05:06
+ *          05m 06s →       05:06
+ *              06s →       00:06  ← seconds always shown with MM floor
+ */
+function visibleUnits(units: TimeUnits): {
+  showDays: boolean;
+  showHours: boolean;
+} {
+  const showDays = units.days > 0;
+  const showHours = showDays || units.hours > 0;
+  return { showDays, showHours };
+}
+
+/**
+ * YouTube Premiere-style countdown: DAYS · HOURS · MINUTES · SECONDS.
+ *
+ * Leading zero units are pruned from the left so the display is always
+ * as compact as the current time requires.  Minutes and seconds are the
+ * minimum — the display never shrinks below MM:SS.
+ *
  * All three original props are preserved unchanged.
  */
 export function ContestCountdownClock({
@@ -120,7 +145,9 @@ export function ContestCountdownClock({
   panicTurn = 0,
 }: Props): React.JSX.Element {
   const units = remainingMs !== null ? decompose(remainingMs) : null;
-  const showDays = units !== null && units.days > 0;
+  const { showDays, showHours } = units !== null
+    ? visibleUnits(units)
+    : { showDays: false, showHours: false };
 
   return (
     <div className="yt-clock-shell">
@@ -136,9 +163,13 @@ export function ContestCountdownClock({
               <Separator />
             </>
           )}
-          <UnitBlock value={pad2(units.hours)} label="HOURS"
-            startIndex={IDX_HOURS} isPanicking={isPanicking} panicTurn={panicTurn} />
-          <Separator />
+          {showHours && (
+            <>
+              <UnitBlock value={pad2(units.hours)} label="HOURS"
+                startIndex={IDX_HOURS} isPanicking={isPanicking} panicTurn={panicTurn} />
+              <Separator />
+            </>
+          )}
           <UnitBlock value={pad2(units.minutes)} label="MINUTES"
             startIndex={IDX_MINUTES} isPanicking={isPanicking} panicTurn={panicTurn} />
           <Separator />
