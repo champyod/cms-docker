@@ -266,9 +266,10 @@
 /*
  * The ended screen's mark: four balls that bounce off each other in front of the field.
  *
- * One ball travels its own vector to the middle while the other three hold their arms, so the
- * only thing that changes between frames is a translate — the shape never changes, and nothing
- * animates on an ancestor of the blurred surface.
+ * Each ball runs its own vector on a quarter-cycle stagger, so exactly one ball
+ * is in the middle at a time — the only thing that changes between frames is
+ * a translate, the shape never changes, and nothing animates on an ancestor
+ * of the blurred surface.
  */
 .countdown-mark {
   position: absolute;
