@@ -219,9 +219,10 @@ verify_migrated() {
 
   marker="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
     psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-    "SELECT to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL" 2>/dev/null || true)"
-  if [[ "$(printf '%s' "$marker" | tr -d '[:space:]')" != "t" ]]; then
-    log_die "\"${DB_NAME}\" has no \"${SCHEMA_MARKER_TABLE}\" table — the base schema was not applied. Check the cms-init output above." 1
+    "SELECT (to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL)
+       AND ((SELECT count(*) FROM _prisma_migrations) > 0)" 2>/dev/null || true)"
+  if [[ "$(printf '%s' "$marker" | tr -d '[:space:]')" != "tt" ]]; then
+    log_die "\"${DB_NAME}\" is missing the base schema marker or has no applied Prisma migrations recorded in _prisma_migrations. Re-run 'make prisma-sync' and inspect its output." 1
   fi
 
   out="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
