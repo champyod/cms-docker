@@ -20,7 +20,9 @@ set -euo pipefail
 
 readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly CRATE="$(cd "${HERE}/../.." && pwd)"
-readonly REPO="$(cd "${CRATE}/../.." && pwd)"
+# The crate sits one level below the repository root (ranking-web/), so the root is
+# its parent — the ../.. this used to be, when the crate lived at tools/cms-ranking.
+readonly REPO="$(cd "${CRATE}/.." && pwd)"
 readonly PARITY="${CRATE}/tests/fixtures/parity"
 readonly DATABASE_URL="${RANKING_E2E_DATABASE_URL:?set RANKING_E2E_DATABASE_URL to a database carrying the ranking tables}"
 readonly REDIS_URL="${RANKING_E2E_REDIS_URL:?set RANKING_E2E_REDIS_URL to the Redis the console counts failures in}"
