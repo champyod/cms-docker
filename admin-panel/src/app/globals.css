@@ -492,91 +492,141 @@
 }
 
 /* ─── YouTube Premiere-style countdown layout ─────────────────────────────────
-   The clock is replaced by four labeled boxes: DAYS · HOURS · MINUTES · SECONDS.
-   The digit size scales with the viewport like the old clock, but is now expressed
-   as a fluid clamp so a ResizeObserver is no longer needed for the basic layout.
-   ─────────────────────────────────────────────────────────────────────────────── */
+ *
+ * Four labeled cards: DAYS · HOURS · MINUTES · SECONDS.
+ *
+ * SIZING STRATEGY
+ * The digit font is driven by two viewport axes simultaneously so the cards
+ * always fill most of the available space:
+ *   • vw component — fills the width when the surface is wide (typical desktop).
+ *   • vh component — fills the height when the surface is tall (typical mobile /
+ *     fullscreen).  Using both axes means the clock is never small on either.
+ * The clamp min keeps it readable on very small screens and the max prevents
+ * it from becoming absurdly huge on ultra-wide displays.
+ *
+ * The countdown-box / countdown-shell flex chain must propagate height from the
+ * surface down to the box; the overrides below ensure that chain is unbroken.
+ * ─────────────────────────────────────────────────────────────────────────────── */
 
-/* Outer wrapper: centers the row and fills the allotted height. */
+/* Make the shell and box fill all available height from the flex parent. */
+.countdown-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.countdown-box {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Remove the fixed min-h so the box can actually shrink on small viewports
+     without being forced to a specific pixel value. */
+  min-height: max(180px, 28vh) !important;
+  height: 100%;
+}
+
+/* The row of unit cards fills the box, centered on both axes. */
 .yt-units-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: clamp(0.4rem, 2vmin, 1.5rem);
+  /* Gap scales with the smaller viewport axis so cards don't crowd on portrait. */
+  gap: clamp(0.5rem, 2.5vmin, 2rem);
   flex-wrap: wrap;
+  /* Ensure it takes the full height of its flex parent so it truly centers. */
+  width: 100%;
+  padding: clamp(0.5rem, 2vmin, 1.5rem) 0;
 }
 
-/* One time-unit column: two digits on top, label underneath. */
+/* One time-unit column: digit card on top, label below. */
 .yt-unit-block {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.25rem, 1vmin, 0.6rem);
+  gap: clamp(0.3rem, 1.2vmin, 0.7rem);
 }
 
-/* The pair of digit slots inside a unit. Uses the same .countdown-digit rules as the
-   previous implementation, so the tick animation fires per-digit on change. */
+/*
+ * Digit card.
+ *
+ * Font size uses the min() of two fluid expressions so the card fills whichever
+ * axis is tighter:
+ *   min(11vw, 22vh)   → on a landscape desktop the width axis governs (vw);
+ *                        on portrait or fullscreen the height axis governs (vh).
+ * The outer clamp() sets hard lower/upper bounds so the result is always usable.
+ */
 .yt-unit-digits {
   display: flex;
   align-items: baseline;
-  font-size: clamp(3rem, 14vmin, 9rem);
-  /* Give each digit pair a faint pill background like YouTube Premiere's card style. */
+  font-size: clamp(2.5rem, min(11vw, 22vh), 11rem);
   background: hsl(var(--countdown-hue, 226) 20% 14% / 0.55);
   border: 1px solid hsl(var(--countdown-hue, 226) 40% 30% / 0.35);
-  border-radius: 0.4em;
-  padding: 0.12em 0.3em 0.08em;
+  border-radius: 0.35em;
+  padding: 0.1em 0.28em 0.06em;
   box-shadow:
-    0 2px 8px hsl(var(--countdown-hue, 226) 60% 10% / 0.4),
-    inset 0 1px 0 hsl(var(--countdown-hue, 226) 60% 60% / 0.08);
+    0 4px 16px hsl(var(--countdown-hue, 226) 60% 8% / 0.5),
+    inset 0 1px 0 hsl(var(--countdown-hue, 226) 60% 60% / 0.1);
   color: hsl(var(--countdown-hue, 226) 80% 92%);
-  text-shadow: 0 0 1.5em hsl(var(--countdown-hue, 226) 80% 65% / 0.55);
+  text-shadow: 0 0 1.2em hsl(var(--countdown-hue, 226) 80% 65% / 0.6);
 }
 
-/* Override the old single-char slot width so each digit is centered inside the card. */
+/* Each digit slot: wide enough for one character without resizing on each tick. */
 .yt-unit-digits .countdown-digit.is-slot {
-  width: 0.62ch;
+  width: 0.58ch;
 }
 
-/* Label below the digits: uppercase, spaced-out, muted. */
+/* Label below the digits. */
 .yt-unit-label {
-  color: hsl(var(--countdown-hue, 226) 50% 68%);
-  font-size: clamp(0.6rem, 2vmin, 0.9rem);
+  color: hsl(var(--countdown-hue, 226) 50% 65%);
+  font-size: clamp(0.55rem, min(1.8vw, 2vh), 1rem);
   font-weight: 700;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
 }
 
-/* Colon separator between unit blocks. It pulses once per second to signal the tick. */
+/* Colon separator: vertically aligned with the top of the digit cards. */
 .yt-unit-sep {
-  font-size: clamp(2rem, 10vmin, 6rem);
+  font-size: clamp(1.8rem, min(8vw, 16vh), 7rem);
   font-weight: 700;
   line-height: 1;
-  color: hsl(var(--countdown-hue, 226) 50% 50% / 0.6);
+  color: hsl(var(--countdown-hue, 226) 50% 50% / 0.55);
+  /* Align with the digit baseline, leaving the label area free. */
   align-self: flex-start;
-  padding-top: 0.1em;
-  /* A brief blink each second mimics classic countdown timers. */
+  /* Offset slightly so the colon sits at mid-digit height rather than the top. */
+  padding-top: 0.18em;
   animation: yt-sep-pulse 1s step-end infinite;
   user-select: none;
 }
 
 @keyframes yt-sep-pulse {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.3; }
+  50%       { opacity: 0.25; }
 }
 
-/* Fullscreen: the unit cards grow to absorb the available height. */
-.countdown-surface:fullscreen .yt-units-row {
-  gap: clamp(0.6rem, 3vmin, 2.5rem);
+/* Ended state: the clock renders a placeholder (em-dash) to preserve layout space
+ * for the ornament overlay, but the placeholder itself must be invisible. */
+.countdown-surface[data-stage='ended'] .yt-units-row,
+.countdown-surface[data-stage='ended'] .countdown-box > span {
+  opacity: 0;
+  pointer-events: none;
 }
 
+/* Fullscreen overrides — the box already grows via flex-1; just push fonts larger. */
 .countdown-surface:fullscreen .yt-unit-digits {
-  font-size: clamp(4rem, 18vmin, 14rem);
+  font-size: clamp(4rem, min(14vw, 26vh), 16rem);
 }
 
-/* Respect reduced-motion: separator stays visible, no pulse. */
+.countdown-surface:fullscreen .yt-unit-sep {
+  font-size: clamp(3rem, min(10vw, 20vh), 11rem);
+}
+
+.countdown-surface:fullscreen .yt-unit-label {
+  font-size: clamp(0.75rem, min(2.2vw, 2.5vh), 1.25rem);
+}
+
+/* Reduced motion: keep separator visible, stop the blink. */
 @media (prefers-reduced-motion: reduce) {
   .yt-unit-sep {
     animation: none;
+    opacity: 0.6;
   }
 }
 

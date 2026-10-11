@@ -122,18 +122,23 @@ export function ContestCountdownTab({
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
-        {/* An ended contest has nothing left to count, so there is no timer to show. */}
-        {isEnded ? null : (
-          <div className="countdown-clock-plate">
-            <div className="countdown-clock-panic">
-              <ContestCountdownClock
-                remainingMs={remainingMs}
-                isPanicking={isPanicking}
-                panicTurn={panicTurn}
-              />
-            </div>
+        {/*
+         * The clock plate is always rendered so the "ended" stage occupies the
+         * same vertical space as every other stage.  When ended, remainingMs is
+         * null (no target), so the clock renders the em-dash placeholder — that
+         * placeholder is then hidden via CSS and the ornament sits over it.
+         * This keeps the stage label at the same position regardless of phase.
+         */}
+        <div className="countdown-clock-plate">
+          <div className="countdown-clock-panic">
+            <ContestCountdownClock
+              remainingMs={isEnded ? null : remainingMs}
+              isPanicking={isPanicking}
+              panicTurn={panicTurn}
+            />
           </div>
-        )}
+        </div>
+
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
           <span className="text-sm text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>
