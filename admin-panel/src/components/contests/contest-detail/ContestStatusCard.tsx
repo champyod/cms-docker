@@ -2,6 +2,7 @@
 
 import { Card } from '@/components/core/Card';
 import { Badge } from '@/components/core/Badge';
+import { resolveContestPhase } from '@/lib/contest-countdown';
 import { Zap } from 'lucide-react';
 
 const LABEL_CLASSES = 'mb-1 block text-xs font-bold uppercase tracking-widest text-muted-foreground';
@@ -14,15 +15,12 @@ interface FormTiming { start: string; stop: string; analysis_start: string; anal
 type StatusVariant = 'neutral' | 'success' | 'info' | 'destructive';
 
 function getStatus(contest: ContestTiming): { label: string; variant: StatusVariant; pulsing: boolean } {
-  const now = new Date();
-  const start = contest.start ? new Date(contest.start) : null;
-  const stop = contest.stop ? new Date(contest.stop) : null;
-  const analysisStart = contest.analysis_start ? new Date(contest.analysis_start) : null;
-  const analysisStop = contest.analysis_stop ? new Date(contest.analysis_stop) : null;
-  if (!start || now < start) return { label: 'Not Started', variant: 'neutral', pulsing: false };
-  if (stop && now < stop) return { label: 'Running', variant: 'success', pulsing: true };
-  if (analysisStart && analysisStop && now >= analysisStart && now < analysisStop) return { label: 'Analysis Mode', variant: 'info', pulsing: false };
-  return { label: 'Ended', variant: 'destructive', pulsing: false };
+  switch (resolveContestPhase(contest, new Date())) {
+    case 'not_started': return { label: 'Not Started', variant: 'neutral', pulsing: false };
+    case 'running': return { label: 'Running', variant: 'success', pulsing: true };
+    case 'analysis': return { label: 'Analysis Mode', variant: 'info', pulsing: false };
+    case 'ended': return { label: 'Ended', variant: 'destructive', pulsing: false };
+  }
 }
 
 function StatusBadge({ contest }: { contest: ContestTiming }) {

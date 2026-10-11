@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ContainersRedirectPage from '@/app/[locale]/(authenticated)/containers/page';
 import DeploymentsRedirectPage from '@/app/[locale]/(authenticated)/deployments/page';
-import RankingRedirectPage from '@/app/[locale]/(authenticated)/ranking/page';
+import InfrastructureRankingRedirectPage from '@/app/[locale]/(authenticated)/infrastructure/ranking/page';
 import ResourcesRedirectPage from '@/app/[locale]/(authenticated)/resources/page';
 
 const mocks = vi.hoisted(() => ({
@@ -53,9 +53,9 @@ const legacyPages = [
     }),
   },
   {
-    name: 'ranking',
-    target: '/en/infrastructure/ranking',
-    invoke: (): Promise<never> => RankingRedirectPage({
+    name: 'infrastructure-ranking',
+    target: '/en/ranking',
+    invoke: (): Promise<never> => InfrastructureRankingRedirectPage({
       params: Promise.resolve({ locale: 'en' }),
     }),
   },

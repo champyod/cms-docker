@@ -174,7 +174,8 @@ dash::help() {
 		"./cms deploy <core|admin|contest|worker|infra|all> [--img]" \
 		"./cms stop [stack] | pull [stack] | clean [stack]" \
 		"./cms backup [drill] | restore <archive>" \
-		"./cms db <init|reset|clean|sync>" \
+		"./cms db <init|reset|clean|sync|migrate>" \
+		"./cms db use <profile> | create <name> | rename <old> <new>" \
 		"./cms worker [edit|deploy|stop|list]" </dev/null
 	printf '\n%s' "$(dash::paint "$TUI_DIM" "press any key to return…")"
 	dash::poll_key 30 && [[ "$KEY" == [qQ] ]] && exit 0

@@ -43,7 +43,11 @@ Commands:
   stop [stack]              stop one stack or all
   clean [stack]             clean one stack or all
   pull [stack]              pull images for one stack or all
-  db <init|reset|clean|sync|use>  database lifecycle shortcuts (use <name> switches db profile)
+  db <init|reset|clean|sync>  database lifecycle shortcuts
+  db migrate                apply the full migration history to the ACTIVE
+                            database (cms-init + prisma-sync) and verify
+                            schema + roles + RLS
+  db use <name>             switch the active db profile (repoints, config sync, restack)
   db create <name> [--dry-run]  CREATE DATABASE in the cms-database container
   db rename <old> <new> [--dry-run]
                             ALTER DATABASE ... RENAME TO (pauses sessions on <old>)
@@ -77,6 +81,9 @@ Examples:
   ./cms deploy core --img
   ./cms db reset
   ./cms db create cmsdb_evaluate --dry-run
+  ./cms db use evaluate
+  ./cms db migrate
+  bash scripts/__db_migrate.sh --dry-run   # print the migration steps, change nothing
   ./cms backup drill
 CMDS
 }

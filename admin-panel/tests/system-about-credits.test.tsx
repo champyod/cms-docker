@@ -89,7 +89,7 @@ describe('panelCredits', () => {
     expect(panel.title).toBe(ROOT_CREDITS.surfaces.panel.title);
     expect(panel.assets.map((asset) => asset.name))
       .toEqual(ROOT_CREDITS.surfaces.panel.assets.map((asset) => asset.name));
-    expect(panel.assets).toHaveLength(24);
+    expect(panel.assets).toHaveLength(25);
     expect(panel.firstParty).toStrictEqual(ROOT_CREDITS.surfaces.panel.first_party);
     expect(panel.transitiveDependencies ?? null)
       .toBe(ROOT_CREDITS.surfaces.panel.transitive_dependencies ?? null);
@@ -133,10 +133,17 @@ describe('panelCredits', () => {
 });
 
 describe('about page', () => {
-  it('renders one row per panel asset and no other', async () => {
+  it('renders a contributors table and one row per panel asset', async () => {
     const container = await renderPage();
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(24);
-    const body = within(container.querySelector('tbody') as HTMLElement);
+    const bodies = container.querySelectorAll('tbody');
+    expect(bodies).toHaveLength(2);
+    // Contributors lead the page: the author, the upstream project, and the
+    // attribution the panel records for itself.
+    expect(bodies[0].querySelectorAll('tr')).toHaveLength(3);
+    expect(within(bodies[0] as HTMLElement).getByText('CCYod')).toBeDefined();
+    // The components table is the one carrying the panel's own assets.
+    expect(bodies[1].querySelectorAll('tr')).toHaveLength(25);
+    const body = within(bodies[1] as HTMLElement);
     for (const asset of panelCredits().panel.assets) {
       expect(body.getByText(asset.name)).toBeDefined();
     }
@@ -158,7 +165,7 @@ describe('about page', () => {
     await renderPage();
     expect(screen.getByText(ROOT_CREDITS.license.name)).toBeDefined();
     expect(screen.getByRole('heading', { name: 'Admin panel' })).toBeDefined();
-    expect(screen.getByRole('heading', { name: 'Third-party software (24)' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Components (25)' })).toBeDefined();
   });
 
   it('keeps every address out of the component source', () => {

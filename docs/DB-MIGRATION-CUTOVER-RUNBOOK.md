@@ -14,9 +14,9 @@ How to take the production database from the pre-RBAC schema onto the Prisma-man
 
 ## 1. What the upgrade does to the database
 
-- **One target schema, two starting points.** A fresh install runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints); an upgrade skips `cmsInitDB` because the `contests` table already exists. Both paths then run the same guarded migrations and converge on the identical 33-table schema with identical grants.
+- **One target schema, two starting points.** A fresh install runs `cmsInitDB` (26 tables, 5 enums, 5 domains, 46 CHECK constraints); an upgrade skips `cmsInitDB` because the `contests` table already exists. Both paths then run the same guarded migrations and converge on the identical schema with identical grants.
 - The 6 RBAC tables — `permissions`, `groups`, `group_permissions`, `admin_groups`, `admin_permission_overrides`, `audit_log` — are created by the migration history only.
-- All 33 application tables end with ROW LEVEL SECURITY **enabled and forced**. `_prisma_migrations` (Prisma's own ledger) is the only table in `public` without RLS.
+- Every application table ends with ROW LEVEL SECURITY **enabled and forced**. `_prisma_migrations` (Prisma's own ledger) is the only table in `public` without RLS.
 - Exactly two database roles: `cmsuser` (owner, demoted) and `cms_backup` (BYPASSRLS, member of `cmsuser`, used by `pg_dump`). On the current production database `cms_backup` does not exist yet — it is created during this upgrade.
 - The 5 `permission_*` boolean columns on `admins` are captured to `cms_legacy._legacy_admin_permissions`, backfilled into group memberships, then dropped. **Forward-only:** there is no in-place undo; rollback means restoring the pre-upgrade dump (§6).
 - The old and new admin panels cannot run against the same schema. This is a hard cutover — schedule a maintenance window.
@@ -119,15 +119,15 @@ The `./cms` no-argument lifecycle performs the same order (`env → core → cms
 
 Run from the repo root. `psql` examples use the default names; substitute `POSTGRES_USER` / `POSTGRES_DB` from `.env` if changed.
 
-1. **Table count — 33 application tables + the ledger.**
+1. **The base schema and the migration ledger are both present.**
    ```bash
    docker exec cms-database psql -U cmsuser -d cmsdb -tAc \
-     "SELECT count(*) FROM information_schema.tables
-      WHERE table_schema='public' AND table_type='BASE TABLE';"
+     "SELECT to_regclass('public.contests') IS NOT NULL,
+             (SELECT count(*) FROM _prisma_migrations) > 0;"
    ```
-   Expected: `34` (26 original tables + 6 RBAC tables + `monitor_targets` + `_prisma_migrations`).
+   Expected: `t`, `t`. A base-table *count* is deliberately not matched — every migration that adds a table moves it. `scripts/__check_rls_coverage.sh` reports the current application-table total.
 
-2. **RLS enabled and forced on all 33 application tables.**
+2. **RLS enabled and forced on every application table.**
    ```bash
    docker exec cms-database psql -U cmsuser -d cmsdb -tAc \
      "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
@@ -138,7 +138,7 @@ Run from the repo root. `psql` examples use the default names; substitute `POSTG
       WHERE n.nspname='public' AND c.relkind='r'
         AND NOT (c.relrowsecurity AND c.relforcerowsecurity);"
    ```
-   Expected: `33`, then exactly one row: `_prisma_migrations` (§7). Do not use an unscoped "0 tables without RLS in public" check — the ledger makes it return 1.
+   Expected: the application-table count `scripts/__check_rls_coverage.sh` reports, then exactly one row: `_prisma_migrations` (§7). Do not use an unscoped "0 tables without RLS in public" check — the ledger makes it return 1.
 
 3. **Exactly two roles, with the right attributes.**
    ```bash
@@ -254,4 +254,4 @@ Then re-verify row counts against the pre-upgrade values and log in.
 
 - **`evaluations.admin_text` is patch-owned.** The column is declared by the CMS ORM and deliberately absent from `schema.prisma`; `scripts/__fix_db_schema.sql` (applied by `make cms-init` on every run, both paths) owns it. Do not add it to the Prisma schema without removing the patch, and vice versa.
 - **`audit_log.actor_id` carries its foreign key.** `audit_log_actor_id_fkey` references `admins(id)` (`ON UPDATE CASCADE ON DELETE SET NULL`) and is created by the object migration; its orphan check fails loudly with a count instead of silently nulling rows.
-- **`_prisma_migrations` has no RLS.** It is Prisma's own ledger, not an application table, and the RLS migrations scope to the 33 application tables. Scope any RLS verification accordingly (§4.2).
+- **`_prisma_migrations` has no RLS.** It is Prisma's own ledger, not an application table, and the RLS migrations scope to the application tables. Scope any RLS verification accordingly (§4.2).

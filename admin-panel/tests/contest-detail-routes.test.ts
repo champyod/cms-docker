@@ -12,6 +12,7 @@ const CONTEST_TAB_PERMISSIONS = {
   'contests.tabs.participants': { all: ['contest:read', 'participation:read', 'user:read'] },
   'contests.tabs.communications': { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] },
   'contests.tabs.settings': { all: ['contest:read'] },
+  'contests.tabs.countdown': { all: ['contest:read'] },
 } as const satisfies Readonly<Record<string, PermissionRequirement>>;
 
 describe('contest detail canonical paths', () => {
@@ -21,6 +22,7 @@ describe('contest detail canonical paths', () => {
     expect(buildRoute('en', 'contests.tabs.participants', { id: 41 })).toBe('/en/contests/41/participants');
     expect(buildRoute('en', 'contests.tabs.communications', { id: 41 })).toBe('/en/contests/41/communications');
     expect(buildRoute('en', 'contests.tabs.settings', { id: 41 })).toBe('/en/contests/41/settings');
+    expect(buildRoute('en', 'contests.tabs.countdown', { id: 41 })).toBe('/en/contests/41/countdown');
   });
 
   it('keeps each descriptor permission equal to its tab read owner', () => {
@@ -49,7 +51,7 @@ describe('contest detail canonical paths', () => {
   });
 
   it('keeps English and Thai Contest detail-label keys in parity', () => {
-    const expected = ['overview', 'tasks', 'participants', 'communications', 'settings'];
+    const expected = ['overview', 'tasks', 'participants', 'communications', 'settings', 'countdown'];
     expect(Object.keys(en.navigation.contests.tabs)).toEqual(expected);
     expect(Object.keys(th.navigation.contests.tabs)).toEqual(expected);
     expect(Object.keys(en.navigation.contests.record)).toEqual(['label']);

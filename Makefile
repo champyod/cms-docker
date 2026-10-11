@@ -99,6 +99,7 @@ help:
 	@echo "  make cms-init       - Initialize CMS database"
 	@echo "  make admin-create   - Create first superadmin account"
 	@echo "  make prisma-sync    - Apply Prisma migrations (migrate deploy) + seed permissions"
+	@echo "  make db-migrate     - Migrate the active DB (cms-init + prisma-sync) and verify schema + RLS"
 	@echo "  make lint           - Run shellcheck/hadolint/yamllint + compose config validation"
 	@echo "  make test           - Run the developer suites in tests/ (needs a checkout, not a stack)"
 	@echo "  make smoke-test     - Run scripts/__smoke-test.sh"
@@ -483,6 +484,12 @@ prisma-sync:
 	echo "Seeding permission groups and permissions..."; \
 	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
+
+# Migrate the ACTIVE database and verify the result. Sequences cms-init then
+# prisma-sync — the same pair ./cms' no-arg lifecycle runs — so a database that
+# ./cms db create made empty ends up schema + roles + RLS ready in one step.
+db-migrate:
+	@chmod +x scripts/__db_migrate.sh && ./scripts/__db_migrate.sh
 
 admin-create:
 	@echo "Creating first Superadmin account..."

@@ -8,13 +8,14 @@ pub mod setup_args;
 pub use renew_args::DomainRenewArgs;
 pub use setup_args::{DomainProxyArgs, DomainSetupArgs};
 
-/// Database lifecycle subcommands (`db <init|reset|clean|sync>`).
+/// Database lifecycle subcommands (`db <init|reset|clean|sync|migrate>`).
 #[derive(ValueEnum, Clone, Debug)]
 pub enum DbSub {
     Init,
     Reset,
     Clean,
     Sync,
+    Migrate,
 }
 
 /// Backup subcommands (`backup [drill|offsite]`; None = default backup).
@@ -156,7 +157,7 @@ pub enum Commands {
         #[arg(default_value = "all")]
         stack: String,
     },
-    /// Database lifecycle shortcuts (`db <init|reset|clean|sync>`).
+    /// Database lifecycle shortcuts (`db <init|reset|clean|sync|migrate>`).
     Db {
         #[arg(value_enum)]
         sub: DbSub,

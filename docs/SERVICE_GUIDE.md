@@ -114,7 +114,7 @@ graph TD
 
 ### Ranking web server
 
-The scoreboard runs the Rust `cms-ranking` binary (`tools/cms-ranking`), not the Python
+The scoreboard runs the Rust `cms-ranking` binary (`ranking-web`), not the Python
 `cmsRankingWebServer`. It reads the projection tables the proxy writes into PostgreSQL and
 takes its login failure counters from the same Redis the contest login counters use, under a
 `cms:ranking:login:` namespace so a clearance here cannot forgive a brute force against the

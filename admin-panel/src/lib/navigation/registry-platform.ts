@@ -16,7 +16,11 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('infrastructure.deployments', '/infrastructure/deployments', { all: ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'] }, ['/deployments']),
   enabledPageRoute('infrastructure.containers', '/infrastructure/containers', { all: ['container:list', 'container:read'] }, ['/containers']),
   enabledPageRoute('infrastructure.resources', '/infrastructure/resources', { all: ['resource:list', 'resource:read'] }, ['/resources']),
-  enabledPageRoute('infrastructure.ranking', '/infrastructure/ranking', { all: ['ranking:list', 'ranking:read'] }, ['/ranking']),
+  enabledPageRoute('ranking.board', '/ranking', { all: ['ranking:list', 'ranking:read'] }, ['/infrastructure/ranking']),
+  enabledPageRoute('ranking.settings', '/ranking/settings', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
+  enabledPageRoute('ranking.appearance', '/ranking/appearance', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
+  enabledPageRoute('ranking.lockouts', '/ranking/lockouts', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
+  enabledPageRoute('ranking.credits', '/ranking/credits', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
 
   enabledPageRoute('system.appearance', '/system/appearance', { all: ['appearance:read', 'appearance:list'] }, ['/appearance']),
   enabledPageRoute('system.maintenance', '/system/maintenance', { any: ['maintenance:update', 'backup:create'] }, ['/maintenance']),

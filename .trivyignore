@@ -1,0 +1,4 @@
+# Dated 2026-10-10: the bundled Compose plugin ships Go 1.26.8 + x/net 0.58.0, fixed upstream but in no Compose release (v5.6.0) yet — remove once Compose carries patched Go.
+CVE-2026-78669
+CVE-2026-78667
+CVE-2026-97031

@@ -1,6 +1,6 @@
 # Ranking server: the Rust cutover runbook
 
-The ranking scoreboard is served by `cms-ranking`, a Rust binary in `tools/cms-ranking`, reading the
+The ranking scoreboard is served by `cms-ranking`, a Rust binary in `ranking-web`, reading the
 projection tables the proxy writes. This runbook is what an operator runs before, during and after
 the switch, and what to do if it goes wrong. The design and its decisions are in
 [`superpowers/specs/2026-10-09-rust-ranking-server-design.md`](superpowers/specs/2026-10-09-rust-ranking-server-design.md).
@@ -40,7 +40,7 @@ the service needs to move.
    compose service already points `RANKING_REDIS_URL` at it.
 3. **Session secret.** `./cms config sync` generates `RANKING_SESSION_SECRET`. An empty value makes
    the console refuse every login rather than mint an unsigned one.
-4. **The page on disk.** `RANKING_STATIC_DIR` (the vendored `cmsranking/static` in the image) and
+4. **The page on disk.** `RANKING_STATIC_DIR` (the vendored `ranking-web/static` in the image) and
    `CMS_CREDITS_FILE` must exist; without them `/` and `/credits` refuse.
 5. **A console account.** `ranking_console_users` needs at least one enabled row, or nobody can reach
    the console when the scoreboard is set to `protected`. Passwords use the panel format:
@@ -59,7 +59,7 @@ the service needs to move.
 | :--- | :--- | :--- |
 | The service is up | `curl -fsS localhost:8890/healthz` | `200 {"status":"ok"}`; it is `503` until `SELECT 1` succeeds |
 | It refuses what it cannot serve | `curl -o /dev/null -w "%{http_code}" localhost:8890/config` with the database stopped | `503`, never an empty board |
-| The board matches the Python scorer | `RANKING_E2E_DATABASE_URL=... bash tools/cms-ranking/tests/e2e/ranking_e2e.sh` | every step prints `[PASS]` |
+| The board matches the Python scorer | `RANKING_E2E_DATABASE_URL=... bash ranking-web/tests/e2e/ranking_e2e.sh` | every step prints `[PASS]` |
 | Live events | the same script | a write reaches an open stream |
 | Protected mode | set `access_mode = protected`, open `/` anonymously | a redirect to `/login` |
 | Sign-in | sign in with a console account | the board opens; a wrong password sets no cookie |
@@ -84,13 +84,52 @@ the appearance row stay in the database for the next attempt.
 
 ## 6. Known gaps at the time of writing
 
-- **The panel still renders its old ranking cards.** `RankingClient` polls `api/ranking/snapshot`,
-  which needs five endpoints against the old Python service that the Rust service does not
-  implement. Its connection card and scoreboard cannot work; the logo card still does, and must be
-  kept when the rest is removed. See the plan, Slice 6.
-- **The rehearsal has not been run against a stack by the author of the cutover.** The script exists,
-  is syntax-checked, and its steps are listed above; its result belongs in the release notes.
+- **The rehearsal still has not been run on a host by the author of the cutover.** This
+  environment has neither docker nor psql, so the script is syntax-checked here and runs in CI —
+  the `rust-ranking` job gives it a fresh Postgres and its own Redis, then drives the release
+  binary. Its result against a real stack belongs in the release notes.
 - **`cmsRWSHelper` was removed** with the HTTP push path: manual pushes now mean writing the
   projection tables or letting the proxy do it.
-- **`cms-ranking-data` holds only the logo.** The JSON store it was created for is gone.
+- **`cms-ranking-data` holds the logo and the contestant faces.** The JSON store the volume was
+  created for is gone; faces live beside the logo as `avatars/<user>.<ext>` and are read per
+  request, so replacing a file updates the board with no restart. Uploading one is an API call
+  (`POST /api/ranking/avatars/<user>`, gated on `ranking:update`) — the panel has no face picker
+  yet, while the logo still has its card on the board page.
+
+### Closed since the first draft
+
+- **The panel's old ranking cards are gone.** `RankingClient` and `api/ranking/snapshot` are no
+  longer anywhere in the panel — the scoreboard is served by the ranking service itself — so the
+  five endpoints they needed are not a gap. What survived is the logo card, and it now sits on the
+  Ranking group's board page rather than a card that polled a retired endpoint.
+- **The credit list is edited apart from the appearance.** The two were one form, so a field one
+  page stopped posting would have written an empty list over the other; they now save separately.
+
+## 7. Where to configure
+
+Every knob has one home. The panel only reads what the stack already puts in front of it, so a
+setting that is not registered in `config.toml` cannot reach the container at all —
+`__check_spec_parity.sh`, `__check_var_coverage.sh` and `tests/test_proxy_body_size.sh` enforce
+that three ways.
+
+| What | Where | Reaches the service by |
+| --- | --- | --- |
+| Session secret, CAPTCHA keys, `RANKING_*` | `config.toml` `[admin]` | `./cms config sync` → `.env` → compose |
+| Upload caps: `MAX_LOGO_UPLOAD_BYTES`, `MAX_AVATAR_UPLOAD_BYTES`, `MAX_STATEMENT_UPLOAD_BYTES`, `MAX_ATTACHMENT_UPLOAD_BYTES`, `MAX_TESTCASE_FILE_BYTES`, `MAX_TESTCASE_UPLOAD_BYTES` | `config.toml` `[admin]` | compose passes each one into the panel container |
+| Ranking logo host path | `config.toml` `RANKING_LOGO_PATH` | `./cms config sync` copies it into `cms-ranking-data` (hot swap) |
+| Appearance, credits list, overrides, console lockouts | **Ranking → appearance / credits / settings / lockouts** | written to `ranking_settings` and the override tables; the service re-reads them on the next request |
+| Branding, per-service settings, display density | **System → appearance** | writes `config.toml` |
+| Database and Redis the service reads | `docker-compose.yml` service env | — |
+
+The panel's own `ranking/*` group is the only place the surface is edited:
+
+- **board** — what the public scoreboard opens with, and the logo it carries;
+- **settings** — manual overrides (hide, guest, pin, rename, score);
+- **appearance** — title, subtitle, organisation, access mode, footer and credits text;
+- **lockouts** — console lockouts and their release;
+- **credits** — the credit list the scoreboard attributes its licences to.
+
+`/infrastructure/ranking` still resolves: it is a redirect to `/ranking`, so old bookmarks and
+chords keep working.
+
 

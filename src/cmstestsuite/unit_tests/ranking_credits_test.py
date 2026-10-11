@@ -197,11 +197,17 @@ class NoticeTest(unittest.TestCase):
         self.assertEqual(self.notice.find(BREAKING), None)
         self.assertNotEqual(" ".join(self.notice.get_text().split()), "")
 
-    def test_the_notice_carries_the_licence_the_offer_and_the_credits(self):
-        self.assertIn("AGPL-3.0", self.notice.get_text())
-        self.assertIsNotNone(self.notice.find(id="LicenseNotice_source"))
-        self.assertEqual(self.notice.find(id="LicenseNotice_credits")["href"],
-                         "credits.html")
+    def test_the_notice_carries_the_credit_line_and_the_project_link(self):
+        # WHY no licence here: the byline is read at a glance, so it names the
+        # project, its author and its lineage and nothing else. The section 13
+        # offer is visible text on the credits page the scoreboard sits beside.
+        credits_file = load_json(CREDITS_PATH, "credits file")
+        text = " ".join(self.notice.get_text().split())
+        self.assertIn(credits_file["project"]["name"], text)
+        if credits_file["project"].get("author"):
+            self.assertIn(credits_file["project"]["author"], text)
+        self.assertNotIn("AGPL-3.0", text)
+        self.assertIsNotNone(self.notice.find(id="LicenseNotice_project"))
         self.assertTrue((STATIC_ROOT / "credits.html").is_file())
 
     def test_the_offer_follows_the_runtime_config(self):

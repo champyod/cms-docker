@@ -33,6 +33,20 @@ fn config_sync_forwards_dry_run_and_no_secrets() {
 }
 
 #[test]
+fn db_migrate_resolves_to_the_migrate_key_with_no_args() {
+    let (key, args) = parse(&["cms", "db", "migrate"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbMigrate);
+    assert!(args.is_empty());
+}
+
+#[test]
+fn db_sync_still_resolves_after_migrate_was_added() {
+    let (key, args) = parse(&["cms", "db", "sync"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbSync);
+    assert!(args.is_empty());
+}
+
+#[test]
 fn domain_setup_keeps_its_original_shape_when_nothing_extra_is_asked() {
     let (key, args) = parse(&["cms", "domain", "setup"]).expect("resolves");
     assert_eq!(key, crate::core::dispatch::DispatchKey::DomainSetup);

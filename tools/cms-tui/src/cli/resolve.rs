@@ -16,6 +16,7 @@ const fn db_key(sub: &DbSub) -> DispatchKey {
         DbSub::Reset => DispatchKey::DbReset,
         DbSub::Clean => DispatchKey::DbClean,
         DbSub::Sync => DispatchKey::DbSync,
+        DbSub::Migrate => DispatchKey::DbMigrate,
     }
 }
 const fn backup_key(sub: Option<&BackupSub>) -> DispatchKey {

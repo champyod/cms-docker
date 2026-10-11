@@ -92,9 +92,16 @@ export default async function SystemAboutPage({
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const copy = dict.about;
-  const { projectName, sourceUrl, upstream, license, panel } = panelCredits();
+  const { projectName, projectAuthor, sourceUrl, upstream, license, panel } = panelCredits();
   return (
     <Stack gap={12} className="mx-auto max-w-5xl">
+      {/* The byline the scoreboard sidebar carries: project, author and lineage in
+          one line at body size, so the page opens on who built it. */}
+      <p className="text-base text-foreground">
+        {projectName}
+        {projectAuthor === null ? '' : ` by ${projectAuthor}`}
+        {panel.attribution.length > 0 ? ` · ${panel.attribution[0].text}` : ''}
+      </p>
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <LabeledValue label={copy.project}>
           <span className="font-medium">{projectName}</span>
@@ -112,17 +119,36 @@ export default async function SystemAboutPage({
         </LabeledValue>
       </div>
       <section className="space-y-4">
-        <Text as="h2" variant="h2">{panel.title}</Text>
-        <div className="space-y-2">
-          <Text variant="label">{copy.attribution}</Text>
-          <ul className="space-y-1 text-sm text-foreground">
+        <Text as="h2" variant="h2">{copy.contributors.title}</Text>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{copy.contributors.name}</TableHead>
+              <TableHead>{copy.contributors.contribution}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {projectAuthor !== null && (
+              <TableRow>
+                <TableCell><ExternalLink href={sourceUrl}>{projectAuthor}</ExternalLink></TableCell>
+                <TableCell>{copy.contributors.maintainer}</TableCell>
+              </TableRow>
+            )}
+            <TableRow>
+              <TableCell><ExternalLink href={upstream.url}>{upstream.name}</ExternalLink></TableCell>
+              <TableCell>{copy.contributors.upstream}</TableCell>
+            </TableRow>
             {panel.attribution.map((entry) => (
-              <li key={entry.url}>
-                <ExternalLink href={entry.url}>{entry.text}</ExternalLink>
-              </li>
+              <TableRow key={entry.url}>
+                <TableCell><ExternalLink href={entry.url}>{entry.text}</ExternalLink></TableCell>
+                <TableCell>{copy.attribution}</TableCell>
+              </TableRow>
             ))}
-          </ul>
-        </div>
+          </TableBody>
+        </Table>
+      </section>
+      <section className="space-y-4">
+        <Text as="h2" variant="h2">{panel.title}</Text>
         <div className="space-y-2">
           <Text variant="label">{copy.firstParty}</Text>
           <ul className="list-inside list-disc space-y-1 font-mono text-xs text-muted-foreground">

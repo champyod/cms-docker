@@ -187,8 +187,9 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms fix` | Non-interactive repair of missing/insecure config |
 | `./cms deploy <stack> [--img]` | Start one stack (`core/admin/contest/worker/infra`) or `all`; `--img` forces registry images |
 | `./cms stop [stack]` / `clean [stack]` / `pull [stack]` | Lifecycle per stack or all |
-| `./cms db init\|reset\|clean\|sync` | Database shortcuts (init schema, full reset, wipe, Prisma sync) |
-| `./cms db create <name>` / `./cms db rename <old> <new>` | Create or rename a database in the running `cms-database` container — `--dry-run` first, then `CONFIRM_DB_ADMIN=yes` or type `yes`; the new database is empty until the migrations run, and a rename leaves every profile pointing at the old name until you repoint them. See [`docs/DB-ROTATION.md`](docs/DB-ROTATION.md) |
+| `./cms db init\|reset\|clean\|sync\|migrate` | Database shortcuts (init schema, full reset, wipe, Prisma sync, and migrate the active DB: schema + roles + RLS) |
+| `./cms db use <profile>` | Point the deployment at a different database — rewrites `ACTIVE_DATABASE`, runs `./cms config sync`, restacks what is running |
+| `./cms db create <name>` / `./cms db rename <old> <new>` | Create or rename a database in the running `cms-database` container — `--dry-run` first, then `CONFIRM_DB_ADMIN=yes` or type `yes`. Neither touches the schema or the config: after `create` run `./cms db use <profile>` then `./cms db migrate`; after `rename` repoint every `[db_<profile>]` `POSTGRES_DB`, run `./cms config sync`, then `./cms deploy core`. See [`docs/DB-ROTATION.md`](docs/DB-ROTATION.md) |
 | `./cms admin-create` | Create a superadmin interactively |
 | `./cms status` | Live service status dashboard |
 | `./cms monitor` | Monitoring/backup operations UI |

@@ -76,7 +76,14 @@ const INFRASTRUCTURE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
   'infrastructure.resources',
-  'infrastructure.ranking',
+] as const satisfies readonly RouteId[];
+
+const RANKING_ROUTE_IDS = [
+  'ranking.board',
+  'ranking.settings',
+  'ranking.appearance',
+  'ranking.lockouts',
+  'ranking.credits',
 ] as const satisfies readonly RouteId[];
 
 const SYSTEM_ROUTE_IDS = [
@@ -91,6 +98,7 @@ const SYSTEM_ROUTE_IDS = [
 const MODULE_FIELD_IDS: readonly RouteId[] = [
   ...ADMINISTRATION_ROUTE_IDS,
   ...INFRASTRUCTURE_ROUTE_IDS,
+  ...RANKING_ROUTE_IDS,
   ...SYSTEM_ROUTE_IDS,
 ];
 
@@ -126,7 +134,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(50);
+    expect(ROUTE_REGISTRY).toHaveLength(55);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration
@@ -142,6 +150,7 @@ describe('target route registry', () => {
       'contests.tabs.participants',
       'contests.tabs.communications',
       'contests.tabs.settings',
+      'contests.tabs.countdown',
       'tasks.list',
       'tasks.record',
       'tasks.tabs.overview',
@@ -168,6 +177,7 @@ describe('target route registry', () => {
       ...SECURITY_ROUTE_IDS,
       ...ADMINISTRATION_ROUTE_IDS,
       ...INFRASTRUCTURE_ROUTE_IDS,
+      ...RANKING_ROUTE_IDS,
       ...SYSTEM_ROUTE_IDS,
       'system.search',
     ];
@@ -272,6 +282,7 @@ describe('route permissions', () => {
     ['contests.tabs.participants', ['contest:read', 'participation:read', 'user:read']],
     ['contests.tabs.communications', ['contest:read', 'announcement:read', 'question:read', 'ranking:read']],
     ['contests.tabs.settings', ['contest:read']],
+    ['contests.tabs.countdown', ['contest:read']],
     ['tasks.tabs.overview', ['task:read', 'statement:read']],
     ['tasks.tabs.datasets', ['task:read', 'dataset:read']],
     ['tasks.tabs.files', ['task:read', 'attachment:read']],
@@ -308,7 +319,11 @@ describe('route permissions', () => {
       ['infrastructure.deployments', ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read']],
       ['infrastructure.containers', ['container:list', 'container:read']],
       ['infrastructure.resources', ['resource:list', 'resource:read']],
-      ['infrastructure.ranking', ['ranking:list', 'ranking:read']],
+      ['ranking.board', ['ranking:list', 'ranking:read']],
+      ['ranking.settings', ['ranking:list', 'ranking:read']],
+      ['ranking.appearance', ['ranking:list', 'ranking:read']],
+      ['ranking.lockouts', ['ranking:list', 'ranking:read']],
+      ['ranking.credits', ['ranking:list', 'ranking:read']],
       ['system.appearance', ['appearance:read', 'appearance:list']],
       ['system.settings', ['env:read', 'env:list', 'monitor:read', 'monitor:list']],
       ['system.search', ['all:all']],
@@ -395,7 +410,7 @@ describe('legacy redirects', () => {
       ['/deployments', ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'], '/th/infrastructure/deployments'],
       ['/containers', ['container:list', 'container:read'], '/th/infrastructure/containers'],
       ['/resources', ['resource:list', 'resource:read'], '/th/infrastructure/resources'],
-      ['/ranking', ['ranking:list', 'ranking:read'], '/th/infrastructure/ranking'],
+      ['/infrastructure/ranking', ['ranking:list', 'ranking:read'], '/th/ranking'],
       ['/appearance', ['appearance:read', 'appearance:list'], '/th/system/appearance'],
       ['/maintenance', ['maintenance:update'], '/th/system/maintenance'],
       ['/settings', ['env:read', 'env:list', 'monitor:read', 'monitor:list'], '/th/system/settings'],

@@ -70,7 +70,11 @@ const MODULE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
   'infrastructure.resources',
-  'infrastructure.ranking',
+  'ranking.board',
+  'ranking.settings',
+  'ranking.appearance',
+  'ranking.lockouts',
+  'ranking.credits',
   'system.appearance',
   'system.maintenance',
   'system.settings',
@@ -250,7 +254,7 @@ describe('foundation cutover state', () => {
     }
   });
 
-  it('enables all 11 module descriptors after Task 3', () => {
+  it('enables all 15 module descriptors after Task 3', () => {
     expectModuleState(MODULE_ROUTE_IDS);
   });
 

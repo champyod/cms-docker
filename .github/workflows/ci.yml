@@ -78,7 +78,7 @@ jobs:
               - '.tools/cms-tui/**'
               - '.github/workflows/ci.yml'
             rust_ranking:
-              - 'tools/cms-ranking/**'
+              - 'ranking-web/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -225,6 +225,10 @@ jobs:
       - name: Install suite prerequisites
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends jq
 
+      # The proxy-body-size suite imports the panel's testcase limits via `bun -e`.
+      - name: Install Bun
+        uses: oven-sh/setup-bun@v2
+
       # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
       - name: Run the repo suites
         run: make test
@@ -316,6 +320,7 @@ jobs:
           image-ref: cms-admin-panel:scan
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           vuln-type: os,library
           exit-code: "1"
 
@@ -433,33 +438,44 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            tools/cms-ranking/target
-          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('tools/cms-ranking/Cargo.lock') }}
+            ranking-web/target
+          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
-      # All three, in order: the CreateTable, the RLS pair the repository generates,
-      # and the notify triggers the live stream depends on. Applying fewer would
-      # test a schema no deployment has.
+      # Every ranking migration in timestamp order, so new ones auto-apply and the test sees a deployment's schema.
       - name: Apply the ranking migrations
         run: |
-          for migration in \
-            admin-panel/prisma/migrations/20261009150000_ranking_tables \
-            admin-panel/prisma/migrations/20261009150100_ranking_tables_rls \
-            admin-panel/prisma/migrations/20261009160000_ranking_notify; do
-            psql "$RANKING_TEST_DATABASE_URL" -f "$migration/migration.sql"
+          for migration in admin-panel/prisma/migrations/*_ranking_*/; do
+            psql "$RANKING_TEST_DATABASE_URL" -f "${migration}migration.sql"
           done
 
       - name: Format check
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo fmt --check
 
       - name: Clippy
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
-        working-directory: tools/cms-ranking
+        working-directory: ranking-web
         run: cargo test --all-targets -- --include-ignored
+
+      # The rehearsal drives the release binary over HTTP against a database of its own:
+      # this job's database already carries the schema, and these migrations are not
+      # idempotent, so a second one is created instead of re-applying them. It is the
+      # only place the whole surface — entity reads, byte framing, events, protected
+      # mode — runs end to end against a real Postgres and Redis.
+      - name: Build the release binary for the rehearsal
+        working-directory: ranking-web
+        run: cargo build --release
+
+      - name: Acceptance rehearsal
+        run: |
+          psql "${RANKING_TEST_DATABASE_URL%/*}/postgres" -c 'CREATE DATABASE ranking_e2e' || true
+          RANKING_E2E_DATABASE_URL="${RANKING_TEST_DATABASE_URL%/*}/ranking_e2e" \
+          RANKING_E2E_REDIS_URL="${RANKING_TEST_REDIS_URL}" \
+            bash ranking-web/tests/e2e/ranking_e2e.sh
 
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it
@@ -538,8 +554,8 @@ jobs:
       # fetching it at build time (no network dependency in the build).
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -593,8 +609,8 @@ jobs:
 
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

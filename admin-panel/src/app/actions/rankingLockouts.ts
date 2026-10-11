@@ -52,6 +52,6 @@ export async function clearRankingLockout(formData: FormData): Promise<void> {
     reason,
     result: 'success',
   });
-  revalidatePath('/[locale]/infrastructure/ranking');
+  revalidatePath('/[locale]/ranking/lockouts');
 }
 

@@ -430,7 +430,7 @@ def _login_page_facts(captcha_facts: dict) -> dict:
         "contest": Attributes(description="A contest", name="contest",
                               languages=[], tasks=[], allow_registration=True),
         "available_translations": [],
-        "credits": Attributes(project=Attributes(name="CMS"),
+        "credits": Attributes(project=Attributes(name="CMS", author="CCYod"),
                               license=Attributes(url="/license", name="AGPL")),
         "config": Attributes(global_=Attributes(source_url="/source")),
         "teams": [],

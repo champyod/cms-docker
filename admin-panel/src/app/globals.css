@@ -1,6 +1,21 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* The panic at the threshold is animate.css's own keyframes, driven through the library's
+   animated/infinite classes. Its _base.css also carries the reduced-motion handling a
+   self-starting animation needs, so a reader who asked for stillness gets a still timer.
+   The cast spans translation, rotation, skew and scale, so the panic is a sequence rather
+   than a single-axis wobble. */
+@import "animate.css/source/_vars.css";
+@import "animate.css/source/_base.css";
+@import "animate.css/source/attention_seekers/shakeX.css";
+@import "animate.css/source/attention_seekers/shakeY.css";
+@import "animate.css/source/attention_seekers/headShake.css";
+@import "animate.css/source/attention_seekers/wobble.css";
+@import "animate.css/source/attention_seekers/jello.css";
+@import "animate.css/source/attention_seekers/tada.css";
+@import "animate.css/source/attention_seekers/swing.css";
+
 @custom-variant dark (&:is(.dark *));
 @custom-variant density (&:where(.density-compact, .density-compact *));
 @custom-variant high-contrast (&:where(.high-contrast, .high-contrast *));
@@ -166,6 +181,549 @@
   .text-size-large {
     font-size: 18px;
   }
+}
+
+/* Only a digit whose character changed re-mounts, so this plays on the tick that moved it. */
+/* A tick, not a fade: the digit drops in and overshoots slightly before settling, so a
+   changed second reads as a mechanical step. The overshoot is in the easing, not the
+   keyframes, which keeps it to transform only and off the paint path. */
+@keyframes countdown-digit-in {
+  from {
+    transform: translateY(-0.22em) scale(1.06);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* inline-flex so a segment never breaks inside a number; the parent wraps between segments. */
+.countdown-segment {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+/* The slot is one character of the display face's widest digit, measured at 0.652em and
+   rounded up. Every numeral gets the same width, so the row never resizes mid-count. */
+/* The slot each digit owns. Its width is one character of the display face's widest digit,
+   measured at 0.652em and rounded up, so the row cannot resize as the seconds change. */
+.countdown-digit {
+  display: inline-block;
+  animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.countdown-digit.is-slot {
+  width: 1ch;
+  text-align: center;
+}
+
+/* A separator takes a fraction of a slot rather than a whole one, so the colon does not
+   read as a gap. 0.36ch is the colon's own advance in the display face. */
+.countdown-digit:not(.is-slot) {
+  width: 0.36ch;
+}
+
+/* The animating element. It holds the transform and nothing else, so the slot above keeps
+   its width whatever the motion does. */
+.countdown-panic-move {
+  display: block;
+}
+
+/* A colon sits inside a narrower box so the row does not read as if it had a gap. */
+.countdown-digit:not(.is-slot) {
+  margin-inline: 0.02em;
+}
+
+/* The panic, one digit at a time. Each digit names its own motion plus its own delay and
+   duration, so the row never beats as one unit. animation-name is read from a custom
+   property, which is what lets the seven library keyframe sets share one class.
+
+   The amplitude is dialled down by a single scale on the transform. Every motion library
+   here moves the transform first and everything else after it, so scaling the transform is
+   what halves the displacement, the rotation and the scale in one place. */
+.countdown-panic-move.is-panicking {
+  /* Added to the scale above rather than replacing it, so the amplitude survives. */
+  animation-composition: add;
+  animation-name: var(--countdown-panic-name);
+  animation-duration: var(--animate-duration, 0.62s);
+  animation-delay: var(--countdown-panic-delay, 0s);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  /* Held still so each layer is cached: several digits animating at once would otherwise
+     repaint the row continuously. */
+  will-change: transform;
+}
+
+/* The point of the tick: the digit is legible from the first frame, so the number never
+   blinks out while it is being read. */
+@media (prefers-reduced-motion: reduce) {
+  .countdown-digit,
+  .countdown-digit.is-panicking {
+    animation: none;
+  }
+}
+
+/*
+ * The ended screen's mark: an outline that draws itself on in front of the field.
+ *
+ * A reveal, not a turn. Each stroke carries one dash equal to its own length, and the offset is
+ * walked from hidden to shown, which is the standard way to draw a path on without a per-shape
+ * keyframe. `pathLength="1"` on the path makes the dash and the offset unitless, so nothing has
+ * to be measured in the browser.
+ *
+ * The animation resets by returning the offset to fully hidden before it starts again, so the
+ * mark assembles afresh rather than flickering off. Nothing here animates on an ancestor, and
+ * nothing changes the box, so the layout under it never moves.
+ */
+.countdown-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 2;
+  width: min(46vmin, 380px);
+  height: min(46vmin, 380px);
+  margin: calc(min(46vmin, 380px) / -2) 0 0 calc(min(46vmin, 380px) / -2);
+  pointer-events: none;
+}
+
+.countdown-mark-shape {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: hsl(var(--countdown-hue) 90% 70%);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.6vmin hsl(var(--countdown-hue) 90% 58% / 0.55));
+}
+
+.countdown-mark-shape path {
+  stroke-dasharray: 1;
+}
+
+.countdown-mark.is-revealing .countdown-mark-shape path {
+  animation: countdown-mark-draw var(--countdown-mark-draw, 1.6s) ease-in-out infinite;
+}
+
+/*
+ * Drawn on, held, then released: the hold is what makes it read as a mark that has arrived
+ * rather than as a progress sweep. The final frames return the offset to fully hidden so the
+ * next cycle starts from an empty mark.
+ */
+@keyframes countdown-mark-draw {
+  0% {
+    stroke-dashoffset: 1;
+  }
+  55% {
+    stroke-dashoffset: 0;
+  }
+  85% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -1;
+  }
+}
+
+/* Fullscreen: the surface fills the screen and the clock column takes the leftover height. */
+.countdown-surface:fullscreen {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  padding: 3rem 2rem;
+  background: var(--background);
+}
+
+.countdown-surface:fullscreen .countdown-clock-fill,
+.countdown-surface:fullscreen .countdown-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.countdown-surface:fullscreen .countdown-box {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+/* Each stage names the colour its label and backdrop take. */
+.countdown-surface[data-stage='waiting'] {
+  --countdown-hue: 226;
+}
+
+.countdown-surface[data-stage='running'] {
+  --countdown-hue: 150;
+}
+
+.countdown-surface[data-stage='analysis'] {
+  --countdown-hue: 205;
+}
+
+/* The hurry is the waiting screen at a higher temperature and a faster beat. */
+.countdown-surface[data-stage='hurry'] {
+  --countdown-hue: 22;
+}
+
+.countdown-surface[data-stage='ended'] {
+  --countdown-hue: 0;
+}
+
+/* The ambient field: one canvas per roll, stacked so a re-roll can cross-fade into
+   the next one instead of cutting. The fade and the blur live on the same element —
+   never on an ancestor of the backdrop-filter child below, which flickers in WebKit. */
+.countdown-ambient-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.countdown-ambient {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: var(--countdown-ambient-opacity, 1);
+  transition:
+    opacity var(--countdown-ambient-fade, 900ms) ease,
+    transform var(--countdown-ambient-fade, 900ms) ease;
+}
+
+/* The fade in, on first paint. @starting-style follows the base rule, as it must. */
+@starting-style {
+  .countdown-ambient {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+/* The outgoing field of a re-roll. Declared here so a roll can fade both ways. */
+.countdown-ambient.is-leaving {
+  opacity: 0;
+}
+
+/* Nothing is drawn behind the digits at the threshold. The field itself is what fills that
+   band, at 90% of the box, so no background is laid over it. */
+.countdown-timer-bed {
+  display: none;
+}
+
+/* A reader who asked the system to stop moving gets the field without its motion. */
+@media (prefers-reduced-motion: reduce) {
+  .countdown-ambient {
+    transition-duration: 0.01ms;
+  }
+}
+
+/* A reader who asked for less transparency keeps the digits fully opaque. */
+@media (prefers-reduced-transparency: reduce) {
+  .countdown-ambient {
+    opacity: 0.55;
+  }
+}
+
+/* No transform here on purpose. The layer is exactly the surface, so translating it would
+   slide the field off one edge and expose a gap on the other. Each painter applies the
+   drift to its own geometry and wraps it, which is what keeps the field seamless. */
+
+.countdown-stage-label {
+  color: hsl(var(--countdown-hue) 70% 74%);
+  font-size: clamp(1rem, 2.4vmin, 1.75rem);
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+
+/* Part of the sizing chain only: as a plain block this capped the clock at the box's
+   minimum height, which is what left the digits at a third of the width they could take.
+   The panic itself is per digit below, not on this wrapper. */
+.countdown-clock-panic {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* The plate the panic moves: it holds still, and its own contrast is what keeps the
+   digits readable while they shake over the blurred field. */
+/* Sizing only, and deliberately bare: no background and no border, so a panic animates the
+   digits themselves over the field rather than a plate. */
+.countdown-clock-plate {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+}
+
+/* Sizes track the viewport so the ask scales with the surface, like the digits. */
+.countdown-threshold {
+  display: inline-flex;
+  height: 44px;
+  align-items: center;
+  gap: 0.35em;
+  padding: 0 0.6em;
+  border: 1px solid var(--input);
+  border-radius: 12px;
+}
+
+.countdown-threshold-input {
+  width: 5ch;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: clamp(0.875rem, 1.7vmin, 1.05rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-align: right;
+  outline: none;
+}
+
+.countdown-threshold-unit {
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: clamp(0.875rem, 1.7vmin, 1.05rem);
+  outline: none;
+}
+
+/* ─── Countdown clock shell ───────────────────────────────────────────────────
+ *
+ * .yt-clock-shell  — the outer flex column that fills all available height from
+ *                    the plate/panic chain above it.
+ * .yt-units-row    — the horizontal flex row of unit cards.
+ * .yt-unit-block   — one column: digits card + label.
+ * .yt-unit-digits  — the pill card holding two digit spans.
+ * .yt-digit        — one character; re-mounts on change to play its entry animation.
+ * .yt-sep          — the blinking colon separator.
+ *
+ * SIZING STRATEGY
+ * Target: cards should together span ~80 % of whichever viewport axis is tighter.
+ * Three cards + two colons across ≈ (3 × card-width) + (2 × sep-width).
+ * With three HH:MM:SS cards each card is ~22 % of viewport width on landscape
+ * and ~22 % of viewport height on portrait.  `min(22vw, 38vh)` picks whichever
+ * axis would overflow first, and a clamp() gives hard floor/ceiling guards.
+ *
+ * WHY NOT ResizeObserver: the old clock needed it because a variable-width string
+ * font has no predictable advance width.  Two fixed digits in a card are a
+ * rectangle — CSS can size them accurately without measuring.
+ * ─────────────────────────────────────────────────────────────────────────────── */
+
+/* Shell: grows to fill the plate that holds it. */
+.yt-clock-shell {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  /* Minimum so the shell never collapses to nothing on an empty flex parent. */
+  min-height: max(160px, 24vh);
+}
+
+/* Invisible placeholder shown when stage=ended to preserve vertical layout space. */
+.yt-clock-placeholder {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Horizontal row of unit cards. */
+.yt-units-row {
+  display: flex;
+  flex-wrap: nowrap;          /* never wrap — the font shrinks before wrapping */
+  align-items: flex-end;      /* align baselines of all blocks at the bottom */
+  justify-content: center;
+  gap: clamp(0.4rem, 2vw, 1.8rem);
+  width: 100%;
+  padding: 0 clamp(0.5rem, 2vw, 2rem);
+}
+
+/* One column: digit card on top, label centred below. */
+.yt-unit-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Gap between the card and its label scales with font size. */
+  gap: 0.35em;
+  /* Each block takes equal share so cards stay the same width regardless of value. */
+  flex: 0 0 auto;
+}
+
+/*
+ * Digit card.
+ *
+ * Two digits side-by-side in a rounded pill.  Font size is the critical number:
+ *   clamp(2rem, min(20vw, 36vh), 14rem)
+ *
+ * • min(20vw, 36vh):  three cards + two colons across ~80 % of the tighter axis.
+ *     Landscape (e.g. 1200 × 700 px): min(20vw=240, 36vh=252) → 240 px → scales on width.
+ *     Portrait  (e.g. 400 × 900 px):  min(20vw=80,  36vh=324) → 80  px → scales on width.
+ *     Fullscreen (100vh tall):         min(20vw,    36vh)       → height governs nicely.
+ * • clamp low=2rem so it is always legible; high=14rem for very large screens.
+ *
+ * WHY font-size drives everything: padding, gap and border-radius are all in `em`
+ * units so they scale automatically with the font, keeping the card proportions
+ * correct at every size.
+ */
+.yt-unit-digits {
+  display: flex;
+  align-items: center;        /* digits centred vertically inside the pill */
+  justify-content: center;    /* digits centred horizontally */
+  /* No gap — digits are naturally spaced by the font's own advance widths. */
+  font-size: clamp(2rem, min(20vw, 36vh), 14rem);
+  /* Pill card */
+  background: hsl(var(--countdown-hue, 226) 18% 12% / 0.65);
+  border: 1px solid hsl(var(--countdown-hue, 226) 50% 36% / 0.4);
+  border-radius: 0.22em;
+  padding: 0.1em 0.3em;
+  box-shadow:
+    0 4px 24px hsl(var(--countdown-hue, 226) 60% 6% / 0.55),
+    inset 0 1px 0 hsl(var(--countdown-hue, 226) 70% 65% / 0.12);
+  /* Digit colour */
+  color: hsl(var(--countdown-hue, 226) 85% 94%);
+  text-shadow: 0 0 1em hsl(var(--countdown-hue, 226) 80% 70% / 0.5);
+}
+
+/*
+ * One digit span inside the card.
+ *
+ * `1ch` is defined as the advance width of the "0" glyph in the current font
+ * at the current font-size.  "0" is the widest digit in Chakra Petch Bold, so
+ * every digit slot is exactly as wide as the widest possible character — no
+ * clipping, no excess gap.  This works even on proportional fonts where
+ * tabular-nums produces no effect, because the slot is sized to the worst case.
+ */
+.yt-digit {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+  /* Entry animation on mount (keyframe defined earlier in this file). */
+  animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Keep the panic-move wrapper a block so it does not affect the digit's own width. */
+.yt-digit .countdown-panic-move {
+  display: block;
+}
+
+/* Unit label below the card. */
+.yt-unit-label {
+  font-size: 0.18em;           /* relative to the digit font so it scales together */
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--countdown-hue, 226) 55% 62%);
+  white-space: nowrap;
+}
+
+/*
+ * Colon separator.
+ *
+ * Vertically centred with the digit cards by `align-self: center` on the flex
+ * row.  Its font size is ~65 % of the digit size so it reads as punctuation not
+ * as a fourth unit.  `padding-bottom` lifts it slightly above the mathematical
+ * centre to optically align with the digit numerals.
+ */
+.yt-sep {
+  font-size: clamp(1.2rem, min(13vw, 24vh), 9rem);
+  font-weight: 700;
+  line-height: 1;
+  align-self: center;
+  padding-bottom: 0.28em;      /* lift to optical digit centre */
+  color: hsl(var(--countdown-hue, 226) 50% 52% / 0.6);
+  animation: yt-sep-pulse 1s step-end infinite;
+  user-select: none;
+}
+
+@keyframes yt-sep-pulse {
+  0%, 100% { opacity: 1;    }
+  50%       { opacity: 0.2; }
+}
+
+/* Ended: hide the unit row — the ornament SVG is the visual on that stage. */
+.countdown-surface[data-stage='ended'] .yt-units-row {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/*
+ * Ornament: run-in / run-out loop — no whole-element fade.
+ *
+ * The element is always visible; only the stroke-dashoffset animates.
+ * Keyframes walk: fully hidden (offset=1) → fully drawn (offset=0) → run out (offset=-1).
+ * The "run out" phase is what makes it look like the stroke exits the shape rather than
+ * simply disappearing, which is the key difference from a plain draw-in.
+ */
+@keyframes countdown-mark-draw {
+  0%   { stroke-dashoffset:  1; }  /* hidden — stroke starts off the right end */
+  40%  { stroke-dashoffset:  0; }  /* fully drawn */
+  70%  { stroke-dashoffset:  0; }  /* hold */
+  100% { stroke-dashoffset: -1; }  /* run out — stroke exits off the left end */
+}
+
+/* Fullscreen: push font a little larger since more screen is available. */
+.countdown-surface:fullscreen .yt-unit-digits {
+  font-size: clamp(3rem, min(22vw, 40vh), 18rem);
+}
+
+.countdown-surface:fullscreen .yt-sep {
+  font-size: clamp(1.8rem, min(14vw, 26vh), 11rem);
+}
+
+/*
+ * Per-unit-count scaling.
+ *
+ * When leading zero units are pruned the remaining cards should grow to fill
+ * the freed space.  The base size (defined on .yt-unit-digits above) is
+ * calibrated for 3 units (HH:MM:SS).  Multipliers for each count:
+ *
+ *   4 units (D:HH:MM:SS) — tighter fit, scale down so all four cards fit
+ *   3 units (HH:MM:SS)   — base, no override needed
+ *   2 units (MM:SS)      — ×1.35, noticeably larger
+ *
+ * The same ratio is applied to .yt-sep so the colon stays proportional.
+ * All three expressions stay inside their own clamp() bounds.
+ */
+.yt-units-row[data-units="4"] .yt-unit-digits {
+  font-size: clamp(1.5rem, min(15vw, 27vh), 11rem);
+}
+.yt-units-row[data-units="4"] .yt-sep {
+  font-size: clamp(0.9rem, min(10vw, 18vh), 7rem);
+}
+
+/* data-units="3" is the base — no override. */
+
+.yt-units-row[data-units="2"] .yt-unit-digits {
+  font-size: clamp(2.5rem, min(27vw, 48vh), 18rem);
+}
+.yt-units-row[data-units="2"] .yt-sep {
+  font-size: clamp(1.5rem, min(18vw, 32vh), 12rem);
+}
+
+/* Fullscreen variants mirror the base fullscreen size × the same multipliers. */
+.countdown-surface:fullscreen .yt-units-row[data-units="4"] .yt-unit-digits {
+  font-size: clamp(2rem, min(17vw, 30vh), 13rem);
+}
+.countdown-surface:fullscreen .yt-units-row[data-units="4"] .yt-sep {
+  font-size: clamp(1.2rem, min(11vw, 20vh), 9rem);
+}
+
+.countdown-surface:fullscreen .yt-units-row[data-units="2"] .yt-unit-digits {
+  font-size: clamp(3.5rem, min(30vw, 54vh), 22rem);
+}
+.countdown-surface:fullscreen .yt-units-row[data-units="2"] .yt-sep {
+  font-size: clamp(2rem, min(20vw, 36vh), 15rem);
+}
+
+/* Reduced motion: keep separator visible, stop the blink; respect digit animation rule above. */
+@media (prefers-reduced-motion: reduce) {
+  .yt-sep          { animation: none; opacity: 0.55; }
+  .yt-digit        { animation: none; }
 }
 
 /* Reduced motion: a reader who asked the system to stop moving gets the same

@@ -351,13 +351,7 @@ else
 fi
 
 echo "every setting the panel reads is one an operator can actually set"
-# WHY this assertion exists: MAX_TESTCASE_UPLOAD_BYTES was read from process.env by the
-# panel while nothing put it in the container, so the cap was not configurable at all and
-# the unit test above still passed — it exercised the resolver, not the delivery. Three
-# more settings were in the same state (BACKUP_LOCATIONS, BACKUP_DEFAULT_LOCATION
-# unregistered, MONITOR_ENHANCED registered but never passed through). The failure mode is
-# silent in both directions: a value the operator sets that the panel never sees, and a
-# setting the panel advertises that no config.toml key fills.
+# WHY: the panel read this from process.env with nothing putting it in the container, so the cap was not configurable and the unit test still passed — silent both ways: a set value the panel never sees, an advertised setting no config.toml key fills.
 #
 # WHY NODE_ENV is exempt: the panel Dockerfile sets it (ENV NODE_ENV=production) and
 # compose has no business overriding a value the image already fixes.
@@ -375,12 +369,8 @@ done
 # WHY registered as well as delivered: a value compose passes through but no config.toml
 # key writes can only be set by hand-editing .env, which the next config sync discards.
 #
-# WHY the section is not named here: BACKUP_LOCATIONS and BACKUP_DEFAULT_LOCATION already
-# lived in [backup] with working defaults, and asserting [admin] here would have demanded
-# a second registration of a key that already had one — which is a duplicate key in
-# config.toml and the exact failure the TOML write gate was added to catch. Any section is
-# correct so long as there is exactly one.
-for var in MAX_TESTCASE_UPLOAD_BYTES BACKUP_LOCATIONS BACKUP_DEFAULT_LOCATION; do
+# WHY the section is not named: asserting one would demand a second registration of a key that already has one elsewhere — a duplicate key, the exact failure the TOML write gate catches. Any section is correct so long as there is exactly one.
+for var in MAX_TESTCASE_UPLOAD_BYTES MAX_TESTCASE_FILE_BYTES MAX_LOGO_UPLOAD_BYTES MAX_AVATAR_UPLOAD_BYTES MAX_STATEMENT_UPLOAD_BYTES MAX_ATTACHMENT_UPLOAD_BYTES; do
   if grep -qE "\|\[[a-z_]+\]\|${var}\|" "${UPDATE_ENGINE}"; then
     ok "${var} is registered under some section"
   else
@@ -397,7 +387,7 @@ done
 # cannot resolve reports an empty archive tree rather than an error, so a missing mount is
 # indistinguishable from a machine with no backups.
 panel_block="$(awk '/^  admin-panel-next:/,/^  admin-web-server:/' "${REPO_ROOT}/docker-compose.yml")"
-for var in BACKUP_DIR BACKUP_LOCATIONS BACKUP_DEFAULT_LOCATION MAX_TESTCASE_UPLOAD_BYTES; do
+for var in BACKUP_DIR MAX_TESTCASE_UPLOAD_BYTES; do
   # WHY the block is captured once rather than piped per variable: grep -q closes the pipe
   # on its first match, which kills awk with SIGPIPE, and the pipeline status then reflects
   # awk rather than grep — so a variable that IS set reports as absent depending on where
