@@ -44,15 +44,14 @@ task_single_keeps_the_python_byte_style() {
 import json, sys
 seed = json.load(open(sys.argv[1]))["entities"]["tasks"][sys.argv[2]]
 served = open(sys.argv[3]).read()
-if (json.dumps("max_score") + ": " + str(seed["max_score"])) not in served:
-    raise SystemExit("max_score lost the Python float spelling: " + served)
-if "\", \"" not in served or "\": \"" not in served:
-    raise SystemExit("the task is not serialised with Python separators: " + served)
-if not isinstance(json.loads(served)["max_score"], float):
-    raise SystemExit("max_score is not a JSON number")
+task = json.loads(served)
+if served != json.dumps(task, separators=(", ", ": ")):
+    raise SystemExit("the task is not serialised in the Python style: " + served)
+if not isinstance(task["max_score"], float) or task["max_score"] != seed["max_score"]:
+    raise SystemExit("max_score is not the seeded float: " + served)
 ' "${PARITY}/seed.json" "${key}" "${WORK}/task_one.json" ||
     fail "/tasks/${key} does not keep the Python byte style"
-  pass "/tasks/${key} keeps the Python float spelling and the ', ' / ': ' separators"
+  pass "/tasks/${key} keeps the seeded float and the Python separators"
 }
 
 public_config_is_exactly_two_keys() {
@@ -60,14 +59,14 @@ public_config_is_exactly_two_keys() {
   python3 -c '
 import json, sys
 raw = open(sys.argv[1]).read()
-if "\", \"" not in raw or "\": \"" not in raw:
-    raise SystemExit("/config is not serialised with Python separators: " + raw)
 config = json.loads(raw)
+if raw != json.dumps(config, separators=(", ", ": ")):
+    raise SystemExit("/config is not serialised in the Python style: " + raw)
 if set(config) != {"show_id_column", "source_url"}:
     raise SystemExit("/config must be exactly show_id_column and source_url, got " + str(sorted(config)))
 if not isinstance(config["show_id_column"], bool) or not isinstance(config["source_url"], str):
     raise SystemExit("/config carries the wrong types")
-' "${WORK}/config.json" || fail "/config leaked more than show_id_column and source_url"
+' "${WORK}/config.json" || fail "/config is not exactly two Python-spaced keys"
   pass "/config is exactly two keys, spaced Python style"
 }
 
