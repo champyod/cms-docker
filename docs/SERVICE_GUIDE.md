@@ -123,7 +123,7 @@ contest surface.
 | Variable | Purpose |
 | :--- | :--- |
 | `DATABASE_URL` | the projection tables it reads |
-| `RANKING_BIND_ADDRESS` | listen address; `0.0.0.0:8890` in compose |
+| `RANKING_BIND_ADDRESS` | address the service binds inside its container; with `RANKING_LISTEN_PORT` it forms the bind; `0.0.0.0` by default, and now a `config.toml` key |
 | `RANKING_STATIC_DIR` | the vendored page it serves |
 | `CMS_CREDITS_FILE` | the licence offer `/credits` returns |
 | `RANKING_LOGO_PATH` | a stem; png, jpg, jpeg, gif and bmp are probed in that order |

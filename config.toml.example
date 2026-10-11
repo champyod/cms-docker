@@ -84,6 +84,7 @@ LOGIN_RATE_LIMIT_REDIS_ENABLED = 0  # enum:0,1; effect: keeps the login failure 
 LOGIN_RATE_LIMIT_REDIS_HOST = "redis-rate-limit" # str; compose service name; counts per process only unless LOGIN_RATE_LIMIT_REDIS_ENABLED=1
 LOGIN_RATE_LIMIT_REDIS_PORT = 6379 # port; port of the shared Redis the login counters dial when LOGIN_RATE_LIMIT_REDIS_ENABLED=1
 RANKING_LISTEN_PORT = 8890      # port; container port the ranking web server listens on — service env, publish map, and proxy target
+RANKING_BIND_ADDRESS = "0.0.0.0" # str; address the ranking service binds inside its container (paired with RANKING_LISTEN_PORT); 0.0.0.0 keeps it reachable on the compose network, and RANKING_BIND_IP decides what is published on the host
 RANKING_PORT_EXTERNAL = 8890    # port; host port the ranking board is published on (RANKING_BIND_IP:RANKING_PORT_EXTERNAL:RANKING_LISTEN_PORT)
 RANKING_DOMAIN = "ranking.cms.local" # str; FQDN of the ranking vhost in the domain nginx; also a cert SAN and Traefik Host() rule
 RANKING_SESSION_SECRET = ""     # secret; auto-generated if empty — signs the ranking console session cookie; empty makes the console refuse every login

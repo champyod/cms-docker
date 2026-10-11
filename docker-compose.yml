@@ -591,7 +591,7 @@ services:
       # The Rust service reads the projection tables, so it takes the same database
       # URL every other service takes rather than a ranking config file.
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
-      RANKING_BIND_ADDRESS: 0.0.0.0:${RANKING_LISTEN_PORT:-8890}
+      RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
       # Where the image keeps the vendored page and the licence offer; both are image
       # layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
