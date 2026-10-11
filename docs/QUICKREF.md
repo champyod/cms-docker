@@ -29,12 +29,12 @@ make infra-stop        # Stop monitoring
 make cms-init          # Initialize database
 make admin-create      # Create admin account
 make db-clean          # FULL RESET (deletes all data!)
-./cms db create <name>      # Create a database in cms-database (empty — run ./cms db migrate after)
-./cms db rename <old> <new> # Rename one; repoint every [db_<profile>] POSTGRES_DB, then ./cms config sync
+./cms db create <name>      # Create a database, empty (run ./cms db migrate after). Stops cms-database briefly.
+./cms db rename <old> <new> # Rename one (stops cms-database briefly); repoint every [db_<profile>] POSTGRES_DB, then ./cms config sync
 ./cms db use <profile>      # Point the stack at another database (repoints, config sync, restacks)
 ./cms db migrate            # Schema + roles + RLS on the ACTIVE database, then verify (empty or partial DBs both fine)
 ```
-`db create` / `db rename` mutate the server: type `yes` at the prompt, or run them with `CONFIRM_DB_ADMIN=yes`. Add `--dry-run` to print the SQL without touching the container. Neither verb repoints a profile or applies migrations.
+`db create` / `db rename` mutate the server: type `yes` at the prompt, or run them with `CONFIRM_DB_ADMIN=yes`. Add `--dry-run` to print the SQL without touching the container. Both stop `cms-database` for the statement — no role here holds `CREATEDB`, so the statement runs in single-user mode — and the container is started again afterwards, including when the statement fails. Neither verb repoints a profile or applies migrations.
 
 Full rotation order: `./cms db create <name>` → `./cms db use <profile>` → `./cms db migrate`. After a `rename` there is no `use` to run — repoint `POSTGRES_DB`, `./cms config sync`, then `./cms deploy core` (services keep the old name until they are recreated). Details: [DB-ROTATION.md](DB-ROTATION.md).
 

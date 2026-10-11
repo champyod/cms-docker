@@ -48,9 +48,8 @@ Commands:
                             database (cms-init + prisma-sync) and verify
                             schema + roles + RLS
   db use <name>             switch the active db profile (repoints, config sync, restack)
-  db create <name> [--dry-run]  CREATE DATABASE in the cms-database container
-  db rename <old> <new> [--dry-run]
-                            ALTER DATABASE ... RENAME TO (pauses sessions on <old>)
+  db create <name> [--dry-run]  CREATE DATABASE (stops cms-database: single-user mode)
+  db rename <old> <new> [--dry-run]  rename a database (stops cms-database: single-user mode)
   db clean|reset                delete ALL cms volumes; requires "yes" on a TTY or CONFIRM_DB_DESTROY=yes
   admin-create              create superadmin account
   status                    live service status dashboard
