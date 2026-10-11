@@ -797,7 +797,10 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                 submission_id=submission_result.submission_id,
                 dataset_id=submission_result.dataset_id)
 
-        # If compilation failed for our fault, we log the error.
+        # If compilation failed for our fault, we log the error (and, once the
+        # retry cap is reached, move it to a terminal state: a result with no
+        # outcome and no tries left is excluded by every re-queue filter, so it
+        # would otherwise sit in COMPILING with no recovery).
         elif submission_result.compilation_outcome is None:
             logger.warning("Worker failed when compiling submission "
                            "%d(%d).",
@@ -806,9 +809,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
             if submission_result.compilation_tries >= \
                     EvaluationService.MAX_COMPILATION_TRIES:
                 logger.error("Maximum number of failures reached for the "
-                             "compilation of submission %d(%d).",
+                             "compilation of submission %d(%d); marking it "
+                             "failed so it leaves COMPILING.",
                              submission_result.submission_id,
                              submission_result.dataset_id)
+                submission_result.set_compilation_outcome(False)
+                self.scoring_service.new_evaluation(
+                    submission_id=submission_result.submission_id,
+                    dataset_id=submission_result.dataset_id)
 
         # Otherwise, error.
         else:
