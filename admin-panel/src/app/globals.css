@@ -264,16 +264,11 @@
 }
 
 /*
- * The ended screen's mark: an outline that draws itself on in front of the field.
+ * The ended screen's mark: four balls that bounce off each other in front of the field.
  *
- * A reveal, not a turn. Each stroke carries one dash equal to its own length, and the offset is
- * walked from hidden to shown, which is the standard way to draw a path on without a per-shape
- * keyframe. `pathLength="1"` on the path makes the dash and the offset unitless, so nothing has
- * to be measured in the browser.
- *
- * The animation resets by returning the offset to fully hidden before it starts again, so the
- * mark assembles afresh rather than flickering off. Nothing here animates on an ancestor, and
- * nothing changes the box, so the layout under it never moves.
+ * One ball travels its own vector to the middle while the other three hold their arms, so the
+ * only thing that changes between frames is a translate — the shape never changes, and nothing
+ * animates on an ancestor of the blurred surface.
  */
 .countdown-mark {
   position: absolute;
@@ -291,39 +286,31 @@
   width: 100%;
   height: 100%;
   overflow: visible;
-  fill: none;
-  stroke: hsl(var(--countdown-hue) 90% 70%);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  fill: hsl(var(--countdown-hue) 90% 70%);
   filter: drop-shadow(0 0 1.6vmin hsl(var(--countdown-hue) 90% 58% / 0.55));
 }
 
-.countdown-mark-shape path {
-  stroke-dasharray: 1;
-}
-
-.countdown-mark.is-revealing .countdown-mark-shape path {
-  animation: countdown-mark-draw var(--countdown-mark-draw, 1.6s) ease-in-out infinite;
+.countdown-mark.is-revealing .countdown-mark-shape circle {
+  animation: countdown-mark-bounce var(--countdown-mark-cycle, 1.6s) ease-in-out infinite;
 }
 
 /*
- * Drawn on, held, then released: the hold is what makes it read as a mark that has arrived
- * rather than as a progress sweep. The final frames return the offset to fully hidden so the
- * next cycle starts from an empty mark.
+ * Four quarters — out, into the middle, held, back out — and a delay of one quarter per ball,
+ * so exactly one ball is in the middle at a time and the hand-off at a quarter boundary is the
+ * only moment two of them meet there.
  */
-@keyframes countdown-mark-draw {
-  0% {
-    stroke-dashoffset: 1;
+@keyframes countdown-mark-bounce {
+  0%, 75%, 100% {
+    transform: translate(0, 0);
   }
-  55% {
-    stroke-dashoffset: 0;
+  25%, 50% {
+    transform: translate(var(--countdown-ball-x), var(--countdown-ball-y));
   }
-  85% {
-    stroke-dashoffset: 0;
-  }
-  100% {
-    stroke-dashoffset: -1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown-mark.is-revealing .countdown-mark-shape circle {
+    animation: none;
   }
 }
 
@@ -649,21 +636,6 @@
 .countdown-surface[data-stage='ended'] .yt-units-row {
   visibility: hidden;
   pointer-events: none;
-}
-
-/*
- * Ornament: run-in / run-out loop — no whole-element fade.
- *
- * The element is always visible; only the stroke-dashoffset animates.
- * Keyframes walk: fully hidden (offset=1) → fully drawn (offset=0) → run out (offset=-1).
- * The "run out" phase is what makes it look like the stroke exits the shape rather than
- * simply disappearing, which is the key difference from a plain draw-in.
- */
-@keyframes countdown-mark-draw {
-  0%   { stroke-dashoffset:  1; }  /* hidden — stroke starts off the right end */
-  40%  { stroke-dashoffset:  0; }  /* fully drawn */
-  70%  { stroke-dashoffset:  0; }  /* hold */
-  100% { stroke-dashoffset: -1; }  /* run out — stroke exits off the left end */
 }
 
 /* Fullscreen: push font a little larger since more screen is available. */
