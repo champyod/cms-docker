@@ -199,9 +199,21 @@
   align-items: baseline;
 }
 
+/* The slot is one character of the display face's widest digit, measured at 0.652em and
+   rounded up. Every numeral gets the same width, so the row never resizes mid-count. */
 .countdown-digit {
   display: inline-block;
   animation: countdown-digit-in 0.26s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.countdown-digit.is-slot {
+  width: 1ch;
+  text-align: center;
+}
+
+/* A colon sits inside a narrower box so the row does not read as if it had a gap. */
+.countdown-digit:not(.is-slot) {
+  margin-inline: 0.02em;
 }
 
 /* The point of the tick: the digit is legible from the first frame, so the number never

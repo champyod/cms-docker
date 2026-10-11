@@ -4,6 +4,7 @@ import {
   COUNTDOWN_FILL_RATIO,
   COUNTDOWN_FIT_MARGIN_RATIO,
   COUNTDOWN_MAX_FONT_PX,
+  isCountdownDigit,
   COUNTDOWN_MIN_FONT_PX,
   DEFAULT_COUNTDOWN_THRESHOLD,
   DEFAULT_COUNTDOWN_TIMEZONE,
@@ -183,6 +184,31 @@ describe('fitCountdownFontPx', () => {
   it('falls back to the base size when there is nothing to measure', () => {
     expect(fitCountdownFontPx({ availableWidth: 400, availableHeight: 100, naturalWidth: 0, naturalHeight: 0 }))
       .toBe(COUNTDOWN_BASE_FONT_PX);
+  });
+});
+
+describe('isCountdownDigit', () => {
+  it('accepts every numeral', () => {
+    for (const char of '0123456789') expect(isCountdownDigit(char)).toBe(true);
+  });
+
+  it('rejects the separators a countdown contains', () => {
+    for (const char of [':', 'd', ' ', '-', '—']) expect(isCountdownDigit(char)).toBe(false);
+  });
+
+  it('rejects anything that is not a single character', () => {
+    expect(isCountdownDigit('12')).toBe(false);
+    expect(isCountdownDigit('')).toBe(false);
+  });
+
+  it('separates exactly the numerals the clock draws, so only those take a fixed slot', () => {
+    const segments = toCountdownSegments(3_723_000);
+    const glyphs = segments.flatMap((segment) => segment.glyphs.map((glyph) => glyph.char));
+    const digits = glyphs.filter(isCountdownDigit);
+    const separators = glyphs.filter((char) => !isCountdownDigit(char));
+    expect(digits.length).toBeGreaterThan(0);
+    expect(separators).toContain(':');
+    expect(digits.length + separators.length).toBe(glyphs.length);
   });
 });
 

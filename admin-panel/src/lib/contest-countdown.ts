@@ -172,8 +172,7 @@ export interface CountdownSegment {
 }
 
 /** Breakable points only: between number groups, never inside one, and no zero leading unit. */
-export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {
-  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
   let index = 0;
   return countdownRuns(totalSeconds).map((run) => ({
     glyphs: [...run].map((char) => ({ char, index: index++ })),
@@ -218,6 +217,17 @@ export function fitCountdownFontPx(params: {
 function clampFillRatio(fillRatio: number | undefined): number {
   if (fillRatio === undefined || !Number.isFinite(fillRatio)) return COUNTDOWN_FILL_RATIO;
   return Math.min(1, Math.max(0.1, fillRatio));
+}
+
+/**
+ * Whether a glyph is a numeral rather than a separator such as the colon or the day mark.
+ *
+ * WHY the caller needs to know: the display face carries no tabular figures, so a numeral
+ * is given a fixed slot to keep the row from changing width as the seconds tick. A
+ * separator must not get that slot, or the row grows for no reason.
+ */
+export function isCountdownDigit(char: string): boolean {
+  return char.length === 1 && char >= '0' && char <= '9';
 }
 
 export function formatZoneTime(date: Date, timeZone: string): string {

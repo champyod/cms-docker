@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import {
   COUNTDOWN_BASE_FONT_PX,
   fitCountdownFontPx,
+  isCountdownDigit,
   toCountdownSegments,
   type CountdownSegment,
 } from '@/lib/contest-countdown';
@@ -75,14 +76,19 @@ export function ContestCountdownClock({ remainingMs }: Props): React.JSX.Element
         ref={boxRef}
         className="countdown-box flex min-h-[200px] w-full flex-1 items-center justify-center overflow-hidden"
       >
+        {/* One slot per digit keeps the row from resizing as the seconds change: the
+            display face has no tabular figures, so the slot is what holds the width. */}
         <div
           ref={lineRef}
-          className="flex flex-wrap items-baseline justify-center gap-x-[0.08em] font-mono font-bold leading-none tracking-tight"
+          className="flex flex-wrap items-baseline justify-center leading-none font-display font-bold tracking-tight"
         >
           {displaySegments.map((segment, segmentIndex) => (
             <span key={segmentIndex} className="countdown-segment">
               {segment.glyphs.map((glyph) => (
-                <span key={`${glyph.index}:${glyph.char}`} className="countdown-digit">
+                <span
+                  key={`${glyph.index}:${glyph.char}`}
+                  className={isCountdownDigit(glyph.char) ? 'countdown-digit is-slot' : 'countdown-digit'}
+                >
                   {glyph.char}
                 </span>
               ))}
