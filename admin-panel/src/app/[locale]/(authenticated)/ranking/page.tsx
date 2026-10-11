@@ -1,10 +1,31 @@
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
+import { Card } from '@/components/core/Card';
+import { Grid, Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
-const TERM_CLASS = 'text-xs font-bold uppercase text-white/50';
+const EMPTY_VALUE = '—';
+const TERM_COLOR = 'text-muted-foreground';
+
+interface BoardEntryProps {
+  readonly term: string;
+  readonly value: string;
+}
+
+function BoardEntry({ term, value }: BoardEntryProps): React.JSX.Element {
+  return (
+    <div>
+      <Text as="dt" variant="label" color={TERM_COLOR}>
+        {term}
+      </Text>
+      <Text as="dd" variant="small" className="text-foreground/80">
+        {value}
+      </Text>
+    </div>
+  );
+}
 
 /** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
 export default async function RankingBoardPage({
@@ -18,36 +39,28 @@ export default async function RankingBoardPage({
   ]);
   const copy = (await getDictionary(locale)).ranking;
   const appearance = await getRankingAppearance();
+  const accessValue =
+    appearance.accessMode === 'protected'
+      ? copy.appearance.accessProtected
+      : copy.appearance.accessPublic;
   return (
-    <div className="space-y-6">
-      <section className={CARD_CLASS}>
-        <h2 className="text-lg font-semibold text-white">{copy.board.title}</h2>
-        <p className="text-sm text-white/60">{copy.board.hint}</p>
-        <dl className="grid gap-3 md:grid-cols-2 text-sm">
-          <div>
-            <dt className={TERM_CLASS}>{copy.appearance.titleField}</dt>
-            <dd className="text-white/80">{appearance.title || '—'}</dd>
-          </div>
-          <div>
-            <dt className={TERM_CLASS}>{copy.appearance.subtitleField}</dt>
-            <dd className="text-white/80">{appearance.subtitle || '—'}</dd>
-          </div>
-          <div>
-            <dt className={TERM_CLASS}>{copy.appearance.organisationField}</dt>
-            <dd className="text-white/80">{appearance.organisation || '—'}</dd>
-          </div>
-          <div>
-            <dt className={TERM_CLASS}>{copy.appearance.accessField}</dt>
-            <dd className="text-white/80">
-              {appearance.accessMode === 'protected'
-                ? copy.appearance.accessProtected
-                : copy.appearance.accessPublic}
-            </dd>
-          </div>
-        </dl>
-      </section>
-
+    <Stack gap={6}>
+      <Card className="space-y-4">
+        <Text as="h2" variant="h3">
+          {copy.board.title}
+        </Text>
+        <Text variant="muted">{copy.board.hint}</Text>
+        <Grid as="dl" cols={2} gap={3} className="text-sm">
+          <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
+          <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
+          <BoardEntry
+            term={copy.appearance.organisationField}
+            value={appearance.organisation || EMPTY_VALUE}
+          />
+          <BoardEntry term={copy.appearance.accessField} value={accessValue} />
+        </Grid>
+      </Card>
       <RankingLogoCard canManage={effective.has('ranking:update')} />
-    </div>
+    </Stack>
   );
 }

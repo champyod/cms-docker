@@ -1,15 +1,133 @@
-import { endRankingOverride, getRankingOverrides, saveRankingOverride } from '@/app/actions/rankingOverrides';
+import {
+  endRankingOverride,
+  getRankingOverrides,
+  saveRankingOverride,
+  type RankingOverride,
+} from '@/app/actions/rankingOverrides';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { EmptyState } from '@/components/core/EmptyState';
+import { SelectField } from '@/components/core/FormField';
+import { Input } from '@/components/core/Input';
+import { Grid, Stack } from '@/components/core/Layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/core/Table';
+import { Text } from '@/components/core/Typography';
 import { getDictionary } from '@/i18n';
+import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-white/5 bg-black/40 px-3 py-2 text-white';
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-white/10 bg-white/10 p-6 backdrop-blur-xl';
-const LABEL_CLASS = 'block text-sm text-white/70';
+const NO_OVERRIDES_MESSAGE = 'No manual overrides are active.';
 
-/**
- * Why plain server forms: each override writes one row and must work before
- * hydration, so a client component would buy state the page does not use.
- */
+type OverrideCopy = Dictionary['ranking']['overrides'];
+
+interface OverrideFormProps {
+  readonly copy: OverrideCopy;
+}
+
+function OverrideForm({ copy }: OverrideFormProps): React.JSX.Element {
+  return (
+    <form action={saveRankingOverride}>
+      <Grid cols={2} gap={3}>
+        <Input label={copy.contestId} name="contestId" inputMode="numeric" required />
+        <SelectField id="ranking-override-target" label={copy.target} name="targetKind">
+          <option value="user">user</option>
+          <option value="team">team</option>
+        </SelectField>
+        <Input label={copy.targetKey} name="targetKey" required />
+        <SelectField id="ranking-override-action" label={copy.action} name="action">
+          <option value="hide">{copy.actionHide}</option>
+          <option value="guest">{copy.actionGuest}</option>
+          <option value="pin">{copy.actionPin}</option>
+          <option value="rename">{copy.actionRename}</option>
+          <option value="score">{copy.actionScore}</option>
+        </SelectField>
+        <Input label={copy.value} name="value" />
+        <Input label={copy.reason} name="reason" required />
+        <Button type="submit" variant="positive">
+          {copy.add}
+        </Button>
+      </Grid>
+    </form>
+  );
+}
+
+interface OverrideRowProps {
+  readonly override: RankingOverride;
+  readonly canOverride: boolean;
+  readonly copy: OverrideCopy;
+}
+
+function OverrideRow({ override, canOverride, copy }: OverrideRowProps): React.JSX.Element {
+  const target = `${override.action} ${override.targetKind} ${override.targetKey}`;
+  const value = override.value === '' ? '' : ` (${override.value})`;
+  return (
+    <TableRow>
+      <TableCell>
+        <span className="font-mono text-muted-foreground">{override.id}</span>{' '}
+        <span>
+          {target}
+          {value}
+        </span>
+      </TableCell>
+      <TableCell className="text-muted-foreground">{override.contestId}</TableCell>
+      <TableCell className="text-muted-foreground">{override.reason}</TableCell>
+      {canOverride ? (
+        <TableCell className="text-right">
+          <form action={endRankingOverride} className="flex items-center justify-end gap-2">
+            <input type="hidden" name="id" value={override.id} />
+            <Input name="reason" required placeholder={copy.reason} className="w-40" />
+            <Button type="submit" variant="negative" size="sm">
+              {copy.end}
+            </Button>
+          </form>
+        </TableCell>
+      ) : null}
+    </TableRow>
+  );
+}
+
+interface OverrideListProps {
+  readonly overrides: readonly RankingOverride[];
+  readonly canOverride: boolean;
+  readonly copy: OverrideCopy;
+}
+
+function OverrideList({ overrides, canOverride, copy }: OverrideListProps): React.JSX.Element {
+  if (overrides.length === 0) {
+    return <EmptyState title={NO_OVERRIDES_MESSAGE} />;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{copy.target}</TableHead>
+          <TableHead>{copy.contestId}</TableHead>
+          <TableHead>{copy.reason}</TableHead>
+          {canOverride ? <TableHead className="text-right">{copy.end}</TableHead> : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {overrides.map((override) => (
+          <OverrideRow
+            key={override.id}
+            override={override}
+            canOverride={canOverride}
+            copy={copy}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+// Plain server forms: each override writes one row and must work before hydration.
 export default async function RankingSettingsPage({
   params,
 }: {
@@ -23,78 +141,15 @@ export default async function RankingSettingsPage({
   const overrides = await getRankingOverrides();
   const canOverride = effective.has('ranking:override');
   return (
-    <div className="space-y-6">
-      <section className={CARD_CLASS}>
-        <h2 className="text-lg font-semibold text-white">{copy.overrides.title}</h2>
-        <p className="text-sm text-white/60">{copy.overrides.hint}</p>
-        {canOverride ? (
-          <form action={saveRankingOverride} className="grid gap-3 md:grid-cols-2">
-            <label className={LABEL_CLASS}>
-              {copy.overrides.contestId}
-              <input name="contestId" inputMode="numeric" required className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.target}
-              <select name="targetKind" className={FIELD_CLASS}>
-                <option value="user">user</option>
-                <option value="team">team</option>
-              </select>
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.targetKey}
-              <input name="targetKey" required className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.action}
-              <select name="action" className={FIELD_CLASS}>
-                <option value="hide">{copy.overrides.actionHide}</option>
-                <option value="guest">{copy.overrides.actionGuest}</option>
-                <option value="pin">{copy.overrides.actionPin}</option>
-                <option value="rename">{copy.overrides.actionRename}</option>
-                <option value="score">{copy.overrides.actionScore}</option>
-              </select>
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.value}
-              <input name="value" className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.reason}
-              <input name="reason" required className={FIELD_CLASS} />
-            </label>
-            <button type="submit" className="rounded-xl bg-indigo-500/20 px-4 py-2 text-indigo-300">
-              {copy.overrides.add}
-            </button>
-          </form>
-        ) : null}
-        <ul className="divide-y divide-white/10 text-sm text-white/80">
-          {overrides.map((override) => (
-            <li key={override.id} className="flex flex-wrap items-center gap-3 py-2">
-              <span className="font-mono text-white/60">{override.id}</span>
-              <span>
-                {override.action} {override.targetKind} {override.targetKey}
-                {override.value === '' ? null : ` (${override.value})`}
-              </span>
-              <span className="text-white/50">contest {override.contestId}</span>
-              <span className="text-white/50">{override.reason}</span>
-              {canOverride ? (
-                <form action={endRankingOverride} className="ml-auto flex items-center gap-2">
-                  <input type="hidden" name="id" value={override.id} />
-                  <input
-                    name="reason"
-                    required
-                    placeholder={copy.overrides.reason}
-                    className="rounded-lg border border-white/5 bg-black/40 px-2 py-1 text-white"
-                  />
-                  <button type="submit" className="rounded-lg bg-red-500/20 px-3 py-1 text-red-300">
-                    {copy.overrides.end}
-                  </button>
-                </form>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+    <Stack gap={6}>
+      <Card className="space-y-4">
+        <Text as="h2" variant="h3">
+          {copy.overrides.title}
+        </Text>
+        <Text variant="muted">{copy.overrides.hint}</Text>
+        {canOverride ? <OverrideForm copy={copy.overrides} /> : null}
+        <OverrideList overrides={overrides} canOverride={canOverride} copy={copy.overrides} />
+      </Card>
+    </Stack>
   );
 }
