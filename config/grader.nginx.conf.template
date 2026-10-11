@@ -37,12 +37,11 @@ limit_req_zone $limit_key zone=per_user:10m rate=5r/s;
 ${REDIS_UPSTREAM_BLOCK}
 ${REDIS_LUA_PLACEHOLDER}
 
-# ── Upstreams ──────────────────────────────────────────────────────
-# One upstream per route-table row, named after the row. Built by
-# __domain_routes.sh, which holds the only copy of the service → container mapping;
-# an upstream is emitted for every row whether or not a domain is configured for it,
-# because a route still answers on the primary vhost without one of its own.
-${UPSTREAM_BLOCKS}
+# ── Resolver ───────────────────────────────────────────────────────
+# The route locations dial a variable target, which nginx answers through this
+# resolver per request — so a recreated container is picked up without a reload.
+# Built by __domain_routes.sh, which holds the only copy of the service mapping.
+${ROUTE_RESOLVER}
 
 # ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
 # Always rendered. default_server answers for any Host, which is what lets a single
@@ -81,6 +80,9 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Binds the primary route target the /login, /ws and static blocks below dial.
+    ${PRIMARY_UPSTREAM_SET}
 
     location = /login {
         limit_req zone=admin_login burst=20 nodelay;
