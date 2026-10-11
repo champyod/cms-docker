@@ -1,152 +1,201 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef } from 'react';
-import {
-  COUNTDOWN_BASE_FONT_PX,
-  fitCountdownFontPx,
-  isCountdownDigit,
-  toCountdownSegments,
-  type CountdownSegment,
-} from '@/lib/contest-countdown';
 import { panicDigitClassNames, panicDigitStyle } from '@/lib/contest-panic';
 
-// A server render has no layout to measure, so the fit degrades to useEffect there.
-const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+// ── Time decomposition ────────────────────────────────────────────────────────
 
-/** Numerals take a fixed slot so the row cannot resize as the seconds change. */
-function digitClassName(char: string): string {
-  return isCountdownDigit(char) ? 'countdown-digit is-slot' : 'countdown-digit';
+interface TimeUnits {
+  days: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
 }
 
-/** The element that carries the panic transform; it holds nothing else. */
-function moverClassName(isPanicking: boolean): string {
-  return ['countdown-panic-move', ...panicDigitClassNames(isPanicking)].join(' ');
+/** Break a millisecond duration into whole days / hours / minutes / seconds. */
+function decompose(totalMs: number): TimeUnits {
+  const total = Math.max(0, Math.floor(totalMs / 1000));
+  return {
+    days:    Math.floor(total / 86400),
+    hours:   Math.floor((total % 86400) / 3600),
+    minutes: Math.floor((total % 3600)  / 60),
+    seconds: total % 60,
+  };
 }
 
-const EMPTY_SEGMENTS: readonly CountdownSegment[] = [{ glyphs: [{ char: '—', index: 0 }] }];
-
-interface FitMetrics {
-  layoutKey: string;
-  width: number;
-  height: number;
+/** Left-pad a single number to two digits. */
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
 }
 
-/** Width signature of the countdown, which changes only when its shape changes. */
-function layoutKeyOf(segments: readonly CountdownSegment[] | null): string {
-  if (!segments) return 'none';
-  return segments.map((segment) => segment.glyphs.length).join('.');
+// ── Single animated digit ─────────────────────────────────────────────────────
+
+interface DigitProps {
+  char: string;
+  /** Absolute position in the display row — used to stagger panic motion. */
+  index: number;
+  isPanicking: boolean;
+  panicTurn: number;
 }
 
-function measureNatural(line: HTMLDivElement, layoutKey: string): FitMetrics {
-  line.style.fontSize = `${COUNTDOWN_BASE_FONT_PX}px`;
-  line.style.whiteSpace = 'nowrap';
-  const metrics = { layoutKey, width: line.scrollWidth, height: line.scrollHeight };
-  line.style.whiteSpace = '';
-  return metrics;
+/**
+ * One character that re-mounts (and plays its entry animation) whenever its
+ * value changes.  The `key` on the parent element encodes both position and
+ * character, so only the digit that actually changed triggers a new mount.
+ */
+function Digit({ char, index, isPanicking, panicTurn }: DigitProps): React.JSX.Element {
+  return (
+    <span
+      className="countdown-digit is-slot"
+      style={panicDigitStyle(isPanicking, index, panicTurn) as React.CSSProperties | undefined}
+    >
+      <span className={['countdown-panic-move', ...panicDigitClassNames(isPanicking)].join(' ')}>
+        {char}
+      </span>
+    </span>
+  );
 }
+
+// ── One time-unit card (e.g. "07 MINUTES") ───────────────────────────────────
+
+interface UnitBlockProps {
+  /** Two-character padded string, e.g. "07". */
+  value: string;
+  label: string;
+  /** Index of the first digit in this block within the global sequence. */
+  startIndex: number;
+  isPanicking: boolean;
+  panicTurn: number;
+}
+
+function UnitBlock({
+  value,
+  label,
+  startIndex,
+  isPanicking,
+  panicTurn,
+}: UnitBlockProps): React.JSX.Element {
+  return (
+    <div className="yt-unit-block">
+      {/* Digits */}
+      <div className="yt-unit-digits font-display font-bold leading-none tracking-tight">
+        {[...value].map((char, offset) => (
+          // Key encodes position + char so only a changed digit re-mounts.
+          <Digit
+            key={`${startIndex + offset}:${char}`}
+            char={char}
+            index={startIndex + offset}
+            isPanicking={isPanicking}
+            panicTurn={panicTurn}
+          />
+        ))}
+      </div>
+
+      {/* Unit label */}
+      <span className="yt-unit-label">{label}</span>
+    </div>
+  );
+}
+
+// ── Colon separator ───────────────────────────────────────────────────────────
+
+/** Visual separator between unit blocks; pulses to signal each tick. */
+function Separator(): React.JSX.Element {
+  return (
+    <span className="yt-unit-sep" aria-hidden>
+      :
+    </span>
+  );
+}
+
+// ── Public component ──────────────────────────────────────────────────────────
 
 interface Props {
+  /** Milliseconds remaining; `null` means no target time is configured. */
   readonly remainingMs: number | null;
-  /** True at the threshold: every digit panics, each with its own motion. */
+  /** Panic mode: every digit shakes independently at the hurry threshold. */
   readonly isPanicking?: boolean;
-  /** Advances on a timer, so each digit is handed a new motion rather than settling. */
+  /** Increments each panic-animation cycle so each digit gets a fresh motion. */
   readonly panicTurn?: number;
 }
 
-/** Digits scaled to fill the box; only the digit that changed re-mounts and animates. */
+// Digit index offsets per unit — fixed positions so panic stagger is stable.
+const IDX_DAYS    = 0; // digits 0-1
+const IDX_HOURS   = 2; // digits 2-3
+const IDX_MINUTES = 4; // digits 4-5
+const IDX_SECONDS = 6; // digits 6-7
+
+/**
+ * YouTube Premiere-style countdown clock.
+ *
+ * Displays days, hours, minutes, and seconds each in a labeled card that
+ * updates every second.  Days are hidden when the remaining time is under
+ * 24 hours to avoid a leading "00 DAYS" card.
+ *
+ * All existing props are preserved: `remainingMs`, `isPanicking`, `panicTurn`.
+ * The resize-observer font-scaling logic from the previous string-based renderer
+ * is replaced by a fluid `clamp()` in CSS, which is sufficient for labeled units.
+ */
 export function ContestCountdownClock({
   remainingMs,
   isPanicking = false,
   panicTurn = 0,
 }: Props): React.JSX.Element {
-  const boxRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<HTMLDivElement>(null);
-  const metricsRef = useRef<FitMetrics | null>(null);
-  const segments = remainingMs !== null ? toCountdownSegments(remainingMs) : null;
-  const displaySegments = segments ?? EMPTY_SEGMENTS;
-  const layoutKey = layoutKeyOf(segments);
-
-  // Natural size is measured once per shape and cached, so a resize costs one read and one write
-  // instead of a measure-write cycle that forces layout on every observer tick.
-  useBrowserLayoutEffect(() => {
-    const box = boxRef.current;
-    const line = lineRef.current;
-    if (!box || !line) return;
-    const fit = (): void => {
-      const cached = metricsRef.current;
-      const metrics = cached && cached.layoutKey === layoutKey ? cached : measureNatural(line, layoutKey);
-      metricsRef.current = metrics;
-      line.style.fontSize = `${fitCountdownFontPx({
-        availableWidth: box.clientWidth,
-        availableHeight: box.clientHeight,
-        naturalWidth: metrics.width,
-        naturalHeight: metrics.height,
-      })}px`;
-    };
-    fit();
-    const observer = new ResizeObserver(fit);
-    observer.observe(box);
-    return () => observer.disconnect();
-  }, [layoutKey]);
-
-  // A cached measurement taken before the display face arrived is measured against the
-  // fallback font, which is a different width, so the row is fitted to the wrong size and
-  // overflows once the real face renders. Dropping the cache when fonts settle re-fits it.
-  useEffect(() => {
-    const fonts = document.fonts;
-    if (!fonts) return;
-    const refit = (): void => {
-      metricsRef.current = null;
-      lineRef.current?.dispatchEvent(new Event('countdown-refit'));
-    };
-    fonts.addEventListener('loadingdone', refit);
-    return () => fonts.removeEventListener('loadingdone', refit);
-  }, []);
-
-  useBrowserLayoutEffect(() => {
-    const box = boxRef.current;
-    const line = lineRef.current;
-    if (!box || !line) return;
-    const refit = (): void => {
-      const metrics = measureNatural(line, layoutKeyOf(segments));
-      metricsRef.current = metrics;
-      line.style.fontSize = `${fitCountdownFontPx({
-        availableWidth: box.clientWidth,
-        availableHeight: box.clientHeight,
-        naturalWidth: metrics.width,
-        naturalHeight: metrics.height,
-      })}px`;
-    };
-    line.addEventListener('countdown-refit', refit);
-    return () => line.removeEventListener('countdown-refit', refit);
-  }, [segments]);
+  const units = remainingMs !== null ? decompose(remainingMs) : null;
+  const showDays = units !== null && units.days > 0;
 
   return (
     <div className="countdown-shell flex min-h-0 flex-1 flex-col">
-      <div
-        ref={boxRef}
-        className="countdown-box flex min-h-[200px] w-full flex-1 items-center justify-center overflow-hidden"
-      >
-        {/* One slot per digit keeps the row from resizing as the seconds change: the
-            display face has no tabular figures, so the slot is what holds the width. */}
-        <div
-          ref={lineRef}
-          className="flex flex-nowrap items-baseline justify-center leading-none font-display font-bold tracking-tight"
-        >
-          {displaySegments.map((segment, segmentIndex) => (
-            <span key={segmentIndex} className="countdown-segment">
-              {segment.glyphs.map((glyph) => (
-                <span
-                  key={`${glyph.index}:${glyph.char}`}
-                  className={digitClassName(glyph.char)}
-                  style={panicDigitStyle(isPanicking, glyph.index, panicTurn) as React.CSSProperties | undefined}
-                >
-                  <span className={moverClassName(isPanicking)}>{glyph.char}</span>
-                </span>
-              ))}
-            </span>
-          ))}
-        </div>
+      <div className="countdown-box yt-countdown-row flex min-h-[200px] w-full flex-1 items-center justify-center overflow-hidden">
+        {units === null ? (
+          // No timing configured — render a static em-dash placeholder.
+          <span
+            className="font-display font-bold text-muted-foreground"
+            style={{ fontSize: 'clamp(2rem, 8vmin, 6rem)' }}
+          >
+            —
+          </span>
+        ) : (
+          <div className="yt-units-row">
+            {showDays && (
+              <>
+                <UnitBlock
+                  value={pad2(units.days)}
+                  label="DAYS"
+                  startIndex={IDX_DAYS}
+                  isPanicking={isPanicking}
+                  panicTurn={panicTurn}
+                />
+                <Separator />
+              </>
+            )}
+
+            <UnitBlock
+              value={pad2(units.hours)}
+              label="HOURS"
+              startIndex={IDX_HOURS}
+              isPanicking={isPanicking}
+              panicTurn={panicTurn}
+            />
+            <Separator />
+
+            <UnitBlock
+              value={pad2(units.minutes)}
+              label="MINUTES"
+              startIndex={IDX_MINUTES}
+              isPanicking={isPanicking}
+              panicTurn={panicTurn}
+            />
+            <Separator />
+
+            <UnitBlock
+              value={pad2(units.seconds)}
+              label="SECONDS"
+              startIndex={IDX_SECONDS}
+              isPanicking={isPanicking}
+              panicTurn={panicTurn}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

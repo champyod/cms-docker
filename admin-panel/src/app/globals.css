@@ -491,6 +491,95 @@
   outline: none;
 }
 
+/* ─── YouTube Premiere-style countdown layout ─────────────────────────────────
+   The clock is replaced by four labeled boxes: DAYS · HOURS · MINUTES · SECONDS.
+   The digit size scales with the viewport like the old clock, but is now expressed
+   as a fluid clamp so a ResizeObserver is no longer needed for the basic layout.
+   ─────────────────────────────────────────────────────────────────────────────── */
+
+/* Outer wrapper: centers the row and fills the allotted height. */
+.yt-units-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.4rem, 2vmin, 1.5rem);
+  flex-wrap: wrap;
+}
+
+/* One time-unit column: two digits on top, label underneath. */
+.yt-unit-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.25rem, 1vmin, 0.6rem);
+}
+
+/* The pair of digit slots inside a unit. Uses the same .countdown-digit rules as the
+   previous implementation, so the tick animation fires per-digit on change. */
+.yt-unit-digits {
+  display: flex;
+  align-items: baseline;
+  font-size: clamp(3rem, 14vmin, 9rem);
+  /* Give each digit pair a faint pill background like YouTube Premiere's card style. */
+  background: hsl(var(--countdown-hue, 226) 20% 14% / 0.55);
+  border: 1px solid hsl(var(--countdown-hue, 226) 40% 30% / 0.35);
+  border-radius: 0.4em;
+  padding: 0.12em 0.3em 0.08em;
+  box-shadow:
+    0 2px 8px hsl(var(--countdown-hue, 226) 60% 10% / 0.4),
+    inset 0 1px 0 hsl(var(--countdown-hue, 226) 60% 60% / 0.08);
+  color: hsl(var(--countdown-hue, 226) 80% 92%);
+  text-shadow: 0 0 1.5em hsl(var(--countdown-hue, 226) 80% 65% / 0.55);
+}
+
+/* Override the old single-char slot width so each digit is centered inside the card. */
+.yt-unit-digits .countdown-digit.is-slot {
+  width: 0.62ch;
+}
+
+/* Label below the digits: uppercase, spaced-out, muted. */
+.yt-unit-label {
+  color: hsl(var(--countdown-hue, 226) 50% 68%);
+  font-size: clamp(0.6rem, 2vmin, 0.9rem);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+/* Colon separator between unit blocks. It pulses once per second to signal the tick. */
+.yt-unit-sep {
+  font-size: clamp(2rem, 10vmin, 6rem);
+  font-weight: 700;
+  line-height: 1;
+  color: hsl(var(--countdown-hue, 226) 50% 50% / 0.6);
+  align-self: flex-start;
+  padding-top: 0.1em;
+  /* A brief blink each second mimics classic countdown timers. */
+  animation: yt-sep-pulse 1s step-end infinite;
+  user-select: none;
+}
+
+@keyframes yt-sep-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+/* Fullscreen: the unit cards grow to absorb the available height. */
+.countdown-surface:fullscreen .yt-units-row {
+  gap: clamp(0.6rem, 3vmin, 2.5rem);
+}
+
+.countdown-surface:fullscreen .yt-unit-digits {
+  font-size: clamp(4rem, 18vmin, 14rem);
+}
+
+/* Respect reduced-motion: separator stays visible, no pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .yt-unit-sep {
+    animation: none;
+  }
+}
+
 /* Reduced motion: a reader who asked the system to stop moving gets the same
    layouts with the movement removed. The 0.01ms floor is deliberate — `none`
    would also cancel the delay an animation needs before its end state applies,
