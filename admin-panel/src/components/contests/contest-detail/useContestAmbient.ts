@@ -12,6 +12,7 @@ import {
   rollAmbient,
   type AmbientConfig,
   type AmbientRoll,
+  type AmbientTextureIdChoice,
 } from '@/lib/contest-ambient';
 
 interface UseAmbientOptions {
@@ -55,6 +56,12 @@ interface AmbientStore {
 }
 
 let store: AmbientStore = { roll: null, rampAnchorMs: null };
+
+/**
+ * The pinned texture, when the deployment names one. Held in a module variable because the
+ * roll is drawn outside React, and set by the hook below before any roll happens.
+ */
+let pinnedTextureId: AmbientTextureIdChoice = 'auto';
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -74,9 +81,14 @@ function readAmbientRoll(): AmbientRoll | null {
  * Draws a new roll. Called from effects and events, never during render. Restarting the
  * ramp is for a state change, where the field's progress legitimately begins again.
  */
+/** Pins the texture the next roll will use; 'auto' returns it to the seeded draw. */
+export function pinAmbientTexture(textureId: AmbientTextureIdChoice): void {
+  pinnedTextureId = textureId;
+}
+
 export function rollAmbientNow(restartRamp: boolean): void {
   store = {
-    roll: rollAmbient(Math.random()),
+    roll: rollAmbient(Math.random(), pinnedTextureId),
     rampAnchorMs: restartRamp || store.rampAnchorMs === null ? Date.now() : store.rampAnchorMs,
   };
   emit();
@@ -118,8 +130,9 @@ export function useContestAmbient({
   // Roll on entry, and start the ramp here too. This writes to the external store rather
   // than to React state, so the seed is never drawn during a render the server also runs.
   useEffect(() => {
+    pinAmbientTexture(config.textureId);
     rollAmbientNow(true);
-  }, []);
+  }, [config.textureId]);
 
   // Roll again while time simply passes. The ramp is left alone, so the blur keeps its
   // place: a fresh roll only changes which colour and texture carry it.
@@ -137,7 +150,7 @@ export function useContestAmbient({
   }, [rerollKey, shouldHoldStill]);
 
   // The fallback is only ever seen for the first paint, before the entry roll lands.
-  const roll = useMemo(() => rollSeed ?? rollAmbient(0), [rollSeed]);
+  const roll = useMemo(() => rollSeed ?? rollAmbient(0, config.textureId), [rollSeed, config.textureId]);
   const progress = resolveAmbientProgress({
     startedAtMs: rampAnchorMs,
     completeAtMs: thresholdMs,

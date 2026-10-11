@@ -157,6 +157,23 @@ describe('ambientDensityScale', () => {
     expect(ambientDensityScale(5, 0)).toBe(1);
   });
 
+  it('takes a pinned texture instead of the seeded draw', () => {
+    expect(rollAmbient(0.31, 'boids').texture.id).toBe('boids');
+    expect(rollAmbient(0.31, 'flow').texture.id).toBe('flow');
+  });
+
+  it('still varies the colour and the pace when the texture is pinned', () => {
+    const first = rollAmbient(0.11, 'boids');
+    const second = rollAmbient(0.77, 'boids');
+    expect(first.texture.id).toBe(second.texture.id);
+    expect([first.palette.id, first.driftSeconds]).not.toStrictEqual([second.palette.id, second.driftSeconds]);
+  });
+
+  it('falls back to the seeded draw when the pin names nothing', () => {
+    const pinned = rollAmbient(0.31, 'nonsense' as never);
+    expect(AMBIENT_TEXTURES.map((texture) => texture.id)).toContain(pinned.texture.id);
+  });
+
   it('clamps a growth gain outside the published range', () => {
     expect(ambientDensityScale(5, 99)).toBe(ambientDensityScale(5, 2));
     expect(ambientDensityScale(5, -5)).toBe(ambientDensityScale(5, 0));
@@ -187,6 +204,15 @@ describe('the ended ornament', () => {
       if ((rollOrnament(seed).ornament as string) !== rollAmbient(seed).texture.id) differed += 1;
     }
     expect(differed).toBeGreaterThan(30);
+  });
+
+  it('takes a pinned ornament instead of the seeded draw', () => {
+    for (const id of AMBIENT_ORNAMENT_IDS) expect(rollOrnament(0.42, id).ornament).toBe(id);
+  });
+
+  it('gives every ornament its own geometry, so the set is not all circles', () => {
+    expect(AMBIENT_ORNAMENT_IDS.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(AMBIENT_ORNAMENT_IDS).size).toBe(AMBIENT_ORNAMENT_IDS.length);
   });
 
   it('keeps the turn inside the band that neither spins nor freezes', () => {

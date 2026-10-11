@@ -13,7 +13,12 @@
  * intended value — because a re-roll interval resolving to NaN would stop the re-roll
  * outright, and a zero frame cap would leave the field frozen.
  */
-import { DEFAULT_AMBIENT_CONFIG, type AmbientConfig } from '@/lib/contest-ambient';
+import {
+  AMBIENT_ORNAMENT_IDS,
+  AMBIENT_TEXTURE_IDS,
+  DEFAULT_AMBIENT_CONFIG,
+  type AmbientConfig,
+} from '@/lib/contest-ambient';
 
 /** Inclusive band a parsed value must land in to be used at all. */
 interface TuningSource {
@@ -23,7 +28,27 @@ interface TuningSource {
   readonly max: number;
 }
 
-export const AMBIENT_TUNING_SOURCES: Readonly<Record<keyof AmbientConfig, TuningSource>> = {
+/** A choice key: resolved against a known set of names, falling back to 'auto'. */
+interface ChoiceSource<Name extends string> {
+  readonly key: string;
+  readonly allowed: readonly Name[];
+}
+
+export const AMBIENT_CHOICE_SOURCES = {
+  textureId: { key: 'COUNTDOWN_AMBIENT_TEXTURE', allowed: [...AMBIENT_TEXTURE_IDS, 'auto'] },
+  ornamentId: { key: 'COUNTDOWN_ORNAMENT', allowed: [...AMBIENT_ORNAMENT_IDS, 'auto'] },
+} as const satisfies Record<'textureId' | 'ornamentId', ChoiceSource<string>>;
+
+/** Resolves one choice key, falling back to 'auto' when it names nothing known. */
+export function resolveAmbientChoice<Name extends string>(source: ChoiceSource<Name>): Name | 'auto' {
+  const raw = process.env[source.key]?.trim().toLowerCase();
+  const match = source.allowed.find((candidate) => candidate.toLowerCase() === raw);
+  return match ?? 'auto';
+}
+
+type NumericTuningKey = Exclude<keyof AmbientConfig, 'textureId' | 'ornamentId'>;
+
+export const AMBIENT_TUNING_SOURCES: Readonly<Record<NumericTuningKey, TuningSource>> = {
   rerollMs: { key: 'COUNTDOWN_AMBIENT_REROLL_MS', fallback: DEFAULT_AMBIENT_CONFIG.rerollMs, min: 1_000, max: 3_600_000 },
   itemScale: { key: 'COUNTDOWN_AMBIENT_ITEM_SCALE', fallback: DEFAULT_AMBIENT_CONFIG.itemScale, min: 0.4, max: 2.5 },
   growthGain: { key: 'COUNTDOWN_AMBIENT_GROWTH_GAIN', fallback: DEFAULT_AMBIENT_CONFIG.growthGain, min: 0, max: 2 },
@@ -59,6 +84,8 @@ export function resolveCountdownAmbientConfig(): AmbientConfig {
     itemScale: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.itemScale),
     growthGain: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.growthGain),
     ornamentRotationMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.ornamentRotationMs),
+    textureId: resolveAmbientChoice(AMBIENT_CHOICE_SOURCES.textureId),
+    ornamentId: resolveAmbientChoice(AMBIENT_CHOICE_SOURCES.ornamentId),
     fallbackProgressMs: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.fallbackProgressMs),
     maxFramesPerSecond: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.maxFramesPerSecond),
     driftExtentRatio: resolveAmbientTuning(AMBIENT_TUNING_SOURCES.driftExtentRatio),

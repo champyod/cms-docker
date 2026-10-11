@@ -113,7 +113,7 @@ export function ContestEndedOrnament({
   isTurning,
   ambientConfig = DEFAULT_AMBIENT_CONFIG,
 }: Props): React.JSX.Element {
-  const { ornament, palette } = rollOrnament(seed);
+  const { ornament, palette } = rollOrnament(seed, ambientConfig.ornamentId);
   const turnSeconds = clampOrnamentRotationMs(ambientConfig.ornamentRotationMs) / 1000;
   return (
     <div

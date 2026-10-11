@@ -54,6 +54,10 @@ export interface AmbientConfig {
   readonly growthGain: number;
   /** Seconds one full turn of the ended screen's ornament takes. */
   readonly ornamentRotationMs: number;
+  /** Pin the field's texture, or 'auto' to let the seed choose. */
+  readonly textureId: AmbientTextureIdChoice;
+  /** Pin the ended screen's ornament, or 'auto' to let the seed choose. */
+  readonly ornamentId: AmbientOrnamentIdChoice;
   /** Frame cap, so a high-refresh display does not spend four times the work per second. */
   readonly maxFramesPerSecond: number;
 }
@@ -65,6 +69,8 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
   itemScale: 1.6,
   growthGain: 0.35,
   ornamentRotationMs: 26_000,
+  textureId: 'auto',
+  ornamentId: 'auto',
   maxFramesPerSecond: 30,
 };
 
@@ -73,6 +79,10 @@ export const DEFAULT_AMBIENT_CONFIG: AmbientConfig = {
 export const AMBIENT_ITEM_SCALE_RANGE: readonly [number, number] = [0.4, 2.5];
 export const AMBIENT_GROWTH_GAIN_RANGE: readonly [number, number] = [0, 2];
 export const AMBIENT_ORNAMENT_ROTATION_MS_RANGE: readonly [number, number] = [4_000, 180_000];
+
+/** 'auto' keeps the seeded roll; naming one pins it, so the screen is reproducible by request. */
+export type AmbientTextureIdChoice = AmbientTextureId | 'auto';
+export type AmbientOrnamentIdChoice = AmbientOrnamentId | 'auto';
 
 export const AMBIENT_TEXTURES: readonly AmbientTexture[] = [
   { id: 'traces', label: 'Circuit traces', driftSecondsRange: [34, 52], agentCount: 0 },
@@ -118,11 +128,18 @@ function pick<T>(options: readonly T[], random: () => number): T {
   return options[Math.min(options.length - 1, Math.floor(random() * options.length))];
 }
 
-/** One seed, one roll: colour, texture and pace all come from this single draw. */
-export function rollAmbient(seed: number): AmbientRoll {
+/**
+ * One seed, one roll: colour, texture and pace all come from this single draw. A pinned
+ * texture overrides only the texture; the colour and the pace still come from the seed, so a
+ * pinned screen is still different on every visit.
+ */
+export function rollAmbient(seed: number, textureId: AmbientTextureIdChoice = 'auto'): AmbientRoll {
   const random = createAmbientRandom(seed);
-  const texture = pick(AMBIENT_TEXTURES, random);
+  const drawn = pick(AMBIENT_TEXTURES, random);
   const palette = pick(AMBIENT_PALETTES, random);
+  const texture = textureId === 'auto'
+    ? drawn
+    : AMBIENT_TEXTURES.find((candidate) => candidate.id === textureId) ?? drawn;
   const [slowest, fastest] = texture.driftSecondsRange;
   return {
     seed,
@@ -157,10 +174,11 @@ export interface AmbientOrnamentRoll {
  * The ornament for a seed. Offsets the seed first, so the ornament a seed picks is not the
  * texture that same seed picks — otherwise every roll would show a matching pair.
  */
-export function rollOrnament(seed: number): AmbientOrnamentRoll {
+export function rollOrnament(seed: number, ornamentId: AmbientOrnamentIdChoice = 'auto'): AmbientOrnamentRoll {
   const random = createAmbientRandom(seed + AMBIENT_ORNAMENT_SEED_OFFSET);
+  const drawn = pick(AMBIENT_ORNAMENT_IDS, random);
   return {
-    ornament: pick(AMBIENT_ORNAMENT_IDS, random),
+    ornament: ornamentId === 'auto' ? drawn : ornamentId,
     palette: pick(AMBIENT_PALETTES, random),
   };
 }
