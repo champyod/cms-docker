@@ -15,6 +15,19 @@ import urllib.request
 logger = logging.getLogger(__name__)
 
 
+class ProviderUnreachable(Exception):
+    """The provider's siteverify could not be reached, or answered uselessly.
+
+    Distinct from a refused token: it is the signal the chain's health tracking
+    uses to skip a provider, so it is raised rather than folded into a False.
+
+    """
+
+    def __init__(self, provider: str) -> None:
+        super().__init__(provider)
+        self.provider = provider
+
+
 # panel: captcha.ts posts to these, the login page loads these scripts.
 TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 HCAPTCHA_VERIFY_URL = "https://hcaptcha.com/siteverify"
@@ -83,11 +96,12 @@ def verify_token(token: str, secret: str, provider: str) -> bool:
                                     timeout=VERIFY_TIMEOUT) as answer:
             body = answer.read()
     except (urllib.error.URLError, OSError, ValueError):
-        # WHY fail closed: an unreachable provider must not become a way to
-        # skip the captcha, so this is logged loudly and refused.
+        # WHY raise instead of returning False: an unreachable provider is the
+        # failover signal, and the caller still refuses the attempt fail-closed;
+        # raising keeps that apart from a token the provider actually rejected.
         logger.warning("Could not reach the %s siteverify endpoint; refusing "
                        "the login attempt.", normalized or "turnstile")
-        return False
+        raise ProviderUnreachable(normalized or "turnstile")
     return _is_successful_answer(body, normalized)
 
 

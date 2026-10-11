@@ -126,12 +126,17 @@ class RedisBackend:
 
     """
 
-    def __init__(self, client: typing.Any) -> None:
+    def __init__(self, client: typing.Any,
+                 prefix: str = REDIS_KEY_PREFIX) -> None:
         self._client = client
+        # WHY the prefix is a parameter: the same backend shape keeps other
+        # state (provider health) in the same Redis, and each family needs its
+        # own namespace so one reader never mistakes the other's keys for its own.
+        self._prefix = prefix
 
     @classmethod
-    def connect(cls, host: str, port: int,
-                window: float) -> "RedisBackend":
+    def connect(cls, host: str, port: int, window: float,
+                prefix: str = REDIS_KEY_PREFIX) -> "RedisBackend":
         """Build a backend against *host*:*port*.
 
         Raises whatever the client raises when the instance cannot be reached,
@@ -148,7 +153,7 @@ class RedisBackend:
                              socket_timeout=1.0, decode_responses=True)
         client.ping()
         logger.info("Login counters are backed by Redis at %s:%d.", host, port)
-        return cls(client)
+        return cls(client, prefix)
 
     def read(self, key: str) -> typing.Optional[typing.Tuple[int, float]]:
         """Return the count and the seconds left in *key*'s window.
@@ -190,8 +195,8 @@ class RedisBackend:
         The prefix keeps the scan from touching unrelated keys in the instance.
 
         """
-        found = self._client.keys(f"{REDIS_KEY_PREFIX}*")
-        return [str(one)[len(REDIS_KEY_PREFIX):] for one in found]
+        found = self._client.keys(f"{self._prefix}*")
+        return [str(one)[len(self._prefix):] for one in found]
 
     def clear(self) -> None:
         tracked = self.keys()
@@ -215,7 +220,7 @@ class RedisBackend:
 
     def _key(self, key: str) -> str:
         """Return the Redis key for a counter key."""
-        return f"{REDIS_KEY_PREFIX}{key}"
+        return f"{self._prefix}{key}"
 
 
 def build_backend(config: typing.Any, window: float,

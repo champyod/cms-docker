@@ -44,9 +44,10 @@ import logging
 import typing
 
 from cms.conf import CaptchaConfig
+from cms.server.captcha_health import ProviderHealth, build_health
 from cms.server.captcha_provider import (PROVIDER_SCRIPT, PROVIDER_WIDGET_CLASS,
-                                         TOKEN_FIELDS, extract_token,
-                                         verify_token)
+                                         TOKEN_FIELDS, ProviderUnreachable,
+                                         extract_token, verify_token)
 from cms.server.login_counters import (LoginFailureCounters, build_counters,
                                         is_loopback)
 
@@ -66,7 +67,8 @@ class Captcha:
     def __init__(self, config: CaptchaConfig,
                  counters: LoginFailureCounters | None = None,
                  verify: typing.Callable[[str, str, str], bool]
-                 | None = None) -> None:
+                 | None = None,
+                 health: ProviderHealth | None = None) -> None:
         self.config = config
         # WHY built from the config when not injected: the counts are kept in a
         # shared Redis when one is configured, and that has to be decided once
@@ -76,6 +78,10 @@ class Captcha:
         # WHY injectable: the verification call reaches the network, and the
         # test suite has to drive the decision logic without one.
         self._verify = verify if verify is not None else verify_token
+        # WHY built once: the provider a request renders and the one it verifies
+        # against must agree, and the health that decides the first has to be the
+        # same store the verification failure updates.
+        self._health = health if health is not None else build_health(config)
         self._counters.set_ban_threshold(config.ban_threshold)
 
     @property
@@ -135,15 +141,21 @@ class Captcha:
     def _active(self) -> tuple[str, str, str]:
         """Return the first chain entry that can actually be used.
 
-        WHY the first with a complete key pair: a provider named first but with
-        no keys cannot render or verify, so it must not disable the challenge
-        while another usable provider remains.
+        A provider is skipped when it has no key pair, and also when the health
+        store has marked it unreachable. WHY one usable provider is still
+        returned when all are unhealthy: rendering nothing would leave the
+        challenge unanswerable, so the chain is not emptied by a transient outage
+        that may have cleared by the time the user submits.
 
         """
         chain = self._chain()
-        for entry in chain:
-            if len(entry[1]) > 0 and len(entry[2]) > 0:
+        usable = [entry for entry in chain
+                  if len(entry[1]) > 0 and len(entry[2]) > 0]
+        for entry in usable:
+            if self._health.is_healthy(entry[0]):
                 return entry
+        if usable:
+            return usable[0]
         return chain[0] if chain else ("turnstile", "", "")
 
     def is_enabled(self) -> bool:
@@ -215,7 +227,17 @@ class Captcha:
             if entry[0] == requested and len(entry[2]) > 0:
                 name, secret = entry[0], entry[2]
                 break
-        return self._verify(token, secret, name)
+        try:
+            verdict = self._verify(token, secret, name)
+        except ProviderUnreachable:
+            # WHY recorded and still refused: an unreachable provider is the
+            # signal the chain fails over on, and the attempt is refused
+            # fail-closed rather than let through.
+            self._health.record_failure(name)
+            return False
+        if verdict:
+            self._health.record_success(name)
+        return verdict
 
     def record_failure(self, username: str, ip: str) -> None:
         """Count a failed attempt, which may make the next one need a captcha."""

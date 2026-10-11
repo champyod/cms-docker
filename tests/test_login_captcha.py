@@ -105,6 +105,7 @@ provider = _load("cms.server.captcha_provider", "cms/server/captcha_provider.py"
 backend = _load("cms.server.login_counter_backend",
                 "cms/server/login_counter_backend.py")
 counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
+health = _load("cms.server.captcha_health", "cms/server/captcha_health.py")
 captcha = _load("cms.server.captcha", "cms/server/captcha.py")
 
 REMOTE_IP = "203.0.113.7"
@@ -383,9 +384,23 @@ class VerifyTokenTest(unittest.TestCase):
         self.assertFalse(captcha.verify_token("", "secret", "turnstile"))
 
     def test_an_unreachable_provider_is_refused(self):
-        # Fail closed: a provider that cannot be reached must not become a way
-        # past the captcha, and must not raise into the login handler either.
-        self.assertFalse(captcha.verify_token("t", "s", "turnstile"))
+        # Fail closed and signal the failover: an unreachable provider raises
+        # rather than returning a verdict, so the chain's health can skip it,
+        # and the caller still refuses the attempt.
+        with self.assertRaises(captcha.ProviderUnreachable):
+            captcha.verify_token("t", "s", "turnstile")
+
+    def test_a_captcha_refuses_when_the_provider_is_unreachable(self):
+        # The raise must not escape to the login handler: verify() catches it and
+        # refuses, which is the fail-closed path.
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("turnstile")
+
+        subject = configured(verify=unreachable)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertFalse(subject.verify(CONTESTANT, REMOTE_IP, "tok"))
 
 
 class Attributes:
@@ -594,7 +609,7 @@ class ProviderTableTest(unittest.TestCase):
         self.assertEqual(keys, {"turnstile", "hcaptcha", "recaptcha"})
 
 
-def _chain(verify=None, **overrides):
+def _chain(verify=None, health=None, **overrides):
     """A captcha with two keyed providers and hcaptcha first in the chain."""
     values = {
         "enabled": True,
@@ -609,7 +624,75 @@ def _chain(verify=None, **overrides):
     values.update(overrides)
     return captcha.Captcha(conf.CaptchaConfig(**values),
                            verify=verify if verify is not None
-                           else (lambda *_: True))
+                           else (lambda *_: True),
+                           health=health)
+
+
+class _Health:
+    """A provider-health store the test drives by hand."""
+
+    def __init__(self, unhealthy=()):
+        self.unhealthy = set(unhealthy)
+
+    def is_healthy(self, provider):
+        return provider not in self.unhealthy
+
+    def record_failure(self, provider):
+        self.unhealthy.add(provider)
+
+    def record_success(self, provider):
+        self.unhealthy.discard(provider)
+
+
+class ProviderFailoverTest(unittest.TestCase):
+    """An unreachable provider is skipped for the next in the chain."""
+
+    def test_an_unhealthy_provider_is_skipped(self):
+        subject = _chain(health=_Health(unhealthy=["hcaptcha"]))
+
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_a_transport_failure_moves_the_chain_to_the_next(self):
+        state = _Health()
+
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("hcaptcha")
+
+        subject = _chain(verify=unreachable, health=state)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertFalse(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"))
+        self.assertFalse(state.is_healthy("hcaptcha"))
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_a_successful_check_clears_the_provider(self):
+        state = _Health(unhealthy=["turnstile"])
+        subject = _chain(health=state)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertTrue(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"))
+
+        self.assertTrue(state.is_healthy("hcaptcha"))
+
+
+class ProviderHealthTest(unittest.TestCase):
+    """The shared health store's threshold and cooldown."""
+
+    def test_a_provider_is_healthy_until_it_fails_enough(self):
+        store = health.ProviderHealth()
+
+        self.assertTrue(store.is_healthy("turnstile"))
+        for _ in range(health.HEALTH_FAILURES - 1):
+            store.record_failure("turnstile")
+        self.assertTrue(store.is_healthy("turnstile"))
+
+        store.record_failure("turnstile")
+        self.assertFalse(store.is_healthy("turnstile"))
+
+        store.record_success("turnstile")
+        self.assertTrue(store.is_healthy("turnstile"))
 
 
 class ProviderChainTest(unittest.TestCase):
