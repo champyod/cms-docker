@@ -25,6 +25,14 @@ PROVIDER_SCRIPT = {
     "hcaptcha": "https://hcaptcha.com/1/api.js",
 }
 
+# The class each provider's script scans for when it auto-renders. The provider
+# NAME is not the class: Turnstile looks for `cf-turnstile` and hCaptcha for
+# `h-captcha`, so interpolating the name leaves the container inert.
+PROVIDER_WIDGET_CLASS = {
+    "turnstile": "cf-turnstile",
+    "hcaptcha": "h-captcha",
+}
+
 # The panel's extractCaptchaToken accepts a token under any of these field
 # names, because each provider's widget injects its own hidden input and the
 # panel also accepts a plain `captchaToken`. Accepting the same set here means a

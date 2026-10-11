@@ -44,8 +44,9 @@ import logging
 import typing
 
 from cms.conf import CaptchaConfig
-from cms.server.captcha_provider import (PROVIDER_SCRIPT, TOKEN_FIELDS,
-                                         extract_token, verify_token)
+from cms.server.captcha_provider import (PROVIDER_SCRIPT, PROVIDER_WIDGET_CLASS,
+                                         TOKEN_FIELDS, extract_token,
+                                         verify_token)
 from cms.server.login_counters import (LoginFailureCounters, build_counters,
                                         is_loopback)
 
@@ -181,15 +182,16 @@ class Captcha:
     def widget_html(self) -> str:
         """Return the widget markup for the login page.
 
-        Mirrors the panel's login page: the provider's own class on the
-        container, the site key in `data-sitekey`, and a hidden input holding
-        the token so the form carries it back to the server.
+        Mirrors the panel's login page: the marker class the provider's script
+        scans for on the container, the site key in `data-sitekey`, and a
+        callback that copies the solved token into the hidden `captchaToken`
+        input so the form carries it back to the server.
 
         """
         if not self.is_enabled():
             return ""
         return WIDGET_TEMPLATE % {
-            "class": self.provider(),
+            "widget_class": PROVIDER_WIDGET_CLASS[self.provider()],
             "script": self.widget_script(),
             "site_key": self.config.site_key,
         }
@@ -218,8 +220,18 @@ class Captcha:
 
 
 WIDGET_TEMPLATE = """<div class="captcha-widget">
+<script>
+function onCaptchaSuccess(token) {
+    var field = document.querySelector("input[name=captchaToken]");
+    if (field) { field.value = token; }
+}
+function onCaptchaExpired() {
+    var field = document.querySelector("input[name=captchaToken]");
+    if (field) { field.value = ""; }
+}
+</script>
 <script src="%(script)s" async defer></script>
-<div class="%(class)s" data-sitekey="%(site_key)s"></div>
+<div class="%(widget_class)s" data-sitekey="%(site_key)s" data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" data-error-callback="onCaptchaExpired"></div>
 <input type="hidden" name="captchaToken" value="">
 </div>"""
 

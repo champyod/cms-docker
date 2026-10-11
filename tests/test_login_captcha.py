@@ -37,6 +37,8 @@ SRC_ROOT = os.path.join(REPO_ROOT, "src")
 # The loader the contest web server itself uses, so the pages under test are the
 # shipped ones rather than a copy that could drift from them.
 TEMPLATES = os.path.join(SRC_ROOT, "cms", "server", "contest", "templates")
+# The classic admin login page is its own Jinja environment and template root.
+ADMIN_TEMPLATES = os.path.join(SRC_ROOT, "cms", "server", "admin", "templates")
 
 # The loader rejects the sample's shipped default secret, so a generated config carries a
 # non-default 16-byte hex key.
@@ -440,6 +442,24 @@ def _login_page_facts(captcha_facts: dict) -> dict:
     }
 
 
+def _render_admin_login(captcha_facts: dict) -> str:
+    """Render the classic admin login page the AWS itself serves.
+
+    The admin page is a standalone template with its own root and no i18n
+    extension, so it needs its own environment: the one the contest server
+    configures would not find login.html at all.
+    """
+    environment = jinja2.Environment(
+        trim_blocks=True, lstrip_blocks=True, autoescape=True,
+        undefined=jinja2.StrictUndefined,
+        loader=jinja2.FileSystemLoader(ADMIN_TEMPLATES))
+    return environment.get_template("login.html").render(
+        url=lambda *_args, **_kwargs: "/static/x",
+        handler=Attributes(get_argument=lambda _name, default="": default),
+        xsrf_form_html="",
+        **captcha_facts)
+
+
 def _over_threshold() -> "captcha.Captcha":
     """A captcha demanding a challenge, with every answer refused.
 
@@ -466,6 +486,9 @@ class ContestFormWidgetTest(unittest.TestCase):
 
         self.assertIn("captchaToken", page)
         self.assertIn(subject.config.site_key, page)
+        # The class has to be the one Turnstile scans for, or the container is
+        # present but the widget never renders and the field stays empty.
+        self.assertIn('class="cf-turnstile"', page)
 
     def test_the_registration_form_carries_the_widget(self):
         # The registration handler refuses a challenged attempt with a 429 and
@@ -477,6 +500,7 @@ class ContestFormWidgetTest(unittest.TestCase):
 
         self.assertIn("captchaToken", page)
         self.assertIn(subject.config.site_key, page)
+        self.assertIn('class="cf-turnstile"', page)
 
     def test_a_deployment_without_a_captcha_renders_no_widget(self):
         # render_params leaves the widget empty when nothing is configured, so
@@ -491,6 +515,50 @@ class ContestFormWidgetTest(unittest.TestCase):
                 page = _render(template, _login_page_facts(facts))
 
                 self.assertNotIn("captchaToken", page)
+
+
+class WidgetMarkupTest(unittest.TestCase):
+    """The markup alone: the class, the callbacks, and the token field."""
+
+    def test_the_widget_uses_the_class_the_provider_renders(self):
+        # The provider NAME is not the class its script scans for: `turnstile`
+        # and `hcaptcha` match nothing, so the container is ignored and the
+        # challenge never appears.
+        for provider, expected in (("turnstile", "cf-turnstile"),
+                                   ("hcaptcha", "h-captcha")):
+            with self.subTest(provider=provider):
+                widget = configured(provider=provider).widget_html()
+
+                self.assertIn('class="%s"' % expected, widget)
+                self.assertNotIn('class="%s"' % provider, widget)
+
+    def test_the_widget_copies_the_token_into_the_form_field(self):
+        # An element without a callback renders a challenge whose answer never
+        # reaches the hidden field, so the form posts an empty token and the
+        # server refuses it.
+        widget = configured().widget_html()
+
+        self.assertIn('data-callback="onCaptchaSuccess"', widget)
+        self.assertIn('input[name=captchaToken]', widget)
+        self.assertIn("function onCaptchaSuccess(token)", widget)
+
+
+class AdminFormWidgetTest(unittest.TestCase):
+    """The widget the classic admin login page has to carry."""
+
+    def test_the_admin_login_form_carries_the_widget(self):
+        subject = _over_threshold()
+        page = _render_admin_login(subject.render_params("admin", REMOTE_IP))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+        self.assertIn('class="cf-turnstile"', page)
+
+    def test_a_deployment_without_a_captcha_renders_no_widget(self):
+        facts = configured(enabled=False).render_params("admin", REMOTE_IP)
+        page = _render_admin_login(facts)
+
+        self.assertNotIn("captchaToken", page)
 
 
 class ApiLoginHandler:
