@@ -22,6 +22,8 @@ pub(crate) const SCRIPT_DOMAIN: &str = "__domain.sh";
 pub(crate) const SCRIPT_FUNNEL: &str = "__funnel.sh";
 pub(crate) const SCRIPT_CREATE_CONTESTS: &str = "__create_contests.sh";
 pub(crate) const SCRIPT_CONFIG_SYNC: &str = "__config_sync.sh";
+pub(crate) const SCRIPT_DB_ADMIN: &str = "__db_admin.sh";
+pub(crate) const SCRIPT_DB_USE: &str = "__db_use.sh";
 
 pub(crate) const MAKE_CMS_INIT: &str = "cms-init";
 pub(crate) const MAKE_DB_RESET: &str = "db-reset";

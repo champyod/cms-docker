@@ -28,6 +28,12 @@ pub enum DispatchKey {
     DbSync,
     /// `./cms db migrate`
     DbMigrate,
+    /// `./cms db create <name>`
+    DbCreate,
+    /// `./cms db rename <old> <new>`
+    DbRename,
+    /// `./cms db use <name>`
+    DbUse,
     /// `./cms admin-create`
     AdminCreate,
     /// `./cms status`
@@ -134,6 +140,9 @@ mod tests {
         DispatchKey::DbClean,
         DispatchKey::DbSync,
         DispatchKey::DbMigrate,
+        DispatchKey::DbCreate,
+        DispatchKey::DbRename,
+        DispatchKey::DbUse,
         DispatchKey::AdminCreate,
         DispatchKey::Status,
         DispatchKey::Monitor,

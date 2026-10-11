@@ -6,19 +6,39 @@ use crate::core::domain_setup::{
 };
 
 use super::{
-    BackupSub, Commands, ConfigSub, ContestSub, DbSub, DomainCmd, DomainRenewArgs, FunnelSub,
+    BackupSub, Commands, ConfigSub, ContestSub, DbCmd, DomainCmd, DomainRenewArgs, FunnelSub,
     SecretsSub, TailscaleSub, WorkerSub,
 };
 
-const fn db_key(sub: &DbSub) -> DispatchKey {
+fn db_dispatch(sub: &DbCmd) -> (DispatchKey, Vec<String>) {
     match sub {
-        DbSub::Init => DispatchKey::DbInit,
-        DbSub::Reset => DispatchKey::DbReset,
-        DbSub::Clean => DispatchKey::DbClean,
-        DbSub::Sync => DispatchKey::DbSync,
-        DbSub::Migrate => DispatchKey::DbMigrate,
+        DbCmd::Init => (DispatchKey::DbInit, Vec::new()),
+        DbCmd::Reset => (DispatchKey::DbReset, Vec::new()),
+        DbCmd::Clean => (DispatchKey::DbClean, Vec::new()),
+        DbCmd::Sync => (DispatchKey::DbSync, Vec::new()),
+        DbCmd::Migrate => (DispatchKey::DbMigrate, Vec::new()),
+        DbCmd::Create { name, dry_run } => {
+            let mut args = vec!["create".to_string(), name.clone()];
+            if *dry_run {
+                args.push("--dry-run".to_string());
+            }
+            (DispatchKey::DbCreate, args)
+        }
+        DbCmd::Rename {
+            old,
+            new_name,
+            dry_run,
+        } => {
+            let mut args = vec!["rename".to_string(), old.clone(), new_name.clone()];
+            if *dry_run {
+                args.push("--dry-run".to_string());
+            }
+            (DispatchKey::DbRename, args)
+        }
+        DbCmd::Use { name } => (DispatchKey::DbUse, vec![name.clone()]),
     }
 }
+
 const fn backup_key(sub: Option<&BackupSub>) -> DispatchKey {
     match sub {
         Some(BackupSub::Drill) => DispatchKey::BackupDrill,
@@ -239,7 +259,7 @@ fn resolve_basic(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
             Some((key, Vec::new()))
         }
         Commands::Fix => Some((DispatchKey::Fix, vec!["--fix".into()])),
-        Commands::Db { sub } => Some((db_key(sub), Vec::new())),
+        Commands::Db { sub } => Some(db_dispatch(sub)),
         Commands::AdminCreate => Some((DispatchKey::AdminCreate, Vec::new())),
         Commands::Status => Some((DispatchKey::Status, Vec::new())),
         Commands::Monitor => Some((DispatchKey::Monitor, Vec::new())),

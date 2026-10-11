@@ -8,14 +8,42 @@ pub mod setup_args;
 pub use renew_args::DomainRenewArgs;
 pub use setup_args::{DomainProxyArgs, DomainSetupArgs};
 
-/// Database lifecycle subcommands (`db <init|reset|clean|sync|migrate>`).
-#[derive(ValueEnum, Clone, Debug)]
-pub enum DbSub {
+/// Database lifecycle subcommands.
+#[derive(Subcommand, Clone, Debug)]
+pub enum DbCmd {
+    /// Initialise the CMS database.
     Init,
+    /// Reset the database (destructive).
     Reset,
+    /// Delete every cms volume (destructive).
     Clean,
+    /// Apply Prisma migrations and seed permissions.
     Sync,
+    /// Apply the full history to the active database and verify.
     Migrate,
+    /// Create a database in the cms-database container.
+    Create {
+        /// Database name to create.
+        name: String,
+        /// Print the SQL and change nothing.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Rename a database in the cms-database container.
+    Rename {
+        /// Current database name.
+        old: String,
+        /// New database name.
+        new_name: String,
+        /// Print the SQL and change nothing.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Switch the active database profile.
+    Use {
+        /// Profile to activate.
+        name: String,
+    },
 }
 
 /// Backup subcommands (`backup [drill|offsite]`; None = default backup).
@@ -157,10 +185,10 @@ pub enum Commands {
         #[arg(default_value = "all")]
         stack: String,
     },
-    /// Database lifecycle shortcuts (`db <init|reset|clean|sync|migrate>`).
+    /// Database lifecycle commands (`db <init|reset|clean|sync|migrate|create|rename|use>`).
     Db {
-        #[arg(value_enum)]
-        sub: DbSub,
+        #[command(subcommand)]
+        sub: DbCmd,
     },
     /// Create superadmin account.
     AdminCreate,
