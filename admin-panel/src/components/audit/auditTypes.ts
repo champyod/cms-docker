@@ -1,4 +1,5 @@
 import type { AuditLogRow } from '@/app/actions/audit';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { AuditDict } from './audit-dict';
 
 export type { AuditDict };
@@ -21,4 +22,5 @@ export interface AuditTableProps {
   filters: AuditFilterValues;
   dict: AuditDict;
   permissionKeys: string[];
+  sort?: ListSortInput;
 }

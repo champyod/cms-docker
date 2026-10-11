@@ -25,8 +25,8 @@ export default async function SecurityOverviewPage(): Promise<React.JSX.Element>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {cards.map((card) => (
         <Card key={card.label}>
-          <p className="text-sm text-white/60">{card.label}</p>
-          <p className="mt-1 font-mono text-2xl text-white">{card.value}</p>
+          <p className="text-sm text-muted-foreground">{card.label}</p>
+          <p className="mt-1 font-mono text-2xl text-foreground">{card.value}</p>
         </Card>
       ))}
     </div>

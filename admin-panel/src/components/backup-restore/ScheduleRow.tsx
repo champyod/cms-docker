@@ -52,7 +52,7 @@ export function ScheduleRow({ schedule, busy, onToggle, onDelete, onEdit }: Sche
         <Stack gap={2}>
             <Stack direction="row" align="center" gap={3} wrap>
                 <div className="min-w-0 mr-auto">
-                    <p className="text-sm font-medium text-white truncate">{schedule.name}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{schedule.name}</p>
                     <p className="text-xs text-muted-foreground truncate">{summarizeTables(schedule.tables)}</p>
                 </div>
                 <Badge variant={schedule.enabled ? 'success' : 'neutral'}>

@@ -16,11 +16,13 @@ import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { apiClient } from '@/lib/apiClient';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 interface ContestListProps {
   initialContests: ContestRowData[];
   totalPages: number;
   permissionKeys: readonly string[];
+  initialSort?: ListSortInput;
 }
 
 interface ContestPermissions {
@@ -40,7 +42,7 @@ function resolveContestPermissions(permissionKeys: readonly string[]): ContestPe
   };
 }
 
-export function ContestList({ initialContests, totalPages, permissionKeys }: ContestListProps): React.JSX.Element {
+export function ContestList({ initialContests, totalPages, permissionKeys, initialSort }: ContestListProps): React.JSX.Element {
   void totalPages;
   const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -77,6 +79,19 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
     <ContestRowActions contest={contest} permissionKeys={permissionKeys} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
   ), [permissionKeys, actions.requestDeploy, handleEdit]);
 
+  const applySort = (next: ListSortInput): void => {
+    const params = new URLSearchParams(window.location.search);
+    if (next !== null && next !== undefined) {
+      params.set('sort', next.key);
+      params.set('dir', next.direction);
+    } else {
+      params.delete('sort');
+      params.delete('dir');
+    }
+    const query = params.toString();
+    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+  };
+
   return (
     <div className="space-y-6">
       <ContestListHeader locale={locale} canManage={permissions.canCreate} onCreate={handleCreate} />
@@ -87,6 +102,8 @@ export function ContestList({ initialContests, totalPages, permissionKeys }: Con
         getRowClassName={getContestRowClassName}
         getRowProps={getContestRowProps}
         renderRowActions={renderRowActions}
+        sort={initialSort}
+        onSortChange={applySort}
         emptyState={
           <EmptyState icon={Trophy} title="No contests found" description="Create your first contest to get started." />
         }

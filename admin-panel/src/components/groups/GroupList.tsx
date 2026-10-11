@@ -9,6 +9,8 @@ import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
 import { buildColumns } from './groupColumns';
@@ -21,8 +23,10 @@ export function GroupList({
   groups,
   permissionKeys,
   dict,
+  sort,
 }: GroupListProps): React.JSX.Element {
   const list = useGroupList(permissionKeys);
+  const router = useAppRouter();
   // Why the hook, not the prop: the group label lives outside the groups copy
   // block, and only the full dictionary carries it.
   const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
@@ -73,6 +77,19 @@ export function GroupList({
     ) : null,
   );
 
+  const applySort = (next: ListSortInput): void => {
+    const params = new URLSearchParams(window.location.search);
+    if (next !== null && next !== undefined) {
+      params.set('sort', next.key);
+      params.set('dir', next.direction);
+    } else {
+      params.delete('sort');
+      params.delete('dir');
+    }
+    const query = params.toString();
+    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+  };
+
   return (
     <div className="space-y-6">
       <ResponsiveTable
@@ -81,6 +98,8 @@ export function GroupList({
         getRowKey={(group) => group.id}
         getRowProps={getRowProps}
         renderRowActions={renderRowActions}
+        sort={sort}
+        onSortChange={applySort}
         emptyState={
           <EmptyState
             title={dict.noGroups}

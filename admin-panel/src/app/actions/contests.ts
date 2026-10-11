@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache';
 import * as contestService from '@/lib/services/contests';
 import * as contestDetail from '@/lib/queries/contest-detail';
 import type { ContestData } from '@/lib/contests-repo';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export type { ContestData } from '@/lib/contests-repo';
 
-export async function getContests({ page = 1, search = '' }: { page?: number; search?: string }): Promise<Awaited<ReturnType<typeof contestService.listContests>>> {
-  return contestService.listContests({ page, search });
+export async function getContests({ page = 1, search = '', sort = null }: { page?: number; search?: string; sort?: ListSortInput }): Promise<Awaited<ReturnType<typeof contestService.listContests>>> {
+  return contestService.listContests({ page, search, sort });
 }
 
 export async function createContest(data: ContestData): Promise<Awaited<ReturnType<typeof contestService.createContest>>> {

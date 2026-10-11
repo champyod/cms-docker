@@ -4,6 +4,8 @@ import { Users } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { RecordList } from '@/components/list/RecordList';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { Dictionary } from '@/lib/dictionary';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
@@ -22,6 +24,8 @@ export interface TeamListTableProps {
   readonly onDelete: (teamId: number) => void;
   readonly onCreate: () => void;
   readonly copy: TeamListCopy;
+  readonly sort?: ListSortInput;
+  readonly onSortChange?: (sort: ListSortInput) => void;
 }
 
 export function TeamListTable({
@@ -33,6 +37,8 @@ export function TeamListTable({
   onDelete,
   onCreate,
   copy,
+  sort,
+  onSortChange,
 }: TeamListTableProps): React.JSX.Element {
   return (
     <RecordList
@@ -58,6 +64,8 @@ export function TeamListTable({
           onAction={capabilities.canCreate ? onCreate : undefined}
         />
       }
+      sort={sort}
+      onSortChange={onSortChange}
     />
   );
 }

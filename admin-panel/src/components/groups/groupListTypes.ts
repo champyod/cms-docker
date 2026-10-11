@@ -1,4 +1,5 @@
 import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export interface GroupsDict {
   title: string;
@@ -23,6 +24,7 @@ export interface GroupListProps {
   groups: GroupWithPermissions[];
   permissionKeys: readonly string[];
   dict: GroupsDict;
+  sort?: ListSortInput;
 }
 
 export interface GroupFormData {

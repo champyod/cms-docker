@@ -4,6 +4,7 @@ import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { UserListHeader } from '@/components/users/UserListHeader';
 import { getDictionary } from '@/i18n';
+import { readListSort, type ListSortInput } from '@/lib/list-sorting';
 import type { Dictionary } from '@/lib/dictionary';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -34,21 +35,24 @@ interface UsersListPage {
   readonly search: string;
   readonly contests: Array<{ id: number; name: string }>;
   readonly canReadContests: boolean;
+  readonly sort: ListSortInput;
 }
 
 // Why: contest options are a separate read from the user page, and a
 // user:list-only reader must not trigger the query or receive the payload.
 async function loadUsersListPage(
-  searchParams: Promise<{ page?: string; search?: string; perPage?: string }>,
+  searchParams: Promise<{ page?: string; search?: string; perPage?: string; sort?: string; dir?: string }>,
 ): Promise<UsersListPage> {
   const query = await searchParams;
   const search = query.search || '';
+  const sort = readListSort({ sort: query.sort, dir: query.dir });
   let result: Awaited<ReturnType<typeof getUsers>>;
   try {
     result = await getUsers({
       page: Number(query.page) || 1,
       search,
       perPage: Number(query.perPage) || 20,
+      sort,
     });
   } catch (error: unknown) {
     if (error instanceof AuthorizationError && error.status === 403) notFound();
@@ -61,17 +65,17 @@ async function loadUsersListPage(
         orderBy: { id: 'desc' },
       })
     : [];
-  return { result, search, contests, canReadContests };
+  return { result, search, contests, canReadContests, sort };
 }
 
 export default async function PeopleUsersPage({ params, searchParams }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ page?: string; search?: string; perPage?: string }>;
+  searchParams: Promise<{ page?: string; search?: string; perPage?: string; sort?: string; dir?: string }>;
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const usersLabel = labelForDescriptor(dict, usersRouteDescriptor());
-  const { result, search, contests, canReadContests } = await loadUsersListPage(searchParams);
+  const { result, search, contests, canReadContests, sort } = await loadUsersListPage(searchParams);
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.users', dict)}
@@ -94,6 +98,7 @@ export default async function PeopleUsersPage({ params, searchParams }: {
         currentPage={result.currentPage}
         perPage={result.perPage}
         initialSearch={search}
+        initialSort={result.sort}
         contests={contests}
         canReadContests={canReadContests}
         navigation={dict.navigation}

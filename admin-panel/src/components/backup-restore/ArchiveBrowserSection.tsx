@@ -194,7 +194,7 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
                         {archives.map((archive) => (
                             <li key={archive.name} className="flex items-center gap-3 px-3 py-2">
                                 <div className="min-w-0 mr-auto">
-                                    <p className="text-sm text-white font-mono truncate">{archive.name}</p>
+                                    <p className="text-sm text-foreground font-mono truncate">{archive.name}</p>
                                     <p className="text-xs text-muted-foreground">
                                         {formatBytes(archive.sizeBytes)} &middot; {archive.kind} &middot; {formatDate(archive.modifiedAt)}
                                     </p>

@@ -26,7 +26,7 @@ export function TablePaginationControls({
   onNext,
 }: TablePaginationControlsProps) {
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-neutral-300">
+    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-muted-foreground">
       <Button
         variant="ghost"
         size="sm"

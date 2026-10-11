@@ -87,12 +87,12 @@ function renderTimelineCell(contest: ContestRowData): React.JSX.Element {
 // the two layouts cannot drift apart.
 export function buildContestColumns(onOpenContest: (id: number) => void): ResponsiveColumn<ContestRowData>[] {
   return [
-    { key: 'id', header: 'ID', render: renderIdCell },
-    { key: 'name', header: 'Name', render: (contest) => renderNameCell(contest, onOpenContest) },
-    { key: 'status', header: 'Status', render: renderStatusCell },
-    { key: 'timeline', header: 'Timeline', render: renderTimelineCell },
-    { key: 'tasks', header: 'Tasks', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.tasks ?? 0}</span> },
-    { key: 'participants', header: 'Participants', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.participations ?? 0}</span> },
+    { key: 'id', header: 'ID', sortKey: 'id', render: renderIdCell },
+    { key: 'name', header: 'Name', sortKey: 'name', render: (contest) => renderNameCell(contest, onOpenContest) },
+    { key: 'status', header: 'Status', sortKey: 'is_active', render: renderStatusCell },
+    { key: 'timeline', header: 'Timeline', sortKey: 'start', render: renderTimelineCell },
+    { key: 'tasks', header: 'Tasks', sortKey: 'tasks', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.tasks ?? 0}</span> },
+    { key: 'participants', header: 'Participants', sortKey: 'participants', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.participations ?? 0}</span> },
   ];
 }
 

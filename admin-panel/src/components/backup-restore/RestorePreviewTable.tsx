@@ -100,7 +100,7 @@ export function RestorePreviewTable({
 }: RestorePreviewTableProps) {
     const selected = new Set(selection);
     const columns: readonly ResponsiveColumn<TableDiffRow>[] = [
-        { key: 'table', header: 'Table', render: (row) => <span className="text-sm font-medium text-white">{row.table}</span> },
+        { key: 'table', header: 'Table', render: (row) => <span className="text-sm font-medium text-foreground">{row.table}</span> },
         { key: 'presence', header: 'Archive', render: (row) => <Badge variant={row.archivePresent ? 'success' : 'neutral'}>{row.archivePresent ? 'in archive' : 'not in archive'}</Badge> },
         { key: 'rows', header: 'Archive versus live', render: (row) => <Text variant="small" color="text-muted-foreground">{describeRow(row)}</Text> },
         {

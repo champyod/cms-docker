@@ -123,7 +123,7 @@ function RunRow({ run, scheduleNames, isSettling, onSettle, feedback }: RunRowPr
             <Stack gap={2}>
                 <Stack direction="row" align="center" gap={3} wrap>
                     <div className="min-w-0 mr-auto">
-                        <p className="text-sm font-medium text-white truncate">{sourceLabel(run, scheduleNames)}</p>
+                        <p className="text-sm font-medium text-foreground truncate">{sourceLabel(run, scheduleNames)}</p>
                         <p className="text-xs text-muted-foreground truncate">{summarizeTables(run.tables)}</p>
                     </div>
                     <Badge variant="indigo">{run.kind}</Badge>

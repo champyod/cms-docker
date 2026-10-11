@@ -56,11 +56,11 @@ export function RestoreModeDialog({
         >
             <Stack gap={3}>
                 <Text variant="small" color="text-muted-foreground">
-                    <strong className="text-white">Apply Replace</strong> overwrites: a row the archive carries replaces the live row with the same key,
+                    <strong className="text-foreground">Apply Replace</strong> overwrites: a row the archive carries replaces the live row with the same key,
                     and a live row the archive does not carry is left alone.
                 </Text>
                 <Text variant="small" color="text-muted-foreground">
-                    <strong className="text-white">Apply Append</strong> merges: a row the archive carries is inserted, and one whose key already exists
+                    <strong className="text-foreground">Apply Append</strong> merges: a row the archive carries is inserted, and one whose key already exists
                     live is updated by the archive&apos;s values.
                 </Text>
                 <Text variant="small" color="text-muted-foreground">

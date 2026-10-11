@@ -3,6 +3,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { auditSortOrderBy } from '@/lib/audit-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { loadActorNames } from '@/lib/admin-names';
 import { loadEntityNames, entityNameKey } from '@/lib/entity-names';
 
@@ -86,6 +88,7 @@ export async function getAuditLog({
   search,
   fromDate,
   toDate,
+  sort,
 }: {
   page?: number;
   pageSize?: number;
@@ -96,6 +99,7 @@ export async function getAuditLog({
   search?: string;
   fromDate?: string;
   toDate?: string;
+  sort?: ListSortInput;
 }): Promise<AuditLogResult> {
   try {
     await ensurePermission('audit:read');
@@ -129,7 +133,7 @@ export async function getAuditLog({
         where,
         skip,
         take: pageSize,
-        orderBy: { id: 'desc' },
+        orderBy: auditSortOrderBy(sort ?? null),
         select: {
           id: true,
           actor_id: true,

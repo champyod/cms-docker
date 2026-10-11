@@ -135,7 +135,7 @@ export function RestoreConflictDialog({
                 <div className="flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-warning" />
                     <Badge variant={conflict.kind === 'fk-overwrite' ? 'warning' : 'destructive'}>{conflict.kind}</Badge>
-                    <span className="text-sm text-white">{conflict.table}</span>
+                    <span className="text-sm text-foreground">{conflict.table}</span>
                 </div>
                 <Text variant="small" color="text-muted-foreground">{conflictMessage(conflict)}</Text>
                 {canRegenerate && (

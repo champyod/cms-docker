@@ -1,18 +1,18 @@
-'use client';
+﻿'use client';
 
 import { useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { TaskModal } from './TaskModal';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
@@ -37,6 +37,7 @@ interface TaskListProps {
   initialTasks: TaskRow[];
   totalPages: number;
   permissionKeys: readonly string[];
+  initialSort?: ListSortInput;
 }
 
 function buildTaskRowActions(
@@ -50,7 +51,7 @@ function buildTaskRowActions(
   ];
 }
 
-export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
+export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
   const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
@@ -94,6 +95,105 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     router.refresh();
   };
 
+  const applySort = (next: ListSortInput): void => {
+    const url = new URL(window.location.href);
+    if (next !== null && next !== undefined) {
+      url.searchParams.set('sort', next.key);
+      url.searchParams.set('dir', next.direction);
+    } else {
+      url.searchParams.delete('sort');
+      url.searchParams.delete('dir');
+    }
+    url.searchParams.set('page', '1');
+    router.push(url.toString());
+  };
+
+  const columns = useMemo<ResponsiveColumn<TaskRow>[]>(() => [
+    {
+      key: 'id',
+      header: 'ID',
+      sortKey: 'id',
+      hideOnMobile: true,
+      render: (task) => <span className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</span>,
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      sortKey: 'name',
+      render: (task) => {
+        const hasErrors = task.diagnostics.some((d) => d.type === 'error');
+        return (
+          <div className="flex items-center gap-2">
+            {task.diagnostics.length > 0 && (
+              <div className="group relative">
+                <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
+                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
+                  <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
+                  {task.diagnostics.map((d, i) => (
+                    <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
+                      <span>•</span>
+                      <span>{d.message}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <button onClick={(event) => { event.stopPropagation(); router.push(buildRoute(locale, 'tasks.record', { id: task.id })); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
+              {task.name}
+              <ExternalLink className="w-3 h-3 opacity-50" />
+            </button>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'title',
+      header: 'Title',
+      sortKey: 'title',
+      render: (task) => {
+        const hasErrors = task.diagnostics.some((d) => d.type === 'error');
+        return (
+          <span className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
+            {task.title}
+          </span>
+        );
+      },
+    },
+    {
+      key: 'contest',
+      header: 'Contest',
+      sortKey: 'contests',
+      render: (task) =>
+        task.contests ? (
+          <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{task.contests.name}</span>
+        ) : (
+          <span className="text-muted-foreground text-xs italic">Unassigned</span>
+        ),
+    },
+    {
+      key: 'resources',
+      header: 'Resources',
+      render: (task) => (
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1" title="Statements">
+            <FileText className="w-3 h-3" />
+            <span>{task.statements.length}</span>
+          </div>
+          <div className="flex items-center gap-1" title="Datasets">
+            <Database className="w-3 h-3" />
+            <span>{task.datasets_datasets_task_idTotasks.length}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'submissions',
+      header: 'Submissions',
+      sortKey: 'submissions',
+      render: (task) => <span>{task._count?.submissions ?? 0}</span>,
+    },
+  ], [locale, router]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -105,119 +205,38 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
         )}
       </div>
 
-      <div className="border border-border rounded-xl overflow-hidden bg-card">
-        <Table
-          mobileCards={tasks.map((task) => (
-            <MobileCard key={task.id}>
-              <MobileCardRow label="ID" value={`#${task.id}`} />
-              <MobileCardRow label="Name" value={task.name} />
-              <MobileCardRow label="Title" value={task.title} />
-              <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
-              <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
-              <RowActions
-                ariaLabel={rowActionGroupLabel(dict, 'tasks')}
-                className="justify-end gap-2 pt-2"
-                permissionKeys={permissionKeys}
-                actions={buildTaskRowActions(task, handleEdit, handleDelete)}
-              />
-            </MobileCard>
-          ))}
-        >
-          <TableHeader>
-            <TableRow className="border-b border-border hover:bg-muted/50">
-              <TableHead className="text-muted-foreground">ID</TableHead>
-              <TableHead className="text-muted-foreground">Name</TableHead>
-              <TableHead className="text-muted-foreground">Title</TableHead>
-              <TableHead className="text-muted-foreground">Contest</TableHead>
-              <TableHead className="text-muted-foreground">Resources</TableHead>
-              <TableHead className="text-muted-foreground">Submissions</TableHead>
-              <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tasks.map((task) => {
-              const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-              const openDetail = () => router.push(buildRoute(locale, 'tasks.record', { id: task.id }));
-              return (
-                <TableRow
-                  key={task.id}
-                  data-shortcut-row
-                  onClick={openDetail}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && event.target === event.currentTarget) openDetail();
-                  }}
-                  tabIndex={0}
-                  className={cn('border-b border-border hover:bg-muted/50 transition-colors cursor-pointer', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}
-                >
-                  <TableCell className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</TableCell>
-                  <TableCell className="font-medium text-foreground max-w-36">
-                    <div className="flex items-center gap-2">
-                      {task.diagnostics.length > 0 && (
-                        <div className="group relative">
-                          <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
-                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
-                            <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
-                            {task.diagnostics.map((d, i) => (
-                              <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
-                                <span>•</span>
-                                <span>{d.message}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <button onClick={(event) => { event.stopPropagation(); router.push(buildRoute(locale, 'tasks.record', { id: task.id })); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
-                        {task.name}
-                        <ExternalLink className="w-3 h-3 opacity-50" />
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
-                    {task.title}
-                  </TableCell>
-                  <TableCell>
-                    {task.contests ? (
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{task.contests.name}</span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs italic">Unassigned</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1" title="Statements">
-                        <FileText className="w-3 h-3" />
-                        <span>{task.statements.length}</span>
-                      </div>
-                      <div className="flex items-center gap-1" title="Datasets">
-                        <Database className="w-3 h-3" />
-                        <span>{task.datasets_datasets_task_idTotasks.length}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{task._count?.submissions ?? 0}</TableCell>
-                  <TableCell className="text-right">
-                    <RowActions
-                      ariaLabel={rowActionGroupLabel(dict, 'tasks')}
-                      className="justify-end gap-2"
-                      permissionKeys={permissionKeys}
-                      actions={buildTaskRowActions(task, handleEdit, handleDelete)}
-                    />
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {tasks.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12">
-                  <EmptyState icon={FileText} title="No tasks found" description="Create your first task to get started." />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <ResponsiveTable
+        columns={columns}
+        rows={tasks}
+        getRowKey={(task) => task.id}
+        getRowClassName={(task) => cn(
+          'border-b border-border hover:bg-muted/50 transition-colors cursor-pointer',
+          task.diagnostics.some((d) => d.type === 'error') && 'opacity-60',
+          ROW_SELECTED_CLASSES,
+        )}
+        getRowProps={(task) => ({
+          'data-shortcut-row': task.id,
+          tabIndex: 0,
+          onClick: () => router.push(buildRoute(locale, 'tasks.record', { id: task.id })),
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' && event.target === event.currentTarget) {
+              router.push(buildRoute(locale, 'tasks.record', { id: task.id }));
+            }
+          },
+        })}
+        renderRowActions={(task) => (
+          <RowActions
+            ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+            permissionKeys={permissionKeys}
+            actions={buildTaskRowActions(task, handleEdit, handleDelete)}
+          />
+        )}
+        sort={initialSort}
+        onSortChange={applySort}
+        emptyState={<EmptyState icon={FileText} title="No tasks found" />}
+      />
 
-      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
+      <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} />
     </div>
   );
 }

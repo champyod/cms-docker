@@ -120,7 +120,7 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalUsers}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalUsers}</Text>
               <Text variant="h1">{stats.usersCount}</Text>
             </Stack>
             <div className="p-2 bg-primary/10 rounded-lg text-primary">
@@ -139,7 +139,7 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalContests}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalContests}</Text>
               <Text variant="h1">{stats.contestsCount}</Text>
             </Stack>
             <div className="p-2 bg-warning/10 rounded-lg text-warning">
@@ -158,16 +158,16 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalSubmissions}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalSubmissions}</Text>
               <Text variant="h1">{stats.submissionsCount}</Text>
             </Stack>
             <div className="p-2 bg-info/10 rounded-lg text-info">
               <FileCode className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-neutral-400">
+          <Stack direction="row" align="center" gap={2} className="z-10 text-muted-foreground">
             <Clock className="w-4 h-4" />
-            <Text variant="small" color="text-neutral-400">{stats.pendingSubmissions} Pending</Text>
+            <Text variant="small" color="text-muted-foreground">{stats.pendingSubmissions} Pending</Text>
           </Stack>
         </Card>
 

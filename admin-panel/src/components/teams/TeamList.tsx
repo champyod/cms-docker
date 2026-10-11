@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useSyncedState } from '@/hooks/useSyncedState';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
@@ -17,7 +18,7 @@ function recordHref(locale: string, team: TeamSummary): string {
   return buildRoute(locale, 'people.team-record', { id: team.id });
 }
 
-export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsLinkLabel }: TeamListProps): React.JSX.Element {
+export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsLinkLabel, initialSort }: TeamListProps): React.JSX.Element {
   const [teams] = useSyncedState(initialTeams);
   const dialogs = useTeamDialogs();
   const pathname = usePathname();
@@ -27,6 +28,19 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsL
   const removeTeam = useTeamDelete(capabilities.canDelete, () => router.refresh());
   const startEdit = (team: TeamSummary): void => {
     if (capabilities.canManage) dialogs.openEdit(team);
+  };
+
+  const applySort = (next: ListSortInput): void => {
+    const params = new URLSearchParams(window.location.search);
+    if (next !== null && next !== undefined) {
+      params.set('sort', next.key);
+      params.set('dir', next.direction);
+    } else {
+      params.delete('sort');
+      params.delete('dir');
+    }
+    const query = params.toString();
+    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
   };
 
   return (
@@ -41,6 +55,8 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsL
         onDelete={(teamId) => { void removeTeam(teamId); }}
         onCreate={dialogs.openCreate}
         copy={copy}
+        sort={initialSort}
+        onSortChange={applySort}
       />
       <TeamModal
         isOpen={dialogs.isOpen}

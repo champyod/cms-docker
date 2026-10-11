@@ -11,6 +11,8 @@ import {
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { adminSortOrderBy } from '@/lib/admin-sorting';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
@@ -73,11 +75,11 @@ async function guardAdminMutation(
 }
 
 
-export async function getAdmins(): Promise<AdminWithLogin[]> {
+export async function getAdmins(sort?: ListSortInput): Promise<AdminWithLogin[]> {
   await ensurePermission('admin:read');
   return prisma.admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
-    orderBy: { username: 'asc' }
+    orderBy: adminSortOrderBy(sort ?? null)
   });
 }
 

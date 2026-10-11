@@ -3,6 +3,8 @@
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
+import { readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { userSortOrderBy } from '@/lib/user-sorting';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import * as peopleReadModels from '@/lib/people-read-models';
 import { parseStoredPassword } from '@/lib/password-format';
@@ -23,10 +25,11 @@ interface UsersPageResult {
   currentPage: number;
   perPage: number;
   total: number;
+  sort?: ListSortInput;
   effectivePermissions: ReadonlySet<string>;
 }
 
-export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE }: { page?: number; search?: string; perPage?: number }): Promise<UsersPageResult> {
+export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE, sort = null }: { page?: number; search?: string; perPage?: number; sort?: ListSortInput }): Promise<UsersPageResult> {
   await ensurePermission('user:list');
 
   const safePerPage = Math.min(Math.max(Number(perPage) || USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
@@ -40,7 +43,7 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
       where,
       skip,
       take: safePerPage,
-      orderBy: { id: 'asc' },
+      orderBy: userSortOrderBy(sort),
       select: usersPageSelect,
     }),
     prisma.users.count({ where }),
@@ -60,6 +63,7 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
     currentPage: safePage,
     perPage: safePerPage,
     total,
+    sort,
     effectivePermissions: perms,
   };
 }

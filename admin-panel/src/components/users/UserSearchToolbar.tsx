@@ -17,7 +17,7 @@ export function UserSearchToolbar({ rows, canManage, selectedCount, onBulkEdit }
     <TableToolbar
       searchText={rows.searchDraft}
       onSearchTextChange={rows.setSearchDraft}
-      onSearchSubmit={() => { void rows.fetchUsers({ page: 1, search: rows.searchDraft }); }}
+      onSearchSubmit={() => { rows.searchUsers(rows.searchDraft); }}
       searchPlaceholder="Search users..."
       rightContent={
         canManage ? (

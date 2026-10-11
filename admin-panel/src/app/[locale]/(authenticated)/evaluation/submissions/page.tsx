@@ -8,6 +8,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { getSubmissions } from '@/lib/people-read-models';
 import type { SubmissionsPageResult } from '@/lib/people-read-model-types';
+import { readListSort, type ListSortInput } from '@/lib/list-sorting';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
 function labelForDescriptor(dictionary: Dictionary, descriptor: RouteDescriptor): string {
@@ -31,10 +32,10 @@ function evaluationRouteDescriptor(routeId: RouteId): RouteDescriptor {
 
 // Why: a caller without submission:list sees the concealed 404 surface, while a
 // 401 or an unexpected failure keeps propagating to the session and error paths.
-async function loadSubmissionsListPage(page: number): Promise<SubmissionsPageResult> {
+async function loadSubmissionsListPage(page: number, sort: ListSortInput): Promise<SubmissionsPageResult> {
   try {
     await requirePermission('submission:list');
-    return await getSubmissions({ page });
+    return await getSubmissions({ page, sort });
   } catch (error: unknown) {
     if (error instanceof AuthorizationError && error.status === 403) notFound();
     throw error;
@@ -46,14 +47,15 @@ export default async function EvaluationSubmissionsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string }>;
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const submissionsLabel = labelForDescriptor(dict, evaluationRouteDescriptor('evaluation.submissions'));
-  const { page } = await searchParams;
+  const { page, sort: sortParam, dir } = await searchParams;
   const currentPage = Number(page) || 1;
-  const result = await loadSubmissionsListPage(currentPage);
+  const sort = readListSort({ sort: sortParam, dir });
+  const result = await loadSubmissionsListPage(currentPage, sort);
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
@@ -65,6 +67,7 @@ export default async function EvaluationSubmissionsPage({
         totalPages={result.totalPages}
         currentPage={currentPage}
         navigation={dict.navigation}
+        initialSort={sort}
       />
     </PageSurface>
   );

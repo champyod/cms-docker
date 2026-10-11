@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
+import { contestSortOrderBy } from '@/lib/contest-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export interface ContestData {
   name: string;
@@ -40,7 +42,7 @@ export interface ContestData {
 
 const CONTESTS_PER_PAGE = 20;
 
-export async function fetchContestsPage({ page = 1, search = '' }: { page?: number; search?: string }) {
+export async function fetchContestsPage({ page = 1, search = '', sort = null }: { page?: number; search?: string; sort?: ListSortInput }) {
   const skip = (page - 1) * CONTESTS_PER_PAGE;
 
   const where = search ? {
@@ -55,7 +57,7 @@ export async function fetchContestsPage({ page = 1, search = '' }: { page?: numb
       where,
       skip,
       take: CONTESTS_PER_PAGE,
-      orderBy: { id: 'desc' },
+      orderBy: contestSortOrderBy(sort),
       include: {
         _count: { select: { participations: true, tasks: true } },
       },

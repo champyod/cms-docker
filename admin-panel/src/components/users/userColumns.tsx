@@ -52,6 +52,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'name',
       header: 'Name',
+      sortKey: 'name',
       render: ({ user }) => (
         <span className="font-medium">{user.first_name} {user.last_name}</span>
       ),
@@ -59,6 +60,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'username',
       header: 'Username',
+      sortKey: 'username',
       render: ({ user }) => <span>{user.username}</span>,
     },
     {
@@ -69,6 +71,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'email',
       header: 'Email',
+      sortKey: 'email',
       render: ({ user }) => (
         <span className="text-muted-foreground">{user.email || '-'}</span>
       ),
@@ -77,6 +80,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'id',
       header: 'ID',
+      sortKey: 'id',
       render: ({ user }) => (
         <span className="font-mono text-muted-foreground text-xs">#{user.id}</span>
       ),
@@ -85,6 +89,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'status',
       header: 'Status',
+      sortKey: 'status',
       render: ({ user }) =>
         user.status ? (
           <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
@@ -95,18 +100,21 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'organization',
       header: 'Organization',
+      sortKey: 'organization',
       render: ({ user }) => <span>{user.organization ?? '—'}</span>,
       hideOnMobile: true,
     },
     {
       key: 'country',
       header: 'Country',
+      sortKey: 'country',
       render: ({ user }) => <span>{user.country ?? '—'}</span>,
       hideOnMobile: true,
     },
     {
       key: 'contests',
       header: 'Contests',
+      sortKey: 'contests',
       render: ({ user }) => <span>{user._count?.participations ?? 0}</span>,
     },
   ];

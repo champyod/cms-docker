@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { extractLocale } from '@/hooks/useShortcuts';
-import { Command, CommandInput, CommandList } from '@/components/core/Command';
+import { Command, CommandEmpty, CommandInput, CommandList } from '@/components/core/Command';
 import {
   DialogContent,
   DialogDescription,
@@ -18,7 +18,9 @@ import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
 import { buildNavVisibility } from './palette-data';
+import { filterPaletteRows, normalizeQuery } from './palette-filter';
 import { useDictionary } from '@/hooks/useDictionary';
+import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import { buildShellItems } from '@/components/navigation/shell-nav';
 import { buildRoute } from '@/lib/navigation/routes';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
@@ -45,6 +47,11 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const searchers = useMemo(() => buildEntitySearchers(visibility, locale), [visibility, locale]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
+  const needle = normalizeQuery(query);
+  const visibleNavItems = useMemo(
+    () => filterPaletteRows<ShellNavItem>(navItems, needle, (item) => item.label),
+    [navItems, needle],
+  );
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) setQuery('');
@@ -110,9 +117,12 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
         <Command shouldFilter={false} className={COMMAND_STYLING}>
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search navigation, entities, actions..." />
           <CommandList>
-            <NavigationItems items={navItems} onSelect={(item) => navigateTo(item.href)} />
+            {visibleNavItems.length > 0 && (
+              <NavigationItems items={visibleNavItems} onSelect={(item) => navigateTo(item.href)} />
+            )}
             <EntityItems loading={loading} hasQuery={hasQuery} hits={hits} onSelect={(hit) => navigateTo(hit.path)} />
-            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} needle={needle} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <CommandEmpty>No matching commands.</CommandEmpty>
           </CommandList>
         </Command>
       </DialogContent>

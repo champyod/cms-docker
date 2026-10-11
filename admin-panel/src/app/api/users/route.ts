@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { getPermissions } from '@/lib/permissions';
+import { readListSort } from '@/lib/list-sorting';
+import { userSortOrderBy } from '@/lib/user-sorting';
 import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
 import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
@@ -21,6 +23,10 @@ export async function GET(req: NextRequest) {
     const page = Math.max(Number(searchParams.get('page')) || 1, 1);
     const perPage = Math.min(Math.max(Number(searchParams.get('perPage')) || DEFAULT_USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
     const search = (searchParams.get('search') || '').trim();
+    const sort = readListSort({
+      sort: searchParams.get('sort') || undefined,
+      dir: searchParams.get('dir') || undefined,
+    });
     const skip = (page - 1) * perPage;
 
     const where = buildUserSearchWhere(search);
@@ -30,7 +36,7 @@ export async function GET(req: NextRequest) {
         where,
         skip,
         take: perPage,
-        orderBy: { id: 'asc' },
+        orderBy: userSortOrderBy(sort),
         select: usersPageSelect,
       }),
       prisma.users.count({ where }),
@@ -49,6 +55,7 @@ export async function GET(req: NextRequest) {
       currentPage: page,
       perPage,
       search,
+      sort,
     });
   } catch (error) {
     return apiError(error);
