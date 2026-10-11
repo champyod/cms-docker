@@ -147,7 +147,7 @@ events_follow_a_write() {
 # The console authenticates a panel admin holding ranking:read, seeded as plaintext
 # instead of a hash so the rehearsal needs no hashing tool. A second admin carries the
 # same password but no group, so the permission gate is exercised without confirming it.
-seed_console_admin() {
+prepare_console_schema() {
     # The console reads the panel's own tables, which the CMS base schema creates and the
     # ranking migrations do not. This rehearsal never runs cms-init, so it carries the five
     # it needs, declared to match the Prisma models it authenticates through.
@@ -173,6 +173,9 @@ CREATE TABLE IF NOT EXISTS admin_groups (
     group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     UNIQUE (admin_id, group_id));
 SQL
+}
+
+seed_console_admin() {
     psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
 DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm');
 INSERT INTO admins (name, username, authentication, enabled) VALUES
@@ -238,6 +241,7 @@ protected_mode_redirects() {
 
 main() {
     require_tools
+    prepare_console_schema
     apply_migrations
     seed_rows
     start_service
