@@ -1,0 +1,8 @@
+# Every db_* integration test runs against the one Postgres in
+# RANKING_TEST_DATABASE_URL: each does clear() and then a plain INSERT, so two
+# threads in the same binary race — one clear() wipes the other's fixture, and
+# both seed 'c0' into ranking_contests (duplicate key on ranking_contests_pkey).
+# Serialising the harness is the fix: these tests share a database, not just a
+# port. Test binaries already run one after another, so this covers the rest.
+[env]
+RUST_TEST_THREADS = "1"
