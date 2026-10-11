@@ -1,17 +1,20 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* The panic at the threshold is animate.css's own shakeX, driven through the
-   library's animated/infinite classes. Its _base.css also carries the
-   reduced-motion handling the shake needs, so a reader who asked for stillness
-   gets a still timer. */
+/* The panic at the threshold is animate.css's own keyframes, driven through the library's
+   animated/infinite classes. Its _base.css also carries the reduced-motion handling a
+   self-starting animation needs, so a reader who asked for stillness gets a still timer.
+   The cast spans translation, rotation, skew and scale, so the panic is a sequence rather
+   than a single-axis wobble. */
 @import "animate.css/source/_vars.css";
 @import "animate.css/source/_base.css";
-/* All three shakes are imported, not just shakeX: shakeY is what moves the timer on the
-   other axis and headShake what turns it, so the panic is not a single-axis metronome. */
 @import "animate.css/source/attention_seekers/shakeX.css";
 @import "animate.css/source/attention_seekers/shakeY.css";
 @import "animate.css/source/attention_seekers/headShake.css";
+@import "animate.css/source/attention_seekers/wobble.css";
+@import "animate.css/source/attention_seekers/jello.css";
+@import "animate.css/source/attention_seekers/tada.css";
+@import "animate.css/source/attention_seekers/swing.css";
 
 @custom-variant dark (&:is(.dark *));
 @custom-variant density (&:where(.density-compact, .density-compact *));
@@ -216,10 +219,26 @@
   margin-inline: 0.02em;
 }
 
+/* The panic, one digit at a time. Each digit names its own motion plus its own delay and
+   duration, so the block never beats as one unit. animation-name is read from a custom
+   property, which is what lets seven different library keyframe sets share one class. */
+.countdown-digit.is-panicking {
+  animation-name: var(--countdown-panic-name);
+  animation-duration: var(--animate-duration, 0.62s);
+  animation-delay: var(--countdown-panic-delay, 0s);
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-fill-mode: both;
+  /* Held still so each layer is cached: several digits animating at once would otherwise
+     repaint the row continuously. */
+  will-change: transform;
+}
+
 /* The point of the tick: the digit is legible from the first frame, so the number never
    blinks out while it is being read. */
 @media (prefers-reduced-motion: reduce) {
-  .countdown-digit {
+  .countdown-digit,
+  .countdown-digit.is-panicking {
     animation: none;
   }
 }
@@ -377,17 +396,14 @@
   text-transform: uppercase;
 }
 
-/* The panic target. animate.css's shake owns the transform in its keyframes, so nothing
-   else may animate this element's transform while it runs. */
+/* Part of the sizing chain only: as a plain block this capped the clock at the box's
+   minimum height, which is what left the digits at a third of the width they could take.
+   The panic itself is per digit below, not on this wrapper. */
 .countdown-clock-panic {
-  animation-duration: var(--animate-duration);
-  /* Also part of the sizing chain: as a plain block this capped the clock at the box's
-     minimum height, which is what left the digits at a third of the width they could take. */
   display: flex;
   flex: 1 1 auto;
   min-height: 0;
   flex-direction: column;
-  transform-origin: 50% 50%;
 }
 
 /* The plate the panic moves: it holds still, and its own contrast is what keeps the

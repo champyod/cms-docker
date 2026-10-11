@@ -3,13 +3,17 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTEST_PANIC_ANIMATION_NAMES,
   DEFAULT_CONTEST_PANIC_CONFIG,
-  panicAnimationName,
-  panicClassNames,
+  panicAnimationFor,
+  panicDigitClassNames,
+  panicDigitStyle,
+  panicDurationFor,
+  panicStaggerFor,
   shouldPanic,
 } from '@/lib/contest-panic';
 import type { CountdownStage } from '@/lib/contest-countdown';
 
 const ALL_STAGES: readonly CountdownStage[] = ['waiting', 'running', 'analysis', 'hurry', 'ended'];
+const DIGITS = [0, 1, 2, 3, 4];
 
 describe('shouldPanic', () => {
   it('panics only at the threshold stage', () => {
@@ -30,67 +34,120 @@ describe('shouldPanic', () => {
 });
 
 describe('the panic cast', () => {
-  it('covers more than one axis, so the timer does not merely thud sideways', () => {
+  it('spans translation, rotation, skew and scale, not translation alone', () => {
     expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('shakeX');
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('shakeY');
-    expect(CONTEST_PANIC_ANIMATION_NAMES.length).toBeGreaterThan(1);
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('headShake');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('wobble');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('jello');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('tada');
   });
 
-  it('turns the timer as well, which no single shake variant does on its own', () => {
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain('headShake');
+  it('carries enough motions that neighbouring digits rarely coincide', () => {
+    expect(CONTEST_PANIC_ANIMATION_NAMES.length).toBeGreaterThanOrEqual(5);
   });
 });
 
-describe('panicAnimationName', () => {
-  it('cycles through every shake as the turn advances', () => {
-    const seen = new Set(
-      Array.from({ length: CONTEST_PANIC_ANIMATION_NAMES.length }, (_unused, turn) => panicAnimationName(turn)),
-    );
+describe('panicAnimationFor', () => {
+  it('is stable for a digit on a turn, so a render is reproducible', () => {
+    expect(panicAnimationFor(2, 3)).toBe(panicAnimationFor(2, 3));
+  });
+
+  it('never names a motion outside its cast', () => {
+    for (let turn = 0; turn < 40; turn += 1) {
+      for (const digit of DIGITS) {
+        expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(panicAnimationFor(digit, turn));
+      }
+    }
+  });
+
+  it('gives the digits of one row different motions rather than one shared motion', () => {
+    const row = DIGITS.map((digit) => panicAnimationFor(digit, 0));
+    expect(new Set(row).size).toBeGreaterThan(1);
+  });
+
+  it('reaches every motion in the cast over a run of turns', () => {
+    const seen = new Set<string>();
+    for (let turn = 0; turn < 400; turn += 1) seen.add(panicAnimationFor(turn % 8, turn));
     expect(seen.size).toBe(CONTEST_PANIC_ANIMATION_NAMES.length);
   });
 
-  it('is stable for a given turn, so a render is reproducible', () => {
-    expect(panicAnimationName(2)).toBe(panicAnimationName(2));
+  it('hands a digit a new motion as the turn advances', () => {
+    const sequence = Array.from({ length: 6 }, (_unused, turn) => panicAnimationFor(0, turn));
+    expect(new Set(sequence).size).toBeGreaterThan(1);
   });
 
-  it('wraps rather than running out of shakes', () => {
-    expect(panicAnimationName(CONTEST_PANIC_ANIMATION_NAMES.length)).toBe(panicAnimationName(0));
-    expect(panicAnimationName(101)).toBe(panicAnimationName(101 % CONTEST_PANIC_ANIMATION_NAMES.length));
-  });
-
-  it('survives a negative or non-finite turn', () => {
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(panicAnimationName(-3));
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(panicAnimationName(Number.NaN));
-  });
-
-  it('takes its cast from config, so a swap needs no code change', () => {
-    const single = { durationSeconds: 1, animationNames: ['shakeY'] as const };
-    expect(panicAnimationName(0, single)).toBe('shakeY');
-    expect(panicAnimationName(9, single)).toBe('shakeY');
-  });
-
-  it('falls back to the default cast rather than throwing on an empty one', () => {
-    const empty = { durationSeconds: 1, animationNames: [] as const };
-    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(panicAnimationName(0, empty));
+  it('takes its cast from config, and falls back rather than throwing on an empty one', () => {
+    expect(panicAnimationFor(0, 0, { durationSeconds: 1, staggerSeconds: 0, animationNames: ['jello'] })).toBe('jello');
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(
+      panicAnimationFor(0, 0, { durationSeconds: 1, staggerSeconds: 0, animationNames: [] }),
+    );
   });
 });
 
-describe('panicClassNames', () => {
-  it('drives the shake through the library classes rather than a hand-rolled animation', () => {
-    expect(panicClassNames(true, 0)).toStrictEqual(['animated', 'infinite', 'shakeX']);
+describe('the per-digit stagger', () => {
+  it('does not start every digit at the same instant', () => {
+    const offsets = DIGITS.map((digit) => panicStaggerFor(digit, 0));
+    expect(new Set(offsets.map((value) => value.toFixed(3))).size).toBeGreaterThan(1);
   });
 
-  it('leads with the shake the brief names', () => {
-    expect(panicClassNames(true, 0)).toContain('shakeX');
-    expect(DEFAULT_CONTEST_PANIC_CONFIG.animationNames[0]).toBe('shakeX');
+  it('keeps every offset inside the configured spread', () => {
+    for (let turn = 0; turn < 50; turn += 1) {
+      for (const digit of DIGITS) {
+        const offset = panicStaggerFor(digit, turn);
+        expect(offset).toBeGreaterThanOrEqual(0);
+        expect(offset).toBeLessThanOrEqual(DEFAULT_CONTEST_PANIC_CONFIG.staggerSeconds);
+      }
+    }
   });
 
-  it('applies no classes at all when the timer is at rest', () => {
-    expect(panicClassNames(false, 0)).toStrictEqual([]);
-    expect(panicClassNames(false, 7)).toStrictEqual([]);
+  it('starts at once when the spread is zero', () => {
+    const config = { durationSeconds: 0.6, staggerSeconds: 0, animationNames: CONTEST_PANIC_ANIMATION_NAMES };
+    for (const digit of DIGITS) expect(panicStaggerFor(digit, 0, config)).toBe(0);
+  });
+});
+
+describe('the per-digit duration', () => {
+  it('varies around the base, so the row does not beat in unison', () => {
+    const durations = DIGITS.map((digit) => panicDurationFor(digit, 0));
+    expect(new Set(durations.map((value) => value.toFixed(3))).size).toBeGreaterThan(1);
   });
 
-  it('changes which shake is applied as the turn advances', () => {
-    expect(panicClassNames(true, 0)).not.toStrictEqual(panicClassNames(true, 1));
+  it('stays near the base rather than running away from it', () => {
+    for (let turn = 0; turn < 50; turn += 1) {
+      for (const digit of DIGITS) {
+        const duration = panicDurationFor(digit, turn);
+        expect(duration).toBeGreaterThan(DEFAULT_CONTEST_PANIC_CONFIG.durationSeconds * 0.8);
+        expect(duration).toBeLessThan(DEFAULT_CONTEST_PANIC_CONFIG.durationSeconds * 1.2);
+      }
+    }
+  });
+});
+
+describe('panicDigitStyle', () => {
+  it('carries the motion, its delay and its duration for one digit', () => {
+    const style = panicDigitStyle(true, 1, 2);
+    expect(style).toBeDefined();
+    expect(CONTEST_PANIC_ANIMATION_NAMES).toContain(style?.['--countdown-panic-name']);
+    expect(style?.['--countdown-panic-delay']).toMatch(/s$/);
+    expect(style?.['--animate-duration']).toMatch(/s$/);
+  });
+
+  it('names a different motion per digit, which is what makes it per letter', () => {
+    const names = DIGITS.map((digit) => panicDigitStyle(true, digit, 0)?.['--countdown-panic-name']);
+    expect(new Set(names).size).toBeGreaterThan(1);
+  });
+
+  it('gives no style at all when the timer is at rest', () => {
+    expect(panicDigitStyle(false, 0, 0)).toBeUndefined();
+  });
+});
+
+describe('panicDigitClassNames', () => {
+  it('drives the motion through the library classes rather than a hand-rolled animation', () => {
+    expect(panicDigitClassNames(true)).toStrictEqual(['animated', 'infinite', 'is-panicking']);
+  });
+
+  it('applies nothing when the timer is at rest', () => {
+    expect(panicDigitClassNames(false)).toStrictEqual([]);
   });
 });

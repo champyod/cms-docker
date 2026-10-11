@@ -8,9 +8,18 @@ import {
   toCountdownSegments,
   type CountdownSegment,
 } from '@/lib/contest-countdown';
+import { panicDigitClassNames, panicDigitStyle } from '@/lib/contest-panic';
 
 // A server render has no layout to measure, so the fit degrades to useEffect there.
 const useBrowserLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect;
+
+/** Numerals take a fixed slot so the row cannot resize as the seconds change. */
+function digitClassName(char: string, isPanicking: boolean): string {
+  const names = ['countdown-digit'];
+  if (isCountdownDigit(char)) names.push('is-slot');
+  if (isPanicking) names.push(...panicDigitClassNames(true));
+  return names.join(' ');
+}
 
 const EMPTY_SEGMENTS: readonly CountdownSegment[] = [{ glyphs: [{ char: '—', index: 0 }] }];
 
@@ -35,11 +44,19 @@ function measureNatural(line: HTMLDivElement, layoutKey: string): FitMetrics {
 }
 
 interface Props {
-  remainingMs: number | null;
+  readonly remainingMs: number | null;
+  /** True at the threshold: every digit panics, each with its own motion. */
+  readonly isPanicking?: boolean;
+  /** Advances on a timer, so each digit is handed a new motion rather than settling. */
+  readonly panicTurn?: number;
 }
 
 /** Digits scaled to fill the box; only the digit that changed re-mounts and animates. */
-export function ContestCountdownClock({ remainingMs }: Props): React.JSX.Element {
+export function ContestCountdownClock({
+  remainingMs,
+  isPanicking = false,
+  panicTurn = 0,
+}: Props): React.JSX.Element {
   const boxRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
   const metricsRef = useRef<FitMetrics | null>(null);
@@ -87,7 +104,8 @@ export function ContestCountdownClock({ remainingMs }: Props): React.JSX.Element
               {segment.glyphs.map((glyph) => (
                 <span
                   key={`${glyph.index}:${glyph.char}`}
-                  className={isCountdownDigit(glyph.char) ? 'countdown-digit is-slot' : 'countdown-digit'}
+                  className={digitClassName(glyph.char, isPanicking)}
+                  style={panicDigitStyle(isPanicking, glyph.index, panicTurn) as React.CSSProperties | undefined}
                 >
                   {glyph.char}
                 </span>

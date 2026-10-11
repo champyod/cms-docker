@@ -29,16 +29,7 @@ import {
   usePhaseNotifications,
 } from './useContestCountdown';
 import { useElementFullscreen } from './useElementFullscreen';
-import {
-  DEFAULT_CONTEST_PANIC_CONFIG,
-  panicClassNames,
-  shouldPanic,
-} from '@/lib/contest-panic';
-
-/** The panic pace as a custom property, so animate.css's own base rule reads it. */
-function panicStyle(): React.CSSProperties & Record<'--animate-duration', string> {
-  return { '--animate-duration': `${DEFAULT_CONTEST_PANIC_CONFIG.durationSeconds}s` };
-}
+import { shouldPanic } from '@/lib/contest-panic';
 
 const DEFAULT_HURRY_MS = resolveHurryThresholdMs(DEFAULT_COUNTDOWN_THRESHOLD, 0);
 
@@ -121,11 +112,12 @@ export function ContestCountdownTab({
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">
         <div className={isPanicking ? 'countdown-clock-plate is-panicking' : 'countdown-clock-plate'}>
-          <div
-            className={cn('countdown-clock-panic', ...panicClassNames(isPanicking, panicTurn))}
-            style={panicStyle()}
-          >
-            <ContestCountdownClock remainingMs={remainingMs} />
+          <div className="countdown-clock-panic">
+            <ContestCountdownClock
+              remainingMs={remainingMs}
+              isPanicking={isPanicking}
+              panicTurn={panicTurn}
+            />
           </div>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
