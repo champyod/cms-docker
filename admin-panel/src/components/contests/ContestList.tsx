@@ -100,7 +100,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
         rows={contests}
         getRowKey={(contest) => contest.id}
         getRowClassName={getContestRowClassName}
-        getRowProps={getContestRowProps}
+        getRowProps={(contest) => getContestRowProps(contest, handleOpenContest)}
         renderRowActions={renderRowActions}
         sort={initialSort}
         onSortChange={applySort}

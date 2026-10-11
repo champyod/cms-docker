@@ -53,7 +53,7 @@ function renderIdCell(contest: ContestRowData): React.JSX.Element {
 function renderNameCell(contest: ContestRowData, onOpenContest: (id: number) => void): React.JSX.Element {
   return (
     <button
-      onClick={() => onOpenContest(contest.id)}
+      onClick={(event) => { event.stopPropagation(); onOpenContest(contest.id); }}
       className="flex max-w-48 items-center gap-2 truncate font-medium text-foreground transition-colors hover:text-primary"
       title={contest.name}
     >
@@ -101,9 +101,18 @@ export function getContestRowClassName(contest: ContestRowData): string | undefi
 }
 
 // Why: j/k navigation queries [data-shortcut-row]; without this prop
-// the migrated contest list is invisible to the shortcut handler.
-export function getContestRowProps(contest: ContestRowData): ResponsiveRowProps {
-  return { 'data-shortcut-row': contest.id };
+// the migrated contest list is invisible to the shortcut handler. The row
+// itself is an activation target too, matching the other record lists.
+export function getContestRowProps(contest: ContestRowData, onOpenContest: (id: number) => void): ResponsiveRowProps {
+  return {
+    'data-shortcut-row': contest.id,
+    className: 'cursor-pointer',
+    tabIndex: 0,
+    onClick: () => onOpenContest(contest.id),
+    onKeyDown: (event) => {
+      if (event.key === 'Enter' && event.target === event.currentTarget) onOpenContest(contest.id);
+    },
+  };
 }
 
 interface ContestRowActionsProps {

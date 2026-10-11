@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { ContestModalShell } from './contest-modal/ContestModalShell';
 import { useContestForm } from './contest-modal/useContestForm';
@@ -20,6 +20,11 @@ interface ContestModalWithPermsProps extends ContestModalProps {
 
 export function ContestModal(props: ContestModalWithPermsProps) {
   const [activeTab, setActiveTab] = useState<ContestModalTab>('general');
+  // The modal stays mounted across open/close, so without this reset it reopens on the
+  // tab the last edit ended on — a create would start on Analysis Mode, not General.
+  useEffect(() => {
+    if (props.isOpen) setActiveTab('general');
+  }, [props.isOpen]);
   const form = useContestForm(props.isOpen, props.contest);
   const { handleSubmit, loading } = useContestSubmit({
     contest: props.contest,

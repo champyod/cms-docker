@@ -41,9 +41,14 @@ interface UserRowProps {
 
 function UserRow({ locale, entry, copy }: UserRowProps): React.JSX.Element {
   return (
-    <TableRow>
+    <TableRow className="relative">
       <TableCell>
-        <a href={userHref(locale, entry.username)} className={ROW_LINK}>
+        {/* Stretched link: the hint invites a row click, and a server row cannot take
+            onClick, so the name link's overlay makes the whole row the target. */}
+        <a
+          href={userHref(locale, entry.username)}
+          className={`${ROW_LINK} after:absolute after:inset-0 after:content-['']`}
+        >
           {entry.displayName}
         </a>
         <span className={`ml-2 text-xs ${MUTED}`}>{entry.username}</span>
