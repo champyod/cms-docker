@@ -10,6 +10,13 @@
     <h1>{% trans status_code=status_code %}Error {{ status_code }}{% endtrans %}</h1>
 </div>
 
+{% if lockout_retry_after %}
+<div class="alert alert-block alert-error">
+    <p>{% trans %}Too many failed login attempts. This account or address is temporarily locked out.{% endtrans %}</p>
+    <p>{% trans minutes=(lockout_retry_after // 60) %}Try again in about {{ minutes }} minutes.{% endtrans %}</p>
+</div>
+{% endif %}
+
 <p>
 {% trans %}An error occured while the server was handling your request.{% endtrans %}
 </p>

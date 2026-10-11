@@ -167,7 +167,13 @@ class BaseHandler(CommonRequestHandler):
         # information. If r_params is not defined (i.e. something went
         # *really* bad) we simply return a basic textual error notice.
         if self.r_params is not None:
-            self.render("error.html", status_code=status_code, **self.r_params)
+            params = dict(self.r_params)
+            # WHY the lockout carries its own message: the status page is where a
+            # refused user lands, and the generic text does not say the account is
+            # temporarily refused or for how long. None for every other status.
+            params["lockout_retry_after"] = getattr(
+                self, "lockout_retry_after", None)
+            self.render("error.html", status_code=status_code, **params)
         else:
             self.write("A critical error has occurred :-(")
             self.finish()

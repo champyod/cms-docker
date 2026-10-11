@@ -768,6 +768,31 @@ class AdminFormWidgetTest(unittest.TestCase):
         self.assertNotIn("captchaToken", page)
 
 
+class LockoutMessageTest(unittest.TestCase):
+    """The 429 page has to explain a lockout, not just print the status."""
+
+    def test_the_lockout_page_names_the_window(self):
+        # WHY: a locked-out user lands on the status page, so it is the one place
+        # the refusal and its window can be explained.
+        page = _render("error.html", {
+            **_login_page_facts({}),
+            "status_code": 429,
+            "lockout_retry_after": 15 * 60,
+        })
+
+        self.assertIn("locked out", page)
+        self.assertIn("15 minutes", page)
+
+    def test_an_ordinary_error_carries_no_lockout_text(self):
+        page = _render("error.html", {
+            **_login_page_facts({}),
+            "status_code": 500,
+            "lockout_retry_after": None,
+        })
+
+        self.assertNotIn("locked out", page)
+
+
 class ApiLoginHandler:
     """A contest API login handler with only what its login path touches.
 

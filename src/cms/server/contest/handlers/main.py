@@ -363,6 +363,10 @@ class LoginHandler(ContestHandler):
 
         """
         self.set_header("Retry-After", str(LOGIN_LOCKED_RETRY_AFTER))
+        # WHY carried on the handler too: write_error renders the status page,
+        # and it is the only place a locked-out user is told why and for how
+        # long, so the window has to reach the template.
+        self.lockout_retry_after = LOGIN_LOCKED_RETRY_AFTER
         raise tornado.web.HTTPError(LOGIN_LOCKED_STATUS)
 
 
