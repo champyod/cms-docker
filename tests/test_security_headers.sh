@@ -28,7 +28,7 @@ OUT="$(render)"
 has "server_tokens is off" "server_tokens off;"
 has "OCSP stapling is on" "ssl_stapling on;"
 has "OCSP verification is on" "ssl_stapling_verify on;"
-has "the trusted chain is the rendered lineage" "ssl_trusted_certificate /etc/letsencrypt/live/grader.example.org/chain.pem;"
+has "the stapling trust anchor is the issued bundle" "ssl_trusted_certificate /etc/letsencrypt/live/grader.example.org/fullchain.pem;"
 has "CSP is off by default" "# Content-Security-Policy disabled (CSP_ENABLED=0)"
 if printf '%s' "$OUT" | grep -Fq 'resolver '; then no "OCSP does not add a second resolver"; else ok "OCSP does not add a second resolver"; fi
 

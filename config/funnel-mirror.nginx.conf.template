@@ -27,7 +27,8 @@ upstream funnel_cms_ranking {
 
 # ── Funnel: Contest (port 8443) ──────────────────────────────────
 server {
-    listen ${FUNNEL_CONTEST_LISTEN} ssl http2;
+    listen ${FUNNEL_CONTEST_LISTEN} ssl;
+    http2 on;
     server_name _;
 
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;

@@ -47,6 +47,28 @@ has "the primary location dials the variable" 'proxy_pass http://$cms_primary;'
 has "a sub-path route rewrites its prefix away" 'rewrite ^/admin/(.*)$ /$1 break;'
 has "the admin route dials its own variable" 'proxy_pass http://$cms_admin;'
 
+printf '\n== the front door emits one resolver and a loadable config ==\n'
+# P15: the redis block used to emit a resolver the route table also emits, and the
+# stapling block pointed at a chain.pem issuance may not write. Either alone makes
+# nginx reject the file it loads (default.conf in grader-nginx-proxy).
+if grep -qE '^resolver ' "${REPO_ROOT}/scripts/__domain.sh"; then
+  no "the redis block emits no active resolver"
+else
+  ok "the redis block emits no active resolver"
+fi
+resolver_lines="$(printf '%s\n' "$OUT" | grep -c 'resolver 127.0.0.11' || true)"
+if [[ "$resolver_lines" -eq 1 ]]; then ok "the route table emits exactly one resolver"; else no "the route table emits exactly one resolver (found ${resolver_lines})"; fi
+if grep -rqE '(^|[^l])chain\.pem' "${REPO_ROOT}/config/grader.nginx.conf.template" "${REPO_ROOT}/scripts/__security_headers.sh"; then
+  no "nothing points at a chain file issuance may not write"
+else
+  ok "nothing points at a chain file issuance may not write"
+fi
+if grep -qE 'listen .*ssl http2;' "${REPO_ROOT}/config/grader.nginx.conf.template"; then
+  no "the listen line uses the modern http2 form"
+else
+  ok "the listen line uses the modern http2 form"
+fi
+
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$pass" "$fail"
 if [[ "$fail" -ne 0 ]]; then exit 1; fi

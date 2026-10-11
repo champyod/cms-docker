@@ -63,7 +63,7 @@ _security_headers_build() {
   if [[ "${OCSP_STAPLING}" == "1" ]]; then
     OCSP_STAPLING_DIRECTIVES="ssl_stapling on;
 ssl_stapling_verify on;
-ssl_trusted_certificate /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/chain.pem;"
+ssl_trusted_certificate /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;"
   else
     OCSP_STAPLING_DIRECTIVES="# OCSP stapling disabled (OCSP_STAPLING=0)"
   fi

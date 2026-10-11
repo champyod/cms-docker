@@ -64,7 +64,8 @@ server {
 # @block primary
 # ── Server 2: primary (contest + ranking + WS) ─────────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${DOMAIN_NAME};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
@@ -122,7 +123,8 @@ server {
 # @block admin
 # ── Server 3: admin panel (Next.js) + classic admin ───────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${ADMIN_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
@@ -159,7 +161,8 @@ server {
 # @block oj
 # ── Server 4: external OJ backend via host-gateway ────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${OJ_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
@@ -190,7 +193,8 @@ server {
 # @block ranking
 # ── Server 5: ranking (always auth) ────────────────────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${RANKING_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;

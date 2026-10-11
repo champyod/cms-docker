@@ -41,7 +41,7 @@ else
 fi
 
 # The backtick spans must survive as literal text.
-for span in '`access_by_lua*`' '`lua_shared_dict`' '`resolver`' '`limit_req`'; do
+for span in '`access_by_lua*`' '`lua_shared_dict`' '`limit_req`'; do
   if printf '%s' "$out" | grep -qF -- "$span"; then
     ok "literal span kept: ${span}"
   else
