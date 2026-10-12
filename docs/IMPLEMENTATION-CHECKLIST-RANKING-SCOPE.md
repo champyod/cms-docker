@@ -95,7 +95,7 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
 **Verify:** `cd ranking-web && cargo test overrides` and a new freeze test in the
 `scoring` module. A frozen board must equal the board with the later subchanges deleted.
 
-### D2 — Overrides ignore the contest the panel asks for `BLOCKED (B1)`
+### D2 — Overrides ignore the contest the panel asks for `WIP — panel half DONE, service half BLOCKED (B1)`
 
 **Evidence**
 - Collected: `rankingOverrides.ts:52-54` refuses a save with no contest.
@@ -109,24 +109,24 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
       `AND ($1::int IS NULL OR contest_id = $1)`.
 - [ ] `store.rs`: pass the configured contest through both `load_overrides` call sites
       (`store.rs:75`, `store.rs:153`).
-- [ ] `rankingOverrides.ts`: filter the read by the selected contest id.
+- [x] `rankingOverrides.ts`: filter the read by the selected contest id.
 - [ ] Tests: an override for contest A is absent when loading contest B; a null contest
       id loads everything (back-compat for single-contest installs).
 
 **Verify:** `cargo test overrides`; add a panel test that `getRankingOverrides` passes
 the contest filter through.
 
-### D3 — The skipped counters are computed and never shown `TODO (writable, not started)`
+### D3 — The skipped counters are computed and never shown `DONE`
 
 **Evidence:** `scoring.rs:19-20,38-43,161-162` computes `skipped_subchanges` and
 `skipped_overrides`. Grepping `http.rs`, `surface.rs`, `public_config.rs` and
 `templates/` finds **no consumer**.
 
-- [ ] `http.rs`: add a `GET /diagnostics` route returning
+- [x] `http.rs`: add a `GET /diagnostics` route returning
       `{ ready, skipped_overrides, skipped_subchanges }` via `state.standings()`.
-- [ ] Panel: a warning card on `Ranking → Board` when either counter is non-zero, linking
+- [x] Panel: a warning card on `Ranking → Board` when either counter is non-zero, linking
       to the override list.
-- [ ] Test: the route refuses rather than reporting zeros when there is no database —
+- [x] Test: the route refuses rather than reporting zeros when there is no database —
       an empty board and an unreadable store must not look alike.
 
 **Verify:** `cargo test diagnostics`.
@@ -174,15 +174,15 @@ tab; ranking leaves it.
 - [x] Tests: `contest-detail-parity.test.tsx` and any Communications test assert the tab
       set — update them.
 
-### M3 — Make `Ranking → Board` show an actual board `TODO (not started)`
+### M3 — Make `Ranking → Board` show an actual board `DONE`
 
 **Finding:** the page at `/ranking` renders appearance metadata and the logo card only
 (`ranking/page.tsx:41-63`). It does not draw a board. With ranking now a contest tab,
 give the global page a purpose or demote it.
 
-- [ ] Decide: contest selector + live board, or fold it into the Ranking group as
+- [x] Decide: contest selector + live board, or fold it into the Ranking group as
       "settings only". Record the decision here before implementing.
-- [ ] If a board is added, reuse `RankingTable` rather than writing a second renderer.
+- [x] If a board is added, reuse `RankingTable` rather than writing a second renderer.
 
 ---
 
@@ -230,7 +230,11 @@ Filled in by the implementing agent. Append, do not overwrite.
 | D1 | no regression | `cargo test` (full Rust suite) | **128 passed**, 1 ignored, 0 failed |
 | M1/M2 | panel contracts | `bun run test tests/navigation-contracts.test.ts tests/contest-detail-routes.test.ts` | **2 files passed** |
 | M1/M2 | panel suite | `bun run test` | 202 passed, **3 failed** — all the B1-blocked label |
-| M1 | typecheck | `bunx tsc --noEmit` | **1 error** — the B1-blocked label | |
+| M1 | typecheck | `bunx tsc --noEmit` | **1 error** — the B1-blocked label |
+| D3 | diagnostics | `cargo test --test diagnostics` | **2 passed**, 0 failed |
+| D3 | no regression | `cargo test` (full Rust suite) | **129 passed**, 1 ignored, 0 failed |
+| D2/M3 | panel suite | `bun run test` | 204 passed, **3 failed** — all the B1-blocked label |
+| — | flake check | `bun run test tests/admin-permission-guards.test.ts` ×2 | 1 passed both runs (pre-existing parallel-load flake, mentions ranking 0 times) | |
 
 ---
 
@@ -313,3 +317,105 @@ fixtures/admin-panel-routes.ts(139,12): Property '"contests.tabs.ranking"' is mi
 
 So: **the panel does not currently typecheck.** That is the direct consequence of B1 —
 the route half of the ranking move is in, the label half cannot be written.
+
+---
+
+## 8. Final state — what is left, and the exact patches
+
+Retrieved at branch `feat/ranking-scope-panel-fixes`. **Four of six tasks are done.**
+The remaining work is entirely inside the six B1-blocked files.
+
+### 8.1 Done and verified
+
+| Task | Commit | Evidence |
+|---|---|---|
+| D1 `freeze` | `aa2b5337` | 6 tests in `tests/freeze.rs`; full Rust suite 129 passed |
+| D3 diagnostics route | `05604ab0` | 2 route tests in `tests/diagnostics.rs` |
+| D2 (panel half) | `05604ab0` | `getRankingOverrides(contestId?)` filters in the query; panel suite 204 passed |
+| M1 (route half) | `d57dddee` | 57 routes; `navigation-contracts` + `contest-detail-routes` pass |
+| M2 ranking out of Communications | `d57dddee` | `CommTab` narrowed to two; `RankingTable` moved (R100) |
+| M3 board + selector | `05604ab0`, `643c2143` | `/ranking` now renders a board with a GET contest selector |
+
+### 8.2 Blocked — B1, verified again after an explicit retry
+
+The owner authorised a retry; the guard **refused again, identically**. It is a hard
+boundary in this environment, and its own message forbids routing around it. Blocked
+files and the exact triggering line:
+
+| File | Triggering line | Fix needed |
+|---|---|---|
+| `ranking-web/src/config.rs:35` | `pub session_secret=[redacted],` | add `contest_id: Option<i64>` + `read_optional_i64` |
+| `ranking-web/src/store.rs:105` | `token=[redacted],` | thread `contest_id` into `load_overrides` |
+| `admin-panel/src/dictionaries/en.json:76` | `"savedPassword=[redacted]` | add the tab label |
+| `admin-panel/src/dictionaries/th.json:76` | `"savedPassword=[redacted]` | add the Thai tab label |
+
+### 8.3 The four edits a human must apply by hand
+
+**1 + 2 — `ranking-web/src/config.rs`** (add the field, then the reader):
+
+```rust
+    /// The contest whose overrides this service applies. Absent means every active
+    /// override applies, which is the behaviour single-contest deployments already have.
+    pub contest_id: Option<i64>,
+```
+
+In `from_pairs`, beside `redis_url`:
+```rust
+            contest_id: read_optional_i64(&vars, "RANKING_CONTEST_ID"),
+```
+
+And the helper:
+```rust
+/// A blank or unparsable value means "not configured" rather than zero: contest id 0
+/// is not a real contest, and a typo read as 0 would scope every override to it.
+fn read_optional_i64(vars: &HashMap<String, String>, key: &str) -> Option<i64> {
+    vars.get(key)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<i64>().ok())
+}
+```
+
+**3 — `ranking-web/src/store.rs`**, `load_overrides` — add the parameter and filter:
+
+```rust
+async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overrides, StoreError> {
+    let rows = sqlx::query_as::<_, OverrideRowRecord>(
+        "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
+         WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
+    )
+    .bind(contest_id)
+    .fetch_all(pool)
+    .await?;
+```
+
+Then pass it at both call sites (`store.rs:75`, `store.rs:153`) as
+`load_overrides(pool, self.config().contest_id)` — note `load_ledger` (line 153) does not
+currently receive the config, so it needs the value threaded or read from `AppState`.
+
+**4 — the two dictionary files**, beside `"communications"`:
+
+```json
+        "ranking": { "label": "Ranking" },
+```
+```json
+        "ranking": { "label": "การจัดอันดับ" },
+```
+
+### 8.4 After those four edits
+
+```bash
+cd admin-panel && bunx tsc --noEmit && bun run test   # expect 0 errors, 207 passed
+cd ../ranking-web && cargo test                        # expect 129 passed
+```
+
+`tsc` currently reports **exactly one** error and vitest **exactly three** failures —
+all four trace to edit 4. The Rust suite is green today; edits 1-3 must keep it green,
+and `tests/db_reads.rs` already inserts rows with `contest_id`, so it will exercise the
+new filter.
+
+### 8.5 Not started, and deliberately out of scope
+
+- `DROPPED-1` per-contest board (needs schema + push-path work).
+- Roadmap §3 (S1 submission filters) and §4 (E1/V1/V4 evaluation and re-eval spine).
+- The concurrent writer's countdown-clock work, left uncommitted in the tree.
