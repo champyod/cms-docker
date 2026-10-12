@@ -69,10 +69,13 @@ impl StandingsCache {
     }
 }
 
-pub async fn load_standings(pool: &PgPool) -> Result<Standings, StoreError> {
+pub async fn load_standings(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<Standings, StoreError> {
     let users = load_users(pool).await?;
     let team_names = load_team_names(pool).await?;
-    let overrides = load_overrides(pool).await?;
+    let overrides = load_overrides(pool, contest_id).await?;
     let ledger = assemble_ledger(pool, &users, &overrides).await?;
     Ok(Standings {
         ledger,
@@ -148,17 +151,20 @@ impl Appearance {
     }
 }
 
-pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
+pub async fn load_ledger(pool: &PgPool, contest_id: Option<i64>) -> Result<Ledger, StoreError> {
     let users = load_users(pool).await?;
-    let overrides = load_overrides(pool).await?;
+    let overrides = load_overrides(pool, contest_id).await?;
     assemble_ledger(pool, &users, &overrides).await
 }
 
 /// The board the page draws: the ledger's override-shaped rows joined with the names
 /// and team the projection holds, so a reader gets a name already renamed and a rank
 /// already assigned instead of recomputing either.
-pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
-    let standings = load_standings(pool).await?;
+pub async fn load_board(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
+    let standings = load_standings(pool, contest_id).await?;
     Ok(board::board_view(
         standings.ledger.board(),
         &standings.users,
@@ -167,8 +173,11 @@ pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, S
 
 /// The team board: the same rows grouped by team, with a team-level override applied to
 /// the aggregate rather than to each member.
-pub async fn load_team_board(pool: &PgPool) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
-    let standings = load_standings(pool).await?;
+pub async fn load_team_board(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
+    let standings = load_standings(pool, contest_id).await?;
     Ok(board::team_board_view(
         standings.ledger.board(),
         &standings.users,
@@ -283,11 +292,12 @@ struct OverrideRowRecord {
 
 /// The active overrides in one query, folded for the board assembly. Only active rows
 /// apply: an ended override keeps its history in the table but not on the board.
-async fn load_overrides(pool: &PgPool) -> Result<Overrides, StoreError> {
+async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
         "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
-         WHERE active ORDER BY id",
+         WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
     )
+    .bind(contest_id)
     .fetch_all(pool)
     .await?;
     let rows: Vec<OverrideRow> = rows

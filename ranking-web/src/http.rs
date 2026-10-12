@@ -75,7 +75,8 @@ pub fn router(state: AppState) -> Router {
     }
 }
 
-async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {    if state.is_ready().await {
+async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
+    if state.is_ready().await {
         (StatusCode::OK, Json(Health { status: "ok" }))
     } else {
         (
@@ -151,7 +152,7 @@ async fn overrides(State(state): State<AppState>) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
-    match crate::overrides::load_overrides(db.pool()).await {
+    match crate::overrides::load_overrides(db.pool(), state.config().contest_id).await {
         Ok(rows) => json_response(&rows),
         Err(error) => refuse(&error.to_string()),
     }

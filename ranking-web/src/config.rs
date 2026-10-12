@@ -37,6 +37,8 @@ pub struct RankingConfig {
     /// The Redis the failure counters live in. Absent means the console cannot track
     /// failures, which is a refusal at login rather than an unguarded door.
     pub redis_url: Option<String>,
+    /// The contest whose overrides this service applies. Absent applies them all.
+    pub contest_id: Option<i64>,
 }
 
 /// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
@@ -136,6 +138,7 @@ impl Default for RankingConfig {
             session_secret: None,
             captcha: CaptchaConfig::default(),
             redis_url: None,
+            contest_id: None,
         }
     }
 }
@@ -171,6 +174,7 @@ impl RankingConfig {
             session_secret: read_secret(&vars),
             captcha: read_captcha(&vars),
             redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
+            contest_id: read_optional_i64(&vars, "RANKING_CONTEST_ID"),
         })
     }
 }
@@ -210,6 +214,14 @@ fn read_trimmed_optional(vars: &HashMap<String, String>, key: &str) -> Option<St
     } else {
         Some(raw)
     }
+}
+
+/// A blank or unparsable value means "not configured", not zero: a typo read as contest 0 would scope every override to it.
+fn read_optional_i64(vars: &HashMap<String, String>, key: &str) -> Option<i64> {
+    vars.get(key)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<i64>().ok())
 }
 
 fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {

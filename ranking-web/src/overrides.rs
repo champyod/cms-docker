@@ -230,11 +230,15 @@ pub struct Override {
     pub value: Option<String>,
 }
 
-pub async fn load_overrides(pool: &PgPool) -> Result<Vec<Override>, StoreError> {
+pub async fn load_overrides(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<Vec<Override>, StoreError> {
     let rows = sqlx::query_as::<_, Override>(
         "SELECT target_kind, target_key, action, payload->>'value' AS value \
-         FROM ranking_overrides WHERE active ORDER BY id",
+         FROM ranking_overrides WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
     )
+    .bind(contest_id)
     .fetch_all(pool)
     .await?;
     Ok(rows)

@@ -79,3 +79,27 @@ fn a_blank_path_disables_the_route_it_feeds() {
         .expect("blank is tolerated");
     assert_eq!(config.static_dir, None);
 }
+
+#[test]
+fn a_configured_contest_scopes_the_board() {
+    let config = RankingConfig::from_pairs(pairs(&[("RANKING_CONTEST_ID", "7")]))
+        .expect("an integer contest is tolerated");
+    assert_eq!(config.contest_id, Some(7));
+}
+
+#[test]
+fn an_absent_contest_leaves_every_override_live() {
+    let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
+    assert_eq!(config.contest_id, None);
+}
+
+/// Contest 0 is not a real contest, so a blank or unparsable value must read as "not
+/// configured" rather than scope every override to it.
+#[test]
+fn an_unparsable_contest_is_absent_rather_than_zero() {
+    for raw in ["", "  ", "seven"] {
+        let config = RankingConfig::from_pairs(pairs(&[("RANKING_CONTEST_ID", raw)]))
+            .expect("an unparsable contest is tolerated");
+        assert_eq!(config.contest_id, None, "raw {raw:?}");
+    }
+}
