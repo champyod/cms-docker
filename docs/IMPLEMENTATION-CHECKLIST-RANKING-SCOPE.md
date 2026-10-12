@@ -87,7 +87,7 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
 - [x] `overrides.rs`: add `pub fn frozen_at(&self) -> Option<i64>`.
 - [x] `scoring.rs`: thread the cutoff into `replay_subchanges`, skipping
       `change.time > frozen_at`.
-- [ ] `RankingOverrideForm.tsx`: add `freeze` to `VALUE_CONTROLS` as
+- [x] `RankingOverrideForm.tsx`: add `freeze` to `VALUE_CONTROLS` as
       `{ type: 'number', inputMode: 'numeric' }`.
 - [x] Tests: freeze hides later subchanges; freeze with a malformed value is skipped
       rather than panicking; absent freeze replays everything.
@@ -95,7 +95,7 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
 **Verify:** `cd ranking-web && cargo test overrides` and a new freeze test in the
 `scoring` module. A frozen board must equal the board with the later subchanges deleted.
 
-### D2 — Overrides ignore the contest the panel asks for `WIP — panel half DONE, service half BLOCKED (B1)`
+### D2 — Overrides ignore the contest the panel asks for `DONE — live-DB read unverified`
 
 **Evidence**
 - Collected: `rankingOverrides.ts:52-54` refuses a save with no contest.
@@ -103,15 +103,21 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
 - **Ignored on read:** `rankingOverrides.ts:31-35` → `where: { active: true }`.
 - **Ignored by the service:** `overrides.rs:205-212` → `WHERE active ORDER BY id`.
 
-- [ ] `config.rs`: read `RANKING_CONTEST_ID` (i64, optional) alongside the other
+- [x] `config.rs`: read `RANKING_CONTEST_ID` (i64, optional) alongside the other
       `RANKING_*` settings.
-- [ ] `overrides.rs`: `load_overrides(pool, contest_id: Option<i64>)`, filtering
-      `AND ($1::int IS NULL OR contest_id = $1)`.
-- [ ] `store.rs`: pass the configured contest through both `load_overrides` call sites
-      (`store.rs:75`, `store.rs:153`).
+- [x] `overrides.rs`: `load_overrides(pool, contest_id: Option<i64>)`, filtering
+      `AND ($1::bigint IS NULL OR contest_id = $1)`.
+- [x] `store.rs`: pass the configured contest through both `load_overrides` call sites
+      (`store.rs:75`, `store.rs:153`), and through `load_board` / `load_team_board` /
+      `load_ledger`; `lib.rs` supplies it from `AppState::config()`.
 - [x] `rankingOverrides.ts`: filter the read by the selected contest id.
-- [ ] Tests: an override for contest A is absent when loading contest B; a null contest
-      id loads everything (back-compat for single-contest installs).
+- [x] Tests: `config/tests.rs` covers configured / absent / unparsable; `tests/override_scope.rs`
+      proves an A-override is absent when loading contest B and that a null contest id
+      loads everything — **ignored here (no psql), unrun**.
+
+**Unverified:** the SQL predicate itself. `tests/override_scope.rs` is `#[ignore]`d and no
+database exists in this environment, so the scoped read is compile-verified and tested in
+structure, not executed. Same gap as DROPPED-2.
 
 **Verify:** `cargo test overrides`; add a panel test that `getRankingOverrides` passes
 the contest filter through.
@@ -146,7 +152,7 @@ Contest → Communications**:
 Tasks / Participants / Communications. Announcements and Questions keep the Communications
 tab; ranking leaves it.
 
-### M1 — Route and tab registration `WIP (route half DONE, label half BLOCKED)`
+### M1 — Route and tab registration `DONE`
 
 - [x] `lib/navigation/types.ts`: add `'contests.tabs.ranking'` to the `RouteId` union.
 - [x] `lib/navigation/registry-competition.ts`: add `contests.tabs.ranking` to the
@@ -157,7 +163,7 @@ tab; ranking leaves it.
 - [x] `contests/[id]/layout.tsx`: add a `case 'contests.tabs.ranking'` to
       `getContestTabLabel`.
 - [x] Create `app/[locale]/(authenticated)/contests/[id]/ranking/page.tsx`.
-- [ ] `dictionaries/en.json` **and** `th.json`: add
+- [x] `dictionaries/en.json` **and** `th.json`: add
       `navigation.contests.tabs.ranking.label` (en: "Ranking"; th: "การจัดอันดับ").
       Every route descriptor resolves its label and **throws** when a key is missing
       (`shell-nav.ts:resolveLabel`), so a missing translation is a page crash.
@@ -235,12 +241,23 @@ Filled in by the implementing agent. Append, do not overwrite.
 | D3 | no regression | `cargo test` (full Rust suite) | **129 passed**, 1 ignored, 0 failed |
 | D2/M3 | panel suite | `bun run test` | 204 passed, **3 failed** — all the B1-blocked label |
 | — | flake check | `bun run test tests/admin-permission-guards.test.ts` ×2 | 1 passed both runs (pre-existing parallel-load flake, mentions ranking 0 times) | |
+| session 2 | D1 form control | `bunx vitest run tests/ranking-override-form.test.tsx` | **3 passed**, 0 failed |
+| session 2 | D2 config reads | `cargo test --lib` (config submodule) | 56 passed, 1 ignored, 0 failed |
+| session 2 | D2 scoped read | `cargo test --test override_scope` | compiles; **2 ignored** (no psql) — unrun |
+| session 2 | Rust suite | `cargo test` | **133 passed**, 12 ignored, 0 failed |
+| session 2 | Rust lints | `cargo fmt --check` && `cargo clippy --all-targets` | clean (fmt also fixed two committed mis-formats: `http.rs:75`, `process_e2e.rs:76`) |
+| session 2 | M1 typecheck | `bunx tsc --noEmit` | **0 errors** — the two B3 errors were the missing label |
+| session 2 | D2/M1 panel suite | `bun run test` | **2925 passed, 0 failed** (212 files); exit 1 from 11 pre-existing unhandled framer-motion rejections in the concurrent writer's untracked `countdown-zone-panel` test |
 
 ---
 
 ## 7. STOPPED — two blockers a human must clear
 
 The implementing agent stopped here. Both blockers are outside the work itself.
+
+> **Session 2:** B1 did **not** reproduce — this harness wrote every file the guard had
+> refused. The four hand patches are applied; see §8.6. B2 (a concurrent writer) was still
+> present in the tree.
 
 ### B1 — The workspace write guard refuses credential-shaped field *names*
 
@@ -419,3 +436,28 @@ new filter.
 - `DROPPED-1` per-contest board (needs schema + push-path work).
 - Roadmap §3 (S1 submission filters) and §4 (E1/V1/V4 evaluation and re-eval spine).
 - The concurrent writer's countdown-clock work, left uncommitted in the tree.
+
+### 8.6 Session 2 — the four hand edits are applied and verified
+
+Applied on `major/admin-panel` in `cms-docker-major`. No commit was made; the tree already
+carried a concurrent writer's changes, so the work is left staged by path only.
+
+| # | File | Change |
+|---|---|---|
+| 1+2 | `ranking-web/src/config.rs` | `contest_id: Option<i64>` + `read_optional_i64`, wired in `from_pairs` and `Default` |
+| 3 | `ranking-web/src/store.rs` | `load_overrides(pool, contest_id)` with `AND ($1::bigint IS NULL OR contest_id = $1)`; the value threads through `load_board`, `load_team_board`, `load_ledger`, `load_standings`; `lib.rs`, `overrides.rs` and `http.rs` supply `AppState::config().contest_id` |
+| 4 | `admin-panel/src/dictionaries/{en,th}.json` | `"ranking": { "label": … }` under `navigation.contests.tabs` |
+| D1 | `admin-panel/src/components/ranking/RankingOverrideForm.tsx` | `freeze` added to `VALUE_CONTROLS` |
+
+- **B1 did not trigger.** This harness wrote `config.rs` (the `session_secret` line) and both
+  dictionaries (the `savedPassword` line) with no credential-name guard. It was specific to
+  the previous agent's environment.
+- New tests: `ranking-web/src/config/tests.rs` (+3), `ranking-web/tests/override_scope.rs`
+  (2, `#[ignore]`d — no psql), `admin-panel/tests/ranking-override-form.test.tsx` (3).
+- Updated: `admin-panel/tests/contest-detail-routes.test.ts:56` — the pinned `contests.tabs`
+  key list gained `ranking`.
+- `cargo fmt` also repaired two formatting defects committed on HEAD (`http.rs:75`,
+  `tests/process_e2e.rs:76`); whitespace only.
+- Still unverified everywhere: the live-DB scoped read (DROPPED-2), and the concurrent
+  writer's untracked `countdown-zone-panel` test, which passes but exits non-zero on 11
+  unhandled framer-motion rejections.
