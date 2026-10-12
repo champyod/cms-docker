@@ -159,7 +159,7 @@ var PerspectiveMetrics = new function () {
     };
 
     self.refresh = function () {
-        self.render_activity();
+        self.render();
     };
 };
 
