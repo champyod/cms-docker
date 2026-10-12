@@ -11,12 +11,16 @@ use serde_json::Value;
 const TARGET_USER: &str = "user";
 const TARGET_TEAM: &str = "team";
 
-/// The five actions the panel may write, taken from dictionaries/en.json.
+/// The six actions the panel may write, taken from dictionaries/en.json.
+/// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
+/// actionFreeze in en.json), and before this it fell through the fold's `_ => false`
+/// arm — a success toast, an audit row, and no change to the board.
 const ACTION_HIDE: &str = "hide";
 const ACTION_GUEST: &str = "guest";
 const ACTION_PIN: &str = "pin";
 const ACTION_RENAME: &str = "rename";
 const ACTION_SCORE: &str = "score";
+const ACTION_FREEZE: &str = "freeze";
 
 /// The key of an override's single value inside payload.
 const PAYLOAD_VALUE: &str = "value";
@@ -87,6 +91,11 @@ pub struct Overrides {
     pinned: Sides<HashMap<String, i64>>,
     guests: Vec<GuestRow>,
     skipped: usize,
+    /// The latest freeze cutoff seen, in projection time. WHY latest and not Sides:
+    /// a freeze is a property of the scoreboard, not of a user or a team, so unlike
+    /// every other action it has nothing to key on. Later rows win by position, which
+    /// is how the table already resolves one action overriding another.
+    frozen_at: Option<i64>,
 }
 
 impl Overrides {
@@ -123,6 +132,12 @@ impl Overrides {
         self.pinned.get(kind).get(key).copied()
     }
 
+    /// The cutoff from a `freeze` override, or None when the board is not frozen.
+    /// Read by the replay so subchanges after the cutoff never reach the ledger.
+    pub fn frozen_at(&self) -> Option<i64> {
+        self.frozen_at
+    }
+
     fn fold_row(&mut self, row: &OverrideRow) {
         let Some(kind) = TargetKind::from_wire(&row.target_kind) else {
             self.skipped += 1;
@@ -138,6 +153,7 @@ impl Overrides {
             ACTION_RENAME => self.fold_rename(kind, key, &row.payload),
             ACTION_PIN => self.fold_pin(kind, key, &row.payload),
             ACTION_SCORE => self.fold_score(kind, key, &row.payload),
+            ACTION_FREEZE => self.fold_freeze(&row.payload),
             _ => false,
         };
         if !folded {
@@ -181,6 +197,18 @@ impl Overrides {
             return false;
         }
         self.scored.get_mut(kind).insert(key.to_string(), score);
+        true
+    }
+
+    /// A freeze carries the projection-time cutoff to hold the board at. Parsed as an
+    /// integer because projection time is whole seconds; a fractional or malformed
+    /// value is refused so a typo is reported in `skipped` rather than truncating the
+    /// scoreboard to an unintended instant.
+    fn fold_freeze(&mut self, payload: &Option<Value>) -> bool {
+        let Some(cutoff) = payload_name(payload).and_then(|value| value.parse::<i64>().ok()) else {
+            return false;
+        };
+        self.frozen_at = Some(cutoff);
         true
     }
 }

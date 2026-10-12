@@ -90,7 +90,13 @@ pub fn assemble_with(
 ) -> Result<Ledger, ScoreError> {
     let mut skipped = 0;
     let mut scores = project_scores(tasks, submissions, &mut skipped);
-    replay_subchanges(&mut scores, submissions, subchanges, &mut skipped);
+    replay_subchanges(
+        &mut scores,
+        submissions,
+        subchanges,
+        &mut skipped,
+        overrides.frozen_at(),
+    );
     Ok(finish(scores, skipped, overrides, teams))
 }
 
@@ -123,6 +129,7 @@ fn replay_subchanges(
     submissions: &[Submission],
     subchanges: &[Subchange],
     skipped: &mut usize,
+    frozen_at: Option<i64>,
 ) {
     let owners: BTreeMap<&str, (&str, &str)> = submissions
         .iter()
@@ -140,6 +147,12 @@ fn replay_subchanges(
             .then_with(|| left.key.cmp(&right.key))
     });
     for change in ordered {
+        // WHY before the owner lookup: a frozen-out change is not a skip, it is the
+        // freeze doing its job. Counting it would make a healthy freeze look like a
+        // stream of malformed rows on the diagnostics surface.
+        if frozen_at.is_some_and(|cutoff| change.time > cutoff) {
+            continue;
+        }
         let Some((user, task)) = owners.get(change.submission.as_str()) else {
             *skipped += 1;
             continue;
