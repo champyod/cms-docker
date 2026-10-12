@@ -8,7 +8,10 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
+import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import {
     archiveFingerprint,
     describeError,
@@ -28,6 +31,8 @@ export interface ArchiveBrowserSectionProps {
 /** Bounded backoff: a selective dump is started detached, so the archive appears later. */
 const POLL_BACKOFF_MS: readonly number[] = [2_000, 4_000, 8_000];
 
+const LIST_ERROR = 'Could not read the backup archive list.';
+
 type BackupWatchState = 'idle' | 'waiting' | 'timedOut';
 
 const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, string>> = {
@@ -36,38 +41,27 @@ const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, s
 };
 
 export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrowserSectionProps) {
+    const dict = useDictionary();
     const [archives, setArchives] = useState<readonly BackupArchive[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
     const [notice, setNotice] = useState<string | null>(null);
     const [deletingName, setDeletingName] = useState<string | null>(null);
     const [backupWatch, setBackupWatch] = useState<BackupWatchState>('idle');
     const knownArchivesRef = useRef<readonly BackupArchive[]>([]);
-    const isMountedRef = useRef(true);
     const isFirstLoadRef = useRef(true);
     const pollGenerationRef = useRef(0);
     const cancelPollDelayRef = useRef<(() => void) | null>(null);
 
-    const loadArchives = useCallback(async () => {
-        setIsLoading(true);
-        setLoadError(null);
-        try {
-            const result = await listArchives(locationId);
-            if (result.success) {
-                const sorted = sortNewestFirst(result.archives ?? []);
-                knownArchivesRef.current = sorted;
-                setArchives(sorted);
-            } else {
-                setArchives([]);
-                setLoadError(result.error ?? 'Could not read the backup archive list.');
-            }
-        } catch (error) {
-            setArchives([]);
-            setLoadError(describeError(error, 'Could not read the backup archive list.'));
-        } finally {
-            setIsLoading(false);
+    const readArchives = useCallback(async (): Promise<void> => {
+        const result = await listArchives(locationId);
+        if (!result.success) {
+            throw new Error(result.error ?? LIST_ERROR);
         }
+        const sorted = sortNewestFirst(result.archives ?? []);
+        knownArchivesRef.current = sorted;
+        setArchives(sorted);
     }, [locationId]);
+
+    const { status, reload } = useSurfaceLoad(readArchives, surfaceLoadMessages(dict));
 
     const waitForPollDelay = useCallback(
         (ms: number): Promise<void> =>
@@ -113,21 +107,19 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
         [locationId, waitForPollDelay],
     );
 
-    useEffect(() => () => {
-        isMountedRef.current = false;
-    }, []);
-
+    // Why the mount load is not here: useSurfaceLoad starts the first load itself, so this effect
+    // only reacts to a refresh token the parent bumps after a backup, and then watches for the
+    // dossier the detached dump is still producing.
     useEffect(() => {
+        if (isFirstLoadRef.current) {
+            isFirstLoadRef.current = false;
+            return;
+        }
         const baseline = archiveFingerprint(knownArchivesRef.current);
-        const isFirstLoad = isFirstLoadRef.current;
-        isFirstLoadRef.current = false;
-        void (async () => {
-            await loadArchives();
-            if (isFirstLoad || !isMountedRef.current) return;
-            await pollForNewArchive(baseline);
-        })();
+        reload();
+        void pollForNewArchive(baseline);
         return stopPolling;
-    }, [loadArchives, pollForNewArchive, refreshToken, stopPolling]);
+    }, [refreshToken, reload, pollForNewArchive, stopPolling]);
 
     const handleDelete = async (name: string) => {
         if (!confirm(`Delete backup archive ${name}? This cannot be undone.`)) return;
@@ -137,7 +129,7 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
             const result = await deleteArchive(name, locationId);
             if (result.success) {
                 setNotice(result.message ?? `Deleted archive ${name}.`);
-                await loadArchives();
+                reload();
             } else {
                 setNotice(result.error ?? `Could not delete ${name}.`);
             }
@@ -162,8 +154,8 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
                         size="sm"
                         variant="secondary"
                         icon={RefreshCw}
-                        loading={isLoading}
-                        onClick={() => void loadArchives()}
+                        loading={status.kind === 'loading'}
+                        onClick={reload}
                     >
                         Refresh
                     </Button>
@@ -175,14 +167,13 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
                     </Text>
                 )}
 
-                {loadError !== null ? (
-                    <Text variant="small" role="alert" className="text-destructive">
-                        {loadError}
-                    </Text>
-                ) : isLoading ? (
-                    <Text variant="small" color="text-muted-foreground">
-                        Loading archives...
-                    </Text>
+                {status.kind !== 'idle' ? (
+                    <SurfaceLoadState
+                        status={status}
+                        loadingTitle="Loading archives..."
+                        onRetry={reload}
+                        retryLabel={dict.states.retry.label}
+                    />
                 ) : archives.length === 0 ? (
                     <EmptyState
                         icon={Archive}
