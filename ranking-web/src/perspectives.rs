@@ -1,7 +1,9 @@
 use serde_json::{json, Value};
 
 /// The perspective ids the page registers; an unknown one is dropped, not rendered.
-pub const PERSPECTIVE_IDS: [&str; 6] = ["board", "teams", "tasks", "scores", "progress", "time"];
+pub const PERSPECTIVE_IDS: [&str; 7] = [
+    "board", "teams", "tasks", "scores", "progress", "time", "group",
+];
 
 /// How the tab bar copes when the tabs do not fit one row.
 pub const OVERFLOW_MODES: [&str; 3] = ["wrap", "scroll", "menu"];
