@@ -11,6 +11,7 @@ import {
   parseIpAllowlist,
   type UpdateParticipationInput,
 } from './participation-sql';
+import { resyncRankingUsers } from '@/lib/ranking-projection';
 
 const PLAINTEXT_PREFIX = 'plaintext:';
 
@@ -33,6 +34,12 @@ export async function updateParticipation(
     if (error) return { success: false, error };
 
     await executeParticipationUpdate(participationId, allowed, validIps);
+
+    const participation = await prisma.participations.findUnique({
+      where: { id: participationId },
+      select: { contest_id: true },
+    });
+    if (participation !== null) await resyncRankingUsers(participation.contest_id);
 
     {
       const { password: _password, passwordKind: _passwordKind, ip: _ip, ...restAllowed } = allowed as Record<string, unknown>;
@@ -73,6 +80,11 @@ export async function setTestUser(participationId: number): Promise<ActionResult
         ...(allowed.unrestricted !== undefined && { unrestricted: allowed.unrestricted }),
       },
     });
+    const participation = await prisma.participations.findUnique({
+      where: { id: participationId },
+      select: { contest_id: true },
+    });
+    if (participation !== null) await resyncRankingUsers(participation.contest_id);
     await recordAudit({
       verb: 'participation:update',
       entity: 'participation',
@@ -133,6 +145,8 @@ export async function addTeamToContest(
         VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
       `;
     }
+
+    await resyncRankingUsers(contestId);
 
     await recordAudit({
       verb: 'participation:create',

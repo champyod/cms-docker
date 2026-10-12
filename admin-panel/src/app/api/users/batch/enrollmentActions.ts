@@ -5,6 +5,7 @@ import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
+import { resyncActiveRankingUsers, resyncRankingUsers } from '@/lib/ranking-projection';
 
 const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
@@ -59,6 +60,7 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
     if (!authorized) return response;
 
     const addedCount = await addUsersToContest(contestId, userIds);
+    await resyncRankingUsers(contestId);
     await recordAudit({
       verb: 'participation:create',
       entity: 'contest',
@@ -80,6 +82,7 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
       user_id: { in: userIds },
     },
   });
+  await resyncRankingUsers(contestId);
 
   await recordAudit({
     verb: 'participation:delete',
@@ -138,6 +141,7 @@ async function assignTeamByCode(
 
   const teamId = await resolveTeamIdByCode(teamCode);
   const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
+  await resyncRankingUsers(contestId);
 
   await recordAudit({
     verb: 'participation:update',
@@ -168,6 +172,7 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
 
   if (mode === 'remove-any') {
     const updatedCount = await removeUsersFromAnyTeam(userIds);
+    await resyncActiveRankingUsers();
     await recordAudit({
       verb: 'participation:update',
       entity: 'team',
