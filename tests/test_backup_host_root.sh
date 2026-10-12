@@ -10,6 +10,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 PREFLIGHT="${REPO_ROOT}/scripts/__preflight.sh"
 COMMON="${REPO_ROOT}/scripts/__lib/common.sh"
+UPDATE_SERVER="${REPO_ROOT}/scripts/__update-server.sh"
 
 pass=0
 fail=0
@@ -32,6 +33,18 @@ if grep -Fq 'backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"' "$PREFLIGHT" \
   no "no host script still defaults the backup root to ${BACKUP_DIR}"
 else
   ok "no host script still defaults the backup root to \${BACKUP_DIR}"
+fi
+# update-server runs the safety backup on the host, where the in-container
+# BACKUP_DIR means nothing, so it must hand the script the host root explicitly.
+if grep -Fq 'BACKUP_ROOT_HOST="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"' "$UPDATE_SERVER"; then
+  ok "update-server resolves the host root, not \${BACKUP_DIR}"
+else
+  no "update-server resolves the host root, not \${BACKUP_DIR}"
+fi
+if grep -Fq '"$BACKUP_SCRIPT" --root "$BACKUP_ROOT_HOST"' "$UPDATE_SERVER"; then
+  ok "update-server retargets the backup script with --root"
+else
+  no "update-server retargets the backup script with --root"
 fi
 
 printf '\n== summary ==\n'
