@@ -58,7 +58,7 @@ function DialogContent({
         )}
         {...props}
       >
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto flex flex-col">
           {isEmpty ? <div className="text-sm text-muted-foreground text-center py-6">No content available</div> : children}
         </div>
         {showCloseButton && (
