@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { WorkerGrid } from '@/components/resources/WorkerGrid';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
@@ -8,12 +8,18 @@ import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
-import { SurfaceState } from '@/components/core/SurfaceState';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useLiveStream } from '@/hooks/useLiveStream';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
 import type { ResourceFrame, ServerStats, TrafficLog, WorkerStat, CoreServiceStatus } from '@/lib/live-frames';
+
+interface PendingFirstFrame {
+  readonly resolve: () => void;
+  readonly reject: (error: unknown) => void;
+}
 
 export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
@@ -22,42 +28,67 @@ export function ResourceView(): React.JSX.Element {
   const [services, setServices] = useState<CoreServiceStatus[]>([]);
   const [traffic, setTraffic] = useState<TrafficLog[]>([]);
   const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
-  const [loading, setLoading] = useState(true);
 
   // Why every section is optional in the frame: a section is left out when this viewer may not read
   // it or when its probe failed, and the card must then keep the last reading it had rather than
   // blanking out. The same handler covers all four cards because they arrive on one connection.
-  const onFrame = useCallback((frame: ResourceFrame): void => {
+  const applyFrame = useCallback((frame: ResourceFrame): void => {
     if (frame.server) setServerStats(frame.server);
     if (frame.workers) setWorkers(frame.workers);
     if (frame.services) setServices(frame.services);
     if (frame.traffic) setTraffic(frame.traffic);
-    setLoading(false);
   }, []);
 
-  const { status } = useLiveStream<ResourceFrame>({
+  // Why the first frame is the load: a channel that never carries one has loaded nothing, and its
+  // status is what tells the panel body apart from a spinner that would never clear. The connection's
+  // own state still lives in useLiveStream; this is only whether the load ever finished.
+  const pendingFirstFrame = useRef<PendingFirstFrame | null>(null);
+  const load = useCallback((): Promise<void> => new Promise<void>((resolve, reject) => {
+    pendingFirstFrame.current = { resolve, reject };
+  }), []);
+  const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
+
+  const onFrame = useCallback((frame: ResourceFrame): void => {
+    applyFrame(frame);
+    pendingFirstFrame.current?.resolve();
+    pendingFirstFrame.current = null;
+  }, [applyFrame]);
+
+  const onStreamError = useCallback((): void => {
+    pendingFirstFrame.current?.reject(new Error('The resource stream did not open'));
+    pendingFirstFrame.current = null;
+  }, []);
+
+  const { status: liveStatus, refresh } = useLiveStream<ResourceFrame>({
     url: `/api/resources/stream?trafficLimit=${trafficLimit}`,
     onFrame,
+    onError: onStreamError,
   });
 
   const source = serverStats?.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
-  const awaitingFirstFrame = loading && !serverStats;
 
-  // Why the indicator is published from here and withdrawn while loading: the stream status
-  // is this hook's own, and the loading surface below replaces the panel body entirely.
+  // Why the indicator is published from here and withdrawn unless loaded: the stream status is this
+  // hook's own, and the loading surface below replaces the panel body entirely.
   usePublishModuleActions(
     'infrastructure.resources',
-    awaitingFirstFrame ? null : <LiveIndicator status={status} />,
+    status.kind === 'idle' ? <LiveIndicator status={liveStatus} /> : null,
   );
 
-  if (awaitingFirstFrame) {
-    return <SurfaceState status={{ kind: 'loading', title: dict.resources.loading }} />;
+  if (status.kind !== 'idle') {
+    return (
+      <SurfaceLoadState
+        status={status}
+        loadingTitle={dict.resources.loading}
+        onRetry={() => { reload(); refresh(); }}
+        retryLabel={dict.states.retry.label}
+      />
+    );
   }
 
   return (
     <div className="space-y-4 density:space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <CoreServicesStatus services={services} loading={loading} />
+          <CoreServicesStatus services={services} loading={false} />
 
           <GaugeCard
             icon={<Cpu className="w-4 h-4 text-primary" />}
@@ -92,7 +123,7 @@ export function ResourceView(): React.JSX.Element {
             </div>
             <MetricsCard serverStats={serverStats} />
           </div>
-          <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={loading} />
+          <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={false} />
         </div>
     </div>
   );

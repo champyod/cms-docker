@@ -15,6 +15,11 @@ interface UseLiveStreamOptions<TFrame> {
   /** The stream to watch. Changing it reopens the connection, which is how a query parameter is re-read. */
   url: string;
   onFrame: (frame: TFrame) => void;
+  /**
+   * Called when a connection fails; the reconnect still runs. A surface whose first frame is its
+   * load uses this to tell "not yet" apart from "never" — the status alone only says reconnecting.
+   */
+  onError?: () => void;
 }
 
 export interface LiveStream {
@@ -34,13 +39,14 @@ export interface LiveStream {
  * was hidden, and a stream would otherwise keep the server sampling for a tab nobody is looking at.
  * The reconnect on focus brings the panel back with a fresh snapshot.
  */
-export function useLiveStream<TFrame>({ url, onFrame }: UseLiveStreamOptions<TFrame>): LiveStream {
+export function useLiveStream<TFrame>({ url, onFrame, onError }: UseLiveStreamOptions<TFrame>): LiveStream {
   // Why the initial state is read from the document: a tab that mounted in the background must not
   // open a connection at all, and a status set from inside the effect would be a cascading render.
   const [status, setStatus] = useState<LiveStatus>(() =>
     typeof document !== 'undefined' && document.hidden ? 'paused' : 'connecting'
   );
   const onFrameRef = useRef(onFrame);
+  const onErrorRef = useRef(onError);
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const watchdogRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -50,6 +56,7 @@ export function useLiveStream<TFrame>({ url, onFrame }: UseLiveStreamOptions<TFr
 
   useEffect(() => {
     onFrameRef.current = onFrame;
+    onErrorRef.current = onError;
   });
 
   useEffect(() => {
@@ -114,6 +121,7 @@ export function useLiveStream<TFrame>({ url, onFrame }: UseLiveStreamOptions<TFr
 
       source.onerror = () => {
         if (disposed || sourceRef.current !== source) return;
+        onErrorRef.current?.();
         scheduleReconnect();
       };
     };
