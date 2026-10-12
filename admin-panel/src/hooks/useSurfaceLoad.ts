@@ -3,11 +3,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { SurfaceStatus } from '@/components/core/SurfaceState';
+import type { Dictionary } from '@/lib/dictionary';
 
 /** The copy a surface shows when its load never produced data. */
 export interface SurfaceLoadMessages {
   readonly denied: { readonly title: string; readonly description?: string };
   readonly failed: { readonly title: string; readonly description?: string };
+}
+
+/**
+ * The dictionary copy every surface uses for a load that ended without data.
+ *
+ * Why one builder: the denied and failed wording is the same on every surface, and a surface
+ * that invented its own would drift from the rest. A surface still names its own spinner.
+ */
+export function surfaceLoadMessages(dict: Dictionary): SurfaceLoadMessages {
+  return {
+    denied: { title: dict.errors.permissionDenied, description: dict.errors.contactAdmin },
+    failed: { title: dict.states.error.generic, description: dict.states.retry.description },
+  };
 }
 
 export interface SurfaceLoad<T> {

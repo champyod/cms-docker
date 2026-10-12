@@ -1,3 +1,4 @@
+import type { SurfaceStatus } from '@/components/core/SurfaceState';
 import type { BackupArchive } from '@/app/actions/backupActions';
 import type { Dictionary } from '@/lib/dictionary';
 import type { Locale } from '@/lib/locales';
@@ -8,7 +9,6 @@ export type Patch = (update: (previous: MaintenanceState) => MaintenanceState) =
 
 export interface MaintenanceState {
   readonly data: Record<string, string>;
-  readonly loading: boolean;
   readonly saving: boolean;
   readonly backingUp: boolean;
   readonly discordState: string;
@@ -28,7 +28,6 @@ export interface MaintenanceGates {
 
 export const INITIAL_MAINTENANCE_STATE: MaintenanceState = {
   data: {},
-  loading: true,
   saving: false,
   backingUp: false,
   discordState: '',
@@ -49,7 +48,8 @@ export const INITIAL_MAINTENANCE_STATE: MaintenanceState = {
 export interface MaintenanceController {
   readonly locale: Locale;
   readonly data: Readonly<Record<string, string>>;
-  readonly loading: boolean;
+  readonly status: SurfaceStatus;
+  readonly reload: () => void;
   readonly saving: boolean;
   readonly backingUp: boolean;
   readonly discordState: string;
