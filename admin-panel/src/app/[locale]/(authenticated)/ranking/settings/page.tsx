@@ -1,4 +1,5 @@
 import { endRankingOverride, getRankingOverrides, saveRankingOverride } from '@/app/actions/rankingOverrides';
+import { OverrideForm } from '@/components/ranking/OverrideForm';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
@@ -27,47 +28,7 @@ export default async function RankingSettingsPage({
       <section className={CARD_CLASS}>
         <h2 className="text-lg font-semibold text-foreground">{copy.overrides.title}</h2>
         <p className="text-sm text-muted-foreground">{copy.overrides.hint}</p>
-        {canOverride ? (
-          <form action={saveRankingOverride} className="grid gap-3 md:grid-cols-2">
-            <label className={LABEL_CLASS}>
-              {copy.overrides.contestId}
-              <input name="contestId" inputMode="numeric" required className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.target}
-              <select name="targetKind" className={FIELD_CLASS}>
-                <option value="user">user</option>
-                <option value="team">team</option>
-              </select>
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.targetKey}
-              <input name="targetKey" required className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.action}
-              <select name="action" className={FIELD_CLASS}>
-                <option value="hide">{copy.overrides.actionHide}</option>
-                <option value="guest">{copy.overrides.actionGuest}</option>
-                <option value="pin">{copy.overrides.actionPin}</option>
-                <option value="rename">{copy.overrides.actionRename}</option>
-                <option value="score">{copy.overrides.actionScore}</option>
-                <option value="freeze">{copy.overrides.actionFreeze}</option>
-              </select>
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.value}
-              <input name="value" className={FIELD_CLASS} />
-            </label>
-            <label className={LABEL_CLASS}>
-              {copy.overrides.reason}
-              <input name="reason" required className={FIELD_CLASS} />
-            </label>
-            <button type="submit" className="rounded-xl bg-indigo-500/20 px-4 py-2 text-indigo-300">
-              {copy.overrides.add}
-            </button>
-          </form>
-        ) : null}
+        {canOverride ? <OverrideForm copy={copy.overrides} /> : null}
         <ul className="divide-y divide-border text-sm text-foreground">
           {overrides.map((override) => (
             <li key={override.id} className="flex flex-wrap items-center gap-3 py-2">

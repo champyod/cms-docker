@@ -72,6 +72,7 @@ var Overview = new function () {
 
         DataStore.score_events.add(self.score_handler);
         DataStore.rank_events.add(self.rank_handler);
+        DataStore.override_events.add(self.override_handler);
         DataStore.select_events.add(self.select_handler);
 
 
@@ -556,6 +557,7 @@ var Overview = new function () {
 
 
     self.score_handler = function (u_id, user, t_id, task, delta) {
+        if (DataStore.is_board_hidden()) return;
         var new_score = user["global"];
         var old_score = new_score - delta;
         var max_score = DataStore.global_max_score;
@@ -573,8 +575,17 @@ var Overview = new function () {
 
 
     self.rank_handler = function (u_id, user, delta) {
+        if (DataStore.is_board_hidden()) return;
         if (user["selected"] > 0) {
             self.update_markers(1000);
+        }
+    };
+
+    self.override_handler = function (overrides) {
+        if (!DataStore.is_board_hidden()) return;
+        var listed = self.user_list.slice();
+        for (var i in listed) {
+            self.delete_marker(listed[i], 0);
         }
     };
 

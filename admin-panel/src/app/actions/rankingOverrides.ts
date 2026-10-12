@@ -15,6 +15,11 @@ import { prisma } from '@/lib/prisma';
 const OVERRIDE_ACTIONS = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'] as const;
 export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
 
+const OVERRIDE_TARGETS = ['user', 'team', 'ranking'] as const;
+export type OverrideTarget = (typeof OVERRIDE_TARGETS)[number];
+
+const RANKING_ACTIONS: ReadonlyArray<OverrideAction> = ['hide', 'freeze'];
+
 export interface RankingOverride {
   id: string;
   contestId: number;
@@ -39,14 +44,17 @@ export async function getRankingOverrides(): Promise<RankingOverride[]> {
 export async function saveRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
   const contestId = Number.parseInt(String(formData.get('contestId') ?? ''), 10);
-  const targetKind = readText(formData, 'targetKind');
-  const targetKey = readText(formData, 'targetKey');
-  const value = readText(formData, 'value');
-  const reason = readText(formData, 'reason');
   const action = readAction(formData);
-  if (!Number.isInteger(contestId) || targetKind === "" || targetKey === "" || reason === "") {
+  const targetKind = readTargetKind(formData);
+  const targetKey = targetKind === 'ranking' ? '*' : readText(formData, 'targetKey');
+  const reason = readText(formData, 'reason');
+  if (!Number.isInteger(contestId) || targetKey === "" || reason === "") {
     throw new Error("a contest, a target and a reason are required");
   }
+  if (targetKind === 'ranking' && !(RANKING_ACTIONS as readonly string[]).includes(action)) {
+    throw new Error(`action ${action} needs a user or team target`);
+  }
+  const value = action === 'hide' ? '' : readText(formData, 'value');
   const actorId = await currentActorId();
   await prisma.ranking_overrides.create({
     data: {
@@ -131,6 +139,15 @@ function readAction(formData: FormData): OverrideAction {
   const found = OVERRIDE_ACTIONS.find((candidate) => candidate === raw);
   if (found === undefined) {
     throw new Error(`unknown override action: ${raw}`);
+  }
+  return found;
+}
+
+function readTargetKind(formData: FormData): OverrideTarget {
+  const raw = String(formData.get("targetKind") ?? "");
+  const found = OVERRIDE_TARGETS.find((candidate) => candidate === raw);
+  if (found === undefined) {
+    throw new Error(`unknown override target: ${raw}`);
   }
   return found;
 }

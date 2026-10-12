@@ -102,9 +102,10 @@ var Scoreboard = new function () {
     };
 
     self.override_handler = function (overrides) {
+        var boardFrozen = DataStore.board_freeze_hit() !== null;
         var next = new Object();
         for (var u_id in DataStore.users) {
-            if (DataStore.freeze_hit_for(u_id) !== null) {
+            if (boardFrozen || DataStore.freeze_hit_for(u_id) !== null) {
                 next[u_id] = (self.frozen[u_id] !== undefined) ? self.frozen[u_id] : self.snapshot_user(DataStore.users[u_id]);
             }
         }
@@ -120,6 +121,7 @@ var Scoreboard = new function () {
 
     self.visible_users = function () {
         var out = new Array();
+        if (DataStore.is_board_hidden()) return out;
         for (var u_id in DataStore.users) {
             if (!DataStore.is_hidden(u_id)) out.push(DataStore.users[u_id]);
         }

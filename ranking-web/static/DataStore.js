@@ -679,6 +679,20 @@ var DataStore = new function () {
         return out;
     };
 
+    self.board_override_for = function (action) {
+        var hit = self.override_for("ranking", "*");
+        if (hit !== null && hit["action"] === action) return hit;
+        return null;
+    };
+
+    self.is_board_hidden = function () {
+        return self.board_override_for("hide") !== null;
+    };
+
+    self.board_freeze_hit = function () {
+        return self.board_override_for("freeze");
+    };
+
     self.set_score = function (u_id, t_id, new_t_score) {
         /* It may be "nice" to check that the user and task do actually exists,
            even if the server should already ensure it!
