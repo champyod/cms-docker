@@ -1,8 +1,8 @@
 use serde_json::{json, Value};
 
 /// The perspective ids the page registers; an unknown one is dropped, not rendered.
-pub const PERSPECTIVE_IDS: [&str; 8] = [
-    "board", "teams", "tasks", "scores", "progress", "time", "group", "metrics",
+pub const PERSPECTIVE_IDS: [&str; 9] = [
+    "board", "teams", "tasks", "scores", "progress", "time", "group", "metrics", "analysis",
 ];
 
 /// How the tab bar copes when the tabs do not fit one row.

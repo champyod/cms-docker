@@ -14,7 +14,7 @@ const SETTINGS_ID = 1;
 /** The perspective tabs the page registers. Kept in step with the crate's registry
  * (ranking-web/src/perspectives.rs) so a tab the panel accepts is one the board can
  * draw; a unit test fails when the two lists drift. */
-const PERSPECTIVE_IDS: readonly string[] = ["board", "teams", "tasks", "scores", "progress", "time", "group", "metrics"];
+const PERSPECTIVE_IDS: readonly string[] = ["board", "teams", "tasks", "scores", "progress", "time", "group", "metrics", "analysis"];
 const OVERFLOW_MODES: readonly string[] = ["wrap", "scroll", "menu"];
 
 /** The appearance columns the board reads. The credit list is edited on its own. */
