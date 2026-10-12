@@ -12,7 +12,10 @@ import {
   countdownTarget,
   fitCountdownFontPx,
   formatZoneClockHHMM,
+  formatZoneClockHMS,
   formatZoneTime,
+  formatZoneTimeTitle,
+  toZoneClockSamples,
   isSupportedTimezone,
   listTimezones,
   resolveContestPhase,
@@ -372,5 +375,50 @@ describe('countdownPhaseWindowMs', () => {
   it('falls back when the columns a phase needs are absent', () => {
     expect(countdownPhaseWindowMs(timing({ stop: null }), 'running', 1234)).toBe(1234);
     expect(countdownPhaseWindowMs(timing(), 'ended', 1234)).toBe(1234);
+  });
+});
+
+describe('formatZoneClockHMS', () => {
+  it('renders a zero-padded HH:MM:SS', () => {
+    const clock = formatZoneClockHMS(new Date('2026-01-01T08:07:09Z'), 'UTC');
+    expect(clock).toBe('08:07:09');
+    expect(clock).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('rolls the seconds rather than the minutes while they tick', () => {
+    expect(formatZoneClockHMS(new Date('2026-01-01T08:07:59Z'), 'UTC')).toBe('08:07:59');
+    expect(formatZoneClockHMS(new Date('2026-01-01T08:08:00Z'), 'UTC')).toBe('08:08:00');
+  });
+
+  it('reads midnight as 00:00:00 rather than 12 or 24', () => {
+    expect(formatZoneClockHMS(new Date('2026-01-01T00:00:00Z'), 'UTC')).toBe('00:00:00');
+  });
+
+  it('agrees with the minute clock on the minute it carries', () => {
+    const instant = new Date('2026-03-05T09:41:37Z');
+    for (const zone of ['UTC', 'Asia/Bangkok', 'Asia/Kolkata', 'America/New_York', 'Pacific/Auckland']) {
+      expect(formatZoneClockHMS(instant, zone)).toContain(formatZoneClockHHMM(instant, zone));
+    }
+  });
+
+  it('carries a half-hour offset into the minutes', () => {
+    expect(formatZoneClockHMS(new Date('2026-01-01T00:00:00Z'), 'Asia/Kolkata')).toBe('05:30:00');
+  });
+});
+
+describe('formatZoneTimeTitle', () => {
+  it('names both the zoned reading and the zone it was read in', () => {
+    const title = formatZoneTimeTitle(new Date('2026-01-01T08:07:09Z'), 'Asia/Bangkok');
+    expect(title).toContain('Jan');
+    expect(title).toContain('15:07:09');
+    expect(title).toContain('(Asia/Bangkok)');
+  });
+});
+
+describe('toZoneClockSamples', () => {
+  it('splits the clock into one entry per character', () => {
+    const samples = toZoneClockSamples(new Date('2026-01-01T08:07:09Z'), 'UTC');
+    expect(samples).toHaveLength('08:07:09'.length);
+    expect(samples.join('')).toBe('08:07:09');
   });
 });

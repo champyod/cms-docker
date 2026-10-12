@@ -81,10 +81,10 @@ describe('getRankingDiagnostics', () => {
   });
 
   it('addresses the ranking service by its compose container name', async () => {
-    const spy = vi.fn(async () => new Response('{}', { status: 200 }));
-    globalThis.fetch = spy as unknown as typeof fetch;
+    const spy = vi.fn<typeof fetch>(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = spy;
     await getRankingDiagnostics();
-    expect(String(spy.mock.calls[0][0])).toBe(
+    expect(String(spy.mock.calls[0]?.[0])).toBe(
       'http://cms-ranking-web-server:8890/diagnostics',
     );
   });
@@ -92,10 +92,10 @@ describe('getRankingDiagnostics', () => {
   // The read decorates a page that must still render, so a hanging service cannot be
   // allowed to hold the request open.
   it('bounds the read with a timeout signal', async () => {
-    const spy = vi.fn(async () => new Response('{}', { status: 200 }));
-    globalThis.fetch = spy as unknown as typeof fetch;
+    const spy = vi.fn<typeof fetch>(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = spy;
     await getRankingDiagnostics();
-    const init = spy.mock.calls[0][1] as RequestInit | undefined;
+    const init = spy.mock.calls[0]?.[1] as RequestInit | undefined;
     expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 });
