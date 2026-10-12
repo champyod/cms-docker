@@ -223,6 +223,23 @@ _routes_location_block() {
   printf '    }\n'
 }
 
+# The page's own static assets are served without the route's rate limit: the page
+# asks for them in one burst, and a limit sized for the dynamic endpoints 503s the
+# tail of that burst — the scripts that draw the page. A regex location outranks the
+# prefix route, so only the assets bypass the limit.
+_routes_static_location_block() {
+  local index="$1"
+  local upstream_var="${ROUTE_UPSTREAM_VAR[$index]}"
+  local port_var="${ROUTE_PORT_VAR[$index]}"
+  local target_var
+  target_var="$(_route_target_var "${ROUTE_LABEL[$index]}")"
+  printf '    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {\n'
+  printf '        set %s %s:%s;\n' "$target_var" "${!upstream_var}" "${!port_var}"
+  printf '        proxy_pass http://%s;\n' "$target_var"
+  printf '        proxy_redirect off;\n'
+  printf '    }\n'
+}
+
 # Renders every route a vhost serves: its own domain's rows, plus the whole table
 # when this is the primary vhost.
 #
@@ -252,6 +269,10 @@ _routes_render_vhost() {
       matcher="$(_route_matcher "${ROUTE_PATH[$index]}")"
     fi
     blocks+="$(_routes_location_block "$index" "$matcher")"$'\n'
+    # The ranking page's assets skip the route's rate limit, which the route keeps.
+    if (( owner )) && [[ "${ROUTE_LABEL[$index]}" == "ranking" ]]; then
+      blocks+="$(_routes_static_location_block "$index")"$'\n'
+    fi
   done
   printf '%s' "$blocks"
 }
