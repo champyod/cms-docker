@@ -156,6 +156,43 @@
         return counts;
     }
 
+    /* A user's score at a moment, from their ascending (time, score) series. */
+    function valueAt(series, time) {
+        var value = 0;
+        for (var index = 0; index < series.length; index += 1) {
+            if (series[index][0] > time) {
+                break;
+            }
+            value = series[index][1];
+        }
+        return value;
+    }
+
+    /* The board as of a moment, given each user's score series. */
+    function boardAt(seriesByUser, time) {
+        var board = {};
+        Object.keys(seriesByUser).forEach(function (user) {
+            board[user] = valueAt(seriesByUser[user], time);
+        });
+        return board;
+    }
+
+    /* Per-user change between two boards, including a user present in only one. */
+    function diffBoards(before, after) {
+        var users = {};
+        Object.keys(before).forEach(function (user) {
+            users[user] = true;
+        });
+        Object.keys(after).forEach(function (user) {
+            users[user] = true;
+        });
+        return Object.keys(users).map(function (user) {
+            var from = before[user] || 0;
+            var to = after[user] || 0;
+            return { user: user, before: from, after: to, delta: to - from };
+        });
+    }
+
     return {
         OVERFLOW_POLICIES: OVERFLOW_POLICIES,
         chooseOverflow: chooseOverflow,
@@ -163,6 +200,9 @@
         assignRanks: assignRanks,
         boardAtTime: boardAtTime,
         intervalGains: intervalGains,
-        histogram: histogram
+        histogram: histogram,
+        valueAt: valueAt,
+        boardAt: boardAt,
+        diffBoards: diffBoards
     };
 }));

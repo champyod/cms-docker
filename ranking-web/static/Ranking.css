@@ -1351,6 +1351,38 @@ abbr {
     max-width: 100%;
 }
 
+.persp-time {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin: 8px 0;
+}
+
+#Persp_time_slider {
+    width: min(60%, 640px);
+}
+
+#Persp_time_clock {
+    font-variant-numeric: tabular-nums;
+    font-size: 1.1em;
+}
+
+.persp-time-btn {
+    font: inherit;
+    padding: 0.3em 0.8em;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    background-color: #ECECEF;
+    cursor: pointer;
+}
+
+.persp-time-compare {
+    font-size: 0.9em;
+    color: #444444;
+}
+
 /* Anonymous hides every name on the scoreboard; the extra views mask it in the DOM. */
 body.views-anonymous #Scoreboard td.f_name,
 body.views-anonymous #Scoreboard td.l_name {

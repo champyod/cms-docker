@@ -112,3 +112,32 @@ test("histogram returns empty buckets for a non-positive max", () => {
     const counts = logic.histogram([1, 2], 3, 0);
     assert.deepEqual(counts, [0, 0, 0, 0]);
 });
+
+test("valueAt reads the last score at or before the moment", () => {
+    const series = [
+        [10, 5],
+        [30, 12]
+    ];
+    assert.equal(logic.valueAt(series, 5), 0);
+    assert.equal(logic.valueAt(series, 10), 5);
+    assert.equal(logic.valueAt(series, 29), 5);
+    assert.equal(logic.valueAt(series, 30), 12);
+});
+
+test("boardAt maps every user's score at the moment", () => {
+    const series = { u1: [[10, 5]], u2: [[20, 8]] };
+    assert.deepEqual(logic.boardAt(series, 15), { u1: 5, u2: 0 });
+    assert.deepEqual(logic.boardAt(series, 25), { u1: 5, u2: 8 });
+});
+
+test("diffBoards reports the change per user, including one-sided users", () => {
+    const before = { u1: 5, u2: 8 };
+    const after = { u1: 9, u3: 4 };
+    const byUser = {};
+    logic.diffBoards(before, after).forEach((entry) => {
+        byUser[entry.user] = entry;
+    });
+    assert.deepEqual(byUser.u1, { user: "u1", before: 5, after: 9, delta: 4 });
+    assert.equal(byUser.u2.delta, -8);
+    assert.equal(byUser.u3.delta, 4);
+});
