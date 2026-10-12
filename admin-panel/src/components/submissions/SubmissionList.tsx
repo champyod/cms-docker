@@ -21,6 +21,7 @@ import type { ListSortInput } from '@/lib/list-sorting';
 import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
+import { BatchRecalcBar } from './BatchRecalcBar';
 
 export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
@@ -33,6 +34,12 @@ export interface SubmissionListProps {
    * an absent filter means "everything" rather than "nothing".
    */
   readonly filters?: SubmissionFilters;
+  /**
+   * Whether the reader may requeue in bulk. Resolved on the server from the same four
+   * keys the action itself gates on, so the control cannot appear to someone the action
+   * would refuse.
+   */
+  readonly canBatchRecompute?: boolean;
 }
 
 /** The contest/task/user narrowing the list query already supports. */
@@ -151,7 +158,7 @@ function SubmissionListHeader({ locale, currentPage, totalPages }: {
   );
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {} }: SubmissionListProps): React.JSX.Element {
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canBatchRecompute = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -199,6 +206,10 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
     <div className="space-y-6">
       <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
       <SubmissionFiltersBar filters={filters} onApply={applyFilters} />
+      <BatchRecalcBar
+        scope={{ contestId: filters.contestId, taskId: filters.taskId, userId: filters.userId }}
+        canRecompute={canBatchRecompute}
+      />
       <RecordList
         rows={submissions}
         columns={buildSubmissionColumns()}

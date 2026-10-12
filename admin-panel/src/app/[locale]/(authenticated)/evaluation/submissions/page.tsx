@@ -9,6 +9,7 @@ import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { getSubmissions } from '@/lib/people-read-models';
 import type { SubmissionsPageResult } from '@/lib/people-read-model-types';
 import { readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 
 /** The contest/task/user narrowing the list query already supports. */
 export interface SubmissionFilters {
@@ -16,6 +17,21 @@ export interface SubmissionFilters {
   readonly taskId?: number;
   readonly userId?: number;
 }
+
+/**
+ * Every key the bulk requeue gates on, mirrored from `recalculateSubmissions`.
+ *
+ * WHY it is declared here rather than imported: importing the action module into this
+ * server page would pull its whole dependency graph in for one constant, and the action
+ * remains the authority — it re-checks each key on every call. This list only decides
+ * whether the control is rendered.
+ */
+const BATCH_RECALC_KEYS = [
+  'submission:recompute',
+  'submission:rejudge',
+  'evaluation:delete',
+  'submissionresult:delete',
+] as const;
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
 function labelForDescriptor(dictionary: Dictionary, descriptor: RouteDescriptor): string {
@@ -98,6 +114,12 @@ export default async function EvaluationSubmissionsPage({
   const sort = readListSort({ sort: sortParam, dir });
   const filters = readSubmissionFilters({ contest, task, user });
   const result = await loadSubmissionsListPage(currentPage, sort, filters);
+  // Why the gate is resolved here and passed down: the batch action re-checks every key
+  // server-side, so this only decides whether the control is worth showing. Resolving it
+  // from the same four keys keeps the control and the action in agreement.
+  const canBatchRecompute = BATCH_RECALC_KEYS.every((key) =>
+    hasEffectivePermission(result.effectivePermissions, key),
+  );
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
@@ -111,6 +133,7 @@ export default async function EvaluationSubmissionsPage({
         navigation={dict.navigation}
         initialSort={sort}
         filters={filters}
+        canBatchRecompute={canBatchRecompute}
       />
     </PageSurface>
   );
