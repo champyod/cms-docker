@@ -41,6 +41,17 @@ export async function getRankingOverrides(): Promise<RankingOverride[]> {
   return rows.map(toOverride);
 }
 
+export async function searchRankingTargets(query: string, targetKind: string) {
+  await ensurePermission('ranking:read');
+  const trimmed = query.trim();
+  if (targetKind === 'team') {
+    const teams = await prisma.ranking_teams.findMany({ where: { OR: [{ key: { contains: trimmed, mode: 'insensitive' } }, { name: { contains: trimmed, mode: 'insensitive' } }] }, orderBy: { key: 'asc' }, take: 8 });
+    return teams.map((team) => ({ key: team.key, label: team.name, detail: team.key }));
+  }
+  const users = await prisma.ranking_users.findMany({ where: { OR: [{ key: { contains: trimmed, mode: 'insensitive' } }, { f_name: { contains: trimmed, mode: 'insensitive' } }, { l_name: { contains: trimmed, mode: 'insensitive' } }] }, orderBy: { key: 'asc' }, take: 8 });
+  return users.map((user) => ({ key: user.key, label: user.key, detail: `${user.f_name} ${user.l_name}` }));
+}
+
 export async function saveRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
   const contestId = Number.parseInt(String(formData.get('contestId') ?? ''), 10);
@@ -54,7 +65,7 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
   if (targetKind === 'ranking' && !(RANKING_ACTIONS as readonly string[]).includes(action)) {
     throw new Error(`action ${action} needs a user or team target`);
   }
-  const value = action === 'hide' ? '' : readText(formData, 'value');
+  const value = action === "hide" || action === "freeze" ? "" : readText(formData, "value");
   const actorId = await currentActorId();
   await prisma.ranking_overrides.create({
     data: {

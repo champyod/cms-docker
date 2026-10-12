@@ -2,10 +2,9 @@
 
 import { useMemo, useState } from 'react';
 
-import { saveRankingOverride } from '@/app/actions/rankingOverrides';
-import { buildTeamSearcher, buildUserSearcher, type EntityHit } from '../palette/entity-searchers';
+import { saveRankingOverride, searchRankingTargets } from '@/app/actions/rankingOverrides';
+import { type EntityHit } from '../palette/entity-searchers';
 import { useEntitySearch } from '../palette/useEntitySearch';
-import { buildNavVisibility } from '../palette/palette-data';
 import { MIN_QUERY_LENGTH } from '../palette/search-scheduler';
 
 const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-50';
@@ -43,13 +42,17 @@ export function OverrideForm({ copy, permissionKeys, locale }: OverrideFormProps
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const actions = targetKind === 'ranking' ? RANKING_ACTIONS : ROW_ACTIONS;
   const keyDisabled = targetKind === 'ranking';
-  const valueDisabled = action === 'hide';
+  const valueDisabled = action === 'hide' || action === 'freeze';
 
-  const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
   const searchers = useMemo(() => {
-    if (!visibility.users || keyDisabled) return [];
-    return targetKind === 'team' ? [buildTeamSearcher(locale)] : [buildUserSearcher(locale)];
-  }, [visibility, keyDisabled, targetKind, locale]);
+    if (!permissionKeys.includes('ranking:read') || keyDisabled) return [];
+    const searcher = async (query: string, signal: AbortSignal): Promise<EntityHit[]> => {
+      if (signal.aborted) return [];
+      const hits = await searchRankingTargets(query, targetKind);
+      return signal.aborted ? [] : hits.map((hit) => ({ ...hit, path: `/${locale}/ranking/settings` }));
+    };
+    return [searcher];
+  }, [permissionKeys, keyDisabled, targetKind, locale]);
   const { loading, hits } = useEntitySearch(dropdownOpen && !keyDisabled, keyDraft, searchers);
   const hasQuery = keyDraft.trim().length >= MIN_QUERY_LENGTH;
   const showDropdown = dropdownOpen && !keyDisabled && (loading || hits.length > 0 || hasQuery);
