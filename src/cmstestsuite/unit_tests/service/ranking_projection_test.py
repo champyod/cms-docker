@@ -9,8 +9,13 @@ test must not require.
 
 import importlib.util
 import json
+import re
 import unittest
 from pathlib import Path
+
+# A bind placeholder and a quoted identifier are the only two places a reserved word may
+# appear; anything left over would be a bare reserved identifier in the SQL.
+PLACEHOLDER_OR_QUOTED = re.compile(r'(?::\w+)|(?:"[^"]*")')
 
 MODULE_PATH = Path(__file__).resolve().parents[3] / "cms" / "service" / "ranking_projection.py"
 SPEC = importlib.util.spec_from_file_location("ranking_projection", MODULE_PATH)
@@ -73,6 +78,17 @@ class ProjectionTest(unittest.TestCase):
         self.assertIn("ON CONFLICT (key) DO UPDATE SET", statement)
         for column in ranking_projection.COLUMNS["tasks"]:
             self.assertIn(":%s" % column, statement)
+
+    def test_the_contest_statement_quotes_the_reserved_identifiers(self):
+        statement = ranking_projection.upsert_statement("contests")
+        self.assertIn('(key, name, "begin", "end", score_precision)', statement)
+        self.assertIn('"begin" = EXCLUDED."begin"', statement)
+        self.assertIn('"end" = EXCLUDED."end"', statement)
+        self.assertIn(":begin", statement)
+        self.assertIn(":end", statement)
+        unquoted = PLACEHOLDER_OR_QUOTED.sub("", statement)
+        for column in ranking_projection.RESERVED:
+            self.assertNotIn(column, unquoted)
 
     def test_rows_are_produced_in_a_stable_order(self):
         payloads = {

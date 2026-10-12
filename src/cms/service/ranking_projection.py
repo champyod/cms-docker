@@ -53,6 +53,12 @@ REQUIRED = {
 
 JSON_COLUMNS = frozenset({"extra_headers", "extra"})
 
+# WHY this set: `begin` and `end` are reserved words in Postgres, so an unquoted
+# column list or assignment is a syntax error at or near `end` and the whole push is
+# refused. Quoting the identifier fixes it without renaming the column or the payload
+# key, which the wire format and the scoreboard readers both depend on.
+RESERVED = frozenset({"begin", "end"})
+
 # Column name to the payload name it comes from, where the two differ.
 PAYLOAD_NAMES = {"display_order": "order"}
 
@@ -78,13 +84,14 @@ def upsert_statement(resource: str) -> str:
     columns = columns_for(resource)
     binds = ", ".join(_bind(column) for column in columns)
     assignments = ", ".join(
-        "%s = EXCLUDED.%s" % (column, column)
+        "%s = EXCLUDED.%s" % (_identifier(column), _identifier(column))
         for column in columns
         if column != KEY_COLUMN
     )
     update = " DO UPDATE SET %s" % assignments if assignments else " DO NOTHING"
     return "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s)%s" % (
-        TABLES[resource], ", ".join(columns), binds, KEY_COLUMN, update,
+        TABLES[resource], ", ".join(_identifier(column) for column in columns),
+        binds, KEY_COLUMN, update,
     )
 
 
@@ -114,6 +121,12 @@ def rows(resource: str, payloads: dict) -> Iterable[dict]:
     """Every entity of one resource, in a stable order so a retry is repeatable."""
     for key in sorted(payloads):
         yield row(resource, key, payloads[key])
+
+
+def _identifier(column: str) -> str:
+    if column in RESERVED:
+        return '"%s"' % column
+    return column
 
 
 def _bind(column: str) -> str:
