@@ -6,7 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { Stack } from '@/components/core/Layout';
 import { Button } from '@/components/core/Button';
-import { SurfaceState } from '@/components/core/SurfaceState';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
 import { ActiveContestCard } from '@/components/deployments/ActiveContestCard';
@@ -63,7 +63,7 @@ export function DeploymentsClient(): React.JSX.Element {
   // that read, and loadData is the read it would restart underneath itself.
   usePublishModuleActions(
     'infrastructure.deployments',
-    snapshot.loading ? null : (
+    snapshot.status.kind === 'idle' ? (
       <Button
         variant="secondary"
         size="sm"
@@ -72,11 +72,18 @@ export function DeploymentsClient(): React.JSX.Element {
       >
         {dict.deployments.refresh}
       </Button>
-    ),
+    ) : null,
   );
 
-  if (snapshot.loading) {
-    return <SurfaceState status={{ kind: 'loading', title: dict.states.loading.deployments }} />;
+  if (snapshot.status.kind !== 'idle') {
+    return (
+      <SurfaceLoadState
+        status={snapshot.status}
+        loadingTitle={dict.states.loading.deployments}
+        onRetry={() => void loadData()}
+        retryLabel={dict.states.retry.label}
+      />
+    );
   }
 
   return (
