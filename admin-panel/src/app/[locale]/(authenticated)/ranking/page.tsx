@@ -2,6 +2,7 @@ import { getRanking, getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import { SelectField } from '@/components/core/FormField';
 import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RankingTable } from '@/components/contests/contest-detail/RankingTable';
@@ -81,10 +82,34 @@ export default async function RankingBoardPage({
         <Text as="h2" variant="h3">
           {copy.users.title}
         </Text>
-        {selected === null ? (
+        {contests.length === 0 ? (
           <EmptyState title={copy.users.empty} description={copy.users.hint} />
         ) : (
-          <RankingTable ranking={board} />
+          <>
+            {/*
+              A plain GET form, so the choice works before hydration and the URL stays
+              shareable — an operator can send a colleague the board they are looking at.
+              The label reuses the override form's wording: it is the same question.
+            */}
+            <form method="get" className="flex items-end gap-2">
+              <SelectField
+                id="ranking-board-contest"
+                label={copy.overrides.contestId}
+                name="contest"
+                defaultValue={String(selected?.id ?? '')}
+              >
+                {contests.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    #{entry.id} — {entry.name}
+                  </option>
+                ))}
+              </SelectField>
+              <button type="submit" className="h-9 rounded-md border border-border px-3 text-sm">
+                {copy.overrides.chooseContest}
+              </button>
+            </form>
+            <RankingTable ranking={board} />
+          </>
         )}
       </Card>
       <RankingLogoCard canManage={effective.has('ranking:update')} />
