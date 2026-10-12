@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useActionState, useCallback, useEffect, useRef, useState } from 'react';
+import { LogoMark } from '@/components/brand/Logo';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
@@ -111,9 +112,7 @@ export default function LoginPage() {
     <AuthBackground>
       <Card className="w-full max-w-md p-8">
         <Stack align="center" gap={8} className="mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Lock className="w-6 h-6 text-foreground" />
-          </div>
+          <LogoMark className="size-12" />
           <Stack align="center" gap={2}>
             <Text variant="h2">Welcome Back</Text>
             <Text variant="muted">Sign in to access the admin panel</Text>
