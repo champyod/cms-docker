@@ -11,6 +11,12 @@ import { prisma } from '@/lib/prisma';
 // The appearance lives in one row, keyed so a second can never be written by accident.
 const SETTINGS_ID = 1;
 
+/** The perspective tabs the page registers. Kept in step with the crate's registry
+ * (ranking-web/src/perspectives.rs) so a tab the panel accepts is one the board can
+ * draw; a unit test fails when the two lists drift. */
+const PERSPECTIVE_IDS: readonly string[] = ["board", "teams", "tasks", "scores", "progress"];
+const OVERFLOW_MODES: readonly string[] = ["wrap", "scroll", "menu"];
+
 /** The appearance columns the board reads. The credit list is edited on its own. */
 export interface AppearanceFields {
   title: string;
@@ -21,6 +27,7 @@ export interface AppearanceFields {
   anonymous: boolean;
   footerText: string;
   creditsText: string;
+  perspectives: string;
 }
 
 export interface RankingAppearance extends AppearanceFields {
@@ -39,6 +46,7 @@ const DEFAULTS: RankingAppearance = {
   footerText: '',
   creditsText: '',
   credits: '',
+  perspectives: '',
 };
 
 /** Reads what the scoreboard shows. A row that does not exist yet is the defaults, not an error. */
@@ -55,7 +63,8 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     anonymous: readAnonymous(row.columns),
     footerText: row.footer_text ?? '',
     creditsText: row.credits_text ?? '',
-    credits: formatCredits(row.credits),
+    credits: formatJson(row.credits),
+    perspectives: formatJson(row.perspectives),
   };
 }
 
@@ -160,8 +169,60 @@ function parseCredits(raw: string): Prisma.InputJsonValue | typeof Prisma.JsonNu
   return parsed as Prisma.InputJsonValue;
 }
 
-function formatCredits(value: unknown): string {
+function formatJson(value: unknown): string {
   return value === null || value === undefined ? '' : JSON.stringify(value, null, 2);
+}
+
+/** Shape-checks the stored config so a bad tab is an error, not a silently ignored one. */
+function parsePerspectives(raw: string): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return Prisma.JsonNull;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error("the perspective config must be valid JSON");
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("the perspective config must be a JSON object");
+  }
+  const config = parsed as Record<string, unknown>;
+  assertPerspectiveTabs(config);
+  assertPerspectiveLayout(config);
+  if (config.default !== undefined && typeof config.default !== "string") {
+    throw new Error("default must name a tab");
+  }
+  return parsed as Prisma.InputJsonValue;
+}
+
+function assertPerspectiveTabs(config: Record<string, unknown>): void {
+  if (config.tabs === undefined) {
+    return;
+  }
+  if (!Array.isArray(config.tabs)) {
+    throw new Error("tabs must be an array");
+  }
+  for (const tab of config.tabs) {
+    const id = tab === null ? undefined : (tab as { id?: unknown }).id;
+    if (typeof id !== "string" || !PERSPECTIVE_IDS.includes(id)) {
+      throw new Error(`unknown perspective tab: ${String(id)}`);
+    }
+  }
+}
+
+function assertPerspectiveLayout(config: Record<string, unknown>): void {
+  if (config.layout === undefined) {
+    return;
+  }
+  if (typeof config.layout !== "object" || config.layout === null) {
+    throw new Error("layout must be an object");
+  }
+  const overflow = (config.layout as Record<string, unknown>).overflow;
+  if (overflow !== undefined && (typeof overflow !== "string" || !OVERFLOW_MODES.includes(overflow))) {
+    throw new Error(`unknown overflow mode: ${String(overflow)}`);
+  }
 }
 
 /** Only a real boolean turns the id column on: a missing or mistyped value must not show ids. */
@@ -189,6 +250,7 @@ function readForm(formData: FormData): AppearanceFields {
     anonymous: formData.get("anonymous") === "on",
     footerText: text("footerText"),
     creditsText: text("creditsText"),
+    perspectives: text("perspectives"),
   };
 }
 
@@ -201,5 +263,6 @@ function toRow(appearance: AppearanceFields) {
     columns: { show_id_column: appearance.showIdColumn, anonymous: appearance.anonymous },
     footer_text: appearance.footerText || null,
     credits_text: appearance.creditsText || null,
+    perspectives: parsePerspectives(appearance.perspectives),
   };
 }

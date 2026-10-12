@@ -1,7 +1,7 @@
 import { getRankingAppearance, submitRankingAppearance, type RankingAppearance } from '@/app/actions/rankingAppearance';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { SelectField } from '@/components/core/FormField';
+import { SelectField, TextareaField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
@@ -62,6 +62,15 @@ function AppearanceForm({ copy, appearance }: AppearanceFormProps): React.JSX.El
       </label>
       <Input label={copy.footerField} name="footerText" defaultValue={appearance.footerText} />
       <Input label={copy.creditsField} name="creditsText" defaultValue={appearance.creditsText} />
+      <TextareaField
+        id="ranking-perspectives"
+        label={copy.perspectivesField}
+        hint={copy.perspectivesHint}
+        name="perspectives"
+        rows={8}
+        defaultValue={appearance.perspectives}
+        className="font-mono"
+      />
       <Button type="submit" variant="positive">
         {copy.save}
       </Button>

@@ -213,6 +213,8 @@
       "anonymousField": "Start the board anonymous",
       "footerField": "Footer text",
       "creditsField": "Credits text",
+      "perspectivesField": "Perspective tabs (JSON)",
+      "perspectivesHint": "Which tabs the board shows and how the bar copes when they do not fit. Tabs: board, teams, tasks, scores, progress. Overflow: wrap, scroll or menu.",
       "save": "Save appearance"
     },
     "overrides": {

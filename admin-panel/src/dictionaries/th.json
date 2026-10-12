@@ -213,6 +213,8 @@
       "anonymousField": "เริ่มกระดานแบบไม่ระบุชื่อ",
       "footerField": "ข้อความส่วนท้าย",
       "creditsField": "ข้อความเครดิต",
+      "perspectivesField": "แท็บมุมมอง (JSON)",
+      "perspectivesHint": "เลือกแท็บที่กระดานแสดง และวิธีที่แถบแท็บจัดการเมื่อพื้นที่ไม่พอ แท็บ: board, teams, tasks, scores, progress โหมดล้น: wrap, scroll หรือ menu",
       "save": "บันทึกรูปลักษณ์"
     },
     "overrides": {

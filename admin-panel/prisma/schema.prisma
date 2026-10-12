@@ -768,6 +768,9 @@ model ranking_settings {
   /// The full credit list the panel edits, when it has one. Absent means the vendored
   /// credits.json is the list; the source-offer line is never taken from here.
   credits       Json?
+  /// The perspective tabs the board shows, in order. Absent means the built-in
+  /// defaults; the serving side normalises whatever is stored here.
+  perspectives  Json?
   access_mode   String   @default("public") @db.VarChar
   updated_at    DateTime @default(now())
   updated_by    Int?
