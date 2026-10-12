@@ -20,6 +20,7 @@ if (!("EventSource" in window)) {
             <script src="lib/explorercanvas.js"></script>
         <![endif]-->
         <script src="Config.js"></script>
+        <script>window.RankingPerspectives = {{ perspectives_json|safe }};</script>
         <script src="DataStore.js"></script>
         <script src="HistoryStore.js"></script>
         <script src="Chart.js"></script>
@@ -28,7 +29,10 @@ if (!("EventSource" in window)) {
         <script src="TeamSearch.js"></script>
         <script src="Overview.js"></script>
         <script src="Scoreboard.js"></script>
-        <script src="Views.js"></script>
+        <script src="Perspectives.logic.js"></script>
+        <script src="Perspectives.js"></script>
+        <script src="Perspectives.views.js"></script>
+        <script src="Perspectives.charts.js"></script>
         <script src="Ranking.js"></script>
         <title>{{ title }}</title>
     {{ theme_block|safe }}</head>

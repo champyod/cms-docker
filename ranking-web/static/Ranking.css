@@ -1225,14 +1225,35 @@ abbr {
 \******************************************************************************/
 
 
-#Views_bar {
+#Perspectives_bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
     margin: 16px 0 0;
-    text-align: center;
 }
 
-#Views_bar .views-btn {
+/* scroll: one row the reader pans; wrap: as many rows as it takes. Neither hides
+   a tab, so every perspective stays one action away; only menu sets tabs aside,
+   and it keeps them behind the "more" toggle. */
+#Perspectives_bar[data-overflow="scroll"] {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+}
+
+#Perspectives_bar[data-overflow="menu"] {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+}
+
+.persp-tab {
     font: inherit;
-    margin: 0 4px 6px 0;
+    max-width: 16em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     padding: 0.35em 0.9em;
     border: 1px solid #C8C8CC;
     border-radius: 4px;
@@ -1240,10 +1261,47 @@ abbr {
     cursor: pointer;
 }
 
-#Views_bar .views-btn.active {
+.persp-tab.active {
     background-color: #3465a4;
     color: #FFFFFF;
     border-color: #3465a4;
+}
+
+.persp-more {
+    font: inherit;
+    padding: 0.35em 0.7em;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    background-color: #ECECEF;
+    cursor: pointer;
+}
+
+#Perspectives_more {
+    position: relative;
+    display: inline-block;
+}
+
+#Perspectives_more_menu {
+    display: none;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 20;
+    padding: 4px;
+    background-color: #F6F6F8;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+#Perspectives_more_menu .persp-tab {
+    display: block;
+    margin: 2px 0;
+}
+
+#Perspectives_more:hover #Perspectives_more_menu,
+#Perspectives_more:focus-within #Perspectives_more_menu {
+    display: block;
 }
 
 #Views_anon {
@@ -1253,7 +1311,7 @@ abbr {
     white-space: nowrap;
 }
 
-.views-view {
+.persp-view {
     display: none;
     margin: 12px 0;
     text-align: center;
@@ -1289,8 +1347,7 @@ abbr {
     color: #444444;
 }
 
-#Views_scores canvas,
-#Views_progress canvas {
+.persp-view canvas {
     max-width: 100%;
 }
 

@@ -10,6 +10,7 @@ pub mod http;
 pub mod json;
 pub mod login;
 pub mod overrides;
+pub mod perspectives;
 pub mod public_config;
 mod score;
 pub mod score_events;

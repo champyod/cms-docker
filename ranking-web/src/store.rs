@@ -123,6 +123,9 @@ pub struct Appearance {
     pub credits_text: Option<String>,
     /// The panel's full credit list, when it has one.
     pub credits: Option<serde_json::Value>,
+    /// The perspective tabs the panel enabled, in order. Normalised before it
+    /// reaches the page; see crate::perspectives.
+    pub perspectives: Option<serde_json::Value>,
     pub access_mode: String,
 }
 
@@ -201,8 +204,8 @@ async fn assemble_ledger(
 pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreError> {
     let row = sqlx::query_as::<_, Appearance>(
         "SELECT title, subtitle, organisation, logo_asset, favicon_asset, theme, \
-         columns, score_format, footer_text, credits_text, credits, access_mode \
-         FROM ranking_settings WHERE id = 1",
+         columns, score_format, footer_text, credits_text, credits, perspectives, \
+         access_mode FROM ranking_settings WHERE id = 1",
     )
     .fetch_optional(pool)
     .await?;
