@@ -2,13 +2,7 @@ import React from 'react';
 
 import { cn } from '@/lib/utils';
 
-/**
- * The CCYod CMS Docker mark: a container hexagon holding a light bulb whose
- * glass is a C and whose filament is an S, the idea-spark in MWIT yellow.
- *
- * Colours come from the theme tokens so the mark tracks light/dark and contrast
- * modes; the static files under assets/brand carry the fixed brand colours.
- */
+// Theme tokens rather than fixed hex, so the mark tracks light, dark and high-contrast modes.
 export function LogoMark({ className }: { className?: string }): React.JSX.Element {
   return (
     <svg
@@ -39,7 +33,6 @@ export function LogoMark({ className }: { className?: string }): React.JSX.Eleme
   );
 }
 
-/** The brand name with its descriptor, led by the CCYod wordmark. */
 export function LogoWordmark({ className }: { className?: string }): React.JSX.Element {
   return (
     <span className={cn('flex min-w-0 flex-col justify-center leading-none', className)}>

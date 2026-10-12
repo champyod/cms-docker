@@ -1,11 +1,5 @@
 #!/usr/bin/env bun
-/**
- * Generates every favicon, app icon and web image from the single brand source
- * in admin-panel/assets/brand, then places them where each surface serves them.
- *
- * Source of truth: assets/brand/icon.svg (the mark) and logo-horizontal.svg.
- * Run: bun run icons   (from admin-panel/)
- */
+// Fans the single brand source out to every surface that serves an icon; run with `bun run icons`.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -20,7 +14,20 @@ const BRAND = path.join(PANEL, 'assets', 'brand');
 
 const DENSITY = 384;
 const FAVICON_SIZES = [16, 32, 48] as const;
+const APP_ICON_SIZES = [192, 512] as const;
 const APPLE_TOUCH_SIZE = 180;
+const MASKABLE_SIZE = 512;
+const WEBP_SIZE = 512;
+const LOCKUP_WIDTH = 480;
+const RANKING_LOGO_WIDTH = 320;
+const TRANSPARENT = { r: 0, g: 0, b: 0, alpha: 0 };
+
+type Output = [file: string, data: Buffer | string];
+
+interface IcoImage {
+  size: number;
+  data: Buffer;
+}
 
 const ICON = await readFile(path.join(BRAND, 'icon.svg'));
 const ICON_MASKABLE = await readFile(path.join(BRAND, 'icon-maskable.svg'));
@@ -28,7 +35,7 @@ const LOCKUP = await readFile(path.join(BRAND, 'logo-horizontal.svg'));
 
 function squarePng(svg: Buffer, size: number): Promise<Buffer> {
   return sharp(svg, { density: DENSITY })
-    .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize(size, size, { fit: 'contain', background: TRANSPARENT })
     .png({ compressionLevel: 9 })
     .toBuffer();
 }
@@ -41,12 +48,7 @@ function widthWebp(svg: Buffer, width: number): Promise<Buffer> {
   return sharp(svg, { density: DENSITY }).resize({ width }).webp({ quality: 92 }).toBuffer();
 }
 
-interface IcoImage {
-  size: number;
-  data: Buffer;
-}
-
-/** Packs PNG-encoded images into a multi-size .ico (the Vista+ PNG-in-ICO container). */
+// Packs PNG frames into the Vista+ PNG-in-ICO container.
 function buildIco(images: IcoImage[]): Buffer {
   const header = Buffer.alloc(6);
   header.writeUInt16LE(0, 0);
@@ -55,7 +57,7 @@ function buildIco(images: IcoImage[]): Buffer {
 
   const directory = Buffer.alloc(16 * images.length);
   let offset = header.length + directory.length;
-  const blobs = images.map((image, index) => {
+  const frames = images.map((image, index) => {
     const entry = 16 * index;
     const dimension = image.size >= 256 ? 0 : image.size;
     directory.writeUInt8(dimension, entry);
@@ -70,17 +72,14 @@ function buildIco(images: IcoImage[]): Buffer {
     return image.data;
   });
 
-  return Buffer.concat([header, directory, ...blobs]);
+  return Buffer.concat([header, directory, ...frames]);
 }
 
-function favicon(): Promise<Buffer> {
-  return Promise.all(FAVICON_SIZES.map(async (size) => ({ size, data: await squarePng(ICON, size) })))
-    .then((images) => buildIco(images.map((image) => ({ size: image.size, data: image.data }))));
-}
-
-async function put(file: string, data: Buffer | string): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, data);
+async function favicon(): Promise<Buffer> {
+  const frames = await Promise.all(
+    FAVICON_SIZES.map(async (size): Promise<IcoImage> => ({ size, data: await squarePng(ICON, size) })),
+  );
+  return buildIco(frames);
 }
 
 function panel(...parts: string[]): string {
@@ -91,47 +90,63 @@ function repo(...parts: string[]): string {
   return path.join(REPO, ...parts);
 }
 
-async function main(): Promise<void> {
-  const ico = await favicon();
-  const apple = await squarePng(ICON_MASKABLE, APPLE_TOUCH_SIZE);
-  const lockupPng = await widthPng(LOCKUP, 480);
-  const lockupWebp = await widthWebp(LOCKUP, 480);
-  const lockupRanking = await widthPng(LOCKUP, 320);
-
-  const outputs: Array<[string, Buffer | string]> = [
-    // Next.js app-directory file conventions (auto-emitted <link> tags).
+async function nextAppIcons(ico: Buffer, appleTouch: Buffer): Promise<Output[]> {
+  return [
     [panel('src', 'app', 'icon.svg'), ICON],
     [panel('src', 'app', 'favicon.ico'), ico],
-    [panel('src', 'app', 'apple-icon.png'), apple],
+    [panel('src', 'app', 'apple-icon.png'), appleTouch],
+  ];
+}
 
-    // Public assets for the web app manifest and general linking.
+async function webIcons(ico: Buffer, appleTouch: Buffer): Promise<Output[]> {
+  const appIcons = await Promise.all(
+    APP_ICON_SIZES.map(
+      async (size): Promise<Output> => [panel('public', 'brand', `icon-${size}.png`), await squarePng(ICON, size)],
+    ),
+  );
+  return [
     [panel('public', 'brand', 'icon.svg'), ICON],
     [panel('public', 'brand', 'favicon.ico'), ico],
-    [panel('public', 'brand', 'icon-192.png'), await squarePng(ICON, 192)],
-    [panel('public', 'brand', 'icon-512.png'), await squarePng(ICON, 512)],
-    [panel('public', 'brand', 'icon-maskable-512.png'), await squarePng(ICON_MASKABLE, 512)],
-    [panel('public', 'brand', 'apple-touch-icon.png'), apple],
-    [panel('public', 'brand', 'icon.webp'), await widthWebp(ICON, 512)],
-    [panel('public', 'brand', 'logo-horizontal.png'), lockupPng],
-    [panel('public', 'brand', 'logo-horizontal.webp'), lockupWebp],
+    ...appIcons,
+    [panel('public', 'brand', `icon-maskable-${MASKABLE_SIZE}.png`), await squarePng(ICON_MASKABLE, MASKABLE_SIZE)],
+    [panel('public', 'brand', 'apple-touch-icon.png'), appleTouch],
+    [panel('public', 'brand', 'icon.webp'), await widthWebp(ICON, WEBP_SIZE)],
+    [panel('public', 'brand', 'logo-horizontal.png'), await widthPng(LOCKUP, LOCKUP_WIDTH)],
+    [panel('public', 'brand', 'logo-horizontal.webp'), await widthWebp(LOCKUP, LOCKUP_WIDTH)],
+  ];
+}
 
-    // Public ranking board (Rust ranking-web): favicon plus the vendored logo fallback.
+async function serviceIcons(ico: Buffer, rankingLogo: Buffer): Promise<Output[]> {
+  return [
     [repo('ranking-web', 'static', 'img', 'favicon.ico'), ico],
-    [repo('ranking-web', 'static', 'img', 'logo.png'), lockupRanking],
-
-    // Legacy contest/admin web interface served by the Python core.
+    [repo('ranking-web', 'static', 'img', 'logo.png'), rankingLogo],
     [repo('src', 'cms', 'server', 'static', 'favicon.ico'), ico],
-
-    // Legacy Python ranking board, kept in step while it remains in the tree.
     [repo('src', 'cmsranking', 'static', 'img', 'favicon.ico'), ico],
-    [repo('src', 'cmsranking', 'static', 'img', 'logo.png'), lockupRanking],
+    [repo('src', 'cmsranking', 'static', 'img', 'logo.png'), rankingLogo],
     [repo('src', 'cmsranking', 'images', 'logo.svg'), LOCKUP],
+  ];
+}
+
+async function put(file: string, data: Buffer | string): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, data);
+}
+
+async function main(): Promise<void> {
+  const ico = await favicon();
+  const appleTouch = await squarePng(ICON_MASKABLE, APPLE_TOUCH_SIZE);
+  const rankingLogo = await widthPng(LOCKUP, RANKING_LOGO_WIDTH);
+
+  const outputs = [
+    ...(await nextAppIcons(ico, appleTouch)),
+    ...(await webIcons(ico, appleTouch)),
+    ...(await serviceIcons(ico, rankingLogo)),
   ];
 
   for (const [file, data] of outputs) {
     await put(file, data);
-    const size = typeof data === 'string' ? Buffer.byteLength(data) : data.length;
-    console.log(`  ${path.relative(REPO, file)}  ${size} B`);
+    const bytes = typeof data === 'string' ? Buffer.byteLength(data) : data.length;
+    console.log(`  ${path.relative(REPO, file)}  ${bytes} B`);
   }
 
   console.log(`\nWrote ${outputs.length} assets from assets/brand.`);
