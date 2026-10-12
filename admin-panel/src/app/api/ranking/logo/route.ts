@@ -6,24 +6,34 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   IMAGE_EXTENSIONS,
   imageMime,
-  normalizeImageExtension,
   validateAssetSize,
   type ImageExtension,
 } from '@/lib/asset-upload';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
+import { logoExtension, setLogoPath } from '@/lib/ranking-logo';
 
 const RANKING_LIB_DIR = '/var/local/lib/cms/ranking';
+const HOST_LOGO_DIR = 'config/assets';
+const LOGO_FILENAME_STEM = 'logo';
+const LOGO_FILE_MODE = 0o644;
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return fs.access(filePath).then(
+    () => true,
+    () => false,
+  );
+}
+
+async function removeIfPresent(filePath: string): Promise<void> {
+  await fs.rm(filePath, { force: true });
+}
 
 async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: ImageExtension } | null> {
   for (const ext of IMAGE_EXTENSIONS) {
-    const candidate = path.join(dir, `logo.${ext}`);
-    try {
-      await fs.access(candidate);
-      return { filePath: candidate, ext };
-    } catch {
-    }
+    const candidate = path.join(dir, `${LOGO_FILENAME_STEM}.${ext}`);
+    if (await fileExists(candidate)) return { filePath: candidate, ext };
   }
   return null;
 }
@@ -31,51 +41,47 @@ async function findFirstLogo(dir: string): Promise<{ filePath: string; ext: Imag
 async function removeOtherLogos(dir: string, keepExt: ImageExtension | null): Promise<void> {
   for (const ext of IMAGE_EXTENSIONS) {
     if (keepExt !== null && ext === keepExt) continue;
-    const target = path.join(dir, `logo.${ext}`);
-    try {
-      await fs.unlink(target);
-    } catch {
-    }
+    await removeIfPresent(path.join(dir, `${LOGO_FILENAME_STEM}.${ext}`));
   }
 }
 
-async function ensureDir(dir: string): Promise<void> {
+async function writeLogoToDir(dir: string, buffer: Buffer, ext: ImageExtension): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
+  await removeOtherLogos(dir, null);
+  const target = path.join(dir, `${LOGO_FILENAME_STEM}.${ext}`);
+  await fs.writeFile(target, buffer);
+  await fs.chmod(target, LOGO_FILE_MODE);
+  await removeOtherLogos(dir, ext);
 }
 
-async function updateConfigToml(ext: string | null): Promise<void> {
-  const repoRoot = getRepoRoot();
-  const tomlPath = path.join(repoRoot, 'config.toml');
+function logoPath(): string {
+  return path.join(getRepoRoot(), 'config.toml');
+}
+
+function hostLogoDir(): string {
+  return path.join(getRepoRoot(), HOST_LOGO_DIR);
+}
+
+/** Points config.toml at the stored logo, or at nothing when the logo is removed. */
+async function updateConfigToml(ext: ImageExtension | null): Promise<void> {
+  const tomlPath = logoPath();
   let content: string;
   try {
     content = await fs.readFile(tomlPath, 'utf-8');
   } catch (error) {
-    console.error('[ranking/logo] failed to read config.toml', error);
+    console.error(`[ranking/logo] cannot read ${tomlPath}`, error);
     throw new Error('config.toml not found');
   }
-
-  const newValue = ext ? `"./config/assets/logo.${ext}"` : '""';
-  const newLine = `RANKING_LOGO_PATH = ${newValue}`;
-
-  if (/^\s*RANKING_LOGO_PATH\s*=.*$/m.test(content)) {
-    content = content.replace(/^\s*RANKING_LOGO_PATH\s*=.*$/m, newLine);
-  } else if (/^\s*RANKING_SESSION_SECRET\s*=.*$/m.test(content)) {
-    content = content.replace(/^\s*RANKING_SESSION_SECRET\s*=.*$/m, (match) => `${match}\n${newLine}`);
-  } else {
-    content = `${content.trimEnd()}\n${newLine}\n`;
-  }
-
-  await fs.writeFile(tomlPath, content, 'utf-8');
+  await fs.writeFile(tomlPath, setLogoPath(content, ext), 'utf-8');
 }
 
 async function serveImageFile(filePath: string, ext: ImageExtension): Promise<NextResponse> {
   const data = await fs.readFile(filePath);
   const stat = await fs.stat(filePath);
-  const mime = imageMime(ext);
   return new NextResponse(new Uint8Array(data), {
     status: 200,
     headers: {
-      'Content-Type': mime,
+      'Content-Type': imageMime(ext),
       'Content-Length': String(data.length),
       'Cache-Control': 'no-store, must-revalidate',
       'Last-Modified': stat.mtime.toUTCString(),
@@ -83,42 +89,46 @@ async function serveImageFile(filePath: string, ext: ImageExtension): Promise<Ne
   });
 }
 
+/** The stored logo, preferring the volume the service reads over the host mirror. */
+async function findStoredLogo(): Promise<{ filePath: string; ext: ImageExtension } | null> {
+  const volumeLogo = await findFirstLogo(RANKING_LIB_DIR);
+  if (volumeLogo !== null) return volumeLogo;
+  return findFirstLogo(hostLogoDir());
+}
+
 export async function GET(): Promise<NextResponse> {
   const { authorized, response } = await verifyApiPermission('ranking:read');
   if (!authorized) return response;
 
   try {
-    const volumeLogo = await findFirstLogo(RANKING_LIB_DIR);
-    if (volumeLogo) {
-      return await serveImageFile(volumeLogo.filePath, volumeLogo.ext);
-    }
-
-    const repoRoot = getRepoRoot();
-    const hostDir = path.join(repoRoot, 'config/assets');
-    const hostLogo = await findFirstLogo(hostDir);
-    if (hostLogo) {
-      return await serveImageFile(hostLogo.filePath, hostLogo.ext);
-    }
-
-    return apiSuccess({ exists: false, fallback: true });
+    const stored = await findStoredLogo();
+    if (stored === null) return apiSuccess({ exists: false, fallback: true });
+    return await serveImageFile(stored.filePath, stored.ext);
   } catch (error) {
     console.error('[ranking/logo] GET failed', error);
     return apiError({ status: 500, message: 'Failed to read ranking logo' });
   }
 }
 
-function extractExt(fileName: string): ImageExtension | null {
-  const rawExt = fileName.includes('.') ? (fileName.split('.').pop() ?? '') : '';
-  return normalizeImageExtension(rawExt);
+interface UploadedLogo {
+  readonly buffer: Buffer;
+  readonly ext: ImageExtension;
 }
 
-async function writeLogoToDir(dir: string, buffer: Buffer, ext: ImageExtension): Promise<void> {
-  await ensureDir(dir);
-  await removeOtherLogos(dir, null);
-  const target = path.join(dir, `logo.${ext}`);
-  await fs.writeFile(target, buffer);
-  await fs.chmod(target, 0o644);
-  await removeOtherLogos(dir, ext);
+/** Validates an upload into the buffer and extension a write needs, or the refusal to send. */
+async function readLogoUpload(formData: FormData): Promise<UploadedLogo | NextResponse> {
+  const file = formData.get('logo');
+  if (!(file instanceof File)) {
+    return apiError({ status: 400, message: 'Missing file field "logo"' });
+  }
+  const sizeError = validateAssetSize('logo', file.size);
+  if (sizeError !== null) return apiError({ status: 400, message: sizeError });
+
+  const ext = logoExtension(file.name || LOGO_FILENAME_STEM);
+  if (ext === null) {
+    return apiError({ status: 400, message: 'Unsupported format — allowed: png, jpg, jpeg, gif, bmp' });
+  }
+  return { buffer: Buffer.from(await file.arrayBuffer()), ext };
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -126,35 +136,20 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!authorized) return response;
 
   try {
-    const formData = await req.formData();
-    const file = formData.get('logo');
-    if (!(file instanceof File)) {
-      return apiError({ status: 400, message: 'Missing file field "logo"' });
-    }
+    const upload = await readLogoUpload(await req.formData());
+    if (upload instanceof NextResponse) return upload;
 
-    const sizeError = validateAssetSize('logo', file.size);
-    if (sizeError) return apiError({ status: 400, message: sizeError });
+    await writeLogoToDir(RANKING_LIB_DIR, upload.buffer, upload.ext);
+    await writeLogoToDir(hostLogoDir(), upload.buffer, upload.ext);
+    await updateConfigToml(upload.ext);
 
-    const ext = extractExt(file.name || 'logo');
-    if (!ext) {
-      return apiError({ status: 400, message: 'Unsupported format — allowed: png, jpg, jpeg, gif, bmp' });
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    await writeLogoToDir(RANKING_LIB_DIR, buffer, ext);
-
-    const repoRoot = getRepoRoot();
-    const hostDir = path.join(repoRoot, 'config/assets');
-    await writeLogoToDir(hostDir, buffer, ext);
-
-    await updateConfigToml(ext);
     await recordAudit({
       verb: 'ranking:update',
       entity: 'ranking',
-      afterValues: { action: 'logo-upload', ext },
+      afterValues: { action: 'logo-upload', ext: upload.ext },
       result: 'success',
     });
-    return apiSuccess({ logoPath: `./config/assets/logo.${ext}`, ext });
+    return apiSuccess({ logoPath: `./${HOST_LOGO_DIR}/logo.${upload.ext}`, ext: upload.ext });
   } catch (error) {
     console.error('[ranking/logo] POST failed', error);
     return apiError(error);
@@ -167,11 +162,7 @@ export async function DELETE(): Promise<NextResponse> {
 
   try {
     await removeOtherLogos(RANKING_LIB_DIR, null);
-
-    const repoRoot = getRepoRoot();
-    const hostDir = path.join(repoRoot, 'config/assets');
-    await removeOtherLogos(hostDir, null);
-
+    await removeOtherLogos(hostLogoDir(), null);
     await updateConfigToml(null);
 
     await recordAudit({
