@@ -2,7 +2,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MotionGlobalConfig } from 'motion/react';
 import { ContestCountdownTimezoneMenu } from '@/components/contests/contest-detail/ContestCountdownTimezoneMenu';
+
+// Why: happy-dom rejects on Animation.cancel() when an unfinished animation is torn down, and
+// vitest fails the run on that unhandled rejection; instant animations avoid the driver.
+MotionGlobalConfig.skipAnimations = true;
 
 // Why: globals are disabled in vitest.config.ts, so the automatic afterEach cleanup does not
 // run and every render would otherwise stay in the document; see notification-bell-dropdown.test.tsx.
