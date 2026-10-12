@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # tests/test_config_cross_section.sh — one key, two sections, one .env slot.
 #
-# The parser keys its duplicate guard by section.key, so the SAME key in two sections
-# passed it twice and the generated .env carried the setting two times; raw readers and
-# the shell then disagreed about which value won.
+# A key in two sections is one .env slot. The sync now drops the stale copy from the
+# live config.toml and reports it (see drop_stale_section_copies and test_config_sync.sh
+# Test 13), so the .env carries the setting once and the report names what it removed.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,7 +36,8 @@ printf '\n== a key in two sections is written once, from the first ==\n'
 count="$(grep -c '^ACCESS_METHOD=' "$TEST_ROOT/.env" 2>/dev/null || printf '0')"
 if [[ "$count" -eq 1 ]]; then ok "the .env carries ACCESS_METHOD once"; else no "the .env carries ACCESS_METHOD once (found ${count})"; fi
 if grep -qx 'ACCESS_METHOD=public_port' "$TEST_ROOT/.env" 2>/dev/null; then ok "the first section's value wins"; else no "the first section's value wins"; fi
-if grep -q 'duplicate key' "$TEST_ROOT/out.log" 2>/dev/null; then ok "the duplicate is reported"; else no "the duplicate is reported"; fi
+if grep -q 'removed stale ACCESS_METHOD from \[contest\]' "$TEST_ROOT/out.log" 2>/dev/null; then ok "the duplicate is reported"; else no "the duplicate is reported"; fi
+if ! grep -q '^ACCESS_METHOD' <(awk '/^\[contest\]/{f=1;next} /^\[/{f=0} f' "$TEST_ROOT/config.toml") 2>/dev/null; then ok "the stale copy is gone from config.toml"; else no "the stale copy is gone from config.toml"; fi
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$pass" "$fail"
