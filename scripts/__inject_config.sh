@@ -225,6 +225,16 @@ _set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
 # could set it left the operator with no way to turn that copy off.
 _set_contest('tests_local_copy', 'TESTS_LOCAL_COPY')
 
+# config.toml [core] CMS_RANKING_URL -> cms.toml [global] ranking_url. The contest
+# sign-in links to it; an empty value leaves the link out of the page.
+def _set_global(key, env_var):
+    global text
+    raw = os.environ.get(env_var, "").strip()
+    if raw:
+        text = set_section_key(text, 'global', key, '"%s"' % toml_escape(raw))
+
+_set_global('ranking_url', 'CMS_RANKING_URL')
+
 # config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha]. WHY both servers
 # get the same table: they verify against the same provider with the same keys,
 # and two copies of these values would be free to drift. An empty or absent

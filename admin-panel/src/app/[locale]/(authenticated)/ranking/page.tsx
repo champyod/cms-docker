@@ -43,13 +43,15 @@ export default async function RankingBoardPage({
     appearance.accessMode === 'protected'
       ? copy.appearance.accessProtected
       : copy.appearance.accessPublic;
+  const boardHint =
+    appearance.accessMode === 'protected' ? copy.board.hintProtected : copy.board.hint;
   return (
     <Stack gap={6}>
       <Card className="space-y-4">
         <Text as="h2" variant="h3">
           {copy.board.title}
         </Text>
-        <Text variant="muted">{copy.board.hint}</Text>
+        <Text variant="muted">{boardHint}</Text>
         <Grid as="dl" cols={2} gap={3} className="text-sm">
           <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
           <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />

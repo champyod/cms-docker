@@ -6,9 +6,10 @@ use axum::Router;
 use serde::Serialize;
 use tower_http::services::ServeDir;
 
+use crate::board;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::public_config;
-use crate::store::{load_appearance, load_ledger, Appearance};
+use crate::store::{load_appearance, Appearance};
 use crate::surface::{credits_from_file, logo_path, render_page};
 use crate::AppState;
 
@@ -34,6 +35,8 @@ pub fn router(state: AppState) -> Router {
         .route("/logout", post(crate::login::logout))
         .route("/", get(root))
         .route("/scores", get(scores))
+        .route("/board", get(board))
+        .route("/board/teams", get(board_teams))
         .route("/history", get(history))
         .route("/config", get(config))
         .route("/logo", get(logo))
@@ -87,23 +90,44 @@ async fn root(State(state): State<AppState>) -> Response {
 }
 
 async fn scores(State(state): State<AppState>) -> Response {
-    let Some(db) = state.db() else {
-        return refuse("no database is configured");
-    };
-    match load_ledger(db.pool()).await {
-        Ok(ledger) => stamped_json(ledger.scores()),
-        // A refusal, never a partial or empty board: a page that renders an empty
-        // scoreboard during a contest is worse than one that renders an error.
+    // A refusal, never a partial or empty board: a page that renders an empty
+    // scoreboard during a contest is worse than one that renders an error.
+    match state.standings().await {
+        Ok(standings) => stamped_json(standings.ledger.scores()),
+        Err(error) => refuse(&error.to_string()),
+    }
+}
+
+/// The board the page draws: one entry per visible user, override-applied and ranked
+/// by the server, so a rename, a hide, a guest, a score or a pin reaches the reader
+/// without the client recomputing anything.
+async fn board(State(state): State<AppState>) -> Response {
+    match state.standings().await {
+        Ok(standings) => stamped_json(&board::board_view(
+            standings.ledger.board(),
+            &standings.users,
+        )),
+        Err(error) => refuse(&error.to_string()),
+    }
+}
+
+/// The team board: each team's visible members summed, with the team-level overrides
+/// applied to the aggregate rather than to each member.
+async fn board_teams(State(state): State<AppState>) -> Response {
+    match state.standings().await {
+        Ok(standings) => stamped_json(&board::team_board_view(
+            standings.ledger.board(),
+            &standings.users,
+            &standings.team_names,
+            &standings.overrides,
+        )),
         Err(error) => refuse(&error.to_string()),
     }
 }
 
 async fn history(State(state): State<AppState>) -> Response {
-    let Some(db) = state.db() else {
-        return refuse("no database is configured");
-    };
-    match load_ledger(db.pool()).await {
-        Ok(ledger) => json_response(&ledger.history().to_vec()),
+    match state.standings().await {
+        Ok(standings) => json_response(&standings.ledger.history().to_vec()),
         Err(error) => refuse(&error.to_string()),
     }
 }

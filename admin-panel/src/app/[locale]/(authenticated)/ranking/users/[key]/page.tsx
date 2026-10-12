@@ -1,6 +1,11 @@
 import { notFound } from 'next/navigation';
 
-import { getRankingUserDetail, type RankingTask, type RankingUserEntry } from '@/app/actions/ranking';
+import {
+  getRankingOverrideOptions,
+  getRankingUserDetail,
+  type RankingTask,
+  type RankingUserEntry,
+} from '@/app/actions/ranking';
 import {
   endRankingOverride,
   getRankingOverrides,
@@ -213,6 +218,7 @@ export default async function RankingUserDetailPage({
   const detail = await getRankingUserDetail(key);
   if (detail === null) notFound();
   const canOverride = effective.has('ranking:override');
+  const options = canOverride ? await getRankingOverrideOptions() : null;
   const overrides = activeOverrides(await getRankingOverrides(), detail.entry);
   return (
     <Stack gap={6}>
@@ -222,9 +228,12 @@ export default async function RankingUserDetailPage({
         <Text as="h2" variant="h3">
           {copy.users.activeOverrides}
         </Text>
-        {canOverride ? (
+        {canOverride && options !== null ? (
           <RankingOverrideForm
             copy={copy.overrides}
+            contests={options.contests}
+            userKeys={options.userKeys}
+            teamKeys={options.teamKeys}
             contestId={String(detail.entry.contestId)}
             targetKind="user"
             targetKey={detail.entry.username}

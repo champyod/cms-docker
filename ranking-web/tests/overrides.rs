@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use cms_ranking::board::{board_view, team_board_view, UserNames};
 use cms_ranking::overrides::{OverrideRow, Overrides};
 use cms_ranking::scoring::{
     assemble_with, BoardRow, Ledger, ScoreMode, Subchange, Submission, TaskMode,
@@ -167,4 +168,153 @@ fn a_malformed_override_is_skipped_and_counted() {
         "the skipped hide leaves the row on the board"
     );
     assert_eq!(ledger.skipped_overrides(), 3);
+}
+
+type NamedUsers = BTreeMap<String, UserNames>;
+
+fn names(rows: &[(&str, &str, &str, Option<&str>)]) -> NamedUsers {
+    rows.iter()
+        .map(|(key, f_name, l_name, team)| {
+            (
+                key.to_string(),
+                UserNames {
+                    f_name: f_name.to_string(),
+                    l_name: l_name.to_string(),
+                    team: team.map(str::to_string),
+                },
+            )
+        })
+        .collect()
+}
+
+/// The view names each row from the projection and carries the team, so a page can
+/// render it without a second lookup.
+#[test]
+fn the_view_names_rows_and_carries_the_team() {
+    let overrides = Overrides::fold(&[]);
+    let ledger = assemble(&overrides);
+    let users = names(&[
+        ("u0", "Grace", "Hopper", Some("team0")),
+        ("u1", "Real", "Name", None),
+    ]);
+    let view = board_view(ledger.board(), &users);
+    let grace = &view["u0"];
+    assert_eq!((grace.f_name.as_str(), grace.l_name.as_str()), ("Grace", "Hopper"));
+    assert_eq!(grace.team.as_deref(), Some("team0"));
+    assert_eq!(grace.score, 50.0);
+    assert_eq!(grace.rank, 2);
+    assert_eq!(view["u1"].rank, 1);
+}
+
+/// A rename fills the two name columns from the one override string and keeps the
+/// team the projection holds, so a rename never drops a team.
+#[test]
+fn a_rename_fills_the_name_columns_and_keeps_the_team() {
+    let overrides = Overrides::fold(&[override_row("user", "u0", "rename", Some("Ada Lovelace"))]);
+    let ledger = assemble(&overrides);
+    let view = board_view(
+        ledger.board(),
+        &names(&[("u0", "Grace", "Hopper", Some("team0"))]),
+    );
+    let ada = &view["u0"];
+    assert_eq!((ada.f_name.as_str(), ada.l_name.as_str()), ("Ada", "Lovelace"));
+    assert_eq!(ada.team.as_deref(), Some("team0"));
+}
+
+/// The team board sums visible members, names the team from the projection and ranks it
+/// the way the user board ranks users.
+#[test]
+fn the_team_board_sums_members_and_names_the_team() {
+    let overrides = Overrides::fold(&[override_row("team", "team0", "rename", Some("Team Zero"))]);
+    let ledger = assemble(&overrides);
+    let users = names(&[("u0", "Grace", "Hopper", Some("team0"))]);
+    let team_names = BTreeMap::from([("team0".to_string(), "Raw Team".to_string())]);
+    let view = team_board_view(ledger.board(), &users, &team_names, &overrides);
+    assert_eq!(view["team0"].name, "Team Zero");
+    assert_eq!(view["team0"].members, vec!["u0".to_string()]);
+    assert_eq!(view["team0"].rank, 1);
+}
+
+/// A team score override replaces the summed total rather than each member's row, so a
+/// two-member team pinned to 10 does not read 20.
+#[test]
+fn a_team_score_override_replaces_the_summed_total() {
+    let tasks = vec![TaskMode {
+        key: "t0".to_string(),
+        mode: ScoreMode::Max,
+    }];
+    let submissions = vec![
+        Submission {
+            key: "s0".to_string(),
+            user: "u0".to_string(),
+            task: "t0".to_string(),
+            time: 1,
+        },
+        Submission {
+            key: "s2".to_string(),
+            user: "u2".to_string(),
+            task: "t0".to_string(),
+            time: 1,
+        },
+    ];
+    let subchanges = vec![
+        Subchange {
+            key: "c0".to_string(),
+            submission: "s0".to_string(),
+            time: 2,
+            score: Some(50.0),
+            token: None,
+            extra: None,
+        },
+        Subchange {
+            key: "c2".to_string(),
+            submission: "s2".to_string(),
+            time: 2,
+            score: Some(30.0),
+            token: None,
+            extra: None,
+        },
+    ];
+    let teams = BTreeMap::from([
+        ("u0".to_string(), "team0".to_string()),
+        ("u2".to_string(), "team0".to_string()),
+    ]);
+    let overrides = Overrides::fold(&[override_row("team", "team0", "score", Some("10"))]);
+    let ledger =
+        assemble_with(&tasks, &submissions, &subchanges, &overrides, &teams).expect("max is known");
+    let users = names(&[
+        ("u0", "A", "One", Some("team0")),
+        ("u2", "B", "Two", Some("team0")),
+    ]);
+    let view = team_board_view(ledger.board(), &users, &BTreeMap::new(), &overrides);
+    assert_eq!(view["team0"].score, 10.0);
+    assert_eq!(
+        view["team0"].members,
+        vec!["u0".to_string(), "u2".to_string()]
+    );
+    assert_eq!(view["team0"].rank, 1);
+}
+
+/// A guest has no projected row, so its override is the only name it has and it
+/// carries no team.
+#[test]
+fn a_guest_is_named_by_its_override_with_no_team() {
+    let overrides = Overrides::fold(&[override_row(
+        "user",
+        "visitor",
+        "guest",
+        Some("Visiting Team"),
+    )]);
+    let ledger = assemble(&overrides);
+    let view = board_view(
+        ledger.board(),
+        &names(&[("u0", "Grace", "Hopper", Some("team0"))]),
+    );
+    let guest = &view["visitor"];
+    assert_eq!(
+        (guest.f_name.as_str(), guest.l_name.as_str()),
+        ("Visiting", "Team")
+    );
+    assert_eq!(guest.team, None);
+    assert_eq!(guest.score, 0.0);
 }

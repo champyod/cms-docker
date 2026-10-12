@@ -252,6 +252,7 @@ main() {
     start_service
     compare_to_oracle "/scores" "scores"
     compare_to_oracle "/history" "history"
+    board_carries_the_overrides
     entity_lists_carry_the_seeded_values
     task_single_keeps_the_python_byte_style
     public_config_is_exactly_two_keys
@@ -261,6 +262,7 @@ main() {
     unknown_entity_key_is_a_404
     events_refuse_a_client_that_excludes_the_stream
     events_follow_a_write
+    a_score_write_publishes_a_board_delta
     a_stale_event_id_is_answered_with_a_reinit
     seed_console_admin
     protected_mode_redirects

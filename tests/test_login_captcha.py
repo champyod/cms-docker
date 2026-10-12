@@ -432,6 +432,7 @@ def _render(template_name: str, facts: dict) -> str:
     environment.filters["to_language"] = lambda value: Attributes(
         source_extensions=[])
     environment.filters["make_timestamp"] = lambda value: 0
+    environment.filters["format_datetime_smart"] = lambda value: "T"
     return environment.get_template(template_name).render(**facts)
 
 
@@ -445,10 +446,11 @@ def _login_page_facts(captcha_facts: dict) -> dict:
         "translation": Attributes(identifier="en"),
         "contest": Attributes(description="A contest", name="contest",
                               languages=[], tasks=[], allow_registration=True),
+        "phase": 0,
         "available_translations": [],
         "credits": Attributes(project=Attributes(name="CMS", author="CCYod"),
                               license=Attributes(url="/license", name="AGPL")),
-        "config": Attributes(global_=Attributes(source_url="/source")),
+        "config": Attributes(global_=Attributes(source_url="/source", ranking_url="")),
         "teams": [],
         "MAX_INPUT_LENGTH": 50,
         "MIN_PASSWORD_LENGTH": 6,

@@ -12,6 +12,7 @@ ACTIVE_DATABASE = "default"  # str; which [db_<name>] profile __config_sync.sh i
 CMS_SECRET_KEY = ""             # secret; auto-generated hex32 if empty; injected into cms.toml
 CMS_CONFIG = "/usr/local/etc/cms.toml" # container path of the generated cms.toml every CMS service reads at startup
 CMS_SOURCE_URL = "https://github.com/champyod/cms-docker" # str; AGPL-13 Corresponding Source offer shown in the UI credits; point at your own fork
+CMS_RANKING_URL = ""            # str; public address of the ranking scoreboard the contest sign-in links to; empty leaves the link out
 LOG_SERVICE_SHARD = 0           # num; shard index handed to cmsLogService; 0 = single instance — raise only when running multiple shards
 RESOURCE_SERVICE_SHARD = 0      # num; shard index handed to cmsResourceService; 0 = single instance — raise only when running multiple shards
 SCORING_SERVICE_SHARD = 0       # num; shard index handed to cmsScoringService; 0 = single instance — raise only when running multiple shards

@@ -1,4 +1,4 @@
-import { getRankingUsers, type RankingUserEntry } from '@/app/actions/ranking';
+import { getRankingOverrideOptions, getRankingUsers, type RankingUserEntry } from '@/app/actions/ranking';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
@@ -108,6 +108,7 @@ export default async function RankingUsersPage({
   const copy = (await getDictionary(locale)).ranking;
   const users = await getRankingUsers();
   const canOverride = effective.has('ranking:override');
+  const options = canOverride ? await getRankingOverrideOptions() : null;
   return (
     <Stack gap={6}>
       <Card className="space-y-4">
@@ -115,9 +116,12 @@ export default async function RankingUsersPage({
           {copy.users.title}
         </Text>
         <Text variant="muted">{copy.users.hint}</Text>
-        {canOverride ? (
+        {canOverride && options !== null ? (
           <RankingOverrideForm
             copy={copy.overrides}
+            contests={options.contests}
+            userKeys={options.userKeys}
+            teamKeys={options.teamKeys}
             contestId=""
             targetKind="user"
             targetKey=""

@@ -1,3 +1,7 @@
+'use client';
+
+import React, { useState } from 'react';
+
 import { saveRankingOverride } from '@/app/actions/rankingOverrides';
 import { Button } from '@/components/core/Button';
 import { SelectField } from '@/components/core/FormField';
@@ -7,48 +11,119 @@ import type { Dictionary } from '@/lib/dictionary';
 
 export type RankingOverrideCopy = Dictionary['ranking']['overrides'];
 
+export interface RankingOverrideContest {
+  readonly id: number;
+  readonly name: string;
+}
+
+export interface RankingOverrideKey {
+  readonly key: string;
+  readonly label: string;
+}
+
 export interface RankingOverrideFormProps {
   readonly copy: RankingOverrideCopy;
+  readonly contests: readonly RankingOverrideContest[];
+  readonly userKeys: readonly RankingOverrideKey[];
+  readonly teamKeys: readonly string[];
   readonly contestId: string;
   readonly targetKind: string;
   readonly targetKey: string;
 }
 
-// Plain server form: each override writes one row and must work before hydration.
+interface ValueControl {
+  readonly type: 'number' | 'text';
+  readonly inputMode: 'numeric' | 'decimal' | 'text';
+}
+
+// The value a verb needs is decided by the verb: a pin is a rank and a score is a
+// number, a rename names a person and a guest names a stand-in. `hide` carries none.
+const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
+  hide: { type: 'text', inputMode: 'text' },
+  guest: { type: 'text', inputMode: 'text' },
+  pin: { type: 'number', inputMode: 'numeric' },
+  rename: { type: 'text', inputMode: 'text' },
+  score: { type: 'number', inputMode: 'decimal' },
+};
+
+// The pickers are fed real rows and the value control follows the chosen verb, so an
+// operator names a contest and a target that exist instead of typing a key by hand.
 export function RankingOverrideForm({
   copy,
+  contests,
+  userKeys,
+  teamKeys,
   contestId,
   targetKind,
   targetKey,
 }: RankingOverrideFormProps): React.JSX.Element {
+  const [kind, setKind] = useState(targetKind === '' ? 'user' : targetKind);
+  const [action, setAction] = useState('hide');
+  const keys: readonly RankingOverrideKey[] =
+    kind === 'team' ? teamKeys.map((name) => ({ key: name, label: name })) : userKeys;
+  const valueControl = VALUE_CONTROLS[action];
   return (
     <form action={saveRankingOverride}>
       <Grid cols={2} gap={3}>
-        <Input
+        <SelectField
+          id="ranking-override-contest"
           label={copy.contestId}
           name="contestId"
-          inputMode="numeric"
           defaultValue={contestId}
           required
-        />
+        >
+          <option value="">{copy.chooseContest}</option>
+          {contests.map((contest) => (
+            <option key={contest.id} value={contest.id}>
+              #{contest.id} — {contest.name}
+            </option>
+          ))}
+        </SelectField>
         <SelectField
-          id="ranking-user-override-kind"
+          id="ranking-override-kind"
           label={copy.target}
           name="targetKind"
-          defaultValue={targetKind}
+          value={kind}
+          onChange={(event) => setKind(event.target.value)}
         >
           <option value="user">{copy.targetUser}</option>
           <option value="team">{copy.targetTeam}</option>
         </SelectField>
-        <Input label={copy.targetKey} name="targetKey" defaultValue={targetKey} required />
-        <SelectField id="ranking-user-override-action" label={copy.action} name="action">
+        <SelectField
+          id="ranking-override-key"
+          label={copy.targetKey}
+          name="targetKey"
+          defaultValue={targetKey}
+          required
+        >
+          <option value="">{copy.chooseTargetKey}</option>
+          {keys.map((entry) => (
+            <option key={entry.key} value={entry.key}>
+              {entry.label}
+            </option>
+          ))}
+        </SelectField>
+        <SelectField
+          id="ranking-override-action"
+          label={copy.action}
+          name="action"
+          value={action}
+          onChange={(event) => setAction(event.target.value)}
+        >
           <option value="hide">{copy.actionHide}</option>
           <option value="guest">{copy.actionGuest}</option>
           <option value="pin">{copy.actionPin}</option>
           <option value="rename">{copy.actionRename}</option>
           <option value="score">{copy.actionScore}</option>
         </SelectField>
-        <Input label={copy.value} name="value" />
+        {action !== 'hide' && valueControl !== undefined ? (
+          <Input
+            label={copy.value}
+            name="value"
+            type={valueControl.type}
+            inputMode={valueControl.inputMode}
+          />
+        ) : null}
         <Input label={copy.reason} name="reason" required />
         <Button type="submit" variant="positive">
           {copy.add}

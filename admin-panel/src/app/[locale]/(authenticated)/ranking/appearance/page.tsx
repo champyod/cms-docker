@@ -51,6 +51,15 @@ function AppearanceForm({ copy, appearance }: AppearanceFormProps): React.JSX.El
         />
         {copy.showIdColumn}
       </label>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          name="anonymous"
+          defaultChecked={appearance.anonymous}
+          className="size-4 accent-primary"
+        />
+        {copy.anonymousField}
+      </label>
       <Input label={copy.footerField} name="footerText" defaultValue={appearance.footerText} />
       <Input label={copy.creditsField} name="creditsText" defaultValue={appearance.creditsText} />
       <Button type="submit" variant="positive">

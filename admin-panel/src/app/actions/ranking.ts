@@ -115,6 +115,27 @@ export async function getRankingUsers(): Promise<RankingUserEntry[]> {
   return buildUserRanking(participations);
 }
 
+export interface RankingOverrideOptions {
+  contests: Array<{ id: number; name: string }>;
+  userKeys: Array<{ key: string; label: string }>;
+  teamKeys: string[];
+}
+
+export async function getRankingOverrideOptions(): Promise<RankingOverrideOptions> {
+  await ensurePermission('ranking:override');
+  const [contests, entries] = await Promise.all([
+    prisma.contests.findMany({ select: { id: true, name: true }, orderBy: { id: 'desc' } }),
+    getRankingUsers(),
+  ]);
+  const userKeys = [...new Map(entries.map((entry) => [entry.username, entry.displayName])).entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+  const teamKeys = [
+    ...new Set(entries.map((entry) => entry.teamName).filter((name): name is string => name !== null)),
+  ].sort();
+  return { contests, userKeys, teamKeys };
+}
+
 export async function getRankingUserDetail(username: string): Promise<RankingUserDetail | null> {
   await ensurePermission('ranking:list');
   const target = await prisma.participations.findFirst({

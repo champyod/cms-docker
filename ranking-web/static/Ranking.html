@@ -26,10 +26,11 @@ if (!("EventSource" in window)) {
         <script src="TeamSearch.js"></script>
         <script src="Overview.js"></script>
         <script src="Scoreboard.js"></script>
+        <script src="Views.js"></script>
         <script src="Ranking.js"></script>
         <title>Ranking</title>
     </head>
-    <body class="teams-hidden">
+    <body class="teams-hidden" data-board-anonymous="false">
         <div id="OuterFrame">
             <div id="LogoPanel">
                 <img src="logo" alt="Logo" />
@@ -56,6 +57,7 @@ if (!("EventSource" in window)) {
                 </div>
             </div>
             <div id="InnerFrame">
+                <div id="ViewsPanel"></div>
                 <table id="Scoreboard">
                     <colgroup id="Scoreboard_cols"></colgroup>
                     <thead id="Scoreboard_head"></thead>

@@ -1,15 +1,14 @@
+import { getRankingOverrideOptions } from '@/app/actions/ranking';
 import {
   endRankingOverride,
   getRankingOverrides,
-  saveRankingOverride,
   type RankingOverride,
 } from '@/app/actions/rankingOverrides';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
-import { SelectField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
-import { Grid, Stack } from '@/components/core/Layout';
+import { Stack } from '@/components/core/Layout';
 import {
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
   TableRow,
 } from '@/components/core/Table';
 import { Text } from '@/components/core/Typography';
+import { RankingOverrideForm } from '@/components/ranking/RankingOverrideForm';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
@@ -26,37 +26,6 @@ import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 const NO_OVERRIDES_MESSAGE = 'No manual overrides are active.';
 
 type OverrideCopy = Dictionary['ranking']['overrides'];
-
-interface OverrideFormProps {
-  readonly copy: OverrideCopy;
-}
-
-function OverrideForm({ copy }: OverrideFormProps): React.JSX.Element {
-  return (
-    <form action={saveRankingOverride}>
-      <Grid cols={2} gap={3}>
-        <Input label={copy.contestId} name="contestId" inputMode="numeric" required />
-        <SelectField id="ranking-override-target" label={copy.target} name="targetKind">
-          <option value="user">user</option>
-          <option value="team">team</option>
-        </SelectField>
-        <Input label={copy.targetKey} name="targetKey" required />
-        <SelectField id="ranking-override-action" label={copy.action} name="action">
-          <option value="hide">{copy.actionHide}</option>
-          <option value="guest">{copy.actionGuest}</option>
-          <option value="pin">{copy.actionPin}</option>
-          <option value="rename">{copy.actionRename}</option>
-          <option value="score">{copy.actionScore}</option>
-        </SelectField>
-        <Input label={copy.value} name="value" />
-        <Input label={copy.reason} name="reason" required />
-        <Button type="submit" variant="positive">
-          {copy.add}
-        </Button>
-      </Grid>
-    </form>
-  );
-}
 
 interface OverrideRowProps {
   readonly override: RankingOverride;
@@ -140,6 +109,7 @@ export default async function RankingSettingsPage({
   const copy = (await getDictionary(locale)).ranking;
   const overrides = await getRankingOverrides();
   const canOverride = effective.has('ranking:override');
+  const options = canOverride ? await getRankingOverrideOptions() : null;
   return (
     <Stack gap={6}>
       <Card className="space-y-4">
@@ -147,7 +117,17 @@ export default async function RankingSettingsPage({
           {copy.overrides.title}
         </Text>
         <Text variant="muted">{copy.overrides.hint}</Text>
-        {canOverride ? <OverrideForm copy={copy.overrides} /> : null}
+        {canOverride && options !== null ? (
+          <RankingOverrideForm
+            copy={copy.overrides}
+            contests={options.contests}
+            userKeys={options.userKeys}
+            teamKeys={options.teamKeys}
+            contestId=""
+            targetKind="user"
+            targetKey=""
+          />
+        ) : null}
         <OverrideList overrides={overrides} canOverride={canOverride} copy={copy.overrides} />
       </Card>
     </Stack>

@@ -100,9 +100,9 @@ pub async fn one_body(pool: &PgPool, kind: Kind, key: &str) -> Result<Option<Vec
 
 /// The per-user submission list the page polls; an empty list is the honest answer
 /// for a user who has none, so this is never a 404. The per-submission score, token
-/// and extra come from the scorer, not the bare submission row.
-pub async fn sublist_body(pool: &PgPool, user: &str) -> Result<Vec<u8>, StoreError> {
-    let ledger = crate::store::load_ledger(pool).await?;
+/// and extra come from the scorer, not the bare submission row. It reads the shared
+/// ledger rather than rebuilding one, because the caller already holds it.
+pub fn sublist_body(ledger: &crate::scoring::Ledger, user: &str) -> Result<Vec<u8>, StoreError> {
     encode(&ledger.sublist(user))
 }
 

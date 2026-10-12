@@ -18,6 +18,7 @@ export interface AppearanceFields {
   organisation: string;
   accessMode: 'public' | 'protected';
   showIdColumn: boolean;
+  anonymous: boolean;
   footerText: string;
   creditsText: string;
 }
@@ -34,6 +35,7 @@ const DEFAULTS: RankingAppearance = {
   organisation: '',
   accessMode: 'public',
   showIdColumn: false,
+  anonymous: false,
   footerText: '',
   creditsText: '',
   credits: '',
@@ -50,6 +52,7 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     organisation: row.organisation ?? '',
     accessMode: row.access_mode === 'protected' ? 'protected' : 'public',
     showIdColumn: readShowIdColumn(row.columns),
+    anonymous: readAnonymous(row.columns),
     footerText: row.footer_text ?? '',
     creditsText: row.credits_text ?? '',
     credits: formatCredits(row.credits),
@@ -168,6 +171,13 @@ function readShowIdColumn(columns: unknown): boolean {
   return value === true;
 }
 
+/** Only a real boolean starts the board anonymous; the default is to show names. */
+function readAnonymous(columns: unknown): boolean {
+  if (typeof columns !== "object" || columns === null) return false;
+  const value = (columns as Record<string, unknown>).anonymous;
+  return value === true;
+}
+
 function readForm(formData: FormData): AppearanceFields {
   const text = (name: string) => String(formData.get(name) ?? '').trim();
   return {
@@ -176,6 +186,7 @@ function readForm(formData: FormData): AppearanceFields {
     organisation: text("organisation"),
     accessMode: formData.get("accessMode") === "protected" ? "protected" : "public",
     showIdColumn: formData.get("showIdColumn") === "on",
+    anonymous: formData.get("anonymous") === "on",
     footerText: text("footerText"),
     creditsText: text("creditsText"),
   };
@@ -187,7 +198,7 @@ function toRow(appearance: AppearanceFields) {
     subtitle: appearance.subtitle || null,
     organisation: appearance.organisation || null,
     access_mode: appearance.accessMode,
-    columns: { show_id_column: appearance.showIdColumn },
+    columns: { show_id_column: appearance.showIdColumn, anonymous: appearance.anonymous },
     footer_text: appearance.footerText || null,
     credits_text: appearance.creditsText || null,
   };

@@ -197,8 +197,9 @@
   },
   "ranking": {
     "board": {
-      "title": "Public scoreboard",
-      "hint": "What a visitor sees first on the ranking page, and the logo it is served with."
+      "title": "Scoreboard",
+      "hint": "What a visitor sees first on the ranking page, and the logo it is served with.",
+      "hintProtected": "Sign-in required before a visitor sees this board. What they see first once signed in is the identity and logo below."
     },
     "appearance": {
       "title": "Scoreboard appearance",
@@ -209,6 +210,7 @@
       "accessPublic": "Public",
       "accessProtected": "Sign-in required",
       "showIdColumn": "Show the id column",
+      "anonymousField": "Start the board anonymous",
       "footerField": "Footer text",
       "creditsField": "Credits text",
       "save": "Save appearance"
@@ -217,10 +219,12 @@
       "title": "Manual ranking overrides",
       "hint": "A row here changes what the scoreboard shows without touching the contest data. Ending one keeps its history.",
       "contestId": "Contest id",
+      "chooseContest": "Select a contest",
       "target": "Target",
       "targetUser": "user",
       "targetTeam": "team",
       "targetKey": "Target key",
+      "chooseTargetKey": "Select a target",
       "action": "Action",
       "actionHide": "hide the row",
       "actionGuest": "add a guest row",

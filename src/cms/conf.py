@@ -75,6 +75,9 @@ class GlobalConfig:
     # of the Corresponding Source to name the running deployment's own source,
     # so a self-hosted fork must be able to point at its own repository.
     source_url: str = "https://github.com/champyod/cms-docker"
+    # Optional public address of the ranking scoreboard the contest sign-in links to.
+    # Empty leaves the link out rather than pointing anywhere.
+    ranking_url: str = ""
     temp_dir: str = "/tmp"
     backdoor: bool = False
     file_log_debug: bool = False

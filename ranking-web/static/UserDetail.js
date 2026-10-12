@@ -99,7 +99,8 @@ var UserDetail = new function () {
             window.history.pushState({}, "", "#" + user_id);
         }
         window.document.title =
-            "Ranking - " + self.user["f_name"] + " " + self.user["l_name"];
+            (document.body.getAttribute("data-board-title") || "Ranking") +
+            " - " + self.user["f_name"] + " " + self.user["l_name"];
 
         HistoryStore.request_update(self.history_callback);
 
@@ -320,7 +321,7 @@ var UserDetail = new function () {
             window.history.pushState(
                 {}, "", window.location.href.replace(/#.*$/, ''));
         }
-        window.document.title = "Ranking";
+        window.document.title = document.body.getAttribute("data-board-title") || "Ranking";
         $("#UserDetail_bg").removeClass("open");
     };
 };

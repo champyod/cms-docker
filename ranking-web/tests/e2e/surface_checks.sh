@@ -83,9 +83,85 @@ if "spdx_id" not in credits["license"] or "name" not in credits["project"]:
   pass "/credits nests licence, project and surface"
 }
 
+# The board the page draws is the override-applied one: a rename reaches it, a hidden
+# user leaves it, a guest joins it, and every row carries a server rank. The client
+# consumes this instead of recomputing ranks, so the overrides actually show.
+board_carries_the_overrides() {
+  python3 - "${PARITY}/seed.json" <<'PY' | psql "${DATABASE_URL}" -q >/dev/null
+import json, sys
+seed = json.load(open(sys.argv[1], encoding="utf-8"))["entities"]
+users = list(seed["users"])
+teams = list(seed["teams"])
+print("DELETE FROM ranking_overrides;")
+print("INSERT INTO ranking_overrides (contest_id,target_kind,target_key,action,payload,reason) "
+      "VALUES (1,'user','%s','rename','{\"value\": \"Renamed Reader\"}'::jsonb,'e2e');" % users[0])
+if len(users) > 1:
+    print("INSERT INTO ranking_overrides (contest_id,target_kind,target_key,action,payload,reason) "
+          "VALUES (1,'user','%s','hide',NULL,'e2e');" % users[1])
+print("INSERT INTO ranking_overrides (contest_id,target_kind,target_key,action,payload,reason) "
+      "VALUES (1,'user','e2e_guest','guest','{\"value\": \"E2E Guest\"}'::jsonb,'e2e');")
+if teams:
+    print("INSERT INTO ranking_overrides (contest_id,target_kind,target_key,action,payload,reason) "
+          "VALUES (1,'team','%s','rename','{\"value\": \"Renamed Team\"}'::jsonb,'e2e');" % teams[0])
+    print("INSERT INTO ranking_overrides (contest_id,target_kind,target_key,action,payload,reason) "
+          "VALUES (1,'team','%s','score','{\"value\": \"123\"}'::jsonb,'e2e');" % teams[0])
+PY
+  curl -fsS "${BASE}/board" >"${WORK}/board.json"
+  python3 - "${PARITY}/seed.json" "${WORK}/board.json" <<'PY' || fail "/board is not the override-applied board"
+import json, sys
+users = list(json.load(open(sys.argv[1], encoding="utf-8"))["entities"]["users"])
+board = json.load(open(sys.argv[2], encoding="utf-8"))
+renamed = board.get(users[0])
+if renamed is None or (renamed["f_name"], renamed["l_name"]) != ("Renamed", "Reader"):
+    raise SystemExit("the rename did not reach /board: " + json.dumps(renamed))
+if len(users) > 1 and users[1] in board:
+    raise SystemExit("a hidden user is still on /board")
+guest = board.get("e2e_guest")
+if guest is None or (guest["f_name"], guest["l_name"]) != ("E2E", "Guest"):
+    raise SystemExit("the guest did not reach /board: " + json.dumps(guest))
+if renamed.get("rank") is None or guest.get("rank") is None:
+    raise SystemExit("a board row carries no server rank")
+PY
+  curl -fsS "${BASE}/board/teams" >"${WORK}/board_teams.json"
+  python3 - "${PARITY}/seed.json" "${WORK}/board_teams.json" <<'PY' || fail "/board/teams is not the override-applied team board"
+import json, sys
+teams = list(json.load(open(sys.argv[1], encoding="utf-8"))["entities"]["teams"])
+board = json.load(open(sys.argv[2], encoding="utf-8"))
+if not teams:
+    raise SystemExit(0)
+team = board.get(teams[0])
+if team is None or team["name"] != "Renamed Team":
+    raise SystemExit("the team rename did not reach /board/teams: " + json.dumps(team))
+if team["score"] != 123.0:
+    raise SystemExit("the team score override did not replace the aggregate: " + json.dumps(team))
+if team.get("rank") is None:
+    raise SystemExit("a team row carries no server rank")
+PY
+  psql "${DATABASE_URL}" -q -c "DELETE FROM ranking_overrides;" >/dev/null
+  pass "/board and /board/teams carry the override-applied, server-ranked rows"
+}
+
+# A score move must reach an open stream as a board delta (rank/score), so a live page
+# updates in place instead of refetching the whole board.
+a_score_write_publishes_a_board_delta() {
+  local subchange
+  subchange="$(python3 -c "import json;print(next(iter(json.load(open('${PARITY}/seed.json'))['entities']['subchanges'])))")" ||
+    fail "seed.json carries no subchange to move"
+  (timeout 10 curl -sS -N "${BASE}/events" >"${LOG}.board" 2>/dev/null || true) &
+  local reader=$!
+  sleep 1
+  psql "${DATABASE_URL}" -q -c \
+    "UPDATE ranking_subchanges SET score = score + 1 WHERE key = '${subchange}'" >/dev/null
+  wait "${reader}" || true
+  grep -q '^event:board' "${LOG}.board" || fail "a score move published no board delta"
+  grep -q '^event:score' "${LOG}.board" || fail "a score move published no score event"
+  rm -f "${LOG}.board"
+  pass "a score move publishes both a score event and a board delta"
+}
+
 timestamps_land_where_python_put_them() {
   local route
-  for route in /scores /users/ /contests/; do
+  for route in /scores /board /board/teams /users/ /contests/; do
     if ! request_has_header "${route}" "timestamp"; then
       fail "${route} is missing the Timestamp header"
     fi
