@@ -636,6 +636,7 @@
         "tasks": { "label": "Tasks" },
         "participants": { "label": "Participants" },
         "communications": { "label": "Communications" },
+        "ranking": { "label": "Ranking" },
         "settings": { "label": "Settings" },
         "countdown": { "label": "Countdown" }
       }

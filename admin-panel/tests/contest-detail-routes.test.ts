@@ -53,7 +53,7 @@ describe('contest detail canonical paths', () => {
   });
 
   it('keeps English and Thai Contest detail-label keys in parity', () => {
-    const expected = ['overview', 'tasks', 'participants', 'communications', 'settings', 'countdown'];
+    const expected = ['overview', 'tasks', 'participants', 'communications', 'ranking', 'settings', 'countdown'];
     expect(Object.keys(en.navigation.contests.tabs)).toEqual(expected);
     expect(Object.keys(th.navigation.contests.tabs)).toEqual(expected);
     expect(Object.keys(en.navigation.contests.record)).toEqual(['label']);

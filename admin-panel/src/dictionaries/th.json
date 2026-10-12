@@ -636,6 +636,7 @@
         "tasks": { "label": "งาน" },
         "participants": { "label": "ผู้เข้าร่วม" },
         "communications": { "label": "การสื่อสาร" },
+        "ranking": { "label": "การจัดอันดับ" },
         "settings": { "label": "การตั้งค่า" },
         "countdown": { "label": "นับถอยหลัง" }
       }
