@@ -169,12 +169,17 @@ parse_toml() {
       # WHY a key in two sections keeps the FIRST section's value: the same key in two
       # sections is one .env slot, and __TOML is keyed by section.key, so both were
       # written and the .env carried the setting twice — the raw readers and the shell
-      # then disagreed on which won.
-      if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
-        log_warn "duplicate key '${key}' in [${section}] at line ${lineno} — already defined in [${first_section[$key]}]; keeping that section's value, ignoring this one"
-        continue
+      # then disagreed on which won. A [db_<name>] profile is exempt: every profile
+      # repeats the same POSTGRES_* keys on purpose, and they are projected into [core]
+      # by resolve_active_db_profile rather than written to the .env, so two profiles
+      # coexist without competing for a slot.
+      if [[ "$section" != db_* ]]; then
+        if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+          log_warn "duplicate key '${key}' in [${section}] at line ${lineno} — already defined in [${first_section[$key]}]; keeping that section's value, ignoring this one"
+          continue
+        fi
+        first_section["$key"]="$section"
       fi
-      first_section["$key"]="$section"
       seen_key="${section}.${key}"
       # WHY a repeated key keeps the FIRST value instead of the last: TOML parsers
       # reject a duplicate key outright, but this reader does not, so the two
@@ -825,12 +830,14 @@ drop_stale_section_copies() {
     fi
     if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
       key="${BASH_REMATCH[1]}"
-      if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
-        dropped=$((dropped + 1))
-        log_info "removed stale ${key} from [${section}] in $TOML_FILE - the tooling declares it in [${first_section[$key]}] only"
-        continue
+      if [[ "$section" != db_* ]]; then
+        if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+          dropped=$((dropped + 1))
+          log_info "removed stale ${key} from [${section}] in $TOML_FILE - the tooling declares it in [${first_section[$key]}] only"
+          continue
+        fi
+        first_section["$key"]="$section"
       fi
-      first_section["$key"]="$section"
     fi
     printf '%s\n' "$line" >> "$tmp"
   done < "$TOML_FILE"
