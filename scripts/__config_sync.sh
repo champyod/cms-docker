@@ -808,6 +808,38 @@ apply_dead_key_removal() {
 # Remove keys with no successor, reporting what replaced each and moving nothing. WHY after
 # migrate_missing_keys (see main): deleting first would let a still-listed example copy the
 # key straight back in, and parse_toml must read the cleaned file or .env keeps exporting it.
+# A key the live file carries in a second section is a copy an older example left behind:
+# the reader keeps the first and ignores the rest, so the extra line is dead weight on a
+# file this tooling maintains. Drop it and say which section owns it now.
+drop_stale_section_copies() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  local tmp line trimmed key section="" dropped=0
+  declare -A first_section=()
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      printf '%s\n' "$line" >> "$tmp"
+      continue
+    fi
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+        dropped=$((dropped + 1))
+        log_info "removed stale ${key} from [${section}] in $TOML_FILE - the tooling declares it in [${first_section[$key]}] only"
+        continue
+      fi
+      first_section["$key"]="$section"
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  if (( dropped > 0 )) && [[ "$DRY_RUN" -eq 0 ]]; then
+    cat "$tmp" > "$TOML_FILE" || { rm -f "$tmp"; return 1; }
+  fi
+  rm -f "$tmp"
+}
+
 retire_dead_keys() {
   [[ -f "$TOML_FILE" ]] || return 0
   local -a present=()
@@ -1296,6 +1328,7 @@ main() {
   # merge would let a file the example still lists copy it straight back in, and parse_toml
   # has to read the cleaned file or the generated .env keeps exporting the dead key.
   retire_dead_keys
+  drop_stale_section_copies
 
   parse_toml "$TOML_PARSE_SOURCE"
 
