@@ -144,10 +144,40 @@ export async function deleteTaskViaApi(id: number): Promise<MutationResult> {
   const before = await prisma.tasks.findUnique({ where: { id }, select: { name: true, title: true } });
   try { await prisma.tasks.delete({ where: { id } }); await recordAudit({ verb: 'task:delete', entity: 'task', entityId: String(id), beforeValues: before ? { name: before.name, title: before.title } : undefined, result: 'success' }); return { success: true }; } catch (e) { throw e; }
 }
+const ASSIGN_NUM_ATTEMPTS = 5;
+
+/** True only for the (contest_id, num) index, so a name clash is not retried forever. */
+function isTaskNumConflict(error: unknown): boolean {
+  const e = error as { code?: string; meta?: { target?: unknown } };
+  return e?.code === 'P2002' && String(e.meta?.target ?? '').includes('num');
+}
+
 export async function assignTaskToContest(taskId: number, contestId: number | null): Promise<MutationResult> {
   await requirePermission('task:update');
   // Why both: moving a task between contests rewires its active dataset path,
   // so the caller needs the dataset-switch right as well as task update.
   await requirePermission('task:switch_dataset');
-  try { let num: number | null = null; if (contestId) { const m = await prisma.tasks.aggregate({ where: { contest_id: contestId }, _max: { num: true } }); num = (m._max.num ?? 0) + 1; } await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num } }); await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(taskId), afterValues: { contest_id: contestId, num }, result: 'success' }); return { success: true }; } catch (e) { return { success: false, error: (e as Error).message }; }
+  try {
+    // Why the retry: the next number is read as MAX(num) + 1, so two assignments racing in the same
+    // contest read the same maximum and pick the same number — the first wins and the rest fail the
+    // (contest_id, num) unique index ("Unique constraint failed"). Re-reading on that exact conflict
+    // lets the losers converge instead of surfacing a write error for a retryable collision.
+    let assignedNum: number | null = null;
+    for (let attempt = 1; ; attempt += 1) {
+      if (contestId) {
+        const m = await prisma.tasks.aggregate({ where: { contest_id: contestId }, _max: { num: true } });
+        assignedNum = (m._max.num ?? 0) + 1;
+      } else {
+        assignedNum = null;
+      }
+      try {
+        await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId, num: assignedNum } });
+        break;
+      } catch (error) {
+        if (attempt >= ASSIGN_NUM_ATTEMPTS || !isTaskNumConflict(error)) throw error;
+      }
+    }
+    await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(taskId), afterValues: { contest_id: contestId, num: assignedNum }, result: 'success' });
+    return { success: true };
+  } catch (e) { return { success: false, error: (e as Error).message }; }
 }

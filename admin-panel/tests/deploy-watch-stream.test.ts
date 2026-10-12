@@ -146,4 +146,17 @@ describe('deploy status watch', () => {
     expect(frames).toHaveLength(1);
     expect(toFrame(frames[0])).toMatchObject({ status: 'completed', log: 'done' });
   });
+
+  it('reports a lookup that failed instead of looping on a silent reconnect', async () => {
+    mocks.fetchDeployStatus.mockRejectedValue(new Error('Failed to deserialize column of type interval'));
+
+    const reader = await openStream();
+    await vi.advanceTimersByTimeAsync(0);
+
+    const frames = await drain(reader);
+    expect(frames).toHaveLength(1);
+    const frame = toFrame(frames[0]);
+    expect(frame).toMatchObject({ status: 'failed', success: false });
+    expect(frame.error).toContain('Failed to deserialize column of type interval');
+  });
 });
