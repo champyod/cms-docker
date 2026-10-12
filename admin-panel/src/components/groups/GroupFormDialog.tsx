@@ -56,7 +56,7 @@ export function GroupFormDialog({
         if (!next) setOpen(false);
       }}
       title={selectedGroup ? dict.editGroup : dict.createGroup}
-      className="max-w-2xl overflow-y-auto sm:max-h-[85vh]"
+      className="max-w-2xl sm:max-h-[85vh]"
     >
       {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <div className="space-y-4">

@@ -204,7 +204,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
           confirmDisabled={loading}
         />
       }
-      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-h-[70vh] sm:max-w-3xl"
+      className="flex w-full flex-col gap-0 p-0 sm:max-h-[70vh] sm:max-w-3xl"
     >
       <ResponsiveModalShell
         sidebarWidthClass="sm:w-48"
