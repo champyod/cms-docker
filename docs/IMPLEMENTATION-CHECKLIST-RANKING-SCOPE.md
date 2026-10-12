@@ -65,7 +65,7 @@ board single-contest, which matches the push path. Recorded as **DROPPED-1** bel
 
 ## 2. Defects
 
-### D1 — `freeze` is a dead option `TODO`
+### D1 — `freeze` is a dead option `DONE`
 
 **Evidence**
 - Offered: `RankingOverrideForm.tsx:118`
@@ -82,20 +82,20 @@ entry for `freeze`** either, so the value field silently falls back to text.
 **Semantics to implement:** `freeze` carries a cutoff time. Subchanges whose `time`
 exceeds the cutoff are not replayed, so the board shows the standing as of that instant.
 
-- [ ] `overrides.rs`: add `ACTION_FREEZE`, a `frozen_at: Option<i64>` on `Overrides`,
+- [x] `overrides.rs`: add `ACTION_FREEZE`, a `frozen_at: Option<i64>` on `Overrides`,
       and `fold_freeze` parsing the payload's `value` as an i64.
-- [ ] `overrides.rs`: add `pub fn frozen_at(&self) -> Option<i64>`.
-- [ ] `scoring.rs`: thread the cutoff into `replay_subchanges`, skipping
+- [x] `overrides.rs`: add `pub fn frozen_at(&self) -> Option<i64>`.
+- [x] `scoring.rs`: thread the cutoff into `replay_subchanges`, skipping
       `change.time > frozen_at`.
 - [ ] `RankingOverrideForm.tsx`: add `freeze` to `VALUE_CONTROLS` as
       `{ type: 'number', inputMode: 'numeric' }`.
-- [ ] Tests: freeze hides later subchanges; freeze with a malformed value is skipped
+- [x] Tests: freeze hides later subchanges; freeze with a malformed value is skipped
       rather than panicking; absent freeze replays everything.
 
 **Verify:** `cd ranking-web && cargo test overrides` and a new freeze test in the
 `scoring` module. A frozen board must equal the board with the later subchanges deleted.
 
-### D2 — Overrides ignore the contest the panel asks for `TODO`
+### D2 — Overrides ignore the contest the panel asks for `BLOCKED (B1)`
 
 **Evidence**
 - Collected: `rankingOverrides.ts:52-54` refuses a save with no contest.
@@ -116,7 +116,7 @@ exceeds the cutoff are not replayed, so the board shows the standing as of that 
 **Verify:** `cargo test overrides`; add a panel test that `getRankingOverrides` passes
 the contest filter through.
 
-### D3 — The skipped counters are computed and never shown `TODO`
+### D3 — The skipped counters are computed and never shown `TODO (writable, not started)`
 
 **Evidence:** `scoring.rs:19-20,38-43,161-162` computes `skipped_subchanges` and
 `skipped_overrides`. Grepping `http.rs`, `surface.rs`, `public_config.rs` and
@@ -146,35 +146,35 @@ Contest → Communications**:
 Tasks / Participants / Communications. Announcements and Questions keep the Communications
 tab; ranking leaves it.
 
-### M1 — Route and tab registration `TODO`
+### M1 — Route and tab registration `WIP (route half DONE, label half BLOCKED)`
 
-- [ ] `lib/navigation/types.ts`: add `'contests.tabs.ranking'` to the `RouteId` union.
-- [ ] `lib/navigation/registry-competition.ts`: add `contests.tabs.ranking` to the
+- [x] `lib/navigation/types.ts`: add `'contests.tabs.ranking'` to the `RouteId` union.
+- [x] `lib/navigation/registry-competition.ts`: add `contests.tabs.ranking` to the
       `recordRoute(...)` `tabIds` for `contests.record`, and a `tabRoute` descriptor at
       `/contests/[id]/ranking` with `{ all: ['contest:read', 'ranking:list'] }`.
       **Note:** the existing ranking read in the tab uses `getRanking`, which requires
       `ranking:list` — reuse that key, do not invent one.
-- [ ] `contests/[id]/layout.tsx`: add a `case 'contests.tabs.ranking'` to
+- [x] `contests/[id]/layout.tsx`: add a `case 'contests.tabs.ranking'` to
       `getContestTabLabel`.
-- [ ] Create `app/[locale]/(authenticated)/contests/[id]/ranking/page.tsx`.
+- [x] Create `app/[locale]/(authenticated)/contests/[id]/ranking/page.tsx`.
 - [ ] `dictionaries/en.json` **and** `th.json`: add
       `navigation.contests.tabs.ranking.label` (en: "Ranking"; th: "การจัดอันดับ").
       Every route descriptor resolves its label and **throws** when a key is missing
       (`shell-nav.ts:resolveLabel`), so a missing translation is a page crash.
 
-### M2 — Remove ranking from Communications `TODO`
+### M2 — Remove ranking from Communications `DONE`
 
-- [ ] `useContestCommunications.ts`: narrow `CommTab` to `'announcements' | 'questions'`;
+- [x] `useContestCommunications.ts`: narrow `CommTab` to `'announcements' | 'questions'`;
       drop the `ranking` state, the `getRanking` import, and the `ranking` branch in
       `load`.
-- [ ] `ContestCommunications.tsx`: drop the ranking tab button and the `RankingTable`
+- [x] `ContestCommunications.tsx`: drop the ranking tab button and the `RankingTable`
       branch.
-- [ ] Decide `RankingTable.tsx`'s fate: move it under `components/contests/contest-detail/`
+- [x] Decide `RankingTable.tsx`'s fate: move it under `components/contests/contest-detail/`
       for the new tab, or keep it and re-point the import. Do not leave it orphaned.
-- [ ] Tests: `contest-detail-parity.test.tsx` and any Communications test assert the tab
+- [x] Tests: `contest-detail-parity.test.tsx` and any Communications test assert the tab
       set — update them.
 
-### M3 — Make `Ranking → Board` show an actual board `TODO`
+### M3 — Make `Ranking → Board` show an actual board `TODO (not started)`
 
 **Finding:** the page at `/ranking` renders appearance metadata and the logo card only
 (`ranking/page.tsx:41-63`). It does not draw a board. With ranking now a contest tab,
@@ -226,7 +226,11 @@ Filled in by the implementing agent. Append, do not overwrite.
 | When | Task | Command | Result |
 |---|---|---|---|
 | baseline | — | `cd ranking-web && cargo test` | 21 passed, 0 failed |
-| | | | |
+| D1 | freeze | `cargo test --test freeze` | **6 passed**, 0 failed |
+| D1 | no regression | `cargo test` (full Rust suite) | **128 passed**, 1 ignored, 0 failed |
+| M1/M2 | panel contracts | `bun run test tests/navigation-contracts.test.ts tests/contest-detail-routes.test.ts` | **2 files passed** |
+| M1/M2 | panel suite | `bun run test` | 202 passed, **3 failed** — all the B1-blocked label |
+| M1 | typecheck | `bunx tsc --noEmit` | **1 error** — the B1-blocked label | |
 
 ---
 
