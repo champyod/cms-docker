@@ -7,7 +7,9 @@ import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RankingTable } from '@/components/contests/contest-detail/RankingTable';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
+import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 const EMPTY_VALUE = '—';
@@ -51,9 +53,10 @@ export default async function RankingBoardPage({
   const { contest } = await searchParams;
   const requested = Number.parseInt(contest ?? '', 10);
   const selected = contests.find((entry) => entry.id === requested) ?? contests[0] ?? null;
-  const [appearance, board] = await Promise.all([
+  const [appearance, board, diagnostics] = await Promise.all([
     getRankingAppearance(),
     selected === null ? Promise.resolve(null) : getRanking(selected.id),
+    getRankingDiagnostics(),
   ]);
   const accessValue =
     appearance.accessMode === 'protected'
@@ -82,6 +85,24 @@ export default async function RankingBoardPage({
         <Text as="h2" variant="h3">
           {copy.users.title}
         </Text>
+        {/*
+          The service counts the rows it had to drop, and this is the only place that
+          counter reaches a human. It sits above the board because it explains what the
+          board is missing. Unreachable renders as its own warning, never as a clean
+          board: collapsing "could not ask" into "nothing dropped" would hide exactly
+          the problem this card exists to surface.
+        */}
+        {diagnostics.reachable ? (
+          diagnostics.skippedOverrides > 0 || diagnostics.skippedSubchanges > 0 ? (
+            <InlineAlert tone="warning">
+              {`Not applied: ${diagnostics.skippedOverrides} override(s), ${diagnostics.skippedSubchanges} subchange(s). A dropped override shows as a board that never had one.`}
+            </InlineAlert>
+          ) : null
+        ) : (
+          <InlineAlert tone="warning">
+            {`Applied-changes report unavailable (${diagnostics.reason}). The board below may omit rows a dropped override would explain.`}
+          </InlineAlert>
+        )}
         {contests.length === 0 ? (
           <EmptyState title={copy.users.empty} description={copy.users.hint} />
         ) : (
