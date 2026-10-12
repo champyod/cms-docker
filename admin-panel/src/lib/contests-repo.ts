@@ -38,6 +38,10 @@ export interface ContestData {
   analysis_stop?: string | Date;
   per_user_time?: number | null;
   min_submission_interval_grace_period?: number | null;
+  evaluation_throttle_delay_s?: number;
+  evaluation_throttle_window_s?: number;
+  evaluation_throttle_max?: number;
+  evaluation_final_open?: boolean;
 }
 
 const CONTESTS_PER_PAGE = 20;
@@ -113,6 +117,10 @@ export function buildContestInsertDefaults(data: ContestData) {
       ? intervalToString(data.min_submission_interval_grace_period, 'seconds')
       : null,
     queue_fairness_penalty_seconds: Math.max(0, Number(data.queue_fairness_penalty_seconds ?? 0) || 0),
+    evaluation_throttle_delay_s: Math.max(0, Number(data.evaluation_throttle_delay_s ?? 0) || 0),
+    evaluation_throttle_window_s: Math.max(0, Number(data.evaluation_throttle_window_s ?? 0) || 0),
+    evaluation_throttle_max: Math.max(0, Number(data.evaluation_throttle_max ?? 0) || 0),
+    evaluation_final_open: data.evaluation_final_open ?? false,
   };
 }
 
@@ -126,7 +134,10 @@ export async function insertContestRow(data: ContestData, d: ReturnType<typeof b
       token_mode, token_max_number, token_min_interval,
       token_gen_initial, token_gen_number, token_gen_interval, token_gen_max,
       max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval,
-      queue_fairness_penalty_seconds, start, stop, analysis_enabled, analysis_start, analysis_stop,
+      queue_fairness_penalty_seconds,
+      evaluation_throttle_delay_s, evaluation_throttle_window_s,
+      evaluation_throttle_max, evaluation_final_open,
+      start, stop, analysis_enabled, analysis_start, analysis_stop,
       score_precision, timezone, per_user_time, min_submission_interval_grace_period
     ) VALUES (
       ${data.name}, ${data.description}, ${d.allowed_localizations}, ${d.languages},
@@ -138,7 +149,10 @@ export async function insertContestRow(data: ContestData, d: ReturnType<typeof b
       ${data.token_gen_initial ?? 0}, ${data.token_gen_number ?? 0}, ${d.token_gen_interval}::interval, ${data.token_gen_max ?? null},
       ${data.max_submission_number ?? null}, ${data.max_user_test_number ?? null},
       ${d.min_submission_interval}::interval, ${d.min_user_test_interval}::interval,
-      ${d.queue_fairness_penalty_seconds}, ${d.startDate}, ${d.stopDate},
+      ${d.queue_fairness_penalty_seconds},
+      ${d.evaluation_throttle_delay_s}, ${d.evaluation_throttle_window_s},
+      ${d.evaluation_throttle_max}, ${d.evaluation_final_open},
+      ${d.startDate}, ${d.stopDate},
       ${data.analysis_enabled ?? false}, ${d.analysisStart}, ${d.analysisStop},
       ${data.score_precision ?? 0}, ${data.timezone},
       ${d.per_user_time}::interval, ${d.min_submission_interval_grace_period}::interval
