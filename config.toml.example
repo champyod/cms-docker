@@ -35,6 +35,11 @@ CERT_EMAIL = ""                         # str; Let's Encrypt registration email
 ACME_CERTBOT_IMAGE = "certbot/certbot"  # str; certbot image; set certbot/dns-cloudflare for DNS-01
 TLS_CERTRESOLVER = "letsencrypt"        # str; traefik certresolver label
 
+# Database profiles. Each [db_<name>] block is a self-contained set of POSTGRES_* keys;
+# the profile named by [core] ACTIVE_DATABASE is the one projected into the generated
+# .env, and every other profile stays dormant. More than one profile may coexist — one
+# active, the rest kept for a later switch — so a migration target never has to
+# overwrite the live database's settings. Switch with './cms db use <name>'.
 [db_default]
 POSTGRES_HOST = "database"      # str; postgres host the services dial — the injector pins "database" (the compose service) into the main server's cms.toml
 POSTGRES_PORT = 5432            # port; postgres port inside the compose network — written into cms.toml, the db-init check, and the panel's host-side DATABASE_URL
@@ -45,11 +50,15 @@ POSTGRES_PASSWORD = ""          # secret; auto-generated if empty on first sync
 POSTGRES_BACKUP_PASSWORD = ""    # secret; auto-generated if empty; backup role cms_backup (BYPASSRLS + member of cmsuser for large-object reads)
 POSTGRES_HOST_AUTH_METHOD = "md5" # postgres image pg_hba auth method; md5 = password required (the dev/test compose files use trust)
 
+# A second profile, made active by setting [core] ACTIVE_DATABASE = "staging" (or running
+# './cms db use staging'). It is a DIFFERENT database on the same server. Leave it
+# commented to keep the live profile authoritative, or uncomment it beside the active
+# one: the profiles no longer compete for the same .env slot.
 # [db_staging]
 # POSTGRES_HOST = "database"
 # POSTGRES_PORT = 5432
 # POSTGRES_PORT_EXTERNAL = 5432
-# POSTGRES_DB = "cmsdb"
+# POSTGRES_DB = "cmsdb_staging"
 # POSTGRES_USER = "cmsuser"
 # POSTGRES_PASSWORD = ""
 # POSTGRES_BACKUP_PASSWORD = ""
