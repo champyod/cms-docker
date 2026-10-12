@@ -601,7 +601,8 @@
       "evaluation": "Evaluation could not be loaded",
       "userRecord": "This user could not be loaded",
       "teamRecord": "This team could not be loaded",
-      "submissionRecord": "This submission could not be loaded"
+      "submissionRecord": "This submission could not be loaded",
+      "generic": "This page could not be loaded"
     }
   },
   "rowActions": {
