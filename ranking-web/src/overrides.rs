@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn later_rows_win_by_position() {
-        let rows = vec![
+        let rows = [
             row("user", "alice", "hide", None),
             row("user", "alice", "rename", Some("Alicia")),
         ];

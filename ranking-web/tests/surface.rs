@@ -220,8 +220,12 @@ fn heading(title: Option<&str>, subtitle: Option<&str>, organisation: Option<&st
 /// the reader through the rendered body, not through a wider object.
 #[test]
 fn the_panel_heading_reaches_the_body() {
-    let rendered = render_page(Some(&heading(Some("IOI 2026"), Some("Day 2"), Some("ACME"))))
-        .expect("the page renders");
+    let rendered = render_page(Some(&heading(
+        Some("IOI 2026"),
+        Some("Day 2"),
+        Some("ACME"),
+    )))
+    .expect("the page renders");
     assert!(rendered.contains("<div id=\"BoardHeading\">"));
     assert!(rendered.contains("<h1 class=\"board-title\">IOI 2026</h1>"));
     assert!(rendered.contains("<p class=\"board-subtitle\">Day 2</p>"));

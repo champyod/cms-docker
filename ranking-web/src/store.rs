@@ -51,7 +51,10 @@ impl StandingsCache {
         *guard = None;
     }
 
-    pub async fn get_or_build<F, Fut>(&self, build: F) -> Result<std::sync::Arc<Standings>, StoreError>
+    pub async fn get_or_build<F, Fut>(
+        &self,
+        build: F,
+    ) -> Result<std::sync::Arc<Standings>, StoreError>
     where
         F: FnOnce() -> Fut,
         Fut: std::future::Future<Output = Result<Standings, StoreError>>,
@@ -156,7 +159,10 @@ pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
 /// already assigned instead of recomputing either.
 pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
     let standings = load_standings(pool).await?;
-    Ok(board::board_view(standings.ledger.board(), &standings.users))
+    Ok(board::board_view(
+        standings.ledger.board(),
+        &standings.users,
+    ))
 }
 
 /// The team board: the same rows grouped by team, with a team-level override applied to
@@ -322,11 +328,9 @@ struct UserRow {
 /// Who each projected user is, so the board can name a row and a team override can
 /// reach its members without a query per row.
 async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreError> {
-    let rows = sqlx::query_as::<_, UserRow>(
-        "SELECT key, f_name, l_name, team FROM ranking_users",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query_as::<_, UserRow>("SELECT key, f_name, l_name, team FROM ranking_users")
+        .fetch_all(pool)
+        .await?;
     Ok(rows
         .into_iter()
         .map(|row| {

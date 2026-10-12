@@ -99,7 +99,8 @@ pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceErr
     let title = panel_title.unwrap_or(DEFAULT_TITLE);
     let heading = panel_title.unwrap_or("");
     let subtitle = present(appearance.and_then(|row| row.subtitle.as_deref())).unwrap_or("");
-    let organisation = present(appearance.and_then(|row| row.organisation.as_deref())).unwrap_or("");
+    let organisation =
+        present(appearance.and_then(|row| row.organisation.as_deref())).unwrap_or("");
     let anonymous = appearance.is_some_and(Appearance::anonymous);
     let theme_block = theme_block(appearance.and_then(|row| row.theme.as_ref()));
     let notice_extras = notice_extras(appearance);

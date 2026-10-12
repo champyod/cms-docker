@@ -199,7 +199,10 @@ fn the_view_names_rows_and_carries_the_team() {
     ]);
     let view = board_view(ledger.board(), &users);
     let grace = &view["u0"];
-    assert_eq!((grace.f_name.as_str(), grace.l_name.as_str()), ("Grace", "Hopper"));
+    assert_eq!(
+        (grace.f_name.as_str(), grace.l_name.as_str()),
+        ("Grace", "Hopper")
+    );
     assert_eq!(grace.team.as_deref(), Some("team0"));
     assert_eq!(grace.score, 50.0);
     assert_eq!(grace.rank, 2);
@@ -217,7 +220,10 @@ fn a_rename_fills_the_name_columns_and_keeps_the_team() {
         &names(&[("u0", "Grace", "Hopper", Some("team0"))]),
     );
     let ada = &view["u0"];
-    assert_eq!((ada.f_name.as_str(), ada.l_name.as_str()), ("Ada", "Lovelace"));
+    assert_eq!(
+        (ada.f_name.as_str(), ada.l_name.as_str()),
+        ("Ada", "Lovelace")
+    );
     assert_eq!(ada.team.as_deref(), Some("team0"));
 }
 
