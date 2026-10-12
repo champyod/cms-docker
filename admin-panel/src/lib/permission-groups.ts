@@ -232,6 +232,17 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'deployment:list',
       'deployment:read',
       'deployment:deploy',
+      // Why: the deployments page resolves its own `all:` read set (registry-platform.ts),
+      // so the infra operator must hold every key that page names, not just the deployment ones.
+      'contest:list',
+      'task:read',
+      'env:list',
+      'env:read',
+      'settings:list',
+      'settings:read',
+      // Why: the maintenance page's archive view and the backups API both gate on
+      // backup:list, so without it the operator saw an authorization error.
+      'backup:list',
       // Why: a deploy is only finished once it activates its contest, and activation is gated on
       // contest:switch (lib/services/contests.ts). Whoever may deploy must therefore be able to
       // activate, or the deploy succeeds and its activation fails.
@@ -239,8 +250,6 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'resource:list',
       'resource:read',
       'resource:update',
-      // No backup:* grants: backup rights are manual-grant only, so no
-      // default group carries them. Re-seed prunes stale backup links.
     ],
   },
   {
