@@ -35,6 +35,7 @@ pub fn router(state: AppState) -> Router {
         .route("/", get(root))
         .route("/scores", get(scores))
         .route("/history", get(history))
+        .route("/overrides", get(overrides))
         .route("/config", get(config))
         .route("/logo", get(logo))
         .route("/credits", get(credits))
@@ -104,6 +105,16 @@ async fn history(State(state): State<AppState>) -> Response {
     };
     match load_ledger(db.pool()).await {
         Ok(ledger) => json_response(&ledger.history().to_vec()),
+        Err(error) => refuse(&error.to_string()),
+    }
+}
+
+async fn overrides(State(state): State<AppState>) -> Response {
+    let Some(db) = state.db() else {
+        return refuse("no database is configured");
+    };
+    match crate::overrides::load_overrides(db.pool()).await {
+        Ok(rows) => json_response(&rows),
         Err(error) => refuse(&error.to_string()),
     }
 }

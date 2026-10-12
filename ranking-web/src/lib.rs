@@ -107,6 +107,7 @@ pub enum StartupError {
 const COUNTER_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub async fn run() -> Result<(), StartupError> {
+    dotenvy::dotenv().ok();
     let config = RankingConfig::from_env()?;
     let db = match config.database_url.as_deref() {
         Some(url) => Some(db::Db::connect_lazy(url)?),

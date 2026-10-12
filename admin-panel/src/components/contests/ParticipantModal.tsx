@@ -59,7 +59,7 @@ export function ParticipantModal({ isOpen, onClose, contestId, availableUsers, o
           placeholder="Search users..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full rounded-lg border border-border bg-muted/50 py-2 pl-10 pr-4 text-sm text-foreground focus:border-primary/50 focus:outline-none"
+          className="w-full rounded-lg border border-border bg-muted/50 py-2 pl-10 pr-4 text-sm text-foreground focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none"
         />
       </div>
 

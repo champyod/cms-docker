@@ -47,6 +47,7 @@ function OverrideForm({ copy }: OverrideFormProps): React.JSX.Element {
           <option value="pin">{copy.actionPin}</option>
           <option value="rename">{copy.actionRename}</option>
           <option value="score">{copy.actionScore}</option>
+          <option value="freeze">{copy.actionFreeze}</option>
         </SelectField>
         <Input label={copy.value} name="value" />
         <Input label={copy.reason} name="reason" required />

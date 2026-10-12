@@ -227,6 +227,7 @@
       "actionPin": "pin a rank",
       "actionRename": "rename the display name",
       "actionScore": "override the shown score",
+      "actionFreeze": "freeze the shown score",
       "value": "Value (rank, name or score)",
       "reason": "Reason",
       "add": "Add override",

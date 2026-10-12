@@ -77,7 +77,7 @@ function BrandingTab({
               value={branding.rankingLogoPath}
               onChange={(e) => onFieldChange('rankingLogoPath', e.target.value)}
               placeholder='e.g. "./config/assets/logo.png"'
-              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
+              className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
             />
           </label>
         </div>
