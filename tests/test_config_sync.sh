@@ -244,5 +244,16 @@ fi
 assert_not_grep "$TEST_ROOT/sync-output.log" 'removed retired' "no dead-key notice for a config without the keys"
 
 echo ""
+echo "=== Test 13: a key declared in a second section loses its stale copy ==="
+setup_test_root
+printf '\n[core]\nE2E_TWO_SECTIONS = "first"\n\n[contest]\nE2E_TWO_SECTIONS = "second"\n' >> "$TEST_ROOT/config.toml"
+sync_rc=0
+run_sync || sync_rc=$?
+assert_exit 0 "$sync_rc" "sync with a second-section copy exits 0"
+assert_grep "$TEST_ROOT/sync-output.log" 'removed stale E2E_TWO_SECTIONS from \[contest\]' "the notice names the key and the section it left"
+assert_not_grep "$TEST_ROOT/config.toml" '^E2E_TWO_SECTIONS = "second"' "the stale copy is gone"
+assert_grep "$TEST_ROOT/config.toml" '^E2E_TWO_SECTIONS = "first"' "the first copy is kept"
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]
