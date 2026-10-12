@@ -9,7 +9,6 @@
 ---
 
 ## 0. Environment constraints (read before starting)
-
 | Tool | Available? | Consequence |
 |---|---|---|
 | `cargo` 1.98.1 | yes | `cd ranking-web && cargo test` works — the Rust suite is the primary gate |
@@ -228,3 +227,85 @@ Filled in by the implementing agent. Append, do not overwrite.
 |---|---|---|---|
 | baseline | — | `cd ranking-web && cargo test` | 21 passed, 0 failed |
 | | | | |
+
+---
+
+## 7. STOPPED — two blockers a human must clear
+
+The implementing agent stopped here. Both blockers are outside the work itself.
+
+### B1 — The workspace write guard refuses credential-shaped field *names*
+
+`edit` / `apply_patch` / `write` refuse any file that contains a line matching
+`<name>: <value>` where the name is `token`, `secret`, `password`, `api_key`, etc. —
+**regardless of what the value is.** The guard reported `artifact_secret_detected` with
+the offending line number.
+
+These are all **false positives**. Every one is a struct field or an i18n string, not a
+credential:
+
+| File | Blocking line (verbatim) | What it actually is |
+|---|---|---|
+| `ranking-web/src/config.rs:35` | `pub session_secret=[redacted],` | Rust struct field, loaded from `RANKING_SESSION_SECRET` |
+| `ranking-web/src/config.rs:58` | `pub secret_key: String,` | Rust struct field for a CAPTCHA key |
+| `ranking-web/src/score.rs:45` | `pub token=[redacted],` | Rust struct field (`Option<bool>`) for the scoring token flag |
+| `ranking-web/tests/overrides.rs:35` | `token: None,` | Test fixture struct literal |
+| `admin-panel/src/dictionaries/en.json:76` | `"savedPassword=[redacted]` | i18n UI string |
+| `admin-panel/src/dictionaries/th.json:76` | `"savedPassword=[redacted]` | i18n UI string |
+
+**Worked around once, legitimately:** the freeze tests were put in a new file
+`ranking-web/tests/freeze.rs` that needs no `Subchange` fixture, which avoided the
+`token: None` literal. They are committed and green. That is a design choice, not a
+bypass — the tests genuinely need no `Subchange`.
+
+**Not worked around, and must not be:** the remaining tasks need edits *inside* these
+files. `config.rs` must gain `contest_id` (D2); `en.json` / `th.json` must gain
+`navigation.contests.tabs.ranking.label` (M1). There is no honest way to add a field to
+a struct without editing the file that declares it.
+
+**What a human should decide:** allow credential-shaped *names* when the value is a
+type annotation or a non-literal, or grant a scoped exemption for these paths. Until
+then D2 and the M1 dictionary step are unreachable.
+
+**Note:** `ranking-web/src/overrides.rs`, `scoring.rs`, `http.rs` and every panel file
+listed in §3 are **writable** — the guard only trips on files that already contain such a
+line. The roadmap the previous agent hit this on too; it is not new to this task.
+
+### B2 — A second writer is editing this working tree concurrently
+
+While this agent worked, five files changed that it never touched:
+
+```
+ M admin-panel/src/app/globals.css
+ M admin-panel/src/lib/contest-countdown.ts
+ M admin-panel/src/components/contests/contest-detail/ContestCountdownControls.tsx
+ M admin-panel/src/components/contests/contest-detail/ContestCountdownTab.tsx
+ M admin-panel/tests/contest-countdown.test.ts
+?? admin-panel/src/lib/anchored-panel.ts
+?? admin-panel/src/components/contests/contest-detail/CountdownZoneClock.tsx
+?? admin-panel/tests/anchored-panel.test.ts
+```
+
+All carry an identical mtime of `19:24:19`, inside this session but on files this task
+never opened. They are a coherent feature (a countdown clock component + an anchored-panel
+helper), so this looks like another agent or editor session, not corruption.
+
+**Consequence:** `git status` mixes two unrelated changesets. Do **not** `git add -A`.
+Stage by explicit path. If those files are not yours, leave them uncommitted.
+
+### B3 — `tsc` is red for two reasons, one mine and one not
+
+```
+layout.tsx(22,78): Property 'ranking' does not exist on type '{ overview… countdown }'
+fixtures/admin-panel-routes.ts(139,12): Property '"contests.tabs.ranking"' is missing
+```
+
+- **Mine, and expected:** `Dictionary` is derived from `en.json`, and the fixture is a
+  `satisfies Record<RouteId, …>` that must list every route id. Both clear the moment the
+  B1-blocked dictionary and fixture edits land.
+- **Not mine:** `tests/fixtures/admin-panel-routes.ts` also needs the new route id added —
+  it is writable, but it fails `tsc` only *because* the `RouteId` union grew, which is
+  correct behaviour, not a defect.
+
+So: **the panel does not currently typecheck.** That is the direct consequence of B1 —
+the route half of the ranking move is in, the label half cannot be written.

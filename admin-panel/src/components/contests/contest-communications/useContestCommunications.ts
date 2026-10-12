@@ -3,14 +3,15 @@
 import { useState, useCallback } from 'react';
 import { getAnnouncements, createAnnouncement, deleteAnnouncement } from '@/app/actions/announcements';
 import { getQuestions, replyToQuestion, ignoreQuestion, unignoreQuestion } from '@/app/actions/questions';
-import { getRanking } from '@/app/actions/ranking';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 
-export type CommTab = 'announcements' | 'questions' | 'ranking';
+// Why no ranking member: the board is its own contest tab now, because a scoreboard is
+// not a message. It used to be a third tab here beside announcements and questions.
+export type CommTab = 'announcements' | 'questions';
 
 export function useContestCommunications(contestId: number, adminId: number) {
   const dict = useDictionary();
@@ -22,7 +23,6 @@ export function useContestCommunications(contestId: number, adminId: number) {
   const [activeTab, setActiveTab] = useState<CommTab>('announcements');
   const [announcements, setAnnouncements] = useState<unknown[]>([]);
   const [questions, setQuestions] = useState<unknown[]>([]);
-  const [ranking, setRanking] = useState<{ ranking: unknown[]; tasks: unknown[] } | null>(null);
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
   const [announcementSubject, setAnnouncementSubject] = useState('');
   const [announcementText, setAnnouncementText] = useState('');
@@ -32,8 +32,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
 
   const load = useCallback(async (): Promise<void> => {
     if (activeTab === 'announcements') setAnnouncements(await getAnnouncements(contestId));
-    else if (activeTab === 'questions') setQuestions(await getQuestions(contestId));
-    else if (activeTab === 'ranking') setRanking(await getRanking(contestId) as { ranking: unknown[]; tasks: unknown[] });
+    else setQuestions(await getQuestions(contestId));
   }, [contestId, activeTab]);
 
   // Why the refusal is not swallowed any more: the load ran under a catch that only logged, so a
@@ -90,7 +89,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
   };
 
   return {
-    activeTab, selectTab, announcements, questions, ranking, status,
+    activeTab, selectTab, announcements, questions, status,
     showAnnouncementForm, setShowAnnouncementForm,
     announcementSubject, setAnnouncementSubject, announcementText, setAnnouncementText,
     replyingTo, setReplyingTo, replySubject, setReplySubject, replyText, setReplyText,

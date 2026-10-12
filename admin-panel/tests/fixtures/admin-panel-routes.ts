@@ -16,11 +16,12 @@ type RouteFixture = Pick<
 export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'home', path: '/', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.list', path: '/contests', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
-  { id: 'contests.record', path: '/contests/[id]', kind: 'record-landing', parentId: 'contests.list', defaultChildId: 'contests.tabs.overview', tabIds: ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.settings', 'contests.tabs.countdown'], legacyPaths: [], enabled: true },
+  { id: 'contests.record', path: '/contests/[id]', kind: 'record-landing', parentId: 'contests.list', defaultChildId: 'contests.tabs.overview', tabIds: ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.ranking', 'contests.tabs.settings', 'contests.tabs.countdown'], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.overview', path: '/contests/[id]/overview', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.tasks', path: '/contests/[id]/tasks', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.participants', path: '/contests/[id]/participants', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.communications', path: '/contests/[id]/communications', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
+  { id: 'contests.tabs.ranking', path: '/contests/[id]/ranking', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.settings', path: '/contests/[id]/settings', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'contests.tabs.countdown', path: '/contests/[id]/countdown', kind: 'nested-tab', parentId: 'contests.record', tabIds: [], legacyPaths: [], enabled: true },
 
@@ -86,7 +87,8 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'contests.tabs.overview': { all: ['contest:read'] },
   'contests.tabs.tasks': { all: ['contest:read', 'task:read'] },
   'contests.tabs.participants': { all: ['contest:read', 'participation:read', 'user:read'] },
-  'contests.tabs.communications': { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] },
+  'contests.tabs.communications': { all: ['contest:read', 'announcement:read', 'question:read'] },
+  'contests.tabs.ranking': { all: ['contest:read', 'ranking:list'] },
   'contests.tabs.settings': { all: ['contest:read'] },
   'contests.tabs.countdown': { all: ['contest:read'] },
   'tasks.list': { all: ['task:list'] },

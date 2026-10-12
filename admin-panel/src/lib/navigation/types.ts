@@ -9,6 +9,7 @@ export type RouteId =
   | 'contests.tabs.tasks'
   | 'contests.tabs.participants'
   | 'contests.tabs.communications'
+  | 'contests.tabs.ranking'
   | 'contests.tabs.settings'
   | 'contests.tabs.countdown'
   | 'tasks.list'

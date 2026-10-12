@@ -10,7 +10,8 @@ const CONTEST_TAB_PERMISSIONS = {
   'contests.tabs.overview': { all: ['contest:read'] },
   'contests.tabs.tasks': { all: ['contest:read', 'task:read'] },
   'contests.tabs.participants': { all: ['contest:read', 'participation:read', 'user:read'] },
-  'contests.tabs.communications': { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] },
+  'contests.tabs.communications': { all: ['contest:read', 'announcement:read', 'question:read'] },
+  'contests.tabs.ranking': { all: ['contest:read', 'ranking:list'] },
   'contests.tabs.settings': { all: ['contest:read'] },
   'contests.tabs.countdown': { all: ['contest:read'] },
 } as const satisfies Readonly<Record<string, PermissionRequirement>>;
@@ -21,6 +22,7 @@ describe('contest detail canonical paths', () => {
     expect(buildRoute('th', 'contests.tabs.tasks', { id: 41 })).toBe('/th/contests/41/tasks');
     expect(buildRoute('en', 'contests.tabs.participants', { id: 41 })).toBe('/en/contests/41/participants');
     expect(buildRoute('en', 'contests.tabs.communications', { id: 41 })).toBe('/en/contests/41/communications');
+    expect(buildRoute('en', 'contests.tabs.ranking', { id: 41 })).toBe('/en/contests/41/ranking');
     expect(buildRoute('en', 'contests.tabs.settings', { id: 41 })).toBe('/en/contests/41/settings');
     expect(buildRoute('en', 'contests.tabs.countdown', { id: 41 })).toBe('/en/contests/41/countdown');
   });

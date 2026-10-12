@@ -2,13 +2,12 @@
 
 import { Card } from '@/components/core/Card';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
-import { Megaphone, MessageSquare, Trophy } from 'lucide-react';
+import { Megaphone, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useContestCommunications } from './contest-communications/useContestCommunications';
 import { AnnouncementsPanel, type AnnouncementRow } from './contest-communications/AnnouncementsPanel';
 import { QuestionsPanel, type QuestionRow } from './contest-communications/QuestionsPanel';
-import { RankingTable, type RankingEntry, type TaskCol } from './contest-communications/RankingTable';
 
 interface ContestCommunicationsProps {
   contestId: number;
@@ -22,7 +21,7 @@ const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:
 
 export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
   const dict = useDictionary();
-  const { activeTab, selectTab, reload, status, announcements, questions, ranking, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
+  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
 
   return (
     <Card className="overflow-hidden">
@@ -32,9 +31,6 @@ export function ContestCommunications({ contestId, adminId, permissionKeys = [] 
         </button>
         <button onClick={() => selectTab('questions')} className={cn(TAB_BASE, activeTab === 'questions' ? TAB_ACTIVE : TAB_INACTIVE)}>
           <MessageSquare className="h-4 w-4" />Questions
-        </button>
-        <button onClick={() => selectTab('ranking')} className={cn(TAB_BASE, activeTab === 'ranking' ? TAB_ACTIVE : TAB_INACTIVE)}>
-          <Trophy className="h-4 w-4" />Ranking
         </button>
       </div>
       <div className="p-4">
@@ -49,7 +45,6 @@ export function ContestCommunications({ contestId, adminId, permissionKeys = [] 
           <>
             {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
             {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReply={handleReply} onIgnore={handleIgnore} />}
-            {activeTab === 'ranking' && <RankingTable ranking={ranking as { ranking: RankingEntry[]; tasks: TaskCol[] } | null} />}
           </>
         )}
       </div>
