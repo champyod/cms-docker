@@ -100,6 +100,43 @@ class TestExecutionStats(unittest.TestCase):
         self.assertRegex(stats["stderr"], "^e.*2$")
 
 
+class TestSandboxMemoryUsed(unittest.TestCase):
+
+    def setUp(self):
+        super().setUp()
+        self.sandbox = FakeIsolateSandbox(None)
+        self.sandbox.stdout_file = "stdout.txt"
+        self.sandbox.stderr_file = "stderr.txt"
+
+    def test_it_falls_back_to_max_rss_when_cg_mem_is_absent(self):
+        # isolate emits max-rss alone on kernels with no memory.peak
+        # (before Linux 6.8), which is the case on the grading host.
+        self.sandbox.fake_execute_data(
+            True, b"o", b"e", 0.1, 0.5, 1000, "OK")
+        self.sandbox.execute_without_std(["command"], wait=True)
+
+        self.assertEqual(self.sandbox.get_memory_used(), 1000 * 1024)
+        self.assertEqual(execution_stats(self.sandbox)["execution_memory"],
+                         1000 * 1024)
+
+    def test_it_prefers_cg_mem_over_max_rss(self):
+        # On kernels with memory.peak isolate emits both keys, and the
+        # cgroup peak is the one that covers every process of the
+        # evaluation, so it has to win over the main process alone.
+        self.sandbox.fake_execute_data(
+            True, b"o", b"e", 0.1, 0.5, 1000, "OK", cgroup_memory=2000)
+        self.sandbox.execute_without_std(["command"], wait=True)
+
+        self.assertEqual(self.sandbox.get_memory_used(), 2000 * 1024)
+
+    def test_it_is_none_when_no_memory_key_is_reported(self):
+        self.sandbox.fake_execute_data(
+            True, b"o", b"e", 0.1, 0.5, None, "OK")
+        self.sandbox.execute_without_std(["command"], wait=True)
+
+        self.assertIsNone(self.sandbox.get_memory_used())
+
+
 class TestMergeExecutionStats(unittest.TestCase):
 
     def assertStats(self, r0, r1):
