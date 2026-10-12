@@ -180,7 +180,7 @@ export function DatasetScoreParamsEditor({ scoreType, params, testcases = [], on
           onChange={(e) => handleCodeChange(e.target.value)}
           rows={5}
           spellCheck={false}
-          className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground font-mono text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+          className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground font-mono text-sm focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           placeholder='e.g. [[30, 3], [70, 5]]'
         />
       ) : effectiveView === 'board' ? (
@@ -204,7 +204,7 @@ export function DatasetScoreParamsEditor({ scoreType, params, testcases = [], on
             step="1"
             value={sumValue}
             onChange={(e) => handleSumChange(e.target.value)}
-            className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+            className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             placeholder="e.g. 100"
           />
         </div>

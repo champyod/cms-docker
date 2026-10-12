@@ -31,7 +31,7 @@ export function TestcasePatternInputs({
           type="text"
           value={inputPattern}
           onChange={(event) => onInputChange(event.target.value)}
-          className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none"
+          className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none"
           placeholder="e.g. case_*.in"
         />
         <p className="mt-1 text-xs text-muted-foreground">* = running number, ** = zero-padded 2-digit number. e.g. case_*.in turns case_3.in into codename 3.</p>
@@ -43,7 +43,7 @@ export function TestcasePatternInputs({
           type="text"
           value={outputPattern}
           onChange={(event) => onOutputChange(event.target.value)}
-          className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none"
+          className="w-full rounded border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none"
           placeholder="e.g. case_*.out"
         />
         <p className="mt-1 text-xs text-muted-foreground">Must capture the same number as the input pattern so files pair up.</p>

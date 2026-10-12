@@ -111,7 +111,7 @@ export function AttachmentModal({ isOpen, onClose, taskId, onSuccess }: Attachme
 
         <div>
           <label className="mb-2 block text-xs font-bold uppercase text-muted-foreground">Filename (as shown to contestants)</label>
-          <input type="text" value={customFilename} onChange={(event) => setCustomFilename(event.target.value)} placeholder="e.g., sample_data.zip" className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-foreground focus:border-ring focus:outline-none" />
+          <input type="text" value={customFilename} onChange={(event) => setCustomFilename(event.target.value)} placeholder="e.g., sample_data.zip" className="w-full rounded-lg border border-border bg-muted/50 px-4 py-3 text-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none" />
         </div>
       </form>
     </Dialog>

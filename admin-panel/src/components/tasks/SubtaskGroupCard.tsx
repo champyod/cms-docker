@@ -16,7 +16,7 @@ interface SubtaskGroupCardProps {
   onMoveTestcase: (codename: string, targetGroupId: string | null) => void;
 }
 
-const FIELD_CLASSES = 'w-full px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50';
+const FIELD_CLASSES = 'w-full px-2.5 py-1.5 bg-muted/40 border border-border rounded-lg text-foreground text-sm focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
 
 export function SubtaskGroupCard({ group, scoreType, canRemove, otherGroups, onUpdate, onRemove, onMoveTestcase }: SubtaskGroupCardProps): React.JSX.Element {
   const { setNodeRef, isOver } = useDroppable({ id: group.id });
@@ -98,7 +98,7 @@ function GroupTestcases({ group, otherGroups, onMoveTestcase }: { group: Subtask
               onMoveTestcase(codename, value === SUBTASK_POOL_ZONE_ID ? null : value);
             }}
             aria-label={`Move ${codename} to another subtask`}
-            className="min-w-0 flex-1 px-1.5 py-0.5 text-xs bg-muted/40 border border-border rounded-md text-foreground focus:outline-none focus:border-ring"
+            className="min-w-0 flex-1 px-1.5 py-0.5 text-xs bg-muted/40 border border-border rounded-md text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <option value="">Move to…</option>
             <option value={SUBTASK_POOL_ZONE_ID}>Unassigned</option>

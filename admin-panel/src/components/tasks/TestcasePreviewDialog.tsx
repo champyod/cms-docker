@@ -56,7 +56,7 @@ export function TestcasePreviewDialog({ pair, onClose, onUpdateEncoding }: Previ
                     onChange={(event) => onUpdateEncoding(pair.id, side, event.target.value as FileEncoding)}
                     aria-label={`${label} encoding selection`}
                     title={`${label} encoding selection`}
-                    className="rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm text-foreground focus:border-ring focus:outline-none"
+                    className="rounded-lg border border-border bg-muted/50 px-3 py-1.5 text-sm text-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none"
                   >
                     {ENCODING_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>

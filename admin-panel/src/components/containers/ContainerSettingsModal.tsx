@@ -162,7 +162,7 @@ export function ContainerSettingsModal({
             max="20"
             value={maxRestarts}
             onChange={(e) => setMaxRestarts(parseInt(e.target.value) || 5)}
-            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus:border-ring"
+            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           />
           <p className="text-xs text-muted-foreground">
             Recommended: 5 attempts. Range: 1-20.

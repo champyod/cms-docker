@@ -30,7 +30,7 @@ export function DatasetScoreSubtaskRow({
           step="any"
           value={row.maxScore}
           onChange={(e) => onFieldChange(index, 'maxScore', e.target.value)}
-          className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+          className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           placeholder="e.g. 40"
         />
       </div>
@@ -40,7 +40,7 @@ export function DatasetScoreSubtaskRow({
           type="text"
           value={row.testcases}
           onChange={(e) => onFieldChange(index, 'testcases', e.target.value)}
-          className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+          className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           placeholder="3 or subtask1_.*"
         />
       </div>
@@ -54,7 +54,7 @@ export function DatasetScoreSubtaskRow({
             step="any"
             value={row.threshold}
             onChange={(e) => onFieldChange(index, 'threshold', e.target.value)}
-            className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+            className="w-full px-3 py-2 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             placeholder="e.g. 1"
           />
         </div>

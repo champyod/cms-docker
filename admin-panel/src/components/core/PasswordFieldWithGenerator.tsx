@@ -122,7 +122,7 @@ export function PasswordFieldWithGenerator({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="w-full rounded-lg border border-border bg-background/60 px-4 py-3 pr-28 text-foreground focus:border-ring focus:outline-none"
+          className="w-full rounded-lg border border-border bg-background/60 px-4 py-3 pr-28 text-foreground focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 focus:outline-none"
         />
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
           <Button
