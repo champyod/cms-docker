@@ -44,6 +44,7 @@ const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
   pin: { type: 'number', inputMode: 'numeric' },
   rename: { type: 'text', inputMode: 'text' },
   score: { type: 'number', inputMode: 'decimal' },
+  freeze: { type: 'number', inputMode: 'numeric' },
 };
 
 // The pickers are fed real rows and the value control follows the chosen verb, so an
