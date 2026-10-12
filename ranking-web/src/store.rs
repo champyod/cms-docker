@@ -338,9 +338,18 @@ struct UserRow {
 /// Who each projected user is, so the board can name a row and a team override can
 /// reach its members without a query per row.
 async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreError> {
-    let rows = sqlx::query_as::<_, UserRow>("SELECT key, f_name, l_name, team FROM ranking_users")
-        .fetch_all(pool)
-        .await?;
+    // A participant added after the last proxy reinitialize has submissions but no
+    // projection row, so the score payload would name a key with no user entity and
+    // the page would fail to initialise. Take the union so every ranked user is
+    // present; one with no projection row is named by its own key.
+    let rows = sqlx::query_as::<_, UserRow>(
+        "SELECT key, f_name, l_name, team FROM ranking_users \
+         UNION SELECT s.\"user\", s.\"user\", '', NULL::text \
+         FROM (SELECT DISTINCT \"user\" FROM ranking_submissions) AS s \
+         WHERE NOT EXISTS (SELECT 1 FROM ranking_users AS u WHERE u.key = s.\"user\")",
+    )
+    .fetch_all(pool)
+    .await?;
     Ok(rows
         .into_iter()
         .map(|row| {
