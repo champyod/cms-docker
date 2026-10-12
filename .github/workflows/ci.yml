@@ -462,6 +462,12 @@ jobs:
         working-directory: ranking-web
         run: cargo test --all-targets -- --include-ignored
 
+      # The tab bar's overflow rule and the views' aggregations are pure JavaScript with
+      # no Rust counterpart, so they are exercised on their own rather than left to the
+      # browser. Runs on the ranking paths filter this job already owns.
+      - name: Perspective logic tests
+        run: node --test ranking-web/static/tests/
+
       # The rehearsal drives the release binary over HTTP against a database of its own:
       # this job's database already carries the schema, and these migrations are not
       # idempotent, so a second one is created instead of re-applying them. It is the
