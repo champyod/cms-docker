@@ -53,11 +53,13 @@ REQUIRED = {
 
 JSON_COLUMNS = frozenset({"extra_headers", "extra"})
 
-# WHY this set: `begin` and `end` are reserved words in Postgres, so an unquoted
-# column list or assignment is a syntax error at or near `end` and the whole push is
-# refused. Quoting the identifier fixes it without renaming the column or the payload
-# key, which the wire format and the scoreboard readers both depend on.
-RESERVED = frozenset({"begin", "end"})
+# WHY this set: an unquoted reserved word in a column list or assignment is a syntax
+# error that refuses the whole push, not just the one row. `end` and `user` are reserved
+# in Postgres. `begin` is not reserved in Postgres but is reserved in the SQL standard,
+# and is quoted for that same safety. Quoting the identifier fixes it without renaming
+# the column or the payload key, which the wire format and the scoreboard readers both
+# depend on.
+RESERVED = frozenset({"begin", "end", "user"})
 
 # Column name to the payload name it comes from, where the two differ.
 PAYLOAD_NAMES = {"display_order": "order"}

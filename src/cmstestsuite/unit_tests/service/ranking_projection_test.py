@@ -17,6 +17,28 @@ from pathlib import Path
 # appear; anything left over would be a bare reserved identifier in the SQL.
 PLACEHOLDER_OR_QUOTED = re.compile(r'(?::\w+)|(?:"[^"]*")')
 
+# Matched over what the strip leaves behind. Whole-token matching is required: the table
+# name `ranking_users` contains the reserved word `user` and must not read as one.
+BARE_IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+
+# WHY this list is independent of the module's own RESERVED: RESERVED is what decides
+# which identifiers get quoted, so asserting against it would only prove the module
+# agrees with itself. The words below are Postgres' reserved words, taken from Appendix C
+# of its documentation, lowercased because an unquoted SQL keyword is case-insensitive
+# and the column names are lowercase. A column that is reserved here but missing from
+# RESERVED is the exact defect that made the push fail, so this list is the oracle that
+# catches it. An empty intersection here means the comparison has silently stopped
+# matching, so the tests below also assert it is non-empty.
+POSTGRES_RESERVED = frozenset("""
+ALL ANALYSE ANALYZE AND ANY ARRAY AS ASC ASYMMETRIC BOTH CASE CAST CHECK COLLATE
+COLUMN CONSTRAINT CREATE CURRENT_CATALOG CURRENT_DATE CURRENT_ROLE CURRENT_TIME
+CURRENT_TIMESTAMP CURRENT_USER DEFAULT DEFERRABLE DESC DISTINCT DO ELSE END EXCEPT
+FALSE FETCH FOR FOREIGN FROM GRANT GROUP HAVING IN INITIALLY INTERSECT INTO LATERAL
+LEADING LIMIT LOCALTIME LOCALTIMESTAMP NOT NULL OFFSET ON ONLY OR ORDER PLACING
+PRIMARY REFERENCES RETURNING SELECT SESSION_USER SOME SYMMETRIC TABLE THEN TO
+TRAILING TRUE UNION UNIQUE USER USING VARIADIC WHEN WHERE WINDOW WITH
+""".lower().split())
+
 MODULE_PATH = Path(__file__).resolve().parents[3] / "cms" / "service" / "ranking_projection.py"
 SPEC = importlib.util.spec_from_file_location("ranking_projection", MODULE_PATH)
 ranking_projection = importlib.util.module_from_spec(SPEC)
@@ -86,9 +108,35 @@ class ProjectionTest(unittest.TestCase):
         self.assertIn('"end" = EXCLUDED."end"', statement)
         self.assertIn(":begin", statement)
         self.assertIn(":end", statement)
-        unquoted = PLACEHOLDER_OR_QUOTED.sub("", statement)
-        for column in ranking_projection.RESERVED:
-            self.assertNotIn(column, unquoted)
+
+    def test_the_reserved_word_oracle_matches_the_columns(self):
+        matched = {
+            resource: sorted(set(columns) & POSTGRES_RESERVED)
+            for resource, columns in ranking_projection.COLUMNS.items()
+        }
+        # WHY `begin` is absent: Postgres lists it as non-reserved, so the oracle does not
+        # require it quoted. The module quotes it anyway for SQL-standard safety.
+        self.assertEqual(
+            sorted(c for cols in matched.values() for c in cols), ["end", "user"],
+            "the reserved-word oracle no longer matches any column: %r" % matched,
+        )
+
+    def test_module_reserved_covers_every_reserved_column(self):
+        for resource, columns in ranking_projection.COLUMNS.items():
+            expected = set(columns) & POSTGRES_RESERVED
+            with self.subTest(resource=resource):
+                self.assertEqual(
+                    expected & ranking_projection.RESERVED, expected,
+                    "%s declares a Postgres reserved column that RESERVED omits" % resource,
+                )
+
+    def test_no_reserved_column_survives_unquoted(self):
+        for resource, columns in ranking_projection.COLUMNS.items():
+            statement = ranking_projection.upsert_statement(resource)
+            bare = set(BARE_IDENTIFIER.findall(PLACEHOLDER_OR_QUOTED.sub("", statement)))
+            for column in set(columns) & POSTGRES_RESERVED:
+                with self.subTest(resource=resource, column=column):
+                    self.assertNotIn(column, bare)
 
     def test_rows_are_produced_in_a_stable_order(self):
         payloads = {
