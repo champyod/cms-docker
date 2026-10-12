@@ -145,7 +145,11 @@ PY
 # updates in place instead of refetching the whole board.
 a_score_write_publishes_a_board_delta() {
   local subchange
-  subchange="$(python3 -c "import json;print(next(iter(json.load(open('${PARITY}/seed.json'))['entities']['subchanges'])))")" ||
+  # Why the highest-scoring subchange and not the first one: a task scores by the max over
+  # its submissions (score_mode "max"), so bumping a subchange that a higher sibling already
+  # outranks leaves the aggregate — the number the board shows — unchanged, and no delta is
+  # correct. The move has to change the aggregate for a board delta to exist at all.
+  subchange="$(python3 -c "import json;rows=json.load(open('${PARITY}/seed.json'))['entities']['subchanges'];print(max(rows, key=lambda key: rows[key]['score']))")" ||
     fail "seed.json carries no subchange to move"
   (timeout 10 curl -sS -N "${BASE}/events" >"${LOG}.board" 2>/dev/null || true) &
   local reader=$!
