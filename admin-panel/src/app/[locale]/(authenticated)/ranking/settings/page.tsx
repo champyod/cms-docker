@@ -52,6 +52,7 @@ export default async function RankingSettingsPage({
                 <option value="pin">{copy.overrides.actionPin}</option>
                 <option value="rename">{copy.overrides.actionRename}</option>
                 <option value="score">{copy.overrides.actionScore}</option>
+                <option value="freeze">{copy.overrides.actionFreeze}</option>
               </select>
             </label>
             <label className={LABEL_CLASS}>
