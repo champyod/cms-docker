@@ -114,7 +114,7 @@ export function DatasetGeneralForm({
             type="text"
             value={formData.description}
             onChange={(e) => onChange({ ...formData, description: e.target.value })}
-            className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+            className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             placeholder="e.g. Default, IOI 2024"
             required
           />
@@ -129,7 +129,7 @@ export function DatasetGeneralForm({
               min="0.1"
               value={formData.time_limit}
               onChange={(e) => onChange({ ...formData, time_limit: parseFloat(e.target.value) })}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             />
           </div>
           <div>
@@ -139,7 +139,7 @@ export function DatasetGeneralForm({
               min="16"
               value={formData.memory_limit}
               onChange={(e) => onChange({ ...formData, memory_limit: parseFloat(e.target.value) })}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             />
           </div>
         </div>
@@ -150,7 +150,7 @@ export function DatasetGeneralForm({
             <select
               value={formData.task_type}
               onChange={(e) => handleTaskTypeChange(e.target.value)}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {TASK_TYPES.map((t) => (
                 <option key={t} value={t}>
@@ -164,7 +164,7 @@ export function DatasetGeneralForm({
             <select
               value={formData.score_type}
               onChange={(e) => handleScoreTypeChange(e.target.value)}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring/50"
+              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {SCORE_TYPES.map((t) => (
                 <option key={t} value={t}>

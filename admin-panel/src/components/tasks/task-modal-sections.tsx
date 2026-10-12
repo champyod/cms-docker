@@ -34,7 +34,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
           onChange={(e) => onChange({ ...formData, name: e.target.value })}
           placeholder="e.g., aplusb"
           required
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring transition-colors"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
       <div>
@@ -45,7 +45,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
           onChange={(e) => onChange({ ...formData, title: e.target.value })}
           placeholder="e.g., A Plus B Problem"
           required
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring transition-colors"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
     </div>
@@ -64,7 +64,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           <select
             value={formData.score_mode}
             onChange={(e) => onChange({ ...formData, score_mode: e.target.value })}
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <option value="max">Max</option>
             <option value="max_subtask">Max Subtask</option>
@@ -79,7 +79,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           <select
             value={formData.feedback_level}
             onChange={(e) => onChange({ ...formData, feedback_level: e.target.value })}
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <option value="restricted">Restricted</option>
             <option value="oi_restricted">OI Restricted</option>
@@ -94,7 +94,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           value={formData.score_precision ?? ''}
           onChange={(e) => onChange({ ...formData, score_precision: e.target.value ? parseInt(e.target.value, 10) : null })}
           placeholder="0"
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
         />
         <p className="text-xs text-muted-foreground mt-1">Number of decimal places for score.</p>
       </div>
@@ -116,7 +116,7 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             value={formData.max_submission_number ?? ''}
             onChange={(e) => onChange({ ...formData, max_submission_number: e.target.value ? parseInt(e.target.value, 10) : null })}
             placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </div>
         <div>
@@ -129,7 +129,7 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             value={formData.max_user_test_number ?? ''}
             onChange={(e) => onChange({ ...formData, max_user_test_number: e.target.value ? parseInt(e.target.value, 10) : null })}
             placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </div>
         <div>
@@ -139,7 +139,7 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             value={formData.min_submission_interval ?? ''}
             onChange={(e) => onChange({ ...formData, min_submission_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
             placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </div>
         <div>
@@ -149,7 +149,7 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             value={formData.min_user_test_interval ?? ''}
             onChange={(e) => onChange({ ...formData, min_user_test_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
             placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </div>
       </div>

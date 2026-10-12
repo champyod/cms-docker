@@ -45,13 +45,13 @@ function WorkerEditFields({ editData, setEditData, onSave }: WorkerEditFieldsPro
       <input
         value={editData.host}
         onChange={e => setEditData({ ...editData, host: e.target.value })}
-        className="flex-1 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+        className="flex-1 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
       />
       <input
         value={editData.port}
         onChange={e => setEditData({ ...editData, port: e.target.value })}
         type="number"
-        className="w-full sm:w-24 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+        className="w-full sm:w-24 min-w-0 bg-background/80 border border-border rounded-lg px-3 py-1.5 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
       />
       <Button size="sm" onClick={onSave}>Done</Button>
     </div>

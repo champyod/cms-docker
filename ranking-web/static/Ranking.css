@@ -89,10 +89,19 @@ abbr {
     top: 3em;
     left: 220px;
     right: 0;
-    bottom: 0;
+    bottom: 250px;
     margin: 2px 0 0 2px;
     padding: 0 3em;
     overflow-y: scroll;
+}
+
+#GraphPanel {
+    position: absolute;
+    left: 220px;
+    right: 0;
+    bottom: 0;
+    height: 250px;
+    overflow: hidden;
 }
 
 

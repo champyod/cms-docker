@@ -115,6 +115,7 @@ export function RankingOverrideForm({
           <option value="pin">{copy.actionPin}</option>
           <option value="rename">{copy.actionRename}</option>
           <option value="score">{copy.actionScore}</option>
+          <option value="freeze">{copy.actionFreeze}</option>
         </SelectField>
         {action !== 'hide' && valueControl !== undefined ? (
           <Input

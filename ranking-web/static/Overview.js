@@ -93,7 +93,7 @@ var Overview = new function () {
 
         // Load initial data.
         $.each(DataStore.users, function (u_id, user) {
-            if (user["selected"] > 0)
+            if (user["selected"] > 0 && !DataStore.is_hidden(u_id))
             {
                 self.user_list.push(user);
             }
@@ -582,6 +582,7 @@ var Overview = new function () {
     self.select_handler = function (u_id, color) {
         var user = DataStore.users[u_id];
         if (color > 0) {
+            if (DataStore.is_hidden(u_id)) return;
             self.user_list.push(user);
             self.user_list.sort(self.compare_users);
             self.update_markers(1000);

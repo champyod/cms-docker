@@ -12,7 +12,7 @@ import { prisma } from '@/lib/prisma';
  * purpose: an unknown verb from a form is refused rather than stored, so the reader never
  * has to guess what an action means.
  */
-const OVERRIDE_ACTIONS = ['hide', 'guest', 'pin', 'rename', 'score'] as const;
+const OVERRIDE_ACTIONS = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'] as const;
 export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
 
 export interface RankingOverride {

@@ -54,6 +54,7 @@ var DataStore = new function () {
 
     self.score_events = $.Callbacks();
     self.rank_events = $.Callbacks();
+    self.override_events = $.Callbacks();
 
 
     ////// Contest
@@ -270,7 +271,7 @@ var DataStore = new function () {
                 for (var key in data) {
                     self.create_team(key, data[key]);
                 }
-                self.init_board();
+                self.init_users();
             },
             error: function () {
                 console.error("Error while getting the list of teams");
@@ -375,97 +376,6 @@ var DataStore = new function () {
             }
         });
     }
-
-
-    ////// Board
-
-    /* The board carries display names, teams, override-applied scores and the
-       server's ranks, so the page draws a rename, a hide, a guest, a score or a pin
-       without recomputing any of it. A board that cannot be read falls back to the
-       raw user and score lists and the client-side ranking. */
-
-    self.board_authoritative = false;
-    self.board_init_time = 0;
-    self.board_ready = false;
-    self.board_refresh_timer = null;
-
-    self.init_board = function () {
-        $.ajax({
-            url: Config.get_board_url(),
-            dataType: "json",
-            success: function (data, status, xhr) {
-                self.board_init_time = parseFloat(xhr.getResponseHeader("Timestamp"));
-                self.user_init_time = self.board_init_time;
-                self.apply_board(data);
-                self.inits_todo -= 1;
-                if (self.inits_todo == 0) {
-                    self.init_scores();
-                }
-            },
-            error: function () {
-                console.error("Error while getting the board, using the raw lists");
-                self.init_users();
-            }
-        });
-    };
-
-    self.apply_board = function (data) {
-        self.board_authoritative = true;
-
-        var seen = {};
-        for (var key in data) {
-            seen[key] = true;
-            var row = data[key];
-            if (self.users[key] === undefined) {
-                self.create_user(key, {"f_name": row["f_name"], "l_name": row["l_name"],
-                                       "team": (row["team"] === undefined ? null : row["team"])});
-            }
-            var user = self.users[key];
-            user["f_name"] = row["f_name"];
-            user["l_name"] = row["l_name"];
-            user["team"] = row["team"];
-            user["global"] = row["score"];
-            user["rank"] = row["rank"];
-            user["board"] = true;
-            if (self.board_ready) {
-                self.user_update.fire(key, user, user);
-                self.rank_events.fire(key, user, 0);
-                self.score_events.fire(key, user, null, null, 0);
-            }
-        }
-
-        var gone = new Array();
-        for (var k in self.users) {
-            if (!seen[k]) {
-                gone.push(k);
-            }
-        }
-        for (var i = 0; i < gone.length; i += 1) {
-            self.delete_user(gone[i]);
-        }
-    };
-
-    self.schedule_board_refresh = function () {
-        if (!self.board_ready || !self.board_authoritative || document.hidden) {
-            return;
-        }
-        if (self.board_refresh_timer) {
-            clearTimeout(self.board_refresh_timer);
-        }
-        self.board_refresh_timer = setTimeout(function () {
-            self.board_refresh_timer = null;
-            $.ajax({
-                url: Config.get_board_url(),
-                dataType: "json",
-                success: function (data) {
-                    self.apply_board(data);
-                },
-                error: function () {
-                    self.update_network_status(4);
-                }
-            });
-        }, 400);
-    };
 
     self.user_listener = function (event) {
         var cmd = event.data.split(" ");
@@ -692,42 +602,89 @@ var DataStore = new function () {
         }
     };
 
-    /* A live board delta: "<key> <score> <rank>" for a moved row and "<key>" for a row
-       that left, so the page updates in place instead of refetching the whole board. A
-       key the page has never seen carries a name it does not have yet, so that one case
-       falls back to the full read. */
-    self.board_listener = function (event) {
-        var lines = event.data.split("\n");
-        for (var i = 0; i < lines.length; i += 1) {
-            if (lines[i] === "") {
-                continue;
+    self.overrides = new Object();
+
+    self.init_overrides = function () {
+        $.ajax({
+            url: "overrides",
+            dataType: "json",
+            success: function (data) {
+                self.set_overrides(data);
+            },
+            error: function () {
+                console.error("Error while getting the overrides");
             }
-            var parts = lines[i].split(" ");
-            var key = parts[0];
-            if (parts.length >= 3) {
-                var user = self.users[key];
-                if (user === undefined) {
-                    self.schedule_board_refresh();
-                    return;
-                }
-                user["global"] = parseFloat(parts[1]);
-                user["rank"] = parseInt(parts[2], 10);
-                self.rank_events.fire(key, user, 0);
-                self.score_events.fire(key, user, null, null, 0);
-            } else if (self.users[key] !== undefined) {
-                self.delete_user(key);
-            }
+        });
+    };
+
+    self.set_overrides = function (rows) {
+        self.overrides = new Object();
+        for (var idx in rows) {
+            var row = rows[idx];
+            self.overrides[row["target_kind"] + "\0" + row["target_key"]] = row;
         }
+        self.override_events.fire(self.overrides);
+    };
+
+    self.override_listener = function (event) {
+        self.init_overrides();
+    };
+
+    self.override_for = function (kind, key) {
+        var hit = self.overrides[kind + "\0" + key];
+        return hit === undefined ? null : hit;
+    };
+
+    self.is_hidden = function (key) {
+        var hit = self.override_for("user", key);
+        return hit !== null && hit["action"] === "hide";
+    };
+
+    self.rename_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "rename" && hit["value"]) return hit["value"];
+        return null;
+    };
+
+    self.score_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "score" && hit["value"]) {
+            var n = parseFloat(hit["value"]);
+            if (!isNaN(n)) return n;
+        }
+        return null;
+    };
+
+    self.pin_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "pin" && hit["value"]) {
+            var n = parseInt(hit["value"], 10);
+            if (!isNaN(n)) return n;
+        }
+        return null;
+    };
+
+    self.freeze_hit_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "freeze") return hit;
+        return null;
+    };
+
+    self.guest_rows = function () {
+        var out = new Array();
+        for (var mapkey in self.overrides) {
+            var row = self.overrides[mapkey];
+            if (row["action"] === "guest" && !(row["target_key"] in self.users)) out.push(row);
+        }
+        return out;
     };
 
     self.set_score = function (u_id, t_id, new_t_score) {
+        /* It may be "nice" to check that the user and task do actually exists,
+           even if the server should already ensure it!
+         */
         var user = self.users[u_id];
         var task = self.tasks[t_id];
-        // A hidden user is on the raw score list but not on the board: skip it rather
-        // than draw a row an override removed.
-        if (user === undefined || task === undefined) {
-            return;
-        }
 
         var c_id = task["contest"];
         var contest = self.contests[c_id];
@@ -738,7 +695,7 @@ var DataStore = new function () {
         user["t_" + t_id] = new_t_score;
 
         // Contest
-        var new_c_score = 0.0;  // = sum(user's score on t for t in contest.tasks)
+        var new_c_score = 0.0;  // = max(user's score on t for t in contest.tasks)
         for (var i = 0; i < contest.tasks.length; i += 1) {
             new_c_score += user["t_" + contest.tasks[i].key];
         }
@@ -746,18 +703,14 @@ var DataStore = new function () {
         var old_c_score = user["c_" + c_id];
         user["c_" + c_id] = new_c_score;
 
-        // Global. When the server owns the board it owns the aggregate too, because an
-        // override may replace it: recomputing it from the tasks would erase the override.
-        var old_g_score = user["global"];
-        var new_g_score = old_g_score;
-        if (!self.board_authoritative) {
-            new_g_score = 0.0;  // = sum(user's score on c for c in self.contest_list)
-            for (var i = 0; i < self.contest_list.length; i += 1) {
-                new_g_score += user["c_" + self.contest_list[i].key];
-            }
-            new_g_score = round(new_g_score, self.global_score_precision);
-            user["global"] = new_g_score;
+        // Global
+        var new_g_score = 0.0;  // = max(user's score on c for c in self.contest_list)
+        for (var i = 0; i < self.contest_list.length; i += 1) {
+            new_g_score += user["c_" + self.contest_list[i].key];
         }
+        new_g_score = round(new_g_score, self.global_score_precision);
+        var old_g_score = user["global"];
+        user["global"] = new_g_score;
 
         console.info("Changed score for user " + u_id + " and task " + t_id + ": " + old_t_score + " -> " + new_t_score);
 
@@ -780,24 +733,6 @@ var DataStore = new function () {
     ////// Rank
 
     self.init_ranks = function () {
-        // When the server owns the board it owns the ranks too: the client keeps them
-        // fresh by re-reading the board on a live change, instead of ranking the raw
-        // scores again, which would ignore an override.
-        if (self.board_authoritative) {
-            self.board_ready = true;
-            // Ranks and totals arrive as live board deltas, so the page does not refetch
-            // the board on every score; a board it fell behind on is caught up when the
-            // tab becomes visible again.
-            $(document).on("visibilitychange", function () {
-                if (!document.hidden) {
-                    self.schedule_board_refresh();
-                }
-            });
-            self.create_event_source();
-            self.init_callback();
-            return;
-        }
-
         // Make a list of all users
         var list = new Array();
 
@@ -939,6 +874,7 @@ var DataStore = new function () {
 
         self.init_contests();
         self.init_teams();
+        self.init_overrides();
     };
 
 
@@ -991,9 +927,6 @@ var DataStore = new function () {
             var timestamp = parseInt(event.lastEventId, 16) / 1000000;
             if (timestamp > self.user_init_time) {
                 self.user_listener(event);
-                // A name or team change moves the board the page draws; the board
-                // delta carries no names, so this one path re-reads the board.
-                self.schedule_board_refresh();
             }
             self.last_event_id = event.lastEventId;
         }, false);
@@ -1004,11 +937,8 @@ var DataStore = new function () {
             }
             self.last_event_id = event.lastEventId;
         }, false);
-        self.es.addEventListener("board", function (event) {
-            var timestamp = parseInt(event.lastEventId, 16) / 1000000;
-            if (timestamp > self.score_init_time) {
-                self.board_listener(event);
-            }
+        self.es.addEventListener("control", function (event) {
+            self.override_listener(event);
             self.last_event_id = event.lastEventId;
         }, false);
     };
@@ -1317,11 +1247,6 @@ var DataStore = new function () {
     };
 
     self.set_selected = function (u_id, flag, color_idx) {
-        // A row that has just been deleted still fires its delete callbacks; there is
-        // nothing left to select, so the selection change is simply skipped.
-        if (self.users[u_id] === undefined) {
-            return;
-        }
         if (self.users[u_id]["selected"] == 0 && flag) {
             // We have to assign a color
             if (!(color_idx > 0))

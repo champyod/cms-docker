@@ -28,7 +28,7 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
           <input
             value={form.newHost} onChange={e => form.setNewHost(e.target.value)} autoFocus
             placeholder="e.g., cms-worker-0 or 192.168.1.50"
-            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
           />
           <p className="text-xs text-muted-foreground/70 mt-1 italic">Supports local container names or remote server IPs.</p>
         </div>
@@ -38,7 +38,7 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
             value={form.newPort}
             onChange={e => form.setNewPort(e.target.value)}
             type="number"
-            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60"
+            className="w-full bg-background/80 border border-border rounded-lg px-4 py-2 text-foreground text-sm font-mono focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
           />
         </div>
         <Button onClick={form.handleAdd} size="sm" className="w-full sm:w-auto">
