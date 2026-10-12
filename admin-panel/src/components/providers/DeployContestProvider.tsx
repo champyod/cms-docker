@@ -15,6 +15,23 @@ const initialState: DeployState = {
   error: null, warning: null, log: '', percent: null, startedAt: null,
 };
 
+// Why a start timeout: the deploy action spawns host work, and a step that stalls inside it never
+// resolves, leaving the card on "Starting…" with no result. Bound the wait so the failure surfaces.
+const DEPLOY_START_TIMEOUT_MS = 120_000;
+
+function withStartTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error('The deploy did not start within two minutes')),
+      DEPLOY_START_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer !== undefined) clearTimeout(timer);
+  });
+}
+
 export function DeployContestProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [state, setState] = useState<DeployState>(initialState);
   const stateRef = useRef(state);
@@ -55,7 +72,7 @@ export function DeployContestProvider({ children }: { children: ReactNode }): Re
     toastHelper.dismiss(toastIdRef);
     updateState({ ...initialState, phase: 'deploying', contestId });
     try {
-      const result = await deployContest(contestId);
+      const result = await withStartTimeout(deployContest(contestId));
       if (!mountedRef.current || request !== requestRef.current) return;
       if (result.alreadyRunning) {
         updateState({ ...initialState, phase: 'already_running', contestId, error: result.error || 'A deploy is already in progress.' });

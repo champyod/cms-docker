@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
-import { getAvailableContests } from '@/app/actions/contests';
+import { activateContest, getAvailableContests } from '@/app/actions/contests';
 import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
@@ -90,19 +90,38 @@ export function useContestDeploymentSnapshot({
 
     // Read the freshly parsed id, not the state binding — setState in this same tick leaves the
     // closure stale.
-    const actualActiveId = applyContestSnapshot(
-      settingsResult.success ? settingsResult.values : {},
-      activeResult.success ? activeResult.contestId : null,
-    );
-    setContainerContestId(containerResult.success ? containerResult.contestId : null);
+    const stackId = containerResult.success ? containerResult.contestId : null;
+    setContainerContestId(stackId);
 
     const databaseContests = contestsResult.success ? contestsResult.contests : [];
     setAvailableContests(databaseContests);
+
+    // The running stack is the single source of truth for "which contest is live", so the card
+    // shows its contest and falls back to config.toml's CONTEST_ID only when the stack did not
+    // answer. config.toml and the DB are derived from it, never the other way round.
+    const configId = activeResult.success ? activeResult.contestId : null;
+    const actualActiveId = applyContestSnapshot(
+      settingsResult.success ? settingsResult.values : {},
+      stackId ?? configId,
+    );
+
     const dbActive = databaseContests.find(
       (contest: { id: number; name: string; is_active: boolean }) => contest.is_active === true,
     );
     setDbActiveContestId(dbActive ? dbActive.id : null);
-    if (actualActiveId) {
+
+    // Derive contests.is_active from the stack. It is the column's only meaningful writer, so a
+    // stack switch made outside the panel converges here. Best-effort: an operator without
+    // contest:switch leaves the column for a later writer, while the card still shows the truth.
+    if (stackId !== null && stackId !== (dbActive ? dbActive.id : null)) {
+      try {
+        await activateContest(stackId);
+      } catch {
+        // Left for a writer that holds contest:switch.
+      }
+    }
+
+    if (actualActiveId !== null) {
       const match = databaseContests.find(
         (contest: { id: number; name: string; is_active: boolean }) => contest.id === actualActiveId,
       );
