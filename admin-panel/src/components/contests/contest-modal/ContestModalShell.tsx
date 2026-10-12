@@ -176,7 +176,7 @@ export function ContestModalShell({
       }}
       title={contest ? 'Edit Contest' : 'Create New Contest'}
       footer={<ShellFooter contest={contest} loading={loading} onClose={onClose} />}
-      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-h-[70vh] sm:max-w-4xl"
     >
       <ShellBody
         validationErrors={validationErrors} error={error} activeTab={activeTab}

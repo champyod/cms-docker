@@ -148,7 +148,7 @@ export function TestcaseUploadModal({ isOpen, onClose, datasetId, currentScoreTy
             cancelDisabled={loading || upload.processing}
           />
         }
-        className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
+        className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-h-[70vh] sm:max-w-3xl"
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {step === 1 ? (
