@@ -58,6 +58,9 @@ function activeOverrides(
   overrides: readonly RankingOverride[],
   entry: RankingUserEntry,
 ): RankingOverride[] {
+  // WHY the contest check is still here: the query is now scoped, but this helper also
+  // filters by target kind and key, and keeping the contest predicate makes it correct
+  // on its own rather than only when its caller has already narrowed the list.
   return overrides.filter(
     (override) =>
       override.targetKind === 'user' &&
@@ -219,7 +222,7 @@ export default async function RankingUserDetailPage({
   if (detail === null) notFound();
   const canOverride = effective.has('ranking:override');
   const options = canOverride ? await getRankingOverrideOptions() : null;
-  const overrides = activeOverrides(await getRankingOverrides(), detail.entry);
+  const overrides = activeOverrides(await getRankingOverrides(detail.entry.contestId), detail.entry);
   return (
     <Stack gap={6}>
       <Identity entry={detail.entry} copy={copy.users} />

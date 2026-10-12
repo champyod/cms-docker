@@ -1,7 +1,10 @@
+import { getRanking, getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
 import { Card } from '@/components/core/Card';
+import { EmptyState } from '@/components/core/EmptyState';
 import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { RankingTable } from '@/components/contests/contest-detail/RankingTable';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
@@ -30,15 +33,27 @@ function BoardEntry({ term, value }: BoardEntryProps): React.JSX.Element {
 /** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
 export default async function RankingBoardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
+  searchParams: Promise<{ contest?: string }>;
 }): Promise<React.JSX.Element> {
   const [{ locale }, effective] = await Promise.all([
     params,
     authorizeRoutePage('ranking.board'),
   ]);
   const copy = (await getDictionary(locale)).ranking;
-  const appearance = await getRankingAppearance();
+  // WHY the contest is resolved before the appearance read: a deployment with no
+  // contest yet still has to render the identity card, so the board below it must be
+  // able to say "nothing to show" rather than fail the whole page.
+  const contests = await getRankingBoardContests();
+  const { contest } = await searchParams;
+  const requested = Number.parseInt(contest ?? '', 10);
+  const selected = contests.find((entry) => entry.id === requested) ?? contests[0] ?? null;
+  const [appearance, board] = await Promise.all([
+    getRankingAppearance(),
+    selected === null ? Promise.resolve(null) : getRanking(selected.id),
+  ]);
   const accessValue =
     appearance.accessMode === 'protected'
       ? copy.appearance.accessProtected
@@ -61,6 +76,16 @@ export default async function RankingBoardPage({
           />
           <BoardEntry term={copy.appearance.accessField} value={accessValue} />
         </Grid>
+      </Card>
+      <Card className="space-y-4">
+        <Text as="h2" variant="h3">
+          {copy.users.title}
+        </Text>
+        {selected === null ? (
+          <EmptyState title={copy.users.empty} description={copy.users.hint} />
+        ) : (
+          <RankingTable ranking={board} />
+        )}
       </Card>
       <RankingLogoCard canManage={effective.has('ranking:update')} />
     </Stack>

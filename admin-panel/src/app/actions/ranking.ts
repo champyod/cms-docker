@@ -121,6 +121,19 @@ export interface RankingOverrideOptions {
   teamKeys: string[];
 }
 
+/**
+ * The contests a board may be selected for.
+ *
+ * WHY it is separate from getRankingOverrideOptions: that one is gated on
+ * ranking:override because it feeds the override form. Reading a board only needs
+ * ranking:list, and a reader who may look but not override must still be able to pick
+ * a contest.
+ */
+export async function getRankingBoardContests(): Promise<Array<{ id: number; name: string }>> {
+  await ensurePermission('ranking:list');
+  return prisma.contests.findMany({ select: { id: true, name: true }, orderBy: { id: 'desc' } });
+}
+
 export async function getRankingOverrideOptions(): Promise<RankingOverrideOptions> {
   await ensurePermission('ranking:override');
   const [contests, entries] = await Promise.all([

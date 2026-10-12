@@ -18,6 +18,20 @@ pub struct Health {
     pub status: &'static str,
 }
 
+/// What the service actually applied, for the panel to show.
+///
+/// WHY this exists: the fold is deliberately forgiving — an unreadable override or a
+/// subchange that resolves to no known submission is dropped and counted rather than
+/// refusing the whole board. That is the right call, but until now the counters were
+/// computed and thrown away, so a dropped override looked exactly like a board that
+/// had none. This is the surface that makes the forgiving path visible.
+#[derive(Serialize)]
+pub struct Diagnostics {
+    pub ready: bool,
+    pub skipped_overrides: usize,
+    pub skipped_subchanges: usize,
+}
+
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
 /// that a Response in the Err slot makes every call site pay for the failure path.
 pub(crate) struct Refusal(pub(crate) String);
@@ -31,6 +45,7 @@ impl Refusal {
 pub fn router(state: AppState) -> Router {
     let router = Router::new()
         .route("/healthz", get(health))
+        .route("/diagnostics", get(diagnostics))
         .route("/login", get(crate::login::page).post(crate::login::submit))
         .route("/logout", post(crate::login::logout))
         .route("/", get(root))
@@ -60,8 +75,7 @@ pub fn router(state: AppState) -> Router {
     }
 }
 
-async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
-    if state.is_ready().await {
+async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {    if state.is_ready().await {
         (StatusCode::OK, Json(Health { status: "ok" }))
     } else {
         (
@@ -195,6 +209,19 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
     load_appearance(db.pool())
         .await
         .map_err(|error| Refusal(error.to_string()))
+}
+
+async fn diagnostics(State(state): State<AppState>) -> Response {
+    // A refusal, never zeros: "no database" and "nothing was dropped" must not look
+    // alike, which is the same reason every other read route refuses here.
+    match state.standings().await {
+        Ok(standings) => json_response(&Diagnostics {
+            ready: true,
+            skipped_overrides: standings.ledger.skipped_overrides(),
+            skipped_subchanges: standings.ledger.skipped_subchanges(),
+        }),
+        Err(error) => refuse(&error.to_string()),
+    }
 }
 
 fn content_type_for(path: &std::path::Path) -> &'static str {

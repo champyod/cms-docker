@@ -26,10 +26,24 @@ export interface RankingOverride {
   createdAt: string;
 }
 
-export async function getRankingOverrides(): Promise<RankingOverride[]> {
+/**
+ * The active overrides, optionally narrowed to one contest.
+ *
+ * WHY the filter is here and not in the caller: the table has always carried
+ * `contest_id` and the save path has always required it, but the reader ignored the
+ * column, so an operator picking a contest in the form saw it have no effect on what
+ * was listed. Narrowing in the query is what makes the selector mean something.
+ *
+ * WHY optional: the console-wide list on the settings page is deliberately every
+ * contest. Only a contest-scoped surface passes an id.
+ */
+export async function getRankingOverrides(contestId?: number): Promise<RankingOverride[]> {
   await ensurePermission('ranking:read');
   const rows = await prisma.ranking_overrides.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      ...(contestId === undefined ? {} : { contest_id: contestId }),
+    },
     orderBy: { id: 'desc' },
     take: 200,
   });
