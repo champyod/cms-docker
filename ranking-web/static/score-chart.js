@@ -25,6 +25,9 @@
  *
  * Row dimming (for table scroll/filter sync):
  *   chart.highlightRange(0, 17);  chart.highlight(fn);  chart.highlight(null);
+ *
+ * PNG export (toolbar buttons call these; also callable directly):
+ *   chart.downloadPNG('board.png');  chart.copyPNG();  chart.toPNGBlob(2);
  */
 (function (global) {
   'use strict';
@@ -81,6 +84,7 @@
       hueOffset: 0,
       autoPosition: true,
       height: 250,
+      toolbar: true,
       compare: null,
       onBarClick: null,
       onFocusChange: null
@@ -129,6 +133,42 @@
       .style('border-radius', '4px')
       .style('white-space', 'nowrap')
       .style('z-index', '10');
+
+    function toolbarButton(label, title, onClick) {
+      return legend.append('div')
+        .attr('class', 'sc-btn')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('padding', '1px 7px')
+        .style('border-radius', '3px')
+        .style('background', 'rgba(255,255,255,0.9)')
+        .style('border', '1px solid #999')
+        .style('font', '11px monospace')
+        .style('color', '#000')
+        .style('cursor', 'pointer')
+        .style('user-select', 'none')
+        .attr('title', title)
+        .text(label)
+        .on('click', onClick);
+    }
+
+    function flashButton(btn, text) {
+      var old = btn.text();
+      btn.text(text);
+      setTimeout(function () { btn.text(old); }, 1200);
+    }
+
+    if (opts.toolbar) {
+      toolbarButton('PNG', 'Download PNG', function () { downloadPNG(); });
+      toolbarButton('Copy', 'Copy PNG to clipboard', function () {
+        var btn = d3.select(this);
+        copyPNG().then(function () {
+          flashButton(btn, 'Copied');
+        }, function () {
+          flashButton(btn, 'Failed');
+        });
+      });
+    }
 
     var state = {
       tasks: [],
@@ -389,6 +429,120 @@
 
     function hideTip() { tip.style('display', 'none'); }
 
+    function svgMarkup(scale) {
+      var W = node.clientWidth, H = node.clientHeight;
+      var clone = svg.node().cloneNode(true);
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('width', Math.max(1, Math.round(W * scale)));
+      clone.setAttribute('height', Math.max(1, Math.round(H * scale)));
+      appendLegend(clone, W);
+      return new XMLSerializer().serializeToString(clone);
+    }
+
+    function appendLegend(clone, W) {
+      var NS = 'http://www.w3.org/2000/svg';
+      var tasks = state.tasks;
+      if (!tasks.length) return;
+      var g = document.createElementNS(NS, 'g');
+      g.setAttribute('font-family', 'monospace');
+      g.setAttribute('font-size', '11');
+      var charW = 6.63, sw = 10, gap = 4, padX = 6, itemGap = 8, lineH = 18;
+      var maxRowW = W * 0.65;
+      var rows = [], cur = [], curW = 0;
+      tasks.forEach(function (t) {
+        var w = sw + gap + t.name.length * charW + padX * 2 + itemGap;
+        if (cur.length && curW + w > maxRowW) { rows.push(cur); cur = []; curW = 0; }
+        cur.push(t); curW += w;
+      });
+      if (cur.length) rows.push(cur);
+      var y = 6;
+      rows.forEach(function (row) {
+        var total = row.reduce(function (acc, t) {
+          return acc + sw + gap + t.name.length * charW + padX * 2 + itemGap;
+        }, -itemGap);
+        var x = W - 10 - total;
+        row.forEach(function (t) {
+          var boxW = sw + gap + t.name.length * charW + padX * 2;
+          var bg = document.createElementNS(NS, 'rect');
+          bg.setAttribute('x', x); bg.setAttribute('y', y);
+          bg.setAttribute('width', boxW); bg.setAttribute('height', 14);
+          bg.setAttribute('rx', 3);
+          bg.setAttribute('fill', 'rgba(255,255,255,0.85)');
+          bg.setAttribute('stroke', '#ccc');
+          g.appendChild(bg);
+          var swr = document.createElementNS(NS, 'rect');
+          swr.setAttribute('x', x + 3); swr.setAttribute('y', y + 2);
+          swr.setAttribute('width', sw); swr.setAttribute('height', 10);
+          swr.setAttribute('fill', state.colors(t.id));
+          g.appendChild(swr);
+          var tx = document.createElementNS(NS, 'text');
+          tx.setAttribute('x', x + 3 + sw + gap); tx.setAttribute('y', y + 11);
+          tx.setAttribute('fill', '#000');
+          tx.textContent = t.name;
+          g.appendChild(tx);
+          x += boxW + itemGap;
+        });
+        y += lineH;
+      });
+      clone.appendChild(g);
+    }
+
+    function toPNGBlob(scale) {
+      scale = scale || 2;
+      return new Promise(function (resolve, reject) {
+        var url;
+        try {
+          url = URL.createObjectURL(new Blob([svgMarkup(scale)], { type: 'image/svg+xml;charset=utf-8' }));
+        } catch (e) { reject(e); return; }
+        var img = new Image();
+        img.onload = function () {
+          try {
+            var canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(node.clientWidth * scale));
+            canvas.height = Math.max(1, Math.round(node.clientHeight * scale));
+            var ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            URL.revokeObjectURL(url);
+            canvas.toBlob(function (b) {
+              if (b) resolve(b);
+              else reject(new Error('ScoreChart: PNG encode failed'));
+            }, 'image/png');
+          } catch (e) {
+            URL.revokeObjectURL(url);
+            reject(e);
+          }
+        };
+        img.onerror = function () {
+          URL.revokeObjectURL(url);
+          reject(new Error('ScoreChart: SVG raster failed'));
+        };
+        img.src = url;
+      });
+    }
+
+    function downloadPNG(filename) {
+      return toPNGBlob().then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'score-chart.png';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
+      });
+    }
+
+    function copyPNG() {
+      if (!global.ClipboardItem || !navigator.clipboard || !navigator.clipboard.write) {
+        return Promise.reject(new Error('ScoreChart: clipboard write unavailable'));
+      }
+      return toPNGBlob().then(function (blob) {
+        return navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      });
+    }
+
     function esc(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -468,6 +622,9 @@
       highlightRange: highlightRange,
       resize: resize,
       destroy: destroy,
+      downloadPNG: downloadPNG,
+      copyPNG: copyPNG,
+      toPNGBlob: toPNGBlob,
       getOrder: function () {
         return state.users.map(function (u) { return u.raw; });
       },
