@@ -50,6 +50,87 @@ var Scoreboard = new function () {
         DataStore.score_events.add(self.score_handler);
         DataStore.rank_events.add(self.rank_handler);
         DataStore.select_events.add(self.select_handler);
+        DataStore.override_events.add(self.override_handler);
+    };
+
+    self.frozen = new Object();
+
+    self.display_name = function (user) {
+        var renamed = DataStore.rename_for(user["key"]);
+        if (renamed !== null) return { first: renamed, last: "" };
+        return { first: user["f_name"], last: user["l_name"] };
+    };
+
+    self.display_global = function (user) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined) return snap["global"];
+        var replaced = DataStore.score_for(user["key"]);
+        if (replaced !== null) return replaced;
+        return user["global"];
+    };
+
+    self.display_rank = function (user) {
+        var pinned = DataStore.pin_for(user["key"]);
+        if (pinned !== null) return pinned;
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined) return snap["rank"];
+        return user["rank"];
+    };
+
+    self.display_task = function (user, t_id) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined && snap["tasks"][t_id] !== undefined) return snap["tasks"][t_id];
+        return user["t_" + t_id];
+    };
+
+    self.display_contest = function (user, c_id) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined && snap["contests"][c_id] !== undefined) return snap["contests"][c_id];
+        return user["c_" + c_id];
+    };
+
+    self.is_frozen = function (user) {
+        return self.frozen[user["key"]] !== undefined;
+    };
+
+    self.snapshot_user = function (user) {
+        var tasks = new Object();
+        for (var t_id in DataStore.tasks) tasks[t_id] = user["t_" + t_id];
+        var contests = new Object();
+        for (var c_id in DataStore.contests) contests[c_id] = user["c_" + c_id];
+        return { global: user["global"], rank: user["rank"], tasks: tasks, contests: contests };
+    };
+
+    self.override_handler = function (overrides) {
+        var next = new Object();
+        for (var u_id in DataStore.users) {
+            if (DataStore.freeze_hit_for(u_id) !== null) {
+                next[u_id] = (self.frozen[u_id] !== undefined) ? self.frozen[u_id] : self.snapshot_user(DataStore.users[u_id]);
+            }
+        }
+        self.frozen = next;
+        self.rebuild();
+    };
+
+    self.rebuild = function () {
+        self.tbody_el.empty();
+        self.user_list = new Array();
+        self.make_body();
+    };
+
+    self.visible_users = function () {
+        var out = new Array();
+        for (var u_id in DataStore.users) {
+            if (!DataStore.is_hidden(u_id)) out.push(DataStore.users[u_id]);
+        }
+        var guests = DataStore.guest_rows();
+        for (var idx in guests) {
+            var row = guests[idx];
+            var user = { key: row["target_key"], f_name: row["value"] || row["target_key"], l_name: "", team: null, global: 0, rank: "–", selected: 0 };
+            for (var t_id in DataStore.tasks) user["t_" + t_id] = 0;
+            out.push(user);
+        }
+        return out;
     };
 
 
@@ -227,8 +308,9 @@ var Scoreboard = new function () {
 
 
     self.make_body = function () {
-        for (var u_id in DataStore.users) {
-            var user = DataStore.users[u_id];
+        var visible = self.visible_users();
+        for (var idx in visible) {
+            var user = visible[idx];
             user["row"] = $(self.make_row(user))[0];
             self.user_list.push(user);
         }
@@ -238,13 +320,13 @@ var Scoreboard = new function () {
 
 
     self.make_row = function (user) {
-        // See the comment in .make_cols() for the reason we use colspans.
+        var name = self.display_name(user);
         var result = " \
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
-    <td class=\"rank\">" + user["rank"] + "</td> \
-    <td colspan=\"10\" class=\"f_name\">" + escapeHTML(user["f_name"]) + "</td> \
-    <td colspan=\"10\" class=\"l_name\">" + escapeHTML(user["l_name"]) + "</td>" +
+    <td class=\"rank\">" + self.display_rank(user) + "</td> \
+    <td colspan=\"10\" class=\"f_name\">" + escapeHTML(name["first"]) + "</td> \
+    <td colspan=\"10\" class=\"l_name\">" + escapeHTML(name["last"]) + "</td>" +
             (PublicConfig.show_id_column ? "<td class=\"user_id\">" + user["key"] + "</td>" : "");
 
         if (user['team']) {
@@ -265,20 +347,20 @@ var Scoreboard = new function () {
                 var task = tasks[j];
                 var t_id = task["key"];
 
-                var score_class = self.get_score_class(user["t_" + t_id], task["max_score"]);
+                var score_class = self.get_score_class(self.display_task(user, t_id), task["max_score"]);
                 result += " \
-    <td colspan=\"3\" class=\"score task " + score_class + "\" data-task=\"" + t_id + "\" data-sort_key=\"t_" + t_id + "\">" + round_to_str(user["t_" + t_id], task["score_precision"]) + "</td>";
+    <td colspan=\"3\" class=\"score task " + score_class + "\" data-task=\"" + t_id + "\" data-sort_key=\"t_" + t_id + "\">" + round_to_str(self.display_task(user, t_id), task["score_precision"]) + "</td>";
             }
 
-            var score_class = self.get_score_class(user["c_" + c_id], contest["max_score"]);
+            var score_class = self.get_score_class(self.display_contest(user, c_id), contest["max_score"]);
             result += " \
-    <td colspan=\"4\" class=\"score contest " + score_class + "\" data-contest=\"" + c_id + "\" data-sort_key=\"c_" + c_id + "\">" + round_to_str(user["c_" + c_id], contest["score_precision"]) + "</td>";
+    <td colspan=\"4\" class=\"score contest " + score_class + "\" data-contest=\"" + c_id + "\" data-sort_key=\"c_" + c_id + "\">" + round_to_str(self.display_contest(user, c_id), contest["score_precision"]) + "</td>";
         }
 
         if(self.show_global_score) {
-            var score_class = self.get_score_class(user["global"], DataStore.global_max_score);
+            var score_class = self.get_score_class(self.display_global(user), DataStore.global_max_score);
             result += " \
-    <td colspan=\"5\" class=\"score global " + score_class + "\" data-sort_key=\"global\">" + round_to_str(user["global"], DataStore.global_score_precision) + "</td> \
+    <td colspan=\"5\" class=\"score global " + score_class + "\" data-sort_key=\"global\">" + round_to_str(self.display_global(user), DataStore.global_score_precision) + "</td> \
 </tr>";
         }
 
@@ -311,6 +393,13 @@ var Scoreboard = new function () {
     // Compare two users. Returns -1 if "a < b" or +1 if "a >= b"
     // (where a < b means that a shoud go above b in the scoreboard)
     self.compare_users = function (a, b) {
+        var a_pin = DataStore.pin_for(a["key"]);
+        var b_pin = DataStore.pin_for(b["key"]);
+        if (a_pin !== null || b_pin !== null) {
+            var a_rank = (a_pin !== null) ? a_pin : Number.MAX_SAFE_INTEGER;
+            var b_rank = (b_pin !== null) ? b_pin : Number.MAX_SAFE_INTEGER;
+            if (a_rank !== b_rank) return (a_rank < b_rank) ? -1 : +1;
+        }
         var sort_key = self.sort_key;
         if ((a[sort_key] > b[sort_key]) || ((a[sort_key] == b[sort_key]) &&
            ((a["global"] > b["global"]) || ((a["global"] == b["global"]) &&
@@ -388,6 +477,7 @@ var Scoreboard = new function () {
 
     // This callback is called by the DataStore when a user is created.
     self.create_user = function (u_id, user) {
+        if (DataStore.is_hidden(u_id)) return;
         var $row = $(self.make_row(user));
         $row.children("td[data-sort_key=" + self.sort_key + "]").addClass("sort_key");
 
@@ -414,8 +504,10 @@ var Scoreboard = new function () {
         delete old_user["row"];
         delete old_user["index"];
 
-        $row.children("td.f_name").text(user["f_name"]);
-        $row.children("td.l_name").text(user["l_name"]);
+        $row.children("td.rank").text(self.display_rank(user));
+        var name = self.display_name(user);
+        $row.children("td.f_name").text(name["first"]);
+        $row.children("td.l_name").text(name["last"]);
 
         if (user["team"]) {
             $row.children(".team").html("<img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" />");
@@ -441,36 +533,34 @@ var Scoreboard = new function () {
     self.score_handler = function (u_id, user, t_id, task, delta) {
         var $row = $(user["row"]);
 
-        // TODO improve this method: avoid walking over all cells
-
         $row.children("td.score").each(function () {
             var $this = $(this);
 
-            var score = user[$this.data("sort_key")];
-
             if ($this.hasClass("global")) {
                 var max_score = DataStore.global_max_score;
+                var score = self.display_global(user);
                 $this.text(round_to_str(score, DataStore.global_score_precision));
             } else if ($this.hasClass("contest")) {
                 var contest = DataStore.contests[$this.data("contest")];
                 var max_score = contest["max_score"];
+                var score = self.display_contest(user, $this.data("contest"));
                 $this.text(round_to_str(score, contest["score_precision"]));
             } else if ($this.hasClass("task")) {
                 var task = DataStore.tasks[$this.data("task")];
                 var max_score = task["max_score"];
+                var score = self.display_task(user, $this.data("task"));
                 $this.text(round_to_str(score, task["score_precision"]));
             }
-
-            // TODO we could user a data-* attribute to store the score class
 
             var score_class = self.get_score_class(score, max_score);
             $this.removeClass("score_0 score_0_10 score_10_20 score_20_30 score_30_40 score_40_50 score_50_60 score_60_70 score_70_80 score_80_90 score_90_100 score_100");
             $this.addClass(score_class);
         });
 
+        if (self.is_frozen(user)) return;
+
         self.move_user(user);
 
-        // Restart CSS animation
         $row.removeClass("score_up score_down");
         if (delta > 0) {
             $row.addClass("score_up");
@@ -484,7 +574,7 @@ var Scoreboard = new function () {
     self.rank_handler = function (u_id, user) {
         var $row = $(user["row"]);
 
-        $row.children("td.rank").text(user["rank"]);
+        $row.children("td.rank").text(self.display_rank(user));
     };
 
 

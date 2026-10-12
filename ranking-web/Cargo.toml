@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 axum = "0.8"
 bcrypt = "0.17"
+dotenvy = "0.15"
 hex = "0.4"
 hmac = "0.12"
 redis = { version = "0.27", features = ["connection-manager", "tokio-comp"] }

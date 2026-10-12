@@ -14,6 +14,8 @@ if (!("EventSource" in window)) {
 }
         </script>
         <script src="lib/raphael.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+        <script src="score-chart.js"></script>
         <!--[if lt IE 9]>
             <script src="lib/explorercanvas.js"></script>
         <![endif]-->
@@ -56,13 +58,14 @@ if (!("EventSource" in window)) {
                     {{ notice_extras|safe }}
                 </div>
             </div>
-            <div id="InnerFrame">
-                <table id="Scoreboard">
-                    <colgroup id="Scoreboard_cols"></colgroup>
-                    <thead id="Scoreboard_head"></thead>
-                    <tbody id="Scoreboard_body"></tbody>
-                </table>
-            </div>
+        <div id="InnerFrame">
+            <table id="Scoreboard">
+                <colgroup id="Scoreboard_cols"></colgroup>
+                <thead id="Scoreboard_head"></thead>
+                <tbody id="Scoreboard_body"></tbody>
+            </table>
+        </div>
+        <div id="GraphPanel"></div>
         </div>
         <input id="TeamSearch_input" type="search" placeholder="Search Team"/>
         <div id="TeamSearch_bg">

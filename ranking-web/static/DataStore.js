@@ -54,6 +54,7 @@ var DataStore = new function () {
 
     self.score_events = $.Callbacks();
     self.rank_events = $.Callbacks();
+    self.override_events = $.Callbacks();
 
 
     ////// Contest
@@ -601,6 +602,83 @@ var DataStore = new function () {
         }
     };
 
+    self.overrides = new Object();
+
+    self.init_overrides = function () {
+        $.ajax({
+            url: "overrides",
+            dataType: "json",
+            success: function (data) {
+                self.set_overrides(data);
+            },
+            error: function () {
+                console.error("Error while getting the overrides");
+            }
+        });
+    };
+
+    self.set_overrides = function (rows) {
+        self.overrides = new Object();
+        for (var idx in rows) {
+            var row = rows[idx];
+            self.overrides[row["target_kind"] + "\0" + row["target_key"]] = row;
+        }
+        self.override_events.fire(self.overrides);
+    };
+
+    self.override_listener = function (event) {
+        self.init_overrides();
+    };
+
+    self.override_for = function (kind, key) {
+        var hit = self.overrides[kind + "\0" + key];
+        return hit === undefined ? null : hit;
+    };
+
+    self.is_hidden = function (key) {
+        var hit = self.override_for("user", key);
+        return hit !== null && hit["action"] === "hide";
+    };
+
+    self.rename_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "rename" && hit["value"]) return hit["value"];
+        return null;
+    };
+
+    self.score_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "score" && hit["value"]) {
+            var n = parseFloat(hit["value"]);
+            if (!isNaN(n)) return n;
+        }
+        return null;
+    };
+
+    self.pin_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "pin" && hit["value"]) {
+            var n = parseInt(hit["value"], 10);
+            if (!isNaN(n)) return n;
+        }
+        return null;
+    };
+
+    self.freeze_hit_for = function (key) {
+        var hit = self.override_for("user", key);
+        if (hit !== null && hit["action"] === "freeze") return hit;
+        return null;
+    };
+
+    self.guest_rows = function () {
+        var out = new Array();
+        for (var mapkey in self.overrides) {
+            var row = self.overrides[mapkey];
+            if (row["action"] === "guest" && !(row["target_key"] in self.users)) out.push(row);
+        }
+        return out;
+    };
+
     self.set_score = function (u_id, t_id, new_t_score) {
         /* It may be "nice" to check that the user and task do actually exists,
            even if the server should already ensure it!
@@ -796,6 +874,7 @@ var DataStore = new function () {
 
         self.init_contests();
         self.init_teams();
+        self.init_overrides();
     };
 
 
@@ -856,6 +935,10 @@ var DataStore = new function () {
             if (timestamp > self.score_init_time) {
                 self.score_listener(event);
             }
+            self.last_event_id = event.lastEventId;
+        }, false);
+        self.es.addEventListener("control", function (event) {
+            self.override_listener(event);
             self.last_event_id = event.lastEventId;
         }, false);
     };
