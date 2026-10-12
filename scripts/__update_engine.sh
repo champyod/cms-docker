@@ -609,6 +609,7 @@ VAR_SPECS=(
   "Core & Network|[core]|CMS_DOMAIN|str||cms.local"
   "Core & Network|[core]|CMS_SOURCE_URL|url||https://github.com/champyod/cms-docker"
   "Core & Network|[core]|CMS_CONFIG|str||/usr/local/etc/cms.toml"
+  "Core & Network|[core]|CMS_RANKING_URL|str||"
   "Core & Network|[core]|CMS_LOG_DIR|str||/var/local/log/cms"
   "Core & Network|[core]|CMS_CACHE_DIR|str||/var/local/cache/cms"
   "Core & Network|[core]|CMS_DATA_DIR|str||/var/local/lib/cms"
