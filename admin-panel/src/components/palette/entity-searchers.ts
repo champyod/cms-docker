@@ -50,7 +50,7 @@ function buildTaskSearcher(locale: string): EntitySearcher {
   };
 }
 
-function buildUserSearcher(locale: string): EntitySearcher {
+export function buildUserSearcher(locale: string): EntitySearcher {
   return async (query, signal) => {
     const params = new URLSearchParams({ search: query, perPage: String(MAX_RESULTS_PER_ENTITY), page: '1' });
     const result = await apiClient.get(`/api/users?${params.toString()}`, { signal });
@@ -65,7 +65,7 @@ function buildUserSearcher(locale: string): EntitySearcher {
   };
 }
 
-function buildTeamSearcher(locale: string): EntitySearcher {
+export function buildTeamSearcher(locale: string): EntitySearcher {
   return async (query, signal) => {
     const teams = await getTeams();
     if (signal.aborted) return [];

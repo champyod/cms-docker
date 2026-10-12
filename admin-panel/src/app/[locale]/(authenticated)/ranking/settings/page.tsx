@@ -28,7 +28,7 @@ export default async function RankingSettingsPage({
       <section className={CARD_CLASS}>
         <h2 className="text-lg font-semibold text-foreground">{copy.overrides.title}</h2>
         <p className="text-sm text-muted-foreground">{copy.overrides.hint}</p>
-        {canOverride ? <OverrideForm copy={copy.overrides} /> : null}
+        {canOverride ? <OverrideForm copy={copy.overrides} permissionKeys={[...effective]} locale={locale} /> : null}
         <ul className="divide-y divide-border text-sm text-foreground">
           {overrides.map((override) => (
             <li key={override.id} className="flex flex-wrap items-center gap-3 py-2">
