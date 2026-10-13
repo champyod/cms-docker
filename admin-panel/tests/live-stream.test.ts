@@ -51,7 +51,7 @@ const EVERY_PERMISSION = ['all:all', 'service:read', 'container:read', 'containe
 const STATS_ONLY = ['resource:list', 'resource:read'];
 
 function stats(cpu: number): ServerStats {
-  return { cpu, memory: 40, uptime: '3d', network: { rx: 100, tx: 200 }, loadAvg: ['0.10', '0.20', '0.30'], source: 'host' };
+  return { cpu, memory: 40, uptime: '3d', network: { rx: 100, tx: 200, source: 'host' }, loadAvg: ['0.10', '0.20', '0.30'], source: 'host' };
 }
 
 function worker(): WorkerNodeView {

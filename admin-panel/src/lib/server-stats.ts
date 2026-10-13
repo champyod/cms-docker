@@ -1,13 +1,21 @@
 import os from 'os';
 import fs from 'fs';
 
+export type StatsSource = 'host' | 'container';
+
+export interface NetworkStats {
+  rx: number;
+  tx: number;
+  source: StatsSource;
+}
+
 export interface ServerStats {
   cpu: number;
   memory: number;
   uptime: string;
-  network: { rx: number; tx: number };
+  network: NetworkStats | null;
   loadAvg: string[];
-  source: 'host' | 'container';
+  source: StatsSource;
 }
 
 type CpuSample = {
@@ -103,11 +111,34 @@ function parseNetworkTotal(netDevText: string): { rx: number; tx: number } {
   return { rx: totalRx, tx: totalTx };
 }
 
-function getProcBasePath(): '/host/proc' | '/proc' {
-  if (fs.existsSync('/host/proc/stat') && fs.existsSync('/host/proc/meminfo')) {
-    return '/host/proc';
+const HOST_PROC_BASE = '/host/proc' as const;
+const CONTAINER_PROC_BASE = '/proc' as const;
+// Why a distinct path: /host/proc/net follows the reader (this container); a host-resolved bind of /proc/1/net/dev does not.
+const HOST_NET_DEV_PATH = '/host/proc-net/dev';
+const CONTAINER_NET_DEV_PATH = `${CONTAINER_PROC_BASE}/net/dev`;
+
+type ProcBase = typeof HOST_PROC_BASE | typeof CONTAINER_PROC_BASE;
+
+function getProcBasePath(): ProcBase {
+  if (fs.existsSync(`${HOST_PROC_BASE}/stat`) && fs.existsSync(`${HOST_PROC_BASE}/meminfo`)) {
+    return HOST_PROC_BASE;
   }
-  return '/proc';
+  return CONTAINER_PROC_BASE;
+}
+
+// Why the origin travels with the figures: the container fallback is a real reading of a different namespace.
+function readNetworkStats(): NetworkStats | null {
+  const hostNetDev = readTextFileSafe(HOST_NET_DEV_PATH);
+  if (hostNetDev !== null) {
+    return { ...parseNetworkTotal(hostNetDev), source: 'host' };
+  }
+
+  const containerNetDev = readTextFileSafe(CONTAINER_NET_DEV_PATH);
+  if (containerNetDev !== null) {
+    return { ...parseNetworkTotal(containerNetDev), source: 'container' };
+  }
+
+  return null;
 }
 
 function formatUptime(seconds: number): string {
@@ -138,7 +169,6 @@ export async function collectServerStats(): Promise<ServerStats> {
 
   const statText = readTextFileSafe(`${procBase}/stat`);
   const memInfoText = readTextFileSafe(`${procBase}/meminfo`);
-  const netDevText = readTextFileSafe(`${procBase}/net/dev`);
   const uptimeText = readTextFileSafe(`${procBase}/uptime`);
 
   const parsedCpuSample = statText ? parseCpuSample(statText.split('\n')[0]) : null;
@@ -159,14 +189,12 @@ export async function collectServerStats(): Promise<ServerStats> {
     }
   }
 
-  const networkStats = netDevText ? parseNetworkTotal(netDevText) : { rx: 0, tx: 0 };
-
   return {
     cpu: Math.min(100, Math.round(cpuUsage)),
     memory: Math.round(memoryUsage),
     uptime: formatUptime(uptime),
-    network: networkStats,
+    network: readNetworkStats(),
     loadAvg: loadAvg.map((load) => load.toFixed(2)),
-    source: procBase === '/host/proc' ? 'host' : 'container',
+    source: procBase === HOST_PROC_BASE ? 'host' : 'container',
   };
 }

@@ -423,5 +423,18 @@ else
   no "the panel has no ./backups:/app/backups mount, so BACKUP_DIR resolves to nothing"
 fi
 
+# WHY a distinct host bind: /host/proc/net follows the reading panel, so host counters need a host-resolved source.
+if grep -qE '^[[:space:]]*- /proc/1/net/dev:/host/proc-net/dev:ro' "${REPO_ROOT}/docker-compose.yml"; then
+  ok "the panel mounts the host net counters read-only at a distinct path"
+else
+  no "the panel has no /proc/1/net/dev:/host/proc-net/dev:ro mount, so the network figures are the container's"
+fi
+# WHY least privilege: the bind must not be met with host pid/network namespaces that widen visibility.
+if grep -qE '^[[:space:]]*(pid|network_mode):[[:space:]]*host' <<<"${panel_block}"; then
+  no "the panel takes pid/network host, widening what it can see beyond the counters"
+else
+  ok "the panel keeps its own pid and network namespaces"
+fi
+
 printf '\n%d passed, %d failed\n' "${pass}" "${fail}"
 (( fail == 0 ))

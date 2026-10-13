@@ -501,8 +501,10 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/repo-root
-      # WHY read-only: server-stats.ts prefers /host/proc, so the resources page reports the host.
+      # WHY read-only: server-stats.ts prefers /host/proc for the CPU, RAM and uptime figures.
       - /proc:/host/proc:ro
+      # WHY a distinct bind: /host/proc/net follows the panel's own netns, so host aggregate counters need docker to resolve /proc/1/net/dev on the host.
+      - /proc/1/net/dev:/host/proc-net/dev:ro
       # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the
       # archive tree at /app/backups and the panel reads the same BACKUP_DIR. Without the
       # panel holding it too, the value resolves to a directory that is not there and every

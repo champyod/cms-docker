@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ResourceView } from '@/components/resources/ResourceView';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import type { ResourceFrame, ServerStats, WorkerNodeView } from '@/lib/live-frames';
+import type { ResourceFrame, ServerStats, StatsSource, WorkerNodeView } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
 
 /**
@@ -21,8 +21,9 @@ class FakeEventSource {
   close(): void { this.readyState = 2; }
 }
 
-function stats(source: ServerStats['source']): ServerStats {
-  return { cpu: 12, memory: 40, uptime: '3d', network: { rx: 1, tx: 2 }, loadAvg: ['0.10', '0.20', '0.30'], source };
+function stats(source: ServerStats['source'], networkSource?: StatsSource): ServerStats {
+  const network = networkSource ?? source;
+  return { cpu: 12, memory: 40, uptime: '3d', network: { rx: 1, tx: 2, source: network }, loadAvg: ['0.10', '0.20', '0.30'], source };
 }
 
 function worker(): WorkerNodeView {
@@ -68,6 +69,11 @@ function states(copy: string): boolean {
   return (document.body.textContent ?? '').includes(copy);
 }
 
+// Why count instead of includes: one label may legitimately appear on more than one figure.
+function count(copy: string): number {
+  return (document.body.textContent ?? '').split(copy).length - 1;
+}
+
 beforeEach(() => {
   FakeEventSource.instances = [];
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -106,6 +112,15 @@ describe('resources surface source label', () => {
     await deliver({ server: stats('host') });
     expect(states(en.resources.hostSource)).toBe(true);
     expect(states(en.resources.containerSource)).toBe(false);
+  });
+
+  it('labels the network figures with their own source, apart from the host figures', async () => {
+    render(surface());
+    // The CPU and RAM gauges carry the host label; the network figures are a container reading underneath.
+    await deliver({ workers: [worker()], server: stats('host', 'container') });
+
+    expect(count(en.resources.hostSource)).toBe(2);
+    expect(count(en.resources.containerSource)).toBe(1);
   });
 });
 

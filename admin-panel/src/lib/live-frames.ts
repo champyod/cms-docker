@@ -1,11 +1,11 @@
-import type { ServerStats } from '@/lib/server-stats';
+import type { ServerStats, StatsSource } from '@/lib/server-stats';
 import type { WorkerNodeView } from '@/lib/worker-nodes';
 import type { ContainerInfo, CoreServiceStatus, TrafficLog } from '@/lib/container-probes';
 import type { ContainerRestartConfig } from '@/lib/container-restart-store';
 
 // Why the section types are re-exported here: the panels read frames and nothing else, so one
 // type-only import from this module keeps them away from the server modules that collect the data.
-export type { ServerStats, WorkerNodeView, ContainerInfo, CoreServiceStatus, TrafficLog, ContainerRestartConfig };
+export type { ServerStats, StatsSource, WorkerNodeView, ContainerInfo, CoreServiceStatus, TrafficLog, ContainerRestartConfig };
 
 /**
  * The frame contracts the live streams and the panels agree on.

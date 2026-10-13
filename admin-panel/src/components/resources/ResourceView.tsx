@@ -29,6 +29,13 @@ function sourceLabel(serverStats: ServerStats | null, dict: Dictionary): string 
   return serverStats.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
 }
 
+// Why the network figures get their own label: their origin can differ from the CPU/RAM/uptime one when only one mount is present.
+function networkSourceLabel(serverStats: ServerStats | null, dict: Dictionary): string | null {
+  const network = serverStats?.network;
+  if (!network) return null;
+  return network.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
+}
+
 export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
@@ -144,6 +151,7 @@ export function ResourceView(): React.JSX.Element {
 
 export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }): React.JSX.Element {
   const dict = useDictionary();
+  const networkSource = networkSourceLabel(serverStats, dict);
   return (
     <div className="grid grid-cols-1 gap-6">
       <Card className="p-4 density:p-3">
@@ -157,7 +165,9 @@ export function MetricsCard({ serverStats }: { serverStats: ServerStats | null }
             <div className="text-lg font-mono text-foreground">{serverStats?.loadAvg?.[0] || '-'}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">{dict.resources.networkTotal}</div>
+            <div className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+              {dict.resources.networkTotal}{networkSource === null ? '' : ` ${networkSource}`}
+            </div>
             <div className="text-xs font-mono text-success">
               {serverStats?.network ? `↓ ${formatBytes(serverStats.network.rx)}` : '-'}
             </div>
