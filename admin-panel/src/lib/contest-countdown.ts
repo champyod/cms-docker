@@ -253,11 +253,6 @@ export function formatZoneClockHHMM(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-GB', { ...CLOCK_OPTIONS, timeZone }).format(date);
 }
 
-/** Wall-clock HH:MM:SS in the given zone: the second-resolution reading the clock displays. */
-export function formatZoneClockHMS(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-GB', { ...CLOCK_OPTIONS, second: '2-digit', timeZone }).format(date);
-}
-
 /** The full zoned reading, carried as a native tooltip so the date stays reachable on hover. */
 export function formatZoneTimeTitle(date: Date, timeZone: string): string {
   return `${formatZoneTime(date, timeZone)} (${timeZone})`;
@@ -265,7 +260,7 @@ export function formatZoneTimeTitle(date: Date, timeZone: string): string {
 
 /** One entry per character of the clock, so its digits are sized without measuring text. */
 export function toZoneClockSamples(date: Date, timeZone: string): readonly string[] {
-  return [...formatZoneClockHMS(date, timeZone)];
+  return [...formatZoneClockHHMM(date, timeZone)];
 }
 
 export function zoneOffsetLabel(timeZone: string): string {

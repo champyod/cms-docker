@@ -717,14 +717,14 @@
 /*
  * ─── Countdown zone clock and its front-layer panel ─────────────────────────
  *
- * .countdown-zone-clock         — the live actual time, HH:MM:SS in the chosen zone.
+ * .countdown-zone-clock         — the live actual time, HH:MM in the chosen zone.
  * .countdown-zone-clock-digits  — the row the size is set on.
  * .countdown-zone-clock-glyph   — one numeral in a fixed 1ch slot.
  * .countdown-zone-clock-sep     — a colon, unslotted because it needs no numeral's width.
  *
  * SIZING STRATEGY
- * The glyph slot is exactly one "0" advance, so the row is nine slots wide whatever the
- * time reads and the number cannot twitch as the seconds tick. Those slots bound the text
+ * The glyph slot is exactly one "0" advance, so the row is five slots wide whatever the
+ * time reads and the number cannot twitch as the minutes tick. Those slots bound the text
  * box, which is why no measurement is needed to size it — the same reasoning that keeps
  * the countdown digits in CSS rather than in JavaScript.
  *

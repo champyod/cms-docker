@@ -1,14 +1,14 @@
 'use client';
 
-import { formatZoneClockHMS, formatZoneTimeTitle, toZoneClockSamples } from '@/lib/contest-countdown';
+import { formatZoneClockHHMM, formatZoneTimeTitle, toZoneClockSamples } from '@/lib/contest-countdown';
 
 const SEPARATOR = ':';
 
 /**
- * The live wall clock in the chosen zone, HH:MM:SS.
+ * The live wall clock in the chosen zone, HH:MM.
  *
  * Every character is its own element, so the digits are exactly as wide as the font's
- * worst-case numeral and the row cannot twitch as the seconds tick. A separator is left
+ * worst-case numeral and the row cannot twitch as the minutes tick. A separator is left
  * unslotted, since a colon does not need a numeral's width.
  */
 export function CountdownZoneClock({ now, timezone }: {
@@ -23,7 +23,7 @@ export function CountdownZoneClock({ now, timezone }: {
         className="countdown-zone-clock-digits font-display font-bold"
         title={formatZoneTimeTitle(now, timezone)}
       >
-        <span className="sr-only" aria-live="off">{formatZoneClockHMS(now, timezone)}</span>
+        <span className="sr-only" aria-live="off">{formatZoneClockHHMM(now, timezone)}</span>
         <span className="countdown-zone-clock-glyphs" aria-hidden>
           {samples.map((glyph, index) => (
             <span
