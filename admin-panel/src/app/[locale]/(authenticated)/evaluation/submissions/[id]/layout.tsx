@@ -4,6 +4,7 @@ import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { getSubmissionSummary } from '@/lib/evaluation-read-models';
 import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
+import { LiveRefresh } from '@/lib/live/live-refresh';
 import { recordBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -101,6 +102,7 @@ export default async function SubmissionRecordLayout({
       title={submissionHeading(summary)}
       description={submissionDescription(summary)}
       tabs={buildSubmissionTabs(locale, id, effective, dictionary)}
+      actions={<LiveRefresh url={`/api/submissions/${id}/stream`} />}
     >
       {children}
     </DetailSurface>

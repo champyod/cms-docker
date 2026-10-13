@@ -4,6 +4,7 @@ import { SubmissionList } from '@/components/submissions/SubmissionList';
 import type { SubmissionFilters } from '@/components/submissions/SubmissionList';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
+import { LiveRefresh } from '@/lib/live/live-refresh';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
@@ -119,6 +120,7 @@ export default async function EvaluationSubmissionsPage({
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
       title={submissionsLabel}
       description={dict.submissions.subtitle}
+      actions={<LiveRefresh url="/api/submissions/stream" />}
     >
       <SubmissionList
         initialSubmissions={result.submissions}
