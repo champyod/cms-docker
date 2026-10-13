@@ -231,7 +231,9 @@
     }
   },
   "deployments": {
-    "refresh": "รีเฟรช"
+    "refresh": "รีเฟรช",
+    "partialTitle": "โหลดข้อมูลบางส่วนไม่สำเร็จ",
+    "partialDescription": "ไม่พร้อมใช้งาน: {parts} ส่วนที่เหลือบนหน้านี้เป็นข้อมูลล่าสุด"
   },
   "ranking": {
     "board": {

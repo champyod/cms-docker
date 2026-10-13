@@ -231,7 +231,9 @@
     }
   },
   "deployments": {
-    "refresh": "Refresh"
+    "refresh": "Refresh",
+    "partialTitle": "Some details could not be loaded",
+    "partialDescription": "Unavailable: {parts}. Everything else on this screen is current."
   },
   "ranking": {
     "board": {

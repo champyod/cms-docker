@@ -15,7 +15,9 @@ import { WorkersPanel } from '@/components/deployments/WorkersPanel';
 import { useDeployWorkers } from '@/components/deployments/useDeployWorkers';
 import { useContestDeploymentSnapshot } from '@/components/deployments/useContestDeploymentSnapshot';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
 
 export function DeploymentsClient(): React.JSX.Element {
   const dict = useDictionary();
@@ -88,6 +90,14 @@ export function DeploymentsClient(): React.JSX.Element {
 
   return (
     <Stack gap={8} className="pb-20">
+      {snapshot.failedReads.length > 0 && (
+        <InlineAlert tone="warning" announce="polite" title={dict.deployments.partialTitle}>
+          {interpolate(dict.deployments.partialDescription, {
+            parts: snapshot.failedReads.map((failure) => failure.label).join(', '),
+          })}
+        </InlineAlert>
+      )}
+
       {deployState.phase !== 'idle' && (
         <DeployStatusPanel state={deployState} onCancel={cancelDeploy} onReset={resetDeploy} />
       )}
