@@ -18,11 +18,12 @@ export const AUDIT_POLL_MS = 5000;
 export const QUESTIONS_POLL_MS = 30_000;
 
 /**
- * The list surfaces' change cursor: users, teams, evaluation lanes and the ranking board.
+ * The list surfaces' change cursor: the submissions list and record, users, teams, evaluation lanes
+ * and the ranking board.
  *
- * Why one cadence for all four: each poll is a lookup on an index the table already has, so the
- * interval measures how quickly a change is noticed rather than what re-reading the page costs —
- * the users list used to re-read its whole page a minute at a time.
+ * Why one cadence for all of them: each sample is a lookup on a key the tables already have, so the
+ * interval measures how quickly a change is noticed rather than what re-reading the page costs — the
+ * users list used to re-read its whole page a minute at a time.
  */
 export const LIST_CURSOR_POLL_MS = 10_000;
 

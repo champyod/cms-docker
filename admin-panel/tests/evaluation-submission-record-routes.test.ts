@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import en from '@/dictionaries/en.json';
+import type { Dictionary } from '@/lib/dictionary';
 import SubmissionRecordLayout, { buildSubmissionTabs, submissionDescription, submissionHeading } from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout';
 import SubmissionLandingPage from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/page';
 import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
@@ -16,6 +17,7 @@ vi.mock('next/navigation', () => ({
   notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
   redirect: vi.fn((target: string) => { throw new Error(`NEXT_REDIRECT:${target}`); }),
   usePathname: () => '/en/evaluation/submissions/19/summary',
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
 }));
 
 vi.mock('@/lib/server/authorization', () => ({
@@ -37,6 +39,14 @@ vi.mock('@/lib/evaluation-read-models', () => ({
 }));
 
 vi.mock('@/i18n', () => ({ getDictionary: vi.fn(async () => en) }));
+
+// Why the dictionary is handed over without its provider: the record header now carries the live
+// indicator, whose copy comes from the same dictionary the layout's page supplies in the browser.
+vi.mock('@/hooks/useDictionary', async () => {
+  const actual = await vi.importActual<typeof import('@/hooks/useDictionary')>('@/hooks/useDictionary');
+  const dictionary = await vi.importActual<{ default: Dictionary }>('@/dictionaries/en.json');
+  return { ...actual, useDictionary: () => dictionary.default };
+});
 
 const RECORD_DIR = 'src/app/[locale]/(authenticated)/evaluation/submissions/[id]';
 
