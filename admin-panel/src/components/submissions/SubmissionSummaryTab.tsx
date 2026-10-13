@@ -6,16 +6,19 @@ import { AlertCircle, ArrowRight } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { Dictionary } from '@/lib/dictionary';
-import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
+import type { SubmissionSourceModel, SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteId } from '@/lib/navigation/types';
 
 import { SubmissionActionBar } from './SubmissionActionBar';
+import { SubmissionSourceViewer } from './SubmissionSourceViewer';
 
 export interface SubmissionSummaryTabProps {
   readonly summary: SubmissionSummary;
+  /** Null when the submission stores no file. */
+  readonly source: SubmissionSourceModel | null;
   readonly permissionKeys: readonly string[];
   readonly navigation: Dictionary['navigation'];
   readonly locale: 'en' | 'th';
@@ -99,10 +102,11 @@ function OutcomeCard({ title, href }: { readonly title: string; readonly href: s
   );
 }
 
-export function SubmissionSummaryTab({ summary, permissionKeys, navigation, locale }: SubmissionSummaryTabProps): React.JSX.Element {
+export function SubmissionSummaryTab({ summary, source, permissionKeys, navigation, locale }: SubmissionSummaryTabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
       <SummaryIdentity summary={summary} locale={locale} />
+      <SubmissionSourceViewer source={source} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OutcomeCard
           title="Compilation"

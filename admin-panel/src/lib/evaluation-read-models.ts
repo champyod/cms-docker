@@ -5,6 +5,7 @@ import type {
   SubmissionEvaluationModel,
   SubmissionLogsModel,
   SubmissionResultsModel,
+  SubmissionSourceModel,
   SubmissionSummary,
   SubmissionTestcaseDetailModel,
 } from '@/lib/evaluation-read-model-types';
@@ -70,6 +71,11 @@ const SUBMISSION_EVALUATION_SELECT = {
 
 const SUBMISSION_TESTCASE_SELECT = {
   testcases: { select: { codename: true, input: true, output: true } },
+} as const;
+
+const SUBMISSION_SOURCE_SELECT = {
+  language: true,
+  files: { select: { filename: true, digest: true }, orderBy: { filename: 'asc' }, take: 1 },
 } as const;
 
 // Why no field projection here: every column this reader returns is bound to
@@ -177,6 +183,26 @@ async function readFsobjectText(digest: string): Promise<string | null> {
   `;
   if (rows.length === 0) return null;
   return Buffer.from(rows[0].data).toString('utf8');
+}
+
+// Why the digest alone: the file is a content-addressed fsobject, so the model
+// carries the reference and the viewer fetches the bytes only when it renders.
+export async function getSubmissionSource(submissionId: number): Promise<SubmissionSourceModel | null> {
+  const permissions = await requirePermission('submission:read');
+  const row = await prisma.submissions.findUnique({
+    where: { id: submissionId },
+    select: SUBMISSION_SOURCE_SELECT,
+  });
+  const file = row?.files[0];
+  if (!row || !file) return null;
+  const ref = { submissionId, language: row.language };
+  // Why the field map and not a bare key: it is the one place that binds a
+  // submission's file row to `file:read`, so the gate follows that binding
+  // instead of duplicating it.
+  if (!getFieldAccess('files', permissions).digest.canRead) {
+    return { ...ref, sourceReadable: false };
+  }
+  return { ...ref, sourceReadable: true, filename: file.filename, digest: file.digest };
 }
 
 // Why the evaluation row is read first: it is the only link proving the testcase
