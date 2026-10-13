@@ -275,10 +275,36 @@
       "save": "บันทึกรายการเครดิต"
     },
     "lockouts": {
-      "title": "การเข้าสู่ระบบที่ถูกล็อก",
+      "title": "การล็อกที่ยังใช้งานอยู่",
+      "surface": "ระบบ",
+      "subject": "บัญชี",
       "failures": "ครั้งที่ล้มเหลว",
       "remaining": "เหลือ",
-      "clear": "ปลดล็อก"
+      "clear": "ปลดล็อก",
+      "reason": "เหตุผล",
+      "countersEmpty": "ไม่มีการล็อกที่ใช้งานอยู่บนระบบใด",
+      "historyTitle": "ประวัติการล็อก",
+      "historyHint": "การล็อกทุกรายการในบัญชีบันทึก เรียงจากใหม่ไปเก่า รวมรายการที่ Redis ลืมไปแล้ว",
+      "historyEmpty": "ยังไม่มีการบันทึกการล็อก",
+      "address": "ที่อยู่",
+      "refusedAt": "ถูกปฏิเสธเมื่อ",
+      "expiresAt": "หมดอายุ",
+      "state": "สถานะ",
+      "stateActive": "ใช้งานอยู่",
+      "stateEnded": "สิ้นสุด",
+      "captchaTitle": "สถานะ CAPTCHA",
+      "captchaEnabled": "เปิดใช้งาน",
+      "captchaThreshold": "เกณฑ์การท้าทาย",
+      "captchaBanThreshold": "เกณฑ์การแบน",
+      "captchaCounterStore": "ที่เก็บตัวนับ",
+      "captchaProvider": "ผู้ให้บริการ",
+      "captchaHealth": "สุขภาพ",
+      "enabledOn": "เปิด",
+      "enabledOff": "ปิด",
+      "surfaces": {
+        "contest": "การแข่งขัน / ผู้ดูแล",
+        "ranking": "คอนโซลอันดับ"
+      }
     },
     "users": {
       "title": "ผู้ใช้ในอันดับ",

@@ -275,10 +275,36 @@
       "save": "Save credit list"
     },
     "lockouts": {
-      "title": "Console lockouts",
+      "title": "Live lockouts",
+      "surface": "Surface",
+      "subject": "Subject",
       "failures": "failures",
       "remaining": "left",
-      "clear": "Clear"
+      "clear": "Clear",
+      "reason": "Reason",
+      "countersEmpty": "No live lockout on any surface.",
+      "historyTitle": "Lockout history",
+      "historyHint": "Every lockout in the ledger, newest first, including the ones Redis has already forgotten.",
+      "historyEmpty": "No lockout has been recorded yet.",
+      "address": "Address",
+      "refusedAt": "Refused at",
+      "expiresAt": "Expires",
+      "state": "State",
+      "stateActive": "active",
+      "stateEnded": "ended",
+      "captchaTitle": "CAPTCHA status",
+      "captchaEnabled": "Enabled",
+      "captchaThreshold": "Challenge threshold",
+      "captchaBanThreshold": "Ban threshold",
+      "captchaCounterStore": "Counter store",
+      "captchaProvider": "Provider",
+      "captchaHealth": "Health",
+      "enabledOn": "on",
+      "enabledOff": "off",
+      "surfaces": {
+        "contest": "Contest / admin",
+        "ranking": "Ranking console"
+      }
     },
     "users": {
       "title": "Ranking users",

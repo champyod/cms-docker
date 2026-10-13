@@ -1,10 +1,8 @@
 import { createClient } from 'redis';
 
+import { LOCKOUT_NAMESPACES } from '@/lib/lockout-namespaces';
 import { describeLockoutKey } from '@/lib/redis-lockouts';
 
-// Every lockout the deployment keeps in Redis, one namespace per surface, so a
-// lockout the panel did not create still reaches an operator.
-const LOCKOUT_NAMESPACES = ['cms:login:', 'cms:ranking:login:'] as const;
 // Failures at which a surface refuses the attempt outright (the ban threshold).
 export const LOCKOUT_THRESHOLD = 5;
 // How long a lockout stays a live alert; once it lapses the same key may alert
@@ -41,15 +39,15 @@ export async function scanLockoutAlerts(url: string): Promise<LockoutAlert[]> {
   await connection.connect();
   try {
     const found: LockoutAlert[] = [];
-    for (const namespace of LOCKOUT_NAMESPACES) {
-      for await (const raw of connection.scanIterator({ MATCH: `${namespace}*`, COUNT: 100 })) {
+    for (const entry of LOCKOUT_NAMESPACES) {
+      for await (const raw of connection.scanIterator({ MATCH: `${entry.namespace}*`, COUNT: 100 })) {
         const key = String(raw);
         const [value, ttl] = await Promise.all([connection.get(key), connection.ttl(key)]);
         const count = Number(value ?? 0);
         if (ttl <= 0 || !isLockout(count)) continue;
         const claimed = await connection.set(`${ALERT_NAMESPACE}${key}`, '1', { NX: true, EX: ALERT_TTL_SECONDS });
         if (claimed === null) continue;
-        found.push({ key, subject: describeLockoutKey(namespace, key), count, retryAfterSeconds: ttl });
+        found.push({ key, subject: describeLockoutKey(entry.namespace, key), count, retryAfterSeconds: ttl });
       }
     }
     return found;
