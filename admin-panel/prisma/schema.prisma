@@ -355,6 +355,7 @@ model teams {
   name           String           @db.VarChar
   organization   String?
   leader_id      Int?
+  registerable   Boolean          @default(true)
   leader         users?           @relation("team_leader", fields: [leader_id], references: [id])
   participations participations[]
 }

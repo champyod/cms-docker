@@ -134,6 +134,15 @@ class Team(Base):
         Unicode,
         nullable=False)
 
+    # Whether a contestant may pick this team when registering in a contest.
+    # A team that exists for staff (teachers, assistants) is not registerable:
+    # it is kept out of the CWS dropdown and refused on the accept path, so the
+    # team still groups its members without being offered to contestants.
+    registerable: bool = Column(
+        Boolean,
+        nullable=False,
+        default=True)
+
     participations: list["Participation"] = relationship(
         "Participation",
         cascade="all, delete-orphan",
