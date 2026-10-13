@@ -153,7 +153,11 @@ const taskSettingsSelect = {
 
 async function fetchTaskIntervals(taskId: number): Promise<IntervalColumns> {
   try {
-    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT token_min_interval, token_gen_interval, min_submission_interval, min_user_test_interval FROM tasks WHERE id = ${taskId}`;
+    // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
+    // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
+    // interval" and left every interval input on its default. EPOCH reads it as total seconds,
+    // which is exactly what the dialog's parser takes.
+    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM tasks WHERE id = ${taskId}`;
     return rows[0] ?? NO_INTERVALS;
   } catch {
     // Why degrade, not throw: the interval columns live on a CMS-created table that

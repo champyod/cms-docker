@@ -41,18 +41,21 @@ check_before() { # <label> <first substring> <second substring>
 printf '\n== rename --dry-run exits clean ==\n'
 if [[ "$RC" -eq 0 ]]; then ok "rename --dry-run exits 0"; else no "rename --dry-run exits 0 (got ${RC})"; fi
 
-printf '\n== the statements the rename runs ==\n'
-check_has "blocks new connections" 'ALTER DATABASE "cmsdb" WITH ALLOW_CONNECTIONS false;'
-check_has "drops the attached sessions" 'pg_terminate_backend(pid)'
-check_has "renames under the blocked state" 'ALTER DATABASE "cmsdb" RENAME TO "cmsdb_evaluate";'
-check_has "re-opens the new name" 'ALTER DATABASE "cmsdb_evaluate" WITH ALLOW_CONNECTIONS true;'
-check_absent "no longer tells the operator to stop core" 'core-stop'
-check_absent "no longer tells the operator to stop core (prose)" 'stop core'
+printf '\n== the statement the rename applies, in single-user mode ==\n'
+check_has "it says the cluster is stopped" 'single-user mode'
+check_has "it names the stop" 'is stopped'
+check_has "it renames in one statement" 'ALTER DATABASE "cmsdb" RENAME TO "cmsdb_evaluate";'
+check_absent "the per-session ALLOW_CONNECTIONS dance is gone" 'ALLOW_CONNECTIONS'
+check_absent "nothing terminates backend sessions" 'pg_terminate_backend'
 
-printf '\n== the order is what keeps the rename unblocked ==\n'
-check_before "the block precedes the terminate" 'ALLOW_CONNECTIONS false;' 'pg_terminate_backend(pid)'
-check_before "the terminate precedes the rename" 'pg_terminate_backend(pid)' 'RENAME TO "cmsdb_evaluate";'
-check_before "the rename precedes the re-open" 'RENAME TO "cmsdb_evaluate";' 'ALLOW_CONNECTIONS true;'
+printf '\n== the create is one statement, owned by the application role ==\n'
+OUT_CREATE="$(cd "$REPO_ROOT" && POSTGRES_USER= bash "$DB_ADMIN" create cmsdb_evaluate --dry-run 2>&1)"
+check_create_has() {
+  if printf '%s\n' "$OUT_CREATE" | grep -Fq -- "$2"; then ok "$1"; else no "$1 (missing: $2)"; fi
+}
+check_create_has "it creates the database owned by POSTGRES_USER" 'CREATE DATABASE "cmsdb_evaluate" OWNER "cmsuser";'
+check_create_has "the create explains the single-user stop" 'single-user mode'
+check_create_has "it says the cluster is stopped" 'is stopped'
 
 printf '\n== a rename onto the same name is refused ==\n'
 if (cd "$REPO_ROOT" && bash "$DB_ADMIN" rename cmsdb cmsdb --dry-run) >/dev/null 2>&1; then
@@ -77,20 +80,48 @@ sandbox() {
   cp "${DB_ADMIN}" "${dir}/scripts/"
   cp "${REPO_ROOT}/scripts/__lib/common.sh" "${dir}/scripts/__lib/"
   # WHY a stub: the claims are about config.toml, and a real container would mean
-  # a real database. It answers the three things the script asks — is the
-  # container running, does the name exist, did the statement succeed.
+  # a real database. It answers what the script asks — is the container running,
+  # what image and PGDATA does it carry, does the name exist, and does the
+  # stop/single-user/start sequence the rotation now depends on complete.
+  # STUB_LOG records the argv of every call so a test can assert the order.
   cat > "${dir}/bin/docker" <<'STUB'
 #!/usr/bin/env bash
+[[ -n "${STUB_LOG:-}" ]] && printf '%s\n' "$*" >> "${STUB_LOG}"
 case "${1:-}" in
   inspect)
-    [[ "${2:-}" == "-f" ]] && printf 'true\n'
+    case "${3:-}" in
+      '{{.State.Running}}') printf 'true\n' ;;
+      '{{.Config.Image}}') printf 'postgres:15\n' ;;
+      '{{range .Config.Env}}{{println .}}{{end}}') printf 'PGDATA=/var/lib/postgresql/data\n' ;;
+      *) printf 'true\n' ;;
+    esac
+    exit 0
+    ;;
+  stop|start)
+    exit 0
+    ;;
+  run)
+    # The one-off single-user container: echo the SQL it was fed on stdin, and
+    # record it too, so a test can assert which statement reached single-user mode.
+    if [[ "${STUB_RUN_FAIL:-0}" == "1" ]]; then
+      cat >/dev/null
+      printf 'ERROR:  permission denied to rename database\n'
+      exit 1
+    fi
+    cat | tee -a "${STUB_LOG:-/dev/null}"
+    [[ -n "${STUB_AFTER_MARKER:-}" ]] && : > "${STUB_AFTER_MARKER}"
+    printf 'ALTER DATABASE\n'
     exit 0
     ;;
   exec)
     for arg in "$@"; do
       case "$arg" in
         *FROM\ pg_database*datname*)
-          [[ "$arg" == *"'"${STUB_PRESENT_DB}"'"* ]] && printf '1\n' || printf '0\n'
+          if [[ -f "${STUB_AFTER_MARKER:-/nonexistent}" ]]; then
+            [[ "$arg" == *"'"${STUB_AFTER_DB:-}"'"* ]] && printf '1\n' || printf '0\n'
+          else
+            [[ "$arg" == *"'"${STUB_PRESENT_DB}"'"* ]] && printf '1\n' || printf '0\n'
+          fi
           exit 0
           ;;
       esac
@@ -113,6 +144,8 @@ run_case() { # <config.toml body, empty for no file>  -> OUT, RC
   dir="$(sandbox)"
   if [[ -n "$1" ]]; then printf '%s\n' "$1" > "${dir}/config.toml"; fi
   OUT="$(PATH="${dir}/bin:${PATH}" CONFIRM_DB_ADMIN=yes STUB_PRESENT_DB=cmsdb \
+    STUB_AFTER_DB=cmsdb_evaluate STUB_AFTER_MARKER="${dir}/after" \
+    STUB_LOG="${dir}/docker.log" \
     bash "${dir}/scripts/__db_admin.sh" rename cmsdb cmsdb_evaluate 2>&1)"
   RC=$?
   SANDBOX_DIR="${dir}"
@@ -191,6 +224,68 @@ check_has "the undeterminable case says so" 'config.toml is missing or unreadabl
 check_absent "it does not claim zero stale profiles" 'no db_<profile> section in config.toml points at'
 check_absent "it does not invent a count" 'found):'
 if [[ "$RC" -eq 0 ]]; then ok "the rename exits 0"; else no "the rename exits 0 (got ${RC})"; fi
+
+printf '\n== the cluster is stopped, the statement applied, and started again ==\n'
+run_case '[db_default]
+POSTGRES_DB = "cmsdb"
+'
+log="${SANDBOX_DIR}/docker.log"
+seq="$(sed -n 's/^\(stop\|run\|start\) .*/\1/p' "${log}" | tr '\n' ' ')"
+if [[ "$seq" == "stop run start " ]]; then
+  ok "the sequence is stop -> single-user -> start"
+else
+  no "the sequence is stop -> single-user -> start (got '${seq}')"
+fi
+if grep -Fq -- '--single' "${log}"; then ok "the statement is applied in --single mode"; else no "the statement is applied in --single mode"; fi
+if grep -Fq -- '--user postgres' "${log}"; then ok "the one-off container runs as the postgres user (the server refuses root)"; else no "the one-off container runs as the postgres user"; fi
+if grep -Fq -- '--volumes-from cms-database' "${log}"; then ok "it reuses the container's own volume"; else no "it reuses the container's own volume"; fi
+if grep -Fq -- 'exit_on_error=on' "${log}"; then ok "a failed statement is made fatal"; else no "a failed statement is made fatal"; fi
+if grep -Fq 'ALTER DATABASE "cmsdb" RENAME TO "cmsdb_evaluate";' "${log}"; then
+  ok "the rename statement reaches single-user mode"
+else
+  no "the rename statement reaches single-user mode"
+fi
+check_has "and the run reports the rename" 'renamed "cmsdb" to "cmsdb_evaluate"'
+
+printf '\n== a failed statement still leaves the container running ==\n'
+FAIL_DIR="$(sandbox)"
+printf '[db_default]\nPOSTGRES_DB = "cmsdb"\n' > "${FAIL_DIR}/config.toml"
+OUT="$(PATH="${FAIL_DIR}/bin:${PATH}" CONFIRM_DB_ADMIN=yes STUB_PRESENT_DB=cmsdb \
+  STUB_RUN_FAIL=1 STUB_LOG="${FAIL_DIR}/docker.log" \
+  bash "${FAIL_DIR}/scripts/__db_admin.sh" rename cmsdb cmsdb_evaluate 2>&1)"
+RC=$?
+fail_log="${FAIL_DIR}/docker.log"
+if [[ "$RC" -ne 0 ]]; then ok "a failed statement exits non-zero"; else no "a failed statement exits non-zero (got ${RC})"; fi
+check_has "the failure is reported, not swallowed" 'RENAME failed'
+if grep -q '^start cms-database' "${fail_log}"; then
+  ok "cms-database is started again after the failure"
+else
+  no "cms-database is started again after the failure"
+fi
+if grep -q 'renamed "cmsdb"' <<<"$OUT"; then no "a failed rename does not claim success"; else ok "a failed rename does not claim success"; fi
+
+printf '\n== a statement that silently does nothing is caught ==\n'
+PROBE_DIR="$(sandbox)"
+printf '[db_default]\nPOSTGRES_DB = "cmsdb"\n' > "${PROBE_DIR}/config.toml"
+OUT="$(PATH="${PROBE_DIR}/bin:${PATH}" CONFIRM_DB_ADMIN=yes STUB_PRESENT_DB=cmsdb \
+  STUB_AFTER_DB=cmsdb STUB_AFTER_MARKER="${PROBE_DIR}/after" \
+  STUB_LOG="${PROBE_DIR}/docker.log" \
+  bash "${PROBE_DIR}/scripts/__db_admin.sh" rename cmsdb cmsdb_evaluate 2>&1)"
+RC=$?
+if [[ "$RC" -eq 1 ]]; then ok "a rename that did not move the name exits 1"; else no "a rename that did not move the name exits 1 (got ${RC})"; fi
+check_has "and says the name was not moved" "not moved"
+if grep -q 'renamed "cmsdb"' <<<"$OUT"; then no "a no-op rename does not claim success"; else ok "a no-op rename does not claim success"; fi
+
+printf '\n== a create that leaves no database is caught ==\n'
+CREATE_DIR="$(sandbox)"
+printf '[db_default]\nPOSTGRES_DB = "cmsdb"\n' > "${CREATE_DIR}/config.toml"
+OUT="$(PATH="${CREATE_DIR}/bin:${PATH}" CONFIRM_DB_ADMIN=yes STUB_PRESENT_DB=__none__ \
+  STUB_AFTER_DB=__none__ STUB_AFTER_MARKER="${CREATE_DIR}/after" \
+  STUB_LOG="${CREATE_DIR}/docker.log" \
+  bash "${CREATE_DIR}/scripts/__db_admin.sh" create cmsdb_new 2>&1)"
+RC=$?
+if [[ "$RC" -eq 1 ]]; then ok "a create that left no database exits 1"; else no "a create that left no database exits 1 (got ${RC})"; fi
+check_has "and says the database is absent" "absent"
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$pass" "$fail"

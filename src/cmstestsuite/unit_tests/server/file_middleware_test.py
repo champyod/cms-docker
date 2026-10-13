@@ -59,8 +59,6 @@ class TestFileByDigestMiddleware(unittest.TestCase):
 
     @responder
     def wrapped_wsgi_app(self, environ, start_response):
-        # XXX: werkzeug adds a few things to the environment; idk how to make this assert hold
-        # self.assertEqual(environ, self.environ)
         if self.serve_file:
             headers = {FileServerMiddleware.DIGEST_HEADER: self.digest}
             if self.provide_filename:
@@ -76,7 +74,7 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.environ = self.environ_builder.get_environ()
         return self.client.open(self.environ)
 
-    def test_success(self):
+    def test_it_serves_the_file_with_the_expected_headers(self):
         response = self.request()
 
         self.assertEqual(response.status_code, 200)
@@ -85,16 +83,13 @@ class TestFileByDigestMiddleware(unittest.TestCase):
             response.headers.get("content-disposition"),
             "attachment; filename=%s" % quote_header_value(self.filename))
         self.assertTupleEqual(response.get_etag(), (self.digest, False))
-        # XXX: bug in werkzeug: it doesn't set accept-ranges properly; not much we can do currently
-        #self.assertEqual(response.accept_ranges, "bytes")
-        # self.assertGreater(response.cache_control.max_age, 0)  # It seems that "max_age" is None
         self.assertTrue(response.cache_control.private)
         self.assertFalse(response.cache_control.public)
         self.assertEqual(response.get_data(), self.content)
 
         self.file_cacher.get_file.assert_called_once_with(self.digest)
 
-    def test_not_a_file(self):
+    def test_it_passes_through_a_non_file_response(self):
         self.serve_file = False
 
         response = self.request()
@@ -103,14 +98,14 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.assertEqual(response.mimetype, "text/plain")
         self.assertEqual(response.get_data(), b"some other content")
 
-    def test_no_filename(self):
+    def test_it_omits_the_content_disposition_without_a_filename(self):
         self.provide_filename = False
 
         response = self.request()
 
         self.assertNotIn("content-disposition", response.headers)
 
-    def test_not_found(self):
+    def test_it_returns_404_when_the_file_is_missing(self):
         self.file_cacher.get_file.side_effect = KeyError()
 
         response = self.request()
@@ -118,7 +113,7 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.file_cacher.get_file.assert_called_once_with(self.digest)
 
-    def test_tombstone(self):
+    def test_it_returns_503_for_a_tombstoned_file(self):
         self.file_cacher.get_file.side_effect = TombstoneError()
 
         response = self.request()
@@ -126,19 +121,19 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.file_cacher.get_file.assert_called_once_with(self.digest)
 
-    def test_conditional_request(self):
+    def test_it_returns_304_when_the_etag_matches(self):
         # Test an etag that matches.
         response = self.request(headers=[("If-None-Match", self.digest)])
         self.assertEqual(response.status_code, 304)
         self.assertEqual(len(response.get_data()), 0)
 
-    def test_conditional_request_no_match(self):
+    def test_it_returns_the_file_when_the_etag_differs(self):
         # Test an etag that doesn't match.
         response = self.request(headers=[("If-None-Match", "not the etag")])
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_data(), self.content)
 
-    def test_range_request(self):
+    def test_it_serves_the_requested_byte_range(self):
         # Test a range that is strictly included.
         response = self.request(headers=[("Range", "bytes=256-767")])
         self.assertEqual(response.status_code, 206)
@@ -148,7 +143,7 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.assertEqual(response.content_range.length, TESTFILE_LEN)
         self.assertEqual(response.get_data(), self.content[256:768])
 
-    def test_range_request_end_overflows(self):
+    def test_it_clamps_a_range_that_ends_past_the_file(self):
         # Test a range that ends after the end of the file.
         response = self.request(headers=[("Range", "bytes=256-2047")])
         self.assertEqual(response.status_code, 206)
@@ -158,7 +153,7 @@ class TestFileByDigestMiddleware(unittest.TestCase):
         self.assertEqual(response.content_range.length, TESTFILE_LEN)
         self.assertEqual(response.get_data(), self.content[256:2048])
 
-    def test_range_request_start_overflows(self):
+    def test_it_returns_416_when_the_range_starts_past_the_file(self):
         # Test a range that starts after the end of the file.
         response = self.request(
             headers=[("Range", f"bytes={len(self.content) + 1}-")])

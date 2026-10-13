@@ -11,6 +11,7 @@ import {
   type PasswordKind,
 } from '@/lib/password-format';
 import { recordAudit } from '@/lib/audit';
+import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   prepareRow,
   shouldGeneratePassword,
@@ -154,6 +155,7 @@ export async function POST(req: NextRequest) {
     }
     const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
     const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind);
+    if (contestId > 0) await resyncRankingUsers(contestId);
 
     await recordAudit({
       verb: 'user:create',

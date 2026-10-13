@@ -150,10 +150,6 @@ function summarize(values: readonly string[]): string {
   return remainder > 0 ? `${shown.join(', ')} and ${remainder} more` : shown.join(', ');
 }
 
-function liveIdFor(accounts: ReadonlyMap<string, AccountRow>, username: string): number | null {
-  return accounts.get(username)?.id ?? null;
-}
-
 export function accountDeltas(facts: PrivilegeFacts): readonly AccountDelta[] {
   const live = indexBy(facts.liveAccounts, (row) => row.username);
   const deltas: AccountDelta[] = [];

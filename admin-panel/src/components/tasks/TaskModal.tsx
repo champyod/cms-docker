@@ -200,7 +200,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
             confirmDisabled={loading}
           />
         }
-        className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-4xl"
+        className="flex w-full flex-col gap-0 p-0 sm:max-h-[70vh] sm:max-w-4xl"
       >
         <ResponsiveModalShell
           sidebar={
@@ -226,7 +226,16 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
           <div className="p-8">
             <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
               {error && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{error}</InlineAlert>}
-              {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+              {activeTab === 'general' && (
+                <div className="space-y-6">
+                  {/* The type lives on the task's dataset, so a task dialog cannot show
+                      it as a field — say where the decision is made instead. */}
+                  <p className="text-xs text-muted-foreground">
+                    Task type is set on the task&apos;s dataset, not here — the dataset chooses Batch, Communication or TwoSteps.
+                  </p>
+                  <GeneralTab formData={formData} onChange={setFormData} />
+                </div>
+              )}
               {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
               {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
               {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}

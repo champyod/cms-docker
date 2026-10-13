@@ -84,10 +84,11 @@ async fn one(state: AppState, kind: Kind, key: &str) -> Response {
 }
 
 async fn sublist(State(state): State<AppState>, Path(user): Path<String>) -> Response {
-    let Some(db) = state.db() else {
-        return refuse("no database is configured");
+    let standings = match state.standings().await {
+        Ok(standings) => standings,
+        Err(error) => return refuse(&error.to_string()),
     };
-    match entities::sublist_body(db.pool(), &user).await {
+    match entities::sublist_body(&standings.ledger, &user) {
         Ok(body) => bytes_response(body),
         Err(error) => refuse(&error.to_string()),
     }

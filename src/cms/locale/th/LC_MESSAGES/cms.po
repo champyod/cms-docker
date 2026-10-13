@@ -551,6 +551,9 @@ msgstr "การแข่งขันยังไม่ได้เริ่ม
 msgid "The contest will start at %(start_time)s and will end at %(stop_time)s."
 msgstr "การแข่งขันนี้จะเริ่มต้นเวลา %(start_time)s และจะสิ้นสุดเวลา %(stop_time)s."
 
+msgid "Scoreboard"
+msgstr "กระดานคะแนน"
+
 msgid "The contest is currently running."
 msgstr "อยู่ในระหว่างการแข่งขัน"
 

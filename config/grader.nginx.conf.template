@@ -37,12 +37,14 @@ limit_req_zone $limit_key zone=per_user:10m rate=5r/s;
 ${REDIS_UPSTREAM_BLOCK}
 ${REDIS_LUA_PLACEHOLDER}
 
-# ── Upstreams ──────────────────────────────────────────────────────
-# One upstream per route-table row, named after the row. Built by
-# __domain_routes.sh, which holds the only copy of the service → container mapping;
-# an upstream is emitted for every row whether or not a domain is configured for it,
-# because a route still answers on the primary vhost without one of its own.
-${UPSTREAM_BLOCKS}
+# ── Resolver ───────────────────────────────────────────────────────
+# The route locations dial a variable target, which nginx answers through this
+# resolver per request — so a recreated container is picked up without a reload.
+# Built by __domain_routes.sh, which holds the only copy of the service mapping.
+${ROUTE_RESOLVER}
+
+${SERVER_TOKENS_DIRECTIVE}
+${OCSP_STAPLING_DIRECTIVES}
 
 # ── Server 1: HTTP → HTTPS redirect + ACME challenge ──────────────
 # Always rendered. default_server answers for any Host, which is what lets a single
@@ -62,13 +64,15 @@ server {
 # @block primary
 # ── Server 2: primary (contest + ranking + WS) ─────────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${DOMAIN_NAME};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -81,6 +85,9 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Binds the primary route target the /login, /ws and static blocks below dial.
+    ${PRIMARY_UPSTREAM_SET}
 
     location = /login {
         limit_req zone=admin_login burst=20 nodelay;
@@ -105,6 +112,7 @@ server {
         proxy_pass http://${PRIMARY_UPSTREAM};
         expires 1d;
         add_header Cache-Control "public, immutable";
+        ${LOCATION_SECURITY_HEADERS}
     }
 
     access_log /var/log/nginx/grader_access.log;
@@ -115,13 +123,15 @@ server {
 # @block admin
 # ── Server 3: admin panel (Next.js) + classic admin ───────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${ADMIN_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -151,13 +161,15 @@ server {
 # @block oj
 # ── Server 4: external OJ backend via host-gateway ────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${OJ_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 
@@ -181,13 +193,15 @@ server {
 # @block ranking
 # ── Server 5: ranking (always auth) ────────────────────────────────
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${RANKING_DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${CERT_LINEAGE_DOMAIN}/privkey.pem;
     include /etc/nginx/conf.d/nginx-ssl.conf;
-    add_header Strict-Transport-Security "max-age=${HSTS_MAX_AGE}; includeSubDomains" always;
+    ${HSTS_HEADER}
+    ${CSP_HEADER}
 
     ${ACME_HTTP01_CHALLENGE_ON_443}
 

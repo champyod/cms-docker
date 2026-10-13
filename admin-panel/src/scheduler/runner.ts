@@ -14,6 +14,7 @@ import { promisify } from 'node:util';
 
 import { logToDiscord } from '@/lib/discord-notifier';
 import { resolveWriteRoot } from '@/lib/backup-locations';
+import { alertDetail, scanLockoutAlerts } from '@/scheduler/lockout-alerts';
 import { prisma } from '@/lib/prisma';
 import {
   buildDueScheduleFilter,
@@ -86,11 +87,26 @@ async function runDueSchedules(now: Date): Promise<void> {
   await fireDueSchedules(await store.findDueSchedules(now), now, deps);
 }
 
+/**
+ * Pages Discord for lockouts the panel did not create — a contestant or
+ * console lockout lives only in the shared Redis, so a poller is what makes it
+ * visible. Each lockout pages once per window; see scanLockoutAlerts.
+ */
+async function runLockoutAlerts(): Promise<void> {
+  const url = process.env.REDIS_URL?.trim();
+  if (url === undefined || url === '') return;
+  const alerts = await scanLockoutAlerts(url);
+  for (const alert of alerts) {
+    await logToDiscord('Login lockout', alertDetail(alert), 15158332, true);
+  }
+}
+
 export async function runTick(now: Date = new Date()): Promise<void> {
   if (isTicking) return;
   isTicking = true;
   try {
     await runDueSchedules(now);
+    await runLockoutAlerts();
   } finally {
     isTicking = false;
   }

@@ -107,6 +107,37 @@ abbr {
 
 /******************************************************************************\
 |                                                                              |
+|                                 Board heading                                |
+|                                 -------------                                |
+\******************************************************************************/
+
+
+#BoardHeading {
+    margin: 20px 0 0;
+    text-align: center;
+}
+
+#BoardHeading .board-title {
+    margin: 0;
+    font-size: 1.8em;
+    line-height: 1.2em;
+}
+
+#BoardHeading .board-subtitle {
+    margin: 0.2em 0 0;
+    font-size: 1.1em;
+    color: #444444;
+}
+
+#BoardHeading .board-organisation {
+    margin-top: 0.2em;
+    font-size: 0.95em;
+    color: #666666;
+}
+
+
+/******************************************************************************\
+|                                                                              |
 |                                    Time View                                 |
 |                                    ---------                                 |
 \******************************************************************************/
@@ -1184,4 +1215,87 @@ abbr {
 #ConnectionStatus_box a {
     cursor: pointer;
     text-decoration: underline;
+}
+
+
+/******************************************************************************\
+|                                                                              |
+|                                    Views                                     |
+|                                    -----                                     |
+\******************************************************************************/
+
+
+#Views_bar {
+    margin: 16px 0 0;
+    text-align: center;
+}
+
+#Views_bar .views-btn {
+    font: inherit;
+    margin: 0 4px 6px 0;
+    padding: 0.35em 0.9em;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    background-color: #ECECEF;
+    cursor: pointer;
+}
+
+#Views_bar .views-btn.active {
+    background-color: #3465a4;
+    color: #FFFFFF;
+    border-color: #3465a4;
+}
+
+#Views_anon {
+    margin-left: 12px;
+    font-size: 0.9em;
+    color: #444444;
+    white-space: nowrap;
+}
+
+.views-view {
+    display: none;
+    margin: 12px 0;
+    text-align: center;
+}
+
+.views-table {
+    width: 100%;
+    table-layout: fixed;
+    margin: 12px 0;
+    border-collapse: collapse;
+}
+
+.views-table th,
+.views-table td {
+    padding: 0.35em 0.6em;
+    border-bottom: 1px solid #E0E0E3;
+    text-align: left;
+}
+
+.views-table th {
+    background-color: #ECECEF;
+}
+
+.views-table td:first-child,
+.views-table th:first-child {
+    width: 64px;
+    text-align: right;
+}
+
+#Views_task_pick {
+    margin: 8px 0;
+    text-align: left;
+    color: #444444;
+}
+
+#Views_scores canvas,
+#Views_progress canvas {
+    max-width: 100%;
+}
+
+/* Anonymous hides every name on the scoreboard; the extra views mask it in the DOM. */
+body.views-anonymous #Scoreboard td.f_name,
+body.views-anonymous #Scoreboard td.l_name {
+    visibility: hidden;
 }

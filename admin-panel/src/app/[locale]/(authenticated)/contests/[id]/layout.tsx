@@ -19,6 +19,7 @@ function getContestTabLabel(dictionary: Dictionary, routeId: RouteId): string {
     case 'contests.tabs.tasks': return dictionary.navigation.contests.tabs.tasks.label;
     case 'contests.tabs.participants': return dictionary.navigation.contests.tabs.participants.label;
     case 'contests.tabs.communications': return dictionary.navigation.contests.tabs.communications.label;
+    case 'contests.tabs.ranking': return dictionary.navigation.contests.tabs.ranking.label;
     case 'contests.tabs.settings': return dictionary.navigation.contests.tabs.settings.label;
     case 'contests.tabs.countdown': return dictionary.navigation.contests.tabs.countdown.label;
     default: return dictionary.navigation.contests.record.label;

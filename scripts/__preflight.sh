@@ -335,23 +335,50 @@ check_captcha() {
   fi
 
   local captcha_issues=()
-  local site_key="${CAPTCHA_SITE_KEY:-}"
-  local secret_key="${CAPTCHA_SECRET_KEY:-}"
-
-  if [[ -z "$site_key" ]]; then
-    captcha_issues+=("CAPTCHA_SITE_KEY empty (CAPTCHA_ENABLED=1)")
-  fi
-  if [[ -z "$secret_key" ]]; then
-    captcha_issues+=("CAPTCHA_SECRET_KEY empty (CAPTCHA_ENABLED=1)")
-  elif [[ "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
-    captcha_issues+=("CAPTCHA_SECRET_KEY is a 64-char hex placeholder, not a provider secret — replace with the secret from the ${CAPTCHA_PROVIDER:-turnstile} dashboard")
+  # WHY the chain is checked per provider: CAPTCHA_PROVIDERS names each provider
+  # and its own key pair, and a provider with a missing or placeholder key would
+  # otherwise be selected at render time and fail every challenge. An empty chain
+  # falls back to the legacy scalar keys.
+  local providers="${CAPTCHA_PROVIDERS:-}"
+  if [[ -n "$providers" ]]; then
+    local provider upper site_var secret_var site_key secret_key usable=0
+    local -a provider_list=()
+    IFS=',' read -ra provider_list <<< "$providers"
+    for provider in "${provider_list[@]}"; do
+      provider="$(printf '%s' "$provider" | tr -d '[:space:]')"
+      [[ -z "$provider" ]] && continue
+      upper="$(printf '%s' "$provider" | tr '[:lower:]' '[:upper:]')"
+      site_var="CAPTCHA_${upper}_SITE_KEY"
+      secret_var="CAPTCHA_${upper}_SECRET_KEY"
+      site_key="${!site_var:-}"
+      secret_key="${!secret_var:-}"
+      if [[ -n "$site_key" && -n "$secret_key" && ! "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+        usable=1
+      else
+        captcha_issues+=("${provider}: ${site_var}/${secret_var} missing or a 64-char hex placeholder")
+      fi
+    done
+    if [[ $usable -eq 0 && ${#captcha_issues[@]} -eq 0 ]]; then
+      captcha_issues+=("CAPTCHA_PROVIDERS names no provider")
+    fi
+  else
+    site_key="${CAPTCHA_SITE_KEY:-}"
+    secret_key="${CAPTCHA_SECRET_KEY:-}"
+    if [[ -z "$site_key" ]]; then
+      captcha_issues+=("CAPTCHA_SITE_KEY empty (CAPTCHA_ENABLED=1)")
+    fi
+    if [[ -z "$secret_key" ]]; then
+      captcha_issues+=("CAPTCHA_SECRET_KEY empty (CAPTCHA_ENABLED=1)")
+    elif [[ "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+      captcha_issues+=("CAPTCHA_SECRET_KEY is a 64-char hex placeholder, not a provider secret — replace with the secret from the ${CAPTCHA_PROVIDER:-turnstile} dashboard")
+    fi
   fi
 
   if [[ ${#captcha_issues[@]} -gt 0 ]]; then
     local msg
     msg=$(IFS='; '; echo "${captcha_issues[*]}")
     printf '[FAIL] captcha env: %s\n' "$msg" >&2
-    printf '       Fix: paste the real CAPTCHA_SITE_KEY and CAPTCHA_SECRET_KEY from the provider dashboard, or set CAPTCHA_ENABLED=0 to run without it\n' >&2
+    printf '       Fix: paste the real provider keys (CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY, or CAPTCHA_SITE_KEY/_SECRET_KEY), or set CAPTCHA_ENABLED=0 to run without it\n' >&2
     record_result "captcha config" "FAIL" "$msg"
     return 0
   fi
@@ -535,7 +562,9 @@ check_monitor_backup_access() {
     return 0
   fi
 
-  local backup_root="${BACKUP_DIR:-${REPO_ROOT}/backups}"
+  # Host tree, not ${BACKUP_DIR}: that is the in-container path (/app/backups), which
+  # nothing is mounted at on the host — stat-ing it here names a stale root.
+  local backup_root="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
   local container_uid="${DOCKER_UID:-1000}"
   # WHY ${container_uid} and not ${DOCKER_GID:-999}: docker/monitor/Dockerfile
   # creates the monitor group with addgroup -g ${DOCKER_UID}, so the container gid

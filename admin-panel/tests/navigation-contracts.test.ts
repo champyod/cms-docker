@@ -80,6 +80,7 @@ const INFRASTRUCTURE_ROUTE_IDS = [
 
 const RANKING_ROUTE_IDS = [
   'ranking.board',
+  'ranking.users',
   'ranking.settings',
   'ranking.appearance',
   'ranking.lockouts',
@@ -134,7 +135,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(55);
+    expect(ROUTE_REGISTRY).toHaveLength(57);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its four tabs, and the Administration
@@ -149,6 +150,7 @@ describe('target route registry', () => {
       'contests.tabs.tasks',
       'contests.tabs.participants',
       'contests.tabs.communications',
+      'contests.tabs.ranking',
       'contests.tabs.settings',
       'contests.tabs.countdown',
       'tasks.list',
@@ -280,7 +282,8 @@ describe('route permissions', () => {
     ['contests.tabs.overview', ['contest:read']],
     ['contests.tabs.tasks', ['contest:read', 'task:read']],
     ['contests.tabs.participants', ['contest:read', 'participation:read', 'user:read']],
-    ['contests.tabs.communications', ['contest:read', 'announcement:read', 'question:read', 'ranking:read']],
+    ['contests.tabs.communications', ['contest:read', 'announcement:read', 'question:read']],
+    ['contests.tabs.ranking', ['contest:read', 'ranking:list']],
     ['contests.tabs.settings', ['contest:read']],
     ['contests.tabs.countdown', ['contest:read']],
     ['tasks.tabs.overview', ['task:read', 'statement:read']],

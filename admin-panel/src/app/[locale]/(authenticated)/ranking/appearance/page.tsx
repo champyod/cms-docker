@@ -1,17 +1,74 @@
-import { getRankingAppearance, submitRankingAppearance } from '@/app/actions/rankingAppearance';
+import { getRankingAppearance, submitRankingAppearance, type RankingAppearance } from '@/app/actions/rankingAppearance';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { SelectField } from '@/components/core/FormField';
+import { Input } from '@/components/core/Input';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 import { getDictionary } from '@/i18n';
+import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-foreground';
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
-const LABEL_CLASS = 'block text-sm text-muted-foreground';
+const ACCESS_MODE_PUBLIC = 'public';
+const ACCESS_MODE_PROTECTED = 'protected';
 
-/**
- * Why a plain server form: the appearance writes one row and must work before
- * hydration, so a client component would buy state the page does not use. The credit
- * list is deliberately absent here — it is edited on its own page so one form cannot
- * clear a field the other no longer posts.
- */
+type AppearanceCopy = Dictionary['ranking']['appearance'];
+
+interface AppearanceFormProps {
+  readonly copy: AppearanceCopy;
+  readonly appearance: RankingAppearance;
+}
+
+// Plain server form: the write must work before hydration, and the credit list stays on its own page.
+function AppearanceForm({ copy, appearance }: AppearanceFormProps): React.JSX.Element {
+  return (
+    <form action={submitRankingAppearance} className="space-y-4">
+      <Text as="h2" variant="h3">
+        {copy.title}
+      </Text>
+      <Input label={copy.titleField} name="title" defaultValue={appearance.title} />
+      <Input label={copy.subtitleField} name="subtitle" defaultValue={appearance.subtitle} />
+      <Input
+        label={copy.organisationField}
+        name="organisation"
+        defaultValue={appearance.organisation}
+      />
+      <SelectField
+        id="ranking-appearance-access"
+        label={copy.accessField}
+        name="accessMode"
+        defaultValue={appearance.accessMode}
+      >
+        <option value={ACCESS_MODE_PUBLIC}>{copy.accessPublic}</option>
+        <option value={ACCESS_MODE_PROTECTED}>{copy.accessProtected}</option>
+      </SelectField>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          name="showIdColumn"
+          defaultChecked={appearance.showIdColumn}
+          className="size-4 accent-primary"
+        />
+        {copy.showIdColumn}
+      </label>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        <input
+          type="checkbox"
+          name="anonymous"
+          defaultChecked={appearance.anonymous}
+          className="size-4 accent-primary"
+        />
+        {copy.anonymousField}
+      </label>
+      <Input label={copy.footerField} name="footerText" defaultValue={appearance.footerText} />
+      <Input label={copy.creditsField} name="creditsText" defaultValue={appearance.creditsText} />
+      <Button type="submit" variant="positive">
+        {copy.save}
+      </Button>
+    </form>
+  );
+}
+
 export default async function RankingAppearancePage({
   params,
 }: {
@@ -25,46 +82,12 @@ export default async function RankingAppearancePage({
   const appearance = await getRankingAppearance();
   const canEdit = effective.has('ranking:appearance');
   return (
-    <div className="space-y-6">
+    <Stack gap={6}>
       {canEdit ? (
-        <form action={submitRankingAppearance} className={CARD_CLASS}>
-          <h2 className="text-lg font-semibold text-foreground">{copy.appearance.title}</h2>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.titleField}
-            <input name="title" defaultValue={appearance.title} className={FIELD_CLASS} />
-          </label>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.subtitleField}
-            <input name="subtitle" defaultValue={appearance.subtitle} className={FIELD_CLASS} />
-          </label>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.organisationField}
-            <input name="organisation" defaultValue={appearance.organisation} className={FIELD_CLASS} />
-          </label>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.accessField}
-            <select name="accessMode" defaultValue={appearance.accessMode} className={FIELD_CLASS}>
-              <option value="public">{copy.appearance.accessPublic}</option>
-              <option value="protected">{copy.appearance.accessProtected}</option>
-            </select>
-          </label>
-          <label className="flex items-center gap-2 text-sm text-muted-foreground">
-            <input type="checkbox" name="showIdColumn" defaultChecked={appearance.showIdColumn} />
-            {copy.appearance.showIdColumn}
-          </label>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.footerField}
-            <input name="footerText" defaultValue={appearance.footerText} className={FIELD_CLASS} />
-          </label>
-          <label className={LABEL_CLASS}>
-            {copy.appearance.creditsField}
-            <input name="creditsText" defaultValue={appearance.creditsText} className={FIELD_CLASS} />
-          </label>
-          <button type="submit" className="rounded-xl bg-indigo-500/20 px-4 py-2 text-indigo-300">
-            {copy.appearance.save}
-          </button>
-        </form>
+        <Card className="space-y-4">
+          <AppearanceForm copy={copy.appearance} appearance={appearance} />
+        </Card>
       ) : null}
-    </div>
+    </Stack>
   );
 }

@@ -12,7 +12,7 @@ the switch, and what to do if it goes wrong. The design and its decisions are in
 | Service command | `cmsRankingWebServer` (Python) | `cms-ranking` (Rust) |
 | Data | JSON files in `cms-ranking-data` | the `ranking_*` tables in PostgreSQL |
 | Push path | ProxyService PUTs to the service over HTTP | ProxyService upserts the tables |
-| Console login | HTTP Basic from `cms_ranking.toml` | `ranking_console_users`, own signed cookie |
+| Console login | HTTP Basic from `cms_ranking.toml` | an admin holding `ranking:read`, own signed cookie |
 | Failure counters | none | the stack Redis, under `cms:ranking:login:` |
 
 The container name, port, profile, labels and published mapping are unchanged, so nothing outside
@@ -20,7 +20,7 @@ the service needs to move.
 
 ## 2. Pre-flight
 
-1. **Migrations.** The five ranking migrations must be applied, in order:
+1. **Migrations.** The ranking migrations must be applied, in order:
 
    ```bash
    for migration in \
@@ -28,7 +28,7 @@ the service needs to move.
        20261009150100_ranking_tables_rls \
        20261009160000_ranking_notify \
        20261009170000_ranking_console_users \
-       20261009170100_ranking_console_users_rls; do
+       20261012020000_drop_ranking_console_users; do
      docker compose exec -T database psql -U cmsuser -d "${POSTGRES_DB:-cmsdb}" \
        -f - < "admin-panel/prisma/migrations/${migration}/migration.sql"
    done
@@ -42,9 +42,9 @@ the service needs to move.
    the console refuse every login rather than mint an unsigned one.
 4. **The page on disk.** `RANKING_STATIC_DIR` (the vendored `ranking-web/static` in the image) and
    `CMS_CREDITS_FILE` must exist; without them `/` and `/credits` refuse.
-5. **A console account.** `ranking_console_users` needs at least one enabled row, or nobody can reach
-   the console when the scoreboard is set to `protected`. Passwords use the panel format:
-   `bcrypt:<hash>` or `plaintext:<value>`.
+5. **A console account.** An enabled admin holding `ranking:read` must exist, or nobody can reach
+   the console when the scoreboard is set to `protected`. Credentials use the panel format:
+   `bcrypt:<hash>` or `plaintext:<value>`, read from `admins` like any other panel sign-in.
 
 ## 3. The switch
 
@@ -62,7 +62,7 @@ the service needs to move.
 | The board matches the Python scorer | `RANKING_E2E_DATABASE_URL=... bash ranking-web/tests/e2e/ranking_e2e.sh` | every step prints `[PASS]` |
 | Live events | the same script | a write reaches an open stream |
 | Protected mode | set `access_mode = protected`, open `/` anonymously | a redirect to `/login` |
-| Sign-in | sign in with a console account | the board opens; a wrong password sets no cookie |
+| Sign-in | sign in as an admin holding `ranking:read` | the board opens; a wrong password or a missing key sets no cookie |
 
 The rehearsal script is the authority for the database-backed claims. Nothing else in the repository
 exercises the served scoreboard against a live database.
@@ -79,15 +79,15 @@ rollback path need it. To go back, restore the compose command and mount a ranki
 
 The deployment no longer generates `config/cms_ranking.toml`, so a rollback must copy
 `config/cms.ranking.sample.toml` to that path and mount it as `CMS_RANKING_CONFIG` before
-redeploying. The tables keep the pushed data, so a rollback loses nothing; the console accounts and
+redeploying. The tables keep the pushed data, so a rollback loses nothing; the admin accounts and
 the appearance row stay in the database for the next attempt.
 
 ## 6. Known gaps at the time of writing
 
-- **The rehearsal still has not been run on a host by the author of the cutover.** This
-  environment has neither docker nor psql, so the script is syntax-checked here and runs in CI —
-  the `rust-ranking` job gives it a fresh Postgres and its own Redis, then drives the release
-  binary. Its result against a real stack belongs in the release notes.
+- **The rehearsal runs in CI, not on an operator's host.** This environment has neither docker nor
+  psql, so the script is syntax-checked here and runs in the `rust-ranking` job, which hands it a
+  fresh Postgres and its own Redis and then drives the release binary end to end. Running it against
+  a live stack belongs in the release notes.
 - **`cmsRWSHelper` was removed** with the HTTP push path: manual pushes now mean writing the
   projection tables or letting the proxy do it.
 - **`cms-ranking-data` holds the logo and the contestant faces.** The JSON store the volume was

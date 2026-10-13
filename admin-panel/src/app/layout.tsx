@@ -29,6 +29,7 @@ const TOAST_BREATHING_GAP_PX = 24;
 const MOBILE_TOAST_BOTTOM_OFFSET = `calc(${MOBILE_BOTTOM_BAR_HEIGHT_PX + TOAST_BREATHING_GAP_PX}px + env(safe-area-inset-bottom))`;
 
 export const metadata: Metadata = {
+  applicationName: 'CCYod CMS Docker',
   title: 'CMS Admin Panel',
   description: 'Contest Management System Administration',
 };

@@ -64,7 +64,7 @@ class TestScoringOperations(DatabaseMixin, unittest.TestCase):
 
     # Testing get_operations.
 
-    def test_get_operations_no_operations(self):
+    def test_it_returns_no_operations_when_none_are_needed(self):
         """Test for submissions without operations to do."""
         # Submission to compile, without a result.
         submission = self.add_submission(self.tasks[0], self.participation)
@@ -103,7 +103,7 @@ class TestScoringOperations(DatabaseMixin, unittest.TestCase):
         self.session.flush()
         self.assertEqual(set(get_operations(self.session)), set())
 
-    def test_get_operations_compilation_failed(self):
+    def test_it_returns_operations_for_a_failed_compilation(self):
         """Test for a submission which failed to compile."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation, False)
@@ -117,7 +117,7 @@ class TestScoringOperations(DatabaseMixin, unittest.TestCase):
             set(get_operations(self.session)),
             expected_operations)
 
-    def test_get_operations_evaluated(self):
+    def test_it_returns_operations_for_a_fully_evaluated_submission(self):
         """Test for a submission which failed to compile."""
         # A submission completely evaluated.
         submission, results = self.add_submission_with_results(

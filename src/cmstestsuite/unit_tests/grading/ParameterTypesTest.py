@@ -52,25 +52,25 @@ class TestParameterTypeString(unittest.TestCase):
         super().setUp()
         self.p = ParameterTypeString("name", "shortname", "description")
 
-    def test_validate_success(self):
+    def test_it_accepts_a_string(self):
         self.p.validate("asd")
         self.p.validate("中文")
 
-    def test_validate_failure(self):
+    def test_it_rejects_a_non_string(self):
         with self.assertRaises(ValueError):
             self.p.validate(1)
         with self.assertRaises(ValueError):
             self.p.validate(["asd"])
 
-    def test_validate_failure_bytes(self):
+    def test_it_rejects_bytes(self):
         with self.assertRaises(ValueError):
             self.p.validate(b"asd")
 
-    def test_parse_string(self):
+    def test_it_parses_a_string_unchanged(self):
         self.assertEqual(self.p.parse_string("asd"), "asd")
         self.assertEqual(self.p.parse_string("中文"), "中文")
 
-    def test_parse_handler(self):
+    def test_it_reads_the_argument_using_the_prefix(self):
         h = FakeHandler({
             "prefix_shortname": "correct prefix",
             "prefix_name": "incorrect",
@@ -90,13 +90,13 @@ class TestParameterTypeInt(unittest.TestCase):
         super().setUp()
         self.p = ParameterTypeInt("name", "shortname", "description")
 
-    def test_validate_success(self):
+    def test_it_accepts_integers(self):
         self.p.validate(1)
         self.p.validate(-1)
         self.p.validate(0)
         self.p.validate(2**34)
 
-    def test_validate_failure_wrong_type(self):
+    def test_it_rejects_a_non_integer(self):
         with self.assertRaises(ValueError):
             self.p.validate("1")
         with self.assertRaises(ValueError):
@@ -106,11 +106,11 @@ class TestParameterTypeInt(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.p.validate([1])
 
-    def test_parse_string(self):
+    def test_it_parses_an_integer_string(self):
         self.assertEqual(self.p.parse_string("123"), 123)
         self.assertEqual(self.p.parse_string("-123"), -123)
 
-    def test_parse_handler(self):
+    def test_it_reads_and_parses_the_argument(self):
         h = FakeHandler({
             "ok_shortname": "-45",
             "fail_shortname": "not an int",
@@ -132,22 +132,22 @@ class TestParameterTypeChoice(unittest.TestCase):
             "c2": "Second choice",
         })
 
-    def test_validate_success(self):
+    def test_it_accepts_a_configured_choice(self):
         self.p.validate("c1")
         self.p.validate("c2")
 
-    def test_validate_failure_wrong_type(self):
+    def test_it_rejects_an_unconfigured_choice(self):
         with self.assertRaises(ValueError):
             self.p.validate("c3")
         with self.assertRaises(ValueError):
             self.p.validate(["c1"])
 
-    def test_parse_string(self):
+    def test_it_parses_a_configured_choice(self):
         self.assertEqual(self.p.parse_string("c1"), "c1")
         with self.assertRaises(ValueError):
             self.p.parse_string("c3")
 
-    def test_parse_handler(self):
+    def test_it_reads_the_choice_from_the_argument(self):
         h = FakeHandler({
             "ok_shortname": "c2",
             "fail_shortname": "c3",
@@ -172,17 +172,17 @@ class TestParameterTypeCollection(unittest.TestCase):
                 "c2": "Second choice",
             })])
 
-    def test_validate_success(self):
+    def test_it_accepts_a_list_matching_the_subtypes(self):
         self.p.validate([1, "2", "c1"])
         self.p.validate([-1, "asd", "c1"])
 
-    def test_validate_failure_wrong_type(self):
+    def test_it_rejects_a_sequence_that_does_not_match_the_subtypes(self):
         with self.assertRaises(ValueError):
             self.p.validate((1, "2", "c1"))
         with self.assertRaises(ValueError):
             self.p.validate(["1", "2", "c1"])
 
-    def test_parse_handler(self):
+    def test_it_reads_and_parses_each_subtype_from_the_argument(self):
         h = FakeHandler({
             "ok_shortname_0_shortname0": "1",
             "ok_shortname_1_shortname1": "1",

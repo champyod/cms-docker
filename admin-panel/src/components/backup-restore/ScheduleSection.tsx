@@ -9,7 +9,9 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
+import { useDictionary } from '@/hooks/useDictionary';
 import { ScheduleForm, type FormValues } from '@/components/backup-restore/ScheduleForm';
 import { ScheduleRow } from '@/components/backup-restore/ScheduleRow';
 import {
@@ -32,8 +34,9 @@ function toFormValues(schedule: BackupSchedule): FormValues {
 }
 
 export function ScheduleSection() {
+    const dict = useDictionary();
     const [notice, setNotice] = useState<Notice | null>(null);
-    const { schedules, isLoading, loadError, reload } = useScheduleList();
+    const { schedules, status, reload } = useScheduleList();
     const { busyRow, toggle, remove } = useScheduleMutations(reload, setNotice);
     const form = useScheduleForm(reload, setNotice);
     const editingId = form.mode?.kind === 'edit' ? form.mode.id : null;
@@ -48,7 +51,7 @@ export function ScheduleSection() {
                     <Text variant="h2" className="mr-auto">
                         Backup Schedules
                     </Text>
-                    <Button size="sm" variant="secondary" icon={RefreshCw} loading={isLoading} onClick={() => void reload()}>
+                    <Button size="sm" variant="secondary" icon={RefreshCw} loading={status.kind === 'loading'} onClick={() => void reload()}>
                         Refresh
                     </Button>
                     <Button
@@ -66,14 +69,13 @@ export function ScheduleSection() {
                     lands in the run history and on Discord.
                 </Text>
 
-                {loadError !== null ? (
-                    <Text variant="small" role="alert" className="text-destructive">
-                        {loadError}
-                    </Text>
-                ) : isLoading ? (
-                    <Text variant="small" color="text-muted-foreground">
-                        Loading schedules...
-                    </Text>
+                {status.kind !== 'idle' ? (
+                    <SurfaceLoadState
+                        status={status}
+                        loadingTitle="Loading schedules..."
+                        onRetry={reload}
+                        retryLabel={dict.states.retry.label}
+                    />
                 ) : schedules.length === 0 && form.mode === null ? (
                     <EmptyState
                         icon={CalendarClock}

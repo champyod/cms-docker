@@ -81,7 +81,7 @@ function groupList(permissionKeys: readonly string[]): React.JSX.Element {
 }
 
 function taskList(permissionKeys: readonly string[]): React.JSX.Element {
-  return <TaskList initialTasks={[TASK]} totalPages={1} permissionKeys={permissionKeys} />;
+  return <TaskList initialTasks={[TASK]} totalPages={1} currentPage={1} permissionKeys={permissionKeys} />;
 }
 
 describe('admin row actions', () => {

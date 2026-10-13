@@ -1,16 +1,102 @@
-import { endRankingOverride, getRankingOverrides, saveRankingOverride } from '@/app/actions/rankingOverrides';
-import { OverrideForm } from '@/components/ranking/OverrideForm';
+import { getRankingOverrideOptions } from '@/app/actions/ranking';
+import {
+  endRankingOverride,
+  getRankingOverrides,
+  type RankingOverride,
+} from '@/app/actions/rankingOverrides';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { EmptyState } from '@/components/core/EmptyState';
+import { Input } from '@/components/core/Input';
+import { Stack } from '@/components/core/Layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/core/Table';
+import { Text } from '@/components/core/Typography';
+import { RankingOverrideForm } from '@/components/ranking/RankingOverrideForm';
 import { getDictionary } from '@/i18n';
+import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-foreground';
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
-const LABEL_CLASS = 'block text-sm text-muted-foreground';
+const NO_OVERRIDES_MESSAGE = 'No manual overrides are active.';
 
-/**
- * Why plain server forms: each override writes one row and must work before
- * hydration, so a client component would buy state the page does not use.
- */
+type OverrideCopy = Dictionary['ranking']['overrides'];
+
+interface OverrideRowProps {
+  readonly override: RankingOverride;
+  readonly canOverride: boolean;
+  readonly copy: OverrideCopy;
+}
+
+function OverrideRow({ override, canOverride, copy }: OverrideRowProps): React.JSX.Element {
+  const target = `${override.action} ${override.targetKind} ${override.targetKey}`;
+  const value = override.value === '' ? '' : ` (${override.value})`;
+  return (
+    <TableRow>
+      <TableCell>
+        <span className="font-mono text-muted-foreground">{override.id}</span>{' '}
+        <span>
+          {target}
+          {value}
+        </span>
+      </TableCell>
+      <TableCell className="text-muted-foreground">{override.contestId}</TableCell>
+      <TableCell className="text-muted-foreground">{override.reason}</TableCell>
+      {canOverride ? (
+        <TableCell className="text-right">
+          <form action={endRankingOverride} className="flex items-center justify-end gap-2">
+            <input type="hidden" name="id" value={override.id} />
+            <Input name="reason" required placeholder={copy.reason} className="w-40" />
+            <Button type="submit" variant="negative" size="sm">
+              {copy.end}
+            </Button>
+          </form>
+        </TableCell>
+      ) : null}
+    </TableRow>
+  );
+}
+
+interface OverrideListProps {
+  readonly overrides: readonly RankingOverride[];
+  readonly canOverride: boolean;
+  readonly copy: OverrideCopy;
+}
+
+function OverrideList({ overrides, canOverride, copy }: OverrideListProps): React.JSX.Element {
+  if (overrides.length === 0) {
+    return <EmptyState title={NO_OVERRIDES_MESSAGE} />;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{copy.target}</TableHead>
+          <TableHead>{copy.contestId}</TableHead>
+          <TableHead>{copy.reason}</TableHead>
+          {canOverride ? <TableHead className="text-right">{copy.end}</TableHead> : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {overrides.map((override) => (
+          <OverrideRow
+            key={override.id}
+            override={override}
+            canOverride={canOverride}
+            copy={copy}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+// Plain server forms: each override writes one row and must work before hydration.
 export default async function RankingSettingsPage({
   params,
 }: {
@@ -23,40 +109,27 @@ export default async function RankingSettingsPage({
   const copy = (await getDictionary(locale)).ranking;
   const overrides = await getRankingOverrides();
   const canOverride = effective.has('ranking:override');
+  const options = canOverride ? await getRankingOverrideOptions() : null;
   return (
-    <div className="space-y-6">
-      <section className={CARD_CLASS}>
-        <h2 className="text-lg font-semibold text-foreground">{copy.overrides.title}</h2>
-        <p className="text-sm text-muted-foreground">{copy.overrides.hint}</p>
-        {canOverride ? <OverrideForm copy={copy.overrides} permissionKeys={[...effective]} locale={locale} /> : null}
-        <ul className="divide-y divide-border text-sm text-foreground">
-          {overrides.map((override) => (
-            <li key={override.id} className="flex flex-wrap items-center gap-3 py-2">
-              <span className="font-mono text-muted-foreground">{override.id}</span>
-              <span>
-                {override.action} {override.targetKind} {override.targetKey}
-                {override.value === '' ? null : ` (${override.value})`}
-              </span>
-              <span className="text-muted-foreground">contest {override.contestId}</span>
-              <span className="text-muted-foreground">{override.reason}</span>
-              {canOverride ? (
-                <form action={endRankingOverride} className="ml-auto flex items-center gap-2">
-                  <input type="hidden" name="id" value={override.id} />
-                  <input
-                    name="reason"
-                    required
-                    placeholder={copy.overrides.reason}
-                    className="rounded-lg border border-border bg-muted/40 px-2 py-1 text-foreground"
-                  />
-                  <button type="submit" className="rounded-lg bg-red-500/20 px-3 py-1 text-red-300">
-                    {copy.overrides.end}
-                  </button>
-                </form>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
+    <Stack gap={6}>
+      <Card className="space-y-4">
+        <Text as="h2" variant="h3">
+          {copy.overrides.title}
+        </Text>
+        <Text variant="muted">{copy.overrides.hint}</Text>
+        {canOverride && options !== null ? (
+          <RankingOverrideForm
+            copy={copy.overrides}
+            contests={options.contests}
+            userKeys={options.userKeys}
+            teamKeys={options.teamKeys}
+            contestId=""
+            targetKind="user"
+            targetKey=""
+          />
+        ) : null}
+        <OverrideList overrides={overrides} canOverride={canOverride} copy={copy.overrides} />
+      </Card>
+    </Stack>
   );
 }

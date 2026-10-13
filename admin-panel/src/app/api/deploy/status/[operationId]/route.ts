@@ -49,6 +49,7 @@ export async function GET(
 
   const encoder = new TextEncoder();
   let lastLogLength = -1;
+  let lastLog = '';
   let lastStatus: string | null = null;
   let lastPercent: number | null = null;
   let startedAtMs: number | null = null;
@@ -85,6 +86,7 @@ export async function GET(
       const push = async (force: boolean): Promise<boolean> => {
         const result = await fetchDeployStatus(operationId);
         const logLength = result.log?.length ?? 0;
+        lastLog = result.log ?? '';
         const percent = result.percent ?? null;
         const changed = logLength !== lastLogLength || result.status !== lastStatus || percent !== lastPercent;
 
@@ -124,8 +126,18 @@ export async function GET(
             closed = true;
             controller.close();
           }
-        } catch {
-          // The stream ends on a failed lookup; the client's EventSource reconnects and tries again.
+        } catch (error) {
+          // Why the failure is sent rather than only closing the stream: the client reconnects on a
+          // closed stream, so a lookup that keeps failing left the card on "Pending build output" with
+          // no error, forever. The frame names the cause and ends the watch; the operation keeps its
+          // record and its guard, and the server settles it when its process exits.
+          send({
+            status: 'failed',
+            success: false,
+            log: lastLog.slice(-DEPLOY_TAIL_LENGTH),
+            percent: null,
+            error: `Could not read the deploy status: ${error instanceof Error ? error.message : 'unknown error'}`,
+          });
           stopTimers();
           if (!closed) {
             closed = true;

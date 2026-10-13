@@ -189,7 +189,7 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms stop [stack]` / `clean [stack]` / `pull [stack]` | Lifecycle per stack or all |
 | `./cms db init\|reset\|clean\|sync\|migrate` | Database shortcuts (init schema, full reset, wipe, Prisma sync, and migrate the active DB: schema + roles + RLS) |
 | `./cms db use <profile>` | Point the deployment at a different database — rewrites `ACTIVE_DATABASE`, runs `./cms config sync`, restacks what is running |
-| `./cms db create <name>` / `./cms db rename <old> <new>` | Create or rename a database in the running `cms-database` container — `--dry-run` first, then `CONFIRM_DB_ADMIN=yes` or type `yes`. Neither touches the schema or the config: after `create` run `./cms db use <profile>` then `./cms db migrate`; after `rename` repoint every `[db_<profile>]` `POSTGRES_DB`, run `./cms config sync`, then `./cms deploy core`. See [`docs/DB-ROTATION.md`](docs/DB-ROTATION.md) |
+| `./cms db create <name>` / `./cms db rename <old> <new>` | Create or rename a database in the running `cms-database` container. **Stops `cms-database`** for the length of the statement — no role on this cluster holds `CREATEDB`, so it runs in single-user mode — then starts it again. `--dry-run` first, then `CONFIRM_DB_ADMIN=yes` or type `yes`. Neither touches the schema or the config: after `create` run `./cms db use <profile>` then `./cms db migrate`; after `rename` repoint every `[db_<profile>]` `POSTGRES_DB`, run `./cms config sync`, then `./cms deploy core`. See [`docs/DB-ROTATION.md`](docs/DB-ROTATION.md) |
 | `./cms admin-create` | Create a superadmin interactively |
 | `./cms status` | Live service status dashboard |
 | `./cms monitor` | Monitoring/backup operations UI |

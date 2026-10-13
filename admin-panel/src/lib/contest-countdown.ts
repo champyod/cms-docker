@@ -172,7 +172,8 @@ export interface CountdownSegment {
 }
 
 /** Breakable points only: between number groups, never inside one, and no zero leading unit. */
-export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
+export function toCountdownSegments(totalMs: number): readonly CountdownSegment[] {
+  const totalSeconds = Math.max(0, Math.floor(totalMs / 1000));
   let index = 0;
   return countdownRuns(totalSeconds).map((run) => ({
     glyphs: [...run].map((char) => ({ char, index: index++ })),
@@ -243,14 +244,30 @@ export function formatZoneTime(date: Date, timeZone: string): string {
   }).format(date);
 }
 
+const CLOCK_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+};
+
 /** Wall-clock HH:MM in the given zone; the 24-hour form so 00:00 and 23:59 are both unambiguous. */
 export function formatZoneClockHHMM(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat('en-GB', {
-    timeZone,
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(date);
+  return new Intl.DateTimeFormat('en-GB', { ...CLOCK_OPTIONS, timeZone }).format(date);
+}
+
+/** Wall-clock HH:MM:SS in the given zone: the second-resolution reading the clock displays. */
+export function formatZoneClockHMS(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-GB', { ...CLOCK_OPTIONS, second: '2-digit', timeZone }).format(date);
+}
+
+/** The full zoned reading, carried as a native tooltip so the date stays reachable on hover. */
+export function formatZoneTimeTitle(date: Date, timeZone: string): string {
+  return `${formatZoneTime(date, timeZone)} (${timeZone})`;
+}
+
+/** One entry per character of the clock, so its digits are sized without measuring text. */
+export function toZoneClockSamples(date: Date, timeZone: string): readonly string[] {
+  return [...formatZoneClockHMS(date, timeZone)];
 }
 
 export function zoneOffsetLabel(timeZone: string): string {

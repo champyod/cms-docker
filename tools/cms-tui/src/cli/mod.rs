@@ -8,14 +8,42 @@ pub mod setup_args;
 pub use renew_args::DomainRenewArgs;
 pub use setup_args::{DomainProxyArgs, DomainSetupArgs};
 
-/// Database lifecycle subcommands (`db <init|reset|clean|sync|migrate>`).
-#[derive(ValueEnum, Clone, Debug)]
-pub enum DbSub {
+/// Database lifecycle subcommands.
+#[derive(Subcommand, Clone, Debug)]
+pub enum DbCmd {
+    /// Initialise the CMS database.
     Init,
+    /// Reset the database (destructive).
     Reset,
+    /// Delete every cms volume (destructive).
     Clean,
+    /// Apply Prisma migrations and seed permissions.
     Sync,
+    /// Apply the full history to the active database and verify.
     Migrate,
+    /// Create a database in the cms-database container.
+    Create {
+        /// Database name to create.
+        name: String,
+        /// Print the SQL and change nothing.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Rename a database in the cms-database container.
+    Rename {
+        /// Current database name.
+        old: String,
+        /// New database name.
+        new_name: String,
+        /// Print the SQL and change nothing.
+        #[arg(long, default_value_t = false)]
+        dry_run: bool,
+    },
+    /// Switch the active database profile.
+    Use {
+        /// Profile to activate.
+        name: String,
+    },
 }
 
 /// Backup subcommands (`backup [drill|offsite]`; None = default backup).
@@ -109,10 +137,16 @@ pub enum ConfigSub {
     Show,
 }
 
-/// Contest subcommands (`contest <create>`).
-#[derive(ValueEnum, Clone, Debug)]
+/// Contest subcommands (`contest <create|set-active>`).
+#[derive(Subcommand, Clone, Debug)]
 pub enum ContestSub {
+    /// Create contests from a YAML file.
     Create,
+    /// Set the active contest in the database, the single source of truth.
+    SetActive {
+        /// Contest id to activate.
+        id: u32,
+    },
 }
 
 /// Full-parity CLI, mirroring the `cms` bash dispatcher.
@@ -128,7 +162,9 @@ pub enum Commands {
     },
     /// Non-interactive repair of missing/insecure config.
     Fix,
-    /// Deploy a stack (`core|admin|contest|worker|infra|domain|waf|all`) with optional `--img`.
+    /// Deploy a stack (`core|admin|contest|worker|infra|monitor|domain|waf|all`) with optional `--img`.
+    ///
+    /// `monitor` is the profile's own name and resolves to the same `infra` targets.
     ///
     /// `domain` and `waf` are additive: they publish host ports and start
     /// certbot, so they are never part of `all`.
@@ -157,10 +193,10 @@ pub enum Commands {
         #[arg(default_value = "all")]
         stack: String,
     },
-    /// Database lifecycle shortcuts (`db <init|reset|clean|sync|migrate>`).
+    /// Database lifecycle commands (`db <init|reset|clean|sync|migrate|create|rename|use>`).
     Db {
-        #[arg(value_enum)]
-        sub: DbSub,
+        #[command(subcommand)]
+        sub: DbCmd,
     },
     /// Create superadmin account.
     AdminCreate,
@@ -207,9 +243,9 @@ pub enum Commands {
         #[arg(value_enum)]
         sub: FunnelSub,
     },
-    /// Contest management (`contest create`).
+    /// Contest management (`contest <create|set-active>`).
     Contest {
-        #[arg(value_enum)]
+        #[command(subcommand)]
         sub: ContestSub,
     },
     /// Shard-aware full server update (git+img+db+verify).

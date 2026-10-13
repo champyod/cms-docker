@@ -80,6 +80,10 @@ fn required_object(
 #[template(path = "ranking.html")]
 struct RankingPage<'a> {
     title: &'a str,
+    heading: &'a str,
+    subtitle: &'a str,
+    organisation: &'a str,
+    anonymous: bool,
     theme_block: &'a str,
     notice_extras: &'a str,
 }
@@ -91,14 +95,21 @@ const DEFAULT_TITLE: &str = "Ranking";
 /// /config carries only the two keys the capture records, so the rest reaches the
 /// reader through the rendered HTML rather than through a wider object.
 pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceError> {
-    let title = appearance
-        .and_then(|row| row.title.as_deref())
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or(DEFAULT_TITLE);
+    let panel_title = present(appearance.and_then(|row| row.title.as_deref()));
+    let title = panel_title.unwrap_or(DEFAULT_TITLE);
+    let heading = panel_title.unwrap_or("");
+    let subtitle = present(appearance.and_then(|row| row.subtitle.as_deref())).unwrap_or("");
+    let organisation =
+        present(appearance.and_then(|row| row.organisation.as_deref())).unwrap_or("");
+    let anonymous = appearance.is_some_and(Appearance::anonymous);
     let theme_block = theme_block(appearance.and_then(|row| row.theme.as_ref()));
     let notice_extras = notice_extras(appearance);
     RankingPage {
         title,
+        heading,
+        subtitle,
+        organisation,
+        anonymous,
         theme_block: &theme_block,
         notice_extras: &notice_extras,
     }

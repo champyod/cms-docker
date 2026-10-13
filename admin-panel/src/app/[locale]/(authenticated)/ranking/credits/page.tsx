@@ -1,16 +1,15 @@
 import { getRankingAppearance, submitRankingCredits } from '@/app/actions/rankingAppearance';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { TextareaField } from '@/components/core/FormField';
+import { Stack } from '@/components/core/Layout';
+import { Text } from '@/components/core/Typography';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const FIELD_CLASS = 'mt-1 w-full rounded-xl border border-border bg-muted/40 px-3 py-2 text-foreground';
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
-const LABEL_CLASS = 'block text-sm text-muted-foreground';
+const CREDIT_ROWS = 12;
 
-/**
- * Why its own page and its own save: the credit list is the one field whose loss is a
- * licence offer rendered wrong, so it is edited apart from the appearance columns
- * rather than inside a form that no longer posts it.
- */
+// Plain server form: the credit list is saved apart from the appearance columns so neither clears the other.
 export default async function RankingCreditsPage({
   params,
 }: {
@@ -24,25 +23,28 @@ export default async function RankingCreditsPage({
   const appearance = await getRankingAppearance();
   const canEdit = effective.has('ranking:appearance');
   return (
-    <div className="space-y-6">
+    <Stack gap={6}>
       {canEdit ? (
-        <form action={submitRankingCredits} className={CARD_CLASS}>
-          <h2 className="text-lg font-semibold text-foreground">{copy.credits.title}</h2>
-          <label className={LABEL_CLASS}>
-            {copy.credits.field}
-            <textarea
+        <Card className="space-y-4">
+          <form action={submitRankingCredits} className="space-y-4">
+            <Text as="h2" variant="h3">
+              {copy.credits.title}
+            </Text>
+            <TextareaField
+              id="ranking-credits"
+              label={copy.credits.field}
+              hint={copy.credits.hint}
               name="credits"
-              rows={12}
+              rows={CREDIT_ROWS}
               defaultValue={appearance.credits}
-              className={`${FIELD_CLASS} font-mono`}
+              className="font-mono"
             />
-          </label>
-          <p className="text-xs text-muted-foreground">{copy.credits.hint}</p>
-          <button type="submit" className="rounded-xl bg-indigo-500/20 px-4 py-2 text-indigo-300">
-            {copy.credits.save}
-          </button>
-        </form>
+            <Button type="submit" variant="positive">
+              {copy.credits.save}
+            </Button>
+          </form>
+        </Card>
       ) : null}
-    </div>
+    </Stack>
   );
 }

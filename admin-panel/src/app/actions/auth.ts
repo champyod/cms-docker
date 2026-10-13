@@ -7,7 +7,9 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 import { createSession, deleteSession, getSession } from '@/lib/auth';
-import { getCaptchaEnv, getCaptchaPublicConfig, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
+import { getFreshPermissions } from '@/lib/permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { getCaptchaEnv, resolveActiveProvider, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
@@ -20,7 +22,7 @@ import {
   pruneExpiredLoginBuckets,
   recordFailedAttempt,
 } from '@/lib/auth-rate-limit';
-import { buildCaptchaRequiredState, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
+import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
@@ -71,21 +73,24 @@ async function resolveBucketKeys(username: string): Promise<readonly string[]> {
 
 /** One ledger row per lockout, never per attempt; the counter itself stays in memory. */
 async function recordLoginFailure(bucketKeys: readonly string[], username: string): Promise<void> {
-  recordFailedAttempt(bucketKeys);
-  if (!isRateLimited(bucketKeys)) return;
+  await recordFailedAttempt(bucketKeys);
+  if (!(await isRateLimited(bucketKeys))) return;
   const ip = bucketKeys[0].split('|')[1] ?? 'local';
   await recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) });
 }
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
   const env = getCaptchaEnv();
-  const pub = getCaptchaPublicConfig();
-  if (!pub.enabled) return { required: false, enabled: false, provider: pub.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
-  pruneExpiredLoginBuckets();
+  // WHY health decides the rendered provider here: this is the panel's render
+  // path, so an unreachable primary must offer the next provider in the chain.
+  const active = await resolveActiveProvider(env);
+  const configured = env.enabled && active.siteKey.length > 0 && active.secretKey.length > 0;
+  if (!configured) return { required: false, enabled: false, provider: active.provider, siteKey: '', threshold: env.threshold, banThreshold: env.banThreshold };
+  await pruneExpiredLoginBuckets();
   const ip = await resolveClientIp();
-  let required = isCaptchaRequiredForIp(ip);
-  if (!required && username && username.trim().length > 0) required = shouldRequireCaptcha(`${username.trim()}|${ip}`);
-  return { required, enabled: true, provider: pub.provider, siteKey: pub.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
+  let required = await isCaptchaRequiredForIp(ip);
+  if (!required && username && username.trim().length > 0) required = await shouldRequireCaptcha(`${username.trim()}|${ip}`);
+  return { required, enabled: true, provider: active.provider, siteKey: active.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
 }
 
 function verifyPlaintextPassword(password: string, stored: string): boolean {
@@ -115,9 +120,27 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly str
   await startAdminSession(admin);
   try {
     await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
-  } catch {
+  } catch (error) {
+    console.error('Could not record the last login time:', error);
   }
-  clearBucket(bucketKeys);
+  await clearBucket(bucketKeys);
+}
+
+/**
+ * Signing in is its own permission, so a group can hold ranking rights without opening
+ * this surface to its members. A refused sign-in is reported exactly like a wrong
+ * password: the account does exist, and saying so would confirm it to whoever probes.
+ */
+async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
+  const permissions = await getFreshPermissions(admin.id.toString());
+  return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
+}
+
+async function refuseLogin(bucketKeys: readonly string[], username: string): Promise<LoginActionState> {
+  await recordLoginFailure(bucketKeys, username);
+  const nextState: LoginActionState = { error: 'Invalid credentials' };
+  if (await shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
+  return nextState;
 }
 
 export async function login(_prevState: LoginActionState | null, formData: FormData): Promise<LoginActionState> {
@@ -125,28 +148,25 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
   const bucketKeys = await resolveBucketKeys(username);
-  pruneExpiredLoginBuckets();
-  if (isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
-  if (shouldRequireCaptcha(bucketKeys[0])) {
+  await pruneExpiredLoginBuckets();
+  if (await isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
+  if (await shouldRequireCaptcha(bucketKeys[0])) {
     const token = extractCaptchaToken(formData);
     if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
-    const valid = await verifyCaptcha(token);
+    const valid = await verifyCaptcha(token, extractCaptchaProvider(formData));
     if (!valid) return { success: false, error: 'CAPTCHA verification failed', ...buildCaptchaRequiredState() };
   }
   try {
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      await recordLoginFailure(bucketKeys, username);
-      const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
-      return nextState;
+      return refuseLogin(bucketKeys, username);
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      await recordLoginFailure(bucketKeys, username);
-      const nextState: LoginActionState = { error: 'Invalid credentials' };
-      if (shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
-      return nextState;
+      return refuseLogin(bucketKeys, username);
+    }
+    if (!(await maySignIn(admin))) {
+      return refuseLogin(bucketKeys, username);
     }
     await completeLogin(admin, bucketKeys);
   } catch (error) {

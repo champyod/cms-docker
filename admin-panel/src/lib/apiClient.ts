@@ -11,33 +11,17 @@ function getErrorMessage(error: unknown): string {
 
 let hasRedirectedToLogin = false;
 
-function getLocaleForRedirect(): string {
-  if (typeof window !== 'undefined') {
-    const segments = window.location.pathname.split('/');
-    const candidate = segments[1];
-    if (candidate && /^[a-z]{2}(-[A-Z]{2})?$/i.test(candidate)) {
-      return candidate;
-    }
-  }
-  return 'en';
-}
-
 function handleUnauthorizedRedirect(): void {
   if (hasRedirectedToLogin) return;
   hasRedirectedToLogin = true;
   try {
     document.cookie = 'session=; Max-Age=0; path=/; SameSite=Lax';
   } catch {
-    // Cookie deletion may fail if blocked; redirect still proceeds
+    // Cookie deletion may fail if blocked
   }
   if (typeof window !== 'undefined') {
-    try {
-      window.dispatchEvent(new CustomEvent('cms-authentication-expired'));
-    } catch {
-      // Event dispatch may fail in constrained environments; redirect still proceeds
-    }
-    const locale = getLocaleForRedirect();
-    window.location.href = `/${locale}/auth/login`;
+    // Why: the authenticated header owns navigation, so expiry routes through its router, not a hard reload.
+    window.dispatchEvent(new CustomEvent('cms-authentication-expired'));
   }
 }
 

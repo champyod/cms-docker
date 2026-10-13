@@ -309,9 +309,10 @@ backup_dir_announce() {
 # ---------------------------------------------------------------------------
 # ensure_backup_dir_perms
 # ---------------------------------------------------------------------------
-# WHY: the monitor container runs as ${DOCKER_UID:-1000} and writes archives under
-# ${BACKUP_DIR:-<repo>/backups}, but a backup root belongs to whoever created it —
-# the operator uid on a fresh install, a foreign uid on a restored box. The
+# WHY: the monitor container runs as ${DOCKER_UID:-1000} and writes archives under the
+# host backup root (<repo>/backups, bind-mounted to /app/backups), but a backup root
+# belongs to whoever created it — the operator uid on a fresh install, a foreign uid on
+# a restored box. The
 # container then cannot create an archive, while the host shell that owns the
 # directory still sees the path as writable, so ownership and mode are read from
 # the filesystem and repaired here rather than only reported.
@@ -330,7 +331,9 @@ ensure_backup_dir_perms() {
   local repo_root root uid state before
 
   repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-  root="${BACKUP_DIR:-${repo_root}/backups}"
+  # Host tree, not ${BACKUP_DIR}: that is the in-container path (/app/backups), which
+  # nothing is mounted at on the host.
+  root="${BACKUP_HOST_DIR:-${repo_root}/backups}"
   # WHY ${DOCKER_UID} and not ${DOCKER_GID} for the container gid: the monitor image
   # builds its group with addgroup -g ${DOCKER_UID}, so the gid equals the uid.
   uid="${DOCKER_UID:-1000}"

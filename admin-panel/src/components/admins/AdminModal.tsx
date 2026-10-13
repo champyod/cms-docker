@@ -202,7 +202,7 @@ export function AdminModal({ isOpen, onClose, onSuccess, initialData, callerPerm
       open={isOpen}
       onOpenChange={(open) => { if (!open) onClose(); }}
       title={initialData ? 'Edit Administrator' : 'Add Administrator'}
-      className="max-w-md max-h-[85vh] overflow-y-auto"
+      className="max-w-md sm:max-h-[85vh]"
     >
       {error && <InlineAlert tone="destructive" density="regular">{error}</InlineAlert>}
       <form onSubmit={handleSubmit} className="space-y-4">

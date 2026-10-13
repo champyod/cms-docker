@@ -34,29 +34,29 @@ class TestDigester(unittest.TestCase):
         super().setUp()
         self.d = Digester()
 
-    def test_success(self):
+    def test_it_digests_the_empty_state_and_the_updated_content(self):
         self.assertEqual(self.d.digest(), _EMPTY_DIGEST)
         self.d.update(b"content")
         self.assertEqual(self.d.digest(), _CONTENT_DIGEST)
 
-    def test_empty_update(self):
+    def test_it_digests_the_empty_state_after_an_empty_update(self):
         self.d.update(b"")
         self.assertEqual(self.d.digest(), _EMPTY_DIGEST)
 
-    def test_string(self):
+    def test_it_rejects_a_string_update(self):
         with self.assertRaises(TypeError):
             self.d.update("")
 
 
 class TestBytesDigest(unittest.TestCase):
 
-    def test_success(self):
+    def test_it_digests_the_given_bytes(self):
         self.assertEqual(bytes_digest(b"content"), _CONTENT_DIGEST)
 
-    def test_empty(self):
+    def test_it_digests_empty_bytes_as_the_empty_digest(self):
         self.assertEqual(bytes_digest(b""), _EMPTY_DIGEST)
 
-    def test_string(self):
+    def test_it_rejects_a_string_argument(self):
         with self.assertRaises(TypeError):
             bytes_digest("")
 
@@ -68,20 +68,20 @@ class TestPathDigest(FileSystemMixin, unittest.TestCase):
         self.filename = "f"
         self.path = self.get_path(self.filename)
 
-    def test_success(self):
+    def test_it_digests_the_content_of_a_file(self):
         self.write_file(self.filename, b"content")
         self.assertEqual(path_digest(self.path), _CONTENT_DIGEST)
 
-    def test_empty(self):
+    def test_it_digests_an_empty_file_as_the_empty_digest(self):
         self.write_file(self.filename, b"")
         self.assertEqual(path_digest(self.path), _EMPTY_DIGEST)
 
-    def test_long(self):
+    def test_it_digests_a_large_file(self):
         content = b"0" * 1_000_000
         self.write_file(self.filename, content)
         self.assertEqual(path_digest(self.path), bytes_digest(content))
 
-    def test_not_found(self):
+    def test_it_raises_when_the_file_is_missing(self):
         with self.assertRaises(FileNotFoundError):
             path_digest(self.path)
 

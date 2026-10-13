@@ -75,6 +75,9 @@ class GlobalConfig:
     # of the Corresponding Source to name the running deployment's own source,
     # so a self-hosted fork must be able to point at its own repository.
     source_url: str = "https://github.com/champyod/cms-docker"
+    # Optional public address of the ranking scoreboard the contest sign-in links to.
+    # Empty leaves the link out rather than pointing anywhere.
+    ranking_url: str = ""
     temp_dir: str = "/tmp"
     backdoor: bool = False
     file_log_debug: bool = False
@@ -122,6 +125,14 @@ class WebServerConfig:
 
 
 @dataclass()
+class CaptchaKeys:
+    # One provider's public site key and server-side secret. The site key travels
+    # to the browser; the secret never leaves the server.
+    site_key: str = ""
+    secret_key: str = ""
+
+
+@dataclass()
 class CaptchaConfig:
     # Adaptive login CAPTCHA, mirroring the Next.js admin panel (captcha.ts).
     # WHY a shared dataclass rather than one field set per server: both web
@@ -131,6 +142,16 @@ class CaptchaConfig:
     # WHY defaults are off/empty: an existing deployment that sets nothing keeps
     # logging in without a captcha, so enabling this cannot break an upgrade.
     enabled: bool = False
+    # WHY a priority list rather than a scalar: one service may name several
+    # providers so the challenge falls through to the next when the first is
+    # misconfigured or unhealthy. Each entry is looked up in `keys`. Empty means
+    # "use the legacy scalar `provider` as a one-element chain".
+    providers: list[str] = dataclasses.field(default_factory=list)
+    keys: dict[str, CaptchaKeys] = dataclasses.field(default_factory=dict)
+    # WHY these scalars remain: the generated config/cms.toml still carries the
+    # legacy CAPTCHA_PROVIDER/SITE_KEY/SECRET_KEY, and an existing deployment
+    # must keep working. They stand in for a one-element chain when `keys` is
+    # empty; captcha.py folds the two forms together.
     provider: str = "turnstile"
     site_key: str = ""
     secret_key: str = ""

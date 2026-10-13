@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { CheckCircle2, History, RefreshCw } from 'lucide-react';
 
 import { listRuns, listSchedules } from '@/app/actions/schedules';
@@ -11,7 +11,10 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
+import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { RUN_STATUS_FAILED, RUN_STATUS_SETTLED, RUN_STATUS_STARTED } from '@/scheduler/tick';
 import { summarizeTables } from '@/components/backup-restore/ScheduleSection';
 import { useSettleRun } from '@/components/backup-restore/useSchedules';
@@ -39,10 +42,6 @@ function isUnfinished(run: BackupRun): boolean {
     return run.status === RUN_STATUS_STARTED;
 }
 
-function describeError(error: unknown, fallback: string): string {
-    return error instanceof Error && error.message.length > 0 ? error.message : fallback;
-}
-
 function statusVariant(status: string): BadgeVariant {
     return STATUS_VARIANT[status] ?? 'neutral';
 }
@@ -57,56 +56,25 @@ function sourceLabel(run: BackupRun, scheduleNames: ReadonlyMap<string, string>)
 }
 
 function useRunHistory() {
+    const dict = useDictionary();
     const [runs, setRuns] = useState<readonly BackupRun[]>([]);
     const [scheduleNames, setScheduleNames] = useState<ReadonlyMap<string, string>>(new Map());
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
 
-    /**
-     * Starts a load and reports its outcome, with every state update inside a
-     * continuation rather than in this function's own body. That is what lets the
-     * mount effect start it: a state update reached directly from an effect body
-     * renders again before the effect has synchronised anything, and the history
-     * already starts in its loading state, so there is nothing to announce.
-     */
-    const start = useCallback(
-        (): Promise<void> => Promise.all([listRuns(RUN_HISTORY_LIMIT), listSchedules()])
-            .then(
-                ([runsResult, schedulesResult]) => {
-                    if (!schedulesResult.success) {
-                        setRuns([]);
-                        setLoadError(schedulesResult.error ?? NAMES_ERROR);
-                        return;
-                    }
-                    if (!runsResult.success) {
-                        setRuns([]);
-                        setLoadError(runsResult.error ?? RUNS_ERROR);
-                        return;
-                    }
-                    setScheduleNames(new Map((schedulesResult.schedules ?? []).map((entry) => [entry.id, entry.name])));
-                    setRuns(runsResult.runs ?? []);
-                },
-                (error: unknown) => {
-                    setRuns([]);
-                    setLoadError(describeError(error, RUNS_ERROR));
-                },
-            )
-            .finally(() => setIsLoading(false)),
+    const load = useCallback(
+        (): Promise<void> => Promise.all([listRuns(RUN_HISTORY_LIMIT), listSchedules()]).then(
+            ([runsResult, schedulesResult]) => {
+                if (!schedulesResult.success) throw new Error(schedulesResult.error ?? NAMES_ERROR);
+                if (!runsResult.success) throw new Error(runsResult.error ?? RUNS_ERROR);
+                setScheduleNames(new Map((schedulesResult.schedules ?? []).map((entry) => [entry.id, entry.name])));
+                setRuns(runsResult.runs ?? []);
+            },
+        ),
         [],
     );
 
-    /** The Refresh path, where the click is what starts a load, so it is announced. */
-    const reload = useCallback(async () => {
-        setIsLoading(true);
-        setLoadError(null);
-        await start();
-    }, [start]);
+    const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
-    useEffect(() => {
-        void start();
-    }, [start]);
-
-    return { runs, scheduleNames, isLoading, loadError, reload };
+    return { runs, scheduleNames, status, reload };
 }
 
 interface RunRowProps {
@@ -164,7 +132,8 @@ function RunRow({ run, scheduleNames, isSettling, onSettle, feedback }: RunRowPr
 }
 
 export function ScheduleRunsSection() {
-    const { runs, scheduleNames, isLoading, loadError, reload } = useRunHistory();
+    const dict = useDictionary();
+    const { runs, scheduleNames, status, reload } = useRunHistory();
     const { busyRunId, feedback, settle } = useSettleRun(reload);
 
     return (
@@ -177,7 +146,7 @@ export function ScheduleRunsSection() {
                     <Text variant="h2" className="mr-auto">
                         Backup Run History
                     </Text>
-                    <Button size="sm" variant="secondary" icon={RefreshCw} loading={isLoading} onClick={() => void reload()}>
+                    <Button size="sm" variant="secondary" icon={RefreshCw} loading={status.kind === 'loading'} onClick={() => void reload()}>
                         Refresh
                     </Button>
                 </Stack>
@@ -189,14 +158,13 @@ export function ScheduleRunsSection() {
                     once you have checked the real result.
                 </Text>
 
-                {loadError !== null ? (
-                    <Text variant="small" role="alert" className="text-destructive">
-                        {loadError}
-                    </Text>
-                ) : isLoading ? (
-                    <Text variant="small" color="text-muted-foreground">
-                        Loading run history...
-                    </Text>
+                {status.kind !== 'idle' ? (
+                    <SurfaceLoadState
+                        status={status}
+                        loadingTitle="Loading run history..."
+                        onRetry={reload}
+                        retryLabel={dict.states.retry.label}
+                    />
                 ) : runs.length === 0 ? (
                     <EmptyState
                         icon={History}

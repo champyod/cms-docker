@@ -14,6 +14,7 @@ import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { ListSortInput } from '@/lib/list-sorting';
 import { TaskModal } from './TaskModal';
+import { RecordListPager } from '@/components/list/RecordListPager';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -36,6 +37,7 @@ interface TaskRow {
 interface TaskListProps {
   initialTasks: TaskRow[];
   totalPages: number;
+  currentPage: number;
   permissionKeys: readonly string[];
   initialSort?: ListSortInput;
 }
@@ -51,7 +53,7 @@ function buildTaskRowActions(
   ];
 }
 
-export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
+export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
   const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
@@ -91,8 +93,10 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
     setIsModalOpen(true);
   };
 
-  const handleSuccess = (): void => {
-    router.refresh();
+  const handlePageChange = (next: number): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', String(next));
+    router.push(url.toString());
   };
 
   const applySort = (next: ListSortInput): void => {
@@ -235,6 +239,10 @@ export function TaskList({ initialTasks, permissionKeys, initialSort }: TaskList
         onSortChange={applySort}
         emptyState={<EmptyState icon={FileText} title="No tasks found" />}
       />
+
+      {totalPages > 1 && (
+        <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+      )}
 
       <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} />
     </div>

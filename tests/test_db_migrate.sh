@@ -47,6 +47,7 @@ case "${1:-}" in
       case "$a" in
         *pg_database*)    printf '%s\n' "${STUB_DB_EXISTS:-1}"; exit 0 ;;
         *to_regclass*)    printf '%s\n' "${STUB_MARKER:-t}";     exit 0 ;;
+        *rolled_back_at*) printf '%s\n' "${STUB_APPLIED:-0}";    exit 0 ;;
         *relrowsecurity*) printf '%s\n' "${STUB_RLS:-_prisma_migrations}"; exit 0 ;;
       esac
     done
@@ -240,6 +241,43 @@ run_migrate
 if [[ "$RC" -eq 1 ]]; then ok "a missing base schema exits 1"; else no "a missing base schema exits 1 (got ${RC})"; fi
 has "and blames the base schema step" "cms-init"
 unset STUB_MARKER CONFIRM_DB_MIGRATE
+
+# The repository owns the migration history; the image copy is a snapshot of build
+# time. If Prisma reads the image's copy, the newest migrations never apply, and the
+# verify below is the only thing that can notice.
+printf '\n== prisma-sync migrates the repository history, not the image copy ==\n'
+if grep -Fq -- '/repo-root/admin-panel/prisma/schema.prisma' "${REPO_ROOT}/Makefile"; then
+  ok "make prisma-sync points Prisma at the repository schema"
+else
+  no "make prisma-sync points Prisma at the repository schema (image copy still used)"
+fi
+
+printf '\n== a database migrated from a shorter history fails ==\n'
+new_sandbox
+write_config default
+write_env cmsdb cmsuser "secretpass"
+mkdir -p "${SB}/admin-panel/prisma/migrations/20260101000000_first" \
+         "${SB}/admin-panel/prisma/migrations/20260102000000_second" \
+         "${SB}/admin-panel/prisma/migrations/20260103000000_third"
+export STUB_APPLIED=2
+export CONFIRM_DB_MIGRATE=yes
+run_migrate
+if [[ "$RC" -eq 1 ]]; then ok "fewer applied than the repository holds exits 1"; else no "fewer applied than the repository holds exits 1 (got ${RC})"; fi
+has "and blames the repository history" "repository"
+unset STUB_APPLIED CONFIRM_DB_MIGRATE
+
+printf '\n== a database migrated from the full history passes ==\n'
+new_sandbox
+write_config default
+write_env cmsdb cmsuser "secretpass"
+mkdir -p "${SB}/admin-panel/prisma/migrations/20260101000000_first" \
+         "${SB}/admin-panel/prisma/migrations/20260102000000_second"
+export STUB_APPLIED=2
+export CONFIRM_DB_MIGRATE=yes
+run_migrate
+if [[ "$RC" -eq 0 ]]; then ok "applied equal to the repository count exits 0"; else no "applied equal to the repository count exits 0 (got ${RC})"; fi
+has "and reports verification" "migrated and verified"
+unset STUB_APPLIED CONFIRM_DB_MIGRATE
 
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$pass" "$fail"

@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
 import { Card } from '@/components/core/Card';
-import { Megaphone, MessageSquare, Trophy } from 'lucide-react';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
+import { Megaphone, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDictionary } from '@/hooks/useDictionary';
 import { useContestCommunications } from './contest-communications/useContestCommunications';
 import { AnnouncementsPanel, type AnnouncementRow } from './contest-communications/AnnouncementsPanel';
 import { QuestionsPanel, type QuestionRow } from './contest-communications/QuestionsPanel';
-import { RankingTable, type RankingEntry, type TaskCol } from './contest-communications/RankingTable';
 
 interface ContestCommunicationsProps {
   contestId: number;
@@ -20,31 +20,31 @@ const TAB_ACTIVE = 'border-b-2 border-primary text-primary';
 const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:text-foreground';
 
 export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
-  const { activeTab, setActiveTab, loadData, loading, announcements, questions, ranking, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
-
-  useEffect(() => {
-    void loadData(activeTab);
-  }, [contestId, activeTab, loadData]);
+  const dict = useDictionary();
+  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
 
   return (
     <Card className="overflow-hidden">
       <div className="flex overflow-x-auto border-b border-border">
-        <button onClick={() => setActiveTab('announcements')} className={cn(TAB_BASE, activeTab === 'announcements' ? TAB_ACTIVE : TAB_INACTIVE)}>
+        <button onClick={() => selectTab('announcements')} className={cn(TAB_BASE, activeTab === 'announcements' ? TAB_ACTIVE : TAB_INACTIVE)}>
           <Megaphone className="h-4 w-4" />Announcements
         </button>
-        <button onClick={() => setActiveTab('questions')} className={cn(TAB_BASE, activeTab === 'questions' ? TAB_ACTIVE : TAB_INACTIVE)}>
+        <button onClick={() => selectTab('questions')} className={cn(TAB_BASE, activeTab === 'questions' ? TAB_ACTIVE : TAB_INACTIVE)}>
           <MessageSquare className="h-4 w-4" />Questions
-        </button>
-        <button onClick={() => setActiveTab('ranking')} className={cn(TAB_BASE, activeTab === 'ranking' ? TAB_ACTIVE : TAB_INACTIVE)}>
-          <Trophy className="h-4 w-4" />Ranking
         </button>
       </div>
       <div className="p-4">
-        {loading ? <div className="text-sm text-muted-foreground">Loading...</div> : (
+        {status.kind !== 'idle' ? (
+          <SurfaceLoadState
+            status={status}
+            loadingTitle="Loading..."
+            onRetry={reload}
+            retryLabel={dict.states.retry.label}
+          />
+        ) : (
           <>
             {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
             {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReply={handleReply} onIgnore={handleIgnore} />}
-            {activeTab === 'ranking' && <RankingTable ranking={ranking as { ranking: RankingEntry[]; tasks: TaskCol[] } | null} />}
           </>
         )}
       </div>

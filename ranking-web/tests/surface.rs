@@ -206,3 +206,58 @@ fn the_panels_credit_list_wins_over_the_vendored_one() {
         "the licence is never taken from the panel"
     );
 }
+
+fn heading(title: Option<&str>, subtitle: Option<&str>, organisation: Option<&str>) -> Appearance {
+    Appearance {
+        title: title.map(str::to_string),
+        subtitle: subtitle.map(str::to_string),
+        organisation: organisation.map(str::to_string),
+        ..appearance(None, None)
+    }
+}
+
+/// /config carries only two keys, so the panel's title, subtitle and organisation reach
+/// the reader through the rendered body, not through a wider object.
+#[test]
+fn the_panel_heading_reaches_the_body() {
+    let rendered = render_page(Some(&heading(
+        Some("IOI 2026"),
+        Some("Day 2"),
+        Some("ACME"),
+    )))
+    .expect("the page renders");
+    assert!(rendered.contains("<div id=\"BoardHeading\">"));
+    assert!(rendered.contains("<h1 class=\"board-title\">IOI 2026</h1>"));
+    assert!(rendered.contains("<p class=\"board-subtitle\">Day 2</p>"));
+    assert!(rendered.contains("<div class=\"board-organisation\">ACME</div>"));
+}
+
+/// The heading block is opt-in: a panel that names none renders no empty box.
+#[test]
+fn an_unset_heading_adds_no_block() {
+    let rendered = render_page(Some(&appearance(None, None))).expect("the page renders");
+    assert!(!rendered.contains("id=\"BoardHeading\""));
+}
+
+/// The scoreboard script reads the configured title off the body instead of hardcoding
+/// "Ranking", so the served title has to be there for it to read.
+#[test]
+fn the_body_carries_the_configured_title() {
+    let rendered =
+        render_page(Some(&appearance(Some("IOI 2026"), None))).expect("the page renders");
+    assert!(rendered.contains("data-board-title=\"IOI 2026\""));
+}
+
+/// The panel's anonymous flag reaches the body so the page can start with names hidden,
+/// and an unset flag leaves them shown.
+#[test]
+fn the_body_carries_the_anonymous_flag() {
+    let on = Appearance {
+        columns: Some(serde_json::json!({ "anonymous": true })),
+        ..appearance(None, None)
+    };
+    let rendered = render_page(Some(&on)).expect("the page renders");
+    assert!(rendered.contains("data-board-anonymous=\"true\""));
+    let off = render_page(Some(&appearance(None, None))).expect("the page renders");
+    assert!(off.contains("data-board-anonymous=\"false\""));
+}

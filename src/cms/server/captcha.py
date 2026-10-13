@@ -44,7 +44,9 @@ import logging
 import typing
 
 from cms.conf import CaptchaConfig
-from cms.server.captcha_provider import (PROVIDER_SCRIPT, TOKEN_FIELDS,
+from cms.server.captcha_health import ProviderHealth, build_health
+from cms.server.captcha_provider import (PROVIDER_SCRIPT, PROVIDER_WIDGET_CLASS,
+                                         TOKEN_FIELDS, ProviderUnreachable,
                                          extract_token, verify_token)
 from cms.server.login_counters import (LoginFailureCounters, build_counters,
                                         is_loopback)
@@ -64,8 +66,9 @@ class Captcha:
 
     def __init__(self, config: CaptchaConfig,
                  counters: LoginFailureCounters | None = None,
-                 verify: typing.Callable[[str, str, CaptchaConfig], bool]
-                 | None = None) -> None:
+                 verify: typing.Callable[[str, str, str], bool]
+                 | None = None,
+                 health: ProviderHealth | None = None) -> None:
         self.config = config
         # WHY built from the config when not injected: the counts are kept in a
         # shared Redis when one is configured, and that has to be decided once
@@ -75,6 +78,10 @@ class Captcha:
         # WHY injectable: the verification call reaches the network, and the
         # test suite has to drive the decision logic without one.
         self._verify = verify if verify is not None else verify_token
+        # WHY built once: the provider a request renders and the one it verifies
+        # against must agree, and the health that decides the first has to be the
+        # same store the verification failure updates.
+        self._health = health if health is not None else build_health(config)
         self._counters.set_ban_threshold(config.ban_threshold)
 
     @property
@@ -104,23 +111,68 @@ class Captcha:
         """
         return self._counters.is_limited(username, ip)
 
+    def _chain(self) -> list[tuple[str, str, str]]:
+        """Return the ordered (provider, site_key, secret_key) chain.
+
+        Unknown provider names are dropped. A legacy scalar provider/site_key/
+        secret_key stands in as a one-element chain when no per-provider table is
+        set, so a config generated before the chain existed keeps working.
+
+        """
+        names = [name.strip().lower() for name in self.config.providers
+                 if name.strip()]
+        legacy = (self.config.provider or "").strip().lower()
+        if not names:
+            names = [legacy]
+        chain: list[tuple[str, str, str]] = []
+        for name in names:
+            if name not in PROVIDER_SCRIPT:
+                continue
+            keys = self.config.keys.get(name)
+            if keys is not None:
+                chain.append((name, keys.site_key, keys.secret_key))
+            elif name == legacy:
+                chain.append((name, self.config.site_key,
+                              self.config.secret_key))
+            else:
+                chain.append((name, "", ""))
+        return chain
+
+    def _active(self) -> tuple[str, str, str]:
+        """Return the first chain entry that can actually be used.
+
+        A provider is skipped when it has no key pair, and also when the health
+        store has marked it unreachable. WHY one usable provider is still
+        returned when all are unhealthy: rendering nothing would leave the
+        challenge unanswerable, so the chain is not emptied by a transient outage
+        that may have cleared by the time the user submits.
+
+        """
+        chain = self._chain()
+        usable = [entry for entry in chain
+                  if len(entry[1]) > 0 and len(entry[2]) > 0]
+        for entry in usable:
+            if self._health.is_healthy(entry[0]):
+                return entry
+        if usable:
+            return usable[0]
+        return chain[0] if chain else ("turnstile", "", "")
+
     def is_enabled(self) -> bool:
         """Return whether the captcha can be enforced at all.
 
-        Mirrors the panel's `isCaptchaConfigured`: enabled, plus a site key
-        and a secret to actually verify with. With any of the three missing
-        the captcha is not demanded, so an unconfigured deployment is never
-        locked out of its own login page.
+        Mirrors the panel's `isCaptchaConfigured`: enabled, plus a usable key
+        pair. With either missing the captcha is not demanded, so an
+        unconfigured deployment is never locked out of its own login page.
 
         """
-        return bool(self.config.enabled) \
-            and len(self.config.site_key) > 0 \
-            and len(self.config.secret_key) > 0
+        _, site_key, secret_key = self._active()
+        return bool(self.config.enabled) and len(site_key) > 0 \
+            and len(secret_key) > 0
 
     def provider(self) -> str:
-        """Return the configured provider, defaulting to turnstile."""
-        provider = (self.config.provider or "").strip().lower()
-        return provider if provider in PROVIDER_SCRIPT else "turnstile"
+        """Return the active provider: the first chain entry that can be used."""
+        return self._active()[0]
 
     def is_required(self, username: str, ip: str) -> bool:
         """Return whether this attempt must carry a valid captcha token.
@@ -153,7 +205,8 @@ class Captcha:
         """
         return max(1, self.config.threshold)
 
-    def verify(self, username: str, ip: str, token: str) -> bool:
+    def verify(self, username: str, ip: str, token: str,
+               provider: str = "") -> bool:
         """Return whether this attempt may proceed.
 
         The three ways through are: no captcha was demanded; a valid token
@@ -161,10 +214,30 @@ class Captcha:
         is refused, including a provider that could not be reached, which is
         the fail-closed behaviour the panel has.
 
+        *provider* is the name the widget posted. A token is only meaningful to
+        the provider that issued it, so when the chain shifted between the
+        render and this call, verification still targets the right endpoint.
+
         """
         if not self.is_required(username, ip):
             return True
-        return self._verify(token, self.config.secret_key, self.config)
+        name, _site_key, secret = self._active()
+        requested = (provider or "").strip().lower()
+        for entry in self._chain():
+            if entry[0] == requested and len(entry[2]) > 0:
+                name, secret = entry[0], entry[2]
+                break
+        try:
+            verdict = self._verify(token, secret, name)
+        except ProviderUnreachable:
+            # WHY recorded and still refused: an unreachable provider is the
+            # signal the chain fails over on, and the attempt is refused
+            # fail-closed rather than let through.
+            self._health.record_failure(name)
+            return False
+        if verdict:
+            self._health.record_success(name)
+        return verdict
 
     def record_failure(self, username: str, ip: str) -> None:
         """Count a failed attempt, which may make the next one need a captcha."""
@@ -181,17 +254,20 @@ class Captcha:
     def widget_html(self) -> str:
         """Return the widget markup for the login page.
 
-        Mirrors the panel's login page: the provider's own class on the
-        container, the site key in `data-sitekey`, and a hidden input holding
-        the token so the form carries it back to the server.
+        Mirrors the panel's login page: the marker class the provider's script
+        scans for on the container, the site key in `data-sitekey`, and a
+        callback that copies the solved token into the hidden `captchaToken`
+        input so the form carries it back to the server.
 
         """
         if not self.is_enabled():
             return ""
+        provider, site_key, _secret = self._active()
         return WIDGET_TEMPLATE % {
-            "class": self.provider(),
-            "script": self.widget_script(),
-            "site_key": self.config.site_key,
+            "widget_class": PROVIDER_WIDGET_CLASS[provider],
+            "script": PROVIDER_SCRIPT[provider],
+            "site_key": site_key,
+            "provider": provider,
         }
 
     def render_params(self, username: str = "", ip: str = "") -> dict:
@@ -200,27 +276,45 @@ class Captcha:
         *username* is whatever the client has typed so far, which is empty on a
         fresh page load: the page can then only know whether the *address* is
         over the threshold, which is the same limit the admin panel applies when
-        it has no username yet.
+        it has no username yet. A page reached from a refused login carries the
+        username in its query, so the account's own counter is read here too.
 
         The secret is deliberately absent: templates render the site key, which
         is public by definition, and never the secret, which is not.
 
         """
         enabled = self.is_enabled()
+        required = self.is_required(username, ip)
+        provider, site_key, _secret = self._active()
         return {
             "captcha_enabled": enabled,
-            "captcha_required": self.is_required(username, ip),
-            "captcha_provider": self.provider(),
-            "captcha_site_key": self.config.site_key if enabled else "",
+            "captcha_required": required,
+            "captcha_provider": provider,
+            "captcha_site_key": site_key if enabled else "",
             "captcha_script_url": self.widget_script(),
-            "captcha_widget": self.widget_html() if enabled else "",
+            # WHY the widget follows `required`, not `enabled`: the provider
+            # script and its token round trip are third-party cost paid on every
+            # page view, but the challenge is only ever demanded past the
+            # threshold, so below it the page keeps no dependency on the provider.
+            "captcha_widget": self.widget_html() if required else "",
         }
 
 
 WIDGET_TEMPLATE = """<div class="captcha-widget">
+<script>
+function onCaptchaSuccess(token) {
+    var field = document.querySelector("input[name=captchaToken]");
+    if (field) { field.value = token; }
+}
+function onCaptchaExpired() {
+    var field = document.querySelector("input[name=captchaToken]");
+    if (field) { field.value = ""; }
+}
+</script>
 <script src="%(script)s" async defer></script>
-<div class="%(class)s" data-sitekey="%(site_key)s"></div>
+<div class="%(widget_class)s" data-sitekey="%(site_key)s" data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" data-error-callback="onCaptchaExpired"></div>
 <input type="hidden" name="captchaToken" value="">
+<input type="hidden" name="captchaProvider" value="%(provider)s">
 </div>"""
 
 
@@ -234,4 +328,17 @@ def is_loopback_client(ip: str) -> bool:
     return is_loopback(ip)
 
 
-__all__ = ["Captcha", "LoginFailureCounters", "is_loopback_client"]
+def extract_provider(form: typing.Any) -> str:
+    """Return the provider named by *form*, or an empty string.
+
+    *form* is anything with a `get_argument(name, default)` method. The widget
+    posts its own provider name so the token is verified by the provider that
+    issued it, even if the chain shifted between render and submit.
+
+    """
+    value = form.get_argument("captchaProvider", "")
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
+__all__ = ["Captcha", "LoginFailureCounters", "extract_provider",
+           "is_loopback_client"]

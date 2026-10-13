@@ -70,14 +70,14 @@ class TestProcessMatcher(unittest.TestCase):
                 ret.append((c.split(), "base"))
         return ret
 
-    def test_find_works(self):
+    def test_it_finds_the_matching_process_by_shard(self):
         for c in self.w0_cmdlines:
             with patch.object(ProcessMatcher, '_get_all_processes') as f:
                 f.return_value = (TestProcessMatcher._get_all_processes_ret(
                     self.bad_cmdlines + [(c, "good")] + self.bad_cmdlines))
                 self.assertEqual(self.pm.find(self.w0), "good")
 
-    def test_find_fails(self):
+    def test_it_returns_none_when_no_process_matches(self):
         service = ServiceCoord("EvaluationService", 0)
         for c in self.w0_cmdlines:
             with patch.object(ProcessMatcher, '_get_all_processes') as f:
@@ -85,7 +85,7 @@ class TestProcessMatcher(unittest.TestCase):
                     self.bad_cmdlines + [(c, "good")] + self.bad_cmdlines))
                 self.assertIsNone(self.pm.find(service))
 
-    def test_get_all_processes_is_called_once(self):
+    def test_it_queries_the_process_list_only_once(self):
         with patch.object(ProcessMatcher, '_get_all_processes') as f:
             f.return_value = (TestProcessMatcher._get_all_processes_ret(
                 self.w0_cmdlines + self.bad_cmdlines))

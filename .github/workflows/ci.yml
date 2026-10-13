@@ -442,7 +442,8 @@ jobs:
           key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-ranking-
 
-      # Every ranking migration in timestamp order, so new ones auto-apply and the test sees a deployment's schema.
+      # Every ranking migration in timestamp order, so new ones auto-apply and the database
+      # tests see a deployment's schema. The rehearsal applies the same set itself.
       - name: Apply the ranking migrations
         run: |
           for migration in admin-panel/prisma/migrations/*_ranking_*/; do

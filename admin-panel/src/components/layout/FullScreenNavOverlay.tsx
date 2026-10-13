@@ -8,6 +8,7 @@ import {
   buildShellSections,
   type ShellNavSection,
 } from '@/components/navigation/shell-nav';
+import { LogoMark, LogoWordmark } from '@/components/brand/Logo';
 import { SidebarNavItem, SectionLabel } from '@/components/layout/SidebarNavItem';
 import { SignOutLink } from '@/components/layout/Sidebar';
 
@@ -24,8 +25,8 @@ function OverlayHeader({ onClose }: { onClose: () => void }): React.JSX.Element 
   return (
     <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-4">
       <div className="flex min-w-0 items-center gap-3">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-primary font-bold text-primary-foreground shadow-sm">C</div>
-        <span className="truncate font-display font-semibold tracking-wide">CMS Admin</span>
+        <LogoMark className="size-8" />
+        <LogoWordmark />
       </div>
       <Button variant="secondary" size="sm" iconOnly tooltip="Close" onClick={onClose} className="size-11">
         <X className="w-4 h-4" />

@@ -2,7 +2,7 @@
 
 import { ArrowDown, ArrowUp, ChevronsUpDown } from 'lucide-react';
 
-import { ariaSortFor, toggleListSort, type ListSortInput } from '@/lib/list-sorting';
+import { toggleListSort, type ListSortInput } from '@/lib/list-sorting';
 import { cn } from '@/lib/utils';
 
 export interface SortableHeaderProps {
@@ -15,13 +15,11 @@ export interface SortableHeaderProps {
 
 export function SortableHeader({ label, sortKey, sort, onSortChange, className }: SortableHeaderProps): React.JSX.Element {
   const active = sort != null && sort.key === sortKey;
-  const ariaSort = ariaSortFor(sort, sortKey);
   const Icon = active ? (sort?.direction === 'asc' ? ArrowUp : ArrowDown) : ChevronsUpDown;
 
   return (
     <button
       type="button"
-      aria-sort={ariaSort}
       onClick={() => onSortChange(toggleListSort(sort, sortKey))}
       className={cn(
         'group -mx-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',

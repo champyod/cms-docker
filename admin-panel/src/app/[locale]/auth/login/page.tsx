@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useActionState, useCallback, useEffect, useRef, useState } from 'react';
+import { LogoMark } from '@/components/brand/Logo';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
@@ -11,6 +12,12 @@ import { AuthBackground } from '@/components/core/PageBackground';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import type { CaptchaProvider } from '@/lib/captcha';
+
+const CAPTCHA_SCRIPTS: Record<CaptchaProvider, string> = {
+  turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+  hcaptcha: 'https://hcaptcha.com/1/api.js',
+  recaptcha: 'https://www.google.com/recaptcha/api.js',
+};
 
 interface CaptchaUiState {
   required: boolean;
@@ -85,14 +92,14 @@ export default function LoginPage() {
   useEffect(() => {
     if (!showCaptcha || !activeSiteKey) return;
     const existing = document.querySelector<HTMLScriptElement>(
-      activeProvider === 'hcaptcha' ? 'script[data-captcha="hcaptcha"]' : 'script[data-captcha="turnstile"]'
+      `script[data-captcha="${activeProvider}"]`
     );
     if (existing) return;
     const script = document.createElement('script');
     script.async = true;
     script.defer = true;
-    script.dataset.captcha = activeProvider === 'hcaptcha' ? 'hcaptcha' : 'turnstile';
-    script.src = activeProvider === 'hcaptcha' ? 'https://hcaptcha.com/1/api.js' : 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.dataset.captcha = activeProvider;
+    script.src = CAPTCHA_SCRIPTS[activeProvider];
     document.head.appendChild(script);
   }, [showCaptcha, activeProvider, activeSiteKey]);
 
@@ -105,9 +112,7 @@ export default function LoginPage() {
     <AuthBackground>
       <Card className="w-full max-w-md p-8">
         <Stack align="center" gap={8} className="mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Lock className="w-6 h-6 text-foreground" />
-          </div>
+          <LogoMark className="size-12" />
           <Stack align="center" gap={2}>
             <Text variant="h2">Welcome Back</Text>
             <Text variant="muted">Sign in to access the admin panel</Text>
@@ -163,6 +168,8 @@ export default function LoginPage() {
                 <input type="hidden" name="captchaToken" value={captchaToken} />
                 <input type="hidden" name="cf-turnstile-response" value={captchaToken} />
                 <input type="hidden" name="h-captcha-response" value={captchaToken} />
+                <input type="hidden" name="g-recaptcha-response" value={captchaToken} />
+                <input type="hidden" name="captchaProvider" value={activeProvider} />
               </>
             )}
 

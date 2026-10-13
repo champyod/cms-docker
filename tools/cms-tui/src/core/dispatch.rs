@@ -28,6 +28,12 @@ pub enum DispatchKey {
     DbSync,
     /// `./cms db migrate`
     DbMigrate,
+    /// `./cms db create <name>`
+    DbCreate,
+    /// `./cms db rename <old> <new>`
+    DbRename,
+    /// `./cms db use <name>`
+    DbUse,
     /// `./cms admin-create`
     AdminCreate,
     /// `./cms status`
@@ -80,6 +86,8 @@ pub enum DispatchKey {
     FunnelStatus,
     /// `./cms contest create`
     ContestCreate,
+    /// `./cms contest set-active <id>`
+    ContestSetActive,
     /// `./cms update-server`
     UpdateServer,
     /// `./cms domain setup`
@@ -134,6 +142,9 @@ mod tests {
         DispatchKey::DbClean,
         DispatchKey::DbSync,
         DispatchKey::DbMigrate,
+        DispatchKey::DbCreate,
+        DispatchKey::DbRename,
+        DispatchKey::DbUse,
         DispatchKey::AdminCreate,
         DispatchKey::Status,
         DispatchKey::Monitor,
@@ -160,6 +171,7 @@ mod tests {
         DispatchKey::FunnelRemove,
         DispatchKey::FunnelStatus,
         DispatchKey::ContestCreate,
+        DispatchKey::ContestSetActive,
         DispatchKey::UpdateServer,
         DispatchKey::DomainSetup,
         DispatchKey::DomainCert,

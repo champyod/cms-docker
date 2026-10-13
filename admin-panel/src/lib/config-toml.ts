@@ -1,11 +1,12 @@
 import { readTomlValue, upsertTomlValue } from '@/lib/discord-webhook';
 
-// config.toml is the single source of truth for configuration: scripts/__config_sync.sh
+// config.toml is the source of truth for the settings the panel edits: scripts/__config_sync.sh
 // truncates and re-emits .env from it (update-server runs that on every deploy), so any
-// key a panel writes into a generated file is erased at the next sync. Every panel write
-// therefore goes through the section-scoped TOML upsert that the active-contest module
-// established, and the section list is closed: upsertTomlValue appends a missing section,
-// so an unknown name would create one the generator never parses.
+// key a panel writes into a generated file is erased at the next sync. The active contest is
+// the one exception — it lives in the database and config.toml derives from it (see
+// active-contest.ts). Every panel write therefore goes through the section-scoped TOML upsert
+// in discord-webhook, and the section list is closed: upsertTomlValue appends a missing
+// section, so an unknown name would create one the generator never parses.
 export const CONFIG_TOML_FILE = 'config.toml';
 
 export const CONFIG_TOML_SECTIONS = [

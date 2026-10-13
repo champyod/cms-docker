@@ -47,6 +47,43 @@ fn db_sync_still_resolves_after_migrate_was_added() {
 }
 
 #[test]
+fn db_create_forwards_the_name() {
+    let (key, args) = parse(&["cms", "db", "create", "cmsdb_evaluate"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbCreate);
+    assert_eq!(args, vec!["create", "cmsdb_evaluate"]);
+}
+
+#[test]
+fn db_create_forwards_dry_run() {
+    let (key, args) =
+        parse(&["cms", "db", "create", "cmsdb_evaluate", "--dry-run"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbCreate);
+    assert_eq!(args, vec!["create", "cmsdb_evaluate", "--dry-run"]);
+}
+
+#[test]
+fn db_rename_forwards_both_names() {
+    let (key, args) = parse(&["cms", "db", "rename", "cmsdb", "cmsdb_archive"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbRename);
+    assert_eq!(args, vec!["rename", "cmsdb", "cmsdb_archive"]);
+}
+
+#[test]
+fn db_rename_forwards_dry_run() {
+    let (key, args) =
+        parse(&["cms", "db", "rename", "cmsdb", "cmsdb_archive", "--dry-run"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbRename);
+    assert_eq!(args, vec!["rename", "cmsdb", "cmsdb_archive", "--dry-run"]);
+}
+
+#[test]
+fn db_use_forwards_the_profile() {
+    let (key, args) = parse(&["cms", "db", "use", "evaluate"]).expect("resolves");
+    assert_eq!(key, crate::core::dispatch::DispatchKey::DbUse);
+    assert_eq!(args, vec!["evaluate"]);
+}
+
+#[test]
 fn domain_setup_keeps_its_original_shape_when_nothing_extra_is_asked() {
     let (key, args) = parse(&["cms", "domain", "setup"]).expect("resolves");
     assert_eq!(key, crate::core::dispatch::DispatchKey::DomainSetup);

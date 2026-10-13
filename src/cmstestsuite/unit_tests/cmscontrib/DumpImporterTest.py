@@ -217,7 +217,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
             .filter(FSObject.digest == digest).all()
         self.assertEqual(len(fsos), 0)
 
-    def test_import(self):
+    def test_it_imports_the_dump_and_keeps_the_existing_contest(self):
         """Test importing everything, while keeping the existing contest."""
         self.write_dump(TestDumpImporter.DUMP)
         self.write_files(TestDumpImporter.FILES)
@@ -234,7 +234,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileInDb(
             TestDumpImporter.NON_GENERATED_FILE_DIGEST, "subsource", b"source")
 
-    def test_import_with_drop(self):
+    def test_it_imports_the_dump_after_dropping_existing_data(self):
         """Test importing everything, but dropping existing data."""
         self.write_dump(TestDumpImporter.DUMP)
         self.write_files(TestDumpImporter.FILES)
@@ -254,7 +254,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileInDb(
             TestDumpImporter.NON_GENERATED_FILE_DIGEST, "subsource", b"source")
 
-    def test_import_skip_generated(self):
+    def test_it_imports_everything_but_the_generated_data(self):
         """Test importing everything but the generated data."""
         self.write_dump(TestDumpImporter.DUMP)
         self.write_files(TestDumpImporter.FILES)
@@ -270,7 +270,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileInDb(
             TestDumpImporter.NON_GENERATED_FILE_DIGEST, "subsource", b"source")
 
-    def test_import_skip_files(self):
+    def test_it_imports_the_json_without_the_files(self):
         """Test importing the json but not the files."""
         self.write_dump(TestDumpImporter.DUMP)
         self.write_files(TestDumpImporter.FILES)
@@ -285,7 +285,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileNotInDb(TestDumpImporter.GENERATED_FILE_DIGEST)
         self.assertFileNotInDb(TestDumpImporter.NON_GENERATED_FILE_DIGEST)
 
-    def test_import_skip_users(self):
+    def test_it_imports_everything_but_the_users(self):
         """Test importing everything but not the users."""
         self.write_dump(TestDumpImporter.DUMP)
         self.write_files(TestDumpImporter.FILES)
@@ -302,7 +302,7 @@ class TestDumpImporter(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFileNotInDb(TestDumpImporter.GENERATED_FILE_DIGEST)
         self.assertFileNotInDb(TestDumpImporter.NON_GENERATED_FILE_DIGEST)
 
-    def test_import_old(self):
+    def test_it_imports_a_dump_of_an_older_version(self):
         """Test importing an old dump.
 
         This does not pretend to be exhaustive, just makes sure the happy

@@ -49,6 +49,19 @@ POSTGRES_HOST_AUTH_METHOD = "md5"
 TOML
 }
 
+# Append all four no-successor keys: CMS_RANKING_CONFIG into [core], the ranking auth pair
+# and the log dir into a fresh [admin] block.
+append_dead_ranking_keys() {
+  cat >> "$TEST_ROOT/config.toml" <<'TOML'
+CMS_RANKING_CONFIG = "/usr/local/etc/cms_ranking.toml"
+
+[admin]
+RANKING_USERNAME = "admin"
+RANKING_PASSWORD = "cms_ranking_NXlzmsMzUP8cvvGw"
+CMS_RANKING_LOG_DIR = "/var/local/log/cms/ranking"
+TOML
+}
+
 setup_test_root() {
   rm -rf -- "$TEST_ROOT"
   mkdir -p "$TEST_ROOT/config" "$TEST_ROOT/admin-panel"
@@ -63,6 +76,7 @@ setup_test_root() {
   mkdir -p "$TEST_ROOT/scripts"
   cp "$REPO_ROOT/cms" "$TEST_ROOT/cms"
   cp "$REPO_ROOT/scripts/__config_sync.sh" "$TEST_ROOT/scripts/"
+  cp "$REPO_ROOT/scripts/__db_use.sh" "$TEST_ROOT/scripts/"
   cp -r "$REPO_ROOT/scripts/__lib" "$TEST_ROOT/scripts/"
 }
 
@@ -173,6 +187,72 @@ if [[ -f "$TEST_ROOT/.env" ]]; then
 else
   fail ".env was not created for the ACME migration"
 fi
+
+echo ""
+echo "=== Test 9: dead ranking keys are removed from config.toml and .env ==="
+setup_test_root
+append_dead_ranking_keys
+sync_rc=0
+run_sync || sync_rc=$?
+assert_exit 0 "$sync_rc" "sync with retired no-successor keys exits 0"
+assert_grep "$TEST_ROOT/sync-output.log" 'removed retired RANKING_USERNAME' "the notice names the retired key"
+assert_grep "$TEST_ROOT/sync-output.log" 'no reader consumes it' "the notice says no reader consumes it"
+assert_grep "$TEST_ROOT/sync-output.log" 'an admin holding ranking:read, signed with RANKING_SESSION_SECRET' "the notice names the ranking console replacement"
+[[ -f "$TEST_ROOT/.env" ]] || fail ".env was not created for the dead-key migration"
+for key in RANKING_USERNAME RANKING_PASSWORD CMS_RANKING_CONFIG CMS_RANKING_LOG_DIR; do
+  assert_not_grep "$TEST_ROOT/config.toml" "^${key}" "config.toml ${key} line is gone"
+  assert_not_grep "$TEST_ROOT/.env" "^${key}=" ".env no longer exports ${key}"
+done
+
+echo ""
+echo "=== Test 10: dry run reports the no-successor removal without writing ==="
+setup_test_root
+append_dead_ranking_keys
+cp "$TEST_ROOT/config.toml" "$TEST_ROOT/config.toml.before"
+run_sync --dry-run
+assert_exit 0 $? "dry-run with dead keys exits 0"
+assert_grep "$TEST_ROOT/sync-output.log" 'Would remove retired RANKING_USERNAME' "dry-run reports the removal"
+assert_grep "$TEST_ROOT/sync-output.log" 'no reader consumes it' "dry-run notice says no reader consumes it"
+if diff -q "$TEST_ROOT/config.toml" "$TEST_ROOT/config.toml.before" >/dev/null 2>&1; then
+  pass "dry-run leaves config.toml byte-identical"
+else
+  fail "dry-run modified config.toml"
+fi
+
+echo ""
+echo "=== Test 11: a .env carrying a dead key has it removed ==="
+setup_test_root
+run_sync || true   # settle config.toml (no dead keys) and produce a .env
+printf 'RANKING_USERNAME=admin\nRANKING_PASSWORD=cms_ranking_NXlzmsMzUP8cvvGw\n' >> "$TEST_ROOT/.env"
+run_sync
+assert_exit 0 $? "sync over a stale .env exits 0"
+assert_not_grep "$TEST_ROOT/.env" '^RANKING_USERNAME=' "stale .env RANKING_USERNAME is removed"
+assert_not_grep "$TEST_ROOT/.env" '^RANKING_PASSWORD=' "stale .env RANKING_PASSWORD is removed"
+
+echo ""
+echo "=== Test 12: a config.toml without the dead keys is left byte-identical ==="
+setup_test_root
+run_sync || true   # settle the old layout so the next run has nothing left to migrate
+cp "$TEST_ROOT/config.toml" "$TEST_ROOT/config.toml.settled"
+run_sync
+assert_exit 0 $? "second real run exits 0"
+if diff -q "$TEST_ROOT/config.toml" "$TEST_ROOT/config.toml.settled" >/dev/null 2>&1; then
+  pass "a config.toml without the dead keys is left byte-identical"
+else
+  fail "a settled config.toml was rewritten"
+fi
+assert_not_grep "$TEST_ROOT/sync-output.log" 'removed retired' "no dead-key notice for a config without the keys"
+
+echo ""
+echo "=== Test 13: a key declared in a second section loses its stale copy ==="
+setup_test_root
+printf '\n[core]\nE2E_TWO_SECTIONS = "first"\n\n[contest]\nE2E_TWO_SECTIONS = "second"\n' >> "$TEST_ROOT/config.toml"
+sync_rc=0
+run_sync || sync_rc=$?
+assert_exit 0 "$sync_rc" "sync with a second-section copy exits 0"
+assert_grep "$TEST_ROOT/sync-output.log" 'removed stale E2E_TWO_SECTIONS from \[contest\]' "the notice names the key and the section it left"
+assert_not_grep "$TEST_ROOT/config.toml" '^E2E_TWO_SECTIONS = "second"' "the stale copy is gone"
+assert_grep "$TEST_ROOT/config.toml" '^E2E_TWO_SECTIONS = "first"' "the first copy is kept"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

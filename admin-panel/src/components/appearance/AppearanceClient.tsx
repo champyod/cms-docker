@@ -1,15 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Image as ImageIcon, Save, Settings2 } from 'lucide-react';
 import NextImage from 'next/image';
 
 import { DisplayTab } from '@/components/appearance/DisplayTab';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Tabs } from '@/components/core/Tabs';
 import { toast } from 'sonner';
 import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
+import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 
 type TabKey = 'branding' | 'services' | 'display';
@@ -42,7 +45,7 @@ function AppearanceTabs({ active, onChange }: { active: TabKey; onChange: (key: 
   );
 }
 
-function BrandingTab({
+export function BrandingTab({
   branding,
   onFieldChange,
   logoPreview,
@@ -111,29 +114,26 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
 }
 
 export function AppearanceClient(): React.JSX.Element {
+  const dict = useDictionary();
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
   const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '' });
   const [saving, setSaving] = useState(false);
   const [logoPreview] = useState<string>(() => `/api/ranking/logo?ts=${Date.now()}`);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const result = await readConfigToml();
-      if (cancelled) return;
-      if (result.success) {
-        setValues(result.values);
-        setBranding({
-          rankingLogoPath: (result.values['RANKING_LOGO_PATH'] ?? '').replace(/^"|"$/g, ''),
-        });
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
+  // Why the read no longer decides whether to render: `if (result.success)` left a refused or
+  // failed read looking like an empty config, with no error and no way back. The load ends in
+  // data, denied or failed, and the surface below renders that.
+  const load = useCallback(async (): Promise<void> => {
+    const result = await readConfigToml();
+    if (!result.success) throw new Error(result.error);
+    setValues(result.values);
+    setBranding({
+      rankingLogoPath: (result.values['RANKING_LOGO_PATH'] ?? '').replace(/^"|"$/g, ''),
+    });
   }, []);
+
+  const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
   const handleFieldChange = useCallback((key: keyof BrandingFields, value: string) => {
     setBranding((prev) => ({ ...prev, [key]: value }));
@@ -157,17 +157,28 @@ export function AppearanceClient(): React.JSX.Element {
     }
   }, [branding]);
 
-  // Why published only over Branding: the fields this Save writes belong to the Branding
-  // panel, so the same control shown over Services or Display would offer to save edits the
-  // reader cannot see on screen.
+  // Why published only over Branding and once loaded: the fields this Save writes belong to
+  // the Branding panel, so the same control shown over Services or Display would offer to save
+  // edits the reader cannot see on screen, and before the read there is nothing to save.
   usePublishModuleActions(
     'system.appearance',
-    active === 'branding' ? (
+    active === 'branding' && status.kind === 'idle' ? (
       <Button size="sm" icon={Save} loading={saving} onClick={() => void handleSave()}>
         Save to config.toml
       </Button>
     ) : null,
   );
+
+  if (status.kind !== 'idle') {
+    return (
+      <SurfaceLoadState
+        status={status}
+        loadingTitle={dict['navigation']['system']['appearance']['label']}
+        onRetry={reload}
+        retryLabel={dict.states.retry.label}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">

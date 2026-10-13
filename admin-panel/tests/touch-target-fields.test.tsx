@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { AppearanceClient } from '@/components/appearance/AppearanceClient';
+import { BrandingTab } from '@/components/appearance/AppearanceClient';
 import { TableToolbar } from '@/components/core/TableToolbar';
 import { EnvSectionCard } from '@/components/settings/EnvSectionCard';
 
@@ -27,7 +27,9 @@ describe('raw form field touch targets', () => {
   });
 
   it('gives all appearance branding inputs a 44px touch target', () => {
-    const markup = renderToStaticMarkup(<AppearanceClient />);
+    const markup = renderToStaticMarkup(
+      <BrandingTab branding={{ rankingLogoPath: '' }} onFieldChange={() => undefined} logoPreview="" />,
+    );
 
     expect(getInputTouchHeightCount(markup)).toBe(1);
   });

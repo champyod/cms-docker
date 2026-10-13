@@ -1,11 +1,17 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
+import type { SurfaceStatus } from '@/components/core/SurfaceState';
+import {
+  surfaceLoadMessages,
+  useSurfaceLoad,
+  type SurfaceLoadMessages,
+} from '@/hooks/useSurfaceLoad';
 import type { Locale } from '@/lib/locales';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
@@ -48,16 +54,24 @@ function permissionGates(permissionKeys: readonly string[]): MaintenanceGates {
   };
 }
 
+interface MaintenanceLoad {
+  readonly state: MaintenanceState;
+  readonly patch: Patch;
+  readonly status: SurfaceStatus;
+  readonly reload: () => void;
+}
+
 function useMaintenanceState(
   gates: MaintenanceGates,
-): readonly [MaintenanceState, Patch] {
+  messages: SurfaceLoadMessages,
+): MaintenanceLoad {
   const [state, setState] = useState<MaintenanceState>(INITIAL_MAINTENANCE_STATE);
   const load = useCallback(
     () => loadMaintenanceData(gates.canConfigure, gates.canViewBackups, setState),
     [gates.canConfigure, gates.canViewBackups],
   );
-  useEffect(() => { void load(); }, [load]);
-  return [state, setState];
+  const { status, reload } = useSurfaceLoad(load, messages);
+  return { state, patch: setState, status, reload };
 }
 
 function useMaintenanceHandlers(
@@ -88,14 +102,15 @@ export function useMaintenanceController(
   locale: Locale,
   permissionKeys: readonly string[],
 ): MaintenanceController {
-  const toasts: MaintenanceToasts = useDictionary().toasts.maintenance;
+  const dict = useDictionary();
+  const toasts: MaintenanceToasts = dict.toasts.maintenance;
   const confirm = useConfirm();
   const { manualBackupConfirm } = useConfirmationCopy();
   const runAction = useActionFeedback();
   const gates = permissionGates(permissionKeys);
-  const [state, patch] = useMaintenanceState(gates);
+  const { state, patch, status, reload } = useMaintenanceState(gates, surfaceLoadMessages(dict));
   const handlers = useMaintenanceHandlers({
     locale, toasts, state, patch, gates, confirm, manualBackupConfirm, runAction,
   });
-  return { locale, ...state, ...gates, ...handlers };
+  return { locale, ...state, ...gates, ...handlers, status, reload };
 }

@@ -37,6 +37,8 @@ pub struct RankingConfig {
     /// The Redis the failure counters live in. Absent means the console cannot track
     /// failures, which is a refusal at login rather than an unguarded door.
     pub redis_url: Option<String>,
+    /// The contest whose overrides this service applies. Absent applies them all.
+    pub contest_id: Option<i64>,
 }
 
 /// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
@@ -45,16 +47,24 @@ pub struct RankingConfig {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptchaConfig {
     pub enabled: bool,
-    pub provider: CaptchaProvider,
-    pub site_key: String,
-    pub secret_key: String,
     pub threshold: u32,
+    /// The service's provider priority list; the first entry with a complete key
+    /// pair is the one that renders and verifies.
+    pub providers: Vec<CaptchaProvider>,
+    pub keys: HashMap<CaptchaProvider, CaptchaKeys>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptchaKeys {
+    pub site_key: String,
+    pub secret_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CaptchaProvider {
     Turnstile,
     HCaptcha,
+    Recaptcha,
 }
 
 impl CaptchaProvider {
@@ -62,15 +72,46 @@ impl CaptchaProvider {
         match self {
             Self::Turnstile => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
             Self::HCaptcha => "https://hcaptcha.com/siteverify",
+            Self::Recaptcha => "https://www.google.com/recaptcha/api/siteverify",
+        }
+    }
+
+    pub(crate) fn wire_name(self) -> &'static str {
+        match self {
+            Self::Turnstile => "turnstile",
+            Self::HCaptcha => "hcaptcha",
+            Self::Recaptcha => "recaptcha",
+        }
+    }
+
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "turnstile" => Some(Self::Turnstile),
+            "hcaptcha" => Some(Self::HCaptcha),
+            "recaptcha" => Some(Self::Recaptcha),
+            _ => None,
         }
     }
 
     fn from_wire(raw: &str) -> Self {
-        if raw.trim().eq_ignore_ascii_case("hcaptcha") {
-            Self::HCaptcha
-        } else {
-            Self::Turnstile
-        }
+        Self::parse(raw).unwrap_or(Self::Turnstile)
+    }
+}
+
+impl CaptchaConfig {
+    /// The first provider in the chain with a complete key pair.
+    pub fn active(&self) -> Option<(CaptchaProvider, &CaptchaKeys)> {
+        self.providers.iter().find_map(|provider| {
+            self.keys
+                .get(provider)
+                .filter(|keys| !keys.site_key.is_empty() && !keys.secret_key.is_empty())
+                .map(|keys| (*provider, keys))
+        })
+    }
+
+    /// Whether the challenge can be enforced at all.
+    pub fn is_usable(&self) -> bool {
+        self.enabled && self.active().is_some()
     }
 }
 
@@ -78,10 +119,9 @@ impl Default for CaptchaConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            provider: CaptchaProvider::Turnstile,
-            site_key: String::new(),
-            secret_key: String::new(),
             threshold: 3,
+            providers: Vec::new(),
+            keys: HashMap::new(),
         }
     }
 }
@@ -98,6 +138,7 @@ impl Default for RankingConfig {
             session_secret: None,
             captcha: CaptchaConfig::default(),
             redis_url: None,
+            contest_id: None,
         }
     }
 }
@@ -133,6 +174,7 @@ impl RankingConfig {
             session_secret: read_secret(&vars),
             captcha: read_captcha(&vars),
             redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
+            contest_id: read_optional_i64(&vars, "RANKING_CONTEST_ID"),
         })
     }
 }
@@ -174,17 +216,55 @@ fn read_trimmed_optional(vars: &HashMap<String, String>, key: &str) -> Option<St
     }
 }
 
+/// A blank or unparsable value means "not configured", not zero: a typo read as contest 0 would scope every override to it.
+fn read_optional_i64(vars: &HashMap<String, String>, key: &str) -> Option<i64> {
+    vars.get(key)
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.parse::<i64>().ok())
+}
+
 fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
+    let legacy = CaptchaProvider::from_wire(
+        vars.get("CAPTCHA_PROVIDER")
+            .map(String::as_str)
+            .unwrap_or("turnstile"),
+    );
+    let mut providers: Vec<CaptchaProvider> = Vec::new();
+    for part in read_trimmed(vars, "CAPTCHA_PROVIDERS").split(',') {
+        if let Some(provider) = CaptchaProvider::parse(part) {
+            if !providers.contains(&provider) {
+                providers.push(provider);
+            }
+        }
+    }
+    if providers.is_empty() {
+        providers.push(legacy);
+    }
+    let mut keys = HashMap::new();
+    for provider in &providers {
+        let prefix = format!("CAPTCHA_{}", provider.wire_name().to_ascii_uppercase());
+        let mut site_key = read_trimmed(vars, &format!("{prefix}_SITE_KEY"));
+        let mut secret_key = read_trimmed(vars, &format!("{prefix}_SECRET_KEY"));
+        // WHY the fallback: a deployment that still sets only the legacy scalar
+        // keys must keep working; they stand in for the legacy provider's entry.
+        if *provider == legacy && site_key.is_empty() && secret_key.is_empty() {
+            site_key = read_trimmed(vars, "CAPTCHA_SITE_KEY");
+            secret_key = read_trimmed(vars, "CAPTCHA_SECRET_KEY");
+        }
+        keys.insert(
+            *provider,
+            CaptchaKeys {
+                site_key,
+                secret_key,
+            },
+        );
+    }
     CaptchaConfig {
         enabled: read_flag(vars, "CAPTCHA_ENABLED"),
-        provider: CaptchaProvider::from_wire(
-            vars.get("CAPTCHA_PROVIDER")
-                .map(String::as_str)
-                .unwrap_or("turnstile"),
-        ),
-        site_key: read_trimmed(vars, "CAPTCHA_SITE_KEY"),
-        secret_key: read_trimmed(vars, "CAPTCHA_SECRET_KEY"),
         threshold: read_threshold(vars, "CAPTCHA_THRESHOLD", 3),
+        providers,
+        keys,
     }
 }
 
@@ -219,87 +299,4 @@ fn read_secret(vars: &HashMap<String, String>) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn pairs(values: &[(&str, &str)]) -> Vec<(String, String)> {
-        values
-            .iter()
-            .map(|(key, value)| (key.to_string(), value.to_string()))
-            .collect()
-    }
-
-    #[test]
-    fn defaults_to_the_ranking_port() {
-        let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
-        assert_eq!(config.bind, "0.0.0.0:8890".parse().expect("a literal"));
-        assert_eq!(config.database_url, None);
-    }
-
-    #[test]
-    fn keeps_a_configured_database() {
-        let config =
-            RankingConfig::from_pairs(pairs(&[("DATABASE_URL", "postgres://cms@db/cmsdb")]))
-                .expect("a valid url");
-        assert_eq!(
-            config.database_url.as_deref(),
-            Some("postgres://cms@db/cmsdb")
-        );
-    }
-
-    #[test]
-    fn treats_a_blank_database_as_absent() {
-        let config = RankingConfig::from_pairs(pairs(&[("DATABASE_URL", "  ")]))
-            .expect("blank is tolerated");
-        assert_eq!(config.database_url, None);
-    }
-
-    #[test]
-    fn refuses_a_bind_that_is_not_an_address() {
-        let error = RankingConfig::from_pairs(pairs(&[("RANKING_BIND_ADDRESS", "nowhere")]))
-            .expect_err("an invalid address is rejected");
-        assert_eq!(error, ConfigError::InvalidBind("nowhere".to_string()));
-    }
-
-    #[test]
-    fn the_page_and_the_offer_have_image_defaults() {
-        let config = RankingConfig::from_pairs(pairs(&[])).expect("defaults parse");
-        assert_eq!(
-            config.static_dir.as_deref(),
-            Some(std::path::Path::new(DEFAULT_STATIC_DIR))
-        );
-        assert_eq!(
-            config.credits_file.as_deref(),
-            Some(std::path::Path::new(DEFAULT_CREDITS_FILE))
-        );
-        assert_eq!(config.logo_path, None);
-        assert_eq!(
-            config.avatar_dir.as_deref(),
-            Some(std::path::Path::new(DEFAULT_AVATAR_DIR))
-        );
-    }
-
-    #[test]
-    fn an_avatar_directory_turns_on_uploaded_faces() {
-        let config = RankingConfig::from_pairs(pairs(&[("RANKING_AVATAR_DIR", "/data/faces")]))
-            .expect("a directory is tolerated");
-        assert_eq!(
-            config.avatar_dir.as_deref(),
-            Some(std::path::Path::new("/data/faces"))
-        );
-    }
-
-    #[test]
-    fn a_blank_avatar_directory_falls_back_to_the_dummy_face() {
-        let config = RankingConfig::from_pairs(pairs(&[("RANKING_AVATAR_DIR", "  ")]))
-            .expect("blank is tolerated");
-        assert_eq!(config.avatar_dir, None);
-    }
-
-    #[test]
-    fn a_blank_path_disables_the_route_it_feeds() {
-        let config = RankingConfig::from_pairs(pairs(&[("RANKING_STATIC_DIR", "  ")]))
-            .expect("blank is tolerated");
-        assert_eq!(config.static_dir, None);
-    }
-}
+mod tests;

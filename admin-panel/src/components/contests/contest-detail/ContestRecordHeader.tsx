@@ -7,6 +7,7 @@ import { getContestEditData } from '@/app/actions/contests';
 import { useDeployContest, type DeployPhase } from '@/hooks/useDeployContest';
 import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/core/Tooltip';
 import { useRecordTabRefresh } from '@/hooks/useRecordTabRefresh';
 import { ContestModal } from '../ContestModal';
 import type { ExistingContest } from '../contest-modal/types';
@@ -98,6 +99,38 @@ function useRecordHeaderState(contestId: number, permissionKeys: readonly string
   };
 }
 
+// Why the control survives a missing grant instead of disappearing: it is the only way to set the
+// active contest from the record, and a control that is simply gone reads as a panel that cannot do
+// it. The key named below is the one the deploy action itself enforces, so the hint and the server
+// gate cannot drift apart.
+const DEPLOY_PERMISSION_HINT = `You need the ${ACTION_PERMISSIONS.deployContest} permission to set the active contest.`;
+
+interface DeployControlProps {
+  isActive: boolean;
+  canDeploy: boolean;
+  onRequestDeploy: () => void;
+}
+
+// Why the disabled control hangs its hint on a wrapper: a `disabled` button is `pointer-events-none`,
+// so a tooltip attached to the button itself never opens and the reason for the greyed state stays
+// unreachable to a pointer.
+function DeployControl({ isActive, canDeploy, onRequestDeploy }: DeployControlProps): React.JSX.Element | null {
+  if (isActive) return null;
+  if (canDeploy) {
+    return <Button variant="positiveOutline" icon={Power} iconOnly tooltip="Set as Active Contest" onClick={onRequestDeploy} />;
+  }
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <Button variant="positiveOutline" icon={Power} iconOnly disabled aria-label={DEPLOY_PERMISSION_HINT} />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{DEPLOY_PERMISSION_HINT}</TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function ContestRecordHeader({ contestId, name, isActive, permissionKeys }: ContestRecordHeaderProps): React.JSX.Element {
   const header = useRecordHeaderState(contestId, permissionKeys);
   const refresh = useRecordTabRefresh();
@@ -115,9 +148,7 @@ export function ContestRecordHeader({ contestId, name, isActive, permissionKeys 
           Edit Contest
         </Button>
       )}
-      {!isActive && header.canDeploy && (
-        <Button variant="positiveOutline" icon={Power} iconOnly tooltip="Set as Active Contest" onClick={header.requestDeploy} />
-      )}
+      <DeployControl isActive={isActive} canDeploy={header.canDeploy} onRequestDeploy={header.requestDeploy} />
       {header.isEditOpen && header.editContest && (
         <ContestModal
           isOpen

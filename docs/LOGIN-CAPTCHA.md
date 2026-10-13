@@ -16,10 +16,11 @@ before relying on it.
 
 ## 1. How it works
 
-The panel supports two providers, chosen by `CAPTCHA_PROVIDER`:
+The panel supports three providers, chosen by `CAPTCHA_PROVIDER`:
 
-- **Turnstile** (Cloudflare) — the default.
-- **hCaptcha**.
+- **Turnstile** (Cloudflare) — the default, and the free one (a checkmark/invisible challenge).
+- **hCaptcha** — presents a real image puzzle; free tier, then paid.
+- **reCAPTCHA v2** (Google) — checkbox plus image puzzle; small free tier, then paid.
 
 The challenge is not shown on the first attempts. Two thresholds decide when it appears
 and when the account stops accepting logins at all:
@@ -55,9 +56,12 @@ single source of truth; `./cms config sync` writes them into the generated `.env
 | Setting | Default | Meaning |
 |---|---|---|
 | `CAPTCHA_ENABLED` | `0` | `1` or `true` turns the layer on. With `0` the panel treats the challenge as not configured, whatever the other keys hold. |
-| `CAPTCHA_PROVIDER` | `turnstile` | `turnstile` or `hcaptcha`. |
-| `CAPTCHA_SITE_KEY` | empty | Public key from the provider dashboard. Also needed server-side so the challenge can be validated. |
-| `CAPTCHA_SECRET_KEY` | empty | Server-side key from the provider dashboard. Never generated locally. |
+| `CAPTCHA_PROVIDERS` | empty | Comma list in priority order, e.g. `hcaptcha,turnstile`. Each name needs `CAPTCHA_<NAME>_SITE_KEY` and `CAPTCHA_<NAME>_SECRET_KEY`. Per service, so one surface can be Cloudflare-only while another tries hCaptcha first. |
+| `CAPTCHA_TURNSTILE_SITE_KEY` / `_SECRET_KEY` | empty | Turnstile key pair (free, a checkmark). |
+| `CAPTCHA_HCAPTCHA_SITE_KEY` / `_SECRET_KEY` | empty | hCaptcha key pair (a real image puzzle). |
+| `CAPTCHA_RECAPTCHA_SITE_KEY` / `_SECRET_KEY` | empty | reCAPTCHA v2 key pair (checkbox plus puzzle). |
+| `CAPTCHA_PROVIDER` | `turnstile` | Legacy single provider; used only when `CAPTCHA_PROVIDERS` is empty. |
+| `CAPTCHA_SITE_KEY` / `CAPTCHA_SECRET_KEY` | empty | Legacy key pair for the legacy provider. Server-side key never generated locally. |
 | `CAPTCHA_THRESHOLD` | `3` | Failed logins before the challenge is required. |
 | `CAPTCHA_BAN_THRESHOLD` | `5` | Declared ban threshold; the effective lockout is the hardcoded `MAX_LOGIN_ATTEMPTS = 5`. |
 

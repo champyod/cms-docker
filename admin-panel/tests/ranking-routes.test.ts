@@ -22,7 +22,7 @@ function readSource(relativePath: string): string {
 const RANKING_PAGES: readonly [RouteId, string, string][] = [
   ['ranking.board', 'src/app/[locale]/(authenticated)/ranking/page.tsx', '<RankingLogoCard'],
   ['ranking.appearance', 'src/app/[locale]/(authenticated)/ranking/appearance/page.tsx', 'submitRankingAppearance'],
-  ['ranking.settings', 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx', 'saveRankingOverride'],
+  ['ranking.settings', 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx', 'RankingOverrideForm'],
   ['ranking.lockouts', 'src/app/[locale]/(authenticated)/ranking/lockouts/page.tsx', 'clearRankingLockout'],
   ['ranking.credits', 'src/app/[locale]/(authenticated)/ranking/credits/page.tsx', 'submitRankingCredits'],
 ];

@@ -60,6 +60,9 @@ const MODULES: readonly string[] = [
 // are deduped during the build so the registry stays key-unique.
 const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'admin', verb: 'password:update' },
+  // Why a login key: signing in to this web server is its own capability, so a group
+  // can hold ranking rights without opening the admin surface to its members.
+  { module: 'admin', verb: 'login' },
   { module: 'contest', verb: 'switch' },
   { module: 'task', verb: 'switch_dataset' },
   { module: 'dataset', verb: 'switch' },

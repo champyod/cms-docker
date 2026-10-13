@@ -53,14 +53,6 @@ const CATALOG = [
   // Roots. Nothing the catalog selects above these resolves through one of them,
   // and three content tables name `admins` as the author of a row, so it leads.
   { name: 'admins', label: 'Admins', pk: ['id'], sensitive: true },
-  // The ranking console's own accounts, restored with the panel's own.
-  //
-  // WHY not flagged sensitive yet: the flag is what GRANT_TABLES derives from, and
-  // that derived list is read as "privileges travel with this selection". These rows
-  // hold no privileges, so flagging them here would put a false claim in the restore
-  // report. Splitting the flag into credential and grant material is the follow-up;
-  // until then a restore replaces console credentials without a specific warning.
-  { name: 'ranking_console_users', label: 'Ranking Console Users', pk: ['id'] },
   { name: 'permissions', label: 'Permissions', pk: ['id'], sensitive: true },
   { name: 'groups', label: 'Groups', pk: ['id'], sensitive: true },
   { name: 'contests', label: 'Contests', pk: ['id'] },
@@ -88,15 +80,13 @@ const CATALOG = [
   { name: 'user_test_managers', label: 'User Test Managers', pk: ['id'], needsLargeObjects: true },
   { name: 'user_test_executables', label: 'User Test Executables', pk: ['id'], needsLargeObjects: true },
   // No table in this catalog references any of these beyond one edge: the three
-  // grant tables resolve through the roots above, `backup_schedules` resolves
-  // through `backup_locations`, and the other three have no relation to
-  // anything — `backup_runs.scheduleId` is a bare string on purpose, because
-  // run history must outlive the schedule it came from.
+  // grant tables resolve through the roots above, and the other three have no
+  // relation to anything — `backup_runs.scheduleId` is a bare string on purpose,
+  // because run history must outlive the schedule it came from.
   { name: 'group_permissions', label: 'Group Permissions', pk: ['id'], sensitive: true },
   { name: 'admin_groups', label: 'Admin Groups', pk: ['id'], sensitive: true },
   { name: 'admin_permission_overrides', label: 'Admin Permission Overrides', pk: ['id'], sensitive: true },
   { name: 'monitor_targets', label: 'Monitor Targets', pk: ['id'] },
-  { name: 'backup_locations', label: 'Backup Locations', pk: ['id'] },
   { name: 'backup_schedules', label: 'Backup Schedules', pk: ['id'] },
   { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
   // Ranking control tables. Nothing references them and they reference nothing,
@@ -232,7 +222,6 @@ const NULLABLE_PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly
   announcements: [ADMIN_TABLE],
   messages: [ADMIN_TABLE],
   questions: [ADMIN_TABLE],
-  backup_schedules: ['backup_locations'],
 };
 
 function buildMissingParentWarnings(selected: ReadonlySet<string>): string[] {

@@ -42,8 +42,6 @@ function override(username: string, permissionKey: string, effect: string): Over
   return { username, permissionKey, effect };
 }
 
-const ALL_GRANTS = mergeStrategies();
-
 function mergeStrategies(overrides: Record<string, string> = {}): Record<string, string> {
   const strategies: Record<string, string> = { [ADMIN_TABLE]: 'merge' };
   for (const table of GRANT_TABLES) strategies[table] = 'merge';

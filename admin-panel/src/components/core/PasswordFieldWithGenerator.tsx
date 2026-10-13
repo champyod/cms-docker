@@ -172,7 +172,7 @@ export function PasswordFieldWithGenerator({
             confirmDisabled={!generated}
           />
         }
-        className="max-h-96 overflow-y-auto sm:max-w-xl"
+        className="sm:max-w-xl"
       >
         <div className="space-y-4">
           <div>

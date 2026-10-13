@@ -110,17 +110,20 @@ export async function loadMaintenanceData(
   canViewBackups: boolean,
   patch: Patch,
 ): Promise<void> {
-  try {
-    if (canConfigure) {
-      const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
-      if (result.success) patch((previous) => ({ ...previous, data: result.values }));
-      await loadDiscordSettings(patch);
+  if (canConfigure) {
+    const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
+    // Why it throws instead of leaving the fields empty: a read that failed and a read that
+    // returned nothing look the same on screen, and the surface can only offer a retry if it
+    // is told the load ended without data. A refused key never reaches here — the gate throws
+    // its own "Unauthorized" first, which the surface renders as denied.
+    if (!result.success) {
+      throw new Error(result.error);
     }
-    if (canViewBackups) {
-      await readArchives(patch);
-    }
-  } finally {
-    patch((previous) => ({ ...previous, loading: false }));
+    patch((previous) => ({ ...previous, data: result.values }));
+    await loadDiscordSettings(patch);
+  }
+  if (canViewBackups) {
+    await readArchives(patch);
   }
 }
 

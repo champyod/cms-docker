@@ -14,6 +14,8 @@ import {
 // Type-only: the runtime module reaches Prisma and must stay out of the client bundle.
 import type { BackupLocationOption, BackupSchedule, ScheduleMutationResult } from '@/app/actions/schedules';
 import { orderSelection, type FormValues } from '@/components/backup-restore/ScheduleForm';
+import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { MAX_INTERVAL_MINS, MIN_INTERVAL_MINS, validateScheduleInput } from '@/lib/backup-schedules';
 
 const DEFAULT_INTERVAL_MINS = 1440;
@@ -60,52 +62,23 @@ function parseInterval(raw: string): number {
 }
 
 export function useScheduleList() {
+    const dict = useDictionary();
     const [schedules, setSchedules] = useState<readonly BackupSchedule[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
 
-    /**
-     * Starts a load and reports its outcome, with every state update inside a
-     * continuation rather than in this function's own body. That is what lets the
-     * mount effect start it: a state update reached directly from an effect body
-     * renders again before the effect has synchronised anything, and the list
-     * already starts in its loading state, so there is nothing to announce.
-     */
-    const start = useCallback(
-        (): Promise<void> => listSchedules()
-            .then(
-                (result) => {
-                    if (!result.success) {
-                        setSchedules([]);
-                        setLoadError(result.error ?? LIST_ERROR);
-                        return;
-                    }
-                    setSchedules(result.schedules ?? []);
-                },
-                (error: unknown) => {
-                    setSchedules([]);
-                    setLoadError(describeError(error, LIST_ERROR));
-                },
-            )
-            .finally(() => setIsLoading(false)),
+    const load = useCallback(
+        (): Promise<void> => listSchedules().then((result) => {
+            if (!result.success) throw new Error(result.error ?? LIST_ERROR);
+            setSchedules(result.schedules ?? []);
+        }),
         [],
     );
 
-    /** The Refresh path, where the click is what starts a load, so it is announced. */
-    const reload = useCallback(async () => {
-        setIsLoading(true);
-        setLoadError(null);
-        await start();
-    }, [start]);
+    const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
-    useEffect(() => {
-        void start();
-    }, [start]);
-
-    return { schedules, isLoading, loadError, reload };
+    return { schedules, status, reload };
 }
 
-export function useScheduleMutations(reload: () => Promise<void>, report: Report) {
+export function useScheduleMutations(reload: () => void, report: Report) {
     const [busyRow, setBusyRow] = useState<BusyRow | null>(null);
 
     const runMutation = useCallback(
@@ -159,7 +132,7 @@ export function useScheduleMutations(reload: () => Promise<void>, report: Report
  * Settling a run is a per-row action, so its notice is keyed by run id and the
  * reload happens only after the row was actually settled.
  */
-export function useSettleRun(reload: () => Promise<void>) {
+export function useSettleRun(reload: () => void) {
     const [busyRunId, setBusyRunId] = useState<string | null>(null);
     const [feedback, setFeedback] = useState<ReadonlyMap<string, Notice>>(new Map());
 
@@ -189,7 +162,7 @@ export function useSettleRun(reload: () => Promise<void>) {
     return { busyRunId, feedback, settle };
 }
 
-export function useScheduleForm(reload: () => Promise<void>, report: Report) {
+export function useScheduleForm(reload: () => void, report: Report) {
     const [mode, setMode] = useState<FormMode>(null);
     const [values, setValues] = useState<FormValues>(EMPTY_FORM);
     const [errors, setErrors] = useState<readonly string[]>([]);

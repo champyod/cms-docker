@@ -107,6 +107,12 @@ log "Running preflight checks..."
 # (d) Safety backup before mutating anything
 # ---------------------------------------------------------------------------
 BACKUP_SCRIPT="scripts/__backup.sh"
+# WHY the host archive root is handed to the script instead of letting it read BACKUP_DIR:
+# __backup.sh sources .env, whose BACKUP_DIR is the in-container path (/app/backups) that
+# compose bind-mounts the host tree onto, while this run happens on the host — where
+# nothing is mounted at /app and mkdir on that root fails. BACKUP_HOST_DIR is the same
+# override ensure_backup_dir_perms and the preflight repair and check.
+BACKUP_ROOT_HOST="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
 if [ -x "$BACKUP_SCRIPT" ]; then
     log "Running safety backup..."
     # WHY the status is read instead of collapsed into one "backup failed" line: the backup
@@ -116,7 +122,7 @@ if [ -x "$BACKUP_SCRIPT" ]; then
     # uploaded files and submissions blobs that live in the volume — which is exactly the
     # fact an operator must see before an update touches the services.
     BACKUP_STATUS=0
-    "$BACKUP_SCRIPT" || BACKUP_STATUS=$?
+    "$BACKUP_SCRIPT" --root "$BACKUP_ROOT_HOST" || BACKUP_STATUS=$?
     if [ "$BACKUP_STATUS" -eq 3 ]; then
         log_die "Backup partial (exit 3): the database dump was kept but the volume archive is missing. Aborting update — a rollback from this backup would not restore uploaded files or submissions."
     fi

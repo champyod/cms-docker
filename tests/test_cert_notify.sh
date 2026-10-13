@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
-# Drives scripts/__cert_notify.sh against a sandboxed checkout with a stub curl, so what the
-# sender hands to the network is assertable without a timer, a webhook or a certificate.
-#
-# WHY this exists: the unit built its alert inline, where systemd expanded the webhook
-# reference to nothing and split the JSON across argv, and the command ended in `|| true` —
-# so the service reported success for an hour of resolve errors and no test could see it.
-# These assertions read the payload, the argv and the unit's own command line.
+# Drives scripts/__cert_notify.sh against a sandboxed checkout with a stub curl and a
+# throwaway certificate, so what the sender does on a no-op tick, a real renewal and an
+# approaching expiry is assertable without a timer, a webhook or a live certificate.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,11 +9,10 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 CERT_NOTIFY="${REPO_ROOT}/scripts/__cert_notify.sh"
 SERVICE_UNIT="${REPO_ROOT}/config/systemd/grader-cert-renew.service"
 SENTINEL_URL='https://discord.example.invalid/api/webhooks/000000000000/sentinel-token'
+LINEAGE='example.test'
 
 pass=0
 fail=0
-# One sandbox per case: each stages its own .env and its own curl logs, so they cannot see
-# one another's leftovers.
 SANDBOXES=()
 
 ok() { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
@@ -27,13 +22,12 @@ cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
 # A copy of the checkout pieces the script reaches for, plus a stub curl that records what
-# it was handed. WHY a stub and not the real curl: the claims under test are where the token
-# and the body sit, so the request must never leave the machine.
+# it was handed. WHY a stub and not the real curl: the request must never leave the machine.
 sandbox() {
   local dir
   dir="$(mktemp -d "${TMPDIR:-/tmp}/cert-notify.XXXXXX")"
   SANDBOXES+=("${dir}")
-  mkdir -p "${dir}/scripts/__lib" "${dir}/bin" "${dir}/home"
+  mkdir -p "${dir}/scripts/__lib" "${dir}/bin" "${dir}/home" "${dir}/config/letsencrypt/live/${LINEAGE}"
   cp "${CERT_NOTIFY}" "${dir}/scripts/"
   cp "${REPO_ROOT}/scripts/__lib/common.sh" "${dir}/scripts/__lib/"
   # WHY the real Makefile and ./cms rather than stubs: the repo-root walk looks for exactly
@@ -42,8 +36,6 @@ sandbox() {
   cp "${REPO_ROOT}/cms" "${dir}/cms"
   cat > "${dir}/bin/curl" <<'STUB'
 #!/usr/bin/env bash
-# Records its own argv, then the body and the config it was handed. The body is removed the
-# moment this returns, so reading it here is the only chance a case gets.
 printf '%s\0' "$@" > "${CURL_ARGV_LOG}"
 : > "${CURL_BODY_LOG}"
 : > "${CURL_CONF_LOG}"
@@ -65,7 +57,24 @@ esac
 exit "${CURL_STUB_STATUS:-0}"
 STUB
   chmod +x "${dir}/bin/curl"
+  printf 'DOMAIN_NAME=%s\nCERT_LINEAGE_DOMAIN=%s\nDISCORD_WEBHOOK_URL=%s\nACME_RENEW_BEFORE_DAYS=7\n' \
+    "${LINEAGE}" "${LINEAGE}" "${SENTINEL_URL}" > "${dir}/.env"
   printf '%s' "${dir}"
+}
+
+# A self-signed certificate in the sandbox lineage, so openssl has something real to read.
+make_cert() {
+  local dir="$1" days="$2"
+  openssl req -x509 -newkey rsa:2048 -nodes -days "${days}" -subj "/CN=${LINEAGE}" \
+    -keyout "${dir}/config/letsencrypt/live/${LINEAGE}/privkey.pem" \
+    -out "${dir}/config/letsencrypt/live/${LINEAGE}/fullchain.pem" 2>/dev/null
+}
+
+cert_enddate() { openssl x509 -noout -enddate -in "${1}/config/letsencrypt/live/${LINEAGE}/fullchain.pem" 2>/dev/null | sed 's/^notAfter=//'; }
+cert_fp()      { openssl x509 -noout -fingerprint -sha256 -in "${1}/config/letsencrypt/live/${LINEAGE}/fullchain.pem" 2>/dev/null | sed 's/^.*=//'; }
+
+state_write() { # <dir> <fingerprint> <warned_for>
+  printf 'FINGERPRINT=%s\nWARNED_FOR=%s\n' "$2" "$3" > "$1/config/letsencrypt/.cert-notify-state"
 }
 
 # The sandbox bin comes first on PATH so the real curl is never reached, and HOME points
@@ -80,46 +89,104 @@ run_notify() {
     bash "${dir}/scripts/__cert_notify.sh" 2>&1
 }
 
-# argv as one entry per line, so a count and a fixed-string search both work on it.
-argv_lines() {
-  tr '\0' '\n' < "$1" 2>/dev/null || true
+curl_ran() { [[ -e "$1/curl.argv" ]]; }
+
+# The embed as a single line of field "name=value" pairs, so a fixed-string search works on it.
+embed_fields() {
+  python3 -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    embed = json.load(handle)["embeds"][0]
+print(embed["title"])
+for field in embed.get("fields", []):
+    print("%s=%s" % (field["name"], field["value"]))' "$1" 2>/dev/null
 }
 
-echo "a webhook in .env is delivered as one intact payload"
+if ! command -v openssl >/dev/null 2>&1; then
+  echo "openssl not found — the certificate notification tests need it" >&2
+  exit 1
+fi
+
+echo "the first observation is recorded, not reported as a renewal"
 dir="$(sandbox)"
-printf 'DISCORD_WEBHOOK_URL=%s\n' "${SENTINEL_URL}" > "${dir}/.env"
+make_cert "${dir}" 90
 out="$(run_notify "${dir}")"
 status=$?
 if [[ "${status}" -eq 0 ]]; then
-  ok "the script exits 0"
+  ok "a fresh certificate exits 0"
 else
-  no "the script exits 0 (status ${status}: ${out})"
+  no "a fresh certificate exits 0 (status ${status}: ${out})"
 fi
-argv="$(argv_lines "${dir}/curl.argv")"
-if [[ "$(grep -c '^@' <<<"${argv}" || true)" -eq 1 ]]; then
-  ok "the payload is one argv entry, not one entry per word"
+if curl_ran "${dir}"; then
+  no "no alert is posted for a certificate that was never seen before"
 else
-  no "the payload is one argv entry, not one entry per word (argv: ${argv})"
+  ok "no alert is posted for a certificate that was never seen before"
 fi
-# WHY the pairing is checked rather than a fixed-string match for "-d @": a flag and its
-# value are two argv entries by construction, so the claim being made is that the value
-# immediately after the flag is one whole path. The path is not asserted to still exist —
-# the sender removes it the moment curl returns — so the proof that it named a readable body
-# is the stub having read it, which the JSON case below settles.
-if python3 -c 'import sys
-with open(sys.argv[1], "rb") as handle:
-    argv = [entry.decode() for entry in handle.read().split(b"\0")[:-1]]
-for index, entry in enumerate(argv):
-    if entry in ("-d", "--data-binary"):
-        assert argv[index + 1].startswith("@"), argv[index + 1]
-        break
-else:
-    raise AssertionError("no -d or --data-binary in %r" % argv)' "${dir}/curl.argv" 2>/dev/null; then
-  ok "the body is handed over as one -d @<file> argument"
+if grep -qF 'no alert' <<<"${out}"; then
+  ok "the first observation says what it did"
 else
-  no "the body is handed over as one -d @<file> argument (argv: ${argv})"
+  no "the first observation says what it did (got: ${out})"
 fi
-if grep -qF '{"content"' <<<"${argv}"; then
+
+echo "an unchanged certificate stays silent on the next tick"
+out="$(run_notify "${dir}")"
+status=$?
+if [[ "${status}" -eq 0 ]]; then
+  ok "an unchanged certificate exits 0"
+else
+  no "an unchanged certificate exits 0 (status ${status}: ${out})"
+fi
+if curl_ran "${dir}"; then
+  no "an unchanged certificate posts nothing"
+else
+  ok "an unchanged certificate posts nothing"
+fi
+if grep -qF 'no alert' <<<"${out}"; then
+  ok "the no-op is stated rather than silent"
+else
+  no "the no-op is stated rather than silent (got: ${out})"
+fi
+
+echo "a rotated certificate posts one embed with domain, issuer and expiry"
+dir="$(sandbox)"
+make_cert "${dir}" 90
+run_notify "${dir}" >/dev/null 2>&1
+old_fp="$(cert_fp "${dir}")"
+make_cert "${dir}" 90
+new_fp="$(cert_fp "${dir}")"
+rm -f "${dir}/curl.argv" "${dir}/curl.body" "${dir}/curl.conf"
+out="$(run_notify "${dir}")"
+status=$?
+if [[ "${status}" -eq 0 ]]; then
+  ok "the renewal run exits 0"
+else
+  no "the renewal run exits 0 (status ${status}: ${out})"
+fi
+if [[ -n "${new_fp}" && "${new_fp}" != "${old_fp}" ]]; then
+  ok "the replacement certificate has a new fingerprint"
+else
+  no "the replacement certificate has a new fingerprint"
+fi
+if curl_ran "${dir}"; then
+  ok "the renewal posts an alert"
+else
+  no "the renewal posts an alert (got: ${out})"
+fi
+expected_expiry="$(cert_enddate "${dir}")"
+argv="$(tr '\0' '\n' < "${dir}/curl.argv" 2>/dev/null || true)"
+if python3 -c 'import json, os, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    embed = json.load(handle)["embeds"][0]
+assert "renewed" in embed["title"], embed["title"]
+assert os.uname().nodename in embed["description"], embed["description"]
+fields = {f["name"]: f["value"] for f in embed.get("fields", [])}
+assert fields.get("Domain") == sys.argv[2], fields
+assert fields.get("Issuer"), fields
+assert fields.get("Expires") == sys.argv[3], fields' "${dir}/curl.body" "${LINEAGE}" "${expected_expiry}" 2>/dev/null; then
+  ok "the embed carries the renewal, the domain, the issuer and the new expiry"
+else
+  no "the embed carries the renewal, the domain, the issuer and the new expiry (got: $(cat "${dir}/curl.body" 2>/dev/null))"
+fi
+if grep -qF '{"embeds"' <<<"${argv}"; then
   no "no part of the payload is left in argv"
 else
   ok "no part of the payload is left in argv"
@@ -132,38 +199,80 @@ fi
 if grep -qF -- "${SENTINEL_URL}" "${dir}/curl.conf"; then
   ok "the webhook token is in the curl config file"
 else
-  no "the webhook token is in the curl config file (got: $(cat "${dir}/curl.conf"))"
+  no "the webhook token is in the curl config file (got: $(cat "${dir}/curl.conf" 2>/dev/null))"
+fi
+if python3 -c 'import sys
+with open(sys.argv[1], "rb") as handle:
+    argv = [entry.decode() for entry in handle.read().split(b"\0")[:-1]]
+for index, entry in enumerate(argv):
+    if entry in ("-d", "--data-binary"):
+        assert argv[index + 1].startswith("@"), argv[index + 1]
+        break
+else:
+    raise AssertionError("no -d or --data-binary in %r" % argv)' "${dir}/curl.argv" 2>/dev/null; then
+  ok "the body is handed over as one -d @<file> argument"
+else
+  no "the body is handed over as one -d @<file> argument"
 fi
 
-echo "the payload is the JSON Discord is asked to accept"
-# WHY python3 and not a regex: a payload can be word-split and still contain every substring
-# it should, so only a parser settles whether it is one JSON value or several.
-if python3 -c 'import json, os, sys
-with open(sys.argv[1], encoding="utf-8") as handle:
-    message = json.load(handle)["content"]
-assert ":lock: SSL cert renewed on " in message, message
-assert os.uname().nodename in message, message' "${dir}/curl.body" 2>/dev/null; then
-  ok "the payload parses as JSON and names this host"
+echo "a certificate already near expiry is announced once, then silent"
+dir="$(sandbox)"
+make_cert "${dir}" 3
+state_write "${dir}" "$(cert_fp "${dir}")" ""
+out="$(run_notify "${dir}")"
+if curl_ran "${dir}"; then
+  ok "the approaching expiry posts an alert"
 else
-  no "the payload parses as JSON and names this host (got: $(cat "${dir}/curl.body" 2>/dev/null))"
+  no "the approaching expiry posts an alert (got: ${out})"
+fi
+if python3 -c 'import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    embed = json.load(handle)["embeds"][0]
+assert "expiring" in embed["title"], embed["title"]
+assert "day(s)" in embed["description"], embed["description"]
+fields = {f["name"]: f["value"] for f in embed.get("fields", [])}
+assert fields.get("Domain") and fields.get("Expires"), fields' "${dir}/curl.body" 2>/dev/null; then
+  ok "the expiry embed names the domain and the expiry"
+else
+  no "the expiry embed names the domain and the expiry (got: $(cat "${dir}/curl.body" 2>/dev/null))"
+fi
+rm -f "${dir}/curl.argv"
+run_notify "${dir}" >/dev/null 2>&1
+if curl_ran "${dir}"; then
+  no "the same approaching expiry is not announced twice"
+else
+  ok "the same approaching expiry is not announced twice"
+fi
+
+echo "CERT_NOTIFY_ENABLED=0 silences the sender"
+dir="$(sandbox)"
+printf 'CERT_NOTIFY_ENABLED=0\n' >> "${dir}/.env"
+make_cert "${dir}" 3
+out="$(run_notify "${dir}")"
+status=$?
+if [[ "${status}" -eq 0 ]] && ! curl_ran "${dir}"; then
+  ok "a disabled sender posts nothing and exits 0"
+else
+  no "a disabled sender posts nothing and exits 0 (status ${status}: ${out})"
+fi
+if grep -qF 'notifications disabled' <<<"${out}"; then
+  ok "the disable switch is stated rather than silent"
+else
+  no "the disable switch is stated rather than silent (got: ${out})"
 fi
 
 echo "a checkout with no webhook sends nothing and says so"
 dir="$(sandbox)"
 printf 'DISCORD_WEBHOOK_URL=\n' > "${dir}/.env"
+make_cert "${dir}" 3
 out="$(run_notify "${dir}")"
 status=$?
-if [[ "${status}" -eq 0 ]]; then
-  ok "an empty webhook exits 0"
+if [[ "${status}" -eq 0 ]] && ! curl_ran "${dir}"; then
+  ok "an empty webhook exits 0 without invoking curl"
 else
-  no "an empty webhook exits 0 (status ${status}: ${out})"
+  no "an empty webhook exits 0 without invoking curl (status ${status}: ${out})"
 fi
-if [[ ! -e "${dir}/curl.argv" ]]; then
-  ok "no payload is staged and curl is never invoked"
-else
-  no "no payload is staged and curl is never invoked"
-fi
-if grep -qF 'renewal notification skipped' <<<"${out}"; then
+if grep -qF 'notification skipped' <<<"${out}"; then
   ok "the skip is stated rather than silent"
 else
   no "the skip is stated rather than silent (got: ${out})"
@@ -171,20 +280,35 @@ fi
 
 echo "a checkout with no .env at all is equally quiet"
 dir="$(sandbox)"
+rm -f "${dir}/.env"
+make_cert "${dir}" 3
 out="$(run_notify "${dir}")"
 status=$?
-if [[ "${status}" -eq 0 ]] && [[ ! -e "${dir}/curl.argv" ]]; then
+if [[ "${status}" -eq 0 ]] && ! curl_ran "${dir}"; then
   ok "a missing .env exits 0 without invoking curl"
 else
   no "a missing .env exits 0 without invoking curl (status ${status}: ${out})"
 fi
 
-echo "a Discord outage does not fail a successful renewal"
-# WHY this case exists at all: the exit status the unit relied on came from `|| true`, and
-# the cost of that was a broken sender nobody could hear about. The status is now the
-# script's own decision, so it is asserted rather than assumed.
+echo "a store with no certificate is reported, not posted"
 dir="$(sandbox)"
-printf 'DISCORD_WEBHOOK_URL=%s\n' "${SENTINEL_URL}" > "${dir}/.env"
+rm -rf "${dir}/config/letsencrypt/live/${LINEAGE}"
+out="$(run_notify "${dir}")"
+status=$?
+if [[ "${status}" -eq 0 ]] && ! curl_ran "${dir}"; then
+  ok "a missing certificate exits 0 without invoking curl"
+else
+  no "a missing certificate exits 0 without invoking curl (status ${status}: ${out})"
+fi
+if grep -qF 'nothing to announce' <<<"${out}"; then
+  ok "the empty store is stated rather than silent"
+else
+  no "the empty store is stated rather than silent (got: ${out})"
+fi
+
+echo "a Discord outage does not fail a successful renewal"
+dir="$(sandbox)"
+make_cert "${dir}" 3
 CURL_STUB_STATUS=1
 out="$(run_notify "${dir}")"
 status=$?
@@ -200,10 +324,6 @@ else
 fi
 
 echo "the unit carries nothing systemd would rewrite before bash runs it"
-# WHY each of the four: an escaped quote pair and an environment-variable reference are what
-# systemd rewrites before bash sees the line, a percent sign is a specifier it expands to
-# something else, and the payload flag is what a word-split body arrived as. A unit carrying
-# any of them is no longer the command it reads as.
 for pattern in '\"' '${' '%' '-d "{\"'; do
   if grep -qF -- "${pattern}" "${SERVICE_UNIT}"; then
     no "the service unit carries no $(printf '%q' "${pattern}")"

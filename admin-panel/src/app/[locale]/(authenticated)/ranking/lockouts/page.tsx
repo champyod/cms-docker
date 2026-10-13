@@ -1,8 +1,97 @@
 import { clearRankingLockout, getRankingLockouts } from '@/app/actions/rankingLockouts';
+import { Button } from '@/components/core/Button';
+import { Card } from '@/components/core/Card';
+import { EmptyState } from '@/components/core/EmptyState';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { Input } from '@/components/core/Input';
+import { Stack } from '@/components/core/Layout';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/core/Table';
+import { Text } from '@/components/core/Typography';
 import { getDictionary } from '@/i18n';
+import type { Dictionary } from '@/lib/dictionary';
+import type { RankingLockout } from '@/lib/ranking-lockouts';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const CARD_CLASS = 'space-y-4 rounded-2xl border border-border bg-card p-6';
+const LOCKOUT_SUBJECT_HEADER = 'Subject';
+const NO_LOCKOUTS_MESSAGE = 'No console lockouts are active.';
+
+type LockoutCopy = Dictionary['ranking']['lockouts'];
+
+interface LockoutRowProps {
+  readonly lockout: RankingLockout;
+  readonly canClear: boolean;
+  readonly reasonPlaceholder: string;
+  readonly clearLabel: string;
+}
+
+function LockoutRow({
+  lockout,
+  canClear,
+  reasonPlaceholder,
+  clearLabel,
+}: LockoutRowProps): React.JSX.Element {
+  return (
+    <TableRow>
+      <TableCell>{lockout.subject}</TableCell>
+      <TableCell className="text-muted-foreground">{lockout.count}</TableCell>
+      <TableCell className="text-muted-foreground">{lockout.retryAfterSeconds}s</TableCell>
+      {canClear ? (
+        <TableCell className="text-right">
+          <form action={clearRankingLockout} className="flex items-center justify-end gap-2">
+            <input type="hidden" name="key" value={lockout.key} />
+            <Input name="reason" required placeholder={reasonPlaceholder} className="w-40" />
+            <Button type="submit" variant="negative" size="sm">
+              {clearLabel}
+            </Button>
+          </form>
+        </TableCell>
+      ) : null}
+    </TableRow>
+  );
+}
+
+interface LockoutListProps {
+  readonly lockouts: readonly RankingLockout[];
+  readonly canClear: boolean;
+  readonly copy: LockoutCopy;
+  readonly reasonPlaceholder: string;
+}
+
+function LockoutList({ lockouts, canClear, copy, reasonPlaceholder }: LockoutListProps): React.JSX.Element {
+  if (lockouts.length === 0) {
+    return <EmptyState title={NO_LOCKOUTS_MESSAGE} />;
+  }
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>{LOCKOUT_SUBJECT_HEADER}</TableHead>
+          <TableHead>{copy.failures}</TableHead>
+          <TableHead>{copy.remaining}</TableHead>
+          {canClear ? <TableHead className="text-right">{copy.clear}</TableHead> : null}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {lockouts.map((lockout) => (
+          <LockoutRow
+            key={lockout.key}
+            lockout={lockout}
+            canClear={canClear}
+            reasonPlaceholder={reasonPlaceholder}
+            clearLabel={copy.clear}
+          />
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
 export default async function RankingLockoutsPage({
   params,
@@ -14,49 +103,29 @@ export default async function RankingLockoutsPage({
     authorizeRoutePage('ranking.lockouts'),
   ]);
   const copy = (await getDictionary(locale)).ranking;
-  // Guarded on the read key, not only the button: the action enforces it too, and an
-  // unguarded call would throw for a contest manager who may not see lockouts at all.
+  // The read key guards the call too: the action enforces it and an unguarded call throws.
   const canSeeLockouts = effective.has('lockout:read');
   const lockoutState = canSeeLockouts ? await getRankingLockouts() : null;
   const canClearLockouts = effective.has('lockout:unlock');
   return (
-    <div className="space-y-6">
+    <Stack gap={6}>
       {lockoutState === null ? null : (
-        <section className={CARD_CLASS}>
-          <h2 className="text-lg font-semibold text-foreground">{copy.lockouts.title}</h2>
+        <Card className="space-y-4">
+          <Text as="h2" variant="h3">
+            {copy.lockouts.title}
+          </Text>
           {lockoutState.ok ? (
-            <ul className="divide-y divide-border text-sm text-foreground">
-              {lockoutState.lockouts.map((lockout) => (
-                <li key={lockout.key} className="flex flex-wrap items-center gap-3 py-2">
-                  <span>{lockout.subject}</span>
-                  <span className="text-muted-foreground">
-                    {lockout.count} {copy.lockouts.failures}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {lockout.retryAfterSeconds}s {copy.lockouts.remaining}
-                  </span>
-                  {canClearLockouts ? (
-                    <form action={clearRankingLockout} className="ml-auto flex items-center gap-2">
-                      <input type="hidden" name="key" value={lockout.key} />
-                      <input
-                        name="reason"
-                        required
-                        placeholder={copy.overrides.reason}
-                        className="rounded-lg border border-border bg-muted/40 px-2 py-1 text-foreground"
-                      />
-                      <button type="submit" className="rounded-lg bg-amber-500/20 px-3 py-1 text-amber-300">
-                        {copy.lockouts.clear}
-                      </button>
-                    </form>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
+            <LockoutList
+              lockouts={lockoutState.lockouts}
+              canClear={canClearLockouts}
+              copy={copy.lockouts}
+              reasonPlaceholder={copy.overrides.reason}
+            />
           ) : (
-            <p className="text-sm text-amber-300">{lockoutState.error}</p>
+            <InlineAlert tone="warning">{lockoutState.error}</InlineAlert>
           )}
-        </section>
+        </Card>
       )}
-    </div>
+    </Stack>
   );
 }

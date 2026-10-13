@@ -77,6 +77,14 @@ var Config = new function () {
     self.get_public_config_url = function () {
         return "config";
     }
+
+    self.get_board_url = function () {
+        return "board";
+    }
+
+    self.get_team_board_url = function () {
+        return "board/teams";
+    }
 };
 
 var PublicConfig = {

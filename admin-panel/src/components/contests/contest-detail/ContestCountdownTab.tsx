@@ -2,14 +2,12 @@
 
 import { useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
 import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
   DEFAULT_COUNTDOWN_THRESHOLD,
   STAGE_LABELS,
   countdownPhaseWindowMs,
   countdownTarget,
-  formatZoneClockHHMM,
   formatZoneTime,
   resolveContestPhase,
   resolveCountdownStage,
@@ -18,6 +16,7 @@ import {
   type ContestTimingWindow,
 } from '@/lib/contest-countdown';
 import { ContestCountdownClock } from './ContestCountdownClock';
+import { CountdownZoneClock } from './CountdownZoneClock';
 import { CountdownToolbar } from './ContestCountdownControls';
 import { ContestAmbientLayer } from './ContestAmbientLayer';
 import { ContestEndedOrnament } from './ContestEndedOrnament';
@@ -122,11 +121,8 @@ export function ContestCountdownTab({
         />
       </div>
 
-      <div
-        className="relative z-10 text-center text-sm tabular-nums text-muted-foreground"
-        aria-label={`Current time ${formatZoneTime(now, timezone)}`}
-      >
-        {formatZoneClockHHMM(now, timezone)}
+      <div className="relative z-10">
+        <CountdownZoneClock now={now} timezone={timezone} />
       </div>
 
       <div className="countdown-clock-fill relative z-10 flex flex-1 flex-col justify-center gap-4 text-center">

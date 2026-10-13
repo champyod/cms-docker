@@ -28,6 +28,7 @@ cd "$REPO_ROOT"
 source "${SCRIPT_DIR}/__lib/common.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__domain_routes.sh"
+source "${SCRIPT_DIR}/__security_headers.sh"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__acme.sh"
 # shellcheck source=/dev/null
@@ -1171,9 +1172,8 @@ _render_nginx_config() {
   if [[ "${REDIS_RATE_LIMIT:-0}" == "1" ]]; then
     redis_upstream_block=$(cat <<'EOF'
 # Redis distributed rate limit — enabled (REDIS_RATE_LIMIT=1)
-# Docker DNS resolver for future OpenResty lua-resty-redis (request-time resolution; nginx starts even if redis absent)
-resolver 127.0.0.11 valid=10s ipv6=off;
-resolver_timeout 3s;
+# The DNS resolver redis would use is emitted once by the route table (${ROUTE_RESOLVER});
+# a second resolver here is a duplicate directive nginx rejects outright.
 # Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
 # upstream redis_rate_limit_backend { server __REDIS_BACKEND__ max_fails=2 fail_timeout=10s; }
 # Local limit_req remains as primary until OpenResty image with resty.redis is deployed
@@ -1182,9 +1182,8 @@ resolver_timeout 3s;
 # because no nginx request path reads Redis. The upstream above is commented out and
 # the token bucket below is commented out too, so the rendered config contains no
 # `access_by_lua*`, no `lua_shared_dict`, and no redis upstream at all: with
-# REDIS_RATE_LIMIT=1 the only redis-related directives emitted are the `resolver`
-# lines above. From nginx the container starts, passes `redis-cli ping`, and is never
-# contacted.
+# REDIS_RATE_LIMIT=1 no redis-related directive is emitted at all. From nginx the
+# container starts, passes `redis-cli ping`, and is never contacted.
 #
 # This answers the fail-open / fail-closed question for nginx: neither. Verified by
 # rendering with REDIS_RATE_LIMIT=1 and filtering comments out of the result — zero
@@ -1257,8 +1256,9 @@ EOF
   _acme_export_challenge_locations
 
   _domain_routes_build
+  _security_headers_build
 
-  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${PROXY_MAX_BODY_SIZE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${UPSTREAM_BLOCKS} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM}' < "$template" \
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${PROXY_MAX_BODY_SIZE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${ROUTE_RESOLVER} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM} ${PRIMARY_UPSTREAM_SET} ${SERVER_TOKENS_DIRECTIVE} ${OCSP_STAPLING_DIRECTIVES} ${CSP_HEADER} ${HSTS_HEADER} ${LOCATION_SECURITY_HEADERS}' < "$template" \
     | _filter_optional_blocks > "$output"
   log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
@@ -1311,7 +1311,7 @@ _validate_nginx_config() {
   if docker exec "$container" nginx -t 2>&1; then
     log_info "nginx config test passed in $container"
   else
-    log_warn "nginx config test failed in $container"
+    log_die "nginx config test FAILED in $container — the rendered config would not load, so the proxy must not be reloaded onto it. Fix the config and re-run." 1
   fi
 }
 

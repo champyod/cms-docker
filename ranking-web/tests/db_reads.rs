@@ -1,5 +1,5 @@
 use cms_ranking::db::Db;
-use cms_ranking::store::{load_appearance, load_ledger, StoreError};
+use cms_ranking::store::{load_appearance, load_board, load_ledger, StoreError};
 use sqlx::PgPool;
 
 /// These need a live PostgreSQL carrying the ranking tables. They are ignored by
@@ -20,11 +20,15 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 4] = [
+    const STATEMENTS: [&str; 8] = [
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
         "DELETE FROM ranking_tasks",
         "DELETE FROM ranking_settings",
+        "DELETE FROM ranking_overrides",
+        "DELETE FROM ranking_users",
+        "DELETE FROM ranking_teams",
+        "DELETE FROM ranking_contests",
     ];
     for statement in STATEMENTS {
         sqlx::query(statement).execute(pool).await?;
@@ -74,7 +78,7 @@ async fn seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 async fn the_ledger_is_assembled_from_the_tables() {
     let pool = pool();
     seed(&pool).await.expect("the seed applies");
-    let ledger = load_ledger(&pool)
+    let ledger = load_ledger(&pool, None)
         .await
         .expect("the seeded projection assembles");
     assert_eq!(ledger.skipped_subchanges(), 0);
@@ -108,7 +112,7 @@ async fn an_unknown_score_mode_refuses_instead_of_guessing() {
     .execute(&pool)
     .await
     .expect("the row inserts");
-    match load_ledger(&pool).await {
+    match load_ledger(&pool, None).await {
         Err(StoreError::Score(error)) => {
             assert!(error.to_string().contains("not_a_mode"));
         }
@@ -138,6 +142,61 @@ async fn appearance_is_absent_until_the_panel_writes_it() {
     assert_eq!(appearance.title.as_deref(), Some("Board"));
     assert_eq!(appearance.access_mode, "protected");
     assert!(!appearance.show_id_column());
+}
+
+/// The board is the ledger's override-shaped rows named from the projection: a rename
+/// reaches the reader, the row is ranked by the server, and a hidden row is gone.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn the_board_applies_overrides_and_names_the_rows() {
+    let pool = pool();
+    clear(&pool).await.expect("the tables are reachable");
+    sqlx::query(
+        "INSERT INTO ranking_users (key, f_name, l_name, team) VALUES \
+         ('u0', 'Grace', 'Hopper', NULL), ('u1', 'Alan', 'Turing', NULL)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the users insert");
+    sqlx::query(
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+         score_precision, extra_headers, display_order, score_mode) \
+         VALUES ('t0', 'Task', 'T0', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the task inserts");
+    sqlx::query(
+        "INSERT INTO ranking_submissions (key, \"user\", task, time) VALUES \
+         ('s0', 'u0', 't0', 1), ('s1', 'u1', 't0', 1)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the submissions insert");
+    sqlx::query(
+        "INSERT INTO ranking_subchanges (key, submission, time, score) VALUES \
+         ('c0', 's0', 2, 10.0), ('c1', 's1', 2, 30.0)",
+    )
+    .execute(&pool)
+    .await
+    .expect("the subchanges insert");
+    sqlx::query(
+        "INSERT INTO ranking_overrides (contest_id, target_kind, target_key, action, payload, reason) \
+         VALUES (1, 'user', 'u0', 'rename', '{\"value\": \"Ada Lovelace\"}'::jsonb, 'e2e'), \
+                (1, 'user', 'u1', 'hide', NULL, 'e2e')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the overrides insert");
+    let board = load_board(&pool, None).await.expect("the board assembles");
+    assert_eq!(board["u0"].f_name, "Ada");
+    assert_eq!(board["u0"].l_name, "Lovelace");
+    assert_eq!(board["u0"].score, 10.0);
+    assert_eq!(board["u0"].rank, 1);
+    assert!(
+        !board.contains_key("u1"),
+        "a hidden row leaves the board the page draws"
+    );
 }
 
 /// The trigger, not the writer, is what makes the board live; this is the only place

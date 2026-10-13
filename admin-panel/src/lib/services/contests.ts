@@ -3,6 +3,7 @@ import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorizatio
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
+import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
   buildContestInsertDefaults,
@@ -103,6 +104,7 @@ export async function addParticipant(contestId: number, userId: number): Promise
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
     `;
+    await resyncRankingUsers(contestId);
     await recordAudit({
       verb: 'participation:create',
       entity: 'participation',
@@ -120,6 +122,7 @@ export async function removeParticipant(participationId: number): Promise<Mutati
   const beforeRow = await prisma.participations.findUnique({ where: { id: participationId } });
   try {
     await prisma.participations.delete({ where: { id: participationId } });
+    if (beforeRow !== null) await resyncRankingUsers(beforeRow.contest_id);
     await recordAudit({
       verb: 'participation:delete',
       entity: 'participation',

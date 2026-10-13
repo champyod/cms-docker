@@ -4,16 +4,12 @@ import { revalidatePath } from 'next/cache';
 
 import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
+import { lockoutRedisUrl } from '@/lib/redis-lockouts';
 import { clearRankingLockouts, listRankingLockouts, type RankingLockout } from '@/lib/ranking-lockouts';
 
 export type RankingLockoutState =
   | { ok: true; lockouts: RankingLockout[] }
   | { ok: false; error: string };
-
-function redisUrl(): string | null {
-  const url = process.env.REDIS_URL?.trim();
-  return url === undefined || url === "" ? null : url;
-}
 
 /**
  * The counters live in Redis, so a missing URL is reported rather than shown as "no
@@ -21,7 +17,7 @@ function redisUrl(): string | null {
  */
 export async function getRankingLockouts(): Promise<RankingLockoutState> {
   await ensurePermission('lockout:read');
-  const url = redisUrl();
+  const url = lockoutRedisUrl();
   if (url === null) {
     return { ok: false, error: 'REDIS_URL is not configured' };
   }
@@ -34,7 +30,7 @@ export async function getRankingLockouts(): Promise<RankingLockoutState> {
 
 export async function clearRankingLockout(formData: FormData): Promise<void> {
   await ensurePermission('lockout:unlock');
-  const url = redisUrl();
+  const url = lockoutRedisUrl();
   if (url === null) {
     throw new Error('REDIS_URL is not configured');
   }

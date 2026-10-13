@@ -15,6 +15,18 @@
 # drop cannot be undone, so `drop` is intentionally absent. Use psql directly
 # if you really mean it.
 #
+# WHY single-user mode: CREATE DATABASE and ALTER DATABASE ... RENAME require a
+# superuser or CREATEDB, and this cluster has neither. The only bootstrap
+# superuser was cmsuser (the image runs `initdb --username=$POSTGRES_USER`), and
+# migration 20260912000500_owner_hardening demoted it to NOCREATEDB — so both
+# statements return `permission denied`. They therefore run in SINGLE-USER MODE,
+# where PostgreSQL grants implicit superuser powers to a session that presents no
+# credential at all. No role is left holding CREATEDB, nothing is stored that
+# could be stolen, and a compromised application credential still cannot create
+# or rename a database. The cost is that the cluster must be stopped for the
+# statement, so a rotation is downtime, and the container is restarted on every
+# exit path — including failure — so it is never left down.
+#
 # Credentials come from the existing environment/.env conventions (POSTGRES_*
 # exported by `make env` / scripts/__config_sync.sh, the same keys
 # scripts/__restore.sh reads); when they are absent this script falls back to
@@ -64,7 +76,8 @@ Usage:
   __db_admin.sh create <name> [--dry-run]
   __db_admin.sh rename <old> <new> [--dry-run]
 
-  create  CREATE DATABASE <name> if it does not already exist (idempotent).
+  create  CREATE DATABASE <name> OWNER <POSTGRES_USER> if it does not already
+          exist (idempotent).
   rename  ALTER DATABASE <old> RENAME TO <new> (no overwrite, no drop).
 
   --dry-run          print the exact SQL and exit 0 without touching docker.
@@ -72,10 +85,20 @@ Usage:
                         terminal you are otherwise asked to type "yes".
 
 Notes:
-  rename takes <old> out of service on its own: it blocks new connections,
-  drops the sessions the running services hold, renames, then re-opens the new
-  name — no service is stopped. renaming does NOT update .env or config.toml —
-  repoint the db_<profile> POSTGRES_DB yourself, then run: ./cms config sync
+  The statement runs in SINGLE-USER MODE: the cluster is stopped, the statement
+  is applied by a one-off container on the same volume, and cms-database is
+  started again — on success and on failure alike. That is a brief outage of
+  every service that uses this database; schedule it.
+  WHY: no role holds CREATEDB (the bootstrap superuser was demoted by
+  20260912000500_owner_hardening), and single-user mode grants implicit
+  superuser powers with no credential, so nothing has to be left standing.
+
+  OWNER is load-bearing: in a fresh PostgreSQL 15 database CREATE on schema
+  "public" is no longer granted to PUBLIC, so the application role must own the
+  database to build its schema.
+
+  Neither verb updates .env or config.toml — repoint the db_<profile>
+  POSTGRES_DB yourself, then run: ./cms config sync
 USAGE
 }
 
@@ -129,13 +152,76 @@ require_docker() {
     || log_die "container '${DB_CONTAINER}' exists but is not running — start it first: make core"
 }
 
-# psql inside the container. PGPASSWORD travels through `docker exec -e`, never
-# on the host argv. -v ON_ERROR_STOP=1 makes SQL failures exit non-zero instead
-# of being swallowed by psql's default continue-on-error.
-psql_exec() {
-  local db="$1" sql="$2"
-  docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
-    psql -U "${POSTGRES_USER:-cmsuser}" -d "$db" -v ON_ERROR_STOP=1 -c "$sql"
+# The image and PGDATA of the running container, read from the container itself so
+# neither the tag nor the path is hardcoded here.
+container_image() {
+  docker inspect -f '{{.Config.Image}}' "$DB_CONTAINER" 2>/dev/null
+}
+
+container_pgdata() {
+  local v
+  v="$(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$DB_CONTAINER" 2>/dev/null \
+    | awk -F= '$1=="PGDATA" {sub(/^[^=]*=/,""); print; exit}')"
+  printf '%s' "${v:-/var/lib/postgresql/data}"
+}
+
+# A role name is interpolated into CREATE DATABASE ... OWNER, so it passes the same
+# allowlist as a database name. The reserved-database check does not apply: `postgres`
+# is a legitimate role name, it is only not a legitimate database target.
+require_role_ident() {
+  local name="$1"
+  [[ "$name" =~ $DB_IDENT_RE ]] \
+    || log_die "invalid owner role '${name}' (from POSTGRES_USER) — must match ${DB_IDENT_RE}."
+}
+
+# Stops the cluster, applies one statement in single-user mode, starts it again.
+# Single-user mode is the only route to superuser on this cluster and it needs no
+# credential at all: PostgreSQL grants implicit superuser powers to the session.
+# SINGLE_USER_STOPPED makes restart_container idempotent, so the EXIT trap and the
+# success path cannot restart it twice.
+SINGLE_USER_STOPPED=0
+
+restart_container() {
+  [[ "$SINGLE_USER_STOPPED" -eq 1 ]] || return 0
+  SINGLE_USER_STOPPED=0
+  log_info "starting ${DB_CONTAINER} again…"
+  docker start "$DB_CONTAINER" >/dev/null 2>&1 \
+    || { log_warn "could not start ${DB_CONTAINER} — start it by hand: docker start ${DB_CONTAINER}"; return 1; }
+  local attempt
+  for attempt in $(seq 1 60); do
+    if docker exec "$DB_CONTAINER" pg_isready -q >/dev/null 2>&1; then
+      log_info "${DB_CONTAINER} is accepting connections again."
+      return 0
+    fi
+    sleep 0.5
+  done
+  log_warn "${DB_CONTAINER} is not reporting ready — check: docker logs ${DB_CONTAINER}"
+  return 1
+}
+
+single_user_psql() {
+  local sql="$1" image pgdata rc=0 restart_rc=0
+  image="$(container_image)"
+  [[ -n "$image" ]] || log_die "could not read the image of '${DB_CONTAINER}' — is it present?"
+  pgdata="$(container_pgdata)"
+
+  log_warn "stopping ${DB_CONTAINER} — single-user mode needs the cluster down."
+  docker stop "$DB_CONTAINER" >/dev/null \
+    || log_die "could not stop ${DB_CONTAINER} — nothing was changed."
+  SINGLE_USER_STOPPED=1
+
+  # --user postgres: the server refuses to run as root. --volumes-from reuses the exact
+  # volume the container uses, so no volume name is guessed. One statement per line:
+  # single-user mode treats the newline as the terminator. exit_on_error makes a failed
+  # statement fatal, so it cannot exit 0 and be reported as a success.
+  if ! printf '%s\n' "$sql" | docker run --rm -i \
+        --volumes-from "$DB_CONTAINER" --user postgres \
+        --entrypoint postgres "$image" --single -c exit_on_error=on -D "$pgdata" postgres; then
+    rc=1
+  fi
+
+  restart_container || restart_rc=1
+  [[ "$rc" -eq 0 && "$restart_rc" -eq 0 ]] || return 1
 }
 
 # Existence probe against the maintenance database. -tAc yields a bare 1/0.
@@ -145,26 +231,6 @@ db_exists() {
     psql -U "${POSTGRES_USER:-cmsuser}" -d "postgres" -tAc \
     "SELECT 1 FROM pg_database WHERE datname = '${name}'" 2>/dev/null || true)"
   [[ "$(printf '%s' "$out" | tr -d '[:space:]')" == "1" ]]
-}
-
-# Report the sessions blocking a rename. ALTER DATABASE ... RENAME fails while
-# any other session (including the pre-migration services' pools) is attached, so
-# naming the blockers turns "transaction is not allowed" into an action list.
-# Never fatal: the ALTER below is the authority, this only explains it.
-list_blocking_sessions() {
-  local old="$1" out rc=0
-  out="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
-    psql -U "${POSTGRES_USER:-cmsuser}" -d "postgres" -tAc \
-    "SELECT datname || ' | ' || usename || ' | ' || application_name || ' | ' || pid \
-       FROM pg_stat_activity WHERE datname = '${old}' AND pid <> pg_backend_pid()" 2>/dev/null)" || rc=$?
-  if [[ $rc -ne 0 ]]; then
-    log_warn "could not enumerate sessions connected to '${old}' (psql exited ${rc})."
-  elif [[ -z "$(printf '%s' "$out" | tr -d '[:space:]')" ]]; then
-    log_warn "no connected sessions visible for '${old}', but the rename still reports an open connection."
-  else
-    log_warn "sessions connected to '${old}' (datname | user | application | pid):"
-    printf '%s\n' "$out" | sed 's/^/    /' >&2
-  fi
 }
 
 # Same philosophy as scripts/__db_destroy_guard.sh: explicit authorisation is
@@ -198,31 +264,42 @@ confirm_admin() {
 }
 
 cmd_create() {
-  local name="$1" dry_run="$2" sql
+  local name="$1" dry_run="$2" owner sql
   require_ident "$name" "database name"
-  # CREATE DATABASE cannot run inside a transaction block, and `-c` sends one
-  # statement: exactly one CREATE DATABASE per successful probe.
-  sql="CREATE DATABASE \"${name}\";"
+  owner="${POSTGRES_USER:-cmsuser}"
 
   if [[ "$dry_run" == "1" ]]; then
+    echo "# Runs in single-user mode: ${DB_CONTAINER} is stopped, this statement is applied"
+    echo "# by a one-off container on the same volume, then ${DB_CONTAINER} is started again."
     echo "SELECT 1 FROM pg_database WHERE datname = '${name}';   # skip when it returns 1"
-    echo "$sql"
-    log_info "Dry run — no database was created."
+    echo "CREATE DATABASE \"${name}\" OWNER \"${owner}\";"
+    log_info "Dry run — no database was created. OWNER is POSTGRES_USER ('${owner}' unless .env says otherwise)."
     return 0
   fi
 
   require_docker
   load_db_env
   load_container_env
+  owner="${POSTGRES_USER:-$owner}"
+  require_role_ident "$owner"
+  # OWNER is load-bearing on PostgreSQL 15 and later: CREATE on schema "public" is no
+  # longer granted to PUBLIC in a fresh database, so the application role has to own
+  # it to build its schema. Single-user mode is a superuser context, so it may create
+  # a database owned by a different role.
+  sql="CREATE DATABASE \"${name}\" OWNER \"${owner}\";"
 
   if db_exists "$name"; then
     log_info "database \"${name}\" already exists — nothing to create."
     return 0
   fi
 
-  confirm_admin "create" "create database \"${name}\" in ${DB_CONTAINER}"
-  psql_exec "postgres" "$sql"
-  log_info "created \"${name}\" in ${DB_CONTAINER}."
+  confirm_admin "create" "stop ${DB_CONTAINER}, then create database \"${name}\" OWNER \"${owner}\" in single-user mode"
+  single_user_psql "$sql" \
+    || log_die "CREATE DATABASE failed — see the single-user output above. ${DB_CONTAINER} was started again."
+  if ! db_exists "$name"; then
+    log_die "CREATE DATABASE reported success but \"${name}\" is absent in ${DB_CONTAINER} — the statement did not take effect. ${DB_CONTAINER} was started again." 1
+  fi
+  log_info "created \"${name}\" owned by \"${owner}\" in ${DB_CONTAINER}."
   log_info "next: point the owning db_<profile> POSTGRES_DB at \"${name}\", then run: ./cms config sync"
 }
 
@@ -318,29 +395,24 @@ report_profiles_pointing_at() {
 }
 
 cmd_rename() {
-  local old="$1" new="$2" dry_run="$3"
+  local old="$1" new="$2" dry_run="$3" sql
   require_ident "$old" "source database name"
   require_ident "$new" "target database name"
   if [[ "$old" == "$new" ]]; then
     log_die "source and target name are both '${old}' — nothing to rename."
   fi
-
-  # Take <old> out of service, rename it, put it back. Blocking new connections
-  # first is what makes the terminate hold: a pool reconnecting between the two
-  # statements would block the rename again.
-  local sql_disable="ALTER DATABASE \"${old}\" WITH ALLOW_CONNECTIONS false;"
-  local sql_terminate="SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${old}' AND pid <> pg_backend_pid();"
-  local sql_rename="ALTER DATABASE \"${old}\" RENAME TO \"${new}\";"
-  local sql_enable="ALTER DATABASE \"${new}\" WITH ALLOW_CONNECTIONS true;"
-  local sql_reopen_old="ALTER DATABASE \"${old}\" WITH ALLOW_CONNECTIONS true;"
+  # In single-user mode no other session exists and the rename runs with implicit
+  # superuser powers, so the ALLOW_CONNECTIONS/terminate/re-open sequence the
+  # multi-session path needed is gone — and with it the state where a failure left
+  # the database refusing connections.
+  sql="ALTER DATABASE \"${old}\" RENAME TO \"${new}\";"
 
   if [[ "$dry_run" == "1" ]]; then
-    echo "# Each statement is sent on its own: ALTER DATABASE cannot run in a transaction block."
-    echo "# No service is stopped — the running pools are dropped and error until repointed."
-    echo "$sql_disable"
-    echo "$sql_terminate"
-    echo "$sql_rename"
-    echo "$sql_enable"
+    echo "# Runs in single-user mode: ${DB_CONTAINER} is stopped, this statement is applied"
+    echo "# by a one-off container on the same volume, then ${DB_CONTAINER} is started again."
+    echo "# No sessions exist there, so nothing is terminated and no connection state"
+    echo "# has to be undone. renaming does NOT update .env or config.toml."
+    echo "$sql"
     log_info "Dry run — no database was renamed."
     return 0
   fi
@@ -356,27 +428,13 @@ cmd_rename() {
     log_die "target database \"${new}\" already exists — refusing to rename onto it (no overwrite on Postgres)."
   fi
 
-  confirm_admin "rename" "rename database \"${old}\" to \"${new}\" in ${DB_CONTAINER}"
+  confirm_admin "rename" "stop ${DB_CONTAINER}, then rename database \"${old}\" to \"${new}\" in single-user mode"
+  single_user_psql "$sql" \
+    || log_die "ALTER DATABASE ... RENAME failed — see the single-user output above. ${DB_CONTAINER} was started again."
 
-  if ! psql_exec "postgres" "$sql_disable"; then
-    log_die "could not take \"${old}\" out of service — the database was NOT renamed."
+  if db_exists "$old" || ! db_exists "$new"; then
+    log_die "the rename reported success but \"${old}\" is still present or \"${new}\" is absent — the name was not moved. ${DB_CONTAINER} was started again." 1
   fi
-
-  # A failure past this point must re-open <old>, or it is left refusing connections.
-  if ! psql_exec "postgres" "$sql_terminate"; then
-    psql_exec "postgres" "$sql_reopen_old" >/dev/null 2>&1 || true
-    log_die "could not drop the sessions on \"${old}\" — it accepts connections again; the database was NOT renamed."
-  fi
-
-  if ! psql_exec "postgres" "$sql_rename"; then
-    psql_exec "postgres" "$sql_reopen_old" >/dev/null 2>&1 || true
-    log_warn "the rename failed — PostgreSQL reports the blocking sessions below."
-    list_blocking_sessions "$old"
-    log_die "\"${old}\" accepts connections again; the database was NOT renamed."
-  fi
-
-  psql_exec "postgres" "$sql_enable" \
-    || log_die "renamed to \"${new}\" but it still refuses connections — run: ${sql_enable}"
 
   log_info "renamed \"${old}\" to \"${new}\" in ${DB_CONTAINER}."
   report_profiles_pointing_at "$old" "$new"
@@ -416,6 +474,11 @@ main() {
       ;;
   esac
 }
+
+# The cluster is stopped for the length of one statement, so any exit — including a
+# `log_die` inside single_user_psql — must put it back. restart_container is a no-op
+# once SINGLE_USER_STOPPED is cleared, so this cannot start a container twice.
+trap 'restart_container >/dev/null 2>&1 || true' EXIT
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main "$@"

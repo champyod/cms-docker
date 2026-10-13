@@ -61,11 +61,10 @@ export function LanguagesTab({ formData, onToggleLanguage, onToggleFormat }: Lan
         <label className="block text-xs font-bold text-muted-foreground uppercase mb-4">Allowed Languages</label>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {PROGRAMMING_LANGUAGES.map((lang) => {
-            const displayName = lang.split(' / ')[0].trim();
             const active = (formData.allowed_languages ?? []).includes(lang);
             return (
               <button key={lang} type="button" onClick={() => onToggleLanguage(lang)} className={cn('truncate rounded-lg px-3 py-2 text-left text-xs font-medium transition-all', active ? 'bg-success/10 text-success ring-1 ring-success/50' : 'bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
-                {displayName}
+                {lang}
               </button>
             );
           })}

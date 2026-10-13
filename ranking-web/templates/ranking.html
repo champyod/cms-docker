@@ -28,10 +28,11 @@ if (!("EventSource" in window)) {
         <script src="TeamSearch.js"></script>
         <script src="Overview.js"></script>
         <script src="Scoreboard.js"></script>
+        <script src="Views.js"></script>
         <script src="Ranking.js"></script>
         <title>{{ title }}</title>
     {{ theme_block|safe }}</head>
-    <body class="teams-hidden">
+    <body class="teams-hidden" data-board-title="{{ title }}" data-board-anonymous="{{ anonymous }}">
         <div id="OuterFrame">
             <div id="LogoPanel">
                 <img src="logo" alt="Logo" />
@@ -59,6 +60,14 @@ if (!("EventSource" in window)) {
                 </div>
             </div>
         <div id="InnerFrame">
+            {% if !heading.is_empty() || !subtitle.is_empty() || !organisation.is_empty() %}
+            <div id="BoardHeading">
+                {% if !heading.is_empty() %}<h1 class="board-title">{{ heading }}</h1>{% endif %}
+                {% if !subtitle.is_empty() %}<p class="board-subtitle">{{ subtitle }}</p>{% endif %}
+                {% if !organisation.is_empty() %}<div class="board-organisation">{{ organisation }}</div>{% endif %}
+            </div>
+            {% endif %}
+            <div id="ViewsPanel"></div>
             <table id="Scoreboard">
                 <colgroup id="Scoreboard_cols"></colgroup>
                 <thead id="Scoreboard_head"></thead>

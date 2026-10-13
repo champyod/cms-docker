@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod board;
 pub mod config;
 pub mod db;
 pub mod entities;
@@ -10,6 +11,7 @@ pub mod json;
 pub mod login;
 pub mod overrides;
 pub mod public_config;
+mod score;
 pub mod score_events;
 pub mod scoring;
 pub mod store;
@@ -20,6 +22,8 @@ use std::sync::Arc;
 pub use config::{ConfigError, RankingConfig};
 pub use feed::Feed;
 pub use http::router;
+
+use store::{Standings, StoreError};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -32,6 +36,7 @@ struct AppStateInner {
     feed: Feed,
     counter: Option<auth::counter::Counter>,
     http: reqwest::Client,
+    standings: store::StandingsCache,
 }
 
 impl AppState {
@@ -47,6 +52,7 @@ impl AppState {
                 feed: Feed::new(),
                 counter,
                 http: reqwest::Client::new(),
+                standings: store::StandingsCache::default(),
             }),
         }
     }
@@ -75,6 +81,27 @@ impl AppState {
 
     pub fn http(&self) -> &reqwest::Client {
         &self.inner.http
+    }
+
+    /// The projection-derived board state, built at most once per data change and shared
+    /// by every board endpoint. A build holds the lock, so a burst of requests after a
+    /// write coalesces into one rebuild rather than one rebuild each.
+    pub async fn standings(&self) -> Result<Arc<Standings>, StoreError> {
+        let Some(db) = self.db() else {
+            return Err(StoreError::NoDatabase);
+        };
+        let contest_id = self.config().contest_id;
+        self.inner
+            .standings
+            .get_or_build(|| store::load_standings(db.pool(), contest_id))
+            .await
+    }
+
+    /// Drops the cached board, so the next read rebuilds it. The listener calls this on
+    /// every projection notification before it republishes, which is what makes the
+    /// cache correct rather than stale.
+    pub async fn invalidate_standings(&self) {
+        self.inner.standings.invalidate().await;
     }
 
     /// Reports whether the service can serve real ranking data. A missing database is
@@ -143,9 +170,9 @@ pub async fn run() -> Result<(), StartupError> {
     let state = AppState::new(db, config.clone(), counter);
     // The listener runs for the process lifetime: without it the board only changes
     // when a browser reloads, which is the behaviour Slice 4 exists to remove.
-    if let Some(database) = state.db().cloned() {
-        let feed = state.feed().clone();
-        tokio::spawn(async move { feed::listen(database, feed).await });
+    if state.db().is_some() {
+        let listener_state = state.clone();
+        tokio::spawn(async move { feed::listen(listener_state).await });
     }
     let listener = tokio::net::TcpListener::bind(config.bind)
         .await

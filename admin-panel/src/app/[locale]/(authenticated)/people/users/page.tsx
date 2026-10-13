@@ -75,7 +75,7 @@ export default async function PeopleUsersPage({ params, searchParams }: {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const usersLabel = labelForDescriptor(dict, usersRouteDescriptor());
-  const { result, search, contests, canReadContests, sort } = await loadUsersListPage(searchParams);
+  const { result, search, contests, canReadContests } = await loadUsersListPage(searchParams);
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.users', dict)}

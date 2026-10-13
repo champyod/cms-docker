@@ -56,6 +56,8 @@ readonly SCHEMA_MARKER_TABLE="contests"
 # migration ledger is exempt. docs/DB-ROTATION.md §7.6 names this as the check
 # that separates a migrated database from an empty one.
 readonly RLS_EXEMPT_TABLE="_prisma_migrations"
+# The repository owns the migration history; the applied ledger must cover it.
+readonly REPO_MIGRATIONS_DIR="admin-panel/prisma/migrations"
 # Defaults copied from the generated .env; the file's own values win.
 readonly DEFAULT_POSTGRES_USER="cmsuser"
 readonly DEFAULT_POSTGRES_DB="cmsdb"
@@ -215,13 +217,26 @@ run_step() {
 # migration ledger. An empty database satisfies nothing and fails both here.
 verify_migrated() {
   printf '\n== [verify] ==\n'
-  local marker out rc=0 compact
+  local marker out rc=0 compact repo_migrations applied
 
   marker="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
     psql -U "$DB_USER" -d "$DB_NAME" -tAc \
-    "SELECT to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL" 2>/dev/null || true)"
+    "SELECT (to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL)
+       AND ((SELECT count(*) FROM _prisma_migrations) > 0)" 2>/dev/null || true)"
   if [[ "$(printf '%s' "$marker" | tr -d '[:space:]')" != "t" ]]; then
-    log_die "\"${DB_NAME}\" has no \"${SCHEMA_MARKER_TABLE}\" table — the base schema was not applied. Check the cms-init output above." 1
+    log_die "\"${DB_NAME}\" is missing the base schema marker or has no applied Prisma migrations recorded in _prisma_migrations. Re-run 'make prisma-sync' and inspect its output." 1
+  fi
+
+  # The image bakes its own snapshot of prisma/migrations; an outdated copy applies
+  # fewer migrations than the repository holds and still passes the marker check.
+  if [[ -d "$REPO_MIGRATIONS_DIR" ]]; then
+    repo_migrations="$(find "$REPO_MIGRATIONS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
+    applied="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+      psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+      "SELECT count(*) FROM _prisma_migrations WHERE rolled_back_at IS NULL" 2>/dev/null | tr -d '[:space:]' || true)"
+    if [[ ! "$applied" =~ ^[0-9]+$ ]] || (( applied < repo_migrations )); then
+      log_die "\"${DB_NAME}\" records ${applied:-0} applied migration(s) but the repository holds ${repo_migrations} — Prisma ran some other history (an outdated copy), so the newest migrations never applied. Re-run 'make prisma-sync' with the repository mounted." 1
+    fi
   fi
 
   out="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \

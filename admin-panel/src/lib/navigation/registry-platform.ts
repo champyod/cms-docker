@@ -17,6 +17,7 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('infrastructure.containers', '/infrastructure/containers', { all: ['container:list', 'container:read'] }, ['/containers']),
   enabledPageRoute('infrastructure.resources', '/infrastructure/resources', { all: ['resource:list', 'resource:read'] }, ['/resources']),
   enabledPageRoute('ranking.board', '/ranking', { all: ['ranking:list', 'ranking:read'] }, ['/infrastructure/ranking']),
+  enabledPageRoute('ranking.users', '/ranking/users', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.settings', '/ranking/settings', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.appearance', '/ranking/appearance', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.lockouts', '/ranking/lockouts', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),

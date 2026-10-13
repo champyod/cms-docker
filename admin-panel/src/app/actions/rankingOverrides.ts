@@ -31,25 +31,28 @@ export interface RankingOverride {
   createdAt: string;
 }
 
-export async function getRankingOverrides(): Promise<RankingOverride[]> {
+/**
+ * The active overrides, optionally narrowed to one contest.
+ *
+ * WHY the filter is here and not in the caller: the table has always carried
+ * `contest_id` and the save path has always required it, but the reader ignored the
+ * column, so an operator picking a contest in the form saw it have no effect on what
+ * was listed. Narrowing in the query is what makes the selector mean something.
+ *
+ * WHY optional: the console-wide list on the settings page is deliberately every
+ * contest. Only a contest-scoped surface passes an id.
+ */
+export async function getRankingOverrides(contestId?: number): Promise<RankingOverride[]> {
   await ensurePermission('ranking:read');
   const rows = await prisma.ranking_overrides.findMany({
-    where: { active: true },
+    where: {
+      active: true,
+      ...(contestId === undefined ? {} : { contest_id: contestId }),
+    },
     orderBy: { id: 'desc' },
     take: 200,
   });
   return rows.map(toOverride);
-}
-
-export async function searchRankingTargets(query: string, targetKind: string) {
-  await ensurePermission('ranking:read');
-  const trimmed = query.trim();
-  if (targetKind === 'team') {
-    const teams = await prisma.ranking_teams.findMany({ where: { OR: [{ key: { contains: trimmed, mode: 'insensitive' } }, { name: { contains: trimmed, mode: 'insensitive' } }] }, orderBy: { key: 'asc' }, take: 8 });
-    return teams.map((team) => ({ key: team.key, label: team.name, detail: team.key }));
-  }
-  const users = await prisma.ranking_users.findMany({ where: { OR: [{ key: { contains: trimmed, mode: 'insensitive' } }, { f_name: { contains: trimmed, mode: 'insensitive' } }, { l_name: { contains: trimmed, mode: 'insensitive' } }] }, orderBy: { key: 'asc' }, take: 8 });
-  return users.map((user) => ({ key: user.key, label: user.key, detail: `${user.f_name} ${user.l_name}` }));
 }
 
 export async function saveRankingOverride(formData: FormData): Promise<void> {

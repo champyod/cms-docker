@@ -73,7 +73,7 @@ class TestGetSafeShard(unittest.TestCase):
         _set_up_async_config(restore=True)
         _set_up_ip_addresses(restore=True)
 
-    def test_success(self):
+    def test_it_returns_the_given_or_autodetected_shard(self):
         """Test success cases.
 
         This tests for both giving explicitly the shard number, and
@@ -84,17 +84,17 @@ class TestGetSafeShard(unittest.TestCase):
         self.assertEqual(get_safe_shard("Service", 1), 1)
         self.assertEqual(get_safe_shard("Service", None), 1)
 
-    def test_shard_not_present(self):
+    def test_it_rejects_a_shard_that_is_not_configured(self):
         """Test failure when the given shard is not in the config."""
         with self.assertRaises(ValueError):
             get_safe_shard("Service", 2)
 
-    def test_service_not_present(self):
+    def test_it_rejects_a_service_that_is_not_configured(self):
         """Test failure when the given service is not in the config."""
         with self.assertRaises(ValueError):
             get_safe_shard("ServiceNotPresent", 0)
 
-    def test_no_autodetect(self):
+    def test_it_rejects_an_autodetect_that_finds_no_shard(self):
         """Test failure when no shard is given and autodetect fails."""
         # Setting up non-matching IPs.
         _set_up_ip_addresses(["1.1.1.1", "0.0.0.2"])
@@ -114,7 +114,7 @@ class TestGetServiceAddress(unittest.TestCase):
         """Restore the mocks to ensure normal operations."""
         _set_up_async_config(restore=True)
 
-    def test_success(self):
+    def test_it_returns_the_address_of_the_service(self):
         """Test success cases."""
         self.assertEqual(
             get_service_address(ServiceCoord("Service", 0)),
@@ -123,12 +123,12 @@ class TestGetServiceAddress(unittest.TestCase):
             get_service_address(ServiceCoord("Service", 1)),
             Address("0.0.0.1", 1))
 
-    def test_shard_not_present(self):
+    def test_it_rejects_a_shard_that_is_not_configured(self):
         """Test failure when the shard of the service is invalid."""
         with self.assertRaises(KeyError):
             get_service_address(ServiceCoord("Service", 2))
 
-    def test_service_not_present(self):
+    def test_it_rejects_a_service_that_is_not_configured(self):
         """Test failure when the service is invalid."""
         with self.assertRaises(KeyError):
             get_service_address(ServiceCoord("ServiceNotPresent", 0))
@@ -146,7 +146,7 @@ class TestGetServiceShards(unittest.TestCase):
         """Restore the mocks to ensure normal operations."""
         _set_up_async_config(restore=True)
 
-    def test_success(self):
+    def test_it_counts_the_shards_or_returns_zero_when_absent(self):
         """Test success cases."""
         self.assertEqual(get_service_shards("Service"), 2)
         self.assertEqual(get_service_shards("ServiceNotPresent"), 0)
@@ -164,7 +164,7 @@ class TestRmtree(unittest.TestCase):
         """Remove temporary directory."""
         os.rmdir(self.tmpdir)
 
-    def test_success(self):
+    def test_it_removes_a_directory_tree_containing_symlinks(self):
         """Test success case."""
         testdir = os.path.join(self.tmpdir, "test")
         os.makedirs(os.path.join(testdir, "a"))
@@ -177,7 +177,7 @@ class TestRmtree(unittest.TestCase):
         self.assertFalse(os.path.exists(testdir))
         self.assertTrue(os.path.isdir(self.tmpdir))
 
-    def test_symlink(self):
+    def test_it_rejects_a_symlink_to_a_directory(self):
         """Test failure on a symlink."""
         link = os.path.join(self.tmpdir, "link")
         os.symlink(self.tmpdir, link)
@@ -187,7 +187,7 @@ class TestRmtree(unittest.TestCase):
 
         os.remove(link)
 
-    def test_missing(self):
+    def test_it_rejects_a_missing_directory(self):
         """Test failure on a missing directory."""
         with self.assertRaises(FileNotFoundError):
             rmtree(os.path.join(self.tmpdir, "missing"))

@@ -46,7 +46,7 @@ class TestPriorityQueue(unittest.TestCase):
     def tearDown(self):
         self.queue = PriorityQueue()
 
-    def test_success(self):
+    def test_it_pops_items_in_priority_and_timestamp_order(self):
         """Verify a simple success case.
 
         Push three items in the wrong order, and recover them.
@@ -73,7 +73,7 @@ class TestPriorityQueue(unittest.TestCase):
         with self.assertRaises(LookupError):
             self.queue.pop()
 
-    def test_set_priority(self):
+    def test_it_moves_an_item_that_changed_priority_to_the_top(self):
         """Test that priority get changed and item moved."""
         self.queue.push(self.item_a, PriorityQueue.PRIORITY_LOW)
         self.queue.push(self.item_b, PriorityQueue.PRIORITY_MEDIUM,
@@ -85,7 +85,7 @@ class TestPriorityQueue(unittest.TestCase):
         self.assertTrue(self.queue._verify())
         self.assertEqual(self.queue.top().item, self.item_a)
 
-    def test_pop_waiting(self):
+    def test_it_wakes_a_waiting_consumer_when_an_item_arrives(self):
         """Test that pop with waiting works.
 
         Spawn a greenlet waiting for the queue to become non-empty,
@@ -115,7 +115,7 @@ class TestPriorityQueue(unittest.TestCase):
         self.assertTrue(self.queue._verify())
         self.assertTrue(greenlet.successful())
 
-    def test_pop_multiple_waiting(self):
+    def test_it_feeds_each_waiting_consumer_once(self):
         """Test that pop with waiting works, even with several consumers.
 
         Spawn three greenlets waiting for the queue to become
@@ -160,7 +160,7 @@ class TestPriorityQueue(unittest.TestCase):
         self.assertEqual(terminated, 3)
         self.assertEqual(successful, 3)
 
-    def test_remove(self):
+    def test_it_removes_an_item_from_the_queue(self):
         """Test that items get removed."""
         self.queue.push(self.item_a, PriorityQueue.PRIORITY_LOW)
         self.assertFalse(self.item_b in self.queue)

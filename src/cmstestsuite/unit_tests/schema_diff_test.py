@@ -119,7 +119,6 @@ def compare_schemas(updated_schema: list[list[str]], fresh_schema: list[list[str
         if fresh_stmt[0] not in updated_map:
             errors += ["Fresh schema contains extra statement:", *fresh_stmt]
         # if it exists, then it was already checked earlier
-    # print('\n'.join(updated_map.keys()))
     return '\n'.join(errors)
 
 def run_pg_dump() -> str:
@@ -162,7 +161,7 @@ def get_fresh_schema():
     return run_pg_dump()
 
 class TestSchemaDiff(unittest.TestCase):
-    def test_schema_diff(self):
+    def test_the_upgraded_schema_matches_a_fresh_install(self):
         dirname = os.path.dirname(__file__)
         schema_file = os.path.join(dirname, "schema_v1.5.sql")
         updater_file = os.path.join(dirname, "../../cmscontrib/updaters/update_from_1.5.sql")

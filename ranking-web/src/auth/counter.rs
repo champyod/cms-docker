@@ -2,6 +2,20 @@ use std::time::Duration;
 
 use redis::AsyncCommands;
 
+use crate::config::CaptchaProvider;
+
+/// Provider health for the CAPTCHA chain, in the same Redis as the counters but
+/// under its own namespace, so an unreachable provider seen by one replica is
+/// skipped by every replica.
+const HEALTH_NAMESPACE: &str = "cms:captcha:health:";
+/// Unreachable checks within one cooldown before a provider is skipped.
+const HEALTH_FAILURES: u32 = 3;
+const HEALTH_COOLDOWN_SECONDS: u64 = 60;
+
+fn health_key(provider: CaptchaProvider) -> String {
+    format!("{HEALTH_NAMESPACE}{}", provider.wire_name())
+}
+
 /// The failure counters live in the Redis the stack already runs for rate limiting,
 /// so a restart does not forgive a brute-force run and the panel can read the same
 /// keys to list and clear them.
@@ -55,6 +69,30 @@ impl Counter {
         let mut connection = self.manager.clone();
         let _: () = connection.del(keys).await?;
         Ok(())
+    }
+
+    /// Whether a provider may still be selected. An unreadable store reads as
+    /// healthy: it must not remove a provider from the chain.
+    pub async fn provider_healthy(&self, provider: CaptchaProvider) -> bool {
+        match self.read(&health_key(provider)).await {
+            Ok(Some((count, _))) => count < HEALTH_FAILURES,
+            _ => true,
+        }
+    }
+
+    /// Count one unreachable check against a provider.
+    pub async fn record_provider_failure(&self, provider: CaptchaProvider) {
+        let _ = self
+            .record_failure(
+                &health_key(provider),
+                Duration::from_secs(HEALTH_COOLDOWN_SECONDS),
+            )
+            .await;
+    }
+
+    /// Forget a provider's failures after a check it answered.
+    pub async fn record_provider_success(&self, provider: CaptchaProvider) {
+        let _ = self.clear(&[health_key(provider)]).await;
     }
 }
 

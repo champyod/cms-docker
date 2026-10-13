@@ -153,6 +153,10 @@ docs_path = "/usr/share/cms/docs"
 # servers cannot drift apart.
 [contest_web_server.captcha]
 enabled = false
+# Provider priority list; each entry needs its own [contest_web_server.captcha.keys.<name>]
+# table with site_key and secret_key, so the challenge can fall through to the next
+# provider. Empty falls back to `provider` plus the scalar site_key/secret_key below.
+providers = []
 provider = "turnstile"
 site_key = ""
 secret_key = ""
@@ -190,6 +194,9 @@ num_proxies_used = 0
 # escalates once an account or address has failed that many times.
 [admin_web_server.captcha]
 enabled = false
+# Provider priority list; each entry needs its own [admin_web_server.captcha.keys.<name>]
+# table with site_key and secret_key. Empty falls back to `provider` and the scalars below.
+providers = []
 provider = "turnstile"
 site_key = ""
 secret_key = ""

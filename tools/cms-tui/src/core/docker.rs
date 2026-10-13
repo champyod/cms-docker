@@ -14,6 +14,19 @@ pub const ADDITIVE_STACKS: [&str; 2] = ["domain", "waf"];
 /// Deploy order used by `./cms deploy all` (core first, worker last).
 const DEPLOY_ALL_ORDER: [&str; 5] = ["core", "infra", "admin", "contest", "worker"];
 
+/// Alternate names that resolve to a stack's make targets. `monitor` is the
+/// profile's own name in `docker-compose.yml`; the make target that carries it
+/// is `infra`. Both spellings must reach the same targets rather than the bare
+/// profile name failing as unknown.
+const STACK_ALIASES: [(&str, &str); 1] = [("monitor", "infra")];
+
+fn canonical_stack(stack: &str) -> &str {
+    STACK_ALIASES
+        .iter()
+        .find(|(alias, _)| *alias == stack)
+        .map_or(stack, |(_, target)| target)
+}
+
 /// Represents a stack lifecycle failure that is not a process error.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum DockerError {
@@ -154,6 +167,7 @@ pub fn deploy_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack == "all" {
         return Ok(DEPLOY_ALL_ORDER.iter().map(ToString::to_string).collect());
     }
+    let stack = canonical_stack(stack);
     if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![stack.to_string()]);
     }
@@ -169,6 +183,7 @@ pub fn stop_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(ALL_STACKS.iter().map(|s| format!("{s}-stop")).collect());
     }
+    let stack = canonical_stack(stack);
     if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![format!("{stack}-stop")]);
     }
@@ -184,6 +199,7 @@ pub fn clean_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(ALL_STACKS.iter().map(|s| format!("{s}-clean")).collect());
     }
+    let stack = canonical_stack(stack);
     if ALL_STACKS.contains(&stack) || ADDITIVE_STACKS.contains(&stack) {
         return Ok(vec![format!("{stack}-clean")]);
     }
@@ -199,6 +215,7 @@ pub fn pull_targets(stack: &str) -> Result<Vec<String>, DockerError> {
     if stack.is_empty() || stack == "all" {
         return Ok(vec!["pull".to_string()]);
     }
+    let stack = canonical_stack(stack);
     if ALL_STACKS.contains(&stack) {
         return Ok(vec![format!("pull-{stack}")]);
     }
@@ -237,6 +254,16 @@ mod tests {
             Err(DockerError::UnknownStack("bogus".into()))
         );
         assert_eq!(deploy_targets(""), Err(DockerError::MissingStack));
+    }
+
+    #[test]
+    fn monitor_resolves_to_the_infra_targets() {
+        // `monitor` is the compose profile's own name; `infra` is the make target
+        // carrying it, so both spellings must reach the same targets.
+        assert_eq!(deploy_targets("monitor").unwrap(), vec!["infra"]);
+        assert_eq!(stop_targets("monitor").unwrap(), vec!["infra-stop"]);
+        assert_eq!(clean_targets("monitor").unwrap(), vec!["infra-clean"]);
+        assert_eq!(pull_targets("monitor").unwrap(), vec!["pull-infra"]);
     }
 
     #[test]

@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "scheduler": "bun run src/scheduler/main.ts",
+    "icons": "bun run scripts/generate-icons.mts",
     "test": "vitest run"
   },
   "dependencies": {

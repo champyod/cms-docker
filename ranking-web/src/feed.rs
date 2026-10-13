@@ -1,12 +1,12 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::broadcast;
 
-use crate::db::Db;
-use crate::score_events::{initial_board, publish_changes};
+use crate::score_events::{initial_snapshot, publish_changes, Snapshot};
 use crate::store::StoreError;
+use crate::AppState;
 
 /// How many events a client that reconnects with a last-event-id may replay. The
 /// Python server sized this from config.buffer_size, default 100.
@@ -157,47 +157,52 @@ pub fn entity_kind(table: &str) -> &str {
 /// into the score events the page expects. NOTIFY has no replay, and a live
 /// subscriber cannot ask for one, so a listener that reconnects stays silent: the
 /// only reinit the contract allows is a stale Last-Event-ID on a fresh connection.
-pub async fn listen(db: Db, feed: Feed) {
-    let mut board = initial_board(&db).await;
+pub async fn listen(state: AppState) {
+    let mut snapshot = initial_snapshot(&state).await;
     loop {
-        if let Err(error) = listen_once(&db, &feed, &mut board).await {
+        if let Err(error) = listen_once(&state, &mut snapshot).await {
             eprintln!("cms-ranking: event listener reconnecting: {error}");
         }
         tokio::time::sleep(std::time::Duration::from_secs(2)).await;
     }
 }
 
-async fn listen_once(
-    db: &Db,
-    feed: &Feed,
-    board: &mut BTreeMap<(String, String), f64>,
-) -> Result<(), StoreError> {
-    let mut listener = sqlx::postgres::PgListener::connect_with(db.pool()).await?;
+async fn listen_once(state: &AppState, snapshot: &mut Snapshot) -> Result<(), StoreError> {
+    let Some(pool) = state.db().map(|db| db.pool().clone()) else {
+        return Ok(());
+    };
+    let mut listener = sqlx::postgres::PgListener::connect_with(&pool).await?;
     listener.listen("ranking_entities").await?;
     listener.listen("ranking_control").await?;
     loop {
         let notification = listener.recv().await?;
-        if notification.channel() == "ranking_control" {
-            feed.publish("control", notification.payload().to_string());
-            continue;
-        }
-        let payload = notification.payload();
+        let payload = notification.payload().to_string();
         let mut parts = payload.splitn(3, ' ');
-        let table = parts.next().unwrap_or_default();
-        let operation = parts.next().unwrap_or_default();
-        let key = parts.next().unwrap_or_default();
+        let table = parts.next().unwrap_or_default().to_string();
+        let operation = parts.next().unwrap_or_default().to_string();
+        let key = parts.next().unwrap_or_default().to_string();
+
+        // Every projection change can move the board the page draws (names, teams,
+        // membership, scores, settings or overrides), so the shared build is dropped
+        // before anything is republished; the next read rebuilds it once.
+        state.invalidate_standings().await;
+
         // Python's DataWatcher registered score callbacks but no submission or
         // subchange callbacks, so those two tables move scores and publish nothing
         // else; an entity event there would name something the page cannot read.
-        if affects_scores(table) {
-            let next = publish_changes(db, feed, board).await?;
-            *board = next;
-        } else {
-            feed.publish(
-                entity_kind(table),
-                format!("{} {key}", operation_name(operation)),
+        // Settings and overrides come over ranking_control, the entity events the page
+        // switches on come over ranking_entities.
+        if notification.channel() == "ranking_control" {
+            state.feed().publish("control", payload);
+        } else if !affects_scores(&table) {
+            state.feed().publish(
+                entity_kind(&table),
+                format!("{} {key}", operation_name(&operation)),
             );
         }
+
+        let next = publish_changes(state, snapshot).await?;
+        *snapshot = next;
     }
 }
 

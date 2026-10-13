@@ -23,19 +23,18 @@ Read this document together with [`DB-MIGRATION-CUTOVER-RUNBOOK.md`](DB-MIGRATIO
 
 | Verb | Invocation | Effect |
 |---|---|---|
-| `create` | `./cms db create <name> [--dry-run]` | `CREATE DATABASE "<name>"` if it does not already exist. Idempotent: an existing database is reported and the command exits 0 without touching the server. |
-| `rename` | `./cms db rename <old> <new> [--dry-run]` | Takes `<old>` out of service, drops the sessions attached to it, runs `ALTER DATABASE "<old>" RENAME TO "<new>"`, and re-opens the new name. |
+| `create` | `./cms db create <name> [--dry-run]` | `CREATE DATABASE "<name>" OWNER "<POSTGRES_USER>"` if it does not already exist. Idempotent: an existing database is reported and the command exits 0 without touching the server. |
+| `rename` | `./cms db rename <old> <new> [--dry-run]` | `ALTER DATABASE "<old>" RENAME TO "<new>"`. |
 
-`create` issues exactly one statement. It is not a provisioning command and it is not paired with a migration command.
-
-`rename` runs four statements in order, each on its own because `ALTER DATABASE` cannot run inside a transaction block:
+Both verbs issue exactly one statement, and neither is a provisioning command or paired with a migration command. Both apply that statement in **single-user mode**: `cms-database` is stopped, a one-off container on the same volume applies it with implicit superuser powers, and `cms-database` is started again.
 
 ```
-ALTER DATABASE "<old>" WITH ALLOW_CONNECTIONS false;
-SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '<old>' AND pid <> pg_backend_pid();
 ALTER DATABASE "<old>" RENAME TO "<new>";
-ALTER DATABASE "<new>" WITH ALLOW_CONNECTIONS true;
 ```
+
+**WHY single-user mode.** `CREATE DATABASE` requires a superuser or `CREATEDB`; `ALTER DATABASE ... RENAME` requires the database owner or a superuser, and a non-superuser owner must additionally hold `CREATEDB`. Neither exists on this cluster: the only bootstrap superuser is `cmsuser` — the image runs `initdb --username=$POSTGRES_USER` — and migration `20260912000500_owner_hardening` demoted it to `NOCREATEDB`. `postgres --single` grants implicit superuser powers to a session that presents no credential, so both verbs work with no role left holding `CREATEDB` and nothing stored that could be stolen.
+
+`OWNER` on `create` is load-bearing: in a fresh PostgreSQL 15 database `CREATE` on schema `public` is no longer granted to `PUBLIC`, so the application role must own the database to build its schema.
 
 Database names must match `^[a-z_][a-z0-9_]{0,50}$` — lower-case letters, digits and underscore, no leading digit, 51 characters maximum. The allowlist is stricter than the server because the name is interpolated into SQL and into a database URI. `template0`, `template1`, `postgres` and `all` are rejected: renaming onto any of them would break the cluster.
 
@@ -50,7 +49,8 @@ bash scripts/__db_admin.sh --help
 - **Neither verb deletes data.** `create` cannot overwrite an existing database — PostgreSQL has no `CREATE OR REPLACE DATABASE`, and the script checks existence before running. `rename` only moves a name; it does not touch rows, roles or schemas.
 - **There is no drop verb.** `scripts/__db_admin.sh` does not implement `drop`. A drop cannot be undone and PostgreSQL has no `DROP DATABASE IF EXISTS`, so the capability is absent by design. Use `psql` directly if a drop is genuinely intended.
 - **The authorisation gate is deliberately lighter than the destroy gate** that `db clean` / `db reset` use, which requires `CONFIRM_DB_DESTROY` and deletes every volume in the compose project. `CONFIRM_DB_ADMIN` guards a name change, not a deletion.
-- **`rename` is not online-transparent.** It drops every session attached to the source database. No service is stopped, so the running connection pools are killed and error until the repoint in §5.3 and a redeploy. Treat the rename window as downtime.
+- **Both verbs are downtime.** The cluster is stopped for the length of the statement, so every service using this database loses its connection. `rename` no longer drops sessions one at a time — single-user mode has none to drop, and no `ALLOW_CONNECTIONS` state is left to undo — but `create` now stops the cluster as well, which the previous path did not. Schedule the window.
+- **The container is always started again.** `restart_container` runs from an `EXIT` trap, so a failed statement, a refusal or a `log_die` still leaves `cms-database` running and accepting connections. A failure cannot strand the database down.
 - **A rename refuses to overwrite.** If the target name already exists the command exits 1 with `target database "<new>" already exists — refusing to rename onto it`.
 
 ## 3. Authorisation and dry run
@@ -268,7 +268,7 @@ Run from the repository root. Substitute your own names for `cmsdb` / `cmsdb_arc
    ```bash
    docker exec cms-database psql -U cmsuser -d cmsdb_archive -tAc "SELECT 1;"
    ```
-   Expected: `1`. A connection refusal means the final `ALTER DATABASE ... ALLOW_CONNECTIONS true` did not run; the error names the statement to re-issue.
+   Expected: `1`. A refusal means `cms-database` did not come back up after the single-user step — check `docker logs cms-database`, then `docker start cms-database`.
 
 5. **The schema and the migration history are present** — for a database that went through §6.4, or for the renamed archive that already carried it.
    ```bash
@@ -299,10 +299,11 @@ Run from the repository root. Substitute your own names for `cmsdb` / `cmsdb_arc
 - **`'<name>' is not a database — 'template0', 'template1', 'postgres' and 'all' are not valid targets`** — reserved name.
 - **`source database "<old>" does not exist`** — the name is wrong, or it was already renamed. `./cms db use <profile>` and the `pg_database` query from §7.1 show what exists.
 - **`target database "<new>" already exists — refusing to rename onto it`** — choose another target name. Postgres cannot rename onto an existing database.
-- **`could not take "<old>" out of service — the database was NOT renamed`** — the first `ALTER DATABASE` failed. Nothing changed. Check container health and permissions.
-- **`could not drop the sessions on "<old>" — it accepts connections again`** — the script re-opened the source database before exiting. Nothing was renamed. Find the session holder with `docker logs cms-database -f`.
-- **`"<old>" accepts connections again; the database was NOT renamed`** — the `ALTER ... RENAME` itself failed, and the script has already restored connections to the source. PostgreSQL refuses a rename while any session is attached. The script prints the blocking sessions from `pg_stat_activity` as `datname | user | application | pid`; terminate those and re-run.
-- **`renamed to "<new>" but it still refuses connections — run: ALTER DATABASE "<new>" WITH ALLOW_CONNECTIONS true`** — the rename succeeded and the re-open did not. **The data is intact and renamed**; this is the one failure after which the name has changed. Issue the printed statement inside `cms-database` to finish.
+- **`could not stop cms-database — nothing was changed.`** — the container could not be stopped, so the statement never ran. Nothing changed.
+- **`ALTER DATABASE ... RENAME failed — see the single-user output above. cms-database was started again.`** — the statement failed inside single-user mode; the output above carries PostgreSQL's own error. The container has already been restarted, and the name is unchanged: the statement is atomic and no connection state was altered on the way.
+- **`CREATE DATABASE failed — see the single-user output above. cms-database was started again.`** — the same, for `create`. Nothing was created unless the output above shows otherwise.
+- **`could not read the image of 'cms-database' — is it present?`** — `docker inspect` could not report the image, so the one-off container cannot be built. Nothing was changed and the cluster was never stopped.
+- **`cms-database is not reporting ready — check: docker logs cms-database`** — the cluster restarted but did not answer `pg_isready` within 30s. The data is intact; `docker logs cms-database` shows why it is slow or refusing.
 - **`config.toml is missing or unreadable`** in the post-rename profile report — the script cannot enumerate the stale profiles. Use `grep -n 'POSTGRES_DB' config.toml` and complete §5.3 by hand.
 - **Services fail to connect after a completed rename** — the repoint was skipped or `config sync` did not run. Verify §7.2 and §7.3, re-run `./cms config sync`, then `./cms deploy core`.
 

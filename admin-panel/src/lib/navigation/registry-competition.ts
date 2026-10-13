@@ -11,13 +11,18 @@ export const COMPETITION_ROUTES: readonly RouteDescriptor[] = [
     '/contests/[id]',
     'contests.list',
     { all: ['contest:read'] },
-    ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.settings', 'contests.tabs.countdown'],
+    ['contests.tabs.overview', 'contests.tabs.tasks', 'contests.tabs.participants', 'contests.tabs.communications', 'contests.tabs.ranking', 'contests.tabs.settings', 'contests.tabs.countdown'],
     'contests.tabs.overview',
   ), enabled: true },
   { ...tabRoute('contests.tabs.overview', '/contests/[id]/overview', 'contests.record', { all: ['contest:read'] }), enabled: true },
   { ...tabRoute('contests.tabs.tasks', '/contests/[id]/tasks', 'contests.record', { all: ['contest:read', 'task:read'] }), enabled: true },
   { ...tabRoute('contests.tabs.participants', '/contests/[id]/participants', 'contests.record', { all: ['contest:read', 'participation:read', 'user:read'] }), enabled: true },
-  { ...tabRoute('contests.tabs.communications', '/contests/[id]/communications', 'contests.record', { all: ['contest:read', 'announcement:read', 'question:read', 'ranking:read'] }), enabled: true },
+  { ...tabRoute('contests.tabs.communications', '/contests/[id]/communications', 'contests.record', { all: ['contest:read', 'announcement:read', 'question:read'] }), enabled: true },
+  // Why contest:read plus ranking:list and not ranking:read alone: the tab is a
+  // contest surface, so it needs the contest the reader already opened, and the board
+  // it renders is the one getRanking serves under ranking:list. Requiring both keeps a
+  // reader who may see the contest but not the board from reaching an empty tab.
+  { ...tabRoute('contests.tabs.ranking', '/contests/[id]/ranking', 'contests.record', { all: ['contest:read', 'ranking:list'] }), enabled: true },
   { ...tabRoute('contests.tabs.settings', '/contests/[id]/settings', 'contests.record', { all: ['contest:read'] }), enabled: true },
   { ...tabRoute('contests.tabs.countdown', '/contests/[id]/countdown', 'contests.record', { all: ['contest:read'] }), enabled: true },
   directPageRoute('tasks.list', '/tasks', { all: ['task:list'] }, []),

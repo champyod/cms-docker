@@ -60,7 +60,8 @@ fi
 # check then passes locally and fails wherever the locale differs from the author's (a real CI failure).
 tmp_a=$(mktemp)
 tmp_b=$(mktemp)
-trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b"' EXIT
+tmp_pol=$(mktemp)
+trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b" "$tmp_pol"' EXIT
 grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
 grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
 cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
@@ -68,6 +69,14 @@ cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
 # WHY two-direction comm: missing = fail-open security hole (model has no RLS), extra = drift (RLS for a dropped table).
 missing=$(LC_ALL=C comm -23 "$tmp_schema" "$tmp_mig" || true)
 extra=$(LC_ALL=C comm -13 "$tmp_schema" "$tmp_mig" || true)
+
+# WHY a policy check on top of the enable check: ENABLE+FORCE without any policy makes the
+# table return zero rows to the owner and reject its inserts — a silent failure the
+# enable-only check cannot see.
+grep -hE 'CREATE POLICY [A-Za-z_][A-Za-z0-9_]* ON public\.' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null \
+  | sed -n 's/.*CREATE POLICY [A-Za-z_][A-Za-z0-9_]* ON public\.\([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' \
+  | LC_ALL=C sort -u > "$tmp_pol" || : > "$tmp_pol"
+no_policy=$(LC_ALL=C comm -23 "$tmp_b" "$tmp_pol" || true)
 
 rc=0
 # WHY also verify generator coverage: every model must be covered somewhere in migration history.
@@ -94,6 +103,15 @@ if [ -n "$extra" ]; then
   fi
   printf '%s\n' "$extra" | while IFS= read -r e; do
     [ -n "$e" ] && printf '  extra RLS for unknown table: %s\n' "$e" >&2
+  done
+  rc=1
+fi
+if [ -n "$no_policy" ]; then
+  if [ "$stale" -eq 0 ] && [ -z "$missing" ] && [ -z "$extra" ]; then
+    printf 'RLS coverage FAILED:\n' >&2
+  fi
+  printf '%s\n' "$no_policy" | while IFS= read -r t; do
+    [ -n "$t" ] && printf '  FORCE RLS without a policy: %s\n' "$t" >&2
   done
   rc=1
 fi

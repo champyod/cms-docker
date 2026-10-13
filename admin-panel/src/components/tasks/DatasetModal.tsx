@@ -204,7 +204,7 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
           confirmDisabled={loading}
         />
       }
-      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-3xl"
+      className="flex w-full flex-col gap-0 p-0 sm:max-h-[70vh] sm:max-w-3xl"
     >
       <ResponsiveModalShell
         sidebarWidthClass="sm:w-48"
@@ -218,21 +218,28 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
       >
         <div className="p-6">
           {activeTab === 'general' && (
-            <DatasetGeneralForm
-              formData={formData}
-              testcases={dataset?.testcases?.map((testcase) => testcase.codename) ?? []}
-              onChange={setFormData}
-              onSubmit={handleSubmit}
-              error={error}
-              scoreParamsError={scoreParamsError}
-              taskParamsError={taskParamsError}
-              onScoreParamsChange={(scoreParams) => setFormData((prev) => ({ ...prev, score_type_parameters: scoreParams }))}
-              onScoreParamsError={setScoreParamsError}
-              onTaskParamsTextChange={(text, paramsError) => {
-                setFormData((prev) => ({ ...prev, task_type_parameters_text: text }));
-                setTaskParamsError(paramsError);
-              }}
-            />
+            <>
+              {!dataset && (
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Managers are uploaded to a saved dataset, so save this one first, then reopen the Managers tab to add them.
+                </p>
+              )}
+              <DatasetGeneralForm
+                formData={formData}
+                testcases={dataset?.testcases?.map((testcase) => testcase.codename) ?? []}
+                onChange={setFormData}
+                onSubmit={handleSubmit}
+                error={error}
+                scoreParamsError={scoreParamsError}
+                taskParamsError={taskParamsError}
+                onScoreParamsChange={(scoreParams) => setFormData((prev) => ({ ...prev, score_type_parameters: scoreParams }))}
+                onScoreParamsError={setScoreParamsError}
+                onTaskParamsTextChange={(text, paramsError) => {
+                  setFormData((prev) => ({ ...prev, task_type_parameters_text: text }));
+                  setTaskParamsError(paramsError);
+                }}
+              />
+            </>
           )}
           {activeTab === 'managers' && dataset && (
             <DatasetManagersTab datasetId={dataset.id} managers={managers} loadingManagers={loadingManagers} onReload={loadManagers} permissionKeys={permissionKeys} />

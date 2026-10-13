@@ -197,8 +197,9 @@
   },
   "ranking": {
     "board": {
-      "title": "Public scoreboard",
-      "hint": "What a visitor sees first on the ranking page, and the logo it is served with."
+      "title": "Scoreboard",
+      "hint": "What a visitor sees first on the ranking page, and the logo it is served with.",
+      "hintProtected": "Sign-in required before a visitor sees this board. What they see first once signed in is the identity and logo below."
     },
     "appearance": {
       "title": "Scoreboard appearance",
@@ -209,6 +210,7 @@
       "accessPublic": "Public",
       "accessProtected": "Sign-in required",
       "showIdColumn": "Show the id column",
+      "anonymousField": "Start the board anonymous",
       "footerField": "Footer text",
       "creditsField": "Credits text",
       "save": "Save appearance"
@@ -217,8 +219,13 @@
       "title": "Manual ranking overrides",
       "hint": "A row here changes what the scoreboard shows without touching the contest data. Ending one keeps its history.",
       "contestId": "Contest id",
+      "chooseContest": "Select a contest",
       "target": "Target",
+      "targetUser": "user",
+      "targetTeam": "team",
+      "targetRanking": "ranking",
       "targetKey": "Target key",
+      "chooseTargetKey": "Select a target",
       "action": "Action",
       "actionHide": "hide the row",
       "actionGuest": "add a guest row",
@@ -242,6 +249,26 @@
       "failures": "failures",
       "remaining": "left",
       "clear": "Clear"
+    },
+    "users": {
+      "title": "Ranking users",
+      "hint": "Every participation in the contest, including the rows the public board hides. Open a row for its scores and overrides.",
+      "name": "User",
+      "team": "Team",
+      "total": "Total",
+      "rank": "Rank",
+      "hidden": "Hidden",
+      "hiddenYes": "hidden",
+      "hiddenNo": "visible",
+      "empty": "No ranking users yet.",
+      "identity": "Identity",
+      "username": "Username",
+      "taskScores": "Task scores",
+      "task": "Task",
+      "score": "Score",
+      "scoresEmpty": "No scored submissions yet.",
+      "activeOverrides": "Active overrides",
+      "overridesEmpty": "No overrides are active on this user."
     }
   },
   "settings": {
@@ -580,7 +607,8 @@
       "evaluation": "Evaluation could not be loaded",
       "userRecord": "This user could not be loaded",
       "teamRecord": "This team could not be loaded",
-      "submissionRecord": "This submission could not be loaded"
+      "submissionRecord": "This submission could not be loaded",
+      "generic": "This page could not be loaded"
     }
   },
   "rowActions": {
@@ -609,6 +637,7 @@
         "tasks": { "label": "Tasks" },
         "participants": { "label": "Participants" },
         "communications": { "label": "Communications" },
+        "ranking": { "label": "Ranking" },
         "settings": { "label": "Settings" },
         "countdown": { "label": "Countdown" }
       }
@@ -624,6 +653,7 @@
     },
     "ranking": {
       "board": { "label": "Board", "description": "Review what the public scoreboard opens with and set the logo it carries." },
+      "users": { "label": "Users", "description": "Every ranking user, including hidden participations, with their scores and overrides." },
       "settings": { "label": "Settings", "description": "Apply manual ranking overrides without touching the contest data." },
       "appearance": { "label": "Appearance", "description": "Set the scoreboard title, subtitle, access mode and footer text." },
       "lockouts": { "label": "Lockouts", "description": "Review and clear ranking console lockouts." },

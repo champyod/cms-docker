@@ -43,19 +43,19 @@ class TestTruncator(unittest.TestCase):
             buf = truncator.read(read_chunk_size)
         self.assertEqual(read_len, min(trunc_len, orig_len))
 
-    def test_long_file(self):
+    def test_it_truncates_a_file_longer_than_the_limit(self):
         """Read a file longer than requested truncation length.
 
         """
         self.perform_truncator_test(100, 40, 1000)
 
-    def test_short_file(self):
+    def test_it_keeps_a_file_shorter_than_the_limit(self):
         """Read a file shorter than requested truncation length.
 
         """
         self.perform_truncator_test(100, 400, 1000)
 
-    def test_chunked_file(self):
+    def test_it_truncates_across_small_reads(self):
         """Read a file in little chunks.
 
         """

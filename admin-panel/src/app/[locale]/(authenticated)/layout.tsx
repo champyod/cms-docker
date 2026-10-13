@@ -30,22 +30,26 @@ export default async function AuthenticatedLayout({
     redirect(`/${locale}/auth/login`);
   }
 
+  // Why: once the session is known these four are independent — status, the sidebar
+  // cookie, the dictionary and the fresh permissions — so they resolve in one
+  // round-trip instead of a serial chain per request.
+  const [sessionStatus, cookieStore, dict, freshPermissions] = await Promise.all([
+    readSessionStatus(session.userId),
+    cookies(),
+    getDictionary(locale),
+    getFreshPermissions(session.userId),
+  ]);
+
   // Why: liveness is read-only here because rendering cannot write cookies; the session
   // slide and the disabled-admin clear happen on the proxy response. Anything but active
   // means timeout or revoked, so redirect once.
-  const sessionStatus = await readSessionStatus(session.userId);
   if (sessionStatus.state !== "active") {
     redirect(`/${locale}/auth/login`);
   }
 
-  const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
-
-  // Why: loaded here rather than in each page so the dialog and toast copy every client component
-  // renders shares one source, and the Thai locale reaches strings the user must act on.
-  const dict = await getDictionary(locale);
+  const sidebarExpanded = cookieStore.get(SIDEBAR_STORAGE_KEY)?.value !== '0';
 
   // Why: Sidebar must reflect current database permissions not stale token claims
-  const freshPermissions = await getFreshPermissions(session.userId);
   const permissionKeys: readonly string[] = freshPermissions ? Array.from(freshPermissions) : [];
 
   return (

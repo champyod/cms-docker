@@ -1,34 +1,32 @@
 import { getCaptchaEnv, getCaptchaPublicConfig, isCaptchaConfigured } from '@/lib/captcha';
-import { loginBuckets } from '@/lib/auth-rate-limit';
+import { buildIpBucketKey, bucketAtOrAbove } from '@/lib/auth-rate-limit';
 import type { LoginActionState } from '@/app/actions/auth';
 
 export function getCaptchaThreshold(): number {
   return getCaptchaEnv().threshold;
 }
 
-export function shouldRequireCaptcha(bucketKey: string): boolean {
+export async function shouldRequireCaptcha(bucketKey: string): Promise<boolean> {
   if (!isCaptchaConfigured()) return false;
-  const bucket = loginBuckets.get(bucketKey);
-  if (!bucket) return false;
-  if (Date.now() >= bucket.resetAt) return false;
-  return bucket.count >= getCaptchaThreshold();
+  return bucketAtOrAbove(bucketKey, getCaptchaThreshold());
 }
 
-export function isCaptchaRequiredForIp(ip: string): boolean {
+export async function isCaptchaRequiredForIp(ip: string): Promise<boolean> {
   if (!isCaptchaConfigured()) return false;
-  const threshold = getCaptchaThreshold();
-  for (const [key, bucket] of loginBuckets) {
-    if (!key.endsWith(`|${ip}`)) continue;
-    if (Date.now() >= bucket.resetAt) continue;
-    if (bucket.count >= threshold) return true;
-  }
-  return false;
+  // The per-address bucket is what names an address with no username yet; a
+  // loopback address has none, so its challenge comes from the posted username.
+  return bucketAtOrAbove(buildIpBucketKey(ip), getCaptchaThreshold());
 }
 
 export function buildCaptchaRequiredState(): Pick<LoginActionState, 'captchaRequired' | 'captchaProvider' | 'captchaSiteKey'> {
   const pub = getCaptchaPublicConfig();
   if (!pub.enabled) return { captchaRequired: true };
   return { captchaRequired: true, captchaProvider: pub.provider, captchaSiteKey: pub.siteKey };
+}
+
+export function extractCaptchaProvider(formData: FormData): string {
+  const value = formData.get('captchaProvider');
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
 }
 
 export function extractCaptchaToken(formData: FormData): string {

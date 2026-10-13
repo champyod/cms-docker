@@ -3,7 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
-import { readListSort, type ListSortInput } from '@/lib/list-sorting';
+import { type ListSortInput } from '@/lib/list-sorting';
 import { userSortOrderBy } from '@/lib/user-sorting';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import * as peopleReadModels from '@/lib/people-read-models';

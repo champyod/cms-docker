@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
@@ -9,13 +9,15 @@ import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
 import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
+import type { SurfaceStatus } from '@/components/core/SurfaceState';
 import type { DeployPhase } from '@/hooks/useDeployContest';
 import { CONTEST_SETTINGS_KEYS } from '@/components/deployments/deploymentConfig';
 import type { ContestOption } from '@/components/deployments/ActiveContestCard';
 import type { Dispatch, SetStateAction } from 'react';
 
 export interface ContestDeploymentSnapshot {
-  readonly loading: boolean;
+  readonly status: SurfaceStatus;
   readonly availableContests: ContestOption[];
   readonly activeContestId: number | null;
   readonly activeContestName: string | null;
@@ -42,8 +44,8 @@ export function useContestDeploymentSnapshot({
   setSaving,
   deployPhase,
 }: ContestDeploymentSnapshotOptions): ContestDeploymentSnapshot {
-  const toastCopy = useDictionary().toasts.deploySettings;
-  const [loading, setLoading] = useState(true);
+  const dict = useDictionary();
+  const toastCopy = dict.toasts.deploySettings;
   const [availableContests, setAvailableContests] = useState<ContestOption[]>([]);
   const [activeContestId, setActiveContestId] = useState<number | null>(null);
   const [activeContestName, setActiveContestName] = useState<string | null>(null);
@@ -54,9 +56,8 @@ export function useContestDeploymentSnapshot({
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
 
   const applyContestSnapshot = useCallback((settings: Record<string, string>, activeId: number | null): number | null => {
-    // Both the active id and the settings below come from config.toml, the file
-    // `./cms config sync` regenerates .env from — the id from [contest] CONTEST_ID,
-    // the settings from the same section.
+    // The settings come from config.toml; the active id comes from the database
+    // (contests.is_active), which config.toml and .env are derived from.
     setActiveContestId(activeId);
     setSelectedContestId(activeId);
     setGlobalSettings(settings);
@@ -64,12 +65,11 @@ export function useContestDeploymentSnapshot({
     return activeId;
   }, []);
 
-  const loadData = useCallback(async (options?: { silent?: boolean }) => {
-    if (options?.silent !== true) setLoading(true);
+  const readSnapshot = useCallback(async (): Promise<void> => {
+    // Why the settle comes before the reads: a deploy that finished while nothing watched its
+    // operation still owes its activation (or its rollback), and the values read below are only
+    // the truth about the stack once that has run.
     try {
-      // Why the settle comes before the reads: a deploy that finished while nothing watched its
-      // operation still owes its activation (or its rollback), and the values read below are only
-      // the truth about the stack once that has run.
       await settleDeployOperations();
     } catch {
       // A settle that could not run leaves what it owes on the operation's own record, which the
@@ -90,30 +90,52 @@ export function useContestDeploymentSnapshot({
 
     // Read the freshly parsed id, not the state binding — setState in this same tick leaves the
     // closure stale.
-    const actualActiveId = applyContestSnapshot(
-      settingsResult.success ? settingsResult.values : {},
-      activeResult.success ? activeResult.contestId : null,
-    );
-    setContainerContestId(containerResult.success ? containerResult.contestId : null);
+    const stackId = containerResult.success ? containerResult.contestId : null;
+    setContainerContestId(stackId);
 
     const databaseContests = contestsResult.success ? contestsResult.contests : [];
     setAvailableContests(databaseContests);
+
+    // The database is the single source of truth for the active contest; config.toml, .env
+    // and the container environment are the same value projected outward. The id the card
+    // shows is therefore the database's, falling back to the container only while the
+    // database read failed — and nothing here writes the database back from the container,
+    // which would let a stack that has not been recreated revert a newer active contest.
+    const dbId = activeResult.success ? activeResult.contestId : null;
+    const actualActiveId = applyContestSnapshot(
+      settingsResult.success ? settingsResult.values : {},
+      dbId ?? stackId,
+    );
+
     const dbActive = databaseContests.find(
       (contest: { id: number; name: string; is_active: boolean }) => contest.is_active === true,
     );
     setDbActiveContestId(dbActive ? dbActive.id : null);
-    if (actualActiveId) {
+
+    if (actualActiveId !== null) {
       const match = databaseContests.find(
         (contest: { id: number; name: string; is_active: boolean }) => contest.id === actualActiveId,
       );
       if (match) setActiveContestName(match.name);
     }
-    setLoading(false);
   }, [applyContestSnapshot]);
 
-  useEffect(() => {
-    queueMicrotask(() => void loadData());
-  }, [loadData]);
+  const { status, reload } = useSurfaceLoad(readSnapshot, surfaceLoadMessages(dict));
+
+  const loadData = useCallback(async (options?: { silent?: boolean }): Promise<void> => {
+    if (options?.silent !== true) {
+      reload();
+      return;
+    }
+    // Why the background re-read must not blank the panel: it runs when a deploy settles, and the
+    // operator is reading the result of that deploy. A failure is not hidden either — it falls
+    // back to the full load, which reports it through the surface status.
+    try {
+      await readSnapshot();
+    } catch {
+      reload();
+    }
+  }, [readSnapshot, reload]);
 
   const applyDeployedContestId = useCallback((contestId: number): void => {
     setActiveContestId(contestId);
@@ -146,7 +168,7 @@ export function useContestDeploymentSnapshot({
       || (containerContestId !== null && (activeContestId !== containerContestId || dbActiveContestId !== containerContestId)));
 
   return {
-    loading,
+    status,
     availableContests,
     activeContestId,
     activeContestName,

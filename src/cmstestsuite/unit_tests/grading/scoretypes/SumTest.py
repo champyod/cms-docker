@@ -37,24 +37,24 @@ class TestSum(ScoreTypeTestMixin, unittest.TestCase):
             "3": False,
         }
 
-    def test_paramaters_correct(self):
+    def test_it_accepts_well_formed_parameters(self):
         """Test that correct parameters do not throw."""
         Sum(100, self._public_testcases)
         Sum(1.5, self._public_testcases)
 
-    def test_paramaters_invalid(self):
+    def test_it_rejects_invalid_parameters(self):
         with self.assertRaises(ValueError):
             Sum([], self._public_testcases)
         with self.assertRaises(ValueError):
             Sum("1", self._public_testcases)
 
-    def test_max_scores(self):
+    def test_it_computes_the_maximum_scores(self):
         testcase_score = 10.5
         self.assertEqual(Sum(testcase_score,
                              self._public_testcases).max_scores(),
                          (testcase_score * 4, testcase_score, []))
 
-    def test_compute_score(self):
+    def test_it_computes_the_score_of_a_submission(self):
         testcase_score = 10.5
         st = Sum(testcase_score, self._public_testcases)
         sr = self.get_submission_result(self._public_testcases)

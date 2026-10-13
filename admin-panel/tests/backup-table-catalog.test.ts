@@ -105,10 +105,6 @@ describe('BACKUP_TABLES', () => {
     expect(positionOf('user_test_results')).toBeLessThan(positionOf('user_test_executables'));
   });
 
-  it('orders backup_locations before backup_schedules, which references it', () => {
-    expect(positionOf('backup_locations')).toBeLessThan(positionOf(SCHEDULE_TABLE));
-  });
-
   it('places admins before every table that names it as the row author', () => {
     for (const child of ['announcements', 'messages', 'questions', 'admin_groups', 'admin_permission_overrides']) {
       expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf(child));
@@ -302,13 +298,6 @@ describe('validateTableSelection', () => {
       expect(adminWarning).toContain('set to NULL');
       expect(adminWarning).not.toContain('fail its foreign keys');
     }
-  });
-
-  it('warns that a schedule selected without its location loses the reference, not the row', () => {
-    const warnings = missingParentWarnings(validateTableSelection([SCHEDULE_TABLE]).warnings);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('backup_locations');
-    expect(warnings[0]).toContain('set to NULL');
   });
 
   it('warns about both grant parents of a grant table selected alone', () => {

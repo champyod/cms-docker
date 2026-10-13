@@ -76,7 +76,18 @@ async fn the_shipped_binary_boots_and_refuses_everything_without_a_database() {
     let client = reqwest::Client::new();
     let base = format!("http://127.0.0.1:{port}");
     for route in [
-        "/healthz", "/scores", "/history", "/config", "/", "/logo", "/credits",
+        "/healthz",
+        "/scores",
+        "/history",
+        "/config",
+        "/",
+        "/logo",
+        "/credits",
+        // Why /diagnostics is in this list despite bypassing the login gate: the gate and
+        // the handler are different refusals. It is exempt from the session check, but it
+        // still reads the store, so with no database it must refuse (503) exactly like
+        // every other read — never answer with zero counters.
+        "/diagnostics",
     ] {
         assert_eq!(
             status(&client, &format!("{base}{route}")).await,

@@ -56,6 +56,12 @@ ADMIN_NEXT_LISTEN_PORT="${ADMIN_NEXT_LISTEN_PORT:-3000}"
 # empty and emit no balancing directive at all.
 CONTEST_UPSTREAM_METHOD="${CONTEST_UPSTREAM_METHOD:-least_conn}"
 
+# Re-resolution. The route targets are variables, not static upstream blocks, and this
+# resolver answers them per request — so a recreated container is dialled again within
+# valid=. Docker's embedded DNS answers at 127.0.0.11.
+DOMAIN_ROUTE_RESOLVER="${DOMAIN_ROUTE_RESOLVER:-127.0.0.11}"
+DOMAIN_ROUTE_RESOLVER_VALID="${DOMAIN_ROUTE_RESOLVER_VALID:-10s}"
+
 CONTEST_ROUTE_DIRECTIVES="${CONTEST_ROUTE_DIRECTIVES:-}"
 ADMIN_ROUTE_DIRECTIVES="${ADMIN_ROUTE_DIRECTIVES:-}"
 ADMIN_CLASSIC_ROUTE_DIRECTIVES="${ADMIN_CLASSIC_ROUTE_DIRECTIVES:-}"
@@ -91,12 +97,6 @@ ROUTE_PORT_VAR=()
 ROUTE_PATH=()
 ROUTE_OWNER=()
 ROUTE_PRIMARY_DOMAIN_VAR=""
-
-# The upstream block name is the row label, so a row added to the table needs no
-# second naming scheme to keep in step with the first.
-_route_upstream_name() {
-  printf 'cms_%s' "$1"
-}
 
 # Validates one *_ROUTE_PATH and normalises it into the variable named by $3. An
 # empty value is not an error: it is how a route is taken off every vhost but its own.
@@ -190,19 +190,16 @@ _routes_collect() {
   ROUTE_PRIMARY_DOMAIN_VAR="${ROUTE_DOMAIN_VAR[0]}"
 }
 
-_routes_upstream_block() {
-  local index="$1" label upstream_var method_var port_var
-  label="${ROUTE_LABEL[$index]}"
-  upstream_var="${ROUTE_UPSTREAM_VAR[$index]}"
-  port_var="${ROUTE_PORT_VAR[$index]}"
-  method_var="${upstream_var}_METHOD"
-  # An unconfigured service has no upstream, and an `upstream` block whose only body is
-  # an empty target makes nginx reject the file — so the block is skipped with it.
-  [[ -n "${!upstream_var:-}" ]] || return 0
-  printf 'upstream %s {\n' "$(_route_upstream_name "$label")"
-  [[ -z "${!method_var:-}" ]] || printf '    %s;\n' "${!method_var}"
-  printf '    server %s:%s;\n' "${!upstream_var}" "${!port_var}"
-  printf '}\n'
+# The resolver the variable proxy targets are answered through, emitted once in the
+# http context. ipv6=off keeps it to the A records Docker's embedded DNS returns.
+_routes_resolver_block() {
+  printf 'resolver %s valid=%s ipv6=off;\n' "$DOMAIN_ROUTE_RESOLVER" "$DOMAIN_ROUTE_RESOLVER_VALID"
+}
+
+# The proxy target variable a location sets and dials, derived from the row label so a
+# row needs no second naming scheme.
+_route_target_var() {
+  printf '$cms_%s' "$1"
 }
 
 # The directive set is emitted before the proxy_pass so the two stay in the order
@@ -211,9 +208,34 @@ _routes_upstream_block() {
 _routes_location_block() {
   local index="$1" matcher="$2"
   local directives_var="${ROUTE_LABEL[$index]^^}_ROUTE_DIRECTIVES"
+  local upstream_var="${ROUTE_UPSTREAM_VAR[$index]}"
+  local port_var="${ROUTE_PORT_VAR[$index]}"
+  local target_var
+  target_var="$(_route_target_var "${ROUTE_LABEL[$index]}")"
   printf '    location %s {\n' "$matcher"
   [[ -z "${!directives_var:-}" ]] || printf '%s\n' "${!directives_var}"
-  printf '        proxy_pass http://%s/;\n' "$(_route_upstream_name "${ROUTE_LABEL[$index]}")"
+  printf '        set %s %s:%s;\n' "$target_var" "${!upstream_var}" "${!port_var}"
+  # A variable proxy_pass does not strip the location prefix the way a literal one
+  # did, so a sub-path route rewrites it away to keep the target path unchanged.
+  [[ "$matcher" == "/" ]] || printf '        rewrite ^%s(.*)$ /$1 break;\n' "$matcher"
+  printf '        proxy_pass http://%s;\n' "$target_var"
+  printf '        proxy_redirect off;\n'
+  printf '    }\n'
+}
+
+# The page's own static assets are served without the route's rate limit: the page
+# asks for them in one burst, and a limit sized for the dynamic endpoints 503s the
+# tail of that burst — the scripts that draw the page. A regex location outranks the
+# prefix route, so only the assets bypass the limit.
+_routes_static_location_block() {
+  local index="$1"
+  local upstream_var="${ROUTE_UPSTREAM_VAR[$index]}"
+  local port_var="${ROUTE_PORT_VAR[$index]}"
+  local target_var
+  target_var="$(_route_target_var "${ROUTE_LABEL[$index]}")"
+  printf '    location ~* \\.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {\n'
+  printf '        set %s %s:%s;\n' "$target_var" "${!upstream_var}" "${!port_var}"
+  printf '        proxy_pass http://%s;\n' "$target_var"
   printf '        proxy_redirect off;\n'
   printf '    }\n'
 }
@@ -247,16 +269,16 @@ _routes_render_vhost() {
       matcher="$(_route_matcher "${ROUTE_PATH[$index]}")"
     fi
     blocks+="$(_routes_location_block "$index" "$matcher")"$'\n'
+    # The ranking page's assets skip the route's rate limit, which the route keeps.
+    if (( owner )) && [[ "${ROUTE_LABEL[$index]}" == "ranking" ]]; then
+      blocks+="$(_routes_static_location_block "$index")"$'\n'
+    fi
   done
   printf '%s' "$blocks"
 }
 
 _routes_render_upstreams() {
-  local index blocks=""
-  for index in "${!ROUTE_LABEL[@]}"; do
-    blocks+="$(_routes_upstream_block "$index")"$'\n'
-  done
-  printf '%s' "$blocks"
+  _routes_resolver_block
 }
 
 # The domain variable a named vhost serves, taken from the table row that claims
@@ -278,17 +300,22 @@ _routes_domain_of() {
 # serves; a name no row claims gets no location block at all, because the region is
 # stripped before that ever matters.
 _routes_build() {
-  local upstream_blocks
-  upstream_blocks="$(_routes_render_upstreams)"
+  local resolver_block primary_upstream_var primary_port_var
+  resolver_block="$(_routes_render_upstreams)"
   PRIMARY_ROUTE_BLOCKS="$(_routes_render_vhost "$ROUTE_PRIMARY_DOMAIN_VAR" 1)"
   ADMIN_ROUTE_BLOCKS="$(_routes_render_vhost "$(_routes_domain_of admin)" 0)"
   OJ_ROUTE_BLOCKS="$(_routes_render_vhost "$(_routes_domain_of oj)" 0)"
   RANKING_ROUTE_BLOCKS="$(_routes_render_vhost "$(_routes_domain_of ranking)" 0)"
-  PRIMARY_UPSTREAM="$(_route_upstream_name "${ROUTE_LABEL[0]}")"
+  # The template's own proxy_pass sites dial the primary route, so the primary target is
+  # exposed both as the variable to dial and as the server-level set that binds it.
+  PRIMARY_UPSTREAM="$(_route_target_var "${ROUTE_LABEL[0]}")"
+  primary_upstream_var="${ROUTE_UPSTREAM_VAR[0]}"
+  primary_port_var="${ROUTE_PORT_VAR[0]}"
+  PRIMARY_UPSTREAM_SET="set ${PRIMARY_UPSTREAM} ${!primary_upstream_var}:${!primary_port_var};"
 
-  export UPSTREAM_BLOCKS="$upstream_blocks"
+  export ROUTE_RESOLVER="$resolver_block"
   export PRIMARY_ROUTE_BLOCKS ADMIN_ROUTE_BLOCKS OJ_ROUTE_BLOCKS RANKING_ROUTE_BLOCKS
-  export PRIMARY_UPSTREAM
+  export PRIMARY_UPSTREAM PRIMARY_UPSTREAM_SET
 }
 
 # The single entrypoint the caller invokes. Split from sourcing so the directive

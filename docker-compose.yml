@@ -229,7 +229,7 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
       interval: 10s
@@ -272,7 +272,7 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/ProxyService-${PROXY_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsProxyService ${PROXY_SERVICE_SHARD:-0} -c ${CONTEST_ID:-1}"
+             cmsProxyService ${PROXY_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsProxyService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28600))\" || exit 1"]
       interval: 10s
@@ -335,7 +335,7 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/ContestWebServer-${CONTEST_WEB_SERVER_SHARD:-0} /var/local/cache/cms /var/local/lib/cms &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
              sudo chmod -R 750 /var/local/log/cms /var/local/cache/cms /var/local/lib/cms &&
-             cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0} -c ${CONTEST_ID:-1}"
+             cmsContestWebServer ${CONTEST_WEB_SERVER_SHARD:-0}"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-contest.rule=Host(`${CONTEST_DOMAIN:-contest.cms.local}`)"
@@ -462,6 +462,7 @@ services:
       # Adaptive login CAPTCHA
       CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
       CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+      CAPTCHA_PROVIDERS: ${CAPTCHA_PROVIDERS:-}
       CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
       CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
       CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
@@ -590,7 +591,7 @@ services:
       # The Rust service reads the projection tables, so it takes the same database
       # URL every other service takes rather than a ranking config file.
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
-      RANKING_BIND_ADDRESS: 0.0.0.0:${RANKING_LISTEN_PORT:-8890}
+      RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
       # Where the image keeps the vendored page and the licence offer; both are image
       # layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static

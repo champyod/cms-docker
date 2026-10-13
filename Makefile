@@ -350,6 +350,14 @@ security-unban:
 	@[ -n "$(JAIL)" ] && [ -n "$(IP)" ] || { echo "usage: make security-unban JAIL=<jail> IP=<address>" >&2; exit 2; }
 	@bash scripts/__security-agent.sh --unban "$(JAIL)" "$(IP)"
 
+# Install the fail2ban jails (nginx-http-auth, nginx-limit-req) with the log path
+# resolved to the nginx Docker volumes. Needs sudo and fail2ban installed.
+fail2ban:
+	@bash scripts/__fail2ban-setup.sh --apply
+
+fail2ban-check:
+	@bash scripts/__fail2ban-setup.sh --check
+
 waf-clean:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s -v grader-waf
 
@@ -446,6 +454,7 @@ prisma-sync:
 	@# WHY: the resolver reports which side it found the tool on, because the database is reached by service name from the container and by loopback from the host.
 	@# WHY: a failed migration and a failed seed are both fatal — without the seed the administrators hold groups that grant nothing.
 	@# WHY: seeding is system initialisation, so it also runs as the owner; it must work before the runtime roles exist.
+	@# WHY: Prisma resolves the migration history from the schema's own directory, so the schema must be the repository bind mount — the image's /app copy is a build-time snapshot missing newer migrations.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
@@ -464,6 +473,9 @@ prisma-sync:
 	PRISMA_RESOLVE="$$(bash scripts/__resolve_tool.sh prisma)" || exit 1; \
 	IFS=$$'\t' read -r PRISMA_WHERE PRISMA_DIR PRISMA_CMD <<< "$$PRISMA_RESOLVE"; \
 	echo "  Prisma CLI: $$PRISMA_CMD (cwd $$PRISMA_DIR, $$PRISMA_WHERE)"; \
+	PRISMA_SCHEMA="./prisma/schema.prisma"; \
+	if [ "$$PRISMA_WHERE" = "container" ]; then PRISMA_SCHEMA="/repo-root/admin-panel/prisma/schema.prisma"; fi; \
+	echo "  Migration history: $$PRISMA_SCHEMA"; \
 	echo "Checking if baseline is needed (P3005 mitigation)..."; \
 	_need_baseline=0; \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-database$$'; then \
@@ -473,13 +485,13 @@ prisma-sync:
 	fi; \
 	if [ "$$_need_baseline" = "1" ]; then \
 		echo "Baseline needed — marking 20260910000000_baseline_marker as applied..."; \
-		run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=./prisma/schema.prisma"; \
+		run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate resolve --applied 20260910000000_baseline_marker --schema=$$PRISMA_SCHEMA"; \
 		st=$$?; if [ $$st -ne 0 ]; then echo "Baseline resolve failed — check logs above" >&2; exit $$st; fi; \
 	else \
 		echo "Baseline not needed (empty DB or already migrated)"; \
 	fi; \
 	echo "Running prisma migrate deploy (owner credentials)..."; \
-	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=./prisma/schema.prisma"; \
+	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=$$PRISMA_SCHEMA"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	echo "Seeding permission groups and permissions..."; \
 	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { readConfigTomlValues } from '@/app/actions/configTomlActions';
+import { readConfigTomlValues, readDatabaseProfiles } from '@/app/actions/configTomlActions';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
   configTomlKeys,
@@ -12,6 +12,8 @@ import {
 export interface EnvConfigDocuments {
   data: EnvFilesData;
   originalData: EnvFilesData;
+  /** The [db_<name>] profiles config.toml declares, for the active-database selector. */
+  databaseProfiles: string[];
   loading: boolean;
   saving: boolean;
   error: string;
@@ -24,6 +26,7 @@ export interface EnvConfigDocuments {
 export function useEnvConfigDocuments(): EnvConfigDocuments {
   const [originalData, setOriginalData] = useState<EnvFilesData>({});
   const [data, setData] = useState<EnvFilesData>({});
+  const [databaseProfiles, setDatabaseProfiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -34,7 +37,10 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
     setLoading(true);
     setError('');
     try {
-      const result = await readConfigTomlValues(configTomlKeys());
+      const [result, profiles] = await Promise.all([
+        readConfigTomlValues(configTomlKeys()),
+        readDatabaseProfiles(),
+      ]);
       if (!result.success) {
         setError('Failed to load configuration');
         return;
@@ -45,6 +51,9 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
       // replaces objects instead of mutating them, so this snapshot can never be
       // changed behind the baseline that computeChangedKeys compares against.
       setOriginalData(() => next);
+      // Why not a load failure: the profile list only populates the selector's options, so an
+      // unreadable list still leaves the current value editable rather than blanking the page.
+      if (profiles.success) setDatabaseProfiles(profiles.profiles);
     } catch {
       setError('Failed to load configuration');
     } finally {
@@ -55,5 +64,5 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
   const handleChange = (filename: string, key: string, value: string): void =>
     setData(prev => updateFileValue(prev, filename, key, value));
 
-  return { data, originalData, loading, saving, error, loadData, handleChange, setSaving, setOriginalData };
+  return { data, originalData, databaseProfiles, loading, saving, error, loadData, handleChange, setSaving, setOriginalData };
 }
