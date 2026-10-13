@@ -103,6 +103,7 @@ export async function addParticipant(contestId: number, userId: number): Promise
     await prisma.$executeRaw`
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+      ON CONFLICT (contest_id, user_id) DO NOTHING
     `;
     await resyncRankingUsers(contestId);
     await recordAudit({
