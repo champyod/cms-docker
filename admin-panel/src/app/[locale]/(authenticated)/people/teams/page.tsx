@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { PageSurface } from '@/components/core/PageSurface';
 import { TeamList } from '@/components/teams/TeamList';
+import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
@@ -55,6 +56,7 @@ export default async function PeopleTeamsPage({ params, searchParams }: {
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
       title={teamsLabel}
       description={dict.teams.subtitle}
+      actions={<LiveRefresh url="/api/teams/stream" />}
     >
       <TeamList
         initialTeams={teams}

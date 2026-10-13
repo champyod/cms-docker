@@ -3,6 +3,7 @@ import { getLaneBoard } from '@/app/actions/evaluation-lanes-board';
 import { type LaneBoard as LaneBoardData } from '@/app/actions/evaluationLanes';
 import { PageSurface } from '@/components/core/PageSurface';
 import { LaneBoard } from '@/components/submissions/LaneBoard';
+import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
@@ -55,6 +56,7 @@ export default async function EvaluationLanesPage({
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.lanes', dict)}
       title={lanesLabel}
       description={dict.submissions.lanesDescription}
+      actions={<LiveRefresh url="/api/evaluation/lanes/stream" />}
     >
       <LaneBoard board={board} permissionKeys={permissionKeys} />
     </PageSurface>

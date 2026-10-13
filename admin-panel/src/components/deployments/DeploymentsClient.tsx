@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { Stack } from '@/components/core/Layout';
 import { Button } from '@/components/core/Button';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
@@ -66,14 +67,17 @@ export function DeploymentsClient(): React.JSX.Element {
   usePublishModuleActions(
     'infrastructure.deployments',
     snapshot.status.kind === 'idle' ? (
-      <Button
-        variant="secondary"
-        size="sm"
-        icon={RefreshCw}
-        onClick={() => void loadData()}
-      >
-        {dict.deployments.refresh}
-      </Button>
+      <div className="flex items-center gap-3">
+        <LiveIndicator status={workers.liveStatus} />
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={RefreshCw}
+          onClick={() => void loadData()}
+        >
+          {dict.deployments.refresh}
+        </Button>
+      </div>
     ) : null,
   );
 

@@ -18,6 +18,18 @@ export const AUDIT_POLL_MS = 5000;
 export const QUESTIONS_POLL_MS = 30_000;
 
 /**
+ * The list surfaces' change cursor: users, teams, evaluation lanes and the ranking board.
+ *
+ * Why one cadence for all four: each poll is a lookup on an index the table already has, so the
+ * interval measures how quickly a change is noticed rather than what re-reading the page costs —
+ * the users list used to re-read its whole page a minute at a time.
+ */
+export const LIST_CURSOR_POLL_MS = 10_000;
+
+/** Worker telemetry: what the deployments panel used to poll every 20 seconds. */
+export const DEPLOY_WORKERS_POLL_MS = 20_000;
+
+/**
  * How often a stream restates its last snapshot even when nothing changed.
  *
  * Why it is a real frame and not an SSE comment: a comment never dispatches the client's `onmessage`,

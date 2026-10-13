@@ -1,3 +1,5 @@
+import type { WorkerNodeView } from '@/lib/worker-nodes';
+
 /**
  * The frame contracts the live surfaces added on the shared helper and their panels agree on.
  *
@@ -31,4 +33,28 @@ export function questionsFrameFingerprint(frame: QuestionsFrame): string {
 
 export function auditCursorFingerprint(frame: AuditCursorFrame): string {
   return JSON.stringify(frame.latestId);
+}
+
+/**
+ * A surface's change cursor: an opaque token that moves when that surface's data does.
+ *
+ * Why one frame for every list surface: each of these pages reloads its own query when the cursor
+ * moves, so what the cursor is built from — an audit id, a row count — belongs to the route that
+ * knows its data, and not to the panel that only compares one cursor with the last.
+ */
+export interface CursorFrame {
+  cursor: string | null;
+}
+
+/** Worker telemetry, as the deployments panel and the resources page both read it. */
+export interface WorkersFrame {
+  workers: WorkerNodeView[];
+}
+
+export function cursorFrameFingerprint(frame: CursorFrame): string {
+  return JSON.stringify(frame.cursor);
+}
+
+export function workersFrameFingerprint(frame: WorkersFrame): string {
+  return JSON.stringify(frame.workers);
 }
