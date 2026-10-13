@@ -3,6 +3,7 @@ import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorizatio
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
+import { writeActiveContestId } from '@/lib/active-contest';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
@@ -191,7 +192,7 @@ export async function getAvailableContests(): Promise<AvailableResult> {
 export async function activateContest(id: number): Promise<MutationResult> {
   await requirePermission('contest:switch');
   try {
-    await prisma.$executeRaw`UPDATE contests SET is_active = (id = ${id})`;
+    await writeActiveContestId(id);
     await recordAudit({
       verb: 'contest:switch',
       entity: 'contest',

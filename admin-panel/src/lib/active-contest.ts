@@ -21,8 +21,14 @@ export async function readActiveContestId(): Promise<number | null> {
 
 /**
  * Flags exactly `id` active in one statement, so every other row is cleared by the same
- * update and the table can never hold two active contests.
+ * update and the table can never hold two active contests. The EXISTS guard makes an id
+ * that matches no row a no-op instead of clearing every row; a zero-row update is fatal.
  */
 export async function writeActiveContestId(id: number): Promise<void> {
-  await prisma.$executeRaw`UPDATE contests SET is_active = (id = ${id})`;
+  const affected = await prisma.$executeRaw`
+    UPDATE contests SET is_active = (id = ${id})
+    WHERE EXISTS (SELECT 1 FROM contests WHERE id = ${id})`;
+  if (affected === 0) {
+    throw new Error(`No contest with id ${id} — refusing to clear the active contest`);
+  }
 }

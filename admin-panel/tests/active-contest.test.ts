@@ -40,4 +40,11 @@ describe('active contest in the database', () => {
     expect(executeRaw).toHaveBeenCalledTimes(1);
     expect(executeRaw.mock.calls[0][1]).toBe(4);
   });
+
+  it('refuses an id that matches no contest row', async () => {
+    // Why: an UPDATE that matched nothing means the id does not exist; clearing every row would
+    // leave the stack with no active contest, so the write must fail instead.
+    executeRaw.mockResolvedValue(0);
+    await expect(writeActiveContestId(99)).rejects.toThrow(/99/);
+  });
 });
