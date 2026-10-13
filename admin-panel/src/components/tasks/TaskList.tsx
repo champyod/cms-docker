@@ -1,38 +1,30 @@
 ﻿'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
-import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
-import { Pencil, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, Plus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { ListSortInput } from '@/lib/list-sorting';
 import { TaskModal } from './TaskModal';
+import { TaskBulkAssignDialog } from './TaskBulkAssignDialog';
+import { buildTaskColumns, type TaskRow } from './taskColumns';
 import { RecordListPager } from '@/components/list/RecordListPager';
+import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { useListSelection } from '@/hooks/useListSelection';
 import { apiClient } from '@/lib/apiClient';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
-import type { TaskDiagnostic } from '@/lib/task-diagnostics';
-
-interface TaskRow {
-  id: number;
-  name: string;
-  title: string;
-  contests: { name: string } | null;
-  statements: Array<{ id: number }>;
-  datasets_datasets_task_idTotasks: Array<{ id: number }>;
-  _count: { submissions: number };
-  diagnostics: TaskDiagnostic[];
-}
 
 interface TaskListProps {
   initialTasks: TaskRow[];
@@ -59,15 +51,22 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
   const locale = pathname.split('/')[1] ?? 'en';
   const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
   const confirm = useConfirm();
-  const { destructiveConfirm } = useConfirmationCopy();
+  const { destructiveConfirm, removeTaskFromContestConfirm } = useConfirmationCopy();
   const dict = useDictionary();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canCreateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.createTask);
   const canUpdateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTask);
   const canDeleteTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTask);
+  // Why both: the assign route and the service it reuses demand task:update and
+  // task:switch_dataset, so the bar only offers what the writer will accept.
+  const canAssignToContest = canUpdateTasks && effective.has('task:switch_dataset');
+
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
+  const selection = useListSelection('tasks.list', taskIds);
 
   const handleEdit = (task: TaskRow): void => {
     if (!canUpdateTasks) return;
@@ -93,6 +92,21 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
     setIsModalOpen(true);
   };
 
+  const handleAssigned = (): void => {
+    selection.clear();
+    router.refresh();
+  };
+
+  const handleUnassign = async (): Promise<void> => {
+    if (!canAssignToContest || selection.selectedCount === 0) return;
+    if (!(await confirm(removeTaskFromContestConfirm()))) return;
+    const result = await runAction(
+      { pending: 'Unassigning tasks...', success: 'Tasks unassigned', failure: 'Failed to unassign tasks' },
+      () => apiClient.post('/api/tasks/batch', { action: 'assign', taskIds: [...selection.selectedIds], contestId: null }),
+    );
+    if (result?.success) handleAssigned();
+  };
+
   const handlePageChange = (next: number): void => {
     const url = new URL(window.location.href);
     url.searchParams.set('page', String(next));
@@ -112,91 +126,11 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
     router.push(url.toString());
   };
 
-  const columns = useMemo<ResponsiveColumn<TaskRow>[]>(() => [
-    {
-      key: 'id',
-      header: 'ID',
-      sortKey: 'id',
-      hideOnMobile: true,
-      render: (task) => <span className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</span>,
-    },
-    {
-      key: 'name',
-      header: 'Name',
-      sortKey: 'name',
-      render: (task) => {
-        const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-        return (
-          <div className="flex items-center gap-2">
-            {task.diagnostics.length > 0 && (
-              <div className="group relative">
-                <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
-                <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
-                  <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
-                  {task.diagnostics.map((d, i) => (
-                    <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
-                      <span>•</span>
-                      <span>{d.message}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            <button onClick={(event) => { event.stopPropagation(); router.push(buildRoute(locale, 'tasks.record', { id: task.id })); }} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
-              {task.name}
-              <ExternalLink className="w-3 h-3 opacity-50" />
-            </button>
-          </div>
-        );
-      },
-    },
-    {
-      key: 'title',
-      header: 'Title',
-      sortKey: 'title',
-      render: (task) => {
-        const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-        return (
-          <span className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
-            {task.title}
-          </span>
-        );
-      },
-    },
-    {
-      key: 'contest',
-      header: 'Contest',
-      sortKey: 'contests',
-      render: (task) =>
-        task.contests ? (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{task.contests.name}</span>
-        ) : (
-          <span className="text-muted-foreground text-xs italic">Unassigned</span>
-        ),
-    },
-    {
-      key: 'resources',
-      header: 'Resources',
-      render: (task) => (
-        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1" title="Statements">
-            <FileText className="w-3 h-3" />
-            <span>{task.statements.length}</span>
-          </div>
-          <div className="flex items-center gap-1" title="Datasets">
-            <Database className="w-3 h-3" />
-            <span>{task.datasets_datasets_task_idTotasks.length}</span>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'submissions',
-      header: 'Submissions',
-      sortKey: 'submissions',
-      render: (task) => <span>{task._count?.submissions ?? 0}</span>,
-    },
-  ], [locale, router]);
+  const handleOpenTask = useCallback((id: number) => {
+    router.push(buildRoute(locale, 'tasks.record', { id }));
+  }, [router, locale]);
+
+  const columns = useMemo(() => buildTaskColumns({ selection, onOpen: handleOpenTask }), [selection, handleOpenTask]);
 
   return (
     <div className="space-y-6">
@@ -208,6 +142,13 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
           </Button>
         )}
       </div>
+
+      {canAssignToContest && (
+        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+          <Button variant="secondary" onClick={() => setIsAssignOpen(true)}>Assign to contest</Button>
+          <Button variant="secondary" onClick={() => { void handleUnassign(); }}>Unassign</Button>
+        </BulkActionBar>
+      )}
 
       <ResponsiveTable
         columns={columns}
@@ -245,6 +186,13 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
       )}
 
       <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} />
+
+      <TaskBulkAssignDialog
+        isOpen={isAssignOpen}
+        onClose={() => setIsAssignOpen(false)}
+        taskIds={[...selection.selectedIds]}
+        onSuccess={handleAssigned}
+      />
     </div>
   );
 }
