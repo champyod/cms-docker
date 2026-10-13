@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   findMany: vi.fn(),
   findUnique: vi.fn(),
+  findFirst: vi.fn(),
   groupBy: vi.fn(),
 }));
 
@@ -17,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
       create: mocks.create,
       findMany: mocks.findMany,
       findUnique: mocks.findUnique,
+      findFirst: mocks.findFirst,
       groupBy: mocks.groupBy,
     },
   },
@@ -28,8 +30,10 @@ import {
   endActiveBlocks,
   endBlock,
   expireStaleBlocks,
+  findActiveLoginExemption,
   isBlockKind,
   isBlockSource,
+  listActiveLoginExemptions,
   listBlocks,
   recordBlock,
 } from '@/lib/security/block-ledger';
@@ -199,13 +203,13 @@ describe('security block ledger', () => {
   it('reports a zero count for every kind that has no active block', async () => {
     mocks.groupBy.mockResolvedValue([{ kind: 'waf', _count: { _all: 3 } }]);
 
-    await expect(countActiveByKind()).resolves.toEqual({ waf: 3, fail2ban: 0, login_lockout: 0 });
+    await expect(countActiveByKind()).resolves.toEqual({ waf: 3, fail2ban: 0, login_lockout: 0, login_exemption: 0 });
   });
 
   it('ignores a kind the registry does not know', async () => {
     mocks.groupBy.mockResolvedValue([{ kind: 'mystery', _count: { _all: 3 } }]);
 
-    await expect(countActiveByKind()).resolves.toEqual({ waf: 0, fail2ban: 0, login_lockout: 0 });
+    await expect(countActiveByKind()).resolves.toEqual({ waf: 0, fail2ban: 0, login_lockout: 0, login_exemption: 0 });
   });
 
   it('refuses to map a row whose kind is unknown', async () => {
@@ -216,8 +220,51 @@ describe('security block ledger', () => {
 
   it('guards the kind and source unions', () => {
     expect(isBlockKind('waf')).toBe(true);
+    expect(isBlockKind('login_exemption')).toBe(true);
     expect(isBlockKind('mystery')).toBe(false);
     expect(isBlockSource('agent')).toBe(true);
     expect(isBlockSource('worker')).toBe(false);
+  });
+
+  it('matches an exemption whose blank dimension is a wildcard, blank-on-both excluded', async () => {
+    mocks.findFirst.mockResolvedValue(null);
+
+    await expect(findActiveLoginExemption('ada', '10.0.0.9')).resolves.toBeNull();
+
+    expect(mocks.findFirst).toHaveBeenCalledWith({
+      where: {
+        kind: 'login_exemption',
+        active: true,
+        AND: [
+          { OR: [{ subject: 'ada' }, { subject: null }] },
+          { OR: [{ ip: '10.0.0.9' }, { ip: null }] },
+          { NOT: { subject: null, ip: null } },
+        ],
+      },
+      orderBy: { started_at: 'desc' },
+    });
+  });
+
+  it('maps an exemption row it finds', async () => {
+    mocks.findFirst.mockResolvedValue(
+      rowFixture({ kind: 'login_exemption', source: 'app', subject: 'ada', ip: '10.0.0.9' }),
+    );
+
+    const found = await findActiveLoginExemption('ada', '10.0.0.9');
+
+    expect(found?.kind).toBe('login_exemption');
+    expect(found?.subject).toBe('ada');
+  });
+
+  it('lists active exemptions under their own kind', async () => {
+    mocks.findMany.mockResolvedValue([]);
+
+    await listActiveLoginExemptions();
+
+    expect(mocks.findMany).toHaveBeenCalledWith({
+      where: { kind: 'login_exemption', active: true },
+      orderBy: { started_at: 'desc' },
+      take: DEFAULT_BLOCK_LIMIT,
+    });
   });
 });

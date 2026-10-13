@@ -176,8 +176,8 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  it('holds exactly 230 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(230);
+  it('holds exactly 231 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(231);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -251,6 +251,7 @@ describe('DEFAULT_GROUPS', () => {
       'ban:unban',
       'lockout:read',
       'lockout:unlock',
+      'lockout:exempt',
       'tls:read',
       'tls:renew',
     ]);

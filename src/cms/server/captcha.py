@@ -85,6 +85,8 @@ class Captcha:
                  | None = None,
                  health: ProviderHealth | None = None,
                  lockout_sink: typing.Callable[[str, str, float], None]
+                 | None = None,
+                 is_exempt: typing.Callable[[str, str], bool]
                  | None = None) -> None:
         self.config = config
         # WHY built from the config when not injected: the counts are kept in a
@@ -100,6 +102,10 @@ class Captcha:
         # same store the verification failure updates.
         self._health = health if health is not None else build_health(config)
         self._counters.set_ban_threshold(config.ban_threshold)
+        # WHY injectable: an exemption is a ledger row, so reading it needs a
+        # database, and the captcha has to stay runnable — and testable — without
+        # one. None means no exemption source, which is the pre-feature behaviour.
+        self._is_exempt = is_exempt
 
     @property
     def counters(self) -> LoginFailureCounters:
@@ -125,7 +131,13 @@ class Captcha:
         not be what removes it. With the captcha off the refusal is a plain one
         and no token is involved; with it on, the lockout still holds.
 
+        A permanent exemption is the one lift that overrides all of that: it is
+        the standing "never refuse this identity" record, checked here and in
+        `is_required` so the lockout and the challenge lift together.
+
         """
+        if self._is_exempt is not None and self._is_exempt(username, ip):
+            return False
         return self._counters.is_limited(username, ip)
 
     def _chain(self) -> list[tuple[str, str, str]]:
@@ -205,7 +217,12 @@ class Captcha:
         configured has no token to demand, so the lockout refusal is its only
         answer and it is unchanged.
 
+        An exempt account or address is never challenged, so it stays False no
+        matter how many times it fails.
+
         """
+        if self._is_exempt is not None and self._is_exempt(username, ip):
+            return False
         if not self.is_enabled():
             return False
         if self.degraded:
@@ -260,7 +277,13 @@ class Captcha:
         return CaptchaOutcome.CHALLENGE_FAILED
 
     def record_failure(self, username: str, ip: str) -> None:
-        """Count a failed attempt, which may make the next one need a captcha."""
+        """Count a failed attempt, which may make the next one need a captcha.
+
+        An exempt identity is not counted: a lift that still accumulated failures
+        would re-arm the very lockout it exists to prevent.
+        """
+        if self._is_exempt is not None and self._is_exempt(username, ip):
+            return
         self._counters.record_failure(username, ip)
 
     def record_success(self, username: str, ip: str) -> None:

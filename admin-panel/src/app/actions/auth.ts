@@ -24,6 +24,7 @@ import {
 } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 import { parseForwardedFor, resolveClientIp } from '@/lib/request-identity';
+import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
@@ -132,10 +133,12 @@ async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
   return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
 }
 
-async function refuseLogin(bucketKeys: readonly string[], username: string): Promise<LoginActionState> {
-  await recordLoginFailure(bucketKeys, username);
+async function refuseLogin(bucketKeys: readonly string[], username: string, exempt: boolean): Promise<LoginActionState> {
+  // An exempt identity is not counted and not challenged, so its wrong passwords
+  // cannot re-arm a counter or summon a challenge that would block it.
+  if (!exempt) await recordLoginFailure(bucketKeys, username);
   const nextState: LoginActionState = { error: 'Invalid credentials' };
-  if (await shouldRequireCaptcha(bucketKeys[0])) Object.assign(nextState, buildCaptchaRequiredState());
+  if (!exempt && (await shouldRequireCaptcha(bucketKeys[0]))) Object.assign(nextState, buildCaptchaRequiredState());
   return nextState;
 }
 
@@ -144,25 +147,31 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
   const bucketKeys = await resolveBucketKeys(username);
-  await pruneExpiredLoginBuckets();
-  if (await isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
-  if (await shouldRequireCaptcha(bucketKeys[0])) {
-    const token = extractCaptchaToken(formData);
-    if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
-    const valid = await verifyCaptcha(token, extractCaptchaProvider(formData));
-    if (!valid) return { success: false, error: 'CAPTCHA verification failed', ...buildCaptchaRequiredState() };
+  // WHY before every gate: an exempt account or address is not policed at all, so
+  // the lockout refusal, the challenge and the failure count are all skipped. A
+  // lift that only cleared the counters could be re-earned; this cannot.
+  const exempt = await isLoginExempt(username, await resolveClientIp());
+  if (!exempt) {
+    await pruneExpiredLoginBuckets();
+    if (await isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };
+    if (await shouldRequireCaptcha(bucketKeys[0])) {
+      const token = extractCaptchaToken(formData);
+      if (!token) return { success: false, error: 'CAPTCHA verification required', ...buildCaptchaRequiredState() };
+      const valid = await verifyCaptcha(token, extractCaptchaProvider(formData));
+      if (!valid) return { success: false, error: 'CAPTCHA verification failed', ...buildCaptchaRequiredState() };
+    }
   }
   try {
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      return refuseLogin(bucketKeys, username);
+      return refuseLogin(bucketKeys, username, exempt);
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      return refuseLogin(bucketKeys, username);
+      return refuseLogin(bucketKeys, username, exempt);
     }
     if (!(await maySignIn(admin))) {
-      return refuseLogin(bucketKeys, username);
+      return refuseLogin(bucketKeys, username, exempt);
     }
     await completeLogin(admin, bucketKeys);
   } catch (error) {

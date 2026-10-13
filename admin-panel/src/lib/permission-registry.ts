@@ -92,6 +92,9 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'ban', verb: 'unban' },
   { module: 'lockout', verb: 'read' },
   { module: 'lockout', verb: 'unlock' },
+  // Why its own verb: a permanent exemption is a standing access decision, so it
+  // must not ride on lockout:unlock, which only resets a counter anyone can re-earn.
+  { module: 'lockout', verb: 'exempt' },
   { module: 'tls', verb: 'read' },
   { module: 'tls', verb: 'renew' },
   { module: 'service', verb: 'restart' },

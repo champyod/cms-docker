@@ -10,11 +10,13 @@ import {
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
+import { ExemptionsPanel } from '@/components/security/ExemptionsPanel';
 import type { SecurityBlock } from '@/lib/security/block-ledger';
 
 interface BlocksPanelProps {
   readonly banned: BannedAddressView;
   readonly lockouts: readonly SecurityBlock[];
+  readonly exemptions: readonly SecurityBlock[];
 }
 
 // The native select is the one control with no core wrapper, so it carries the
@@ -22,7 +24,7 @@ interface BlocksPanelProps {
 const SELECT_SURFACE =
   'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 
-export function BlocksPanel({ banned, lockouts }: BlocksPanelProps): React.JSX.Element {
+export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps): React.JSX.Element {
   const [reason, setReason] = useState('');
   const [manualJail, setManualJail] = useState('');
   const [manualIp, setManualIp] = useState('');
@@ -113,6 +115,8 @@ export function BlocksPanel({ banned, lockouts }: BlocksPanelProps): React.JSX.E
           </div>
         </div>
       </Card>
+
+      <ExemptionsPanel exemptions={exemptions} reason={reason} />
 
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Login lockouts</h2>

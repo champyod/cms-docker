@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import { prisma } from '@/lib/prisma';
 
-export const BLOCK_KINDS = ['waf', 'fail2ban', 'login_lockout'] as const;
+export const BLOCK_KINDS = ['waf', 'fail2ban', 'login_lockout', 'login_exemption'] as const;
 export const BLOCK_SOURCES = ['app', 'agent'] as const;
 
 export const DEFAULT_BLOCK_LIMIT = 200;
@@ -156,6 +156,36 @@ export async function listBlocks(query: BlockQuery = {}): Promise<SecurityBlock[
   return rows.map(toSecurityBlock);
 }
 
+/**
+ * The active exemption covering an attempt by *username* from *ip*, or null.
+ *
+ * An exemption is a `login_exemption` row whose blank dimension is a wildcard: a
+ * row with only `subject` covers that account from any address, one with only `ip`
+ * covers that address for every account, and one with both covers the pair. A row
+ * blank on both is not an exemption — it would cover everyone — so it is excluded
+ * by construction here and refused at the action that writes one.
+ */
+export async function findActiveLoginExemption(username: string, ip: string): Promise<SecurityBlock | null> {
+  const row = await prisma.security_blocks.findFirst({
+    where: {
+      kind: 'login_exemption',
+      active: true,
+      AND: [
+        { OR: [{ subject: username }, { subject: null }] },
+        { OR: [{ ip }, { ip: null }] },
+        { NOT: { subject: null, ip: null } },
+      ],
+    },
+    orderBy: { started_at: 'desc' },
+  });
+  return row === null ? null : toSecurityBlock(row);
+}
+
+/** Every active exemption, for the operator's list. */
+export async function listActiveLoginExemptions(): Promise<SecurityBlock[]> {
+  return listBlocks({ kind: 'login_exemption', active: true });
+}
+
 /** A ban whose expiry has passed stops being active even if nothing reported its end. */
 export async function expireStaleBlocks(now: Date = new Date()): Promise<number> {
   const expired = await prisma.security_blocks.updateMany({
@@ -171,7 +201,7 @@ export async function countActiveByKind(): Promise<Readonly<Record<BlockKind, nu
     where: { active: true },
     _count: { _all: true },
   });
-  const counts: Record<BlockKind, number> = { waf: 0, fail2ban: 0, login_lockout: 0 };
+  const counts: Record<BlockKind, number> = { waf: 0, fail2ban: 0, login_lockout: 0, login_exemption: 0 };
   for (const row of rows) {
     if (isBlockKind(row.kind)) counts[row.kind] = row._count._all;
   }

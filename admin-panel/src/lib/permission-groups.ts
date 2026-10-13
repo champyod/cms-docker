@@ -269,6 +269,7 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'ban:unban',
       'lockout:read',
       'lockout:unlock',
+      'lockout:exempt',
       'tls:read',
       'tls:renew',
     ],

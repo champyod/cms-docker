@@ -50,6 +50,7 @@ async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Har
     shouldRequireCaptcha: () => false,
   }));
   vi.doMock('@/lib/security/lockouts', () => ({ recordLoginLockout: vi.fn(async () => undefined) }));
+  vi.doMock('@/lib/security/exemptions', () => ({ isLoginExempt: vi.fn(async () => false) }));
   vi.doMock('next/headers', () => ({ headers: async () => new Headers() }));
   vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
   vi.doMock('@/lib/redirect', () => ({
@@ -91,6 +92,7 @@ describe('signing in requires admin:login', () => {
     vi.doUnmock('@/lib/captcha');
     vi.doUnmock('@/lib/auth-captcha-helpers');
     vi.doUnmock('@/lib/security/lockouts');
+    vi.doUnmock('@/lib/security/exemptions');
     vi.doUnmock('next/headers');
     vi.doUnmock('next/cache');
     vi.doUnmock('@/lib/redirect');

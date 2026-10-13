@@ -81,6 +81,9 @@ describe('notification events', () => {
       'waf:control:restart',
       'ban:unban:queue',
       'lockout:unlock',
+      // Granting an exemption audits as lockout:exempt (a registry key); revoking
+      // it names the inverse action while the gate stays lockout:exempt.
+      'lockout:exempt:revoke',
       'tls:renew:queue',
     ]);
     for (const verb of CRITICAL_AUDIT_VERBS) {

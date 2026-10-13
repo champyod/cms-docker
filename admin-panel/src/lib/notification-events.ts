@@ -24,6 +24,8 @@ export const CRITICAL_AUDIT_VERBS: ReadonlySet<string> = new Set([
   'waf:control:restart',
   'ban:unban:queue',
   'lockout:unlock',
+  'lockout:exempt',
+  'lockout:exempt:revoke',
   'tls:renew:queue',
 ]);
 
@@ -45,6 +47,8 @@ export const DISCORD_SENSITIVE_VERBS: ReadonlySet<string> = new Set([
   'override:clear',
   'waf:control:restart',
   'lockout:unlock',
+  'lockout:exempt',
+  'lockout:exempt:revoke',
   'tls:renew:queue',
 ]);
 

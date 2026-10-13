@@ -55,6 +55,7 @@ from cms.db.username import get_display_name
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
 from cms.server.captcha import Captcha
+from cms.server.login_exemption import is_login_exempt
 from cms.server.login_lockout_ledger import record_login_lockout
 from cms.server.contest.authentication import authenticate_request
 from cms.server.credits import load_credits
@@ -99,7 +100,8 @@ class ContestHandler(BaseHandler):
         if ContestHandler._cws_captcha is None:
             ContestHandler._cws_captcha = Captcha(
                 config.contest_web_server.captcha,
-                lockout_sink=record_login_lockout)
+                lockout_sink=record_login_lockout,
+                is_exempt=is_login_exempt)
         return ContestHandler._cws_captcha
 
     def prepare(self):

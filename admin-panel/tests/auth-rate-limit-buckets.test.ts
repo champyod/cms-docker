@@ -122,6 +122,7 @@ describe('bucket key selection by client address', () => {
     vi.resetModules();
     vi.stubEnv('AUTH_SECRET', 'auth-rate-limit-suite-fixture-secret');
     vi.doMock('server-only', () => ({}));
+    vi.doMock('@/lib/security/exemptions', () => ({ isLoginExempt: vi.fn(async () => false) }));
     vi.doMock('@/lib/prisma', () => ({
       prisma: { admins: { findUnique: vi.fn(async () => null), update: vi.fn(async () => undefined) } },
     }));
@@ -146,6 +147,7 @@ describe('bucket key selection by client address', () => {
   beforeEach(() => {
     vi.doUnmock('next/headers');
     vi.doUnmock('server-only');
+    vi.doUnmock('@/lib/security/exemptions');
     vi.doUnmock('@/lib/prisma');
     vi.resetModules();
   });
