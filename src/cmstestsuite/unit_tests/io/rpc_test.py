@@ -289,6 +289,45 @@ class TestRPC(unittest.TestCase):
         self.assertTrue(client.connected, "Autoreconnect didn't kick in "
                                           "after server came back online")
 
+    def test_it_recovers_from_a_transient_resolution_failure(self):
+        # A one-off DNS failure must not kill the reconnect loop.
+        real_getaddrinfo = gevent.socket.getaddrinfo
+        calls = {"count": 0}
+
+        def flaky_getaddrinfo(host, port, **kwargs):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise socket.gaierror("Temporary failure in name resolution")
+            return real_getaddrinfo(host, port, **kwargs)
+
+        with patch("cms.io.rpc.gevent.socket.getaddrinfo",
+                   side_effect=flaky_getaddrinfo):
+            client = RemoteServiceClient(ServiceCoord("Foo", 0), auto_retry=0.001)
+            client.connect()
+            self.clients.append(client)
+            self.assertTrue(
+                client._connection_event.wait(timeout=1.0),
+                "Client never recovered from a transient resolution failure")
+
+    def test_the_reconnect_loop_survives_an_unexpected_connect_error(self):
+        # An unexpected error while connecting must not end the supervisor.
+        client = RemoteServiceClient(ServiceCoord("Foo", 0), auto_retry=0.001)
+        original_connect = client._connect
+        calls = {"count": 0}
+
+        def flaky_connect():
+            calls["count"] += 1
+            if calls["count"] == 1:
+                raise RuntimeError("boom")
+            original_connect()
+
+        with patch.object(client, "_connect", side_effect=flaky_connect):
+            client.connect()
+            self.clients.append(client)
+            self.assertTrue(
+                client._connection_event.wait(timeout=1.0),
+                "Reconnect loop died after an unexpected error")
+
     def test_it_does_not_reconnect_after_an_explicit_disconnect(self):
         client = self.get_client(ServiceCoord("Foo", 0), auto_retry=0.002)
         self.sleep()

@@ -229,11 +229,13 @@ class RemoteServiceBase:
 
         local_address = self._local_address
 
+        # Clear first so no reader or writer observes a live flag with a
+        # half-dismantled socket.
+        self._connection_event.clear()
         self._socket = None
         self._reader = None
         self._writer = None
         self._local_address = None
-        self._connection_event.clear()
 
         logger.info("Terminated connection with %s (local address: %s): %s",
                     self._repr_remote(), local_address, reason)
@@ -538,6 +540,10 @@ class RemoteServiceClient(RemoteServiceBase):
     BREAKER_COOLDOWN = 120.0
     # Log every failure while fresh, then at most this often per target.
     RETRY_LOG_INTERVAL = 60.0
+    # A link that drops sooner than this flapped; it is not a healthy cycle.
+    STUCK_FLAP_SECONDS = 2.0
+    # Consecutive failed cycles before the outage is reported as stuck.
+    STUCK_FAILURES = 5
 
     def __init__(
         self, remote_service_coord: ServiceCoord, auto_retry: float | None = None
@@ -564,6 +570,8 @@ class RemoteServiceClient(RemoteServiceBase):
         self.auto_retry = auto_retry
 
         self._loop = None
+        self._last_retry_log = 0.0
+        self._connected_at = 0.0
 
     def _repr_remote(self):
         """See RemoteServiceBase._repr_remote."""
@@ -590,9 +598,9 @@ class RemoteServiceClient(RemoteServiceBase):
                 self.remote_address.ip,
                 self.remote_address.port,
                 type=socket.SOCK_STREAM)
-        except socket.gaierror:
-            logger.warning("Cannot resolve %s.", self.remote_address)
-            raise
+        except socket.gaierror as error:
+            logger.debug("Cannot resolve %s: %s.", self.remote_address, error)
+            return
 
         for family, type, proto, _canonname, sockaddr in addresses:
             try:
@@ -605,6 +613,7 @@ class RemoteServiceClient(RemoteServiceBase):
                              self._repr_remote(), host, port, error)
             else:
                 self.initialize(sock, self.remote_service_coord)
+                self._connected_at = time.monotonic()
                 break
 
     def _retry_delay(self, failures: int) -> float:
@@ -615,7 +624,7 @@ class RemoteServiceClient(RemoteServiceBase):
 
     def _log_retry(self, failures: int, delay: float, now: float) -> float:
         """Throttled reconnect notice; returns the last-log timestamp."""
-        last = getattr(self, "_last_retry_log", 0.0)
+        last = self._last_retry_log
         if failures <= 3 or now - last >= self.RETRY_LOG_INTERVAL:
             logger.warning(
                 "Couldn't reach %s (%d consecutive failures, "
@@ -624,6 +633,31 @@ class RemoteServiceClient(RemoteServiceBase):
             return now
         return last
 
+    def _backoff(self, failures: int, capped_waits: int) -> int:
+        """Wait out the reconnect delay for a failed cycle.
+
+        failures: consecutive failed cycles so far.
+        capped_waits: consecutive waits already at the cap.
+        return: the updated count of consecutive capped waits.
+
+        """
+        delay = self._retry_delay(failures)
+        if delay >= self.RETRY_MAX_INTERVAL:
+            capped_waits += 1
+        else:
+            capped_waits = 0
+        # Breaker: prolonged outage, probe at cooldown pace instead.
+        if capped_waits > self.BREAKER_CAPPED_WAITS:
+            delay = self.BREAKER_COOLDOWN
+        self._last_retry_log = self._log_retry(failures, delay, time.monotonic())
+        if failures == self.STUCK_FAILURES:
+            logger.error(
+                "Coordinator %s is stuck: %d consecutive failed cycles; "
+                "dependent RPC requests are failing.",
+                self._repr_remote(), failures)
+        gevent.sleep(delay)
+        return capped_waits
+
     def _run(self):
         """Maintain the connection up, if required.
 
@@ -631,25 +665,32 @@ class RemoteServiceClient(RemoteServiceBase):
         failures = 0
         capped_waits = 0
         while True:
-            self._connect()
-            if not self.connected and self.auto_retry is not None:
+            try:
+                if not self.connected:
+                    self._connect()
+            except Exception:
+                logger.error("Unexpected error connecting to %s.",
+                             self._repr_remote(), exc_info=True)
+
+            if not self.connected:
+                if self.auto_retry is None:
+                    break
                 failures += 1
-                delay = self._retry_delay(failures)
-                if delay >= self.RETRY_MAX_INTERVAL:
-                    capped_waits += 1
-                else:
-                    capped_waits = 0
-                # Breaker: prolonged outage, probe at cooldown pace instead.
-                if capped_waits > self.BREAKER_CAPPED_WAITS:
-                    delay = self.BREAKER_COOLDOWN
-                now = time.monotonic()
-                self._last_retry_log = self._log_retry(failures, delay, now)
-                gevent.sleep(delay)
+                capped_waits = self._backoff(failures, capped_waits)
                 continue
+
             failures = 0
             capped_waits = 0
-            if self.connected:
-                self.run()
+            connected_at = self._connected_at
+            self.run()
+            if (self.auto_retry is not None
+                    and not self.connected
+                    and time.monotonic() - connected_at < self.STUCK_FLAP_SECONDS):
+                # The peer accepted then dropped us: back off, do not flap.
+                failures += 1
+                capped_waits = self._backoff(failures, capped_waits)
+                continue
+
             if self.auto_retry is None:
                 break
 
