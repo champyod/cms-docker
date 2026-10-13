@@ -34,6 +34,19 @@ profile_active_name() {
   ' config.toml 2>/dev/null || true
 }
 
+# A key's value inside a [db_<name>] profile, or empty when the profile does not set it.
+# Used to check the switch target before it repoints every service.
+profile_key() {
+  local name="$1" key="$2"
+  awk -v sec="[db_${name}]" -v k="$key" '
+    $0 == sec { in_sec = 1; next }
+    /^\[/ { in_sec = 0 }
+    in_sec && $0 ~ ("^" k "[[:space:]]*=") {
+      if (match($0, /"[^"]*"/)) { print substr($0, RSTART + 1, RLENGTH - 2); exit }
+    }
+  ' config.toml 2>/dev/null || true
+}
+
 usage() {
   cat <<'USAGE'
 Usage:
@@ -139,6 +152,20 @@ main() {
       echo "Available profiles:" >&2
       profile_names >&2
       exit 1
+    fi
+  fi
+
+  # A profile that names a database the server does not have would repoint every service
+  # at a database that cannot answer, so warn before the switch, not after.
+  local target_db target_user
+  target_db="$(profile_key "$name" POSTGRES_DB)"
+  target_user="$(profile_key "$name" POSTGRES_USER)"
+  if [[ -n "$target_db" ]] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx cms-database; then
+    if ! docker exec cms-database psql -U "${target_user:-cmsuser}" -d postgres -tAc \
+           "SELECT 1 FROM pg_database WHERE datname = '${target_db}'" 2>/dev/null | grep -q 1; then
+      echo "WARNING: [db_${name}] points at database '${target_db}', which does not exist on cms-database." >&2
+      echo "         Switching would repoint every service at a database that cannot answer." >&2
+      echo "         Create it first, or fix POSTGRES_DB in [db_${name}]." >&2
     fi
   fi
 
