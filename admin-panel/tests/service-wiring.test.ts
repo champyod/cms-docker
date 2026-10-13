@@ -10,6 +10,7 @@ import {
   type ServiceRow,
   type WiringRow,
 } from '@/lib/service-wiring';
+import { parsePayload, renderFromPayload, type WiringPayload } from '@/lib/service-wiring-cli';
 import {
   assertSafeHostname,
   assertSafePath,
@@ -195,3 +196,52 @@ describe('renderServeConfig', () => {
     expect(parsed.AllowFunnel[key]).toBe(true);
   });
 });
+
+describe('parsePayload', () => {
+  it('accepts the three arrays', () => {
+    const payload = parsePayload('{"services":[],"wirings":[],"exposures":[]}');
+    expect(payload).toEqual({ services: [], wirings: [], exposures: [] });
+  });
+
+  it.each([['[]'], ['null'], ['"x"']])('refuses a payload that is %s', (raw) => {
+    expect(() => parsePayload(raw)).toThrow(WiringError);
+  });
+
+  it('refuses a payload missing a required array', () => {
+    expect(() => parsePayload('{"services":[],"wirings":[]}')).toThrow(/exposures/);
+  });
+});
+
+describe('renderFromPayload', () => {
+  const web = service({ id: 1, name: 'web-1', host: 'web-1', contest_id: 1 });
+  const payload: WiringPayload = {
+    services: [web],
+    wirings: [],
+    exposures: [exposure({ contest_id: 1, hostname: 'a.example.com' })],
+  };
+
+  it('renders nginx blocks for the registry', () => {
+    expect(renderFromPayload(payload, 'nginx')).toContain('server_name a.example.com;');
+  });
+
+  it('renders the tailnet serve config for the registry', () => {
+    const withTailnet: WiringPayload = {
+      ...payload,
+      exposures: [exposure({ contest_id: 1, tailnet: 'cms-1' })],
+    };
+    expect(renderFromPayload(withTailnet, 'serve')).toContain('AllowFunnel');
+  });
+
+  it('refuses a registry with a wiring naming a service it lost', () => {
+    const broken: WiringPayload = {
+      ...payload,
+      wirings: [{ from_service_id: 1, to_service_id: 99, relation: 'drains', enabled: true }],
+    };
+    expect(() => renderFromPayload(broken, 'nginx')).toThrow(WiringError);
+  });
+
+  it('refuses an exposure whose contest has nothing to answer on', () => {
+    expect(() => renderFromPayload({ ...payload, services: [] }, 'nginx')).toThrow(WiringError);
+  });
+});
+
