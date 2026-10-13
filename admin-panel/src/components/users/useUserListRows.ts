@@ -6,13 +6,13 @@ import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
-import { useTableAutoRefresh } from '@/hooks/useTableAutoRefresh';
+import type { LiveStatus } from '@/hooks/useLiveStream';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { listSortQuery, type ListSortInput } from '@/lib/list-sorting';
 import { writeListQuery, type ListQueryState } from '@/lib/list-state';
+import { useLiveCursor } from '@/lib/live/use-live-cursor';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
-const AUTO_REFRESH_INTERVAL_MS = 60000;
 const SEARCH_DEBOUNCE_MS = 300;
 
 type UserTableState = ReturnType<typeof useTable>;
@@ -28,6 +28,7 @@ export interface UserListRows {
   readonly users: UsersPageRow[];
   readonly totalPages: number;
   readonly loading: boolean;
+  readonly liveStatus: LiveStatus;
   readonly searchDraft: string;
   readonly setSearchDraft: (value: string) => void;
   readonly sort: ListSortInput;
@@ -135,19 +136,21 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
       table.setSearch(nextSearch);
       setSort(nextSort);
       setPageInput(String(nextPage));
-      // Why only on navigation: the auto-refresh re-reads the page the reader is
-      // already on, and pushing that same query would put an entry in history
-      // every minute for a list nobody navigated.
+      // Why only on navigation: the live cursor re-reads the page the reader is
+      // already on, and pushing that same query would put an entry in history for
+      // a change nobody navigated to.
       if (isNavigation) syncQueryToUrl({ page: nextPage, perPage: nextPerPage, search: nextSearch, ...listSortQuery(nextSort) });
     } finally {
       setLoading(false);
     }
   }, [syncQueryToUrl, table, initialSort]);
 
-  useTableAutoRefresh({ enabled: true, intervalMs: AUTO_REFRESH_INTERVAL_MS, onRefresh: () => fetchUsers() });
-
   const fetchUsersRef = useRef(fetchUsers);
   useEffect(() => { fetchUsersRef.current = fetchUsers; }, [fetchUsers]);
+
+  // Why a live cursor and not the minute-long poll: that poll re-read the page whether or not
+  // anything had changed, while this one moves only when a user write is recorded.
+  const liveStatus = useLiveCursor('/api/users/stream', () => { void fetchUsersRef.current(); });
 
   const searchUsers = useDebouncedSearch({
     value: searchDraft,
@@ -161,7 +164,7 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
   }, [fetchUsers]);
 
   return {
-    users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
+    users, totalPages: totalPagesState, loading, liveStatus, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
     table, userCache, fetchUsers, searchUsers,
   };
 }

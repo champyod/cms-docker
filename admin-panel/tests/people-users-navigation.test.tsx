@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import { buildEntitySearchers, type EntityHit } from '@/components/palette/entity-searchers';
@@ -21,6 +21,27 @@ function expectTouchTarget(button: Element): void {
 // automatic afterEach cleanup does not run; without it, later row queries
 // would bind to the accumulated document.body.
 afterEach(() => cleanup());
+
+// Why the stand-in: happy-dom has no EventSource, and the list now opens its live stream on mount.
+class FakeEventSource {
+  static instances: FakeEventSource[] = [];
+  onopen: (() => void) | null = null;
+  onmessage: ((event: MessageEvent<string>) => void) | null = null;
+  onerror: (() => void) | null = null;
+  readyState = 0;
+  constructor(readonly url: string) { FakeEventSource.instances.push(this); }
+  close(): void { this.readyState = 2; }
+}
+
+beforeEach(() => {
+  FakeEventSource.instances = [];
+  vi.stubGlobal('EventSource', FakeEventSource);
+  Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),

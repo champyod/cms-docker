@@ -11,6 +11,7 @@ import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
 import { RankingBoardGraph } from '@/components/ranking/RankingBoardGraph';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
+import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
@@ -69,9 +70,12 @@ export default async function RankingBoardPage({
   return (
     <Stack gap={6}>
       <Card className="space-y-4">
-        <Text as="h2" variant="h3">
-          {copy.board.title}
-        </Text>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Text as="h2" variant="h3">
+            {copy.board.title}
+          </Text>
+          <LiveRefresh url="/api/ranking/stream" />
+        </div>
         <Text variant="muted">{boardHint}</Text>
         <Grid as="dl" cols={2} gap={3} className="text-sm">
           <BoardEntry

@@ -14,7 +14,15 @@ import type { LaneBoard } from './evaluationLanes';
 const LANE_AUDIT_SCAN_LIMIT = 2000;
 const QUEUE_STATUS_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/queue_status';
 const QUEUE_RPC_TIMEOUT_MS = 5000;
-const LANE_VERBS: readonly string[] = ['evaluation:lane_assign', 'evaluation:lane_move'];
+
+/**
+ * The lane verbs, as the board and its live cursor both read them.
+ *
+ * Why exported: the cursor that tells the board to reload watches the same two verbs this read
+ * model folds, and a second copy of the pair is what would let a new lane verb move the board while
+ * the cursor stayed asleep.
+ */
+export const LANE_VERBS: readonly string[] = ['evaluation:lane_assign', 'evaluation:lane_move'];
 
 export async function getLaneBoard(): Promise<LaneBoard> {
   await ensurePermission('evaluation:list');

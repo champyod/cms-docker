@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
 import { getWorkersLiveStatus } from '@/app/actions/workers';
+import { useLiveStream } from '@/hooks/useLiveStream';
+import type { WorkersFrame } from '@/lib/live/frames';
 import type { WorkerConfig, WorkerNodeView } from '@/lib/worker-nodes';
 import { toast } from 'sonner';
 
@@ -35,16 +37,16 @@ export function useDeployWorkers(setSaving: SetSaving) {
         })();
     }, []);
 
-    // Poll worker telemetry so activity/lagging stay fresh.
-    useEffect(() => {
-        const id = setInterval(async () => {
-            try {
-                const res = await getWorkersLiveStatus();
-                if (!res.forbidden) setLiveWorkers(res.workers ?? []);
-            } catch { /* keep last snapshot */ }
-        }, 20_000);
-        return () => clearInterval(id);
+    // Why the readings travel whole on the frame and not as a cursor: they are the data this panel
+    // shows, so the panel keeps its last reading until the next one arrives.
+    const onWorkersFrame = useCallback((frame: WorkersFrame): void => {
+        setLiveWorkers(frame.workers);
     }, []);
+
+    const { status: liveStatus } = useLiveStream<WorkersFrame>({
+        url: '/api/workers/stream',
+        onFrame: onWorkersFrame,
+    });
 
     const handleSaveWorkers = useCallback(async () => {
         setSaving(true);
@@ -82,6 +84,7 @@ export function useDeployWorkers(setSaving: SetSaving) {
         workers,
         workersDirty,
         liveWorkers,
+        liveStatus,
         workersForbidden,
         canManageWorkers,
         handleSaveWorkers,
