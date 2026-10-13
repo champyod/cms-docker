@@ -23,6 +23,7 @@ import {
   recordFailedAttempt,
 } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
+import { parseForwardedFor, resolveClientIp } from '@/lib/request-identity';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
@@ -43,11 +44,6 @@ interface AuthenticatedAdmin {
   authentication: string;
 }
 
-async function resolveClientIp(): Promise<string> {
-  const requestHeaders = await headers();
-  return requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
-}
-
 // A dual-stack socket hands back `::ffff:127.0.0.1` where a v4-only one reports
 // the bare address, so the prefix is stripped before the v4 test rather than
 // being tested for twice.
@@ -65,7 +61,7 @@ function isLoopbackIp(ip: string): boolean {
 // bucket there would be one shared counter that locks out unrelated accounts.
 async function resolveBucketKeys(username: string): Promise<readonly string[]> {
   const requestHeaders = await headers();
-  const ip = requestHeaders.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'local';
+  const ip = parseForwardedFor(requestHeaders.get('x-forwarded-for'));
   const accountKey = buildAccountBucketKey(username, ip);
   if (isLoopbackIp(ip)) return [accountKey];
   return [accountKey, buildIpBucketKey(ip)];

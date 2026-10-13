@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
+import { resolveClientIp } from '@/lib/request-identity';
 
 export type AuditResult = 'success' | 'failure';
 
@@ -36,6 +37,13 @@ export function isDestructiveVerb(verb: string): boolean {
     return false;
   }
   return DESTRUCTIVE_VERB_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
+
+export const VIEW_VERB_SUFFIX = ':view';
+
+/** Whether a verb is a page load rather than an action that changed state. */
+export function isPageViewVerb(verb: string): boolean {
+  return verb.endsWith(VIEW_VERB_SUFFIX);
 }
 
 export function assertReasonForDestructive(
@@ -134,6 +142,27 @@ async function publishFrame(
   }
 }
 
+interface AuditRequestContext {
+  readonly ip: string | null;
+  readonly sessionId: string | null;
+}
+
+async function tryResolve<T>(resolve: () => Promise<T>): Promise<T | null> {
+  try {
+    return await resolve();
+  } catch {
+    // Absent outside a request; identity is best-effort and never blocks the row.
+    return null;
+  }
+}
+
+async function resolveAuditContext(): Promise<AuditRequestContext> {
+  return {
+    ip: await tryResolve(() => resolveClientIp()),
+    sessionId: await tryResolve(async () => (await import('@/lib/auth')).getSessionId()),
+  };
+}
+
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   try {
     const { getSession } = await import('@/lib/auth');
@@ -157,6 +186,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     // Why: chaining each row to the previous entry_hash makes the log tamper-evident — editing or dropping any row breaks every later hash.
     const previousHash = previous?.entry_hash ?? null;
     const entryHash = computeEntryHash(previousHash, canonicaliseEntry(entry));
+    const context = await resolveAuditContext();
 
     const created = await prisma.audit_log.create({
       data: {
@@ -167,8 +197,8 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
         before_values: jsonInput(entry.beforeValues),
         after_values: jsonInput(entry.afterValues),
         reason: entry.reason ?? null,
-        ip: entry.ip ?? null,
-        session_id: entry.sessionId ?? null,
+        ip: entry.ip ?? context.ip,
+        session_id: entry.sessionId ?? context.sessionId,
         result: entry.result,
         entry_hash: entryHash,
         prev_hash: previousHash,
