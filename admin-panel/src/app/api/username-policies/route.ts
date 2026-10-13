@@ -7,11 +7,16 @@ import { recordAudit } from '@/lib/audit';
 const SCOPES = ['contest', 'user', 'group'] as const;
 const POLICIES = ['allow', 'deny'] as const;
 
-// WHY one statement: the resolution mirrors the Python side
-// (src/cms/db/username.py resolve_username_config) — the contest
-// policy beats the user policy, which beats the user's group
-// policies, where a deny on any group wins; with no policy set
-// anywhere the feature stays denied.
+type Scope = (typeof SCOPES)[number];
+type Policy = (typeof POLICIES)[number];
+
+interface PolicyInput {
+  scope: Scope;
+  scopeId: number;
+  policy: Policy;
+}
+
+// Mirrors the Python resolution: contest beats user beats group, a deny on any group wins.
 const EFFECTIVE_POLICY_SQL = `
   SELECT policy FROM (
     SELECT 1 AS prio, policy FROM username_policies WHERE scope = 'contest' AND scope_id = $1
@@ -27,7 +32,29 @@ const EFFECTIVE_POLICY_SQL = `
     HAVING COUNT(*) > 0
   ) t ORDER BY prio LIMIT 1`;
 
-export async function GET(req: NextRequest) {
+function isScope(value: unknown): value is Scope {
+  return typeof value === 'string' && (SCOPES as readonly string[]).includes(value);
+}
+
+function isPolicy(value: unknown): value is Policy {
+  return typeof value === 'string' && (POLICIES as readonly string[]).includes(value);
+}
+
+function parsePolicyInput(data: Record<string, unknown>): PolicyInput | null {
+  const scope = data.scope;
+  const policy = data.policy;
+  const scopeId = Number(data.scope_id);
+  if (!isScope(scope) || !isPolicy(policy) || !Number.isInteger(scopeId)) return null;
+  return { scope, scopeId, policy };
+}
+
+async function assertScopeAuthorized(scope: Scope): Promise<Response | null> {
+  if (scope !== 'contest') return null;
+  const contestAuthorized = await verifyApiPermission('contest:update');
+  return contestAuthorized.authorized ? null : contestAuthorized.response;
+}
+
+export async function GET(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('username:policy:read');
   if (!authorized) return response;
 
@@ -47,30 +74,20 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function PUT(req: NextRequest) {
+export async function PUT(req: NextRequest): Promise<Response> {
   const { authorized, response, session } = await verifyApiPermission('username:policy:update');
   if (!authorized) return response;
 
   try {
-    const data = await req.json();
-    const scope = data.scope;
-    const scopeId = Number(data.scope_id);
-    const policy = data.policy;
-    if (!SCOPES.includes(scope) || !POLICIES.includes(policy)
-        || !Number.isInteger(scopeId)) {
-      return apiError({ message: 'Invalid policy', status: 400 });
-    }
-    // WHY the contest scope additionally demands contest:update:
-    // it configures the feature for a whole contest, so the
-    // caller must hold the contest's own update key as well.
-    if (scope === 'contest') {
-      const contestAuthorized = await verifyApiPermission('contest:update');
-      if (!contestAuthorized.authorized) return contestAuthorized.response;
-    }
+    const input = parsePolicyInput(await req.json());
+    if (input === null) return apiError({ message: 'Invalid policy', status: 400 });
+
+    const notAuthorized = await assertScopeAuthorized(input.scope);
+    if (notAuthorized !== null) return notAuthorized;
 
     await prisma.$executeRaw`
       INSERT INTO username_policies (scope, scope_id, policy, updated_at, updated_by)
-      VALUES (${scope}::username_policy_scope, ${scopeId}, ${policy}::username_policy, now(), ${Number(session.userId)})
+      VALUES (${input.scope}::username_policy_scope, ${input.scopeId}, ${input.policy}::username_policy, now(), ${Number(session.userId)})
       ON CONFLICT (scope, scope_id) DO UPDATE
         SET policy = EXCLUDED.policy,
             updated_at = EXCLUDED.updated_at,
@@ -79,13 +96,13 @@ export async function PUT(req: NextRequest) {
     await recordAudit({
       verb: 'username_policy:update',
       entity: 'username_policy',
-      entityId: `${scope}:${scopeId}`,
-      afterValues: { scope, scopeId, policy },
+      entityId: `${input.scope}:${input.scopeId}`,
+      afterValues: { scope: input.scope, scopeId: input.scopeId, policy: input.policy },
       result: 'success',
     });
     revalidatePath('/[locale]/people/users', 'page');
-    if (scope === 'contest') revalidatePath('/[locale]/contests', 'page');
-    return apiSuccess({ scope, scopeId, policy });
+    if (input.scope === 'contest') revalidatePath('/[locale]/contests', 'page');
+    return apiSuccess({ scope: input.scope, scopeId: input.scopeId, policy: input.policy });
   } catch (error) {
     return apiError(error);
   }
