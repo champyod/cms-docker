@@ -243,3 +243,43 @@ export function resolveDisplayZone(ownerZone: string | null | undefined): string
   if (typeof ownerZone === 'string' && isSupportedZone(ownerZone)) return ownerZone;
   return browserZone();
 }
+
+const DAY_START_WALL = '00:00:00';
+const DAY_END_WALL = '23:59:59';
+const LAST_MS_IN_SECOND = 999;
+
+/**
+ * One instant of a `type="date"` day in `zone`: its first second, or its last one followed by the
+ * closing milliseconds when `endOfDay` is set. An empty day yields null, so a half-filled filter
+ * narrows to the bound it does carry.
+ */
+function zoneDayToInstant(day: string, zone: string, endOfDay: boolean): Date | null {
+  const trimmed = day.trim();
+  if (trimmed === '') return null;
+  const instant = zoneWallClockToInstant(`${trimmed}T${endOfDay ? DAY_END_WALL : DAY_START_WALL}`, zone);
+  if (instant === null) return null;
+  return endOfDay ? new Date(instant.getTime() + LAST_MS_IN_SECOND) : instant;
+}
+
+/** The instants a pair of `type="date"` days spans in `zone`; either bound is null when its day is empty. */
+export interface ZoneDayRange {
+  gte: Date | null;
+  lte: Date | null;
+}
+
+/**
+ * The instant range a `type="date"` pair covers. A date input carries no offset of its own, so the
+ * day is read in `zone` — the caller's zone of record, or the browser zone where none exists.
+ * Throws on a day whose own first or last second falls in a DST jump, rather than quietly
+ * narrowing the range to a different day.
+ */
+export function zoneDayRange(
+  fromDay: string | null | undefined,
+  toDay: string | null | undefined,
+  zone: string,
+): ZoneDayRange {
+  return {
+    gte: fromDay ? zoneDayToInstant(fromDay, zone, false) : null,
+    lte: toDay ? zoneDayToInstant(toDay, zone, true) : null,
+  };
+}

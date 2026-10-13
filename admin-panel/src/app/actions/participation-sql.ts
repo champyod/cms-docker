@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { formatStoredPassword, type PasswordKind } from '@/lib/password-format';
+import { zoneWallClockToInstant } from '@/lib/timezone';
 
 const MAX_IP_ENTRIES = 50;
 const CIDR_PATTERN = /^(\d{1,3}\.){3}\d{1,3}(\/(3[0-2]|[12]?\d))?$/;
@@ -28,6 +29,7 @@ interface ParticipationDetailsRow {
   extra_time_seconds: number | null;
   starting_time: Date | string | null;
   ip_string: string | null;
+  timezone: string | null;
 }
 
 export interface ParticipationDetails {
@@ -87,6 +89,12 @@ export async function executeParticipationUpdate(
   const storedPassword = data.password
     ? await formatStoredPassword(data.passwordKind ?? 'plaintext', data.password)
     : null;
+  // Why the zone is resolved before the write: starting_time arrives as a wall clock in the
+  // participation's own contest zone, so the contest row is read first and the wall clock is
+  // converted to the instant it names. A gap or repeat wall clock throws here, before any SQL.
+  const startingTime = data.starting_time
+    ? zoneWallClockToInstant(data.starting_time, await resolveContestZone(participationId))
+    : null;
   const params: unknown[] = [
     data.team_id ?? null,
     data.hidden ?? false,
@@ -94,7 +102,7 @@ export async function executeParticipationUpdate(
     (data.extra_time_seconds ?? 0).toString(),
     (data.delay_time_seconds ?? 0).toString(),
     storedPassword,
-    data.starting_time ? new Date(data.starting_time) : null,
+    startingTime,
     participationId,
     ...validIps,
   ];
@@ -113,17 +121,28 @@ export async function executeParticipationUpdate(
   `, ...params);
 }
 
+/** The contest zone a participation's wall clocks are read in; empty when the contest has none. */
+async function resolveContestZone(participationId: number): Promise<string> {
+  const row = await prisma.participations.findUnique({
+    where: { id: participationId },
+    select: { contests: { select: { timezone: true } } },
+  });
+  return row?.contests?.timezone ?? '';
+}
+
 export async function queryParticipationDetails(id: number): Promise<ParticipationDetailsRow | null> {
   const result = await prisma.$queryRaw<ParticipationDetailsRow[]>`
     SELECT
-      id, contest_id, user_id, team_id,
-      hidden, unrestricted,
-      EXTRACT(EPOCH FROM delay_time)::int as delay_time_seconds,
-      EXTRACT(EPOCH FROM extra_time)::int as extra_time_seconds,
-      starting_time,
-      array_to_string(ip, ', ') as ip_string
-    FROM participations
-    WHERE id = ${id}
+      p.id, p.contest_id, p.user_id, p.team_id,
+      p.hidden, p.unrestricted,
+      EXTRACT(EPOCH FROM p.delay_time)::int as delay_time_seconds,
+      EXTRACT(EPOCH FROM p.extra_time)::int as extra_time_seconds,
+      p.starting_time,
+      array_to_string(p.ip, ', ') as ip_string,
+      c.timezone
+    FROM participations p
+    JOIN contests c ON c.id = p.contest_id
+    WHERE p.id = ${id}
   `;
   return result[0] ?? null;
 }

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { loadActorNames } from '@/lib/admin-names';
+import { resolveDisplayZone, zoneDayRange } from '@/lib/timezone';
 
 const EXPORT_ROW_LIMIT = 5000;
 
@@ -44,12 +45,15 @@ export async function exportAuditLog(
       where.OR = [{ verb: contains }, { reason: contains }, { entity: contains }];
     }
     if (filters.fromDate || filters.toDate) {
-      where.timestamp = {};
-      if (filters.fromDate) where.timestamp.gte = new Date(filters.fromDate);
-      if (filters.toDate) {
-        const end = new Date(filters.toDate);
-        end.setHours(23, 59, 59, 999);
-        where.timestamp.lte = end;
+      // Why: the filter day is read in the reader's own zone, so the export covers exactly the day
+      // the operator selected rather than a UTC-shifted window of it.
+      const dayRange = zoneDayRange(filters.fromDate, filters.toDate, resolveDisplayZone(null));
+      if (dayRange.gte !== null && dayRange.lte !== null) {
+        where.timestamp = { gte: dayRange.gte, lte: dayRange.lte };
+      } else if (dayRange.gte !== null) {
+        where.timestamp = { gte: dayRange.gte };
+      } else if (dayRange.lte !== null) {
+        where.timestamp = { lte: dayRange.lte };
       }
     }
 

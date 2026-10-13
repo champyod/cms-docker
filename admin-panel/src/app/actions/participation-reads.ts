@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
 import { safeUserSelect } from '@/lib/prisma-selects';
+import { utcToZoneWallClock } from '@/lib/timezone';
 import { queryParticipationDetails, type ParticipationDetails } from './participation-sql';
 
 export async function getParticipation(participationId: number) {
@@ -33,7 +34,9 @@ export async function getParticipationDetails(id: number): Promise<Participation
     unrestricted: p.unrestricted,
     delay_time_seconds: p.delay_time_seconds || 0,
     extra_time_seconds: p.extra_time_seconds || 0,
-    starting_time: p.starting_time ? new Date(p.starting_time).toISOString().slice(0, 16) : '',
+    // Why: the picker shows the wall clock the participation's contest zone names, so the stored
+    // instant is converted here instead of showing UTC digits.
+    starting_time: p.starting_time ? utcToZoneWallClock(new Date(p.starting_time).toISOString(), p.timezone ?? '') : '',
     ip_string: p.ip_string || '',
   };
 }
