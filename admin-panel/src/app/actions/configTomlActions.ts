@@ -9,7 +9,6 @@ import { readTomlValue, upsertTomlValue } from '@/lib/discord-webhook';
 import {
   CONTEST_ID_KEY,
   readActiveContestId as readActiveContestIdFromDb,
-  writeActiveContestId as writeActiveContestIdToDb,
 } from '@/lib/active-contest';
 import {
   CONFIG_TOML_FILE,
@@ -222,26 +221,6 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
       afterValues: { source: 'contests.is_active', error: error instanceof Error ? error.name : 'UnknownError' },
       result: 'failure',
     });
-    return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function writeActiveContestId(id: number): Promise<{ success: true } | { success: false; error: string }> {
-  await ensurePermission('env:update');
-  try {
-    // Persist to the database only, the single source of truth. Reaching the running stack
-    // is the deploy path's job (config sync regenerates config.toml/.env from this row,
-    // then the contest services are recreated), so a sync can no longer erase it the way a
-    // write to a generated file would be.
-    await writeActiveContestIdToDb(id);
-    await recordAudit({
-      verb: 'env:update',
-      entity: 'config',
-      afterValues: { source: 'contests.is_active', [CONTEST_ID_KEY]: id },
-      result: 'success',
-    });
-    return { success: true };
-  } catch (error) {
     return { success: false, error: (error as Error).message };
   }
 }
