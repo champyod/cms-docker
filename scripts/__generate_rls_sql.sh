@@ -22,9 +22,7 @@ for arg in "$@"; do
   esac
 done
 
-# WHY: the migration directory name is part of the contract with
-# prisma migrate deploy (lexical apply order), so the name is
-# restricted to the characters Prisma's own directory names use.
+# The directory name must use Prisma's own characters (lexical apply order).
 if [ "$WRITE" -eq 1 ] && ! printf '%s\n' "$WRITE_NAME" | grep -qE '^[A-Za-z0-9_-]+$'; then
   log_die "migration name must be letters, digits, hyphens or underscores: $WRITE_NAME" 2
 fi
@@ -67,21 +65,15 @@ if [ ! -s "$tmp_models" ]; then
   log_die "no models found in $SCHEMA — refusing to emit RLS guards" 1
 fi
 
-# WHY LC_ALL=C on every ordering command below: collation is machine-dependent, so an unpinned
-# sort/comm emits a different block order and a different coverage verdict per locale — the gate
-# then passes locally and fails wherever the locale differs from the author's (a real CI failure).
-# WHY sanity: duplicate table names after @@map resolution would emit duplicate guards; fail instead of silently deduping.
+# LC_ALL=C everywhere: locale-dependent collation would reorder blocks and change the verdict.
+# Duplicate names after @@map resolution are fatal rather than silently deduped.
 if [ "$(LC_ALL=C sort "$tmp_models" | uniq -d | wc -l | tr -d ' ')" -ne 0 ]; then
   dup=$(LC_ALL=C sort "$tmp_models" | uniq -d | tr '\n' ' ')
   log_die "duplicate table names after @@map resolution: $dup" 1
 fi
 
-# WHY: collect every table with ENABLE ROW LEVEL SECURITY somewhere in
-# migration history. Handles both the to_regclass guard form and the
-# direct ALTER TABLE form (including inside EXECUTE). Called again after
-# --write so the generator can verify its own output.
-# WHY LC_ALL=C on these sorts: the committed migration history is emitted in C order, so anything
-# emitted below must use that same order, and comm only agrees with inputs sorted the same way.
+# Collect every table with ENABLE ROW LEVEL SECURITY in migration history, via either form.
+# Sorts stay LC_ALL=C so comm agrees with the C-ordered migration history.
 collect_covered() {
   local output="$1"
   local tmp_a tmp_b
@@ -134,12 +126,7 @@ emit_rls_blocks() {
     printf "  IF to_regclass('public.%s') IS NOT NULL THEN\n" "$tbl"
     printf "    EXECUTE 'ALTER TABLE public.%s ENABLE ROW LEVEL SECURITY';\n" "$tbl"
     printf "    EXECUTE 'ALTER TABLE public.%s FORCE ROW LEVEL SECURITY';\n" "$tbl"
-    # WHY the policy rides along: FORCE makes the table owner subject to
-    # RLS too, and every service (CWS, admin panel) connects as cmsuser,
-    # the owner — without a permissive policy each access would be denied.
-    # The app has no per-user database principal to key a stricter policy
-    # on, so cmsuser_all is the only correct policy (same reasoning as the
-    # hand-authored 20260912000400_rls_policies for the RBAC tables).
+    # FORCE subjects the cmsuser owner to RLS, so a permissive policy must ride along.
     printf "    EXECUTE 'DROP POLICY IF EXISTS cmsuser_all ON public.%s';\n" "$tbl"
     printf "    EXECUTE 'CREATE POLICY cmsuser_all ON public.%s FOR ALL TO cmsuser USING (true) WITH CHECK (true)';\n" "$tbl"
     printf '  END IF;\n'
@@ -163,16 +150,9 @@ fi
 
 uncovered_count=$(wc -l < "$tmp_uncovered" | tr -d ' ')
 
-# WHY --write: redirecting stdout into a hand-named file with a
-# hand-written header let the header drift from the tool that produced
-# the body; --write creates the migration directory, stamps the standard
-# GENERATED header, and verifies the written file closes every gap.
+# --write creates the directory and header and verifies the file closes every gap.
 if [ "$WRITE" -eq 1 ]; then
-  # WHY LC_ALL=C: a host whose locale counts years in another
-  # era (e.g. th_TH renders 2026 as 2569) would otherwise stamp
-  # a migration directory Prisma's lexical apply order never
-  # expects, and the timestamp is the only ordering the directory
-  # name carries.
+  # LC_ALL=C keeps the timestamp year off a non-Gregorian host locale (th_TH renders 2026 as 2569).
   timestamp=$(LC_ALL=C date -u +%Y%m%d%H%M%S)
   migration_dir="${MIGRATIONS_DIR}/${timestamp}_${WRITE_NAME}"
   if [ -e "$migration_dir" ]; then
@@ -184,19 +164,14 @@ if [ "$WRITE" -eq 1 ]; then
       "-- ${timestamp}_${WRITE_NAME}/migration.sql — GENERATED — do not hand-edit" \
       "-- Source: admin-panel/prisma/schema.prisma" \
       "-- Generator: scripts/__generate_rls_sql.sh --write=${WRITE_NAME}" \
-      "-- WHY GENERATED: ENABLE/FORCE plus the cmsuser_all policy per table, all mechanical from schema.prisma." \
-      "-- WHY the policy: FORCE makes the table owner subject to RLS too, and every service connects as cmsuser (the owner), so the permissive policy rides along in the same guarded block." \
-      '-- WHY DO $$ with to_regclass guard: prisma db push --accept-data-loss can drop/rename a table; an unguarded ALTER TABLE would abort the entire apply (ON_ERROR_STOP=1) and leave roles half-applied.' \
+      '-- Mechanical ENABLE/FORCE plus the cmsuser_all policy per table; to_regclass keeps each ALTER safe if prisma db push drops or renames a table.' \
       "-- To regenerate: bash scripts/__generate_rls_sql.sh --write=${WRITE_NAME}" \
       "-- To verify freshness (CI): bash scripts/__generate_rls_sql.sh --check" \
       ""
     emit_rls_blocks
   } > "${migration_dir}/migration.sql"
 
-  # WHY the self-check: a written migration that failed to cover the
-  # tables it was written for would otherwise only surface as a red CI
-  # gate later; re-deriving coverage from the written file makes the
-  # generator verify its own output before reporting success.
+  # Re-derive coverage from the written file so the generator verifies its own output.
   tmp_covered_after=$(mktemp)
   tmp_uncovered_after=$(mktemp)
   trap 'rm -f "$tmp_models" "$tmp_covered" "$tmp_uncovered" "$tmp_extra" "$tmp_covered_after" "$tmp_uncovered_after"' EXIT
