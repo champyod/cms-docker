@@ -182,7 +182,9 @@ def active_contest_id() -> int | None:
     """
     from sqlalchemy import inspect
     with SessionGen() as session:
-        if not inspect(session.get_bind()).has_table("contests"):
+        # Inspector.has_table was removed from the SQLAlchemy 2.0 inspector; listing the
+        # table catalog is the call that exists across supported versions.
+        if "contests" not in inspect(session.get_bind()).get_table_names():
             raise ContestsTableMissingError("the contests table does not exist yet")
         contest = session.query(Contest).filter(Contest.is_active.is_(True)).first()
         return None if contest is None else contest.id
