@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -56,8 +57,11 @@ import { POST as bulkCreate } from '@/app/api/users/bulk/route';
 const CONTEST_ID = 5;
 const ALLOWLIST = '10.0.0.0/8';
 
-function jsonRequest(body: unknown): { json: () => Promise<unknown> } {
-  return { json: async () => body };
+function jsonRequest(body: unknown): NextRequest {
+  return new NextRequest('http://localhost/api/users/bulk', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 beforeEach(() => {
@@ -140,7 +144,7 @@ describe('the shared action strips an allowlist the caller may not set', () => {
 describe('bulk create carries the validated allowlist', () => {
   it('inserts each created participation with the ip column', async () => {
     const response = await bulkCreate(
-      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: ALLOWLIST }) as never,
+      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: ALLOWLIST }),
     );
 
     expect(response.status).toBe(200);
@@ -152,7 +156,7 @@ describe('bulk create carries the validated allowlist', () => {
 
   it('refuses an invalid allowlist before creating any user', async () => {
     const response = await bulkCreate(
-      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: '10.10.0.0/10' }) as never,
+      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: '10.10.0.0/10' }),
     );
 
     expect(response.status).toBe(400);
