@@ -1,3 +1,5 @@
+import { ChevronDown } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
 
 export interface FormFieldRenderProps {
@@ -69,10 +71,23 @@ export interface SelectFieldProps extends Omit<React.SelectHTMLAttributes<HTMLSe
   readonly error?: string;
 }
 
-export function SelectField({ id, label, hint, error, className, ...props }: SelectFieldProps): React.JSX.Element {
+export function SelectField({ id, label, hint, error, required, className, ...props }: SelectFieldProps): React.JSX.Element {
   return (
-    <FormField id={id} label={label ?? ''} hint={hint} error={error}>
-      {(render) => <select {...render} {...props} className={cn(FIELD_CLASSES, className)} />}
+    <FormField id={id} label={label ?? ''} hint={hint} error={error} required={required}>
+      {(render) => (
+        <div className="relative">
+          <select
+            {...render}
+            {...props}
+            className={cn(
+              FIELD_CLASSES,
+              'cursor-pointer appearance-none pr-9 disabled:cursor-not-allowed disabled:opacity-50 dark:[color-scheme:dark]',
+              className
+            )}
+          />
+          <ChevronDown aria-hidden className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+        </div>
+      )}
     </FormField>
   );
 }

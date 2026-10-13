@@ -89,19 +89,10 @@ abbr {
     top: 3em;
     left: 220px;
     right: 0;
-    bottom: 250px;
+    bottom: 0;
     margin: 2px 0 0 2px;
     padding: 0 3em;
     overflow-y: scroll;
-}
-
-#GraphPanel {
-    position: absolute;
-    left: 220px;
-    right: 0;
-    bottom: 0;
-    height: 250px;
-    overflow: hidden;
 }
 
 
@@ -1349,6 +1340,17 @@ abbr {
 
 .persp-view canvas {
     max-width: 100%;
+}
+
+.persp-scores-chart {
+    position: relative;
+    height: 360px;
+}
+
+.persp-solve-chart {
+    position: relative;
+    height: 240px;
+    margin-top: 12px;
 }
 
 .persp-time {
