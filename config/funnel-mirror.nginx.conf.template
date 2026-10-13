@@ -110,6 +110,14 @@ server {
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 
+    # The panel's long-lived endpoints: the shared SSE directives, from the one definition
+    # in scripts/__nginx_sse.sh, so ordinary requests keep the server-level timeout.
+    location ~ ^/${SSE_ENDPOINT_PATTERN} {
+${SSE_PROXY_DIRECTIVES}
+        proxy_pass http://funnel_cms_admin_panel;
+        proxy_redirect off;
+    }
+
     location / {
         proxy_pass http://funnel_cms_admin_panel;
         proxy_redirect off;

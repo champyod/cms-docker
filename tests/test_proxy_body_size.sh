@@ -143,6 +143,25 @@ else
   no "the funnel template renders the configured limit into all three gateways"
 fi
 
+echo "the funnel gateway that fronts the panel reuses the shared SSE location"
+# WHY here: this suite already renders the funnel template and reads __domain.sh's allowlist,
+# and the SSE names must be in that allowlist or envsubst would blank the location.
+if grep -qF 'location ~ ^/${SSE_ENDPOINT_PATTERN}' "${FUNNEL_TEMPLATE}"; then
+  ok "the funnel template declares its SSE location from the shared pattern"
+else
+  no "the funnel template declares its SSE location from the shared pattern"
+fi
+if grep -qF '${SSE_PROXY_DIRECTIVES}' "${FUNNEL_TEMPLATE}"; then
+  ok "the funnel template carries the shared SSE directives"
+else
+  no "the funnel template carries the shared SSE directives"
+fi
+if grep -qF '${SSE_ENDPOINT_PATTERN}' "${DOMAIN_SH}" && grep -qF '${SSE_PROXY_DIRECTIVES}' "${DOMAIN_SH}"; then
+  ok "the shared SSE names are in the domain renderer's envsubst allowlist"
+else
+  no "the shared SSE names are in the domain renderer's envsubst allowlist"
+fi
+
 echo "an unset key still renders a limit"
 # WHY the fallback is read from __domain.sh rather than restated here: the renderer only ever
 # sees a non-empty value because __domain.sh resolves the default before envsubst runs, so

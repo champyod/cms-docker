@@ -420,6 +420,8 @@ services:
     volumes:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
       - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
+      # WHY: render.sh sources this for the panel's SSE location, one definition shared with the domain proxy.
+      - ./scripts/__nginx_sse.sh:/usr/local/bin/nginx-sse.sh:ro
       - ./config/funnel.htpasswd:/etc/nginx/funnel.htpasswd:ro
       # Shared webroot so this proxy can answer the HTTP-01 challenge when it owns :80.
       - ./config/letsencrypt/www:/var/www/certbot:ro

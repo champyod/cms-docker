@@ -47,6 +47,19 @@ has "the primary location dials the variable" 'proxy_pass http://$cms_primary;'
 has "a sub-path route rewrites its prefix away" 'rewrite ^/admin/(.*)$ /$1 break;'
 has "the admin route dials its own variable" 'proxy_pass http://$cms_admin;'
 
+printf '\n== the panel streams are kept alive on both panel vhosts ==\n'
+# WHY the admin vhost and the primary sub-path separately: the panel answers at the root of
+# its own vhost and under /admin on the primary, so the two SSE locations carry different
+# prefixes and a single one would leave the other vhost cutting the stream at 90s.
+has "the admin vhost carries the SSE location" 'location ~ ^/api/((notifications|resources|containers)/stream$|deploy/status/) {'
+has "the primary vhost carries the SSE location under its prefix" 'location ~ ^/admin/api/((notifications|resources|containers)/stream$|deploy/status/) {'
+has "the SSE location lengthens the read timeout" 'proxy_read_timeout 3600s;'
+has "the SSE location buffers nothing" 'proxy_buffering off;'
+sse_locations="$(printf '%s\n' "$OUT" | grep -c 'stream\$|deploy/status/' || true)"
+if [[ "$sse_locations" -eq 2 ]]; then ok "both panel vhosts get the SSE location"; else no "both panel vhosts get the SSE location (found ${sse_locations})"; fi
+if grep -qF 'SSE_ENDPOINT_PATTERN' "${REPO_ROOT}/scripts/__nginx_sse.sh"; then ok "the SSE pattern has one shared definition"; else no "the SSE pattern has one shared definition"; fi
+if grep -qF '${SSE_ENDPOINT_PATTERN}' "${REPO_ROOT}/scripts/__domain.sh"; then ok "the domain renderer lets the shared SSE names through envsubst"; else no "the domain renderer lets the shared SSE names through envsubst"; fi
+
 printf '\n== the front door emits one resolver and a loadable config ==\n'
 # P15: the redis block used to emit a resolver the route table also emits, and the
 # stapling block pointed at a chain.pem issuance may not write. Either alone makes

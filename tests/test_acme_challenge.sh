@@ -29,8 +29,24 @@ render() {
       RANKING_LISTEN_PORT="8890" \
       RANKING_AUTH_DIRECTIVES="" \
       FUNNEL_ENABLED="false" \
+      SSE_SNIPPET="${REPO_ROOT}/scripts/__nginx_sse.sh" \
       bash -c "${body}
 printf '%s' \"\$HTTP_SERVER\""
+}
+
+# The funnel gateway in front of the panel: it sources the shared SSE definition, so this
+# exercises the real render body with funnel enabled and reads the admin gateway block back.
+render_funnel() {
+  env FUNNEL_ENABLED="true" \
+      NGINX_HOST="contest.example.org" \
+      CONTEST_LISTEN_PORT="8888" \
+      FUNNEL_REALM="CMS restricted" \
+      FUNNEL_PANEL_LISTEN="8892" \
+      RANKING_LISTEN_PORT="8890" \
+      RANKING_AUTH_DIRECTIVES="" \
+      SSE_SNIPPET="${REPO_ROOT}/scripts/__nginx_sse.sh" \
+      bash -c "${body}
+printf '%s' \"\$FUNNEL_SERVERS\""
 }
 
 for enable_tls in true false; do
@@ -65,6 +81,32 @@ if grep -q -- '- \./config/letsencrypt/www:/var/www/certbot:ro' "${REPO_ROOT}/do
   ok "docker-compose.yml: webroot mounted into nginx-proxy"
 else
   no "docker-compose.yml: webroot mounted into nginx-proxy"
+fi
+
+printf '\n== the funnel gateway keeps the panel streams alive ==\n'
+# WHY this suite: it already runs the real render body, so the funnel admin gateway is read
+# back from it rather than from a copy of the block.
+funnel="$(render_funnel)"
+if printf '%s' "$funnel" | grep -qF 'location ~ ^/api/((notifications|resources|containers)/stream$|deploy/status/) {'; then
+  ok "the funnel gateway carries the SSE location"
+else
+  no "the funnel gateway carries the SSE location"
+fi
+if printf '%s' "$funnel" | grep -qF 'proxy_read_timeout 3600s;' \
+  && printf '%s' "$funnel" | grep -qF 'proxy_buffering off;'; then
+  ok "the SSE location carries the shared directives"
+else
+  no "the SSE location carries the shared directives"
+fi
+if grep -qF '${SSE_SNIPPET:-/usr/local/bin/nginx-sse.sh}' "${RENDER}"; then
+  ok "the renderer sources the one shared SSE definition"
+else
+  no "the renderer sources the one shared SSE definition"
+fi
+if grep -qF -- '- ./scripts/__nginx_sse.sh:/usr/local/bin/nginx-sse.sh:ro' "${REPO_ROOT}/docker-compose.yml"; then
+  ok "docker-compose.yml: the shared SSE definition mounted into nginx-proxy"
+else
+  no "docker-compose.yml: the shared SSE definition mounted into nginx-proxy"
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

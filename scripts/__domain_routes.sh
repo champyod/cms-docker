@@ -25,6 +25,11 @@
 # mounted on no sub-path at all, which is how a service is taken off the primary vhost
 # without editing the table.
 
+# The SSE directives and endpoint pattern are one shared definition, not a copy here.
+_NGINX_ROUTES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+. "${_NGINX_ROUTES_DIR}/__nginx_sse.sh"
+
 # label|domain_var|path_var|upstream_var|listen_port_var
 _ROUTES_TABLE="$(cat <<'EOF'
 primary|DOMAIN_NAME|CONTEST_ROUTE_PATH|CONTEST_UPSTREAM|CONTEST_LISTEN_PORT
@@ -223,6 +228,26 @@ _routes_location_block() {
   printf '    }\n'
 }
 
+# The panel's long-lived endpoints, dialled exactly like the route that owns the panel: the
+# shared SSE directives (a long read timeout, no buffering) plus the same variable target and
+# prefix-stripping rewrite. WHY a regex location of its own: a location-scoped override is the
+# only way to lengthen the read timeout for the streams without also lengthening it for every
+# ordinary request the same route serves.
+_routes_sse_location_block() {
+  local index="$1" prefix="$2"
+  local upstream_var="${ROUTE_UPSTREAM_VAR[$index]}"
+  local port_var="${ROUTE_PORT_VAR[$index]}"
+  local target_var
+  target_var="$(_route_target_var "${ROUTE_LABEL[$index]}")"
+  printf '    location ~ ^%s/%s {\n' "$prefix" "$SSE_ENDPOINT_PATTERN"
+  printf '%s\n' "$SSE_PROXY_DIRECTIVES"
+  printf '        set %s %s:%s;\n' "$target_var" "${!upstream_var}" "${!port_var}"
+  [[ -z "$prefix" ]] || printf '        rewrite ^%s/(.*)$ /$1 break;\n' "$prefix"
+  printf '        proxy_pass http://%s;\n' "$target_var"
+  printf '        proxy_redirect off;\n'
+  printf '    }\n'
+}
+
 # The page's own static assets are served without the route's rate limit: the page
 # asks for them in one burst, and a limit sized for the dynamic endpoints 503s the
 # tail of that burst — the scripts that draw the page. A regex location outranks the
@@ -249,7 +274,7 @@ _routes_static_location_block() {
 # served from this vhost and no block is emitted for it.
 _routes_render_vhost() {
   local domain_var="$1" is_primary="$2"
-  local index owner matcher blocks=""
+  local index owner matcher sse_prefix blocks=""
   for index in "${!ROUTE_LABEL[@]}"; do
     owner=0
     if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]]; then
@@ -272,6 +297,13 @@ _routes_render_vhost() {
     # The ranking page's assets skip the route's rate limit, which the route keeps.
     if (( owner )) && [[ "${ROUTE_LABEL[$index]}" == "ranking" ]]; then
       blocks+="$(_routes_static_location_block "$index")"$'\n'
+    fi
+    # The panel's streams: rooted where the panel answers, so the prefix is the vhost root
+    # for its owner and the route's sub-path for the primary vhost.
+    if [[ "${ROUTE_LABEL[$index]}" == "admin" ]]; then
+      sse_prefix=""
+      (( owner )) || sse_prefix="${ROUTE_PATH[$index]}"
+      blocks+="$(_routes_sse_location_block "$index" "$sse_prefix")"$'\n'
     fi
   done
   printf '%s' "$blocks"

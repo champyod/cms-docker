@@ -1,7 +1,11 @@
 import { verifyApiPermission } from '@/lib/api-utils';
 import { getRecent, subscribe, type QueuedNotification } from '@/lib/notification-queue';
+import { LIVE_HEARTBEAT_MS, LIVE_STREAM_HEADERS } from '@/lib/constants/live-stream';
 
 export const dynamic = 'force-dynamic';
+
+/** An empty frame the client drops (it carries no frame id); sent only to hold the connection open. */
+const HEARTBEAT_FRAME = 'data: {}\n\n';
 
 /** Numeric row id behind a stable `audit-<n>` frame id, or null. */
 function frameRowId(id: string): number | null {
@@ -12,47 +16,42 @@ function frameRowId(id: string): number | null {
 }
 
 export async function GET(request: Request): Promise<Response> {
-  // Why audit:read with no exception: every frame derives from audit rows, so
-  // the audit gate is the correct boundary.
   const { authorized, response } = await verifyApiPermission('audit:read');
   if (!authorized) return response;
 
-  const url = new URL(request.url);
-  const since = Number(url.searchParams.get('since') ?? 0);
-
+  const since = Number(new URL(request.url).searchParams.get('since') ?? 0);
   const encoder = new TextEncoder();
   let closed = false;
   let unsubscribe: (() => void) | null = null;
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
+
+  const stop = (): void => {
+    closed = true;
+    unsubscribe?.();
+    if (heartbeat !== null) clearInterval(heartbeat);
+  };
 
   const stream = new ReadableStream({
     start(controller) {
-      const push = (frame: QueuedNotification): void => {
-        if (closed) return;
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(frame)}\n\n`));
+      const send = (frame: string): void => {
+        if (!closed) controller.enqueue(encoder.encode(frame));
       };
+      const sendNotification = (frame: QueuedNotification): void => send(`data: ${JSON.stringify(frame)}\n\n`);
       for (const frame of getRecent()) {
         const rowId = frameRowId(frame.id);
-        if (rowId !== null && rowId <= since) continue;
-        push(frame);
+        if (rowId === null || rowId > since) sendNotification(frame);
       }
-      unsubscribe = subscribe(push);
+      unsubscribe = subscribe(sendNotification);
+      // Why a real frame and not an SSE comment: a comment never dispatches onmessage, so it could not hold the watchdog.
+      heartbeat = setInterval(() => send(HEARTBEAT_FRAME), LIVE_HEARTBEAT_MS);
       request.signal.addEventListener('abort', () => {
-        closed = true;
-        unsubscribe?.();
+        stop();
         controller.close();
       });
     },
     cancel() {
-      closed = true;
-      unsubscribe?.();
+      stop();
     },
   });
-
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      Connection: 'keep-alive',
-    },
-  });
+  return new Response(stream, { headers: LIVE_STREAM_HEADERS });
 }

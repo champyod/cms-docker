@@ -5,6 +5,11 @@
 # otherwise        -> plain HTTP :80 server proxying to CWS.
 set -eu
 
+# WHY sourced and not inlined: the panel's SSE directives and endpoint pattern are one shared
+# definition across every proxy that fronts the panel; compose mounts this file read-only.
+# shellcheck source=/dev/null
+. "${SSE_SNIPPET:-/usr/local/bin/nginx-sse.sh}"
+
 PROXY_COMMON='
     client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
@@ -38,6 +43,10 @@ PROXY_ADMIN_PANEL='
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
 
+# The funnel gateway in front of the panel serves the panel's long-lived endpoints too, so the
+# shared SSE directives land here rather than as a fourth copy of the same values.
+SSE_LOCATION="$(printf '    location ~ ^/%s {\n%s\n        proxy_pass http://admin_panel_next;\n        proxy_redirect off;\n    }' "$SSE_ENDPOINT_PATTERN" "$SSE_PROXY_DIRECTIVES")"
+
 RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 RANKING_AUTH="${RANKING_AUTH_DIRECTIVES:-}"
 
@@ -51,6 +60,7 @@ server {
     auth_basic           \"@FUNNEL_REALM@\";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 $PROXY_ADMIN_PANEL
+$SSE_LOCATION
     location / {
         proxy_pass http://admin_panel_next;
         proxy_redirect off;
