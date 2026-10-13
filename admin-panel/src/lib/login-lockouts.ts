@@ -10,7 +10,7 @@ export async function listLoginLockouts(url: string): Promise<LoginLockout[]> {
   const rows = await Promise.all(
     LOCKOUT_NAMESPACES.map(async (entry) => {
       const lockouts = await listLockouts(url, entry.namespace);
-      return lockouts.map((lockout) => ({ ...lockout, surface: entry.label }));
+      return lockouts.map((lockout) => ({ ...lockout, surface: entry.surface }));
     }),
   );
   return rows.flat().sort((left, right) => right.count - left.count);
