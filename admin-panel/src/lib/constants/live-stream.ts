@@ -11,6 +11,12 @@ export const RESOURCE_SUMMARY_POLL_MS = 5000;
 /** Container state: what the containers page used to poll every 10 seconds. */
 export const CONTAINERS_POLL_MS = 10_000;
 
+/** The audit log's newest-row check: what the audit table used to poll every 5 seconds. */
+export const AUDIT_POLL_MS = 5000;
+
+/** Unanswered questions: what the header used to poll every 30 seconds. */
+export const QUESTIONS_POLL_MS = 30_000;
+
 /**
  * How often a stream restates its last snapshot even when nothing changed.
  *

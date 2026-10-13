@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useTransition } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useLiveStream } from '@/hooks/useLiveStream';
+import { LiveIndicator } from '@/components/core/LiveIndicator';
+import type { AuditCursorFrame } from '@/lib/live/frames';
 import type { ListSortInput } from '@/lib/list-sorting';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { EmptyState } from '@/components/core/EmptyState';
@@ -54,14 +57,24 @@ export function AuditTable({
 
   const [entities, setEntities] = useState<string[]>([]);
   const [pageInput, setPageInput] = useState(String(currentPage));
+  const latestAuditIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const timer = setInterval(() => {
+  // Why the cursor and not the rows: the rows on screen are this page's own query, so a new one is only
+  // visible through the reload the stream triggers — and only once per new row.
+  const onAuditFrame = useCallback(
+    (frame: AuditCursorFrame): void => {
+      if (latestAuditIdRef.current === frame.latestId) return;
+      latestAuditIdRef.current = frame.latestId;
       router.refresh();
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [autoRefresh, router]);
+    },
+    [router],
+  );
+
+  const { status: liveStatus } = useLiveStream<AuditCursorFrame>({
+    url: '/api/audit/stream',
+    onFrame: onAuditFrame,
+    enabled: autoRefresh,
+  });
 
   useEffect(() => {
     void (async () => {
@@ -225,6 +238,12 @@ export function AuditTable({
           toDate: toDateFilter,
         }}
       />
+
+      {autoRefresh && (
+        <div className="flex justify-end">
+          <LiveIndicator status={liveStatus} />
+        </div>
+      )}
 
       <ResponsiveTable
         columns={columns}

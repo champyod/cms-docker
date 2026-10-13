@@ -1,56 +1,35 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useState } from 'react';
 import { BellRing } from 'lucide-react';
-import { toast } from 'sonner';
 import { Button } from '@/components/core/Button';
-import { useLiveStream } from '@/hooks/useLiveStream';
-import { cursorFromFrameId, isNewFrame } from '@/lib/notification-queue';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
+import type { QueuedNotification } from '@/lib/notification-queue';
 
-interface AlertFrame {
-  id: string;
-  level: 'critical' | 'warning';
-  title: string;
-  detail: string;
-  timestamp: string;
+interface NotificationBellProps {
+  events: readonly QueuedNotification[];
+  unread: number;
+  onClear: () => void;
+  onSeen: () => void;
 }
 
-const MAX_EVENTS = 20;
-
-/** System alert bell: critical admin actions and unusual-activity warnings via server push. */
-export function NotificationBell(): React.JSX.Element {
+/**
+ * System alert bell: the critical admin actions and unusual-activity warnings the notification service
+ * holds, rendered as a count and a list.
+ *
+ * Why the bell renders and does not listen: the service owns the connection, the dedup and the
+ * alerting, so this stays the same bell whether its alerts arrive from the audit stream or from a
+ * later channel.
+ */
+export function NotificationBell({ events, unread, onClear, onSeen }: NotificationBellProps): React.JSX.Element {
   // Why: an alert is about the running system, not about any one contest, so it has no owner zone
   // of its own and reads in the reader's.
   const formatTimestamp = useFormatTimestamp();
-  const [events, setEvents] = useState<AlertFrame[]>([]);
   const [open, setOpen] = useState(false);
-  const [unread, setUnread] = useState(0);
-  const [lastId, setLastId] = useState(0);
-  const seenIdsRef = useRef<Set<string>>(new Set());
-
-  const handleFrame = useCallback((frame: AlertFrame) => {
-    if (!frame || typeof frame.id !== 'string') return;
-    // Why the guard sits before every side effect: a reconnect replays the
-    // backlog, and the list dedup below used to swallow the repeat while the
-    // toast and unread count still fired a second time.
-    if (!isNewFrame(seenIdsRef.current, frame.id)) return;
-    seenIdsRef.current.add(frame.id);
-    setLastId((previous) => cursorFromFrameId(previous, frame.id));
-    setEvents((prev) => [frame, ...prev].slice(0, MAX_EVENTS));
-    setUnread((count) => count + 1);
-    if (frame.level === 'critical') toast.error(frame.title, { description: frame.detail });
-    else toast.warning(frame.title, { description: frame.detail });
-  }, []);
-
-  // Why the cursor travels in the url: the stream replays its backlog on every
-  // (re)connect, and `since` narrows that replay to frames this viewer is
-  // still missing — which is what stops focus toggles from re-toasting.
-  useLiveStream<AlertFrame>({ url: `/api/notifications/stream?since=${lastId}`, onFrame: handleFrame });
 
   const toggle = (): void => {
-    setOpen((v) => !v);
-    setUnread(0);
+    setOpen((value) => !value);
+    onSeen();
   };
 
   return (
@@ -69,7 +48,7 @@ export function NotificationBell(): React.JSX.Element {
         <div className="fixed inset-x-3 top-16 max-h-96 overflow-y-auto rounded-xl border border-border bg-card shadow-xl z-50 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80 sm:max-w-none">
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">System alerts</span>
-            <button type="button" onClick={() => setEvents([])} className="text-xs text-muted-foreground hover:text-foreground">
+            <button type="button" onClick={onClear} className="text-xs text-muted-foreground hover:text-foreground">
               Clear
             </button>
           </div>

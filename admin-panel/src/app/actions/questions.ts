@@ -1,7 +1,6 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
@@ -116,24 +115,4 @@ export async function unignoreQuestion(questionId: number) {
     const e = error as Error;
     return { success: false, error: e.message };
   }
-}
-
-export async function getUnansweredQuestions(contestId: number | null) {
-  await ensurePermission('question:list');
-  const where: Record<string, unknown> = {
-    reply_timestamp: null,
-    ignored: false
-  };
-
-  if (contestId) {
-    where.participations = { contest_id: contestId };
-  }
-
-  return prisma.questions.findMany({
-    where: where as Prisma.questionsWhereInput,
-    include: {
-      participations: { include: { users: { select: { username: true } } } }
-    },
-    orderBy: { question_timestamp: 'desc' }
-  });
 }

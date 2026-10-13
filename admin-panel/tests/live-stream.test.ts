@@ -8,6 +8,7 @@ import {
 } from '@/lib/constants/live-stream';
 import { GET as resourcesStream } from '@/app/api/resources/stream/route';
 import { GET as containersStream } from '@/app/api/containers/stream/route';
+import { framesWithin, toFrame } from './stream-frames';
 import type { ContainersFrame, ResourceFrame, ServerStats, WorkerNodeView } from '@/lib/live-frames';
 
 /**
@@ -42,10 +43,6 @@ vi.mock('@/lib/container-probes', () => ({
   collectContainerRestartCount: mocks.collectContainerRestartCount,
 }));
 vi.mock('@/lib/container-restart-store', () => ({ readContainerRestartConfig: mocks.readContainerRestartConfig }));
-
-// Why captured before the fake clock is installed: the tests need one timer that measures real time
-// while the streams' own timers are driven by hand.
-const realSetTimeout = globalThis.setTimeout.bind(globalThis);
 
 const EVERY_PERMISSION = ['all:all', 'service:read', 'container:read', 'container:list', 'resource:list', 'resource:read'];
 const STATS_ONLY = ['resource:list', 'resource:read'];
@@ -88,41 +85,9 @@ async function openResources(limit = '20'): Promise<ReadableStreamDefaultReader<
 }
 
 async function openContainers(): Promise<ReadableStreamDefaultReader<Uint8Array>> {
-  const response = await containersStream();
+  const response = await containersStream(new Request('http://panel.local/api/containers/stream'));
   expect(response.status).toBe(200);
   return (response.body as ReadableStream<Uint8Array>).getReader();
-}
-
-/**
- * Reads the frames a stream delivered, and returns once it has been quiet for a real moment.
- *
- * Why the pending read is remembered per stream: a read abandoned when the quiet timer wins would
- * swallow the next frame, and "no frame was sent" is exactly what several of these tests assert.
- */
-const pendingReads = new WeakMap<
-  ReadableStreamDefaultReader<Uint8Array>,
-  Promise<ReadableStreamReadResult<Uint8Array>>
->();
-
-async function framesWithin(reader: ReadableStreamDefaultReader<Uint8Array>, quietMs = 30): Promise<string[]> {
-  const frames: string[] = [];
-  for (;;) {
-    let pending = pendingReads.get(reader);
-    if (pending === undefined) {
-      pending = reader.read();
-      pendingReads.set(reader, pending);
-    }
-    const quiet = new Promise<'quiet'>((resolve) => { realSetTimeout(() => resolve('quiet'), quietMs); });
-    const next = await Promise.race([pending, quiet]);
-    if (next === 'quiet') return frames;
-    pendingReads.delete(reader);
-    if (next.done) return frames;
-    frames.push(new TextDecoder().decode(next.value));
-  }
-}
-
-function toFrame<TFrame>(raw: string): TFrame {
-  return JSON.parse(raw.replace(/^data: /, '').trim()) as TFrame;
 }
 
 /** Every frame must be dispatcheable: an SSE comment would never reach the client's onmessage. */
@@ -351,7 +316,7 @@ describe('containers stream', () => {
 
   it('refuses the connection without the page permission', async () => {
     mocks.verifyApiPermission.mockResolvedValue({ authorized: false, response: new Response('nope', { status: 403 }) });
-    const response = await containersStream();
+    const response = await containersStream(new Request('http://panel.local/api/containers/stream'));
     expect(response.status).toBe(403);
     expect(mocks.collectContainers).not.toHaveBeenCalled();
   });
