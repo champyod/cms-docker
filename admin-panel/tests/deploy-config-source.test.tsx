@@ -49,10 +49,10 @@ describe('mismatch banner names the sources it actually compares', () => {
     <MismatchBanner activeContestId={12} activeContestName="Autumn" dbActiveContestId={10} containerContestId={10} />,
   );
 
-  it('reports config.toml [contest] CONTEST_ID against the database and the container', () => {
-    expect(bannerHtml).toContain('config.toml');
-    expect(bannerHtml).toContain('CONTEST_ID');
-    expect(bannerHtml).toContain('Mismatch between config.toml and database and config.toml and running container');
+  it('reports the database row against the running container', () => {
+    expect(bannerHtml).toContain('database');
+    expect(bannerHtml).toContain('running container');
+    expect(bannerHtml).not.toContain('config.toml');
   });
 
   it('does not name the generated .env as a source', () => {
