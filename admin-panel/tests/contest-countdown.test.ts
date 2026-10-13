@@ -7,7 +7,6 @@ import {
   isCountdownDigit,
   COUNTDOWN_MIN_FONT_PX,
   DEFAULT_COUNTDOWN_THRESHOLD,
-  DEFAULT_COUNTDOWN_TIMEZONE,
   countdownPhaseWindowMs,
   countdownTarget,
   fitCountdownFontPx,
@@ -221,16 +220,15 @@ describe('isCountdownDigit', () => {
 });
 
 describe('timezone helpers', () => {
-  it('defaults to UTC+7', () => {
-    expect(DEFAULT_COUNTDOWN_TIMEZONE).toBe('Asia/Bangkok');
-    expect(zoneOffsetLabel(DEFAULT_COUNTDOWN_TIMEZONE)).toBe('UTC+07:00');
+  it('labels the Bangkok offset as UTC+7', () => {
+    expect(zoneOffsetLabel('Asia/Bangkok')).toBe('UTC+07:00');
   });
 
   it('lists the full zone set the runtime knows, including the default and UTC', () => {
     const zones = listTimezones();
     expect(zones.length).toBeGreaterThan(50);
     expect(zones).toContain('UTC');
-    expect(zones).toContain(DEFAULT_COUNTDOWN_TIMEZONE);
+    expect(zones).toContain('Asia/Bangkok');
   });
 
   it('answers support for a known zone and rejects an unknown one', () => {
@@ -242,7 +240,7 @@ describe('timezone helpers', () => {
     const offsets = zoneOffsetMap();
     const zones = listTimezones();
     expect(offsets.size).toBe(zones.length);
-    expect(offsets.get(DEFAULT_COUNTDOWN_TIMEZONE)).toBe('UTC+07:00');
+    expect(offsets.get('Asia/Bangkok')).toBe('UTC+07:00');
   });
 
   it('renders a zone time deterministically for UTC', () => {

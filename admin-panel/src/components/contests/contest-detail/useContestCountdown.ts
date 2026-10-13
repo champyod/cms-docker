@@ -7,11 +7,11 @@ import type { ContestCountdownData } from '@/lib/queries/contest-detail';
 import {
   COUNTDOWN_THRESHOLD_UNITS,
   DEFAULT_COUNTDOWN_THRESHOLD,
-  DEFAULT_COUNTDOWN_TIMEZONE,
   isSupportedTimezone,
   type ContestPhase,
   type CountdownThreshold,
 } from '@/lib/contest-countdown';
+import { resolveDisplayZone } from '@/lib/timezone';
 
 const TICK_MS = 1000;
 const CONFIG_POLL_MS = 15000;
@@ -68,6 +68,28 @@ export function usePhaseNotifications(name: string, phase: ContestPhase): void {
   }, [phase, name]);
 }
 
+/**
+ * A zone pick kept beside the contest zone it was made against. The contest record is
+ * authoritative: a pick is honored only while its basis still matches, so editing the
+ * contest's own zone discards every override rather than leaving a stale one in force.
+ */
+interface ZoneOverride {
+  readonly zone: string;
+  readonly basis: string | null;
+}
+
+function parseZoneOverride(raw: string | null): ZoneOverride | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ZoneOverride>;
+    if (typeof parsed.zone !== 'string' || !isSupportedTimezone(parsed.zone)) return null;
+    return { zone: parsed.zone, basis: typeof parsed.basis === 'string' ? parsed.basis : null };
+  } catch (error: unknown) {
+    console.warn('Ignoring unreadable countdown timezone override:', error);
+    return null;
+  }
+}
+
 function subscribeTimezone(onStoreChange: () => void): () => void {
   window.addEventListener('storage', onStoreChange);
   window.addEventListener(TIMEZONE_EVENT, onStoreChange);
@@ -77,18 +99,63 @@ function subscribeTimezone(onStoreChange: () => void): () => void {
   };
 }
 
-function readTimezone(): string {
-  const saved = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
-  return saved && isSupportedTimezone(saved) ? saved : DEFAULT_COUNTDOWN_TIMEZONE;
+// Cached: useSyncExternalStore needs a stable snapshot for an unchanged value.
+let cachedOverrideRaw: string | null = null;
+let cachedOverride: ZoneOverride | null = null;
+
+function readZoneOverride(): ZoneOverride | null {
+  const raw = window.localStorage.getItem(TIMEZONE_STORAGE_KEY);
+  if (raw !== cachedOverrideRaw) {
+    cachedOverrideRaw = raw;
+    cachedOverride = parseZoneOverride(raw);
+  }
+  return cachedOverride;
 }
 
-/** The chosen zone as an external store, so a mount effect never has to setState. */
-export function useCountdownTimezone(): { timezone: string; setTimezone: (timeZone: string) => void } {
-  const timezone = useSyncExternalStore(subscribeTimezone, readTimezone, () => DEFAULT_COUNTDOWN_TIMEZONE);
+/** An override applies only while the contest zone it was made against is still the contest's own. */
+function overrideFor(override: ZoneOverride | null, contestTimezone: string | null): string | null {
+  return override && override.basis === contestTimezone ? override.zone : null;
+}
+
+interface CountdownTimezoneOptions {
+  /** The owning contest's zone, from the polled timing data; the countdown's own default. */
+  readonly contestTimezone: string | null;
+  /** A pick made in full screen is session-only and reverts when the screen is exited. */
+  readonly isFullscreen: boolean;
+}
+
+/**
+ * The zone the countdown displays in. Defaults to the contest's own zone, else the browser
+ * zone. A pick outside full screen persists per browser; a pick inside full screen lives
+ * only for the session and is dropped on exit; either is forgotten once the contest zone
+ * it was made against changes.
+ */
+export function useCountdownTimezone({
+  contestTimezone,
+  isFullscreen,
+}: CountdownTimezoneOptions): { timezone: string; setTimezone: (timeZone: string) => void } {
+  const baseZone = resolveDisplayZone(contestTimezone);
+  const persisted = useSyncExternalStore(subscribeTimezone, readZoneOverride, () => null);
+  const [sessionOverride, setSessionOverride] = useState<ZoneOverride | null>(null);
+
+  // Why during render, not an effect: an effect would paint the dropped zone for one frame.
+  // Leaving full screen ends the session, so its pick is cleared and a later entry starts clean.
+  if (!isFullscreen && sessionOverride !== null) setSessionOverride(null);
+
+  const timezone =
+    overrideFor(sessionOverride, contestTimezone)
+    ?? overrideFor(persisted, contestTimezone)
+    ?? baseZone;
+
   const setTimezone = useCallback((timeZone: string): void => {
-    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, timeZone);
+    if (isFullscreen) {
+      setSessionOverride({ zone: timeZone, basis: contestTimezone });
+      return;
+    }
+    window.localStorage.setItem(TIMEZONE_STORAGE_KEY, JSON.stringify({ zone: timeZone, basis: contestTimezone }));
     window.dispatchEvent(new Event(TIMEZONE_EVENT));
-  }, []);
+  }, [contestTimezone, isFullscreen]);
+
   return { timezone, setTimezone };
 }
 

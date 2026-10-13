@@ -61,9 +61,11 @@ export function ContestCountdownTab({
   const router = useRouter();
   const surfaceRef = useRef<HTMLDivElement>(null);
   const { timing, now } = useCountdownTiming(data);
-  const { timezone, setTimezone } = useCountdownTimezone();
   const { threshold, setThreshold } = useCountdownThreshold();
   const { isFullscreen, toggle: toggleFullscreen } = useElementFullscreen(surfaceRef);
+  // Why the polling timing, not the initial data: an edit to the contest zone reaches the tab
+  // through the repoll, and the hook must re-default to it the moment it arrives.
+  const { timezone, setTimezone } = useCountdownTimezone({ contestTimezone: timing.timezone, isFullscreen });
   const { isPaused, togglePaused } = useContestMotion();
 
   const phase = resolveContestPhase(timing, now);
