@@ -599,9 +599,9 @@
   display: block;
 }
 
-/* Unit label below the card. */
+/* Unit label below the card: fluid, with a floor that keeps it legible at the smallest digit clamp. */
 .yt-unit-label {
-  font-size: 0.18em;           /* relative to the digit font so it scales together */
+  font-size: clamp(0.7rem, min(3.2vw, 5vh), 2rem);
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -646,6 +646,10 @@
 
 .countdown-surface:fullscreen .yt-sep {
   font-size: clamp(1.8rem, min(14vw, 26vh), 11rem);
+}
+
+.countdown-surface:fullscreen .yt-unit-label {
+  font-size: clamp(1.1rem, min(3.6vw, 5.6vh), 2.6rem);
 }
 
 /*

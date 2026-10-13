@@ -146,7 +146,7 @@ export function ContestCountdownTab({
 
         <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
           <span className="countdown-stage-label">{STAGE_LABELS[stage]}</span>
-          <span className="text-sm text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>
+          <span className="text-[clamp(0.8rem,1.8vmin,1.1rem)] text-muted-foreground">{describeMoment(timing, phase, timezone)}</span>
         </div>
       </div>
     </div>
