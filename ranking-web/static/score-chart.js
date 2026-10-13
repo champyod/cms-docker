@@ -176,8 +176,24 @@
       colors: null,
       dim: null,
       hover: null,
-      solo: null
+      solo: null,
+      theme: 'light'
     };
+
+    var THEMES = {
+      light: { ink: '#000', grid: '#e3e3e3', axis: '#555', legendBg: 'rgba(255,255,255,0.85)', legendInk: '#000', legendEdge: '#ccc', page: '#ffffff' },
+      dark: { ink: '#e8e8e8', grid: '#3a3d46', axis: '#999', legendBg: 'rgba(30,30,30,0.9)', legendInk: '#e8e8e8', legendEdge: '#555', page: '#14161c' }
+    };
+
+    function theme() { return THEMES[state.theme] || THEMES.light; }
+
+    function setTheme(name) {
+      state.theme = (name === 'dark') ? 'dark' : 'light';
+      renderLegend();
+      schedule(false);
+    }
+
+    function getTheme() { return state.theme; }
 
     /* ----- data normalisation ----- */
 
@@ -234,7 +250,7 @@
       legend.selectAll('div.sc-item')
         .style('opacity', function (t) { return !fk || fk === t.id ? 1 : 0.4; })
         .style('outline', function (t) {
-          return state.solo === t.id ? '2px solid #333' : '1px solid #ccc';
+          return state.solo === t.id ? '2px solid ' + theme().ink : '1px solid ' + theme().legendEdge;
         })
         .style('font-weight', function (t) {
           return state.solo === t.id ? 'bold' : 'normal';
@@ -270,9 +286,9 @@
             .style('gap', '4px')
             .style('padding', '1px 6px 1px 3px')
             .style('border-radius', '3px')
-            .style('background', 'rgba(255,255,255,0.85)')
+            .style('background', theme().legendBg)
             .style('font', '11px monospace')
-            .style('color', '#000')
+            .style('color', theme().legendInk)
             .style('cursor', 'pointer')
             .style('user-select', 'none');
           d.append('span').attr('class', 'sc-sw')
@@ -284,6 +300,7 @@
         });
       items.select('.sc-sw').style('background', function (t) { return state.colors(t.id); });
       items.select('.sc-lb').text(function (t) { return t.name; });
+      items.style('background', theme().legendBg).style('color', theme().legendInk);
       items
         .on('mouseenter', function (event, t) { setHover(t.id); })
         .on('mouseleave', function () { setHover(null); })
@@ -347,9 +364,9 @@
       gGrid.call(
         d3.axisLeft(y).tickValues(tv).tickSize(-iw).tickPadding(6)
       );
-      gGrid.select('.domain').attr('stroke', '#555');
-      gGrid.selectAll('.tick line').attr('stroke', '#e3e3e3');
-      gGrid.selectAll('.tick text').attr('fill', '#000').style('font-size', '11px');
+      gGrid.select('.domain').attr('stroke', theme().axis);
+      gGrid.selectAll('.tick line').attr('stroke', theme().grid);
+      gGrid.selectAll('.tick text').attr('fill', theme().ink).style('font-size', '11px');
 
       gBars.attr('transform', 'translate(' + m.left + ',' + m.top + ')');
 
@@ -467,8 +484,8 @@
           bg.setAttribute('x', x); bg.setAttribute('y', y);
           bg.setAttribute('width', boxW); bg.setAttribute('height', 14);
           bg.setAttribute('rx', 3);
-          bg.setAttribute('fill', 'rgba(255,255,255,0.85)');
-          bg.setAttribute('stroke', '#ccc');
+          bg.setAttribute('fill', theme().legendBg);
+          bg.setAttribute('stroke', theme().legendEdge);
           g.appendChild(bg);
           var swr = document.createElementNS(NS, 'rect');
           swr.setAttribute('x', x + 3); swr.setAttribute('y', y + 2);
@@ -477,7 +494,7 @@
           g.appendChild(swr);
           var tx = document.createElementNS(NS, 'text');
           tx.setAttribute('x', x + 3 + sw + gap); tx.setAttribute('y', y + 11);
-          tx.setAttribute('fill', '#000');
+          tx.setAttribute('fill', theme().legendInk);
           tx.textContent = t.name;
           g.appendChild(tx);
           x += boxW + itemGap;
@@ -501,7 +518,7 @@
             canvas.width = Math.max(1, Math.round(node.clientWidth * scale));
             canvas.height = Math.max(1, Math.round(node.clientHeight * scale));
             var ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = theme().page;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             URL.revokeObjectURL(url);
@@ -618,6 +635,8 @@
       setData: setData,
       focusTask: setSolo,
       getFocus: function () { return state.solo; },
+      setTheme: setTheme,
+      getTheme: getTheme,
       highlight: highlight,
       highlightRange: highlightRange,
       resize: resize,

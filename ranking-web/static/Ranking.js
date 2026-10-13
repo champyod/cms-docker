@@ -36,6 +36,7 @@ if (!window.console.error) {
 }
 
 $(document).ready(function() {
+    RWTheme.init();
     DataStore.init(function(){
         HistoryStore.init();
         UserDetail.init();

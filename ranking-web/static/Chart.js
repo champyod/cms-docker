@@ -67,7 +67,7 @@ var Chart = new function () {
 
         // draw the axes
         context.lineWidth = 2;
-        context.strokeStyle = "#dddddd";
+        context.strokeStyle = RWTheme.grid();
 
         context.beginPath();
         context.moveTo(pad_l, pad_t);
@@ -89,7 +89,7 @@ var Chart = new function () {
         }
 
         // draw labels on the axes
-        context.fillStyle = "#000000";
+        context.fillStyle = RWTheme.ink();
         context.textAlign = "right";
         context.textBaseline = "middle";
         if (y_min != y_max)
@@ -133,7 +133,7 @@ var Chart = new function () {
         // helper method to draw a separator
         var draw_separator = function () {
             context.lineWidth = 2;
-            context.strokeStyle = "#dddddd";
+            context.strokeStyle = RWTheme.grid();
             context.beginPath();
             context.moveTo(get_x(x_pos), get_y(y_min));
             context.lineTo(get_x(x_pos), get_y(y_max));

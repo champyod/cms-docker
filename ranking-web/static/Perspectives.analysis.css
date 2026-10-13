@@ -9,21 +9,22 @@
 .persp-analysis-mode {
     font: inherit;
     padding: 0.3em 0.8em;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
+    color: var(--rw-ink);
     cursor: pointer;
 }
 
 .persp-analysis-mode.active {
-    background-color: #3465a4;
-    color: #FFFFFF;
-    border-color: #3465a4;
+    background-color: var(--rw-select);
+    color: var(--rw-select-ink);
+    border-color: var(--rw-select);
 }
 
 .persp-analysis-pick {
     margin: 8px 0;
-    color: #444444;
+    color: var(--rw-ink-soft);
 }
 
 #Persp_analysis_panel {

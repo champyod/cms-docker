@@ -81,7 +81,8 @@ var Overview = new function () {
         self.paper.text(4, 10, "Score").attr("text-anchor", "start");
         self.paper.text(self.width - 4, 10, "Rank").attr("text-anchor", "end");
         var set = self.paper.setFinish();
-        set.attr({"font-size": "12px", "fill": "#000000", "stroke": "none", "font-family": "sans-serif", "opacity": 0});
+        self.header_set = set;
+        set.attr({"font-size": "12px", "fill": RWTheme.ink(), "stroke": "none", "font-family": "sans-serif", "opacity": 0});
 
         $elem.mouseenter(function () {
             set.animate({"opacity": 1}, 1000);
@@ -121,7 +122,22 @@ var Overview = new function () {
             self.score_axis.attr("path", d);
         } else {
             self.score_axis = self.paper.path(d).attr(
-                {"fill": "none", "stroke": "#b8b8b8", "stroke-width": 3, "stroke-linecap": "round"});
+                {"fill": "none", "stroke": RWTheme.axis(), "stroke-width": 3, "stroke-linecap": "round"});
+        }
+    };
+
+    self.setTheme = function (dark) {
+        if (self.header_set) {
+            self.header_set.attr("fill", dark ? "#e8e8e8" : "#000000");
+        }
+        if (self.score_axis) {
+            self.score_axis.attr("stroke", dark ? "#6a6d75" : "#b8b8b8");
+        }
+        if (self.score_line) {
+            self.score_line.attr("stroke", dark ? "#8a8d94" : "#cccccc");
+        }
+        if (self.score_back) {
+            self.score_back.attr("fill", dark ? "0-#3a3d46-#33363e" : "0-#E4E4E4-#DADADB");
         }
     };
 

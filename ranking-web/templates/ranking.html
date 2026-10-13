@@ -2,6 +2,7 @@
 <html lang="en">
     <head>
         <meta charset='utf-8'/>
+        <script>try{var t=localStorage.getItem("cms.rws.theme");if(t==="dark"||t==="light")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
         <link rel="shortcut icon" href="img/favicon.ico" />
         <link rel='stylesheet' href='Ranking.css'>
         <link rel='stylesheet' href='Perspectives.group.css'>
@@ -20,6 +21,7 @@ if (!("EventSource" in window)) {
         <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
         <script src="score-chart.js"></script>
         <script src="solve-rate-chart.js"></script>
+        <script src="Theme.js"></script>
         <!--[if lt IE 9]>
             <script src="lib/explorercanvas.js"></script>
         <![endif]-->
@@ -54,6 +56,7 @@ if (!("EventSource" in window)) {
                 <img src="logo" alt="Logo" />
             </div>
             <div id="UpperPanel">
+                <button id="Theme_toggle" type="button" aria-pressed="false">Dark</button>
                 <div id="ConnectionStatus_box">
                     <div id="ConnectionStatus_label">Status</div>
                     <div id="ConnectionStatus_text"></div>
@@ -70,7 +73,7 @@ if (!("EventSource" in window)) {
             </div>
             <div id="SidePanel">
                 <div id="Overview"></div>
-                <div id="LicenseNotice" style="color: #999; text-align: center; font-size: 16px; padding-top: 5px; flex: 0 0 auto;">
+                <div id="LicenseNotice" style="text-align: center; font-size: 16px; padding-top: 5px; flex: 0 0 auto;">
                     <a id="LicenseNotice_project" style="color: #00A3DA; text-decoration: none;" target="_blank" rel="noopener noreferrer">CMS Docker by CCYod &middot; a fork of CMS</a>
                     {{ notice_extras|safe }}
                 </div>

@@ -1,14 +1,60 @@
+:root {
+    color-scheme: light;
+    --rw-bg-base: #F6F6F6;
+    --rw-bghi: #FFFFFF;
+    --rw-bglo: #EDEDED;
+    --rw-ink: #000000;
+    --rw-ink-soft: #444444;
+    --rw-ink-faint: #666666;
+    --rw-panel: #EAEAEC;
+    --rw-edge: #FAFAFA;
+    --rw-line: #C8C8CC;
+    --rw-head: #ECECEF;
+    --rw-cell-edge: #D0D0D2;
+    --rw-row-alt: #EEEEEE;
+    --rw-row-alt2: #F8F8F8;
+    --rw-row-hi: #DDDDDD;
+    --rw-btn-edge: #999999;
+    --rw-shadow: gray;
+    --rw-select: #3465a4;
+    --rw-select-ink: #FFFFFF;
+    --rw-card: #FFFFFF;
+}
+
+html[data-theme="dark"] {
+    color-scheme: dark;
+    --rw-bg-base: #14161c;
+    --rw-bghi: #1e222b;
+    --rw-bglo: #101218;
+    --rw-ink: #e8e8e8;
+    --rw-ink-soft: #b8b8b8;
+    --rw-ink-faint: #909090;
+    --rw-panel: #22252d;
+    --rw-edge: #33363f;
+    --rw-line: #3a3d46;
+    --rw-head: #2a2d36;
+    --rw-cell-edge: #3a3d46;
+    --rw-row-alt: #24272f;
+    --rw-row-alt2: #1d2027;
+    --rw-row-hi: #2c2f38;
+    --rw-btn-edge: #55585f;
+    --rw-shadow: #000000;
+    --rw-select: #5b9bd5;
+    --rw-select-ink: #101218;
+    --rw-card: #1e2129;
+}
+
 body {
     /* FIXME: I'd suggest putting a 0.75em font-size */
     font: .85em/1.3em sans-serif;
 
-    color: black;
+    color: var(--rw-ink);
 
-    background-color: #F6F6F6;
-    background-image: -webkit-linear-gradient(#FFFFFF, #EDEDED);
-    background-image:    -moz-linear-gradient(#FFFFFF, #EDEDED);
-    background-image:      -o-linear-gradient(#FFFFFF, #EDEDED);
-    background-image:         linear-gradient(#FFFFFF, #EDEDED);
+    background-color: var(--rw-bg-base);
+    background-image: -webkit-linear-gradient(var(--rw-bghi), var(--rw-bglo));
+    background-image:    -moz-linear-gradient(var(--rw-bghi), var(--rw-bglo));
+    background-image:      -o-linear-gradient(var(--rw-bghi), var(--rw-bglo));
+    background-image:         linear-gradient(var(--rw-bghi), var(--rw-bglo));
     background-attachment: fixed;
 
     margin: 0;
@@ -55,10 +101,10 @@ abbr {
     height: 3em;
     border-width: 0 0 2px 2px;
     border-style: solid;
-    border-color: #FAFAFA;
+    border-color: var(--rw-edge);
     border-radius: 0 0 0 10px;
-    background-color: #EAEAEC;
-    box-shadow: 0 0 2px 0 gray;
+    background-color: var(--rw-panel);
+    box-shadow: 0 0 2px 0 var(--rw-shadow);
     z-index: 100;
 }
 
@@ -70,10 +116,10 @@ abbr {
     width: 220px;
     border-width: 2px 2px 2px 0;
     border-style: solid;
-    border-color: #FAFAFA;
+    border-color: var(--rw-edge);
     border-radius: 0 10px 10px 0;
-    background-color: #EAEAEC;
-    box-shadow: 0 0 2px 0 gray;
+    background-color: var(--rw-panel);
+    box-shadow: 0 0 2px 0 var(--rw-shadow);
     z-index: 8;
     padding: 0;
     /* The graph used to take the whole panel and the byline was left to hang past
@@ -117,13 +163,13 @@ abbr {
 #BoardHeading .board-subtitle {
     margin: 0.2em 0 0;
     font-size: 1.1em;
-    color: #444444;
+    color: var(--rw-ink-soft);
 }
 
 #BoardHeading .board-organisation {
     margin-top: 0.2em;
     font-size: 0.95em;
-    color: #666666;
+    color: var(--rw-ink-faint);
 }
 
 
@@ -162,10 +208,10 @@ abbr {
 #TimeView.cont #TimeView_selector:hover,
 #TimeView_selector.open {
     margin: 2px;
-    background-color: #EAEAEC;
+    background-color: var(--rw-panel);
     border: 2px solid #FAFAFA;
     border-radius: 4px;
-    box-shadow: 0 0 2px 0 gray;
+    box-shadow: 0 0 2px 0 var(--rw-shadow);
 }
 
 #TimeView_selector.open {
@@ -229,7 +275,7 @@ abbr {
     padding: 2px 4px;
     font-size: 0.875em;
     line-height: 1.4em;
-    color: #444444;
+    color: var(--rw-ink-soft);
     cursor: pointer;
 }
 
@@ -249,8 +295,8 @@ abbr {
 #TimeView_selector_elapsed:hover,
 #TimeView_selector_remaining:hover,
 #TimeView_selector_current:hover {
-    background-color: #FAFAFA !important;
-    color: #000000;
+    background-color: var(--rw-edge) !important;
+    color: var(--rw-ink);
 }
 
 #TimeView + #SidePanel {
@@ -299,7 +345,7 @@ abbr {
     border-radius: 0.5em;
     /* Needed to override WebKit's default font size for inputs */
     font: inherit;
-    background-color: #FFFFFF;
+    background-color: var(--rw-card);
     outline: 0;
 }
 
@@ -334,7 +380,7 @@ abbr {
     width: 940px;
     margin: 64px auto 48px;
     border-radius: 12px;
-    background-color: white;
+    background-color: var(--rw-card);
 }
 
 #TeamSearch_close {
@@ -370,7 +416,7 @@ abbr {
     padding: 0;
     border: 0 solid white;
     border-width: 0.5em 10px;
-    background-color: #DDDDDD;
+    background-color: var(--rw-row-hi);
 
     -webkit-user-select: none;
      -khtml-user-select: none;
@@ -459,8 +505,8 @@ abbr {
 }
 
 #Scoreboard_head tr th {
-    background-color: #ECECEF;
-    border: 1px #D0D0D2 solid;
+    background-color: var(--rw-head);
+    border: 1px var(--rw-cell-edge) solid;
     border-radius: 4px;
     box-shadow: 0 0 2px 0 #D2D2D4 inset;
     height: 24px;
@@ -859,7 +905,7 @@ abbr {
 }
 
 .score_0 {
-    color: #666;
+    color: var(--rw-ink-faint);
 }
 
 .score_0_10 {
@@ -942,7 +988,7 @@ abbr {
     margin: 48px auto;
     padding: 20px;
     border-radius: 12px;
-    background-color: white;
+    background-color: var(--rw-card);
 }
 
 #UserDetail_close {
@@ -1024,9 +1070,9 @@ abbr {
 
 #UserDetail_navigator tbody tr td.btn {
     text-align: center;
-    border: 1px solid #999999;
-    box-shadow: 0 0 2px gray;
-    background-color: #EEEEEE;
+    border: 1px solid var(--rw-btn-edge);
+    box-shadow: 0 0 2px var(--rw-shadow);
+    background-color: var(--rw-row-alt);
     border-radius: 3px;
     cursor: pointer;
     -webkit-user-select: none;
@@ -1037,15 +1083,15 @@ abbr {
 }
 
 #UserDetail_navigator tbody tr td.btn:hover {
-    background-color: #DDDDDD;
+    background-color: var(--rw-row-hi);
 }
 
 #UserDetail_navigator tbody tr td.btn:active {
-    background-color: #CCCCCC;
+    background-color: var(--rw-line);
 }
 
 #UserDetail_navigator tbody tr.active td.btn {
-    background-color: #EEEEEE;
+    background-color: var(--rw-row-alt);
     opacity: 0.4;
     cursor: default;
     /* the following two lines are for IE */
@@ -1054,15 +1100,15 @@ abbr {
 }
 
 #UserDetail_navigator tr.global {
-    background-color: #DDDDDD;
+    background-color: var(--rw-row-hi);
 }
 
 #UserDetail_navigator tr.contest {
-    background-color: #EEEEEE;
+    background-color: var(--rw-row-alt);
 }
 
 #UserDetail_navigator tr.task {
-    background-color: #FFFFFF;
+    background-color: var(--rw-select-ink);
 }
 
 #UserDetail_navigator tr.global td.name {
@@ -1109,15 +1155,15 @@ abbr {
 }
 
 #UserDetail_submissions thead {
-    background-color: #DDDDDD;
+    background-color: var(--rw-row-hi);
 }
 
 #UserDetail_submissions tbody tr:nth-child(even) {
-    background-color: #EEEEEE;
+    background-color: var(--rw-row-alt);
 }
 
 #UserDetail_submissions tbody tr:nth-child(odd) {
-    background-color: #F8F8F8;
+    background-color: var(--rw-row-alt2);
 }
 
 #UserDetail_submissions tbody td[colspan] {
@@ -1125,6 +1171,17 @@ abbr {
     font-style: italic;
 }
 
+
+#Theme_toggle {
+    font: inherit;
+    margin: 0.5em;
+    padding: 0.25em 0.8em;
+    border: 1px solid var(--rw-line);
+    border-radius: 0.5em;
+    background-color: var(--rw-head);
+    color: var(--rw-ink);
+    cursor: pointer;
+}
 
 /* Style for the network status indicator */
 
@@ -1180,7 +1237,7 @@ abbr {
 
 #ConnectionStatus_box[data-status="connected"] #ConnectionStatus_label,
 #ConnectionStatus_box[data-status="connected"] #ConnectionStatus_text {
-    background-color: white;
+    background-color: var(--rw-card);
     color: green;
     border-color: green;
 }
@@ -1246,24 +1303,24 @@ abbr {
     white-space: nowrap;
     text-overflow: ellipsis;
     padding: 0.35em 0.9em;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
     cursor: pointer;
 }
 
 .persp-tab.active {
-    background-color: #3465a4;
-    color: #FFFFFF;
-    border-color: #3465a4;
+    background-color: var(--rw-select);
+    color: var(--rw-select-ink);
+    border-color: var(--rw-select);
 }
 
 .persp-more {
     font: inherit;
     padding: 0.35em 0.7em;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
     cursor: pointer;
 }
 
@@ -1280,7 +1337,7 @@ abbr {
     z-index: 20;
     padding: 4px;
     background-color: #F6F6F8;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
@@ -1298,7 +1355,7 @@ abbr {
 #Views_anon {
     margin-left: 12px;
     font-size: 0.9em;
-    color: #444444;
+    color: var(--rw-ink-soft);
     white-space: nowrap;
 }
 
@@ -1318,12 +1375,12 @@ abbr {
 .views-table th,
 .views-table td {
     padding: 0.35em 0.6em;
-    border-bottom: 1px solid #E0E0E3;
+    border-bottom: 1px solid var(--rw-cell-edge);
     text-align: left;
 }
 
 .views-table th {
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
 }
 
 .views-table td:first-child,
@@ -1335,7 +1392,7 @@ abbr {
 #Views_task_pick {
     margin: 8px 0;
     text-align: left;
-    color: #444444;
+    color: var(--rw-ink-soft);
 }
 
 .persp-view canvas {
@@ -1374,15 +1431,15 @@ abbr {
 .persp-time-btn {
     font: inherit;
     padding: 0.3em 0.8em;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
     cursor: pointer;
 }
 
 .persp-time-compare {
     font-size: 0.9em;
-    color: #444444;
+    color: var(--rw-ink-soft);
 }
 
 /* Anonymous hides every name on the scoreboard; the extra views mask it in the DOM. */

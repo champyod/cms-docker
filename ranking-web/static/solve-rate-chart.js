@@ -120,8 +120,23 @@
       colors: {},     // taskId -> colour
       filter: null,   // fn(rawUser) -> bool, or null
       hover: null,
-      focus: null
+      focus: null,
+      theme: 'light'
     };
+
+    var THEMES = {
+      light: { ink: '#000', soft: '#222', zero: '#e6e6e6' },
+      dark: { ink: '#e8e8e8', soft: '#c8c8c8', zero: '#4a4a4a' }
+    };
+
+    function theme() { return THEMES[state.theme] || THEMES.light; }
+
+    function setTheme(name) {
+      state.theme = (name === 'dark') ? 'dark' : 'light';
+      schedule(false);
+    }
+
+    function getTheme() { return state.theme; }
 
     var SEG_LABEL = { full: 'Full', partial: 'Partial', zero: 'None' };
 
@@ -247,14 +262,14 @@
             .attr('text-anchor', 'end')
             .attr('dy', '0.35em')
             .style('font', '12px monospace')
-            .style('fill', '#000')
+            .style('fill', theme().ink)
             .style('cursor', 'pointer');
           g.append('g').attr('class', 'segs');
           g.append('g').attr('class', 'counts').style('pointer-events', 'none');
           g.append('text').attr('class', 'stat')
             .attr('dy', '0.35em')
             .style('font', '11px monospace')
-            .style('fill', '#000')
+            .style('fill', theme().ink)
             .style('pointer-events', 'none');
           return g;
         })
@@ -263,6 +278,7 @@
       rows.select('text.lbl')
         .attr('x', -8)
         .attr('y', bh / 2)
+        .style('fill', theme().ink)
         .text(function (d) {
           var n = d.task.name;
           return n.length > maxChars ? n.slice(0, maxChars - 1) + '\u2026' : n;
@@ -274,6 +290,7 @@
       rows.select('text.stat')
         .attr('x', iw + 8)
         .attr('y', bh / 2)
+        .style('fill', theme().ink)
         .text(function (d) {
           return d.n ? pct(d.full, d.n) + '%  ' + d.full + '/' + d.n : '\u2013';
         });
@@ -290,7 +307,7 @@
       }
 
       function fillOf(s) {
-        return s.key === 'zero' ? opts.zeroColor : state.colors[s.row.task.id];
+        return s.key === 'zero' ? theme().zero : state.colors[s.row.task.id];
       }
       function fillOpacityOf(s) {
         return s.key === 'partial' ? opts.partialOpacity : 1;
@@ -326,9 +343,10 @@
               .attr('text-anchor', 'middle')
               .attr('dy', '0.35em')
               .style('font', '11px monospace')
-              .style('fill', '#222');
+              .style('fill', theme().soft);
           })
           .attr('y', bh / 2)
+          .style('fill', theme().soft)
           .text(function (s) { return s.w >= 24 && bh >= 12 && s.c ? s.c : ''; })
           .transition().duration(dur)
           .attr('x', function (s) { return s.x + s.w / 2; });
@@ -357,7 +375,7 @@
       var items = [
         { key: 'full', label: 'Full', fo: 1, fill: '#8a8a8a' },
         { key: 'partial', label: 'Partial', fo: opts.partialOpacity, fill: '#8a8a8a' },
-        { key: 'zero', label: 'None', fo: 1, fill: opts.zeroColor }
+        { key: 'zero', label: 'None', fo: 1, fill: theme().zero }
       ];
       var itemW = 64;
       var x0 = W - opts.margin.right - itemW * items.length;
@@ -368,7 +386,7 @@
           var e = enter.append('g').attr('class', 'item');
           e.append('rect').attr('width', 10).attr('height', 10).attr('rx', 2);
           e.append('text').attr('x', 14).attr('y', 9)
-            .style('font', '11px monospace').style('fill', '#000');
+            .style('font', '11px monospace').style('fill', theme().ink);
           return e;
         })
         .attr('transform', function (d, i) { return 'translate(' + i * itemW + ',0)'; });
@@ -444,6 +462,8 @@
       setData: setData,
       setFilter: setFilter,
       focusTask: focusTask,
+      setTheme: setTheme,
+      getTheme: getTheme,
       resize: resize,
       destroy: destroy,
       getStats: computeStats

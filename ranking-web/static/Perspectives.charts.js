@@ -115,6 +115,11 @@ var PerspectiveCharts = new function () {
         return true;
     };
 
+    self.setTheme = function (name) {
+        if (self.scores_chart) self.scores_chart.setTheme(name);
+        if (self.solve_chart) self.solve_chart.setTheme(name);
+    };
+
     self.draw_scores = function ($el) {
         if (self.scores_charts($el)) return;
         self.draw_scores_bars($el);
@@ -140,7 +145,7 @@ var PerspectiveCharts = new function () {
             draw.fillRect(pad + position * (bar_width + 2), canvas.height - pad - height,
                 bar_width, height);
         }
-        draw.fillStyle = "#000000";
+        draw.fillStyle = RWTheme.ink();
         draw.font = "11px sans-serif";
         draw.fillText("Top score " + round_to_str(max, DataStore.global_score_precision) +
             " \u00b7 " + users.length + " ranked", pad, 16);
@@ -176,7 +181,7 @@ var PerspectiveCharts = new function () {
             }
         }
         draw.stroke();
-        draw.fillStyle = "#000000";
+        draw.fillStyle = RWTheme.ink();
         draw.font = "12px sans-serif";
         draw.fillText("Leading score over time", pad, 18);
     };

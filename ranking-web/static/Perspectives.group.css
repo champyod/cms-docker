@@ -11,9 +11,10 @@
 .persp-group-toggle {
     font: inherit;
     padding: 0 0.5em;
-    border: 1px solid #C8C8CC;
+    border: 1px solid var(--rw-line);
     border-radius: 4px;
-    background-color: #ECECEF;
+    background-color: var(--rw-head);
+    color: var(--rw-ink);
     cursor: pointer;
 }
 
@@ -28,6 +29,6 @@
 .persp-group-members td {
     width: auto;
     text-align: left;
-    color: #444444;
+    color: var(--rw-ink-soft);
     font-size: 0.9em;
 }
