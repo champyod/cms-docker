@@ -126,6 +126,52 @@ function buildComposeRestart(
   return `(${invocation} pull${scope} || true) && ${recreate}`;
 }
 
+/** One force-recreate scoped to exactly these services, under the profiles that expose them. */
+function scopedRecreate(
+  services: readonly string[],
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string {
+  return buildComposeRestart(
+    { profiles: profilesForServices(services), upFlags: ['--force-recreate'], services },
+    files,
+    mode,
+    location,
+  );
+}
+
+/**
+ * The worker-fleet half. Why a contest-stack request names every shard: that recreation previously
+ * included the workers through the merged files, so this keeps the coverage without handing the
+ * fleet to the non-fleet project.
+ */
+function customWorkerCommand(needsContestStack: boolean, workers: readonly string[]): string[] {
+  if (!needsContestStack && workers.length === 0) return [];
+  const allWorkers = needsContestStack || workers.some(service => service === 'worker' || service === 'cms-worker');
+  return [buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length)))];
+}
+
+/** The compose half of a custom restart: the contest stack when asked, plus the services outside it. */
+function customComposeCommands(
+  scopedServices: readonly string[],
+  needsContestStack: boolean,
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string[] {
+  if (!needsContestStack) {
+    return scopedServices.length > 0 ? [scopedRecreate(scopedServices, files, mode, location)] : [];
+  }
+  const commands = [buildComposeRestart(CONTEST_RESTART, files, mode, location)];
+  // Why: the contest-stack recreation covers only the core and contest profiles, so a request that
+  // also names services outside them — a database change cascades to the contest web server and to
+  // the admin panel — would otherwise leave those services (the panel above all) on stale config.
+  const outsideContestStack = scopedServices.filter(service => !CONTEST_RESTART.services.includes(service));
+  if (outsideContestStack.length > 0) commands.push(scopedRecreate(outsideContestStack, files, mode, location));
+  return commands;
+}
+
 async function buildCustomRestartCommand(
   customList: string[],
   files: string,
@@ -148,23 +194,10 @@ async function buildCustomRestartCommand(
   // custom restart naming redis-rate-limit would otherwise reach the container the guard in
   // lib/protected-containers.ts exists to protect.
   const scopedServices = scopedServiceList(services.filter(service => !isWorker(service)).map(asService));
-  const commands: string[] = [];
-  // A contest-stack recreation previously included workers through the merged
-  // files; keep that coverage without handing them to the non-fleet project.
-  if (needsContestStack || workers.length > 0) {
-    const allWorkers = needsContestStack || workers.some(service => service === 'worker' || service === 'cms-worker');
-    commands.push(buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length))));
-  }
-  if (needsContestStack) {
-    commands.push(buildComposeRestart(CONTEST_RESTART, files, mode, location));
-  } else if (scopedServices.length > 0) {
-    commands.push(buildComposeRestart(
-      { profiles: profilesForServices(scopedServices), upFlags: ['--force-recreate'], services: scopedServices },
-      files,
-      mode,
-      location,
-    ));
-  }
+  const commands = [
+    ...customWorkerCommand(needsContestStack, workers),
+    ...customComposeCommands(scopedServices, needsContestStack, files, mode, location),
+  ];
   // Why an empty plan is a skip and not an empty command: dropping a protected service can leave
   // nothing to act on, and an empty shell string would be executed rather than reported.
   if (commands.length === 0) return { skip: true, message: 'Nothing to restart.' };

@@ -6,6 +6,9 @@ import {
   type ConfigTomlUpdate,
 } from '@/lib/config-toml';
 
+/** The [core] key that selects which [db_<name>] profile the generated .env describes. */
+export const ACTIVE_DATABASE_KEY = 'ACTIVE_DATABASE';
+
 export interface EnvConfigField {
   key: string;
   /** Where in config.toml this key lives — the panel writes it there, never into .env. */
@@ -13,6 +16,8 @@ export interface EnvConfigField {
   label: string;
   description?: string;
   placeholder?: string;
+  /** Selects the control: a free-text input, or a list of the file's live database profiles. */
+  control?: 'database-profile';
 }
 
 export interface EnvConfigSection {
@@ -29,6 +34,7 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
     title: 'Database Configuration',
     filename: CONFIG_TOML_FILE,
     fields: [
+      { key: ACTIVE_DATABASE_KEY, tomlSection: 'core', control: 'database-profile', label: 'Active Database Profile', description: 'Which [db_<name>] profile the generated .env describes; switching recreates every service that reads the database.' },
       { key: 'POSTGRES_DB', tomlSection: 'core', label: 'Database Name', description: 'PostgreSQL database name.' },
       { key: 'POSTGRES_USER', tomlSection: 'core', label: 'Database User', description: 'PostgreSQL username.' },
       { key: 'POSTGRES_PASSWORD', tomlSection: 'core', label: 'Database Password', description: 'PostgreSQL password.' },
