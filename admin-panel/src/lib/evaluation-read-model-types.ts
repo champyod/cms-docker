@@ -52,12 +52,21 @@ export interface SubmissionEvaluationModel {
   }[];
 }
 
-export interface SubmissionTestcaseDetailModel {
+interface SubmissionTestcaseRef {
   submissionId: number;
   testcaseId: number;
   testcaseName: string | null;
-  input: string | null;
-  expectedOutput: string | null;
   /** Null while the evaluation service stores no candidate output for a submission. */
   output: string | null;
 }
+
+// Why a union: input and expected output are governed by `testcase:read`, so a
+// reader without it receives a payload with no such fields at all — the bytes
+// are never sent and there is nothing left to hide.
+export type SubmissionTestcaseDetailModel =
+  | (SubmissionTestcaseRef & {
+      testcaseReadable: true;
+      input: string | null;
+      expectedOutput: string | null;
+    })
+  | (SubmissionTestcaseRef & { testcaseReadable: false });

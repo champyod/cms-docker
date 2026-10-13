@@ -25,7 +25,12 @@ const mockFindFirst = vi.mocked(prisma.evaluations.findFirst);
 const mockQueryRaw = vi.mocked(prisma.$queryRaw);
 
 const SUBMISSION_READER = new Set(['submission:read']);
+const TESTCASE_READER = new Set(['submission:read', 'testcase:read']);
 const TESTCASE_PARAMS = { params: Promise.resolve({ id: '19', testcaseId: '2' }) };
+
+const TESTCASE_ROW = {
+  testcases: { codename: 'test-2', input: 'in-digest', output: 'out-digest' },
+};
 
 function request(): NextRequest {
   return new NextRequest('http://localhost/api/submissions/19/testcase/2');
@@ -34,8 +39,8 @@ function request(): NextRequest {
 beforeEach(() => {
   vi.clearAllMocks();
   mockGetSession.mockResolvedValue({ userId: '1', username: 'admin', expiresAt: '2099-01-01' });
-  mockGetFreshPermissions.mockResolvedValue(SUBMISSION_READER);
-  mockRequirePermission.mockResolvedValue(SUBMISSION_READER);
+  mockGetFreshPermissions.mockResolvedValue(TESTCASE_READER);
+  mockRequirePermission.mockResolvedValue(TESTCASE_READER);
   mockFindFirst.mockResolvedValue(null as never);
   mockQueryRaw.mockResolvedValue([] as never);
 });
@@ -59,10 +64,8 @@ describe('Submission testcase detail read model', () => {
     });
   });
 
-  it('resolves the input and expected-output digests and reports no stored output', async () => {
-    mockFindFirst.mockResolvedValue({
-      testcases: { codename: 'test-2', input: 'in-digest', output: 'out-digest' },
-    } as never);
+  it('resolves the input and expected-output digests for a reader holding testcase:read', async () => {
+    mockFindFirst.mockResolvedValue(TESTCASE_ROW as never);
     mockQueryRaw
       .mockResolvedValueOnce([{ data: Buffer.from('1 2\n') }] as never)
       .mockResolvedValueOnce([{ data: Buffer.from('3\n') }] as never);
@@ -76,18 +79,35 @@ describe('Submission testcase detail read model', () => {
       input: '1 2\n',
       expectedOutput: '3\n',
       output: null,
+      testcaseReadable: true,
     });
     expect(mockQueryRaw).toHaveBeenCalledTimes(2);
   });
 
   it('reports an input or output digest with no stored object as null', async () => {
-    mockFindFirst.mockResolvedValue({
-      testcases: { codename: 'test-2', input: 'in-digest', output: 'out-digest' },
-    } as never);
+    mockFindFirst.mockResolvedValue(TESTCASE_ROW as never);
 
     const detail = await getSubmissionTestcaseDetail(19, 2);
 
-    expect(detail).toMatchObject({ input: null, expectedOutput: null });
+    expect(detail).toMatchObject({ testcaseReadable: true, input: null, expectedOutput: null });
+  });
+
+  it('omits the input and expected output without testcase:read', async () => {
+    mockRequirePermission.mockResolvedValue(SUBMISSION_READER);
+    mockFindFirst.mockResolvedValue(TESTCASE_ROW as never);
+
+    const detail = await getSubmissionTestcaseDetail(19, 2);
+
+    expect(detail).toEqual({
+      submissionId: 19,
+      testcaseId: 2,
+      testcaseName: 'test-2',
+      output: null,
+      testcaseReadable: false,
+    });
+    expect(detail).not.toHaveProperty('input');
+    expect(detail).not.toHaveProperty('expectedOutput');
+    expect(mockQueryRaw).not.toHaveBeenCalled();
   });
 });
 
@@ -132,10 +152,8 @@ describe('Submission testcase detail route', () => {
     }));
   });
 
-  it('returns the testcase payload for an authorized caller', async () => {
-    mockFindFirst.mockResolvedValue({
-      testcases: { codename: 'test-2', input: 'in-digest', output: 'out-digest' },
-    } as never);
+  it('returns the testcase bytes for a caller holding testcase:read', async () => {
+    mockFindFirst.mockResolvedValue(TESTCASE_ROW as never);
     mockQueryRaw
       .mockResolvedValueOnce([{ data: Buffer.from('1 2\n') }] as never)
       .mockResolvedValueOnce([{ data: Buffer.from('3\n') }] as never);
@@ -151,6 +169,28 @@ describe('Submission testcase detail route', () => {
       input: '1 2\n',
       expectedOutput: '3\n',
       output: null,
+      testcaseReadable: true,
     });
+  });
+
+  it('sends no testcase bytes to a caller without testcase:read', async () => {
+    mockRequirePermission.mockResolvedValue(SUBMISSION_READER);
+    mockFindFirst.mockResolvedValue(TESTCASE_ROW as never);
+
+    const response = await getTestcaseDetail(request(), TESTCASE_PARAMS);
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toEqual({
+      success: true,
+      submissionId: 19,
+      testcaseId: 2,
+      testcaseName: 'test-2',
+      output: null,
+      testcaseReadable: false,
+    });
+    expect(payload).not.toHaveProperty('input');
+    expect(payload).not.toHaveProperty('expectedOutput');
+    expect(mockQueryRaw).not.toHaveBeenCalled();
   });
 });

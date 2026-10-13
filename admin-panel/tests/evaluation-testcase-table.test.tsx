@@ -45,6 +45,7 @@ const DETAIL_PAYLOAD = {
   input: '1 2\n',
   expectedOutput: '3\n',
   output: null,
+  testcaseReadable: true,
 };
 
 const mockFetch = vi.fn();
@@ -64,7 +65,7 @@ beforeEach(() => {
 
 describe('Submission testcase table', () => {
   it('shows one row per testcase, verdict, time and memory, and fetches nothing', () => {
-    const { container } = render(<TestcaseDetailTable model={MODEL} />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
 
     expect(screen.getByText('test-2')).not.toBeNull();
     expect(screen.getByText('Testcase #3')).not.toBeNull();
@@ -77,7 +78,7 @@ describe('Submission testcase table', () => {
 
   it('fetches one testcase through the gated route when its row opens', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, DETAIL_PAYLOAD));
-    const { container } = render(<TestcaseDetailTable model={MODEL} />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
 
     fireEvent.click(toggleButton('test-2'));
 
@@ -91,7 +92,7 @@ describe('Submission testcase table', () => {
 
   it('fetches the row that was opened, not the first one', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, { ...DETAIL_PAYLOAD, testcaseId: 3, testcaseName: null }));
-    render(<TestcaseDetailTable model={MODEL} />);
+    render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
 
     fireEvent.click(toggleButton('Testcase #3'));
 
@@ -101,7 +102,7 @@ describe('Submission testcase table', () => {
 
   it('collapses the row and keeps its fetch count at one', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, DETAIL_PAYLOAD));
-    const { container } = render(<TestcaseDetailTable model={MODEL} />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
 
     fireEvent.click(toggleButton('test-2'));
     await waitFor(() => expect(container.textContent).toContain('1 2'));
@@ -113,11 +114,47 @@ describe('Submission testcase table', () => {
 
   it('surfaces the route error without leaving a loading line', async () => {
     mockFetch.mockResolvedValue(jsonResponse(false, { success: false, error: 'Testcase not found for this submission' }));
-    const { container } = render(<TestcaseDetailTable model={MODEL} />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
 
     fireEvent.click(toggleButton('test-2'));
 
     await waitFor(() => expect(container.textContent).toContain('Testcase not found for this submission'));
     expect(container.textContent).not.toContain('Loading testcase');
+  });
+
+  it('names the missing key instead of fetching when testcase:read is absent', () => {
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} />);
+
+    fireEvent.click(toggleButton('test-2'));
+
+    expect(container.textContent).toContain('Hidden — requires testcase:read');
+    expect(container.textContent).not.toContain('Input');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('names the missing key when the route withholds the bytes mid-session', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(true, {
+      success: true,
+      submissionId: 19,
+      testcaseId: 2,
+      testcaseName: 'test-2',
+      output: null,
+      testcaseReadable: false,
+    }));
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase />);
+
+    fireEvent.click(toggleButton('test-2'));
+
+    await waitFor(() => expect(container.textContent).toContain('Hidden — requires testcase:read'));
+    expect(container.textContent).not.toContain('Not stored');
+  });
+
+  it('keeps the row data visible to a reader without testcase:read', () => {
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} />);
+
+    expect(screen.getByText('test-2')).not.toBeNull();
+    expect(container.textContent).toContain('1.0');
+    expect(container.textContent).toContain('0.500s');
+    expect(container.textContent).toContain('1.00 MiB');
   });
 });

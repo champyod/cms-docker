@@ -16,6 +16,8 @@ type EvaluationRow = SubmissionEvaluationModel['evaluations'][number];
 
 export interface TestcaseDetailTableProps {
   readonly model: SubmissionEvaluationModel;
+  /** False keeps the row data visible but never asks the route for the gated bytes. */
+  readonly canReadTestcase: boolean;
 }
 
 const DETAIL_COLUMN_COUNT = 5;
@@ -72,6 +74,16 @@ function DetailBlock({ label, body, emptyLabel = '—' }: {
   );
 }
 
+// Why an explicit reason: an unreadable testcase is a permission boundary, so the
+// panel names the key instead of rendering an empty block that reads as missing data.
+function HiddenTestcaseData(): React.JSX.Element {
+  return (
+    <InlineAlert tone="info" density="compact">
+      Hidden — requires testcase:read
+    </InlineAlert>
+  );
+}
+
 function TestcaseDetailBody({ detail, loading, error }: {
   readonly detail: SubmissionTestcaseDetailModel | null;
   readonly loading: boolean;
@@ -80,6 +92,7 @@ function TestcaseDetailBody({ detail, loading, error }: {
   if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading testcase…</p>;
   if (error !== null) return <InlineAlert tone="destructive" density="compact">{error}</InlineAlert>;
   if (detail === null) return <p className="text-sm text-muted-foreground">No testcase detail.</p>;
+  if (!detail.testcaseReadable) return <HiddenTestcaseData />;
   return (
     <div className="grid gap-4 lg:grid-cols-3">
       <DetailBlock label="Input" body={detail.input} />
@@ -125,7 +138,7 @@ function TestcaseRow({ row, expanded, onToggle }: {
  * One row per testcase; opening a row fetches that testcase's input, expected
  * output and stored output from the gated per-testcase route.
  */
-export function TestcaseDetailTable({ model }: TestcaseDetailTableProps): React.JSX.Element {
+export function TestcaseDetailTable({ model, canReadTestcase }: TestcaseDetailTableProps): React.JSX.Element {
   const [expandedTestcaseId, setExpandedTestcaseId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SubmissionTestcaseDetailModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -139,6 +152,9 @@ export function TestcaseDetailTable({ model }: TestcaseDetailTableProps): React.
     setExpandedTestcaseId(row.testcaseId);
     setDetail(null);
     setError(null);
+    // Why no request: the route would only return the same hidden payload, so
+    // the reader without the key is told so without a round trip.
+    if (!canReadTestcase) return;
     setLoading(true);
     try {
       const response = await fetch(`/api/submissions/${model.submissionId}/testcase/${row.testcaseId}`);
@@ -187,7 +203,9 @@ export function TestcaseDetailTable({ model }: TestcaseDetailTableProps): React.
               {expanded && (
                 <TableRow>
                   <TableCell colSpan={DETAIL_COLUMN_COUNT} className="bg-muted/40">
-                    <TestcaseDetailBody detail={detail} loading={loading} error={error} />
+                    {canReadTestcase
+                      ? <TestcaseDetailBody detail={detail} loading={loading} error={error} />
+                      : <HiddenTestcaseData />}
                   </TableCell>
                 </TableRow>
               )}

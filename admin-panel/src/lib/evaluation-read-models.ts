@@ -186,25 +186,31 @@ export async function getSubmissionTestcaseDetail(
   submissionId: number,
   testcaseId: number,
 ): Promise<SubmissionTestcaseDetailModel | null> {
-  await requirePermission('submission:read');
+  const permissions = await requirePermission('submission:read');
   const evaluation = await prisma.evaluations.findFirst({
     where: { submission_id: submissionId, testcase_id: testcaseId },
     select: SUBMISSION_TESTCASE_SELECT,
   });
   const testcase = evaluation?.testcases;
   if (!testcase) return null;
-  const [input, expectedOutput] = await Promise.all([
-    readFsobjectText(testcase.input),
-    readFsobjectText(testcase.output),
-  ]);
-  return {
+  const ref = {
     submissionId,
     testcaseId,
     testcaseName: testcase.codename,
-    input,
-    expectedOutput,
     // Why null: `evaluations` carries no candidate-output column (only
     // `user_test_results` does), so a submission stores no output to return here.
     output: null,
   };
+  // Why the field map and not a bare key: it is the one place that binds
+  // `testcases.input` and `testcases.output` to `testcase:read`, so the gate
+  // follows that binding instead of duplicating it.
+  const testcaseAccess = getFieldAccess('testcases', permissions);
+  if (!testcaseAccess.input.canRead || !testcaseAccess.output.canRead) {
+    return { ...ref, testcaseReadable: false };
+  }
+  const [input, expectedOutput] = await Promise.all([
+    readFsobjectText(testcase.input),
+    readFsobjectText(testcase.output),
+  ]);
+  return { ...ref, testcaseReadable: true, input, expectedOutput };
 }
