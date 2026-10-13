@@ -279,6 +279,11 @@ jobs:
         working-directory: admin-panel
         run: bun run test
 
+      # WHY: the served favicons and logos are committed copies of brand/, so drift needs its own gate.
+      - name: Brand drift
+        working-directory: admin-panel
+        run: bun run icons:check
+
       # WHY blocking now: the tree audits clean at high/critical except
       # braces@3.0.3 (GHSA-vfj7-8cjw-p6xm) — no fixed release exists, and the
       # package sits only in the eslint glob chain (fast-glob > micromatch),

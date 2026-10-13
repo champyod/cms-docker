@@ -9,6 +9,7 @@
     "lint": "eslint",
     "scheduler": "bun run src/scheduler/main.ts",
     "icons": "bun run scripts/generate-icons.mts",
+    "icons:check": "bun run scripts/generate-icons.mts --check",
     "test": "vitest run"
   },
   "dependencies": {

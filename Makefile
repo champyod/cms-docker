@@ -58,7 +58,7 @@ WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f do
 # which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset
+.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
@@ -636,6 +636,14 @@ test:
 		exit 1; \
 	fi; \
 	echo ""; echo "all suites passed"
+
+# Regenerate the committed favicons/logos from the single source in brand/.
+icons:
+	@cd admin-panel && bun run icons
+
+# WHY: the served icons are committed copies of brand/, so drift must fail here.
+icons-check:
+	@cd admin-panel && bun run icons:check
 
 smoke-test:
 	@if [ -x scripts/__smoke-test.sh ]; then \
