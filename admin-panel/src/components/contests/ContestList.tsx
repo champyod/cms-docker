@@ -11,7 +11,12 @@ import { ContestModal } from './ContestModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
 import { ContestListHeader } from './contest-list/ContestListHeader';
 import { ContestRowActions, buildContestColumns, getContestRowClassName, getContestRowProps, type ContestRowData } from './contest-list/ContestTableRows';
+import { ContestBulkEditDialog } from './contest-list/ContestBulkEditDialog';
 import { useContestListActions } from './contest-list/useContestListActions';
+import { Button } from '@/components/core/Button';
+import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { buildSelectionColumn } from '@/components/core/SelectionColumn';
+import { useListSelection } from '@/hooks/useListSelection';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -46,12 +51,16 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
   void totalPages;
   const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditWindowOpen, setIsEditWindowOpen] = useState(false);
   const [selectedContest, setSelectedContest] = useState<ExistingContest | null>(null);
   const router = useRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const actions = useContestListActions();
   const permissions = useMemo(() => resolveContestPermissions(permissionKeys), [permissionKeys]);
+
+  const contestIds = useMemo(() => contests.map((contest) => contest.id), [contests]);
+  const selection = useListSelection('contests.list', contestIds);
 
   const handleCreate = () => { if (!permissions.canCreate) return; setSelectedContest(null); setIsModalOpen(true); };
   const handleEdit = useCallback(async (id: number) => {
@@ -73,7 +82,22 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
 
   // Why: one column definition drives desktop rows and mobile cards, so
   // the two layouts cannot drift apart.
-  const columns = useMemo(() => buildContestColumns(handleOpenContest), [handleOpenContest]);
+  const columns = useMemo(
+    () => [
+      buildSelectionColumn<ContestRowData>({
+        getRowId: (contest) => contest.id,
+        selectedIds: selection.selectedIds,
+        allSelected: selection.allSelected,
+        partlyChecked: selection.someSelected,
+        selectAllLabel: 'Select all contests',
+        selectRowLabel: (contest) => `Select contest ${contest.id}`,
+        onToggleAll: selection.toggleAll,
+        onToggleOne: selection.toggleOne,
+      }),
+      ...buildContestColumns(handleOpenContest),
+    ],
+    [handleOpenContest, selection],
+  );
 
   const renderRowActions = useCallback((contest: ContestRowData) => (
     <ContestRowActions contest={contest} permissionKeys={permissionKeys} onSetActive={actions.requestDeploy} onEdit={(id) => { void handleEdit(id); }} />
@@ -95,6 +119,11 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
   return (
     <div className="space-y-6">
       <ContestListHeader locale={locale} canManage={permissions.canCreate} onCreate={handleCreate} />
+      {permissions.canUpdate && (
+        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+          <Button variant="secondary" onClick={() => setIsEditWindowOpen(true)}>Edit window</Button>
+        </BulkActionBar>
+      )}
       <ResponsiveTable
         columns={columns}
         rows={contests}
@@ -110,6 +139,12 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
       />
       <ContestModal isOpen={isModalOpen} onClose={handleClose} contest={selectedContest} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
       <DeployConfirmModal isOpen={actions.deployTarget !== null} phase={actions.deployState.phase} targetLabel={`#${actions.deployTarget}`} extraNote="The previous active contest will be deactivated." onClose={actions.closeDeploy} onConfirm={actions.confirmDeploy} />
+      <ContestBulkEditDialog
+        isOpen={isEditWindowOpen}
+        onClose={() => setIsEditWindowOpen(false)}
+        contestIds={[...selection.selectedIds]}
+        onSuccess={() => { selection.clear(); router.refresh(); }}
+      />
     </div>
   );
 }

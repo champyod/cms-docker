@@ -175,6 +175,19 @@ export async function updateContestSettings(id: number, data: Partial<ContestDat
   return updateContest(id, data);
 }
 
+// Why read-then-write: executeContestUpdate writes the four token and limit
+// columns unconditionally, so a window-only patch would null them on every
+// selected contest; the current values ride along so a window edit keeps them.
+export async function updateContestWindow(id: number, patch: Partial<ContestData>): Promise<MutationResult> {
+  await requirePermission(ACTION_PERMISSIONS.updateContest);
+  const current = await prisma.contests.findUnique({
+    where: { id },
+    select: { token_max_number: true, token_gen_max: true, max_submission_number: true, max_user_test_number: true },
+  });
+  if (current === null) return { success: false, error: 'Contest not found' };
+  return updateContest(id, { ...current, ...patch });
+}
+
 export async function getAvailableContests(): Promise<AvailableResult> {
   await requirePermission('contest:list');
   try {
