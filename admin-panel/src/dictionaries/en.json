@@ -253,6 +253,7 @@
       "target": "Target",
       "targetUser": "user",
       "targetTeam": "team",
+      "targetRanking": "ranking",
       "targetKey": "Target key",
       "chooseTargetKey": "Select a target",
       "action": "Action",

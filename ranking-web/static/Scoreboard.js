@@ -74,7 +74,13 @@ var Scoreboard = new function () {
         if (pinned !== null) return pinned;
         var snap = self.frozen[user["key"]];
         if (snap !== undefined) return snap["rank"];
-        return user["rank"];
+        if (typeof user["rank"] !== "number") return user["rank"];
+        var mine = self.display_global(user);
+        var rank = 1;
+        for (var u_id in DataStore.users) {
+            if (self.display_global(DataStore.users[u_id]) > mine) rank += 1;
+        }
+        return rank;
     };
 
     self.display_task = function (user, t_id) {
@@ -87,6 +93,13 @@ var Scoreboard = new function () {
         var snap = self.frozen[user["key"]];
         if (snap !== undefined && snap["contests"][c_id] !== undefined) return snap["contests"][c_id];
         return user["c_" + c_id];
+    };
+
+    self.display_column = function (user, sort_key) {
+        if (sort_key === "global") return self.display_global(user);
+        if (sort_key.slice(0, 2) === "c_") return self.display_contest(user, sort_key.slice(2));
+        if (sort_key.slice(0, 2) === "t_") return self.display_task(user, sort_key.slice(2));
+        return user[sort_key];
     };
 
     self.is_frozen = function (user) {
@@ -102,9 +115,10 @@ var Scoreboard = new function () {
     };
 
     self.override_handler = function (overrides) {
+        var boardFrozen = DataStore.board_freeze_hit() !== null;
         var next = new Object();
         for (var u_id in DataStore.users) {
-            if (DataStore.freeze_hit_for(u_id) !== null) {
+            if (boardFrozen || DataStore.freeze_hit_for(u_id) !== null) {
                 next[u_id] = (self.frozen[u_id] !== undefined) ? self.frozen[u_id] : self.snapshot_user(DataStore.users[u_id]);
             }
         }
@@ -120,6 +134,7 @@ var Scoreboard = new function () {
 
     self.visible_users = function () {
         var out = new Array();
+        if (DataStore.is_board_hidden()) return out;
         for (var u_id in DataStore.users) {
             if (!DataStore.is_hidden(u_id)) out.push(DataStore.users[u_id]);
         }
@@ -401,8 +416,12 @@ var Scoreboard = new function () {
             if (a_rank !== b_rank) return (a_rank < b_rank) ? -1 : +1;
         }
         var sort_key = self.sort_key;
-        if ((a[sort_key] > b[sort_key]) || ((a[sort_key] == b[sort_key]) &&
-           ((a["global"] > b["global"]) || ((a["global"] == b["global"]) &&
+        var a_value = self.display_column(a, sort_key);
+        var b_value = self.display_column(b, sort_key);
+        var a_global = self.display_global(a);
+        var b_global = self.display_global(b);
+        if ((a_value > b_value) || ((a_value == b_value) &&
+           ((a_global > b_global) || ((a_global == b_global) &&
            ((a["l_name"] < b["l_name"]) || ((a["l_name"] == b["l_name"]) &&
            ((a["f_name"] < b["f_name"]) || ((a["f_name"] == b["f_name"]) &&
            (a["key"] <= b["key"]))))))))) {
