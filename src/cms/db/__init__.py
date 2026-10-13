@@ -61,6 +61,8 @@ __all__ = [
     # permissions
     "Permission", "Group", "GroupPermission", "AdminGroup",
     "AdminPermissionOverride", "AuditLog",
+    # security
+    "SecurityBlock",
     # task
     "Task", "Statement", "Attachment", "Dataset", "Manager", "Testcase",
     # submission
@@ -112,6 +114,10 @@ from .usertest import UserTest, UserTestFile, UserTestManager, \
 # resolution; Prisma migrations own their creation (cmsInitDB excludes them).
 from .permissions import Permission, Group, GroupPermission, AdminGroup, \
     AdminPermissionOverride, AuditLog
+# WHY imported like the RBAC models: Prisma owns the table's creation, and the
+# web servers only append the lockouts they count so the panel's block list has
+# something to read.
+from .security_block import SecurityBlock
 
 from .init import init_db
 from .drop import drop_db

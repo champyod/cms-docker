@@ -52,7 +52,7 @@ from cms.db import User, Participation, Team
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
 from cms.server import multi_contest
-from cms.server.captcha import extract_provider, extract_token
+from cms.server.captcha import CaptchaOutcome, extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
@@ -133,11 +133,12 @@ class RegistrationHandler(ContestHandler):
         # browser's jQuery handler to tell apart from a genuine credential
         # error. 429 also describes what actually happened, and the handler's
         # own script shows the widget again after it.
-        if not self.captcha.verify(
-                self.get_argument("username", ""), self.request.remote_ip,
-                extract_token(self), extract_provider(self)):
-            logger.info("CAPTCHA rejected on registration from IP %s.",
-                        self.request.remote_ip)
+        outcome = self.captcha.verify(
+            self.get_argument("username", ""), self.request.remote_ip,
+            extract_token(self), extract_provider(self))
+        if outcome is not CaptchaOutcome.ALLOWED:
+            logger.info("CAPTCHA refused on registration from IP %s: %s.",
+                        self.request.remote_ip, outcome.value)
             raise tornado.web.HTTPError(429)
 
         create_new_user = self.get_argument("new_user") == "true"
@@ -308,11 +309,12 @@ class LoginHandler(ContestHandler):
         # WHY the captcha comes first: a wrong or forged answer must not be
         # worth anything to an attacker, so the credentials are not examined
         # until the captcha has passed.
-        if not self.captcha.verify(
-                username, self.request.remote_ip, extract_token(self),
-                extract_provider(self)):
-            logger.info("CAPTCHA rejected for user %r from IP %s.", username,
-                        self.request.remote_ip)
+        outcome = self.captcha.verify(
+            username, self.request.remote_ip, extract_token(self),
+            extract_provider(self))
+        if outcome is not CaptchaOutcome.ALLOWED:
+            logger.info("CAPTCHA refused for user %r from IP %s: %s.", username,
+                        self.request.remote_ip, outcome.value)
             return False
 
         # WHY the lockout comes after it and before validate_login: the password

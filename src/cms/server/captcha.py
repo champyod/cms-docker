@@ -40,6 +40,7 @@ rejects the login (fail-closed), as `verifyCaptcha` does in the panel too.
 
 """
 
+import enum
 import logging
 import typing
 
@@ -55,6 +56,20 @@ from cms.server.login_counters import (LoginFailureCounters, build_counters,
 logger = logging.getLogger(__name__)
 
 
+class CaptchaOutcome(enum.Enum):
+    """Why an attempt was let through or refused.
+
+    A bare False folds two unlike refusals together: a token the provider
+    rejected and a provider nobody could reach. The handler logs the difference,
+    because an outage that refuses everyone looks exactly like a wave of wrong
+    puzzles and the two need opposite responses.
+    """
+
+    ALLOWED = "allowed"
+    CHALLENGE_FAILED = "challenge_failed"
+    PROVIDER_UNREACHABLE = "provider_unreachable"
+
+
 class Captcha:
     """The adaptive captcha for one web server.
 
@@ -68,13 +83,15 @@ class Captcha:
                  counters: LoginFailureCounters | None = None,
                  verify: typing.Callable[[str, str, str], bool]
                  | None = None,
-                 health: ProviderHealth | None = None) -> None:
+                 health: ProviderHealth | None = None,
+                 lockout_sink: typing.Callable[[str, str, float], None]
+                 | None = None) -> None:
         self.config = config
         # WHY built from the config when not injected: the counts are kept in a
         # shared Redis when one is configured, and that has to be decided once
         # at construction rather than per request.
         self._counters = counters if counters is not None \
-            else build_counters(config)
+            else build_counters(config, lockout_sink)
         # WHY injectable: the verification call reaches the network, and the
         # test suite has to drive the decision logic without one.
         self._verify = verify if verify is not None else verify_token
@@ -206,13 +223,15 @@ class Captcha:
         return max(1, self.config.threshold)
 
     def verify(self, username: str, ip: str, token: str,
-               provider: str = "") -> bool:
-        """Return whether this attempt may proceed.
+               provider: str = "") -> CaptchaOutcome:
+        """Return why this attempt may or may not proceed.
 
         The three ways through are: no captcha was demanded; a valid token
         came with the attempt; or the captcha is not configured. Anything else
-        is refused, including a provider that could not be reached, which is
-        the fail-closed behaviour the panel has.
+        is refused, and the refusal says which of the two it was — a token the
+        provider rejected, or a provider that could not be reached — so the
+        caller can log an outage apart from a wrong puzzle while still refusing
+        both fail-closed.
 
         *provider* is the name the widget posted. A token is only meaningful to
         the provider that issued it, so when the chain shifted between the
@@ -220,7 +239,7 @@ class Captcha:
 
         """
         if not self.is_required(username, ip):
-            return True
+            return CaptchaOutcome.ALLOWED
         name, _site_key, secret = self._active()
         requested = (provider or "").strip().lower()
         for entry in self._chain():
@@ -234,10 +253,11 @@ class Captcha:
             # signal the chain fails over on, and the attempt is refused
             # fail-closed rather than let through.
             self._health.record_failure(name)
-            return False
+            return CaptchaOutcome.PROVIDER_UNREACHABLE
         if verdict:
             self._health.record_success(name)
-        return verdict
+            return CaptchaOutcome.ALLOWED
+        return CaptchaOutcome.CHALLENGE_FAILED
 
     def record_failure(self, username: str, ip: str) -> None:
         """Count a failed attempt, which may make the next one need a captcha."""
@@ -340,5 +360,5 @@ def extract_provider(form: typing.Any) -> str:
     return value.strip().lower() if isinstance(value, str) else ""
 
 
-__all__ = ["Captcha", "LoginFailureCounters", "extract_provider",
-           "is_loopback_client"]
+__all__ = ["Captcha", "CaptchaOutcome", "LoginFailureCounters",
+           "extract_provider", "is_loopback_client"]

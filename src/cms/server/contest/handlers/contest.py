@@ -54,6 +54,7 @@ from cms.db import Contest, Submission, Task, UserTest
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
 from cms.server.captcha import Captcha
+from cms.server.login_lockout_ledger import record_login_lockout
 from cms.server.contest.authentication import authenticate_request
 from cms.server.credits import load_credits
 from cmscommon.datetime import get_timezone
@@ -96,7 +97,8 @@ class ContestHandler(BaseHandler):
         """
         if ContestHandler._cws_captcha is None:
             ContestHandler._cws_captcha = Captcha(
-                config.contest_web_server.captcha)
+                config.contest_web_server.captcha,
+                lockout_sink=record_login_lockout)
         return ContestHandler._cws_captcha
 
     def prepare(self):

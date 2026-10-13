@@ -30,7 +30,7 @@ from cmstestsuite.unit_tests.databasemixin import DatabaseMixin, \
 
 from cms import config
 from cms.conf import CaptchaConfig
-from cms.server.captcha import Captcha
+from cms.server.captcha import Captcha, CaptchaOutcome
 from cms.server.contest.authentication import validate_login, \
     authenticate_request
 from cms.server.login_counter_backend import InProcessBackend
@@ -592,7 +592,8 @@ class TestLoginLockout(DatabaseObjectGeneratorMixin, unittest.TestCase):
         refusal: an account can be challenged and still be guessable, and
         the lockout is what bounds that guessing.
         """
-        self.assertTrue(captcha.verify(username, ip_address, "good"))
+        self.assertIs(captcha.verify(username, ip_address, "good"),
+                      CaptchaOutcome.ALLOWED)
 
     def assertLocksOut(self, captcha, username="myuser",
                        ip_address=LOCKOUT_IP):
@@ -673,6 +674,25 @@ class TestLoginLockout(DatabaseObjectGeneratorMixin, unittest.TestCase):
 
         self.assertEqual(self.captcha.counters.count("myuser", LOCKOUT_IP), 0)
         self.assertNotLockedOut(self.captcha)
+
+    def test_the_crossing_threshold_reports_the_lockout_once(self):
+        # The panel's block list can only show a lockout the counters report, so
+        # the attempt that crosses the ban threshold tells the sink. It tells it
+        # once: the count is retained, so reporting on every later failure would
+        # write a row per guess for a lockout already in the ledger.
+        reported = []
+        counters = LoginFailureCounters(
+            backend=InProcessBackend(),
+            lockout_sink=lambda username, ip, window:
+            reported.append((username, ip, window)))
+
+        for _ in range(BAN_THRESHOLD - 1):
+            counters.record_failure("myuser", LOCKOUT_IP)
+        self.assertEqual(reported, [])
+
+        counters.record_failure("myuser", LOCKOUT_IP)
+        counters.record_failure("myuser", LOCKOUT_IP)
+        self.assertEqual(reported, [("myuser", LOCKOUT_IP, FAILURE_WINDOW)])
 
 
 if __name__ == "__main__":

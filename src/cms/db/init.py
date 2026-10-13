@@ -19,16 +19,17 @@
 
 from . import metadata
 
-# WHY: the 6 RBAC tables are Prisma-owned; cmsInitDB must not create them
-# or fresh installs collide with the migration history and prod never
-# receives them via migrations.
-_RBAC_TABLES = frozenset({
+# WHY: these tables are Prisma-owned; cmsInitDB must not create them or fresh
+# installs collide with the migration history and prod never receives them via
+# migrations.
+_PRISMA_TABLES = frozenset({
     "permissions",
     "groups",
     "group_permissions",
     "admin_groups",
     "admin_permission_overrides",
     "audit_log",
+    "security_blocks",
 })
 
 
@@ -41,7 +42,7 @@ def init_db() -> bool:
     # WHY: restrict create_all to CMS-owned tables; RBAC tables are created
     # by Prisma migrations (see src/cms/db/__init__.py import comment).
     metadata.create_all(
-        tables=[t for t in metadata.tables.values() if t.name not in _RBAC_TABLES]
+        tables=[t for t in metadata.tables.values() if t.name not in _PRISMA_TABLES]
     )
 
     return True

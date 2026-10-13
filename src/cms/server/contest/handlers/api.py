@@ -26,7 +26,7 @@ import logging
 from cms.db.submission import Submission
 from cms.db.user import Participation
 from cms.server import multi_contest
-from cms.server.captcha import extract_provider, extract_token
+from cms.server.captcha import CaptchaOutcome, extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
@@ -140,12 +140,16 @@ class ApiLoginHandler(ApiContestHandler):
         # attempt that costs the attacker nothing. is_required() is the single
         # authority on whether a captcha is demanded, so an attempt below the
         # threshold never reaches the provider at all.
-        if captcha_demanded and not self.captcha.verify(
+        if captcha_demanded:
+            outcome = self.captcha.verify(
                 username, self.request.remote_ip, extract_token(self),
-                extract_provider(self)):
-            self.captcha.record_failure(username, self.request.remote_ip)
-            self.json({"error": "Login failed"}, 403)
-            return False
+                extract_provider(self))
+            if outcome is not CaptchaOutcome.ALLOWED:
+                logger.info("CAPTCHA refused for API login %r from IP %s: %s.",
+                            username, self.request.remote_ip, outcome.value)
+                self.captcha.record_failure(username, self.request.remote_ip)
+                self.json({"error": "Login failed"}, 403)
+                return False
 
         # WHY the lockout comes after it and before validate_login: the password
         # of a locked-out account is the work the lockout exists to skip. A

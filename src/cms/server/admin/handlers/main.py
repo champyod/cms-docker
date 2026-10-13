@@ -30,7 +30,8 @@ import logging
 
 from cms import ServiceCoord, get_service_shards, get_service_address
 from cms.db import Admin, Contest, Question
-from cms.server.captcha import Captcha, extract_provider, extract_token
+from cms.server.captcha import (Captcha, CaptchaOutcome, extract_provider,
+                                extract_token)
 from cms.server.credits import get_surface
 from cms.server.jinja2_toolbox import markdown_filter
 from cmscommon.crypto import validate_password
@@ -81,11 +82,11 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
         # WHY check the captcha before the password: a wrong or forged answer
         # must not be worth anything to an attacker, so the credential is not
         # even examined until the captcha has passed.
-        if not self.captcha.verify(
-                username, client_ip, extract_token(self),
-                extract_provider(self)):
-            logger.info("CAPTCHA rejected for admin %r from IP %s.", username,
-                        client_ip)
+        outcome = self.captcha.verify(
+            username, client_ip, extract_token(self), extract_provider(self))
+        if outcome is not CaptchaOutcome.ALLOWED:
+            logger.info("CAPTCHA refused for admin %r from IP %s: %s.", username,
+                        client_ip, outcome.value)
             self.redirect(error_page)
             return
 

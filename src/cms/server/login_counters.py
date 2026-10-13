@@ -62,7 +62,9 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
     """
 
     def __init__(self, backend: CounterBackend | None = None,
-                 degraded: bool = False) -> None:
+                 degraded: bool = False,
+                 lockout_sink: typing.Callable[[str, str, float], None]
+                 | None = None) -> None:
         # WHY a lock here as well as inside the backend: an operation touches
         # both key families, and holding one lock across them keeps a concurrent
         # read from seeing a half-recorded failure. The backend's own lock is
@@ -75,6 +77,10 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
         # WHY the counters own this flag: it is a property of where the counts
         # are kept, and the captcha needs it to decide what to demand.
         self._degraded = degraded
+        # WHY injected rather than imported: the sink writes the operator-facing
+        # ledger, which needs a database, and the counters must stay runnable
+        # (and testable) without one.
+        self._lockout_sink = lockout_sink
         self._ban_threshold = 5
 
     @property
@@ -127,8 +133,12 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
 
         """
         with self._lock:
-            account = self._live_count(f"{username}|{ip}")
-            address = self._live_count(self._ip_key(ip))
+            return self._count_unlocked(username, ip)
+
+    def _count_unlocked(self, username: str, ip: str) -> int:
+        """Return the count without taking the lock, for callers already holding it."""
+        account = self._live_count(f"{username}|{ip}")
+        address = self._live_count(self._ip_key(ip))
         return max(account, address)
 
     def is_limited(self, username: str, ip: str) -> bool:
@@ -146,12 +156,21 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
         return self.count(username, ip) >= self._ban_threshold
 
     def record_failure(self, username: str, ip: str) -> None:
-        """Count one more failed attempt against this account and address."""
+        """Count one more failed attempt against this account and address.
+
+        The attempt that crosses the ban threshold is reported to the sink, once,
+        outside the lock: that crossing is the lockout an operator has to be able
+        to see, and a slow sink must not serialise concurrent logins behind it.
+        """
         ban_threshold = self._ban_threshold
         with self._lock:
+            was_limited = self._count_unlocked(username, ip) >= ban_threshold
             self._increment(f"{username}|{ip}", ban_threshold)
             if not is_loopback(ip):
                 self._increment(self._ip_key(ip), ban_threshold)
+            now_limited = self._count_unlocked(username, ip) >= ban_threshold
+        if self._lockout_sink is not None and now_limited and not was_limited:
+            self._lockout_sink(username, ip, FAILURE_WINDOW)
 
     def set_ban_threshold(self, value: int) -> None:
         """Set the failure count at which the account or address is refused.
@@ -240,10 +259,12 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
         return 0 if bucket is None else bucket[0]
 
 
-def build_counters(config: typing.Any) -> LoginFailureCounters:
+def build_counters(config: typing.Any,
+                   lockout_sink: typing.Callable[[str, str, float], None]
+                   | None = None) -> LoginFailureCounters:
     """Return the counters *config* asks for, and record how they are kept."""
     backend, degraded = build_backend(config, FAILURE_WINDOW)
-    return LoginFailureCounters(backend, degraded)
+    return LoginFailureCounters(backend, degraded, lockout_sink)
 
 
 __all__ = ["LoginFailureCounters", "build_counters", "is_loopback",
