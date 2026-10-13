@@ -116,8 +116,11 @@ RUN CHECKPOINT_DISABLE=1 ./node_modules/.bin/prisma --version \
 # Unprivileged runtime: compose grants the host docker group (group_add) so the
 # node user can still reach the mounted socket, and the cache dir must be
 # writable for Next's lazy cache writes.
-RUN mkdir -p /app/.next/cache \
- && chown -R node:node /app/.next
+# WHY the ranking dir: a fresh `cms-ranking-data` named volume is seeded from this
+# image path, so declaring it node:node is what lets the unprivileged panel write
+# the uploaded logo there instead of hitting EACCES.
+RUN mkdir -p /app/.next/cache /var/local/lib/cms/ranking \
+ && chown -R node:node /app/.next /var/local/lib/cms/ranking
 USER node
 
 # Expose port (Next.js defaults to 3000)

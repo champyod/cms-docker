@@ -10,6 +10,7 @@ import {
   type ImageExtension,
 } from '@/lib/asset-upload';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { fileExists } from '@/lib/file-system';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { logoExtension, setLogoPath } from '@/lib/ranking-logo';
@@ -18,13 +19,6 @@ const RANKING_LIB_DIR = '/var/local/lib/cms/ranking';
 const HOST_LOGO_DIR = 'config/assets';
 const LOGO_FILENAME_STEM = 'logo';
 const LOGO_FILE_MODE = 0o644;
-
-async function fileExists(filePath: string): Promise<boolean> {
-  return fs.access(filePath).then(
-    () => true,
-    () => false,
-  );
-}
 
 async function removeIfPresent(filePath: string): Promise<void> {
   await fs.rm(filePath, { force: true });

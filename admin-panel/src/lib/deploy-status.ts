@@ -4,6 +4,7 @@ import { DEPLOY_OPERATION_ID_REGEX, DEPLOY_STALE_LABEL, DEPLOY_STALE_MS, DEPLOY_
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
 import { getDeployOperationPaths, probeDeployProcess, readDeployMeta, type DeployMeta } from '@/lib/deploy-operation-store';
 import { applyClaimedOutcome } from '@/lib/deploy-settle';
+import { fileExists } from '@/lib/file-system';
 
 export interface DeployStatusResult {
   success: boolean;
@@ -18,10 +19,6 @@ export interface DeployStatusResult {
 
 function runningStatus(meta: DeployMeta, log: string): DeployStatusResult {
   return { success: true, status: 'running', contestId: meta.contestId, startedAt: meta.startedAt, log, percent: parseDeployPercent(log) };
-}
-
-async function fileExists(file: string): Promise<boolean> {
-  return fs.access(file).then(() => true, () => false);
 }
 
 /**

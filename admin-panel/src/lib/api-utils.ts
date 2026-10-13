@@ -47,6 +47,21 @@ interface KnownApiError {
   status?: number;
   message?: string;
   errors?: unknown;
+  path?: string;
+  syscall?: string;
+}
+
+/** The errno codes a filesystem refusal carries; a read's ENOENT is a missing record, not one. */
+const FILESYSTEM_ERRNO_CODES = new Set(['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'EDQUOT', 'EBUSY']);
+
+// Why not 500: the path refused the operation (wrong owner, read-only, full), which is a conflict
+// with the target resource rather than an internal crash — and 403 already means "this account
+// lacks the permission". The message names the path so the operator knows which one refused.
+const FILESYSTEM_REFUSED_STATUS = 409;
+
+function describeFilesystemFailure(err: KnownApiError): string {
+  const operation = err.syscall ?? 'access';
+  return `${err.code}: cannot ${operation} ${err.path ?? 'the target path'}`;
 }
 
 export function apiError(error: unknown): NextResponse {
@@ -54,16 +69,19 @@ export function apiError(error: unknown): NextResponse {
   const err = error as KnownApiError;
   const code = err.code;
   let message: string;
+  let status = err.status || 500;
   if (code === 'P2002') {
     message = 'A record with these details already exists';
   } else if (code === 'P2025') {
     message = 'Record not found';
+  } else if (code !== undefined && FILESYSTEM_ERRNO_CODES.has(code)) {
+    message = describeFilesystemFailure(err);
+    status = err.status ?? FILESYSTEM_REFUSED_STATUS;
   } else if (err.status != null && err.status < 500) {
     message = err.message || 'An unexpected error occurred';
   } else {
     message = 'An unexpected error occurred';
   }
-  const status = err.status || 500;
   const extra = err.errors ? { errors: err.errors } : {};
   return NextResponse.json({ success: false, error: message, ...extra }, { status });
 }
