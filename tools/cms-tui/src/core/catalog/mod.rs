@@ -21,6 +21,7 @@ pub(crate) const SCRIPT_TAILSCALE_SERVE: &str = "__tailscale_serve.sh";
 pub(crate) const SCRIPT_DOMAIN: &str = "__domain.sh";
 pub(crate) const SCRIPT_FUNNEL: &str = "__funnel.sh";
 pub(crate) const SCRIPT_CREATE_CONTESTS: &str = "__create_contests.sh";
+pub(crate) const SCRIPT_CONTEST_SET_ACTIVE: &str = "__contest_set_active.sh";
 pub(crate) const SCRIPT_CONFIG_SYNC: &str = "__config_sync.sh";
 pub(crate) const SCRIPT_DB_ADMIN: &str = "__db_admin.sh";
 pub(crate) const SCRIPT_DB_USE: &str = "__db_use.sh";
@@ -63,6 +64,11 @@ pub(crate) const ARGS_SECRET_FLAG: &[ArgSpec] = &[ArgSpec {
     name: "flag",
     required: true,
     description: "Secrets subcommand flag",
+}];
+pub(crate) const ARGS_CONTEST_ID: &[ArgSpec] = &[ArgSpec {
+    name: "id",
+    required: true,
+    description: "Contest id to activate",
 }];
 pub(crate) const ARGS_WORKER: &[ArgSpec] = &[ArgSpec {
     name: "args",

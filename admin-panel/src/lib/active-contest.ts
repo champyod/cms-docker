@@ -1,38 +1,28 @@
-import { upsertTomlValue } from '@/lib/discord-webhook';
+import { prisma } from '@/lib/prisma';
 
-// The active contest lives in exactly one place: config.toml [contest] CONTEST_ID.
-// It used to be mirrored into .env.contest as ACTIVE_CONTEST_ID + CONTEST_ID, which is
-// the class of bug ./cms config sync (and update-server, which runs it on deploy)
-// exposes: a value written to a generated file is not the source of truth. Compose
-// interpolates ${CONTEST_ID} from the generated .env, so CONTEST_ID is the one setting
-// and this module is the only reader/writer of it — no second writable source.
-export const CONTEST_SECTION = 'contest';
+// The active contest lives in exactly one place: contests.is_active in the database.
+// config.toml [contest] CONTEST_ID and the generated .env are derived from it by
+// scripts/__config_sync.sh (see ./cms contest set-active), so neither is a writable copy
+// and nothing here reads or writes them. This module is the panel's only accessor of it.
 export const CONTEST_ID_KEY = 'CONTEST_ID';
 
-// Scoped to the [contest] section so a same-named key elsewhere cannot be picked up,
-// and quote/comment tolerant so both `CONTEST_ID = 1  # num` and `CONTEST_ID = "1"`
-// (the form upsertTomlValue emits) round-trip.
-const CONTEST_ID_RE = /^(\[contest\][\s\S]*?CONTEST_ID\s*=\s*)"?(\d+)"?(.*)$/m;
-
-/** Reads the active contest id from config.toml content; null when absent or non-numeric. */
-export function readContestId(content: string): number | null {
-  const match = content.match(CONTEST_ID_RE);
-  if (match === null) return null;
-  return Number.parseInt(match[2], 10);
+/**
+ * The id of the contest flagged active, or null when no row is. Read from the database
+ * because that is the only store that authors it.
+ */
+export async function readActiveContestId(): Promise<number | null> {
+  const contest = await prisma.contests.findFirst({
+    where: { is_active: true },
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  });
+  return contest === null ? null : contest.id;
 }
 
 /**
- * Returns config.toml content with the active contest id set, leaving every other key
- * untouched. Keeps the value numeric (matching the example's `# num`) and preserves the
- * inline comment when the key already exists; inserts via the shared TOML writer when the
- * section or key is missing.
+ * Flags exactly `id` active in one statement, so every other row is cleared by the same
+ * update and the table can never hold two active contests.
  */
-export function setContestId(content: string, id: number): string {
-  if (CONTEST_ID_RE.test(content)) {
-    return content.replace(
-      CONTEST_ID_RE,
-      (_match, head: string, _old: string, tail: string) => `${head}${id}${tail}`,
-    );
-  }
-  return upsertTomlValue(content, CONTEST_SECTION, CONTEST_ID_KEY, String(id));
+export async function writeActiveContestId(id: number): Promise<void> {
+  await prisma.$executeRaw`UPDATE contests SET is_active = (id = ${id})`;
 }

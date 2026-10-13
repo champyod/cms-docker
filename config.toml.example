@@ -164,7 +164,7 @@ RPC_SECRET = ""               # secret; auto-generated hex32 if empty; shared in
 RPC_ALLOW_BACKDOOR = false    # bool; allow remote start_backdoor/stop_backdoor via RPC (requires secret)
 
 [contest]
-CONTEST_ID = 1                  # num; ACTIVE contest served by the contest stack; single source of truth (docker compose reads ${CONTEST_ID}); the admin panel writes here, never the generated .env
+CONTEST_ID = 1                  # num; GENERATED CACHE of the active contest — the database (contests.is_active) is the source of truth, set via './cms contest set-active <id>'; scripts/__config_sync.sh rewrites this from the DB and compose reads ${CONTEST_ID}. Do not edit by hand.
 CONTEST_DOMAIN = ""             # str; FQDN contestants reach the contest UI at — the traefik Host rule and the standalone nginx server_name; empty=CMS_DOMAIN
 CONTEST_LISTEN_PORT = 8888      # port; port the publish map, healthcheck, and every proxy upstream dial the contest server on — must match listen_port in config/cms.toml (this key never rewrites it)
 CONTEST_BIND_IP = "127.0.0.1"   # csv; addresses the contest web UI is published on; loopback keeps it reachable only through the proxy — set it to 0.0.0.0 to expose the port to the LAN

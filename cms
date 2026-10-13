@@ -72,6 +72,8 @@ Commands:
   config edit               open config.toml in $EDITOR
   config show               print current config.toml
   contest create            create contests from YAML
+  contest set-active <id>   set the active contest in the database (config.toml/.env
+                            are derived from it; rows and DB are the source of truth)
   update-server             shard-aware FULL server update (git+img+db+verify)
   update all                alias for update-server (full update)
 
@@ -330,7 +332,7 @@ if ! is_skipped contest; then
       if [[ "$have" == "0" ]]; then
         log_info "DB has no contests — importing sample (examples/contests.yaml)"
         run_step sample-contest soft './scripts/__create_contests.sh -f examples/contests.yaml'
-        log_info "Set CONTEST_ID in config.toml [contest] to the desired sample id, then: make env && make contest"
+        log_info "Set the active contest with './cms contest set-active <id>' (the database is the source of truth; config.toml/.env derive from it), then: make contest"
       else
         record "sample-contest" "SKIPPED (contests exist: $have)"
       fi

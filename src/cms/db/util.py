@@ -24,6 +24,7 @@
 """
 
 import sys
+import os
 import logging
 
 from sqlalchemy import union
@@ -153,6 +154,81 @@ def ask_for_contest(skip: int | None = None) -> int:
             sys.exit(1)
 
     return contest_id
+
+
+class ContestsTableMissingError(RuntimeError):
+    """The contests table does not exist yet (a fresh install, before cmsInitDB).
+
+    WHY a distinct error and not a None return: a caller may bootstrap only while there
+    is nothing to read. A table that exists but holds no active row is a different,
+    non-bootstrappable state and must not be answered the same way.
+    """
+
+
+def active_contest_id() -> int | None:
+    """Return the id of the contest flagged active in the database.
+
+    WHY the database: contests.is_active is the single source of truth for the active
+    contest; config.toml [contest] CONTEST_ID and the generated .env are derived from it,
+    so reading either here would reintroduce the copy this change removes.
+
+    return: the active contest id, or None when the contests table exists but no row is
+        flagged active.
+
+    raises ContestsTableMissingError: the contests table does not exist yet. A database
+        that cannot be reached is not caught here: its error propagates so a running stack
+        fails loud instead of serving a contest the database does not name.
+
+    """
+    from sqlalchemy import inspect
+    with SessionGen() as session:
+        if not inspect(session.get_bind()).has_table("contests"):
+            raise ContestsTableMissingError("the contests table does not exist yet")
+        contest = session.query(Contest).filter(Contest.is_active.is_(True)).first()
+        return None if contest is None else contest.id
+
+
+def _bootstrap_contest_id() -> int:
+    """Return the bootstrap contest id from the environment.
+
+    Used only while the contests table does not exist (a fresh install). WHY the
+    environment and not config.toml: compose still exports CONTEST_ID, and a service may
+    not read the file the generator derives from the database.
+
+    """
+    bootstrap = os.environ.get("CONTEST_ID")
+    if not bootstrap:
+        logger.critical(
+            "contests table does not exist yet and CONTEST_ID is unset — cannot "
+            "decide which contest to serve.")
+        sys.exit(1)
+    try:
+        return int(bootstrap)
+    except ValueError:
+        logger.critical("bootstrap CONTEST_ID '%s' is not a contest id", bootstrap)
+        sys.exit(1)
+
+
+def ask_for_active_contest() -> int:
+    """Return the contest a service should serve, read from the database.
+
+    The database is the single source. The only fallback is the bootstrap one — before
+    cmsInitDB has created the contests table there is nothing to read — and every other
+    state is fatal, so a running stack never serves a contest the database does not name.
+
+    return: the active contest id.
+
+    """
+    try:
+        active = active_contest_id()
+    except ContestsTableMissingError:
+        return _bootstrap_contest_id()
+    if active is None:
+        logger.critical(
+            "No active contest: contests.is_active holds no active row. Set one with "
+            "'./cms contest set-active <id>'.")
+        sys.exit(1)
+    return active
 
 
 def get_submissions(

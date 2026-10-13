@@ -48,6 +48,36 @@ const mocks = vi.hoisted(() => ({
   pidNamespaceReadFails: false,
 }));
 
+/**
+ * The active contest the store moves, held in memory: contests.is_active is the single source
+ * of truth, and the store reaches it through `@/lib/active-contest`, so mocking that module is
+ * what lets a test seed and read the row without a database. The two gates below pause the
+ * store's read and write of it exactly as the old file-based tests paused the file.
+ */
+const activeStore = vi.hoisted(() => ({ id: null as number | null }));
+
+vi.mock('@/lib/active-contest', () => ({
+  CONTEST_ID_KEY: 'CONTEST_ID',
+  readActiveContestId: async (): Promise<number | null> => {
+    const gate = mocks.configReadGate;
+    if (gate !== null && gate.shouldHold()) {
+      mocks.configReadGate = null;
+      gate.markEntered();
+      await gate.released;
+    }
+    return activeStore.id;
+  },
+  writeActiveContestId: async (id: number): Promise<void> => {
+    const gate = mocks.configWriteGate;
+    if (gate !== null && gate.shouldHold()) {
+      mocks.configWriteGate = null;
+      gate.markEntered();
+      await gate.released;
+    }
+    activeStore.id = id;
+  },
+}));
+
 vi.mock('server-only', () => ({}));
 
 vi.mock('@/lib/discord-notifier', () => ({ logToDiscord: mocks.logToDiscord }));
@@ -85,44 +115,16 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 /**
- * Wraps the three filesystem calls a test needs to hold: the store's write of `config.toml`, its read
- * of it, and its unlink of an operation's record.
- *
- * Why the write is the interposition point: the settle reads the file to decide the rollback is still
- * its to make, and writes it immediately after. Holding the write is the only way to observe what a
- * settlement does with the file once a newer deploy has taken it.
- *
- * The read side is wrapped for the same reason in the other direction: the store re-reads `config.toml`
- * just before it writes, so a test that holds *that* read acts in the window between the ownership check
- * and the content the write is derived from — the window the store closes by re-reading instead of
- * writing back the snapshot the ownership check took. The hold is before the read executes (the write's
- * hold is likewise before the write), and `skip` selects which read of the settle is held: holding the
- * earlier ownership check would test a window the store has already closed.
+ * Wraps the two filesystem calls a test needs to hold: the store's unlink of an operation's record,
+ * and its read of `/proc/self/ns/pid` that decides whether a liveness probe is answerable. The active
+ * contest is no longer a file, so the holds on its read and write live on the `@/lib/active-contest`
+ * mock above.
  *
  * The unlink is wrapped because that is where a record stops existing, which is one half of the
  * guard-against-record ordering `cleanStaleOperations` has to get right.
  */
 vi.mock('fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs/promises')>();
-  const writeFile = async (file: unknown, ...rest: unknown[]): Promise<void> => {
-    const gate = mocks.configWriteGate;
-    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml') && gate.shouldHold()) {
-      // Only the first gated write pauses: a released gate lets later writers through.
-      mocks.configWriteGate = null;
-      gate.markEntered();
-      await gate.released;
-    }
-    return (actual.writeFile as (...args: unknown[]) => Promise<void>)(file, ...rest);
-  };
-  const readFile = async (file: unknown, ...rest: unknown[]): Promise<unknown> => {
-    const gate = mocks.configReadGate;
-    if (gate !== null && typeof file === 'string' && file.endsWith('config.toml') && gate.shouldHold()) {
-      mocks.configReadGate = null;
-      gate.markEntered();
-      await gate.released;
-    }
-    return (actual.readFile as (...args: unknown[]) => Promise<unknown>)(file, ...rest);
-  };
   const unlink = async (file: unknown): Promise<void> => {
     const gate = mocks.metaUnlinkGate;
     if (gate !== null && typeof file === 'string' && file.endsWith('.json') && gate.shouldHold()) {
@@ -139,15 +141,12 @@ vi.mock('fs/promises', async (importOriginal) => {
     return (actual.readlink as (target: string) => Promise<string>)(String(file));
   };
   // Both import styles, because this runner resolves 'fs/promises' and 'node:fs/promises' to one
-  // module: only `config.toml` and the `.json` record are gated, so the test file's own reads and
-  // writes pass untouched.
+  // module: only the `.json` record is gated, so the test file's own reads and writes pass untouched.
   return {
     ...actual,
-    writeFile,
-    readFile,
     unlink,
     readlink,
-    default: { ...actual, writeFile, readFile, unlink, readlink },
+    default: { ...actual, unlink, readlink },
   };
 });
 
@@ -166,10 +165,9 @@ const lockPath = (): string => path.join(logsDir(), 'active.lock');
 
 const plan: ContestDeployPlan = { files: '-f docker-compose.yml', mode: 'img', location: null };
 
+/** The active contest the store last left in the database, as the mocked row holds it. */
 async function readConfigContestId(): Promise<number | null> {
-  const content = await fs.readFile(path.join(repoRoot, 'config.toml'), 'utf-8');
-  const match = content.match(/CONTEST_ID\s*=\s*(\d+)/);
-  return match === null ? null : Number.parseInt(match[1], 10);
+  return activeStore.id;
 }
 
 async function readOrNull(file: string): Promise<string | null> {
@@ -234,16 +232,15 @@ async function rewriteRecordedMeta(operationId: string, meta: Record<string, unk
   await fs.writeFile(metaPath(operationId), JSON.stringify(meta));
 }
 
-/** Holds the store's next `config.toml` write until the test releases it. */
+/** Holds the store's next `contests.is_active` write until the test releases it. */
 function armConfigWritePause(): ConfigGate {
   return armConfigPause('configWriteGate');
 }
 
 /**
- * Holds the store's `config.toml` read until the test releases it, letting the first `skip` reads of that
- * file through. A settle makes two — the ownership check and the read *its write is derived from* — and
- * the held read pauses before it executes, so `skip: 1` puts a test in the window between the ownership
- * check and the write-path read.
+ * Holds the store's read of `contests.is_active` until the test releases it, letting the first `skip`
+ * reads through. A rollback reads it once — the ownership check — so `skip: 0` puts a test inside that
+ * check, where a newer deploy's row can be seeded before the rollback decides whether to revert.
  */
 function armConfigReadPause(skip = 0): ConfigGate {
   return armConfigPause('configReadGate', skip);
@@ -346,7 +343,7 @@ beforeEach(async () => {
     callback(null, { stdout: '', stderr: '' });
   });
   await fs.rm(path.join(repoRoot, 'logs'), { recursive: true, force: true });
-  await fs.writeFile(path.join(repoRoot, 'config.toml'), '[contest]\nCONTEST_ID = 10\n# num\n');
+  activeStore.id = 10;
 });
 
 afterEach(async () => {
@@ -477,16 +474,16 @@ describe('contest deploy lifecycle', () => {
     expect(operationId).toBeDefined();
     if (operationId === undefined) return;
     await killDeployProcesses();
-    // A newer deploy has taken the file since: reverting this operation's replacement would make
-    // config.toml and the database assert different contests.
-    await fs.writeFile(path.join(repoRoot, 'config.toml'), '[contest]\nCONTEST_ID = 13\n');
+    // A newer deploy has moved the active row since: reverting this operation's replacement would
+    // make the database assert a contest no deploy reached.
+    activeStore.id = 13;
 
     const failed = await store.fetchDeployStatus(operationId);
     expect(failed.status).toBe('failed');
     expect(await readConfigContestId()).toBe(13);
   });
 
-  it('keeps a deploy out of the window between a settle\'s ownership check and its config write', async () => {
+  it('keeps a deploy out of the window between a settle\'s ownership check and its active-row write', async () => {
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
     expect(operationId).toBeDefined();
@@ -495,7 +492,8 @@ describe('contest deploy lifecycle', () => {
     const syncsBefore = mocks.exec.mock.calls.length;
     const spawnsBefore = mocks.spawn.mock.calls.length;
 
-    // The settler holds `config.toml` after it decided the file is still its operation's to revert.
+    // The settler holds its write of contests.is_active after it decided the row is still its
+    // operation's to revert.
     const pause = armConfigWritePause();
     const settle = store.fetchDeployStatus(operationId);
     await pause.entered;
@@ -506,10 +504,7 @@ describe('contest deploy lifecycle', () => {
     const deploy = await store.runDeployContest(13, plan);
 
     // What refuses this deploy is the guard, not the claim: the settle releases `active.lock` only
-    // after its config write, so no deploy starts behind a rollback that is still in flight — without
-    // the guard, the deploy's write would land inside this settle's read-then-write window and be
-    // reverted. (The claim is what the assertions after this one are about: it keeps the concurrent
-    // settle from repeating the effects.)
+    // after its active-row write, so no deploy starts behind a rollback that is still in flight.
     expect(deploy).toMatchObject({ success: false, alreadyRunning: true });
     expect(mocks.spawn.mock.calls.length - spawnsBefore).toBe(0);
 
@@ -523,22 +518,19 @@ describe('contest deploy lifecycle', () => {
     expect(await readOrNull(lockPath())).toBeNull();
   });
 
-  it('reverts only its own key, keeping an edit another writer made before the write-path read', async () => {
+  it('reverts only the active row, leaving config.toml another writer owns untouched', async () => {
     const started = await store.runDeployContest(12, plan);
     const operationId = started.operationId;
     expect(operationId).toBeDefined();
     if (operationId === undefined) return;
     await killDeployProcesses();
 
-    // The settle reads config.toml twice: first to decide the rollback is still its own, then again just
-    // before the write, because the write is derived from that fresh content. This holds the *second* read
-    // (skip: 1) — the write path's, not the ownership check — and holds it before it executes, so the edit
-    // below lands in the window between the ownership check and that read. Keeping the edit is what that
-    // fresh read buys: a write built from the snapshot the ownership check took would lose every key
-    // another writer added in the meantime. What this does not cover is the window that remains open
-    // between the write-path read and the write, which `revertOwnedContestId` documents as the one it
-    // cannot close.
-    const pause = armConfigReadPause(1);
+    // The rollback reads contests.is_active to decide the revert is still its own and writes only that
+    // row: config.toml is derived from the row by the sync, so a rollback must not rewrite the file at
+    // all. Holding the read lets an unrelated writer edit the file inside the window; because the
+    // rollback never writes it, the edit survives — the property the old fresh-read preserved, now
+    // structural.
+    const pause = armConfigReadPause(0);
     const settle = store.fetchDeployStatus(operationId);
     await pause.entered;
     await fs.writeFile(
@@ -550,8 +542,6 @@ describe('contest deploy lifecycle', () => {
     const settled = await settle;
     expect(settled.status).toBe('failed');
     expect(await readConfigContestId()).toBe(10);
-    // Writing back the snapshot the ownership check read would revert the whole file to a state it never
-    // had, silently losing every key another writer put there.
     expect(await fs.readFile(path.join(repoRoot, 'config.toml'), 'utf-8')).toContain('DISCORD_WEBHOOK_URL');
   });
 

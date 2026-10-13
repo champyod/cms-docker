@@ -5,7 +5,11 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
-import { CONTEST_ID_KEY, readContestId, setContestId } from '@/lib/active-contest';
+import {
+  CONTEST_ID_KEY,
+  readActiveContestId as readActiveContestIdFromDb,
+  writeActiveContestId as writeActiveContestIdToDb,
+} from '@/lib/active-contest';
 import {
   CONFIG_TOML_FILE,
   applyConfigTomlUpdates,
@@ -101,16 +105,15 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
   await ensurePermission('env:read');
   await ensurePermission('env:list');
   try {
-    // config.toml is the source of truth; reading the generated env file here made the
-    // display lag the value the panel just wrote and drift from a config sync.
-    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
-    const contestId = readContestId(content);
+    // config.toml and .env are generated from the database, so reading either here would
+    // show a value a sync is free to change. The database authors the active contest.
+    const contestId = await readActiveContestIdFromDb();
     await recordAudit({
       verb: 'config:view',
       entity: 'config',
-      // The id, matching what writeActiveContestId records, is what a page load that lands here
-      // looked up: it names the active contest without exposing the rest of the file.
-      afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: contestId },
+      // The id, matching what a write records, is what a page load that lands here looked
+      // up: it names the active contest without exposing the rest of the table.
+      afterValues: { source: 'contests.is_active', [CONTEST_ID_KEY]: contestId },
       result: 'success',
     });
     return { success: true, contestId };
@@ -118,7 +121,7 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
     await recordAudit({
       verb: 'config:view',
       entity: 'config',
-      afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' },
+      afterValues: { source: 'contests.is_active', error: error instanceof Error ? error.name : 'UnknownError' },
       result: 'failure',
     });
     return { success: false, error: (error as Error).message };
@@ -128,16 +131,15 @@ export async function readActiveContestId(): Promise<{ success: true; contestId:
 export async function writeActiveContestId(id: number): Promise<{ success: true } | { success: false; error: string }> {
   await ensurePermission('env:update');
   try {
-    const tomlPath = path.join(getRepoRoot(), CONFIG_TOML_FILE);
-    const content = await fs.readFile(tomlPath, 'utf-8');
-    // Persist to the source only. Reaching the running stack is the deploy path's job
-    // (config sync regenerates .env, then the contest services are recreated), so a sync
-    // can no longer erase this the way a write to the generated .env would be.
-    await fs.writeFile(tomlPath, setContestId(content, id));
+    // Persist to the database only, the single source of truth. Reaching the running stack
+    // is the deploy path's job (config sync regenerates config.toml/.env from this row,
+    // then the contest services are recreated), so a sync can no longer erase it the way a
+    // write to a generated file would be.
+    await writeActiveContestIdToDb(id);
     await recordAudit({
       verb: 'env:update',
       entity: 'config',
-      afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: id },
+      afterValues: { source: 'contests.is_active', [CONTEST_ID_KEY]: id },
       result: 'success',
     });
     return { success: true };

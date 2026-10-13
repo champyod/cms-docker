@@ -1,54 +1,43 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { readContestId, setContestId } from '@/lib/active-contest';
+// WHY the prisma mock: the active contest now lives in the database (contests.is_active),
+// not in config.toml, so what is asserted here is which row the module reads and the single
+// statement it writes — the file round-trip this test used to pin is gone with the helpers.
+const { findFirst, executeRaw } = vi.hoisted(() => ({
+  findFirst: vi.fn(),
+  executeRaw: vi.fn(),
+}));
 
-const TOML = [
-  '# config.toml — single source of truth',
-  '[core]',
-  'CMS_DOMAIN = "cms.local"',
-  '',
-  '[contest]',
-  'CONTEST_ID = 1                  # num; active contest',
-  'CONTEST_LISTEN_PORT = 8888',
-  '',
-  '[worker]',
-  'WORKER_PORT = 26000',
-  '',
-].join('\n');
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    contests: { findFirst },
+    $executeRaw: executeRaw,
+  },
+}));
 
-describe('active contest in config.toml', () => {
-  it('reads CONTEST_ID from [contest], ignoring the inline comment', () => {
-    expect(readContestId(TOML)).toBe(1);
+import { readActiveContestId, writeActiveContestId } from '@/lib/active-contest';
+
+describe('active contest in the database', () => {
+  beforeEach(() => {
+    findFirst.mockReset();
+    executeRaw.mockReset();
   });
 
-  it('tolerates the quoted form the TOML writer emits', () => {
-    expect(readContestId('[contest]\nCONTEST_ID = "3"\n')).toBe(3);
+  it('reads the id of the row flagged active', async () => {
+    findFirst.mockResolvedValue({ id: 7 });
+    await expect(readActiveContestId()).resolves.toBe(7);
+    expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { is_active: true } }));
   });
 
-  it('returns null when CONTEST_ID is absent', () => {
-    expect(readContestId('[contest]\nCONTEST_LISTEN_PORT = 8888\n')).toBeNull();
+  it('returns null when no row is active', async () => {
+    findFirst.mockResolvedValue(null);
+    await expect(readActiveContestId()).resolves.toBeNull();
   });
 
-  it('does not pick up a same-named key outside [contest]', () => {
-    expect(readContestId('[core]\nCONTEST_ID = 5\n')).toBeNull();
-  });
-
-  it('replaces the id in [contest] and leaves other sections untouched', () => {
-    const updated = setContestId(TOML, 7);
-    expect(readContestId(updated)).toBe(7);
-    expect(updated).toContain('CMS_DOMAIN = "cms.local"');
-    expect(updated).toContain('CONTEST_LISTEN_PORT = 8888');
-    expect(updated).toContain('WORKER_PORT = 26000');
-    expect(updated).toContain('# num; active contest');
-  });
-
-  it('inserts CONTEST_ID when the [contest] section exists without it', () => {
-    const updated = setContestId('[contest]\nCONTEST_LISTEN_PORT = 8888\n', 4);
-    expect(readContestId(updated)).toBe(4);
-    expect(updated).toContain('CONTEST_LISTEN_PORT = 8888');
-  });
-
-  it('round-trips any id', () => {
-    expect(readContestId(setContestId(TOML, 42))).toBe(42);
+  it('flags the id active in one statement', async () => {
+    executeRaw.mockResolvedValue(2);
+    await writeActiveContestId(4);
+    expect(executeRaw).toHaveBeenCalledTimes(1);
+    expect(executeRaw.mock.calls[0][1]).toBe(4);
   });
 });
