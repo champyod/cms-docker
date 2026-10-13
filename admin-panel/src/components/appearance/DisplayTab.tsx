@@ -33,7 +33,7 @@ export function DisplayTab(): React.JSX.Element {
       <Card className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Density</h2>
-          <p className="text-xs text-muted-foreground mt-1">Compact shrinks padding and gaps panel-wide. Applies instantly.</p>
+          <p className="text-xs text-muted-foreground mt-1">Compact shrinks padding and gaps panel-wide. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={DENSITY_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}
@@ -45,7 +45,7 @@ export function DisplayTab(): React.JSX.Element {
       <Card className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Text size</h2>
-          <p className="text-xs text-muted-foreground mt-1">Spacing follows the font size automatically. Applies instantly.</p>
+          <p className="text-xs text-muted-foreground mt-1">Spacing follows the font size automatically. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={TEXT_SIZE_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}
@@ -57,7 +57,7 @@ export function DisplayTab(): React.JSX.Element {
       <Card className="space-y-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Contrast</h2>
-          <p className="text-xs text-muted-foreground mt-1">High outlines every card and field and makes status colours solid. Applies instantly.</p>
+          <p className="text-xs text-muted-foreground mt-1">High outlines every card and field and makes status colours solid. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={CONTRAST_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}

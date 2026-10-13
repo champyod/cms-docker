@@ -9,6 +9,7 @@ import { readContestEditData, type ContestEditData } from '@/lib/queries/contest
 export type ContestDetailSummary = {
   id: number; name: string; description: string; is_active: boolean;
   start: string | null; stop: string | null; analysis_start: string | null; analysis_stop: string | null;
+  timezone: string | null;
   permissionKeys: readonly string[];
 };
 
@@ -47,6 +48,7 @@ export type ContestCountdownData = {
   stop: string | null;
   analysis_start: string | null;
   analysis_stop: string | null;
+  timezone: string | null;
 };
 
 export type ContestSettingsData = { contestId: number; fields: ContestSettingsFields; permissionKeys: readonly string[] };
@@ -58,6 +60,7 @@ type ParticipationEntry = {
 
 const contestSummarySelect = {
   id: true, name: true, description: true, is_active: true, start: true, stop: true, analysis_start: true, analysis_stop: true,
+  timezone: true,
 } satisfies Prisma.contestsSelect;
 
 // Why: all summary fields share the contest:read gate; row fallbacks only satisfy Partial types.
@@ -67,6 +70,7 @@ function toContestSummary(row: Prisma.contestsGetPayload<{ select: typeof contes
     id: visible.id ?? row.id, name: visible.name ?? row.name, description: visible.description ?? row.description,
     is_active: visible.is_active ?? row.is_active, start: toIsoDate(row.start), stop: toIsoDate(row.stop),
     analysis_start: toIsoDate(row.analysis_start), analysis_stop: toIsoDate(row.analysis_stop),
+    timezone: visible.timezone ?? row.timezone,
     permissionKeys: [...permissions],
   };
 }
@@ -85,7 +89,8 @@ export async function getContestOverview(contestId: number): Promise<ContestOver
 }
 
 // Why: the countdown tab polls this narrow timing projection so an
-// edited start or stop time reaches the page without a reload.
+// edited start or stop time reaches the page without a reload, and it
+// carries the contest zone so the tab defaults to it over a fixed zone.
 export async function getContestCountdown(contestId: number): Promise<ContestCountdownData | null> {
   const summary = await getContestDetailSummary(contestId);
   if (!summary) return null;
@@ -96,6 +101,7 @@ export async function getContestCountdown(contestId: number): Promise<ContestCou
     stop: summary.stop,
     analysis_start: summary.analysis_start,
     analysis_stop: summary.analysis_stop,
+    timezone: summary.timezone,
   };
 }
 

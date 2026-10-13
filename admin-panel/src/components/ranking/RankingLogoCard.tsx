@@ -11,7 +11,13 @@ import { BrandingCard } from './BrandingCard';
 // GET needs ranking:read and POST needs ranking:update, so the card is read-only without the second.
 const LOGO_URL = '/api/ranking/logo';
 
-export function RankingLogoCard({ canManage }: { canManage: boolean }): React.JSX.Element {
+export function RankingLogoCard({
+  canManage,
+  displayName,
+}: {
+  canManage: boolean;
+  displayName?: string;
+}): React.JSX.Element {
   const toastCopy = useDictionary().toasts.ranking;
   const [logoUrl, setLogoUrl] = useState(LOGO_URL);
   const [uploading, setUploading] = useState(false);
@@ -48,6 +54,7 @@ export function RankingLogoCard({ canManage }: { canManage: boolean }): React.JS
       onUpload={handleUpload}
       error={error}
       readOnly={!canManage}
+      displayName={displayName}
     />
   );
 }

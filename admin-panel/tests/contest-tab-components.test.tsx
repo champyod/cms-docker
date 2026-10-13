@@ -19,7 +19,7 @@ const settings = {
 
 describe('Contest tab components', () => {
   it('renders overview timing without Participant or Task relations', () => {
-    const html = renderToStaticMarkup(<ContestOverviewTab data={{ contest: { id: 7, name: 'Contest Seven', description: 'Description', is_active: true, start: null, stop: null, analysis_start: null, analysis_stop: null, permissionKeys: ['contest:read'] }, permissionKeys: ['contest:read'] }} />);
+    const html = renderToStaticMarkup(<ContestOverviewTab data={{ contest: { id: 7, name: 'Contest Seven', description: 'Description', is_active: true, start: null, stop: null, analysis_start: null, analysis_stop: null, timezone: 'Asia/Bangkok', permissionKeys: ['contest:read'] }, permissionKeys: ['contest:read'] }} />);
     expect(html).toContain('Contest Status');
     expect(html).not.toContain('participations');
   });

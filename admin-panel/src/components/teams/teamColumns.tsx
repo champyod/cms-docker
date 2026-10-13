@@ -1,3 +1,4 @@
+import { CellText } from '@/components/core/CellText';
 import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import type { TeamSummary } from '@/lib/people-read-model-types';
 
@@ -11,11 +12,52 @@ export function leaderName(team: TeamSummary): string {
 // other. The hidden columns are the ones the mobile card never showed.
 export function buildTeamColumns(): ResponsiveColumn<TeamSummary>[] {
   return [
-    { key: 'id', header: 'ID', sortKey: 'id', cellClassName: 'font-mono text-muted-foreground text-xs', hideOnMobile: true, render: (team) => <span>#{team.id}</span> },
-    { key: 'code', header: 'Code', sortKey: 'code', cellClassName: 'font-mono text-primary text-sm', render: (team) => <span>{team.code ?? '—'}</span> },
-    { key: 'name', header: 'Name', sortKey: 'name', cellClassName: 'font-medium', render: (team) => <span>{team.name ?? '—'}</span> },
-    { key: 'members', header: 'Members', sortKey: 'members', cellClassName: 'text-muted-foreground text-sm', render: (team) => <span>{team.participationCount}</span> },
-    { key: 'organization', header: 'Organization', sortKey: 'organization', cellClassName: 'text-muted-foreground text-sm', hideOnMobile: true, render: (team) => <span>{team.organization ?? '—'}</span> },
-    { key: 'leader', header: 'Leader', cellClassName: 'text-muted-foreground text-sm', render: (team) => <span>{leaderName(team)}</span> },
+    {
+      key: 'id',
+      header: 'ID',
+      sortKey: 'id',
+      cellClassName: 'w-16',
+      hideOnMobile: true,
+      render: (team) => <CellText width="id" mono muted>#{team.id}</CellText>,
+    },
+    {
+      key: 'code',
+      header: 'Code',
+      sortKey: 'code',
+      cellClassName: 'w-24',
+      render: (team) => <CellText width="sm" mono className="text-primary">{team.code ?? '—'}</CellText>,
+    },
+    {
+      key: 'name',
+      header: 'Name',
+      sortKey: 'name',
+      cellClassName: 'min-w-[140px]',
+      render: (team) => <CellText width="lg" bold>{team.name ?? '—'}</CellText>,
+    },
+    {
+      key: 'members',
+      header: 'Members',
+      sortKey: 'members',
+      cellClassName: 'w-20 text-center',
+      render: (team) => (
+        <CellText width="id" mono muted className="text-center">
+          {team.participationCount}
+        </CellText>
+      ),
+    },
+    {
+      key: 'organization',
+      header: 'Organization',
+      sortKey: 'organization',
+      cellClassName: 'min-w-[120px]',
+      hideOnMobile: true,
+      render: (team) => <CellText width="md" muted>{team.organization ?? '—'}</CellText>,
+    },
+    {
+      key: 'leader',
+      header: 'Leader',
+      cellClassName: 'min-w-[120px]',
+      render: (team) => <CellText width="md" muted>{leaderName(team)}</CellText>,
+    },
   ];
 }

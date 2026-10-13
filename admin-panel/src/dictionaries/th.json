@@ -203,6 +203,8 @@
     },
     "appearance": {
       "title": "รูปลักษณ์ของกระดานคะแนน",
+      "displayNameField": "ชื่อที่แสดง",
+      "displayNameHint": "แสดงใต้โลโก้บนกระดานคะแนนสาธารณะ เว้นว่างไว้เพื่อใช้หัวเรื่องแทน",
       "titleField": "หัวเรื่อง",
       "subtitleField": "หัวเรื่องรอง",
       "organisationField": "หน่วยงาน",

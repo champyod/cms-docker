@@ -63,7 +63,7 @@ export interface UserHistorySubmission {
 export interface UserHistory {
   accountAccess: { lastLoginAt: string | null };
   participations: readonly UserHistoryParticipation[];
-  contests: readonly { id: number | null; name: string | null; start: string | null; stop: string | null }[];
+  contests: readonly { id: number | null; name: string | null; start: string | null; stop: string | null; timezone: string | null }[];
   teams: readonly { id: number | null; code: string | null; name: string | null }[];
   submissions: readonly UserHistorySubmission[];
   recentContestActivity: readonly UserHistorySubmission[];

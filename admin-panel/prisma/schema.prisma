@@ -758,6 +758,9 @@ model ranking_settings {
   title         String?  @db.VarChar
   subtitle      String?  @db.VarChar
   organisation  String?  @db.VarChar
+  /// The short display name shown below the logo on the public scoreboard.
+  /// When absent, the scoreboard falls back to the title field.
+  display_name  String?  @db.VarChar
   logo_asset    String?  @db.VarChar
   favicon_asset String?  @db.VarChar
   theme         Json?

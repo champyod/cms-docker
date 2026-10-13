@@ -12,6 +12,7 @@ vi.mock('@/lib/server/authorization', () => ({ requirePermission }));
 vi.mock('@/lib/field-permissions', () => ({ filterReadableFields: (_entity: string, row: Record<string, unknown>) => row }));
 
 import {
+  getContestCountdown,
   getContestDetailSummary,
   getContestEditData,
   getContestParticipants,
@@ -30,6 +31,7 @@ describe('contest detail read models', () => {
       stop: null,
       analysis_start: null,
       analysis_stop: null,
+      timezone: 'Asia/Bangkok',
       participations: [{ password: 'must-not-leak' }],
     });
   });
@@ -48,10 +50,24 @@ describe('contest detail read models', () => {
 
   it('returns only the summary projection and no Contest relations', async () => {
     const result = await getContestDetailSummary(7);
-    expect(result).toMatchObject({ id: 7, name: 'Contest Seven', is_active: true });
+    expect(result).toMatchObject({ id: 7, name: 'Contest Seven', is_active: true, timezone: 'Asia/Bangkok' });
     expect(result).not.toHaveProperty('participations');
     expect(result).not.toHaveProperty('tasks');
-    expect(findUnique.mock.calls[0][0].select).toEqual(expect.objectContaining({ id: true, name: true, description: true, is_active: true }));
+    expect(findUnique.mock.calls[0][0].select).toEqual(expect.objectContaining({ id: true, name: true, description: true, is_active: true, timezone: true }));
+  });
+
+  it('carries the contest zone on the timing payload the countdown polls', async () => {
+    const countdown = await getContestCountdown(7);
+
+    expect(countdown).toEqual({
+      id: 7,
+      name: 'Contest Seven',
+      start: '2026-09-25T00:00:00.000Z',
+      stop: null,
+      analysis_start: null,
+      analysis_stop: null,
+      timezone: 'Asia/Bangkok',
+    });
   });
 
   it('rejects the participant reader when user:read is missing', async () => {

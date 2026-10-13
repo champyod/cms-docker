@@ -30,7 +30,7 @@ export function toIntervalSeconds(value: unknown): number | null {
 }
 
 export type NamedRow = { id: number; name: string };
-export type NamedContestRow = NamedRow & { start: Date | string; stop: Date | string };
+export type NamedContestRow = NamedRow & { start: Date | string; stop: Date | string; timezone: string | null };
 export type TeamIdentityRow = { id: number; code: string; name: string };
 export type UserIdentityRow = { id: number; username: string; first_name: string; last_name: string };
 export type TeamIdentity = { id: number | null; code: string | null; name: string | null };
@@ -46,9 +46,13 @@ export function toContestIdentity(contest: NamedRow | null, access: FieldAccessT
 }
 
 export function toContestRef(contest: NamedContestRow | null, access: FieldAccessTable<'contests'>): UserHistory['contests'][number] {
-  if (!contest) return { id: null, name: null, start: null, stop: null };
-  const visible = filterReadableFieldsWith(access, { id: contest.id, name: contest.name, start: contest.start, stop: contest.stop });
-  return { id: visible.id ?? null, name: visible.name ?? null, start: toIso(visible.start ?? null), stop: toIso(visible.stop ?? null) };
+  if (!contest) return { id: null, name: null, start: null, stop: null, timezone: null };
+  const visible = filterReadableFieldsWith(access, { id: contest.id, name: contest.name, start: contest.start, stop: contest.stop, timezone: contest.timezone });
+  return {
+    id: visible.id ?? null, name: visible.name ?? null,
+    start: toIso(visible.start ?? null), stop: toIso(visible.stop ?? null),
+    timezone: visible.timezone ?? null,
+  };
 }
 
 export function toTeamIdentity(team: TeamIdentityRow | null, access: FieldAccessTable<'teams'>): TeamIdentity {

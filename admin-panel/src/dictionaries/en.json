@@ -203,6 +203,8 @@
     },
     "appearance": {
       "title": "Scoreboard appearance",
+      "displayNameField": "Display name",
+      "displayNameHint": "Shown below the logo on the public scoreboard. Leave blank to use Title instead.",
       "titleField": "Title",
       "subtitleField": "Subtitle",
       "organisationField": "Organisation",

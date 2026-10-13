@@ -14,13 +14,15 @@ export function AddWorkerNodeForm({ form }: AddWorkerNodeFormProps): ReactElemen
     <div className="mb-6 bg-primary/5 p-4 rounded-xl border border-primary/25 animate-in fade-in slide-in-from-top-2 duration-300">
       <div className="text-xs font-bold text-primary uppercase tracking-wider mb-4 flex items-center justify-between">
         Add New Worker Node
-        <button
+        <Button
+          size="sm"
+          variant="ghost"
+          iconOnly
+          icon={X}
           onClick={() => form.setShowAddForm(false)}
-          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
           aria-label="Close add worker node form"
-        >
-          <X className="w-3.5 h-3.5" />
-        </button>
+          className="size-7"
+        />
       </div>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1">

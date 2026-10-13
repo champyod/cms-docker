@@ -51,7 +51,7 @@ const PARTICIPATION_ROWS = [{
   contest_id: 3,
   team_id: 4,
   starting_time: START,
-  contests: { id: 3, name: 'Thailand Cup', start: START, stop: STOP },
+  contests: { id: 3, name: 'Thailand Cup', start: START, stop: STOP, timezone: 'Asia/Bangkok' },
   teams: { id: 4, code: 'A-1', name: 'Alpha' },
   users: { id: 9, username: 'ada', first_name: 'Ada', last_name: 'Lovelace' },
   submissions: [{
@@ -336,7 +336,7 @@ describe('People reader relations and gates', () => {
 
     const history = await getUserHistory(9);
 
-    expect(history?.contests).toEqual([{ id: 3, name: 'Thailand Cup', start: '2026-02-03T04:05:06.000Z', stop: '2026-02-03T06:07:08.000Z' }]);
+    expect(history?.contests).toEqual([{ id: 3, name: 'Thailand Cup', start: '2026-02-03T04:05:06.000Z', stop: '2026-02-03T06:07:08.000Z', timezone: 'Asia/Bangkok' }]);
     expect(history?.teams).toEqual([{ id: 4, code: 'A-1', name: 'Alpha' }]);
   });
 

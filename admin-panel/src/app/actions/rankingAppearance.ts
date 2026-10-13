@@ -16,6 +16,8 @@ export interface AppearanceFields {
   title: string;
   subtitle: string;
   organisation: string;
+  /** Short display name shown below the logo on ranking board. Falls back to title if empty. */
+  displayName: string;
   accessMode: 'public' | 'protected';
   showIdColumn: boolean;
   anonymous: boolean;
@@ -33,6 +35,7 @@ const DEFAULTS: RankingAppearance = {
   title: '',
   subtitle: '',
   organisation: '',
+  displayName: '',
   accessMode: 'public',
   showIdColumn: false,
   anonymous: false,
@@ -50,6 +53,7 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     title: row.title ?? '',
     subtitle: row.subtitle ?? '',
     organisation: row.organisation ?? '',
+    displayName: row.display_name ?? '',
     accessMode: row.access_mode === 'protected' ? 'protected' : 'public',
     showIdColumn: readShowIdColumn(row.columns),
     anonymous: readAnonymous(row.columns),
@@ -184,6 +188,7 @@ function readForm(formData: FormData): AppearanceFields {
     title: text("title"),
     subtitle: text("subtitle"),
     organisation: text("organisation"),
+    displayName: text("displayName"),
     accessMode: formData.get("accessMode") === "protected" ? "protected" : "public",
     showIdColumn: formData.get("showIdColumn") === "on",
     anonymous: formData.get("anonymous") === "on",
@@ -197,6 +202,7 @@ function toRow(appearance: AppearanceFields) {
     title: appearance.title || null,
     subtitle: appearance.subtitle || null,
     organisation: appearance.organisation || null,
+    display_name: appearance.displayName || null,
     access_mode: appearance.accessMode,
     columns: { show_id_column: appearance.showIdColumn, anonymous: appearance.anonymous },
     footer_text: appearance.footerText || null,
