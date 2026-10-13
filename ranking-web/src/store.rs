@@ -5,7 +5,9 @@ use sqlx::postgres::PgPool;
 
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
 use crate::overrides::{OverrideRow, Overrides};
-use crate::scoring::{self, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode};
+use crate::scoring::{
+    self, parse_extra, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode,
+};
 
 mod admin;
 
@@ -271,18 +273,9 @@ async fn load_subchanges(pool: &PgPool) -> Result<Vec<Subchange>, StoreError> {
             time: i64::from(row.time),
             score: row.score,
             token: row.token,
-            extra: row.extra.as_ref().and_then(to_scores),
+            extra: row.extra.as_ref().and_then(parse_extra),
         })
         .collect())
-}
-
-fn to_scores(value: &serde_json::Value) -> Option<Vec<f64>> {
-    value.as_array().map(|values| {
-        values
-            .iter()
-            .filter_map(serde_json::Value::as_f64)
-            .collect()
-    })
 }
 
 #[derive(sqlx::FromRow)]

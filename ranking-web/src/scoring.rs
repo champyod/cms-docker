@@ -6,7 +6,7 @@ use crate::overrides::Overrides;
 
 pub use crate::board::BoardRow;
 pub use crate::score::{
-    Score, ScoreError, ScoreMode, Subchange, Submission, SubmissionEntry, TaskMode,
+    parse_extra, Score, ScoreError, ScoreMode, Subchange, Submission, SubmissionEntry, TaskMode,
 };
 
 /// The scoreboard, assembled from the projection.

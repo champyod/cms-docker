@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
+use serde_json::Value;
 
 /// The score modes the CMS scorer implements (src/cmscommon/constants.py).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,6 +41,20 @@ pub struct Subchange {
     pub score: Option<f64>,
     pub token: Option<bool>,
     pub extra: Option<Vec<f64>>,
+}
+
+/// The `extra` column is a JSON array of numeric strings (the CMS column is
+/// `character varying[]`); a real number is accepted too, and both become scores.
+pub fn parse_extra(value: &Value) -> Option<Vec<f64>> {
+    value
+        .as_array()
+        .map(|values| values.iter().filter_map(as_score).collect())
+}
+
+fn as_score(value: &Value) -> Option<f64> {
+    value
+        .as_f64()
+        .or_else(|| value.as_str().and_then(|text| text.parse::<f64>().ok()))
 }
 
 /// One user/task pair's mode and the submission keys that belong to it.
@@ -246,4 +261,52 @@ pub struct SubmissionEntry {
     pub score: f64,
     pub token: bool,
     pub extra: Vec<f64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn subchange(
+        key: &str,
+        submission: &str,
+        time: i64,
+        score: f64,
+        extra: [&str; 2],
+    ) -> Subchange {
+        Subchange {
+            key: key.to_string(),
+            submission: submission.to_string(),
+            time,
+            score: Some(score),
+            token: None,
+            extra: parse_extra(&serde_json::json!(extra)),
+        }
+    }
+
+    /// The regression: the projection stores `extra` as numeric strings, so a parser
+    /// that keeps only JSON numbers drops every subtask and the mode reads as max.
+    #[test]
+    fn parse_extra_reads_the_numeric_strings_the_projection_stores() {
+        assert_eq!(
+            parse_extra(&serde_json::json!(["30", "0"])),
+            Some(vec![30.0, 0.0])
+        );
+        assert_eq!(
+            parse_extra(&serde_json::json!([30.0, 0.0])),
+            Some(vec![30.0, 0.0])
+        );
+        assert_eq!(parse_extra(&serde_json::json!([])), Some(Vec::new()));
+        assert!(parse_extra(&serde_json::json!("30")).is_none());
+    }
+
+    #[test]
+    fn max_subtask_sums_the_per_subtask_maxima_over_string_extras() {
+        let mut score = Score::new(ScoreMode::MaxSubtask);
+        score.register("s0", 1);
+        score.register("s1", 2);
+        score.append(&subchange("c0", "s0", 1, 30.0, ["30", "0"]));
+        score.append(&subchange("c1", "s1", 2, 70.0, ["0", "70"]));
+        assert_eq!(score.value(), 100.0);
+    }
 }

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use cms_ranking::scoring::{assemble, ScoreMode, Subchange, Submission, TaskMode};
+use cms_ranking::scoring::{assemble, parse_extra, ScoreMode, Subchange, Submission, TaskMode};
 use serde_json::Value;
 
 fn fixture(name: &str) -> Value {
@@ -49,9 +49,7 @@ fn inputs(seed: &Value) -> (Vec<TaskMode>, Vec<Submission>, Vec<Subchange>) {
             time: body["time"].as_i64().expect("a time"),
             score: body["score"].as_f64(),
             token: body["token"].as_bool(),
-            extra: body["extra"]
-                .as_array()
-                .map(|values| values.iter().filter_map(Value::as_f64).collect()),
+            extra: parse_extra(&body["extra"]),
         })
         .collect();
     (tasks, submissions, subchanges)
