@@ -670,7 +670,8 @@ backup:
 		docker exec cms-monitor /usr/local/bin/cms-backup.sh; \
 	elif [ -x scripts/__backup.sh ]; then \
 		echo "cms-monitor not running, running backup script directly..."; \
-		./scripts/__backup.sh; \
+		BACKUP_HOST_DIR="$${BACKUP_HOST_DIR:-$$(pwd)/backups}"; \
+		./scripts/__backup.sh --root "$$BACKUP_HOST_DIR"; \
 	else \
 		echo "ERROR: cms-monitor not running and scripts/__backup.sh not found or not executable." >&2; \
 		exit 1; \
