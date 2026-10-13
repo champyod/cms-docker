@@ -6,7 +6,7 @@ import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildRoute } from '@/lib/navigation/routes';
-import { LiveNotificationProvider, useLiveNotifications } from '@/lib/live/notifications';
+import { useLiveNotifications } from '@/lib/live/notifications';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
@@ -93,9 +93,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         </kbd>
       </button>
       <ThemeToggle />
-      <LiveNotificationProvider permissionKeys={permissionKeys}>
-        <HeaderNotifications permissionKeys={permissionKeys} />
-      </LiveNotificationProvider>
+      <HeaderNotifications permissionKeys={permissionKeys} />
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>

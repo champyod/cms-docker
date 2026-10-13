@@ -4,6 +4,7 @@ import type { LucideIcon } from 'lucide-react';
 import {
   Activity,
   Ban,
+  BellRing,
   BookOpen,
   Box,
   DatabaseBackup,
@@ -48,6 +49,7 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['home', Home],
   ['contests.list', Trophy],
   ['tasks.list', FileCode],
+  ['notifications', BellRing],
   ['people.users', Users],
   ['people.teams', Users],
   ['evaluation.submissions', Activity],

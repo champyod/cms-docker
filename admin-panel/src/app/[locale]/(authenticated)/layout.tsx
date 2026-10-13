@@ -12,6 +12,7 @@ import { MAIN_SCROLL_CONTAINER_ID, ScrollReset } from "@/components/layout/Scrol
 import { DeployContestProvider } from "@/components/providers/DeployContestProvider";
 import { DictionaryProvider } from "@/components/providers/DictionaryProvider";
 import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
+import { LiveNotificationProvider } from "@/lib/live/notifications";
 import { getDictionary } from "@/i18n";
 
 export default async function AuthenticatedLayout({
@@ -55,27 +56,32 @@ export default async function AuthenticatedLayout({
   return (
     <DictionaryProvider dict={dict}>
       <ConfirmProvider>
-        <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
-          <Sidebar
-            className="z-20 hidden md:flex"
-            locale={locale}
-            permissionKeys={permissionKeys}
-            initialExpanded={sidebarExpanded}
-          />
-          <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-            {/* The provider wraps the header too, so the command palette shares the one deploy context. */}
-            <DeployContestProvider>
-              <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
+        {/* Why the notification service wraps the whole shell rather than the header: the alert
+            centre renders the same service below the header, and two providers would open the alert
+            stream twice. */}
+        <LiveNotificationProvider permissionKeys={permissionKeys}>
+          <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
+            <Sidebar
+              className="z-20 hidden md:flex"
+              locale={locale}
+              permissionKeys={permissionKeys}
+              initialExpanded={sidebarExpanded}
+            />
+            <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
+              {/* The provider wraps the header too, so the command palette shares the one deploy context. */}
+              <DeployContestProvider>
+                <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
-              <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-                {children}
-              </div>
-              <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
-            </DeployContestProvider>
-          </Stack>
-          <MobileNav locale={locale} permissionKeys={permissionKeys} />
-          <ShortcutLayer permissionKeys={permissionKeys} />
-        </PageBackground>
+                <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+                  {children}
+                </div>
+                <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
+              </DeployContestProvider>
+            </Stack>
+            <MobileNav locale={locale} permissionKeys={permissionKeys} />
+            <ShortcutLayer permissionKeys={permissionKeys} />
+          </PageBackground>
+        </LiveNotificationProvider>
       </ConfirmProvider>
     </DictionaryProvider>
   );
