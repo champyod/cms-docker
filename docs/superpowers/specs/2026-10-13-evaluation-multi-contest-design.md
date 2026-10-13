@@ -265,3 +265,43 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 ## 10. Reference material ported
 
 `docs/reference/lanes-wip/` holds the unlanded `feat/evaluation-lanes` work verbatim: `worker-endpoints.ts`, `evaluationWorkers.ts`, `evaluationLaneBoard.ts`, two components, the old `evaluation-rpc.ts`, its migration, and a 1 920-line patch of the 13 tracked files it touched. `workers_status` was verified to exist in the current tree (`EvaluationService.py:439`, authorized at `src/cms/server/admin/rpc_authorization.py:31`), so the WIP's RPC call is sound. Read it as design; re-derive it against the schema in section 5.2.
+
+## 11. Status — what landed and what did not (2026-10-13)
+
+### 11.1 Landed and verified
+
+| Step | Where | Evidence |
+|---|---|---|
+| `services`, `wirings`, `contest_exposures` models plus the `contests` back-relations | `admin-panel/prisma/schema.prisma` | `prisma generate` exit 0 — the schema validates |
+| Guarded, idempotent table DDL | `admin-panel/prisma/migrations/20261013170000_service_wiring_registry/` | column-by-column agreement with `prisma migrate diff` output |
+| Generated RLS for the three tables | `admin-panel/prisma/migrations/20261013173321_service_wiring/` | `scripts/__check_rls_coverage.sh` → 53 tables matched |
+| Resolver: path normalisation, wiring join, per-contest selection, upstream precedence | `admin-panel/src/lib/service-wiring.ts` | 33 vitest cases |
+| Renderer: nginx blocks, tailnet serve config, injection rejection | `admin-panel/src/lib/service-wiring-render.ts` | 33 vitest cases |
+| Per-service DB profile validation, fatal on an unknown `[db_<name>]` | `scripts/__config_sync.sh` | `bash -n` clean; no new shellcheck warnings |
+| Backup catalog placement | `admin-panel/src/lib/backup-table-catalog.ts` | 54 catalog tests pass |
+
+Branch gate: `tsc --noEmit` clean, `vitest run` **249 files / 3232 tests passed**, RLS coverage 53 tables.
+
+### 11.2 Not landed
+
+| Phase | Missing | Why it stopped |
+|---|---|---|
+| 3 — renderer wiring | `./cms config sync` does not emit the N contest blocks or per-contest `serve.json`; the renderer has no caller yet | Integrating it needs a live database or a container, neither available here |
+| 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID` | Python is unrunnable (no `sqlalchemy`, no `tornado`, no database); a concurrent-service edit that cannot be run is the half-built surface to avoid |
+| 5 — panel surface | No Services & Wiring screen | Needs phase 3 exposed via a server action, and the panel cannot be exercised here |
+
+Still true and important: `contests.is_active` remains the authority in `scripts/__config_sync.sh`. The schema and the profile validation for per-service binding landed; the authority switch (5.1) did not. N=1 behaves exactly as before.
+
+### 11.3 Running the gate
+
+The workspace write-quota cannot hold the ~1 GB dependency tree, so the gate runs from a mirror on `/tmp`:
+
+```sh
+# once
+cp -a admin-panel /tmp/cms-hub-build/admin-panel
+cd /tmp/cms-hub-build/admin-panel && bun install --frozen-lockfile && ./node_modules/.bin/prisma generate
+cd - && tar --exclude=./admin-panel --exclude=./.git -cf - . | tar -C /tmp/cms-hub-build -xf -
+# each run
+/tmp/gate.sh tsc    # tsc --noEmit
+/tmp/gate.sh test   # vitest run
+```
