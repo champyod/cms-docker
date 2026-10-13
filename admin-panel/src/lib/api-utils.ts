@@ -54,9 +54,7 @@ interface KnownApiError {
 /** The errno codes a filesystem refusal carries; a read's ENOENT is a missing record, not one. */
 const FILESYSTEM_ERRNO_CODES = new Set(['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'EDQUOT', 'EBUSY']);
 
-// Why not 500: the path refused the operation (wrong owner, read-only, full), which is a conflict
-// with the target resource rather than an internal crash — and 403 already means "this account
-// lacks the permission". The message names the path so the operator knows which one refused.
+// A refusing path is a conflict with the target, not a crash, and 403 means the account.
 const FILESYSTEM_REFUSED_STATUS = 409;
 
 function describeFilesystemFailure(err: KnownApiError): string {

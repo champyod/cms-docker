@@ -15,13 +15,7 @@ function describeReadError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Resolves one read to its value or a named failure, and never waits past `timeoutMs`.
- *
- * Why per-read: a read that rejects or cannot finish at all must not hold the whole surface on
- * "Loading" — each one ends here so the caller can render the parts it has and name the ones
- * that failed.
- */
+/** One read, resolved to its value or a named failure, never pending past `timeoutMs`. */
 export async function settleRead<T>(
   label: string,
   read: () => Promise<T>,

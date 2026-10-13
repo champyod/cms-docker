@@ -79,10 +79,7 @@ export function useContestDeploymentSnapshot({
   }, []);
 
   const readSnapshot = useCallback(async (): Promise<void> => {
-    // Why the settle still runs before the reads: a deploy that finished while nothing watched its
-    // operation still owes its activation (or its rollback), and the values read below are only the
-    // truth about the stack once that has run. Each read is settled and bounded on its own, so a slow
-    // or refused source names itself instead of holding the whole surface on "Loading".
+    // The settle runs first: a deploy that finished unwatched still owes its activation.
     const settle = await settleRead(READ_LABELS.settle, settleDeployOperations);
     const [active, settings, contests, container, operation] = await Promise.all([
       settleRead(READ_LABELS.activeContest, readActiveContestId),
