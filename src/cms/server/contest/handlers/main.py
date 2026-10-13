@@ -80,6 +80,29 @@ def N_(msgid):
     return msgid
 
 
+def selectable_teams(sql_session) -> list[Team]:
+    """Return the teams a contestant may register into.
+
+    A team flagged as not registerable exists for staff rather than for
+    contestants, so it is never offered.
+
+    """
+    return sql_session.query(Team).filter(
+        Team.registerable.is_(True)).order_by(Team.name).all()
+
+
+def find_registerable_team(sql_session, team_code: str) -> Team:
+    """Return the registerable team carrying this code.
+
+    raise: NoResultFound if no registerable team has the code, so a request
+        naming a staff team is refused instead of honoured.
+
+    """
+    return sql_session.query(Team).filter(
+        Team.code == team_code,
+        Team.registerable.is_(True)).one()
+
+
 class MainHandler(ContestHandler):
     """Home page handler.
 
@@ -151,8 +174,7 @@ class RegistrationHandler(ContestHandler):
 
         self.r_params["MAX_INPUT_LENGTH"] = self.MAX_INPUT_LENGTH
         self.r_params["MIN_PASSWORD_LENGTH"] = self.MIN_PASSWORD_LENGTH
-        self.r_params["teams"] = self.sql_session.query(Team)\
-                                     .order_by(Team.name).all()
+        self.r_params["teams"] = selectable_teams(self.sql_session)
 
         self.render("register.html", **self.r_params)
 
@@ -219,14 +241,16 @@ class RegistrationHandler(ContestHandler):
         return user
 
     def _get_team(self) -> Team | None:
-        # If we have teams, we assume that the 'team' field is mandatory
-        if self.sql_session.query(Team).count() > 0:
+        # If we have registerable teams, we assume that the 'team' field is
+        # mandatory. The count is over the registerable teams alone, so a
+        # contest whose only teams are staff teams leaves the field optional,
+        # exactly as a contest with no teams does.
+        if self.sql_session.query(Team).filter(
+                Team.registerable.is_(True)).count() > 0:
             try:
                 team_code: str = self.get_argument("team")
-                team: Team | None = (
-                    self.sql_session.query(Team).filter(
-                        Team.code == team_code).one()
-                )
+                team: Team | None = find_registerable_team(
+                    self.sql_session, team_code)
             except (tornado.web.MissingArgumentError, NoResultFound):
                 raise tornado.web.HTTPError(400)
         else:
