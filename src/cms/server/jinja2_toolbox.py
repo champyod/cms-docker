@@ -230,11 +230,11 @@ def format_time(ctx: Context, dt: datetime):
 
 
 @pass_context
-def format_datetime_smart(ctx: Context, dt: datetime):
+def format_datetime_smart(ctx: Context, dt: datetime, with_zone: bool = False):
     translation: Translation = ctx.get("translation", DEFAULT_TRANSLATION)
     now: datetime = ctx.get("now", make_datetime())
     timezone: tzinfo = ctx.get("timezone", local_tz)
-    return translation.format_datetime_smart(dt, now, timezone)
+    return translation.format_datetime_smart(dt, now, timezone, with_zone=with_zone)
 
 
 @pass_context

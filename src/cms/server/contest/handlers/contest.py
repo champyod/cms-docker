@@ -245,8 +245,9 @@ class ContestHandler(BaseHandler):
             if ret["actual_phase"] == 0:
                 ret["phase"] = 0
 
-            # set the timezone used to format timestamps
-            ret["timezone"] = get_timezone(participation.user, self.contest)
+        # the timezone must be set on the pre-login pages too, which carry no user
+        user = self.current_user.user if self.current_user is not None else None
+        ret["timezone"] = get_timezone(user, self.contest)
 
         # some information about token configuration
         ret["tokens_contest"] = self.contest.token_mode

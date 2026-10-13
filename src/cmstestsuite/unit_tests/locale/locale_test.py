@@ -36,6 +36,8 @@ from cms.locale import Translation, DEFAULT_TRANSLATION, filter_language_codes, 
 
 UTC = babel.dates.UTC
 ROME = babel.dates.get_timezone("Europe/Rome")
+NEW_YORK = babel.dates.get_timezone("America/New_York")
+BANGKOK = babel.dates.get_timezone("Asia/Bangkok")
 
 FRENCH_CATALOG = Catalog(locale="fr")
 FRENCH_CATALOG.add("%s KiB", "%s Kio")
@@ -288,6 +290,53 @@ class TestFormatDatetimeSmart(unittest.TestCase):
                                           datetime(2018, 6, 30, 21, 30),
                                           timezone=ROME),
             "1 lug 2018, 14:34:56")
+
+
+class TestFormatDatetimeSmartZoneLabel(unittest.TestCase):
+
+    def test_it_labels_a_utc_instant(self):
+        self.assertEqual(
+            ENGLISH.format_timezone_label(datetime(2018, 1, 1, 12, 0), UTC),
+            "UTC")
+
+    def test_it_labels_a_positive_offset_in_winter(self):
+        self.assertEqual(
+            ENGLISH.format_timezone_label(datetime(2018, 1, 1, 12, 0), ROME),
+            "UTC+01:00")
+
+    def test_it_labels_a_positive_offset_in_summer(self):
+        self.assertEqual(
+            ENGLISH.format_timezone_label(datetime(2018, 7, 1, 12, 0), ROME),
+            "UTC+02:00")
+
+    def test_it_labels_the_contest_timezone(self):
+        self.assertEqual(
+            ENGLISH.format_timezone_label(datetime(2018, 1, 1, 12, 0), BANGKOK),
+            "UTC+07:00")
+
+    def test_it_labels_a_negative_offset(self):
+        self.assertEqual(
+            ENGLISH.format_timezone_label(datetime(2018, 1, 1, 12, 0), NEW_YORK),
+            "UTC-05:00")
+
+    def test_it_appends_the_zone_only_when_asked(self):
+        self.assertEqual(
+            ENGLISH.format_datetime_smart(datetime(2018, 1, 1, 12, 34, 56),
+                                          datetime(2018, 1, 1, 23, 30),
+                                          timezone=UTC),
+            "12:34:56\N{Narrow No-Break Space}PM")
+        self.assertEqual(
+            ENGLISH.format_datetime_smart(datetime(2018, 1, 1, 12, 34, 56),
+                                          datetime(2018, 1, 1, 23, 30),
+                                          timezone=UTC, with_zone=True),
+            "12:34:56\N{Narrow No-Break Space}PM (UTC)")
+
+    def test_it_keeps_the_date_and_adds_the_zone(self):
+        self.assertEqual(
+            ENGLISH.format_datetime_smart(datetime(2018, 7, 1, 12, 34, 56),
+                                          datetime(2018, 6, 30, 21, 30),
+                                          timezone=ROME, with_zone=True),
+            "Jul 1, 2018, 2:34:56\N{Narrow No-Break Space}PM (UTC+02:00)")
 
 
 class TestFormatTimedelta(unittest.TestCase):
