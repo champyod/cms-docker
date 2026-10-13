@@ -498,6 +498,43 @@ describe('Submissions list payload', () => {
       'evaluation_outcome',
     ]);
   });
+
+  it('narrows the query to the id or the username when a search is supplied', async () => {
+    grant(['submission:list']);
+    vi.mocked(prisma.submissions.findMany).mockResolvedValue([prismaSubmissionsRow()] as never);
+    vi.mocked(prisma.submissions.count).mockResolvedValue(1 as never);
+
+    await getSubmissions({ page: 1, search: '19' });
+
+    expect(vi.mocked(prisma.submissions.findMany).mock.calls[0][0]?.where).toMatchObject({
+      OR: [
+        { id: 19 },
+        { participations: { users: { username: { contains: '19', mode: 'insensitive' } } } },
+      ],
+    });
+  });
+
+  it('matches a non-numeric term against the username only', async () => {
+    grant(['submission:list']);
+    vi.mocked(prisma.submissions.findMany).mockResolvedValue([prismaSubmissionsRow()] as never);
+    vi.mocked(prisma.submissions.count).mockResolvedValue(1 as never);
+
+    await getSubmissions({ page: 1, search: 'ada' });
+
+    expect(vi.mocked(prisma.submissions.findMany).mock.calls[0][0]?.where).toMatchObject({
+      OR: [{ participations: { users: { username: { contains: 'ada', mode: 'insensitive' } } } }],
+    });
+  });
+
+  it('leaves the where clause unfiltered when the search is blank', async () => {
+    grant(['submission:list']);
+    vi.mocked(prisma.submissions.findMany).mockResolvedValue([prismaSubmissionsRow()] as never);
+    vi.mocked(prisma.submissions.count).mockResolvedValue(1 as never);
+
+    await getSubmissions({ page: 1, search: '   ' });
+
+    expect(vi.mocked(prisma.submissions.findMany).mock.calls[0][0]?.where).toEqual({});
+  });
 });
 
 describe('Record edit payloads', () => {

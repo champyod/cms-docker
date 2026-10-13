@@ -78,6 +78,27 @@ describe('submission list filters', () => {
     expect(pushed.searchParams.get('user')).toBe('9');
   });
 
+  it('pushes the trimmed search term alongside the id narrowing', () => {
+    mockPush.mockClear();
+    const container = renderList();
+    fireEvent.change(field(container, 'search'), { target: { value: '  ada  ' } });
+    fireEvent.change(field(container, 'contest'), { target: { value: '2' } });
+    submit(container);
+
+    const pushed = new URL(mockPush.mock.calls[0][0]);
+    expect(pushed.searchParams.get('search')).toBe('ada');
+    expect(pushed.searchParams.get('contest')).toBe('2');
+  });
+
+  it('drops a blank search rather than sending an empty term', () => {
+    mockPush.mockClear();
+    const container = renderList();
+    fireEvent.change(field(container, 'search'), { target: { value: '   ' } });
+    submit(container);
+
+    expect(new URL(mockPush.mock.calls[0][0]).searchParams.has('search')).toBe(false);
+  });
+
   it('resets to page 1 when a filter is applied', () => {
     mockPush.mockClear();
     const container = renderList();
@@ -90,10 +111,11 @@ describe('submission list filters', () => {
   });
 
   it('prefills the fields from the active filters', () => {
-    const container = renderList({ contestId: 7, taskId: 3, userId: 11 });
+    const container = renderList({ contestId: 7, taskId: 3, userId: 11, search: 'ada' });
     expect(field(container, 'contest').value).toBe('7');
     expect(field(container, 'task').value).toBe('3');
     expect(field(container, 'user').value).toBe('11');
+    expect(field(container, 'search').value).toBe('ada');
   });
 
   it('drops a non-numeric value rather than filtering on zero', () => {
@@ -119,7 +141,7 @@ describe('submission list filters', () => {
 
   it('clears every filter and the fields when Clear is pressed', () => {
     mockPush.mockClear();
-    const container = renderList({ contestId: 7 });
+    const container = renderList({ contestId: 7, search: 'ada' });
     const clear = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Clear');
     if (!clear) throw new Error('Missing Clear control');
@@ -127,7 +149,16 @@ describe('submission list filters', () => {
 
     const pushed = new URL(mockPush.mock.calls[0][0]);
     expect(pushed.searchParams.has('contest')).toBe(false);
+    expect(pushed.searchParams.has('search')).toBe(false);
     expect(field(container, 'contest').value).toBe('');
+    expect(field(container, 'search').value).toBe('');
+  });
+
+  it('offers Clear when only a search is active', () => {
+    const container = renderList({ search: 'ada' });
+    const clear = [...container.querySelectorAll('button')]
+      .find((button) => button.textContent?.trim() === 'Clear');
+    expect(clear).toBeTruthy();
   });
 
   it('offers no Clear control when nothing is filtered', () => {
