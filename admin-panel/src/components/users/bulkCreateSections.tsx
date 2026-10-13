@@ -40,6 +40,60 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
   );
 }
 
+interface PreviewStateAlertsProps {
+  stalePreview: boolean;
+  blockingSelectedCount: number;
+  skipInvalid: boolean;
+  onReparse: () => void;
+  onToggleSkipInvalid: () => void;
+}
+
+export function PreviewStateAlerts({
+  stalePreview,
+  blockingSelectedCount,
+  skipInvalid,
+  onReparse,
+  onToggleSkipInvalid,
+}: PreviewStateAlertsProps) {
+  return (
+    <>
+      {stalePreview && (
+        <InlineAlert
+          tone="warning"
+          density="compact"
+          className="border-warning/30"
+          actions={
+            <Button variant="secondary" size="sm" onClick={onReparse}>
+              Re-parse now
+            </Button>
+          }
+        >
+          The CSV text changed after this preview was parsed. Re-parse before creating, or the rows
+          created will not match the rows below.
+        </InlineAlert>
+      )}
+
+      {blockingSelectedCount > 0 && (
+        <InlineAlert
+          tone="warning"
+          density="compact"
+          className="border-warning/30"
+          actions={
+            <Button variant="secondary" size="sm" onClick={onToggleSkipInvalid}>
+              {skipInvalid
+                ? `Include ${blockingSelectedCount} invalid row(s)`
+                : `Skip ${blockingSelectedCount} invalid row(s)`}
+            </Button>
+          }
+        >
+          {blockingSelectedCount} selected row(s) cannot be created: a required field is missing or the
+          field count does not match the header.
+        </InlineAlert>
+      )}
+    </>
+  );
+}
+
 interface SubmitResultBannerProps {
   result: BulkSubmitResult;
   onDownloadCredentials: () => void;

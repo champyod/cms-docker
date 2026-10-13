@@ -13,7 +13,7 @@ const CHECKBOX_CLASS = 'size-4 accent-primary cursor-pointer';
 interface PreviewTableProps {
   rows: PreviewRow[];
   totalRowCount: number;
-  selectedRowIndices: Set<number>;
+  selectedRowIndices: ReadonlySet<number>;
   onSelectAll: (checked: boolean) => void;
   onToggleRow: (rowIndex: number, checked: boolean) => void;
 }
@@ -22,7 +22,7 @@ interface PreviewTableProps {
 // the two layouts cannot drift apart. Empty strings render null so
 // mobile omits the row while desktop keeps the empty cell.
 function buildPreviewColumns(args: {
-  selectedRowIndices: Set<number>;
+  selectedRowIndices: ReadonlySet<number>;
   totalRowCount: number;
   onSelectAll: (checked: boolean) => void;
   onToggleRow: (rowIndex: number, checked: boolean) => void;
