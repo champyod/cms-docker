@@ -42,8 +42,10 @@ export function EntityItems({ loading, hasQuery, hits, onSelect }: { loading: bo
   );
 }
 
-export function ActionItems({ contestsEnabled, availableContests, needle, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; needle: string; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element | null {
-  const contestRows = filterPaletteRows(availableContests, needle, (contest) => contest.name).slice(0, SWITCH_CONTEST_LIMIT);
+export function ActionItems({ contestsEnabled, canDeploy, availableContests, needle, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; canDeploy: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; needle: string; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element | null {
+  // Why canDeploy guards the rows: switching recreates the contest stack, so it is offered only to
+  // whoever may deploy, the same key the deploy action enforces.
+  const contestRows = canDeploy ? filterPaletteRows(availableContests, needle, (contest) => contest.name).slice(0, SWITCH_CONTEST_LIMIT) : [];
   const showCreateContest = contestsEnabled && labelMatches('Create Contest', needle);
   const showSignOut = labelMatches('Sign Out', needle);
 

@@ -13,7 +13,9 @@ import {
   DialogTitle,
 } from '@/components/core/Dialog';
 import { toast } from 'sonner';
-import { activateContest, getAvailableContests } from '@/app/actions/contests';
+import { getAvailableContests } from '@/app/actions/contests';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
@@ -40,6 +42,11 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
+  const { deploy } = useDeployContest();
+  const canDeploy = useMemo(
+    () => hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.deployContest),
+    [permissionKeys],
+  );
   const navItems = useMemo(
     () => buildShellItems(effective, 'palette', locale, dictionary),
     [effective, locale, dictionary],
@@ -59,11 +66,11 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   }, [onOpenChange]);
 
   useEffect(() => {
-    if (!open || !visibility.contests) return;
+    if (!open || !canDeploy) return;
     let cancelled = false;
     getAvailableContests().then((result) => { if (!cancelled && result.success) setAvailableContests(result.contests); }).catch(() => { if (!cancelled) setAvailableContests([]); });
     return () => { cancelled = true; };
-  }, [open, visibility.contests]);
+  }, [open, canDeploy]);
 
   const openRef = useRef(open);
   const toggleRef = useRef(handleOpenChange);
@@ -89,13 +96,11 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   const close = useCallback(() => handleOpenChange(false), [handleOpenChange]);
   const navigateTo = useCallback((href: string) => { close(); router.push(href); }, [close, router]);
 
-  const runSwitchContest = async (contestId: number): Promise<void> => {
+  const runSwitchContest = (contestId: number): void => {
     close();
-    try {
-      const result = await activateContest(contestId);
-      if (result.success) { toast.success('Active contest switched'); router.refresh(); }
-      else toast.error('Failed to switch contest', { description: result.error ?? 'Unknown error' });
-    } catch { toast.error('Failed to switch contest'); }
+    // Why the deploy and not a bare flag write: switching the active contest must also sync
+    // config.toml/.env and recreate the contest stack, or the running stack keeps serving the old one.
+    void deploy(contestId);
   };
 
   // Why: the route handler owns both the cookie clear and the locale-correct redirect, so the
@@ -121,7 +126,7 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
               <NavigationItems items={visibleNavItems} onSelect={(item) => navigateTo(item.href)} />
             )}
             <EntityItems loading={loading} hasQuery={hasQuery} hits={hits} onSelect={(hit) => navigateTo(hit.path)} />
-            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} needle={needle} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <ActionItems contestsEnabled={visibility.contests} canDeploy={canDeploy} availableContests={availableContests} needle={needle} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => runSwitchContest(contestId)} onSignOut={runSignOut} />
             <CommandEmpty>No matching commands.</CommandEmpty>
           </CommandList>
         </Command>
