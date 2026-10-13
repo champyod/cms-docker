@@ -5,11 +5,10 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
+import { readTomlValue, upsertTomlValue } from '@/lib/discord-webhook';
 import { CONTEST_ID_KEY, readContestId, setContestId } from '@/lib/active-contest';
 import {
   CONFIG_TOML_FILE,
-  applyConfigTomlUpdates,
-  extractConfigTomlValues,
   isConfigTomlSection,
   isValidConfigKey,
   type ConfigTomlKey,
@@ -21,7 +20,66 @@ import {
  * file with a different lifecycle: config.toml is the source `./cms config sync` regenerates .env
  * from, which is also why their audit rows carry the `config` entity where the .env rows carry
  * `env`. The permission keys stay `env:*` — they gate one settings surface, not one file.
+ *
+ * One key group is addressed through its own section rather than the one the screen asks for: the
+ * POSTGRES_* settings live in a [db_<name>] profile now, so they are resolved before every read and
+ * write (see resolveConfigSection).
  */
+
+/** The [core] key naming the profile `./cms config sync` projects into [core], and hence into .env. */
+const ACTIVE_DATABASE_KEY = 'ACTIVE_DATABASE';
+
+/** The profile name the sync falls back to when [core] ACTIVE_DATABASE is absent. */
+const DEFAULT_DB_PROFILE = 'default';
+
+/** Key prefix config.toml keeps in a [db_<name>] profile instead of in [core]. */
+const DB_PROFILE_KEY_PREFIX = 'POSTGRES_';
+
+/** True when the config text declares a [<section>] header, wherever its keys are. */
+function tomlSectionExists(content: string, section: string): boolean {
+  const header = `[${section}]`;
+  return content.split('\n').some((line) => line.trim() === header);
+}
+
+/**
+ * The section a setting is really stored in.
+ *
+ * config.toml moved every POSTGRES_* key out of [core] into a [db_<name>] profile, and
+ * `./cms config sync` projects only the profile [core] ACTIVE_DATABASE names back into [core] when
+ * it regenerates .env. A settings screen that still addressed them as [core] therefore read nothing,
+ * and a write there was relocated into [db_default] by the next sync — an apply that silently left
+ * the running database untouched. Resolving to the active profile is what makes the read and the
+ * write land on the database the deployment reads from. A config.toml that predates the move has no
+ * such section, keeps the key in [core], and is migrated by the sync.
+ */
+function resolveConfigSection(content: string, { section, key }: ConfigTomlKey): string {
+  if (section !== 'core' || !key.startsWith(DB_PROFILE_KEY_PREFIX)) return section;
+  const profile = readTomlValue(content, 'core', ACTIVE_DATABASE_KEY) || DEFAULT_DB_PROFILE;
+  const profileSection = `db_${profile}`;
+  return tomlSectionExists(content, profileSection) ? profileSection : section;
+}
+
+/** Every requested key read from the section it really lives in; see resolveConfigSection. */
+function readResolvedValues(content: string, keys: readonly ConfigTomlKey[]): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const entry of keys) {
+    values[entry.key] = readTomlValue(content, resolveConfigSection(content, entry), entry.key);
+  }
+  return values;
+}
+
+/** Applies every update inside the section it really lives in; see resolveConfigSection. */
+function applyResolvedUpdates(content: string, updates: readonly ConfigTomlUpdate[]): string {
+  return updates.reduce((accumulated, update) => {
+    const section = resolveConfigSection(accumulated, update);
+    return upsertTomlValue(accumulated, section, update.key, singleLineValue(update.value));
+  }, content);
+}
+
+/** A TOML basic string cannot span lines, and the sync reads one line per key. */
+function singleLineValue(value: string): string {
+  return value.replace(/[\r\n]+/g, ' ');
+}
 
 export async function readConfigTomlValues(
   keys: readonly ConfigTomlKey[],
@@ -34,7 +92,7 @@ export async function readConfigTomlValues(
   }
   try {
     const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
-    const values = extractConfigTomlValues(content, keys);
+    const values = readResolvedValues(content, keys);
     await recordAudit({
       verb: 'config:view',
       entity: 'config',
@@ -71,7 +129,7 @@ export async function updateConfigTomlValues(
   try {
     const tomlPath = path.join(getRepoRoot(), CONFIG_TOML_FILE);
     const content = await fs.readFile(tomlPath, 'utf-8');
-    await fs.writeFile(tomlPath, applyConfigTomlUpdates(content, updates));
+    await fs.writeFile(tomlPath, applyResolvedUpdates(content, updates));
     await recordAudit({
       verb: 'env:update',
       entity: 'config',
