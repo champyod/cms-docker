@@ -14,6 +14,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { type ListSortInput } from '@/lib/list-sorting';
 import { cn } from '@/lib/utils';
@@ -44,6 +45,9 @@ export function AdminList({
   const dict = useDictionary();
   const router = useRouter();
   const confirm = useConfirm();
+  // Why: an admin account outlives every contest, so its sign-in time has no owner contest and
+  // reads in the operator's own zone.
+  const formatTimestamp = useFormatTimestamp();
   const { destructiveConfirm } = useConfirmationCopy();
   const canUpdate = hasEffectivePermission(new Set(callerPermissions), ACTION_PERMISSIONS.updateAdmin);
   // Why the pair: the Actions column and the row's own click both admit `updateAdmin`'s either
@@ -153,7 +157,7 @@ export function AdminList({
       hideOnMobile: true,
       render: (admin) => (
         <span className="text-xs text-muted-foreground">
-          {admin.last_login_at ? new Date(admin.last_login_at).toLocaleString() : '—'}
+          {admin.last_login_at ? formatTimestamp(admin.last_login_at) : '—'}
         </span>
       ),
     },
@@ -200,7 +204,7 @@ export function AdminList({
         );
       },
     },
-  ], [accessSummary, canUpdate, handleToggleEnabled]);
+  ], [accessSummary, canUpdate, formatTimestamp, handleToggleEnabled]);
 
   const table = (
     <ResponsiveTable

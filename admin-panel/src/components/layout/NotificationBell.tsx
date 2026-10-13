@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/core/Button';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { cursorFromFrameId, isNewFrame } from '@/lib/notification-queue';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 
 interface AlertFrame {
   id: string;
@@ -19,6 +20,9 @@ const MAX_EVENTS = 20;
 
 /** System alert bell: critical admin actions and unusual-activity warnings via server push. */
 export function NotificationBell(): React.JSX.Element {
+  // Why: an alert is about the running system, not about any one contest, so it has no owner zone
+  // of its own and reads in the reader's.
+  const formatTimestamp = useFormatTimestamp();
   const [events, setEvents] = useState<AlertFrame[]>([]);
   const [open, setOpen] = useState(false);
   const [unread, setUnread] = useState(0);
@@ -76,7 +80,7 @@ export function NotificationBell(): React.JSX.Element {
               <div key={event.id} className="px-3 py-2 border-b border-border/50 last:border-0">
                 <p className="text-xs font-semibold text-foreground">{event.title}</p>
                 <p className="text-xs text-muted-foreground break-words">{event.detail}</p>
-                <p className="text-[10px] text-muted-foreground/70 font-mono">{new Date(event.timestamp).toLocaleString()}</p>
+                <p className="text-[10px] text-muted-foreground/70 font-mono">{formatTimestamp(event.timestamp)}</p>
               </div>
             ))
           )}

@@ -11,6 +11,7 @@ import { DetailSurface, type DetailSurfaceProps } from '@/components/core/Detail
 import { getContestDetailSummary } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { ContestRecordHeader } from '@/components/contests/contest-detail/ContestRecordHeader';
+import { TimezoneProvider } from '@/components/layout/TimezoneProvider';
 import { RecordTabRefreshRegistrar } from '@/hooks/useRecordTabRefresh';
 
 function getContestTabLabel(dictionary: Dictionary, routeId: RouteId): string {
@@ -81,9 +82,9 @@ export default async function ContestDetailLayout({
   // Why: tab action hooks refresh through a registered router instead of
   // calling useRouter where unit tests render provider-less.
   return (
-    <>
+    <TimezoneProvider timezone={summary.timezone}>
       <RecordTabRefreshRegistrar />
       <DetailSurface {...props} />
-    </>
+    </TimezoneProvider>
   );
 }

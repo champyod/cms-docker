@@ -13,6 +13,7 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
+import { useFormatTimestamp, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { RUN_STATUS_FAILED, RUN_STATUS_SETTLED, RUN_STATUS_STARTED } from '@/scheduler/tick';
@@ -46,8 +47,8 @@ function statusVariant(status: string): BadgeVariant {
     return STATUS_VARIANT[status] ?? 'neutral';
 }
 
-function formatWhen(date: Date | null, fallback: string): string {
-    return date === null ? fallback : date.toLocaleString();
+function formatWhen(date: Date | null, fallback: string, formatTimestamp: TimestampFormatter): string {
+    return date === null ? fallback : formatTimestamp(date);
 }
 
 function sourceLabel(run: BackupRun, scheduleNames: ReadonlyMap<string, string>): string {
@@ -86,6 +87,9 @@ interface RunRowProps {
 }
 
 function RunRow({ run, scheduleNames, isSettling, onSettle, feedback }: RunRowProps) {
+    // Why: a backup run is an event of the machine, not of a contest, so it reads in the operator's
+    // zone; the row states no zone because the operator's own clock is the one they compare against.
+    const formatTimestamp = useFormatTimestamp();
     return (
         <li className="px-3 py-3">
             <Stack gap={2}>
@@ -109,8 +113,8 @@ function RunRow({ run, scheduleNames, isSettling, onSettle, feedback }: RunRowPr
                     )}
                 </Stack>
                 <Text variant="small" color="text-muted-foreground">
-                    Started {formatWhen(run.startedAt, 'unknown')} &middot; finished{' '}
-                    {formatWhen(run.finishedAt, 'not finished')}
+                    Started {formatWhen(run.startedAt, 'unknown', formatTimestamp)} &middot; finished{' '}
+                    {formatWhen(run.finishedAt, 'not finished', formatTimestamp)}
                 </Text>
                 {run.message !== null && MESSAGE_STATUSES.has(run.status) && (
                     <Text variant="small" className={run.status === RUN_STATUS_FAILED ? 'text-destructive' : 'text-muted-foreground'}>

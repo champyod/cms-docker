@@ -10,6 +10,7 @@ import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { Calendar, CheckCircle2, Clock, ExternalLink, Pencil, Power, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { formatListMomentInZone } from '@/lib/timezone';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface ContestRowData {
@@ -18,6 +19,8 @@ export interface ContestRowData {
   is_active: boolean;
   start: Date;
   stop: Date;
+  /** The row's own contest zone: a list of contests shows each contest's wall clocks in its zone. */
+  timezone: string | null;
   _count?: { tasks: number; participations: number };
 }
 
@@ -25,12 +28,8 @@ type StatusVariant = 'warning' | 'neutral' | 'success';
 
 // Why module scope: two timeline cells per contest ask for the same shape, so a
 // per-cell formatter would be rebuilt for every row of both layouts.
-const CONTEST_DATE_FORMAT = new Intl.DateTimeFormat(undefined, {
-  month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
-});
-
-function formatContestDate(date: Date): string {
-  return CONTEST_DATE_FORMAT.format(new Date(date));
+function formatContestDate(date: Date, timezone: string | null): string {
+  return formatListMomentInZone(date.toISOString(), timezone);
 }
 
 function getContestStatus(start: Date, stop: Date): { label: string; variant: StatusVariant } {
@@ -77,8 +76,8 @@ function renderStatusCell(contest: ContestRowData): React.JSX.Element {
 function renderTimelineCell(contest: ContestRowData): React.JSX.Element {
   return (
     <span className="flex flex-col gap-1 text-xs text-muted-foreground">
-      <span className="flex items-center gap-2"><Calendar className="h-3 w-3" /><span>{formatContestDate(contest.start)}</span></span>
-      <span className="flex items-center gap-2"><Clock className="h-3 w-3" /><span>{formatContestDate(contest.stop)}</span></span>
+      <span className="flex items-center gap-2"><Calendar className="h-3 w-3" /><span>{formatContestDate(contest.start, contest.timezone)}</span></span>
+      <span className="flex items-center gap-2"><Clock className="h-3 w-3" /><span>{formatContestDate(contest.stop, contest.timezone)}</span></span>
     </span>
   );
 }

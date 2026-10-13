@@ -223,15 +223,45 @@ export function utcToZoneWallClock(iso: string, zone: string): string {
   return `${wall.year}-${pad2(wall.month)}-${pad2(wall.day)}T${wallClockTimeLabel(wall)}`;
 }
 
+const wallClockDayLabel = (wall: WallClock): string => `${pad2(wall.day)}/${pad2(wall.month)}/${wall.year}`;
+const resolvedZone = (zone: string | null | undefined): string => effectiveZone(zone ?? '');
+
 /**
  * Render a UTC instant for a human reader: `dd/mm/yyyy, HH:MM:SS` in `zone`. Omit `zone` on a page
  * with no contest context and the browser zone is used. `iso` must be a parseable instant, and a
  * zone name Intl rejects falls back to the browser zone.
  */
-export function formatInZone(iso: string, zone?: string): string {
-  const wall = readWallClock(new Date(iso), effectiveZone(zone ?? ''));
-  const date = `${pad2(wall.day)}/${pad2(wall.month)}/${wall.year}`;
-  return `${date}, ${wallClockTimeLabel(wall)}:${pad2(wall.second)}`;
+export function formatInZone(iso: string, zone?: string | null): string {
+  const wall = readWallClock(new Date(iso), resolvedZone(zone));
+  return `${wallClockDayLabel(wall)}, ${wallClockTimeLabel(wall)}:${pad2(wall.second)}`;
+}
+
+/**
+ * Render a UTC instant as a list moment in `zone`: `dd/mm/yyyy, HH:MM`, for rows that name a day
+ * and a clock but no second. Omit `zone` where no contest owns the record and the browser zone is
+ * used. `iso` must be a parseable instant.
+ */
+export function formatListMomentInZone(iso: string, zone?: string | null): string {
+  const wall = readWallClock(new Date(iso), resolvedZone(zone));
+  return `${wallClockDayLabel(wall)}, ${wallClockTimeLabel(wall)}`;
+}
+
+/**
+ * Render a UTC instant as a bare day in `zone`: `dd/mm/yyyy`, for a surface that carries no clock
+ * time because the day is the whole meaning of the column. Omit `zone` where no contest owns the
+ * record and the browser zone is used. `iso` must be a parseable instant.
+ */
+export function formatDayInZone(iso: string, zone?: string | null): string {
+  return wallClockDayLabel(readWallClock(new Date(iso), resolvedZone(zone)));
+}
+
+/**
+ * Render a UTC instant as a bare wall clock in `zone`: `HH:MM`, for a surface that sits beside a
+ * label naming the same day already. Omit `zone` where no contest owns the record and the browser
+ * zone is used. `iso` must be a parseable instant.
+ */
+export function formatTimeInZone(iso: string, zone?: string | null): string {
+  return wallClockTimeLabel(readWallClock(new Date(iso), resolvedZone(zone)));
 }
 
 /**

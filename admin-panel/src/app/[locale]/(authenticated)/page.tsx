@@ -18,6 +18,9 @@ import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
 import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { EmptyState } from '@/components/core/EmptyState';
+// Why the bare form: this page is a server component, so the activity row cannot read the
+// reviewer's own zone from a client context; the zone of record is the one this process renders in.
+import { formatInZone } from '@/lib/timezone';
 
 async function getStats() {
   const [
@@ -197,7 +200,7 @@ export default async function DashboardPage({
                     </Text>
                   </div>
                   <Text variant="muted" className="whitespace-nowrap">
-                    {item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}
+                    {item.timestamp ? formatInZone(item.timestamp.toISOString()) : ''}
                   </Text>
                 </Stack>
               ))}

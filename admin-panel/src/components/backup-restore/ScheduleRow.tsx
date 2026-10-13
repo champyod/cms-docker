@@ -7,6 +7,7 @@ import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { useFormatTimestamp, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import type { BusyRow } from '@/components/backup-restore/useSchedules';
 
 const SUMMARIZED_TABLE_COUNT = 4;
@@ -34,8 +35,8 @@ function plural(count: number, unit: string): string {
     return `${count} ${unit}${count === 1 ? '' : 's'}`;
 }
 
-function formatWhen(date: Date | null, fallback: string): string {
-    return date === null ? fallback : date.toLocaleString();
+function formatWhen(date: Date | null, fallback: string, formatTimestamp: TimestampFormatter): string {
+    return date === null ? fallback : formatTimestamp(date);
 }
 
 interface ScheduleRowProps {
@@ -47,6 +48,9 @@ interface ScheduleRowProps {
 }
 
 export function ScheduleRow({ schedule, busy, onToggle, onDelete, onEdit }: ScheduleRowProps) {
+    // Why: a backup schedule runs the whole service, so its run times belong to no contest and
+    // read in the operator's zone.
+    const formatTimestamp = useFormatTimestamp();
     const isBusy = (action: BusyRow['action']) => busy?.id === schedule.id && busy.action === action;
     return (
         <Stack gap={2}>
@@ -82,7 +86,7 @@ export function ScheduleRow({ schedule, busy, onToggle, onDelete, onEdit }: Sche
                 </Button>
             </Stack>
             <Text variant="small" color="text-muted-foreground">
-                Next run {formatWhen(schedule.nextRunAt, 'unknown')} &middot; last run {formatWhen(schedule.lastRunAt, 'never')}
+                Next run {formatWhen(schedule.nextRunAt, 'unknown', formatTimestamp)} &middot; last run {formatWhen(schedule.lastRunAt, 'never', formatTimestamp)}
             </Text>
         </Stack>
     );

@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Plus, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface AnnouncementRow {
@@ -28,15 +29,10 @@ interface Props {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
-// Why module scope: every announcement row formats its own timestamp, so a per-row
-// formatter would be rebuilt for each card on every render.
-const ANNOUNCEMENT_TIME_FORMAT = new Intl.DateTimeFormat();
-
-function formatTime(date: Date | string): string {
-  return ANNOUNCEMENT_TIME_FORMAT.format(new Date(date));
-}
-
 export function AnnouncementsPanel({ announcements, showForm, subject, text, permissionKeys, onShowForm, onSubject, onText, onCreate, onDelete }: Props): React.JSX.Element {
+  // Why the contest zone: an announcement times the contest's own schedule, so it reads in the
+  // contest's wall clock rather than whichever zone the announcing staff member sits in.
+  const formatTime = useFormatTimestamp();
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canPublish = hasEffectivePermission(effective, ACTION_PERMISSIONS.createAnnouncement);
   const canDelete = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteAnnouncement);

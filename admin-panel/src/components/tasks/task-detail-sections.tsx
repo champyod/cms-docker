@@ -10,6 +10,7 @@ import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/Respon
 import { EmptyState } from '@/components/core/EmptyState';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useFormatDay, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { Dictionary } from '@/lib/dictionary';
@@ -76,13 +77,10 @@ function formatSize(bytes: number | null | undefined): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(iso: string | null | undefined): string {
-  if (!iso) return '-';
-  try {
-    return new Date(iso).toLocaleDateString();
-  } catch {
-    return iso;
-  }
+/** Why the day alone: a statement's upload date is read as "which day", never as a clock time. */
+function formatUploadDate(uploadedAt: string | null | undefined, formatDay: TimestampFormatter): string {
+  if (!uploadedAt) return '-';
+  return formatDay(uploadedAt);
 }
 
 // Why: one fragment drives desktop rows and mobile cards, with 44px
@@ -98,12 +96,12 @@ function renderStatementActions(stmt: StatementRow, onDelete: (statementId: numb
 
 // Why: one column definition drives desktop rows and mobile cards, so
 // the two layouts cannot drift apart.
-function buildStatementColumns(): ResponsiveColumn<StatementRow>[] {
+function buildStatementColumns(formatDay: TimestampFormatter): ResponsiveColumn<StatementRow>[] {
   return [
     { key: 'language', header: 'Language', render: (stmt) => <span className="font-mono text-sm">{stmt.language}</span> },
     { key: 'filename', header: 'Filename', render: (stmt) => <span className="text-sm">{stmt.filename ?? `${stmt.language}.pdf`}</span> },
     { key: 'size', header: 'Size', render: (stmt) => <span className="text-sm">{formatSize(stmt.size)}</span> },
-    { key: 'uploadedAt', header: 'Upload date', render: (stmt) => <span className="text-sm">{formatDate(stmt.uploadedAt)}</span> },
+    { key: 'uploadedAt', header: 'Upload date', render: (stmt) => <span className="text-sm">{formatUploadDate(stmt.uploadedAt, formatDay)}</span> },
   ];
 }
 
@@ -111,6 +109,9 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
   const refresh = useTaskTabRefresh();
   const confirm = useConfirm();
   const { destructiveConfirm } = useTaskConfirmationCopy();
+  // Why the task's own route zone: this section is also rendered outside a contest layout, and a
+  // statement file has no contest owner of its own, so the browser zone is the honest answer.
+  const formatDay = useFormatDay();
   const [activeLanguage, setActiveLanguage] = useState<string | null>(null);
 
   const runAction = useActionFeedback();
@@ -130,7 +131,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
 
   const languages = useMemo(() => Array.from(new Set(statements.map((s) => s.language))).sort(), [statements]);
   const filtered = useMemo(() => (activeLanguage ? statements.filter((s) => s.language === activeLanguage) : statements), [statements, activeLanguage]);
-  const columns = useMemo(() => buildStatementColumns(), []);
+  const columns = useMemo(() => buildStatementColumns(formatDay), [formatDay]);
   const renderActions = useCallback(
     (stmt: StatementRow): React.JSX.Element =>
       renderStatementActions(stmt, (statementId: number): void => { void deleteStatement(statementId); }),

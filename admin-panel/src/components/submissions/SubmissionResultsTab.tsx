@@ -4,6 +4,7 @@ import { AlertCircle, CheckCircle2, FileCode, Loader2, XCircle } from 'lucide-re
 
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { Dictionary } from '@/lib/dictionary';
 import type { SubmissionResultsModel, SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,9 @@ function scoreTone(result: ResultRow): string {
 }
 
 function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Element {
+  // Why: a scoring run is an event of the evaluation service rather than of a contest, so it reads
+  // in the reviewer's own zone.
+  const formatTimestamp = useFormatTimestamp();
   const compilationFailed = result.compilationOutcome === 'fail';
   return (
     <div className="bg-muted/40 rounded-xl p-4 border border-border space-y-3">
@@ -72,7 +76,7 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
           <span>{`Memory: ${(result.compilationMemoryBytes / 1024 / 1024).toFixed(2)} MB`}</span>
         )}
         {result.publicScore !== null && <span>{`Public: ${result.publicScore.toFixed(1)}`}</span>}
-        {result.scoredAt !== null && <span>{`Scored: ${new Date(result.scoredAt).toLocaleString()}`}</span>}
+        {result.scoredAt !== null && <span>{`Scored: ${formatTimestamp(result.scoredAt)}`}</span>}
       </div>
     </div>
   );

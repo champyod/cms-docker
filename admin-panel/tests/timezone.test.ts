@@ -3,6 +3,7 @@ import {
   AmbiguousZoneTimeError,
   NonexistentZoneTimeError,
   formatInZone,
+  formatListMomentInZone,
   resolveDisplayZone,
   utcToZoneWallClock,
   zoneWallClockToInstant,
@@ -115,6 +116,11 @@ describe('formatInZone', () => {
     expect(formatInZone('2026-12-31T14:00:00.000Z')).toBe(
       formatInZone('2026-12-31T14:00:00.000Z', BROWSER_ZONE),
     );
+  });
+
+  it('renders a list moment to the minute, with no seconds', () => {
+    expect(formatListMomentInZone('2026-12-31T08:00:30.000Z', BANGKOK)).toBe('31/12/2026, 15:00');
+    expect(formatListMomentInZone('2026-12-31T08:00:30.000Z', ROME)).toBe('31/12/2026, 09:00');
   });
 });
 

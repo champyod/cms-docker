@@ -9,6 +9,7 @@ import { LogFollowButton } from '@/components/core/LogFollowButton';
 import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { useFormatTimeOfDay, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { cn } from '@/lib/utils';
 import type { DeployState, DeployPhase } from '@/hooks/useDeployContest';
 
@@ -48,10 +49,11 @@ function displayPercent(state: DeployState): number | null {
   return state.percent;
 }
 
-function formatStartTime(startedAt: string | null): string {
+function formatStartTime(startedAt: string | null, formatTimeOfDay: TimestampFormatter): string {
   if (!startedAt) return 'Recent';
-  const time = new Date(startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `started ${time}`;
+  // Why the clock only: the header already reads "Deployment Status", so the instant's own clock
+  // time in the reader's zone is the whole meaning of this label.
+  return `started ${formatTimeOfDay(startedAt)}`;
 }
 
 function ProgressBar({ percent, barClass }: { percent: number | null; barClass: string }) {
@@ -172,6 +174,9 @@ function LogTail({ log, active }: LogTailProps): React.JSX.Element {
 export function DeployStatusPanel({ state, onCancel, onReset }: DeployStatusPanelProps) {
   const { phase } = state;
   const meta = PHASE_META[phase];
+  // Why: a deployment runs the whole service, so its start time belongs to no single contest and
+  // reads in the operator's zone.
+  const formatTimeOfDay = useFormatTimeOfDay();
   const active = isActivePhase(phase);
   const terminal = isTerminalPhase(phase);
   const percent = displayPercent(state);
@@ -187,7 +192,7 @@ export function DeployStatusPanel({ state, onCancel, onReset }: DeployStatusPane
               {meta.label}
             </span>
           </Stack>
-          <Text variant="small" color="text-muted-foreground">{formatStartTime(state.startedAt)}</Text>
+          <Text variant="small" color="text-muted-foreground">{formatStartTime(state.startedAt, formatTimeOfDay)}</Text>
         </Stack>
 
         <Stack gap={2}>
