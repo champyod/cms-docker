@@ -65,7 +65,7 @@ export const SEEDED_GROUPS: Readonly<Record<string, readonly string[]>> = {
   'Data Correction': [
     'admin:login',
     'contest:list', 'contest:read',
-    'evaluation:delete', 'evaluation:list', 'evaluation:read', 'evaluation:update',
+    'evaluation:delete', 'evaluation:list', 'evaluation:read',
     'file:list', 'file:read',
     'participation:create', 'participation:list', 'participation:read',
     'participation:update',

@@ -121,7 +121,6 @@ export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
       'submissionresult:read',
       'submissionresult:delete',
       EVALUATION_TRIAGE,
-      'evaluation:update',
       SUBMISSION_ARTIFACTS,
       reads('user'),
       'user:update',
