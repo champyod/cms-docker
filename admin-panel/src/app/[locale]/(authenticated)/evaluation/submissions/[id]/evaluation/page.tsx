@@ -5,6 +5,7 @@ import { getSubmissionEvaluation, getSubmissionSummary } from '@/lib/evaluation-
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
@@ -26,7 +27,7 @@ export default async function SubmissionEvaluationPage({ params }: { params: Pro
   const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
-  await authorizeSubmissionTab('evaluation.submission-tabs.evaluation');
+  const effective = await authorizeSubmissionTab('evaluation.submission-tabs.evaluation');
   const dictionary = await getDictionary(locale);
   // Why the summary read here: it carries the record capabilities that gate the
   // lane move entry point, and its submission:read key is already part of this
@@ -39,6 +40,7 @@ export default async function SubmissionEvaluationPage({ params }: { params: Pro
     <SubmissionEvaluationTab
       model={model}
       capabilities={summary.capabilities}
+      canReadTestcase={hasEffectivePermission(effective, 'testcase:read')}
       navigation={dictionary.navigation}
     />
   );
