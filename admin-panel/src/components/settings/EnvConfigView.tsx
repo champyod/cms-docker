@@ -36,6 +36,7 @@ export function EnvConfigView(): ReactElement {
           hasPendingRestarts={config.requiredRestarts.length > 0}
           onPersist={(filename, shouldRestart) => config.persistChanges(filename, shouldRestart)}
           onChange={config.handleChange}
+          databaseProfiles={config.databaseProfiles}
         />
       ))}
 

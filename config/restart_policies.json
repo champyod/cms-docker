@@ -28,6 +28,7 @@
     ]
   },
   "env_triggers": {
+    "ACTIVE_DATABASE": ["cms-database", "cms-admin-panel-next"],
     "POSTGRES_DB": ["cms-database", "cms-admin-panel-next"],
     "POSTGRES_USER": ["cms-database", "cms-admin-panel-next"],
     "POSTGRES_PASSWORD": ["cms-database", "cms-admin-panel-next"],

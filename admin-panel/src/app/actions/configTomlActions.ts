@@ -97,6 +97,46 @@ function describeInvalidKeys(keys: readonly ConfigTomlKey[]): string | null {
   return null;
 }
 
+// The [db_<name>] sections config.toml declares, in file order. The captured name is the value
+// [core] ACTIVE_DATABASE selects and what `./cms config sync` resolves POSTGRES_* from.
+const DB_PROFILE_RE = /^\[db_([A-Za-z0-9_-]+)\]\s*$/gm;
+
+function extractDatabaseProfileNames(content: string): string[] {
+  return [...content.matchAll(DB_PROFILE_RE)].map(match => match[1]);
+}
+
+/**
+ * The profiles an operator can switch the active database to. The selector is fed from the file
+ * itself, so every option names a section config sync can resolve and a typo cannot point the
+ * generated .env at a profile that does not exist.
+ */
+export async function readDatabaseProfiles(): Promise<
+  { success: true; profiles: string[] } | { success: false; error: string }
+> {
+  await ensurePermission('env:read');
+  await ensurePermission('env:list');
+  try {
+    const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
+    const profiles = extractDatabaseProfileNames(content);
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      // Section names only: they name the profiles without exposing the credentials each one holds.
+      afterValues: { file: CONFIG_TOML_FILE, requestedKeys: profiles.map(name => `db_${name}`) },
+      result: 'success',
+    });
+    return { success: true, profiles };
+  } catch (error) {
+    await recordAudit({
+      verb: 'config:view',
+      entity: 'config',
+      afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
+    return { success: false, error: (error as Error).message };
+  }
+}
+
 export async function readActiveContestId(): Promise<{ success: true; contestId: number | null } | { success: false; error: string }> {
   await ensurePermission('env:read');
   await ensurePermission('env:list');
