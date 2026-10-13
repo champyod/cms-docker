@@ -10,6 +10,8 @@ const USERS_LIST_ROUTE_ID = 'people.users';
 export interface UserSelection {
   readonly selectedIds: Set<number>;
   readonly selectedUsers: UsersPageRow[];
+  /** Selected ids that no already-read page could resolve, so no action can reach them. */
+  readonly missingCount: number;
   readonly toggleAll: (checked: boolean) => void;
   readonly toggleOne: (userId: number, checked: boolean) => void;
 }
@@ -20,6 +22,15 @@ export interface UserSelection {
 // Why the session and not local state: opening a user record and coming back used
 // to cost the reader every checked box, and the list behind a record tab is the
 // one place that still has the rows to act on them.
+/**
+ * Why the count is surfaced: a selection survives paging, so an id whose row is gone
+ * from every fetched page used to drop out of the action silently. The reader sees
+ * how many cannot be reached instead of a shrinking selection with no explanation.
+ */
+export function countUnreachableSelection(selectedIdCount: number, resolvedCount: number): number {
+  return Math.max(selectedIdCount - resolvedCount, 0);
+}
+
 export function useUserSelection(
   users: readonly UsersPageRow[],
   userCache: Readonly<Record<number, UsersPageRow>>,
@@ -52,5 +63,7 @@ export function useUserSelection(
     [session.selectedIds, userCache],
   );
 
-  return { selectedIds, selectedUsers, toggleAll, toggleOne };
+  const missingCount = countUnreachableSelection(selectedIds.size, selectedUsers.length);
+
+  return { selectedIds, selectedUsers, missingCount, toggleAll, toggleOne };
 }

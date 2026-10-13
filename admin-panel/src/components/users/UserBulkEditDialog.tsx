@@ -15,15 +15,16 @@ interface UserBulkEditDialogProps {
   isOpen: boolean;
   onClose: () => void;
   selectedUsers: SelectedUser[];
+  unavailableCount?: number;
   contests: ContestOption[];
   canReadContests: boolean;
   navigation: Dictionary['navigation'];
   onSuccess: () => void;
 }
 
-export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, canReadContests, navigation, onSuccess }: UserBulkEditDialogProps) {
+export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailableCount = 0, contests, canReadContests, navigation, onSuccess }: UserBulkEditDialogProps) {
   const {
-    loading, statusMessage, errorMessage,
+    loading, statusMessage, errorMessage, failures, credentialChangeCount,
     selectedContestId, setSelectedContestId,
     teamContestId, setTeamContestId,
     teamCode, setTeamCode,
@@ -65,6 +66,11 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
           Selected: {rows.length} user(s)
+          {unavailableCount > 0 && (
+            <span className="text-warning">
+              {' '}— {unavailableCount} selected row(s) are not loaded and cannot be edited
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -132,6 +138,21 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
         {statusMessage && <InlineAlert tone="success" density="compact" className="border-success/30">{statusMessage}</InlineAlert>}
         {errorMessage && <InlineAlert tone="destructive" density="compact" className="border-destructive/30">{errorMessage}</InlineAlert>}
 
+        {failures.length > 0 && (
+          <InlineAlert tone="destructive" density="compact" className="border-destructive/30">
+            <div className="space-y-1">
+              <div>{failures.length} credential update(s) were rejected</div>
+              <div className="max-h-32 overflow-auto">
+                {failures.map((failure) => (
+                  <div key={`${failure.id ?? 'unknown'}-${failure.reason}`}>
+                    User {failure.id ?? 'unknown'}: {failure.reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </InlineAlert>
+        )}
+
         <BulkEditPreviewTable
           rows={rows}
           revealedIds={revealedIds}
@@ -142,8 +163,13 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
         />
 
         <div className="flex items-center justify-end gap-2">
-          <Button variant="positiveOutline" onClick={() => applyCredentials(false)} disabled={loading || rows.length === 0}>
-            Apply Credentials
+          <Button
+            variant="positiveOutline"
+            onClick={() => applyCredentials(false)}
+            disabled={loading || credentialChangeCount === 0}
+            title={credentialChangeCount === 0 ? 'Nothing has changed yet' : undefined}
+          >
+            {credentialChangeCount === 0 ? 'Apply Credentials' : `Apply Credentials (${credentialChangeCount})`}
           </Button>
         </div>
       </div>

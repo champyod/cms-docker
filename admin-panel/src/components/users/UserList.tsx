@@ -29,7 +29,13 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
 
   return (
     <div className="space-y-6">
-      <UserSearchToolbar rows={rows} canManage={capabilities.canManage} selectedCount={selection.selectedIds.size} onBulkEdit={dialogs.openBulkEdit} />
+      <UserSearchToolbar
+        rows={rows}
+        canManage={capabilities.canManage}
+        selectedCount={selection.selectedIds.size}
+        unavailableCount={selection.missingCount}
+        onBulkEdit={dialogs.openBulkEdit}
+      />
       <UserListTable
         rows={rows}
         selection={selection}
@@ -44,6 +50,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
           isOpen={dialogs.isBulkEditOpen}
           onClose={dialogs.closeBulkEdit}
           selectedUsers={selection.selectedUsers}
+          unavailableCount={selection.missingCount}
           contests={contests}
           canReadContests={canReadContests}
           navigation={navigation}

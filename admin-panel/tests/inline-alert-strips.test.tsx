@@ -59,8 +59,12 @@ vi.mock('@/app/actions/containerConfig', () => ({
 vi.mock('@/lib/discord-notifier', () => ({ getDiscordWebhookStatus: vi.fn(() => Promise.resolve({ configured: true })) }));
 vi.mock('@/components/users/bulkEditActions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/components/users/bulkEditActions')>()),
-  submitCredentialUpdates: vi.fn((_rows, _closeAfter, _onClose, _onSuccess, setters) => {
+  submitCredentialUpdates: vi.fn((_rows, _baseline, _closeAfter, _onClose, _onSuccess, setters) => {
+    // Why the clears: the real function wipes the previous outcome before it posts, so a
+    // stub that keeps them would leave two strips on screen and weaken the one-strip rule.
     setters.setLoading(false);
+    setters.setStatusMessage('');
+    setters.setFailures([]);
     setters.setErrorMessage('Bulk apply failed');
     return Promise.resolve();
   }),
@@ -216,7 +220,10 @@ describe('the bulk user and create strips announce their own outcome tone', () =
 
   it('reports a failed apply in the destructive tone', async () => {
     openBulkUserEdit();
-    fireEvent.click(screen.getByRole('button', { name: 'Apply Credentials' }));
+    // Why the regeneration first: an apply with nothing changed is disabled now, so the
+    // failure path is only reachable once there is a change for it to send.
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate Password' }));
+    fireEvent.click(screen.getByRole('button', { name: /Apply Credentials/ }));
     await vi.waitFor(() => expectStrip('destructive', 'Bulk apply failed'));
   });
 

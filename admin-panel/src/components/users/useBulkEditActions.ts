@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getTeams } from '@/app/actions/teams';
+import { downloadCsvFile } from '@/lib/csv-download';
 import type { PasswordKind } from '@/lib/password-format';
-import { submitCredentialUpdates } from './bulkEditActions';
-import type { ContestOption, SelectedUser } from './bulkEditActions';
+import { collectCredentialUpdates, submitCredentialUpdates } from './bulkEditActions';
+import type { BatchFailure, ContestOption, SelectedUser } from './bulkEditActions';
 import { makePassword, makeUsername } from './csvPreview';
 import { useBulkReveal } from './useBulkReveal';
 import { useBulkBatch } from './useBulkBatch';
@@ -34,6 +35,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
   const [renderedUsers, setRenderedUsers] = useState<SelectedUser[] | null>(null);
+  const [failures, setFailures] = useState<BatchFailure[]>([]);
   if (renderedUsers !== selectedUsers) {
     setRenderedUsers(selectedUsers);
     setRows(selectedUsers.map((user) => ({ ...user, password: null })));
@@ -79,6 +81,10 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   }, [teamContestId]);
 
   const selectedUserIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const credentialChangeCount = useMemo(
+    () => collectCredentialUpdates(rows, selectedUsers).length,
+    [rows, selectedUsers],
+  );
 
   const batch = useBulkBatch({
     rows,
@@ -119,16 +125,26 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
 
   const exportSelectedRows = (filename: string, buildCsv: (rows: SelectedUser[]) => string): void => {
     if (rows.length === 0) return;
-    openCsvDownload(buildCsv(rows), filename);
+    downloadCsvFile(filename, buildCsv(rows));
   };
 
   const applyCredentials = (closeAfter: boolean): Promise<void> =>
-    submitCredentialUpdates(rows, closeAfter, onClose, onSuccess, { setLoading, setErrorMessage, setStatusMessage }, passwordKind);
+    submitCredentialUpdates(
+      rows,
+      selectedUsers,
+      closeAfter,
+      onClose,
+      onSuccess,
+      { setLoading, setErrorMessage, setStatusMessage, setFailures },
+      passwordKind,
+    );
 
   return {
     loading,
     statusMessage,
     errorMessage,
+    failures,
+    credentialChangeCount,
     selectedContestId,
     setSelectedContestId,
     teamContestId,
@@ -169,17 +185,4 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     runEmailDomainUpdate: batch.runEmailDomainUpdate,
     runEmailClear: batch.runEmailClear,
   };
-}
-
-function openCsvDownload(content: string, filename: string): void {
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.setAttribute('download', filename);
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }

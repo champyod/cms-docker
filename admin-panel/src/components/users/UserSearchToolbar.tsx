@@ -9,10 +9,11 @@ export interface UserSearchToolbarProps {
   readonly rows: UserListRows;
   readonly canManage: boolean;
   readonly selectedCount: number;
+  readonly unavailableCount: number;
   readonly onBulkEdit: () => void;
 }
 
-export function UserSearchToolbar({ rows, canManage, selectedCount, onBulkEdit }: UserSearchToolbarProps): React.JSX.Element {
+export function UserSearchToolbar({ rows, canManage, selectedCount, unavailableCount, onBulkEdit }: UserSearchToolbarProps): React.JSX.Element {
   return (
     <TableToolbar
       searchText={rows.searchDraft}
@@ -21,9 +22,16 @@ export function UserSearchToolbar({ rows, canManage, selectedCount, onBulkEdit }
       searchPlaceholder="Search users..."
       rightContent={
         canManage ? (
-          <Button variant="secondary" onClick={onBulkEdit} disabled={selectedCount === 0}>
-            Edit Selected ({selectedCount})
-          </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            {unavailableCount > 0 && (
+              <span className="text-xs text-warning">
+                {unavailableCount} selected row(s) are not loaded
+              </span>
+            )}
+            <Button variant="secondary" onClick={onBulkEdit} disabled={selectedCount === 0}>
+              Edit Selected ({selectedCount})
+            </Button>
+          </div>
         ) : null
       }
     />

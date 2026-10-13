@@ -1,7 +1,7 @@
 'use client';
 
 import { apiClient } from '@/lib/apiClient';
-import { openServerDownload } from './bulkEditActions';
+import { openServerDownload } from '@/lib/csv-download';
 import type { BatchActionResult, ContestOption, SelectedUser } from './bulkEditActions';
 
 interface BatchDeps {
@@ -66,7 +66,7 @@ export function useBulkBatch(deps: BatchDeps) {
         deps.setLoading(false);
         return;
       }
-      if (result.downloadUrl) openServerDownload(result.downloadUrl);
+      if (result.downloadUrl) openServerDownload(result.downloadUrl, `users-plaintext-${Date.now()}.csv`);
       deps.setStatusMessage(
         typeof result.count === 'number' && result.count > 0
           ? `Exported ${result.count} plain-text password(s)`
