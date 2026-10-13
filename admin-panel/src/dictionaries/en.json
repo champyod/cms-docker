@@ -124,6 +124,30 @@
     "contests": {
       "emptyTitle": "No contests found.",
       "emptyDescription": "This team is not participating in any contests yet."
+    },
+    "bulkActions": {
+      "button": "Bulk actions",
+      "title": "Bulk actions",
+      "description": "Apply changes to this team and its members.",
+      "registerable": "Registerable",
+      "contest": "Contest",
+      "contestPlaceholder": "Select a contest",
+      "addUsers": "Add users to team",
+      "addUsersHint": "Usernames separated by commas or new lines",
+      "settings": "Participation settings",
+      "hidden": "Hidden",
+      "unrestricted": "Unrestricted",
+      "extraTime": "Extra time (seconds)",
+      "delayTime": "Delay time (seconds)",
+      "ip": "IP restrictions (CIDR, comma separated)",
+      "noChange": "No change",
+      "yes": "Yes",
+      "no": "No",
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "needContest": "Select a contest first.",
+      "needMembers": "Select at least one member for participation settings.",
+      "applied": "Bulk actions applied"
     }
   },
   "submissions": {

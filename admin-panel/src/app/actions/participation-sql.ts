@@ -121,6 +121,63 @@ export async function executeParticipationUpdate(
   `, ...params);
 }
 
+/** Settings a bulk edit may change; an absent key leaves that column untouched. */
+export interface BulkParticipationSettings {
+  hidden?: boolean;
+  unrestricted?: boolean;
+  extra_time_seconds?: number;
+  delay_time_seconds?: number;
+  ip?: string;
+}
+
+/** Update only the columns named in settings; the rest stay as they are. */
+export async function executeBulkParticipationSettings(
+  participationIds: number[],
+  settings: BulkParticipationSettings,
+  validIps: string[]
+): Promise<void> {
+  if (participationIds.length === 0) return;
+
+  const assignments: string[] = [];
+  const params: unknown[] = [];
+
+  if (settings.hidden !== undefined) {
+    params.push(settings.hidden);
+    assignments.push(`hidden = $${params.length}`);
+  }
+  if (settings.unrestricted !== undefined) {
+    params.push(settings.unrestricted);
+    assignments.push(`unrestricted = $${params.length}`);
+  }
+  if (settings.extra_time_seconds !== undefined) {
+    params.push(settings.extra_time_seconds.toString());
+    assignments.push(`extra_time = ($${params.length} || ' seconds')::interval`);
+  }
+  if (settings.delay_time_seconds !== undefined) {
+    params.push(settings.delay_time_seconds.toString());
+    assignments.push(`delay_time = ($${params.length} || ' seconds')::interval`);
+  }
+  if (settings.ip !== undefined) {
+    if (validIps.length === 0) {
+      assignments.push('ip = NULL');
+    } else {
+      const placeholders = validIps.map((ip) => {
+        params.push(ip);
+        return `$${params.length}::cidr`;
+      });
+      assignments.push(`ip = ARRAY[${placeholders.join(',')}]`);
+    }
+  }
+
+  if (assignments.length === 0) return;
+
+  params.push(participationIds);
+  await prisma.$executeRawUnsafe(
+    `UPDATE participations SET ${assignments.join(', ')} WHERE id = ANY($${params.length}::int[])`,
+    ...params
+  );
+}
+
 /** The contest zone a participation's wall clocks are read in; empty when the contest has none. */
 async function resolveContestZone(participationId: number): Promise<string> {
   const row = await prisma.participations.findUnique({

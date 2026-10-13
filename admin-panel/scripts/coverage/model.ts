@@ -56,6 +56,7 @@ export const ALLOWLIST: AllowEntry[] = [
   { id: "lib/redirect.ts#redirect", reason: "Redirect helper: preserves locale in a path, performs no data access." },
   { id: "app/actions/submissions.ts#getSubmissionFieldAccess", reason: "Static field metadata: describes columns, discloses no submission rows." },
   { id: "app/actions/participation-sql.ts#executeParticipationUpdate", reason: "Raw-SQL helper: every caller gates participation:update before invoking." },
+  { id: "app/actions/participation-sql.ts#executeBulkParticipationSettings", reason: "Raw-SQL helper: applyTeamParticipationSettings gates participation:update before invoking." },
   { id: "app/actions/participation-sql.ts#queryParticipationDetails", reason: "Read helper: every caller gates participation:read before invoking." },
   { id: "app/actions/participation-sql.ts#parseIpAllowlist", reason: "Pure validator: parses IP strings, performs no data access." },
   { id: "app/actions/testcase-support.ts#findDatasetOrError", reason: "Internal guard: verifies the dataset exists; every caller gates testcase:create before invoking." },

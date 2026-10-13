@@ -6,6 +6,8 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTeamMembers } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { prisma } from '@/lib/prisma';
 import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
 
 // Why: the reader enforces the same keys, but the page must resolve the exact
@@ -28,8 +30,23 @@ export default async function TeamMembersPage({ params }: { params: Promise<{ lo
   const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
-  await authorizeTeamTab('people.team-tabs.members');
+  const effective = await authorizeTeamTab('people.team-tabs.members');
   const dictionary = await getDictionary(locale);
   const members = await readRecordOrNotFound(async () => ((await getTeamMembers(id)) ?? null));
-  return <TeamMembersTab members={members} navigation={dictionary.navigation} copy={dictionary.teams} locale={locale as 'en' | 'th'} />;
+  // Why contest:read gates the options: the bulk dialog targets a contest, and a
+  // caller who may not list contests gets no selector rather than a leaked name.
+  const contests = hasEffectivePermission(effective, 'contest:read')
+    ? await prisma.contests.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } })
+    : [];
+  return (
+    <TeamMembersTab
+      teamId={id}
+      members={members}
+      permissionKeys={[...effective]}
+      contests={contests}
+      navigation={dictionary.navigation}
+      copy={dictionary.teams}
+      locale={locale as 'en' | 'th'}
+    />
+  );
 }
