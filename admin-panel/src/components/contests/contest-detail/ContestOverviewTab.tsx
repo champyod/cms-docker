@@ -24,7 +24,7 @@ function buildOverviewPayload(form: ContestSettingsFormState): Partial<ContestDa
 }
 
 export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX.Element {
-  const { formData, updateForm, saving, justSaved, handleSave } = useContestSettingsState(
+  const { formData, updateForm, saving, justSaved, timeErrors, handleSave } = useContestSettingsState(
     data.contest.id,
     toOverviewFormState(data.contest),
     buildOverviewPayload,
@@ -35,6 +35,7 @@ export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX
         contest={data.contest}
         formData={{ start: formData.start, stop: formData.stop, analysis_start: formData.analysis_start, analysis_stop: formData.analysis_stop }}
         onChange={(patch) => updateForm(patch)}
+        timeErrors={timeErrors}
       />
       <div className="flex justify-end">
         <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />

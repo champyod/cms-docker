@@ -1,14 +1,105 @@
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { parseInterval } from '@/lib/contest-validation';
 import type { ContestData } from '@/lib/contest-validation';
+import {
+  AmbiguousZoneTimeError,
+  NonexistentZoneTimeError,
+  utcToZoneWallClock,
+  zoneWallClockToInstant,
+} from '@/lib/timezone';
 import type { ContestFormData, ExistingContest } from './types';
 
-export const formatDateForInput = (date?: Date | string | null) => {
-    if (!date) return '';
-  const d = new Date(date);
-    const pad = (n: number) => n < 10 ? '0' + n : n;
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+/** The four wall clocks a contest form owns, and the only keys a zone can invalidate. */
+export const CONTEST_TIME_FIELDS = ['start', 'stop', 'analysis_start', 'analysis_stop'] as const;
+
+export type ContestTimeField = (typeof CONTEST_TIME_FIELDS)[number];
+
+/** The shape every zone-aware contest form shares, whichever tab or modal owns it. */
+export interface ContestTimeFields {
+  timezone: string;
+  start: string;
+  stop: string;
+  analysis_start: string;
+  analysis_stop: string;
+}
+
+/**
+ * Render a stored instant as the `datetime-local` value an operator reads it in. `zone` is the
+ * form's own live zone, so a picker always shows the wall clock that zone names.
+ */
+export function formatDateForInput(date: Date | string | null | undefined, zone?: string): string {
+  if (!date) return '';
+  const iso = date instanceof Date ? date.toISOString() : date;
+  if (Number.isNaN(new Date(iso).getTime())) return '';
+  return utcToZoneWallClock(iso, zone ?? '');
+}
+
+/** Null when the wall clock names an instant; the thrown zone error's message when it names none. */
+function zoneTimeError(value: string, zone: string): string | null {
+  try {
+    zoneWallClockToInstant(value, zone);
+    return null;
+  } catch (error) {
+    if (error instanceof NonexistentZoneTimeError || error instanceof AmbiguousZoneTimeError) return error.message;
+    throw error;
+  }
+}
+
+/**
+ * Why: a wall clock inside a DST gap or a fall-back repeat names no single instant, so the save
+ * must stop at the field instead of storing a shifted time. Each message is the thrown error
+ * verbatim — it names the zone, the jump, or both candidate instants.
+ */
+export function collectZoneTimeErrors(form: ContestTimeFields, zone: string): Map<string, string> {
+  const errors = new Map<string, string>();
+  for (const field of CONTEST_TIME_FIELDS) {
+    const message = zoneTimeError(form[field], zone);
+    if (message !== null) errors.set(field, message);
+  }
+  return errors;
+}
+
+/** Why: an unresolvable wall clock has no instant to move, so the typed value stays for the submit error. */
+function reprojectInstant(value: string, fromZone: string, toZone: string): string {
+  if (zoneTimeError(value, fromZone) !== null) return value;
+  const instant = zoneWallClockToInstant(value, fromZone);
+  return instant === null ? value : utcToZoneWallClock(instant.toISOString(), toZone);
+}
+
+/**
+ * Why: the pickers follow the form's live timezone field, so a zone change must move the four wall
+ * clocks to the same instants in the new zone — never re-read the old digits as a new wall clock.
+ */
+export function rezoneTimeFields<T extends ContestTimeFields>(previous: T, next: T): T {
+  if (next.timezone === previous.timezone) return next;
+  return {
+    ...next,
+    start: reprojectInstant(previous.start, previous.timezone, next.timezone),
+    stop: reprojectInstant(previous.stop, previous.timezone, next.timezone),
+    analysis_start: reprojectInstant(previous.analysis_start, previous.timezone, next.timezone),
+    analysis_stop: reprojectInstant(previous.analysis_stop, previous.timezone, next.timezone),
+  };
+}
+
+/**
+ * Why: tabs and the modal build their payload from wall-clock strings; converting once here means
+ * every contest write stores the instant the form's zone names, with no per-call-site conversion
+ * to forget. A cleared field stays empty so the writer keeps its unchanged-value path. The
+ * payload's own type is preserved, so the strict repo contract and the validation contract each
+ * keep the shape they were written against.
+ */
+export function toZoneInstants<T extends Partial<Record<ContestTimeField, string | Date | null | undefined>>>(
+  payload: T,
+  zone: string,
+): T {
+  const converted = { ...payload };
+  for (const field of CONTEST_TIME_FIELDS) {
+    const value = converted[field];
+    if (typeof value !== 'string' || value === '') continue;
+    converted[field] = zoneWallClockToInstant(value, zone) ?? value;
+  }
+  return converted;
+}
 
 type CommonFormFields = Omit<
   ContestFormData,
@@ -71,30 +162,32 @@ export function defaultNewContestForm(): ContestFormData {
   const end = new Date(now.getTime() + 5 * 60 * 60 * 1000);
   const analysisStart = new Date(end.getTime() + 1000);
   const analysisStop = new Date(end.getTime() + 1000 * 60 * 60);
+  const zone = COMMON_DEFAULTS.timezone;
 
   return {
     ...COMMON_DEFAULTS,
     name: '',
     description: '',
-    start: formatDateForInput(now),
-    stop: formatDateForInput(end),
+    start: formatDateForInput(now, zone),
+    stop: formatDateForInput(end, zone),
     languages: [...PROGRAMMING_LANGUAGES],
     max_submission_number: 100,
     min_submission_interval: 60,
     min_user_test_interval: 60,
     score_precision: 2,
-    analysis_start: formatDateForInput(analysisStart),
-    analysis_stop: formatDateForInput(analysisStop),
+    analysis_start: formatDateForInput(analysisStart, zone),
+    analysis_stop: formatDateForInput(analysisStop, zone),
   };
 }
 
 function contestTimingFields(
   contest: ExistingContest
 ): Pick<ContestFormData, 'start' | 'stop' | 'timezone' | 'languages' | 'allowed_localizations'> {
+  const zone = contest.timezone || COMMON_DEFAULTS.timezone;
   return {
-    start: formatDateForInput(contest.start),
-    stop: formatDateForInput(contest.stop),
-    timezone: contest.timezone || 'Asia/Bangkok',
+    start: formatDateForInput(contest.start, zone),
+    stop: formatDateForInput(contest.stop, zone),
+    timezone: zone,
     languages: contest.languages || [],
     allowed_localizations: (contest.allowed_localizations || []).join(', '),
   };
@@ -151,7 +244,8 @@ function contestTokenFields(
 }
 
 function contestLimitFields(
-  contest: ExistingContest
+  contest: ExistingContest,
+  zone: string
 ): Pick<
   ContestFormData,
   | 'max_submission_number'
@@ -172,8 +266,8 @@ function contestLimitFields(
     queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
     score_precision: contest.score_precision,
     analysis_enabled: contest.analysis_enabled,
-    analysis_start: formatDateForInput(contest.analysis_start),
-    analysis_stop: formatDateForInput(contest.analysis_stop),
+    analysis_start: formatDateForInput(contest.analysis_start, zone),
+    analysis_stop: formatDateForInput(contest.analysis_stop, zone),
   };
 }
 
@@ -184,7 +278,7 @@ export function formFromContest(contest: ExistingContest): ContestFormData {
     ...contestTimingFields(contest),
     ...contestAccessFields(contest),
     ...contestTokenFields(contest),
-    ...contestLimitFields(contest),
+    ...contestLimitFields(contest, contest.timezone || COMMON_DEFAULTS.timezone),
   };
 }
 
@@ -198,5 +292,5 @@ export function buildPayload(formData: ContestFormData): ContestData {
         .filter((s: string) => s.length > 0);
   }
   payload.queue_fairness_penalty_seconds = Math.max(0, Number(payload.queue_fairness_penalty_seconds ?? 0) || 0);
-  return payload;
+  return toZoneInstants(payload, formData.timezone);
 }
