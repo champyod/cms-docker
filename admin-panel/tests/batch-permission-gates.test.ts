@@ -96,6 +96,9 @@ describe('batch permission enforcement (runtime)', () => {
     });
     vi.doMock('@/lib/prisma', () => ({
       prisma: {
+        admins: {
+          findUnique: vi.fn(async () => null),
+        },
         users: {
           findMany: vi.fn(async () => [{ id: 1, username: 'alice', password: 'plaintext:secret123' }]),
           update: vi.fn(async () => ({})),
@@ -107,6 +110,7 @@ describe('batch permission enforcement (runtime)', () => {
           updateMany: vi.fn(async () => ({ count: 1 })),
         },
         $executeRaw: vi.fn(async () => 1),
+        $executeRawUnsafe: vi.fn(async () => 1),
       },
     }));
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));

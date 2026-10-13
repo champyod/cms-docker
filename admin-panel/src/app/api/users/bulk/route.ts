@@ -3,6 +3,9 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { cleanupExpiredCreds, csvEscape, writeCredsCsv } from '@/lib/creds-file';
+import { getPermissions } from '@/lib/permissions';
+import { insertParticipation } from '@/lib/participation-insert';
+import { resolveAllowlistInput } from '@/app/actions/participation-settings';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import {
   formatStoredPassword,
@@ -28,7 +31,8 @@ interface BulkOutcome {
 async function createUserWithParticipation(
   prepared: PreparedRow,
   contestId: number,
-  passwordKind: PasswordKind
+  passwordKind: PasswordKind,
+  validIps: string[]
 ): Promise<void> {
   const user = await prisma.users.create({
     data: {
@@ -46,11 +50,12 @@ async function createUserWithParticipation(
 
   const teamId = prepared.teamCode ? await resolveTeamIdByCode(prepared.teamCode) : null;
 
-  await prisma.$executeRaw`
-    INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-    VALUES (${contestId}, ${user.id}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-    ON CONFLICT (contest_id, user_id) DO NOTHING
-  `;
+  await insertParticipation(contestId, user.id, teamId, validIps);
+}
+
+async function resolveBulkAllowlist(raw: unknown, contestId: number): Promise<{ validIps: string[]; error?: string }> {
+  if (contestId <= 0) return { validIps: [] };
+  return resolveAllowlistInput(raw, await getPermissions());
 }
 
 async function processBulkRow(
@@ -59,6 +64,7 @@ async function processBulkRow(
   generationMode: GenerationMode,
   contestId: number,
   passwordKind: PasswordKind,
+  validIps: string[],
   seenUsernames: Set<string>,
   outcome: BulkOutcome
 ): Promise<void> {
@@ -69,7 +75,7 @@ async function processBulkRow(
   }
 
   try {
-    await createUserWithParticipation(prepared, contestId, passwordKind);
+    await createUserWithParticipation(prepared, contestId, passwordKind, validIps);
   } catch (error) {
     const e = error as { code?: string; message?: string };
     if (e.code === 'P2002') {
@@ -91,13 +97,14 @@ async function processBulkRows(
   rows: BulkUserRow[],
   generationMode: GenerationMode,
   contestId: number,
-  passwordKind: PasswordKind
+  passwordKind: PasswordKind,
+  validIps: string[]
 ): Promise<BulkOutcome> {
   const outcome: BulkOutcome = { created: [], failed: [] };
   const seenUsernames = new Set<string>();
 
   for (let index = 0; index < rows.length; index += 1) {
-    await processBulkRow(rows[index], index, generationMode, contestId, passwordKind, seenUsernames, outcome);
+    await processBulkRow(rows[index], index, generationMode, contestId, passwordKind, validIps, seenUsernames, outcome);
   }
 
   return outcome;
@@ -154,13 +161,15 @@ export async function POST(req: NextRequest) {
       if (!participationAuth.authorized) return participationAuth.response;
     }
     const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
-    const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind);
+    const { validIps, error } = await resolveBulkAllowlist(body?.ip, contestId);
+    if (error) return apiError({ message: error, status: 400 });
+    const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind, validIps);
     if (contestId > 0) await resyncRankingUsers(contestId);
 
     await recordAudit({
       verb: 'user:create',
       entity: 'user',
-      afterValues: { bulkCount: outcome.created.length, failedCount: outcome.failed.length, contestId: contestId || null },
+      afterValues: { bulkCount: outcome.created.length, failedCount: outcome.failed.length, contestId: contestId || null, ip: validIps },
       result: 'success',
     });
     revalidatePath('/[locale]/people/users', 'page');

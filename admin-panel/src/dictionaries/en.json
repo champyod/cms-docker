@@ -14,6 +14,13 @@
     "contactAdmin": "Contact your administrator to request access.",
     "returnToDashboard": "Return to Dashboard"
   },
+  "participation": {
+    "ip": {
+      "label": "IP Address / Subnet",
+      "placeholder": "e.g., 192.168.1.0/24, 10.0.0.1",
+      "hint": "Comma-separated list of IPs or subnets in CIDR notation"
+    }
+  },
   "contests": {
     "title": "Contests Management",
     "subtitle": "Create and manage programming contests.",
@@ -59,6 +66,11 @@
     "tableEmptyDescription": "Adjust your search or create a new user to get started.",
     "bulkCreateTitle": "Bulk Add Users (CSV)",
     "bulkEditTitle": "Edit Selected Users",
+    "bulkEdit": {
+      "ipTitle": "IP allowlist",
+      "ipContest": "Contest",
+      "ipApply": "Apply IP allowlist"
+    },
     "bulkCreateTemplate": "Download CSV Template",
     "bulkCreateParse": "Parse & Preview",
     "bulkOverwriteApply": "Apply Credentials",

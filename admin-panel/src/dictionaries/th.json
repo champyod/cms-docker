@@ -14,6 +14,13 @@
     "contactAdmin": "ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์การเข้าถึง",
     "returnToDashboard": "กลับไปหน้าแดชบอร์ด"
   },
+  "participation": {
+    "ip": {
+      "label": "ที่อยู่ IP / ซับเน็ต",
+      "placeholder": "เช่น 192.168.1.0/24, 10.0.0.1",
+      "hint": "รายการ IP หรือซับเน็ตแบบ CIDR คั่นด้วยเครื่องหมายจุลภาค"
+    }
+  },
   "contests": {
     "title": "การจัดการการแข่งขัน",
     "subtitle": "สร้างและจัดการการแข่งขันโปรแกรมมิ่ง",
@@ -59,6 +66,11 @@
     "tableEmptyDescription": "ปรับการค้นหาหรือสร้างผู้ใช้ใหม่เพื่อเริ่มต้น",
     "bulkCreateTitle": "เพิ่มผู้ใช้จำนวนมาก (CSV)",
     "bulkEditTitle": "แก้ไขผู้ใช้ที่เลือก",
+    "bulkEdit": {
+      "ipTitle": "รายการ IP ที่อนุญาต",
+      "ipContest": "การแข่งขัน",
+      "ipApply": "ใช้รายการ IP ที่อนุญาต"
+    },
     "bulkCreateTemplate": "ดาวน์โหลดเทมเพลต CSV",
     "bulkCreateParse": "แยกวิเคราะห์และแสดงตัวอย่าง",
     "bulkOverwriteApply": "ใช้ข้อมูลรับรอง",

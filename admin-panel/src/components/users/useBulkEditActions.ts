@@ -26,6 +26,8 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [selectedContestId, setSelectedContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamContestId, setTeamContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamCode, setTeamCode] = useState('');
+  const [ipContestId, setIpContestId] = useState<number>(contests[0]?.id ?? 0);
+  const [ip, setIp] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [emailDomain, setEmailDomain] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
@@ -54,6 +56,13 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   }, [contests, teamContestId]);
 
   useEffect(() => {
+    if (contests.length === 0 || contests.some((contest) => contest.id === ipContestId)) return;
+    queueMicrotask(() => {
+      setIpContestId(contests[0].id);
+    });
+  }, [contests, ipContestId]);
+
+  useEffect(() => {
     const fetchTeams = async (): Promise<void> => {
       if (!teamContestId) {
         setTeamsOptions([]);
@@ -79,6 +88,8 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     selectedContestId,
     teamContestId,
     teamCode,
+    ipContestId,
+    ip,
     timezone,
     emailDomain,
     setLoading,
@@ -124,6 +135,10 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     setTeamContestId,
     teamCode,
     setTeamCode,
+    ipContestId,
+    setIpContestId,
+    ip,
+    setIp,
     timezone,
     setTimezone,
     emailDomain,
@@ -149,6 +164,7 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     runContestMutation: batch.runContestMutation,
     runTeamSet: batch.runTeamSet,
     runTeamRemoveAny: batch.runTeamRemoveAny,
+    runIpAllowlist: batch.runIpAllowlist,
     runTimezoneUpdate: batch.runTimezoneUpdate,
     runEmailDomainUpdate: batch.runEmailDomainUpdate,
     runEmailClear: batch.runEmailClear,

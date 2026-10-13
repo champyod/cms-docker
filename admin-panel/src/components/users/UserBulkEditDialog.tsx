@@ -7,7 +7,7 @@ import { ModalFooter } from '@/components/core/ModalFooter';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import type { Dictionary } from '@/lib/dictionary';
-import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
+import { BulkEditPreviewTable, ContestSection, IpAllowlistSection, ProfileSection, TeamSection } from './bulkEditSections';
 import { buildEditExportCsv, type ContestOption, type SelectedUser } from './bulkEditActions';
 import { useBulkEditActions } from './useBulkEditActions';
 
@@ -27,6 +27,8 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
     selectedContestId, setSelectedContestId,
     teamContestId, setTeamContestId,
     teamCode, setTeamCode,
+    ipContestId, setIpContestId,
+    ip, setIp,
     timezone, setTimezone,
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
@@ -35,6 +37,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
     revealRowPassword, toggleAllRevealed,
     runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
+    runIpAllowlist,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
     applyCredentials,
   } = useBulkEditActions({ selectedUsers, contests, onSuccess, onClose });
@@ -98,6 +101,19 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, c
             onTeamCodeChange={setTeamCode}
             onRunTeamSet={runTeamSet}
             onRunTeamRemoveAny={runTeamRemoveAny}
+          />
+        )}
+
+        {canReadContests && (
+          <IpAllowlistSection
+            contests={contests}
+            contestId={ipContestId}
+            ip={ip}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onContestIdChange={setIpContestId}
+            onIpChange={setIp}
+            onRunIpAllowlist={runIpAllowlist}
           />
         )}
 

@@ -3,6 +3,8 @@
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { useDictionary } from '@/hooks/useDictionary';
+import { IpAllowlistInput } from './IpAllowlistInput';
 import { EXPECTED_FIELDS } from './csvTemplate';
 import type { GenerationMode } from './csvPreview';
 
@@ -80,8 +82,10 @@ interface BulkCreateInputSectionProps {
   canReadContests: boolean;
   csvText: string;
   placeholder: string;
+  ip: string;
   onContestIdChange: (contestId: number) => void;
   onCsvTextChange: (text: string) => void;
+  onIpChange: (value: string) => void;
   onDownloadTemplate: () => void;
   onUploadFile: (file: File | undefined) => void;
   onRebuildPreview: () => void;
@@ -92,14 +96,27 @@ const SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2
 
 const LABEL_BUTTON_CLASS = 'inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer text-sm transition-colors';
 
+function BulkCreateIpAllowlistField({ value, onChange }: { value: string; onChange: (value: string) => void }): React.JSX.Element {
+  const ipCopy = useDictionary().participation.ip;
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-muted-foreground">{ipCopy.label}</label>
+      <IpAllowlistInput value={value} onChange={onChange} />
+      <p className="text-xs text-muted-foreground">{ipCopy.hint}</p>
+    </div>
+  );
+}
+
 export function BulkCreateInputSection({
   contests,
   contestId,
   canReadContests,
   csvText,
   placeholder,
+  ip,
   onContestIdChange,
   onCsvTextChange,
+  onIpChange,
   onDownloadTemplate,
   onUploadFile,
   onRebuildPreview,
@@ -144,6 +161,8 @@ export function BulkCreateInputSection({
           </select>
         </div>
       )}
+
+      {canReadContests && <BulkCreateIpAllowlistField value={ip} onChange={onIpChange} />}
 
       <textarea
         value={csvText}

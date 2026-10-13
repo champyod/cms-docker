@@ -131,7 +131,7 @@ function stripping(label: string, message: string, node: React.ReactNode, scale:
 
 const FAILURE_CASES = [
   stripping('participation create', 'Failed to load participation data',
-    <ParticipationModal isOpen onClose={NOOP} participationId={4} username="ada" teams={[]} onSuccess={NOOP} />, REGULAR_SCALE),
+    <DictionaryProvider dict={en}><ParticipationModal isOpen onClose={NOOP} participationId={4} username="ada" teams={[]} onSuccess={NOOP} /></DictionaryProvider>, REGULAR_SCALE),
   stripping('group create', 'Group name is required',
     <GroupFormDialog open setOpen={NOOP} selectedGroup={null} dict={en.groups} formData={{ name: '', description: '', permissionKeys: [], reason: '' }} setFormData={NOOP} groupedPermissions={new Map()} effectivePreview={new Set<string>()} error="Group name is required" loading={false} onTogglePermission={NOOP} onToggleModule={NOOP} onSave={NOOP} />, REGULAR_SCALE),
   stripping('group delete', 'Group is still referenced',

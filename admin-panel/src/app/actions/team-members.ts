@@ -2,14 +2,10 @@
 
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
-import { ensurePermission, getPermissions } from '@/lib/permissions';
-import { stripDisallowedFields } from '@/lib/field-permissions';
+import { ensurePermission } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
-import {
-  executeBulkParticipationSettings,
-  parseIpAllowlist,
-  type BulkParticipationSettings,
-} from './participation-sql';
+import { type BulkParticipationSettings } from './participation-sql';
+import { applyBulkParticipationSettings, type BulkParticipationResult } from './participation-settings';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 
 interface ActionResult {
@@ -80,42 +76,6 @@ export async function applyTeamParticipationSettings(
   contestId: number,
   userIds: readonly number[],
   settings: BulkParticipationSettings
-): Promise<ActionResult & { updated?: number }> {
-  await ensurePermission('participation:update');
-
-  try {
-    if (userIds.length === 0) {
-      return { success: false, error: 'No members selected' };
-    }
-
-    const permissions = await getPermissions();
-    const allowed = stripDisallowedFields(
-      'participations',
-      settings as Record<string, unknown>,
-      permissions,
-    ) as BulkParticipationSettings;
-
-    const { validIps, error } = parseIpAllowlist(allowed.ip);
-    if (error) return { success: false, error };
-
-    const rows = await prisma.participations.findMany({
-      where: { contest_id: contestId, user_id: { in: [...userIds] } },
-      select: { id: true },
-    });
-    const participationIds = rows.map((row) => row.id);
-    await executeBulkParticipationSettings(participationIds, allowed, validIps);
-
-    await resyncRankingUsers(contestId);
-    await recordAudit({
-      verb: 'participation:update',
-      entity: 'contest',
-      entityId: String(contestId),
-      afterValues: { action: 'team-bulk-settings', contestId, participationIds, settings: allowed, ip: validIps },
-      result: 'success',
-    });
-    revalidatePath('/[locale]/contests', 'page');
-    return { success: true, updated: participationIds.length };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
-  }
+): Promise<BulkParticipationResult> {
+  return applyBulkParticipationSettings(contestId, userIds, settings, 'team-bulk-settings');
 }

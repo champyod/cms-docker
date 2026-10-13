@@ -2,6 +2,9 @@ import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { getFreshPermissions } from '@/lib/permissions';
+import { insertParticipation } from '@/lib/participation-insert';
+import { resolveAllowlistInput } from '@/app/actions/participation-settings';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
@@ -23,19 +26,23 @@ function isValidId(id: number): boolean {
   return Number.isInteger(id) && id > 0;
 }
 
-async function addUsersToContest(contestId: number, userIds: number[]): Promise<number> {
+async function addUsersToContest(contestId: number, userIds: number[], validIps: string[]): Promise<number> {
   let addedCount = 0;
 
   for (const userId of userIds) {
-    const inserted = await prisma.$executeRaw`
-      INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
-      VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-      ON CONFLICT (contest_id, user_id) DO NOTHING
-    `;
+    const inserted = await insertParticipation(contestId, userId, null, validIps);
     if (inserted > 0) addedCount += 1;
   }
 
   return addedCount;
+}
+
+async function resolveContestAddAllowlist(
+  raw: unknown,
+  userId: string,
+): Promise<{ validIps: string[]; error?: string }> {
+  const permissions = (await getFreshPermissions(userId)) ?? new Set<string>();
+  return resolveAllowlistInput(raw, permissions);
 }
 
 export async function handleContest({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
@@ -56,16 +63,19 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
 
   if (mode === 'add') {
     // WHY participation:create: this inserts participations rows.
-    const { authorized, response } = await verifyApiPermission('participation:create');
+    const { authorized, response, session } = await verifyApiPermission('participation:create');
     if (!authorized) return response;
 
-    const addedCount = await addUsersToContest(contestId, userIds);
+    const { validIps, error } = await resolveContestAddAllowlist(body.ip, session.userId);
+    if (error) return apiError({ message: error, status: 400 });
+
+    const addedCount = await addUsersToContest(contestId, userIds, validIps);
     await resyncRankingUsers(contestId);
     await recordAudit({
       verb: 'participation:create',
       entity: 'contest',
       entityId: String(contestId),
-      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount },
+      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount, ip: validIps },
       result: 'success',
     });
     revalidateUserContestPages();

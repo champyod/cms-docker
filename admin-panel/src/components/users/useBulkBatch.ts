@@ -12,6 +12,8 @@ interface BatchDeps {
   selectedContestId: number;
   teamContestId: number;
   teamCode: string;
+  ipContestId: number;
+  ip: string;
   timezone: string;
   emailDomain: string;
   setLoading: (value: boolean) => void;
@@ -148,12 +150,23 @@ export function useBulkBatch(deps: BatchDeps) {
     );
   };
 
+  const runIpAllowlist = (): void => {
+    if (deps.selectedUserIds.length === 0 || !deps.ipContestId) return;
+    if (!requireValue(deps.ip, 'IP allowlist', deps.setErrorMessage)) return;
+    void runBatchAction(
+      { action: 'participation', mode: 'ip', contestId: deps.ipContestId, ip: deps.ip.trim(), userIds: deps.selectedUserIds },
+      (result) => `Updated the IP allowlist for ${result.updatedCount ?? 0} user(s)`,
+      { fallbackError: 'Failed to update the IP allowlist' }
+    );
+  };
+
   return {
     runBatchAction,
     exportCurrentPasswords,
     runContestMutation,
     runTeamSet,
     runTeamRemoveAny,
+    runIpAllowlist,
     runTimezoneUpdate,
     runEmailDomainUpdate,
     runEmailClear,

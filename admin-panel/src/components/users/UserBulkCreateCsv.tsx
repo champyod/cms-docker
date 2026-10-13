@@ -57,6 +57,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
   const [submitResult, setSubmitResult] = useState<BulkSubmitResult | null>(null);
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
   const [contestId, setContestId] = useState<number>(0);
+  const [ip, setIp] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
 
   const placeholder = useMemo(() => TEMPLATE_CSV, []);
@@ -133,6 +134,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
         })),
         generationMode,
         contestId: contestId || undefined,
+        ip: ip.trim() || undefined,
         passwordKind,
       });
 
@@ -180,8 +182,10 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
           canReadContests={canReadContests}
           csvText={csvText}
           placeholder={placeholder}
+          ip={ip}
           onContestIdChange={setContestId}
           onCsvTextChange={setCsvText}
+          onIpChange={setIp}
           onDownloadTemplate={handleDownloadTemplate}
           onUploadFile={handleUploadFile}
           onRebuildPreview={() => buildPreview(csvText, generationMode)}

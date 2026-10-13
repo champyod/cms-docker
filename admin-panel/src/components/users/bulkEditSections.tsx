@@ -1,6 +1,8 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
+import { useDictionary } from '@/hooks/useDictionary';
+import { IpAllowlistInput } from './IpAllowlistInput';
 import type { ContestOption } from './bulkEditActions';
 
 const CONTEST_SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
@@ -166,6 +168,42 @@ export function ProfileSection({ timezone, emailDomain, loading, hasRows, onTime
           Reset email
         </Button>
       </div>
+    </SectionBox>
+  );
+}
+
+interface IpAllowlistSectionProps {
+  contests: ContestOption[];
+  contestId: number;
+  ip: string;
+  loading: boolean;
+  hasRows: boolean;
+  onContestIdChange: (id: number) => void;
+  onIpChange: (value: string) => void;
+  onRunIpAllowlist: () => void;
+}
+
+export function IpAllowlistSection({ contests, contestId, ip, loading, hasRows, onContestIdChange, onIpChange, onRunIpAllowlist }: IpAllowlistSectionProps) {
+  const dictionary = useDictionary();
+  return (
+    <SectionBox title={dictionary.users.bulkEdit.ipTitle}>
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={contestId}
+          title={dictionary.users.bulkEdit.ipContest}
+          onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
+          className={CONTEST_SELECT_CLASS}
+        >
+          {contests.map((contest) => (
+            <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+          ))}
+        </select>
+        <IpAllowlistInput value={ip} onChange={onIpChange} />
+        <Button variant="positiveOutline" onClick={onRunIpAllowlist} disabled={loading || !hasRows || !contestId}>
+          {dictionary.users.bulkEdit.ipApply}
+        </Button>
+      </div>
+      <p className="text-xs text-muted-foreground">{dictionary.participation.ip.hint}</p>
     </SectionBox>
   );
 }
