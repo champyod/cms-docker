@@ -195,6 +195,45 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.assertSuccess("myuser", "mypass", "10.0.0.1", "admin-token")
         self.assertSuccess("myuser", "mypass", "10.0.1.1", "admin-token")
 
+    # --- last_login_at stamping ---
+
+    def test_successful_password_login_stamps_last_login_at(self):
+        # WHY flush-and-expire: without a flush the column write stays in the
+        # identity map; without expire we read back the in-memory value, not
+        # the one the session would commit to the DB, so the assertion would
+        # pass even if the Column declaration were missing.
+        self.session.flush()
+        self.session.expire(self.user)
+
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "mypass", ipaddress.ip_address("127.0.0.1"))
+
+        self.session.flush()
+        self.session.refresh(self.user)
+
+        self.assertIsNotNone(self.user.last_login_at)
+        self.assertEqual(self.user.last_login_at, self.timestamp)
+
+    def test_failed_login_does_not_stamp_last_login_at(self):
+        # Ensure the column stays untouched when the password is wrong so that
+        # the timestamp always reflects a proven credential, not any attempt.
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "wrongpassword", ipaddress.ip_address("127.0.0.1"))
+
+        self.assertIsNone(self.user.last_login_at)
+
+    def test_impersonation_does_not_stamp_last_login_at(self):
+        # WHY excluded: impersonation proves the admin token, not the user's
+        # own password, so the timestamp must not reflect admin activity.
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "", ipaddress.ip_address("127.0.0.1"),
+            admin_token="admin-token")
+
+        self.assertIsNone(self.user.last_login_at)
+
 
 class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
 

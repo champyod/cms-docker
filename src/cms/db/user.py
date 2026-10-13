@@ -97,6 +97,14 @@ class User(Base):
         nullable=False,
         default=[])
 
+    # Timestamp of the most recent successful password login through CWS.
+    # Written by validate_login on success so the admin panel can surface it
+    # under the audit:read permission. NULL when the user has never logged in
+    # or the column has not yet been backfilled.
+    last_login_at: datetime | None = Column(
+        DateTime,
+        nullable=True)
+
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
 
