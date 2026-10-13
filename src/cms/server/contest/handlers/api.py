@@ -25,24 +25,16 @@ import logging
 
 from cms.db.submission import Submission
 from cms.db.user import Participation
-from cms.server import multi_contest
-from cms.server.captcha import CaptchaOutcome, extract_provider, extract_token
+from cms.server import login_refusal, multi_contest
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
+from cms.server.login_refusal import LoginRefusal
 from .contest import ContestHandler, api_login_required
 from ..phase_management import actual_phase_required
 
 logger = logging.getLogger(__name__)
-
-
-# WHY 429 for a lockout and not the 403 every other rejection on this endpoint
-# answers with: a client, a script or a WAF has to be able to tell "stop
-# trying" from "wrong password", otherwise the refusal is indistinguishable
-# from an ordinary failed login and nothing can be acted on. 429 is what the
-# registration path uses in the sibling handler for the same meaning, that of
-# an attempt refused before the credential was checked.
-LOGIN_LOCKED_STATUS = 429
 
 
 class ApiContestHandler(ContestHandler):
@@ -98,7 +90,7 @@ class ApiLoginHandler(ApiContestHandler):
         """
         if participation is None:
             self.captcha.record_failure(username, self.request.remote_ip)
-            self.json({"error": "Login failed"}, 403)
+            self._refuse(login_refusal.CREDENTIALS)
         elif login_data is not None:
             # WHY record_success here and in the branch below: whoever ends up
             # authenticated has proven they are not guessing, so the failures
@@ -121,60 +113,55 @@ class ApiLoginHandler(ApiContestHandler):
     def _may_examine_password(self, username: str, admin_token: str) -> bool:
         """Return whether this attempt may reach the password check.
 
-        The captcha gate and the lockout gate in the order they have to run in,
-        so that neither layer is accidentally moved past the credential check.
+        The lockout gate and the captcha gate in the order they have to run in,
+        neither of them charging a failure the attempt did not earn.
 
         """
-        # WHY a token is exempt from the challenge as well as from the lockout
-        # below: a script, a client or a WAF authenticating with an admin token
-        # is not guessing, and this endpoint is JSON with no page to host an
-        # interactive challenge, so demanding one would reproduce exactly the
-        # unsatisfiable gate the contest form had. The token is still validated
-        # afterwards by validate_login, so one that turns out to be invalid
-        # fails as an ordinary rejected login.
-        captcha_demanded = admin_token == "" and self.captcha.is_required(
-            username, self.request.remote_ip)
+        ip = self.request.remote_ip
 
-        # WHY the captcha comes first: a wrong or forged answer must not reach
-        # the password check at all, or the layer only slows the part of the
-        # attempt that costs the attacker nothing. is_required() is the single
-        # authority on whether a captcha is demanded, so an attempt below the
-        # threshold never reaches the provider at all.
-        if captcha_demanded:
-            outcome = self.captcha.verify(
-                username, self.request.remote_ip, extract_token(self),
-                extract_provider(self))
-            if outcome is not CaptchaOutcome.ALLOWED:
-                logger.info("CAPTCHA refused for API login %r from IP %s: %s.",
-                            username, self.request.remote_ip, outcome.value)
-                self.captcha.record_failure(username, self.request.remote_ip)
-                self.json({"error": "Login failed"}, 403)
-                return False
-
-        # WHY the lockout comes after it and before validate_login: the password
-        # of a locked-out account is the work the lockout exists to skip. A
-        # token is exempted: an administrator impersonating a contestant proves
-        # who they are with the token and not with the contestant's password,
-        # so that contestant's own failures must not lock the administrator out
-        # of an account they are acting on. The check still holds against a
-        # token that turns out to be invalid, because validate_login then
-        # fails it as an ordinary rejected login.
-        if admin_token == "" and self.captcha.is_locked(
-                username, self.request.remote_ip):
-            # WHY not recorded as another failure: the count is already at the
-            # threshold and is never reset while the window is live, so
-            # incrementing it here would slide the window forward on every
-            # attempt and turn a lockout someone waits out into one that never
-            # ends for an address that keeps trying.
+        # WHY the lockout first: while it holds it is what refused the attempt,
+        # and a challenge refusal would send the user to fix a captcha that is
+        # not the obstacle while calling the provider for nothing.
+        # WHY not recorded as another failure: the count is already at the
+        # threshold and is never reset while the window is live, so incrementing
+        # it here would slide the window forward on every attempt and turn a
+        # lockout someone waits out into one that never ends for an address that
+        # keeps trying.
+        if admin_token == "" and self.captcha.is_locked(username, ip):
             logger.info("Login refused, account or IP %r locked out from IP %s.",
-                        username, self.request.remote_ip)
-            self.json({
-                "error": "Account or IP address locked out after too many "
-                         "failed attempts. Retry later.",
-            }, LOGIN_LOCKED_STATUS)
+                        username, ip)
+            self._refuse(login_refusal.locked_refusal(
+                self.captcha.counters.retry_after(username, ip)))
             return False
 
+        # WHY a token is exempt from the challenge as well as from the lockout:
+        # this endpoint is JSON with nowhere to answer a challenge, so demanding
+        # one would reproduce the unsatisfiable gate the form had. The token is
+        # still validated afterwards, so an invalid one fails as an ordinary
+        # rejected login.
+        # WHY the captcha comes before the credential check: a wrong or forged
+        # answer must not reach it at all. is_required() is the single authority
+        # on whether a challenge is demanded.
+        if admin_token == "" and self.captcha.is_required(username, ip):
+            outcome = self.captcha.verify(
+                username, ip, extract_token(self), extract_provider(self))
+            captcha_refusal = login_refusal.refusal_for_outcome(outcome)
+            if captcha_refusal is not None:
+                # WHY the counter is left alone: the answer says nothing about
+                # the password, and charging it climbs the ratchet towards a ban
+                # this attempt never earned.
+                logger.info("CAPTCHA refused for API login %r from IP %s: %s.",
+                            username, ip, outcome.value)
+                self._refuse(captcha_refusal)
+                return False
+
         return True
+
+    def _refuse(self, refusal: LoginRefusal) -> None:
+        """Answer one refusal, in the shape every API client reads."""
+        if refusal.retry_after is not None:
+            self.set_header("Retry-After", str(refusal.retry_after))
+        self.json(refusal.body(), refusal.status)
 
     def _answer_already_logged_in(self, username: str) -> None:
         """Answer a login request from a client that is already authenticated.

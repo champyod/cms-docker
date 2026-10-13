@@ -33,6 +33,7 @@ import json
 import logging
 import os.path
 import re
+import typing
 
 import collections
 
@@ -51,11 +52,12 @@ from cms import config
 from cms.db import User, Participation, Team
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
-from cms.server import multi_contest
-from cms.server.captcha import CaptchaOutcome, extract_provider, extract_token
+from cms.server import login_refusal, multi_contest
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
+from cms.server.login_refusal import LoginRefusal
 from cmscommon.crypto import hash_password, validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
 from .contest import ContestHandler, api_login_required
@@ -63,16 +65,6 @@ from ..phase_management import actual_phase_required
 
 
 logger = logging.getLogger(__name__)
-
-
-# WHY 429 for a lockout and not the 403 this handler answers a wrong password
-# with: a client, a proxy or a WAF has to be able to tell "stop trying" from
-# "wrong password", otherwise the refusal reads as an ordinary failed login and
-# there is nothing to act on. 429 is what the registration path already uses
-# here to mean "this attempt was refused before the credential was checked", and
-# Retry-After tells the caller how long the window lasts.
-LOGIN_LOCKED_STATUS = 429
-LOGIN_LOCKED_RETRY_AFTER = 15 * 60
 
 
 # Dummy function to mark translatable strings.
@@ -128,18 +120,16 @@ class RegistrationHandler(ContestHandler):
         if not self.contest.allow_registration:
             raise tornado.web.HTTPError(404)
 
-        # WHY 429 and not 403: this path already answers 403 for "the password
-        # is not correct", so a captcha refusal needs its own code for the
-        # browser's jQuery handler to tell apart from a genuine credential
-        # error. 429 also describes what actually happened, and the handler's
-        # own script shows the widget again after it.
-        outcome = self.captcha.verify(
+        # WHY the refusal's own status and not 403: this path already answers
+        # 403 for "the password is not correct", and the browser's jQuery handler
+        # tells the two apart by the code alone.
+        refusal = login_refusal.registration_refusal(self.captcha.verify(
             self.get_argument("username", ""), self.request.remote_ip,
-            extract_token(self), extract_provider(self))
-        if outcome is not CaptchaOutcome.ALLOWED:
+            extract_token(self), extract_provider(self)))
+        if refusal is not None:
             logger.info("CAPTCHA refused on registration from IP %s: %s.",
-                        self.request.remote_ip, outcome.value)
-            raise tornado.web.HTTPError(429)
+                        self.request.remote_ip, refusal.reason)
+            raise tornado.web.HTTPError(refusal.status)
 
         create_new_user = self.get_argument("new_user") == "true"
 
@@ -266,8 +256,6 @@ class LoginHandler(ContestHandler):
     """
     @multi_contest
     def post(self):
-        next_page, error_page = self._login_pages()
-
         username: str = self.get_argument("username", "")
         password: str = self.get_argument("password", "")
 
@@ -278,8 +266,9 @@ class LoginHandler(ContestHandler):
                            self.request.remote_ip)
             return None
 
-        if not self._may_examine_password(username):
-            self.redirect(error_page)
+        refusal = self._may_examine_password(username)
+        if refusal is not None:
+            self._refuse(refusal)
             return
 
         participation, cookie = validate_login(
@@ -290,76 +279,84 @@ class LoginHandler(ContestHandler):
 
         if participation is None:
             self.captcha.record_failure(username, self.request.remote_ip)
-            self.redirect(error_page)
+            self.redirect(self._error_page(login_refusal.CREDENTIALS.reason))
         else:
             # WHY record_success here: whoever finally gets the password right
             # has proven they are not guessing, so the failures behind this
             # account and address are dropped and a mistyped password cannot
             # accumulate into a lockout.
             self.captcha.record_success(username, self.request.remote_ip)
-            self.redirect(next_page)
+            self.redirect(self._next_page())
 
-    def _may_examine_password(self, username: str) -> bool:
-        """Return whether this attempt may reach the password check.
+    def _may_examine_password(self, username: str
+                              ) -> typing.Optional[LoginRefusal]:
+        """Return the refusal that stops this attempt, None to examine the password.
 
-        The captcha gate and the lockout gate in the order they have to run in,
-        so that neither layer is accidentally moved past the credential check.
+        The lockout gate and the captcha gate in the order they have to run in,
+        neither of them charging a failure the attempt did not earn.
 
         """
-        # WHY the captcha comes first: a wrong or forged answer must not be
-        # worth anything to an attacker, so the credentials are not examined
-        # until the captcha has passed.
-        outcome = self.captcha.verify(
-            username, self.request.remote_ip, extract_token(self),
-            extract_provider(self))
-        if outcome is not CaptchaOutcome.ALLOWED:
-            logger.info("CAPTCHA refused for user %r from IP %s: %s.", username,
-                        self.request.remote_ip, outcome.value)
-            return False
+        ip = self.request.remote_ip
 
-        # WHY the lockout comes after it and before validate_login: the password
-        # of a locked-out account is the work the lockout exists to skip, and
-        # this form has no admin token, so there is no impersonation path to
-        # exempt here. is_locked is not gated on the captcha being configured,
+        # WHY the lockout first: while it holds it is what refused the attempt,
+        # and a challenge refusal would send the user to fix a captcha that is
+        # not the obstacle while calling the provider for nothing.
+        # WHY not recorded as another failure: the count is already at the
+        # threshold and is never reset while the window is live, so incrementing
+        # it here would slide the window forward on every attempt and turn a
+        # lockout someone waits out into one that never ends for an address that
+        # keeps trying. is_locked is not gated on the captcha being configured,
         # so a deployment with it off is still refused.
-        if self.captcha.is_locked(username, self.request.remote_ip):
-            # WHY not recorded as another failure: the count is already at the
-            # threshold and is never reset while the window is live, so
-            # incrementing it here would slide the window forward on every
-            # attempt and turn a lockout someone waits out into one that never
-            # ends for an address that keeps trying.
+        if self.captcha.is_locked(username, ip):
             logger.info("Login refused, account or IP %r locked out from IP %s.",
-                        username, self.request.remote_ip)
-            self._refuse_locked_out()
+                        username, ip)
+            return login_refusal.locked_refusal(
+                self.captcha.counters.retry_after(username, ip))
 
-        return True
+        # WHY the captcha comes before the credential check: a wrong or forged
+        # answer must not be worth anything to an attacker, so the credentials
+        # are not examined until the challenge has passed.
+        refusal = login_refusal.refusal_for_outcome(self.captcha.verify(
+            username, ip, extract_token(self), extract_provider(self)))
+        if refusal is not None:
+            logger.info("CAPTCHA refused for user %r from IP %s: %s.", username,
+                        ip, refusal.reason)
+        return refusal
 
-    def _login_pages(self) -> tuple[str, str]:
-        """Return where a failed and a successful login lead.
+    def _next_page(self) -> str:
+        """Return where a successful login leads."""
+        next_page: str | None = self.get_argument("next", None)
+        if next_page is None:
+            return self.contest_url()
+        if next_page == "/":
+            return self.url()
+        return self.url(*next_page.strip("/").split("/"))
 
-        Split out of `post` so the redirect targets are built once and the
-        handler's own flow stays readable.
+    def _error_page(self, reason: str) -> str:
+        """Return the login page URL carrying the refusal's reason.
+
+        WHY the username rides in the redirect: the login page recomputes the
+        captcha from the counters, and a loopback client has no address bucket to
+        read, so without the username the account's own count would be invisible
+        and the widget would stay away while the next attempt is refused for
+        lacking its token.
 
         """
-        error_args = {"login_error": "true"}
-        # WHY the username rides in the error redirect: the login page recomputes
-        # the captcha from the counters, and a loopback client has no address
-        # bucket to read, so without the username the account's own count would
-        # be invisible and the widget would stay away while the next attempt is
-        # refused for lacking its token.
+        error_args = {"login_error": reason}
         username = self.get_argument("username", "")
         if len(username) > 0:
             error_args["username"] = username
         next_page: str | None = self.get_argument("next", None)
         if next_page is not None:
             error_args["next"] = next_page
-            if next_page != "/":
-                next_page = self.url(*next_page.strip("/").split("/"))
-            else:
-                next_page = self.url()
-        else:
-            next_page = self.contest_url()
-        return next_page, self.contest_url(**error_args)
+        return self.contest_url(**error_args)
+
+    def _refuse(self, refusal: LoginRefusal) -> None:
+        """Answer one refusal: the status page for a lockout, the form otherwise."""
+        if refusal.status == login_refusal.LOCKED_STATUS:
+            self._refuse_locked_out(refusal)
+            return
+        self.redirect(self._error_page(refusal.reason))
 
     def _apply_login_cookie(self, cookie: bytes | None) -> None:
         """Issue the contest's login cookie, or drop the one held.
@@ -379,7 +376,7 @@ class LoginHandler(ContestHandler):
             max_age=config.contest_web_server.cookie_duration,
         )
 
-    def _refuse_locked_out(self) -> None:
+    def _refuse_locked_out(self, refusal: LoginRefusal) -> None:
         """Answer an attempt from a locked-out account or address.
 
         The status is raised rather than rendered: the surrounding page shows
@@ -388,12 +385,12 @@ class LoginHandler(ContestHandler):
         registration path in this file uses the same idiom.
 
         """
-        self.set_header("Retry-After", str(LOGIN_LOCKED_RETRY_AFTER))
+        self.set_header("Retry-After", str(refusal.retry_after))
         # WHY carried on the handler too: write_error renders the status page,
         # and it is the only place a locked-out user is told why and for how
         # long, so the window has to reach the template.
-        self.lockout_retry_after = LOGIN_LOCKED_RETRY_AFTER
-        raise tornado.web.HTTPError(LOGIN_LOCKED_STATUS)
+        self.lockout_retry_after = refusal.retry_after
+        raise tornado.web.HTTPError(refusal.status)
 
 
 class StartHandler(ContestHandler):

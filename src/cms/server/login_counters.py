@@ -155,6 +155,19 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
         """
         return self.count(username, ip) >= self._ban_threshold
 
+    def retry_after(self, username: str, ip: str) -> float:
+        """Return the seconds left before the recorded failures lapse.
+
+        The longer of the two windows, because either bucket can be the one that
+        holds the lockout: an address that rotated usernames has only its own.
+
+        """
+        with self._lock:
+            buckets = [self._backend.read(f"{username}|{ip}"),
+                       self._backend.read(self._ip_key(ip))]
+        spans = [bucket[1] for bucket in buckets if bucket is not None]
+        return max(spans) if spans else 0.0
+
     def record_failure(self, username: str, ip: str) -> None:
         """Count one more failed attempt against this account and address.
 

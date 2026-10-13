@@ -13,7 +13,12 @@
 
 {% if admin is undefined %}
 <h1>Welcome</h1>
-    {% if handler.get_argument("login_error", "") != "" %}
+    {% set login_error = handler.get_argument("login_error", "") %}
+    {% if login_error == "captcha_failed" %}
+<h4 class="alert">The challenge could not be verified. Please try again.</h4>
+    {% elif login_error == "captcha_unavailable" %}
+<h4 class="alert">The challenge service is unreachable. Please try again in a moment.</h4>
+    {% elif login_error != "" %}
 <h4 class="alert">Failed to log in.</h4>
     {% endif %}
 <p>Please log in:</p>

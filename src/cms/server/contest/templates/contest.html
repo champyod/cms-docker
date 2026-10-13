@@ -77,11 +77,18 @@ $(document).ready(function () {
             </div>
         </div>
 {% if participation is undefined %}
-    {% if handler.get_argument("login_error", "") != "" %}
+    {% set login_error = handler.get_argument("login_error", "") %}
+    {% if login_error != "" %}
         <div id="notifications" class="notifications">
             <div class="alert alert-block alert-error notification">
                 <a class="close" data-dismiss="alert" href="#">&#xD7;</a>
+                {% if login_error == "captcha_failed" %}
+                <h4 class="alert-heading">{% trans %}The challenge could not be verified. Please try again.{% endtrans %}</h4>
+                {% elif login_error == "captcha_unavailable" %}
+                <h4 class="alert-heading">{% trans %}The challenge service is unreachable. Please try again in a moment.{% endtrans %}</h4>
+                {% else %}
                 <h4 class="alert-heading">{% trans %}Failed to log in.{% endtrans %}</h4>
+                {% endif %}
             </div>
         </div>
     {% endif %}

@@ -107,6 +107,7 @@ backend = _load("cms.server.login_counter_backend",
 counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
 health = _load("cms.server.captcha_health", "cms/server/captcha_health.py")
 captcha = _load("cms.server.captcha", "cms/server/captcha.py")
+refusal = _load("cms.server.login_refusal", "cms/server/login_refusal.py")
 
 REMOTE_IP = "203.0.113.7"
 
@@ -464,7 +465,7 @@ def _login_page_facts(captcha_facts: dict) -> dict:
     }
 
 
-def _render_admin_login(captcha_facts: dict) -> str:
+def _render_admin_login(captcha_facts: dict, handler=None) -> str:
     """Render the classic admin login page the AWS itself serves.
 
     The admin page is a standalone template with its own root and no i18n
@@ -477,7 +478,8 @@ def _render_admin_login(captcha_facts: dict) -> str:
         loader=jinja2.FileSystemLoader(ADMIN_TEMPLATES))
     return environment.get_template("login.html").render(
         url=lambda *_args, **_kwargs: "/static/x",
-        handler=Attributes(get_argument=lambda _name, default="": default),
+        handler=handler if handler is not None else Attributes(
+            get_argument=lambda _name, default="": default),
         xsrf_form_html="",
         **captcha_facts)
 
@@ -818,6 +820,7 @@ class ApiLoginHandler:
         self.arguments = arguments if arguments is not None else {}
         self.request = Attributes(remote_ip=REMOTE_IP)
         self.answers: list = []
+        self.headers: dict = {}
         self.contest = None
         self.sql_session = None
         self.timestamp = None
@@ -825,6 +828,7 @@ class ApiLoginHandler:
     post = api.ApiLoginHandler.post
     _may_examine_password = api.ApiLoginHandler._may_examine_password
     _answer_login_result = api.ApiLoginHandler._answer_login_result
+    _refuse = api.ApiLoginHandler._refuse
 
     def get_argument(self, name, default=""):
         return self.arguments.get(name, default)
@@ -834,6 +838,9 @@ class ApiLoginHandler:
 
     def create_signed_value(self, _name, value):
         return value
+
+    def set_header(self, name, value):
+        self.headers[name] = value
 
     def json(self, payload, status=200):
         self.answers.append((payload, status))
@@ -862,7 +869,8 @@ class ApiCaptchaGateTest(unittest.TestCase):
         handler = ApiLoginHandler(subject)
 
         self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
-        self.assertEqual(handler.answers, [({"error": "Login failed"}, 403)])
+        self.assertEqual(handler.answers,
+                         [(refusal.CHALLENGE_FAILED.body(), 403)])
 
     def test_a_login_below_the_threshold_never_reaches_the_provider(self):
         # is_required() is the single authority on whether a captcha is
@@ -889,7 +897,189 @@ class ApiCaptchaGateTest(unittest.TestCase):
 
         self.assertEqual(len(VALIDATED_LOGINS), 1)
         self.assertEqual(VALIDATED_LOGINS[0][1]["admin_token"], "admin-token")
-        self.assertEqual(handler.answers, [({"error": "Login failed"}, 403)])
+        self.assertEqual(handler.answers, [(refusal.CREDENTIALS.body(), 403)])
+
+
+class RefusalTableTest(unittest.TestCase):
+    """The one table every login surface refuses through."""
+
+    def test_every_outcome_that_is_not_allowed_is_mapped(self):
+        # A member added to CaptchaOutcome later has to refuse the attempt, so
+        # the table is asserted to be as complete as the enum.
+        self.assertEqual(set(refusal.OUTCOME_REFUSALS),
+                         set(captcha.CaptchaOutcome)
+                         - {captcha.CaptchaOutcome.ALLOWED})
+
+    def test_an_allowed_outcome_is_not_a_refusal(self):
+        self.assertIsNone(refusal.refusal_for_outcome(captcha.CaptchaOutcome.ALLOWED))
+
+    def test_the_credential_refusal_stays_generic(self):
+        # The message must not tell a caller whether the account exists.
+        self.assertEqual(refusal.CREDENTIALS.message, "Login failed")
+
+    def test_a_captcha_refusal_answers_its_own_status(self):
+        self.assertEqual(refusal.CHALLENGE_FAILED.status, 403)
+        self.assertEqual(refusal.UNAVAILABLE.status, 503)
+
+    def test_registration_refuses_a_challenge_with_its_own_status(self):
+        # The register form spends 403 on "the password is not correct" and its
+        # script tells the two apart by the status alone, so a refused challenge
+        # cannot reuse it.
+        self.assertEqual(
+            refusal.registration_refusal(
+                captcha.CaptchaOutcome.CHALLENGE_FAILED).status,
+            refusal.LOCKED_STATUS)
+        self.assertEqual(
+            refusal.registration_refusal(
+                captcha.CaptchaOutcome.PROVIDER_UNREACHABLE).status, 503)
+
+    def test_a_lockout_states_the_measured_wait(self):
+        self.assertEqual(refusal.locked_refusal(42).retry_after, 42)
+
+    def test_an_unmeasured_wait_reports_the_whole_window(self):
+        # Reporting zero would tell a locked-out client to retry at once.
+        self.assertEqual(refusal.locked_refusal(0).retry_after,
+                         counters.FAILURE_WINDOW)
+
+
+class CounterWaitTest(unittest.TestCase):
+    """The counters can state how long a lockout still holds."""
+
+    def test_a_live_count_reports_the_window_left(self):
+        clock = ManualClock()
+        subject = captcha.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        subject.record_failure("admin", REMOTE_IP)
+        clock.advance(60)
+
+        self.assertAlmostEqual(subject.retry_after("admin", REMOTE_IP),
+                               counters.FAILURE_WINDOW - 60, places=3)
+
+    def test_an_address_count_alone_still_reports_a_wait(self):
+        # The address bucket is the one that holds when usernames rotate.
+        clock = ManualClock()
+        subject = captcha.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        subject.record_failure("someone", REMOTE_IP)
+        clock.advance(30)
+
+        self.assertAlmostEqual(subject.retry_after("nobody", REMOTE_IP),
+                               counters.FAILURE_WINDOW - 30, places=3)
+
+    def test_no_count_reports_no_wait(self):
+        self.assertEqual(captcha.LoginFailureCounters().retry_after(
+            "admin", REMOTE_IP), 0.0)
+
+
+class ApiRefusalTest(unittest.TestCase):
+    """Which outcomes are charged, and what each one answers."""
+
+    def test_a_rejected_challenge_is_not_charged(self):
+        # A token the provider refused says nothing about the password, so
+        # charging it climbs a ratchet the attempt never earned.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP),
+                         OVER_CAPTCHA_THRESHOLD)
+        self.assertEqual(handler.answers[0][1], refusal.CHALLENGE_FAILED.status)
+        self.assertEqual(handler.answers[0][0]["reason"],
+                         refusal.CHALLENGE_FAILED.reason)
+
+    def test_an_unreachable_provider_is_not_charged(self):
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("turnstile")
+
+        subject = configured(verify=unreachable)
+        for _ in range(OVER_CAPTCHA_THRESHOLD):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP),
+                         OVER_CAPTCHA_THRESHOLD)
+        self.assertEqual(handler.answers, [(refusal.UNAVAILABLE.body(), 503)])
+
+    def test_a_wrong_password_is_still_charged_and_stays_generic(self):
+        subject = configured()
+        handler = ApiLoginHandler(subject)
+
+        handler._answer_login_result(CONTESTANT, None, None)
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP), 1)
+        self.assertEqual(handler.answers, [(refusal.CREDENTIALS.body(), 403)])
+
+    def test_a_lockout_answers_its_reason_and_its_wait(self):
+        subject = configured(ban_threshold=5)
+        for _ in range(5):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        payload, status = handler.answers[0]
+        self.assertEqual(status, refusal.LOCKED_STATUS)
+        self.assertEqual(payload["reason"], refusal.LOCKED_REASON)
+        self.assertGreater(payload["retry_after_seconds"], 0)
+        self.assertEqual(handler.headers["Retry-After"],
+                         str(payload["retry_after_seconds"]))
+
+    def test_a_locked_account_hears_about_the_lockout_not_the_challenge(self):
+        # Answering "challenge failed" sends a locked-out user to fix a captcha
+        # that is not what refused them, and calls the provider for nothing.
+        called = []
+
+        def refuse(*_args):
+            called.append(True)
+            return False
+
+        subject = configured(ban_threshold=5, verify=refuse)
+        for _ in range(5):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(called, [])
+        self.assertEqual(handler.answers[0][1], refusal.LOCKED_STATUS)
+
+
+class LoginPageRefusalTest(unittest.TestCase):
+    """The login pages name a challenge refusal instead of blaming the password."""
+
+    def _contest_page(self, reason: str) -> str:
+        facts = _login_page_facts(configured().render_params("", REMOTE_IP))
+        facts["handler"] = Attributes(
+            get_argument=lambda name, default="":
+            reason if name == "login_error" else default)
+        return _render("contest.html", facts)
+
+    def _admin_page(self, reason: str) -> str:
+        return _render_admin_login(
+            configured(enabled=False).render_params("", REMOTE_IP),
+            handler=Attributes(
+                get_argument=lambda name, default="":
+                reason if name == "login_error" else default))
+
+    def test_a_challenge_refusal_is_named_on_both_pages(self):
+        # Every captcha reason in the table has to reach a branch that says so,
+        # or the page blames the password for a challenge that never registered.
+        for outcome in captcha.CaptchaOutcome:
+            refusal_for = refusal.refusal_for_outcome(outcome)
+            if refusal_for is None:
+                continue
+            for page in (self._contest_page(refusal_for.reason),
+                         self._admin_page(refusal_for.reason)):
+                with self.subTest(reason=refusal_for.reason):
+                    self.assertIn("The challenge", page)
+                    self.assertNotIn("Failed to log in.", page)
+
+    def test_a_credential_failure_still_reads_as_one(self):
+        self.assertIn("Failed to log in.", self._contest_page("credentials"))
+        self.assertIn("Failed to log in.", self._admin_page("credentials"))
 
 
 if __name__ == "__main__":
