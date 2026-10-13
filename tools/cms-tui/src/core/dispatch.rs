@@ -86,6 +86,8 @@ pub enum DispatchKey {
     FunnelStatus,
     /// `./cms contest create`
     ContestCreate,
+    /// `./cms contest set-active <id>`
+    ContestSetActive,
     /// `./cms update-server`
     UpdateServer,
     /// `./cms domain setup`
@@ -169,6 +171,7 @@ mod tests {
         DispatchKey::FunnelRemove,
         DispatchKey::FunnelStatus,
         DispatchKey::ContestCreate,
+        DispatchKey::ContestSetActive,
         DispatchKey::UpdateServer,
         DispatchKey::DomainSetup,
         DispatchKey::DomainCert,

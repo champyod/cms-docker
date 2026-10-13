@@ -1288,6 +1288,108 @@ migrate_split_env_files() {
   done
 }
 
+# --- Active contest: the database is the source, config.toml is a generated cache ---
+# WHY: contests.is_active is the single source of truth for the active contest. This
+# generator derives [contest] CONTEST_ID from it and writes the value back into config.toml,
+# so the file an operator reads can never drift from the stack it describes. Only a fresh
+# install reads config.toml instead: before cmsInitDB has created the contests table (or
+# before cms-database runs at all) there is nothing in the database to read, and the value
+# already in config.toml is the bootstrap one.
+DB_CONTAINER="cms-database"
+
+# One value out of the running database, or empty. Uses the resolved core.POSTGRES_* values
+# (already projected from the active [db_<name>] profile), so it follows the same database
+# the stack is pointed at.
+db_query() {
+  local sql="$1"
+  docker exec -i -e PGPASSWORD="${__TOML[core.POSTGRES_PASSWORD]:-}" \
+    "$DB_CONTAINER" psql -U "${__TOML[core.POSTGRES_USER]:-cmsuser}" \
+    -d "${__TOML[core.POSTGRES_DB]:-cmsdb}" -tA -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
+}
+
+# The id of the contest flagged active, read into DB_ACTIVE_ID and reported through DB_STATE:
+# "missing" (no database or no contests table yet — bootstrap), "empty" (table exists, no
+# active row) or "active". Returns non-zero only when the database is reachable but the read
+# failed, which the caller treats as fatal rather than guessing.
+db_active_contest_id() {
+  DB_STATE="missing"
+  DB_ACTIVE_ID=""
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.contests') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+  DB_ACTIVE_ID="$(db_query "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")" || return 1
+  DB_STATE="empty"
+  [[ -n "$DB_ACTIVE_ID" ]] && DB_STATE="active"
+  return 0
+}
+
+# Rewrite the [contest] CONTEST_ID value in place, keeping everything after the number
+# (an inline comment) and every other byte of the file. Returns non-zero when the key is
+# absent, because a file the merge should have populated yet does not carry the key is a
+# state to report rather than to invent a section for.
+apply_contest_id_to_config_toml() {
+  local id="$1" tmp line trimmed sec="" written=0
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$sec" == "contest" && "$line" =~ ^([[:space:]]*CONTEST_ID[[:space:]]*=[[:space:]]*)(\"?[0-9]+\"?)(.*)$ ]]; then
+      printf '%s%s%s\n' "${BASH_REMATCH[1]}" "$id" "${BASH_REMATCH[3]}" >> "$tmp"
+      written=1
+      continue
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  if [[ "$written" -ne 1 ]]; then
+    rm -f "$tmp"
+    return 1
+  fi
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Point [contest] CONTEST_ID at the database's active contest, or fail loud. A reachable
+# database that reports no active contest, a read that fails, and a non-numeric id all stop
+# the sync: silently keeping the previous value would let the file and the stack diverge,
+# which is the class of bug this derivation exists to remove.
+derive_contest_id_from_db() {
+  if ! db_active_contest_id; then
+    log_error "cms-database is running but contests.is_active could not be read — refusing to guess the active contest."
+    exit 1
+  fi
+  if [[ "$DB_STATE" == "missing" ]]; then
+    log_info "contests table not available yet — keeping config.toml CONTEST_ID as the bootstrap value"
+    return 0
+  fi
+  if [[ "$DB_STATE" == "empty" ]]; then
+    log_error "no active contest: contests.is_active holds no active row. Set one with './cms contest set-active <id>'."
+    exit 1
+  fi
+  if [[ ! "$DB_ACTIVE_ID" =~ ^[0-9]+$ ]]; then
+    log_error "contests.is_active returned a non-numeric id '${DB_ACTIVE_ID}' — refusing to write it."
+    exit 1
+  fi
+  if [[ "${__TOML[contest.CONTEST_ID]:-}" == "$DB_ACTIVE_ID" ]]; then
+    return 0
+  fi
+  __TOML[contest.CONTEST_ID]="$DB_ACTIVE_ID"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf 'Would set [contest] CONTEST_ID = %s from the database (contests.is_active)\n' "$DB_ACTIVE_ID"
+    return 0
+  fi
+  if ! apply_contest_id_to_config_toml "$DB_ACTIVE_ID"; then
+    log_error "could not write [contest] CONTEST_ID = ${DB_ACTIVE_ID} into $TOML_FILE — the key is missing from [contest]."
+    exit 1
+  fi
+  log_info "active contest CONTEST_ID=${DB_ACTIVE_ID} derived from the database (contests.is_active)"
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -1368,6 +1470,11 @@ main() {
   fi
 
   resolve_active_db_profile
+
+  # WHY after resolve_active_db_profile: the database read needs the [core] POSTGRES_*
+  # values that step projects from the active [db_<name>] profile, and WHY before the .env
+  # writer: the derived id has to reach .env (compose reads ${CONTEST_ID}) on this run.
+  derive_contest_id_from_db
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or

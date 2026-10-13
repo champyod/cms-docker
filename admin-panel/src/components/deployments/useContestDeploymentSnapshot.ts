@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
-import { activateContest, getAvailableContests } from '@/app/actions/contests';
+import { getAvailableContests } from '@/app/actions/contests';
 import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
@@ -56,9 +56,8 @@ export function useContestDeploymentSnapshot({
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
 
   const applyContestSnapshot = useCallback((settings: Record<string, string>, activeId: number | null): number | null => {
-    // Both the active id and the settings below come from config.toml, the file
-    // `./cms config sync` regenerates .env from — the id from [contest] CONTEST_ID,
-    // the settings from the same section.
+    // The settings come from config.toml; the active id comes from the database
+    // (contests.is_active), which config.toml and .env are derived from.
     setActiveContestId(activeId);
     setSelectedContestId(activeId);
     setGlobalSettings(settings);
@@ -97,30 +96,21 @@ export function useContestDeploymentSnapshot({
     const databaseContests = contestsResult.success ? contestsResult.contests : [];
     setAvailableContests(databaseContests);
 
-    // The running stack is the single source of truth for "which contest is live", so the card
-    // shows its contest and falls back to config.toml's CONTEST_ID only when the stack did not
-    // answer. config.toml and the DB are derived from it, never the other way round.
-    const configId = activeResult.success ? activeResult.contestId : null;
+    // The database is the single source of truth for the active contest; config.toml, .env
+    // and the container environment are the same value projected outward. The id the card
+    // shows is therefore the database's, falling back to the container only while the
+    // database read failed — and nothing here writes the database back from the container,
+    // which would let a stack that has not been recreated revert a newer active contest.
+    const dbId = activeResult.success ? activeResult.contestId : null;
     const actualActiveId = applyContestSnapshot(
       settingsResult.success ? settingsResult.values : {},
-      stackId ?? configId,
+      dbId ?? stackId,
     );
 
     const dbActive = databaseContests.find(
       (contest: { id: number; name: string; is_active: boolean }) => contest.is_active === true,
     );
     setDbActiveContestId(dbActive ? dbActive.id : null);
-
-    // Derive contests.is_active from the stack. It is the column's only meaningful writer, so a
-    // stack switch made outside the panel converges here. Best-effort: an operator without
-    // contest:switch leaves the column for a later writer, while the card still shows the truth.
-    if (stackId !== null && stackId !== (dbActive ? dbActive.id : null)) {
-      try {
-        await activateContest(stackId);
-      } catch {
-        // Left for a writer that holds contest:switch.
-      }
-    }
 
     if (actualActiveId !== null) {
       const match = databaseContests.find(

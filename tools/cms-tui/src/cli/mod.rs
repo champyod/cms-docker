@@ -137,10 +137,16 @@ pub enum ConfigSub {
     Show,
 }
 
-/// Contest subcommands (`contest <create>`).
-#[derive(ValueEnum, Clone, Debug)]
+/// Contest subcommands (`contest <create|set-active>`).
+#[derive(Subcommand, Clone, Debug)]
 pub enum ContestSub {
+    /// Create contests from a YAML file.
     Create,
+    /// Set the active contest in the database, the single source of truth.
+    SetActive {
+        /// Contest id to activate.
+        id: u32,
+    },
 }
 
 /// Full-parity CLI, mirroring the `cms` bash dispatcher.
@@ -237,9 +243,9 @@ pub enum Commands {
         #[arg(value_enum)]
         sub: FunnelSub,
     },
-    /// Contest management (`contest create`).
+    /// Contest management (`contest <create|set-active>`).
     Contest {
-        #[arg(value_enum)]
+        #[command(subcommand)]
         sub: ContestSub,
     },
     /// Shard-aware full server update (git+img+db+verify).

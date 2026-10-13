@@ -19,7 +19,8 @@ import {
   type DeployMeta,
 } from '@/lib/deploy-operation-store';
 import { buildContestDeployCommand, buildDeployScript, type ContestDeployPlan } from '@/lib/deploy-command';
-import { readConfigTomlContestId, runConfigSync, updateConfigTomlContestId } from '@/lib/deploy-config';
+import { revertActiveContest, runConfigSync } from '@/lib/deploy-config';
+import { readActiveContestId, writeActiveContestId } from '@/lib/active-contest';
 import { fetchDeployStatus } from '@/lib/deploy-status';
 import { getRepoRoot } from '@/lib/repo-root';
 
@@ -99,19 +100,21 @@ export async function runDeployContest(contestId: number, plan: ContestDeployPla
   try {
     await ensureDeployLogsDir();
     // Why before the guard: a leftover operation that already finished must not block this deploy, and
-    // one that is still running must. Settling also leaves config.toml on the contest the database
+    // one that is still running must. Settling also leaves the active row on the contest the database
     // actually has active, which is the id this deploy records as the one to roll back to.
     await reconcileDeployOperations();
     if ((await getActiveOperationId()) !== null) return { success: false, alreadyRunning: true, error: 'A deploy is already in progress.' };
 
-    const previousContestId = await readConfigTomlContestId();
-    if (previousContestId === null) return { success: false, error: 'Could not read CONTEST_ID from config.toml.' };
+    const previousContestId = (await readActiveContestId()) ?? undefined;
 
-    await updateConfigTomlContestId(contestId);
+    // The database is the single source of truth for the active contest; config.toml and .env are
+    // derived from it by the sync below. Writing the row is what this deploy actually moves — the
+    // file is only the projection compose reads.
+    await writeActiveContestId(contestId);
     try {
       await runConfigSync();
     } catch (error) {
-      await updateConfigTomlContestId(previousContestId).catch(() => {});
+      await revertActiveContest(previousContestId);
       return { success: false, error: 'Config sync failed: ' + (error as Error).message };
     }
 
@@ -120,9 +123,9 @@ export async function runDeployContest(contestId: number, plan: ContestDeployPla
     try {
       await recordDeployOperationStart(operationId, meta);
     } catch (error) {
-      // The contest id is already in config.toml with nothing recorded behind it: revert rather than
-      // leave the file naming a contest the database was never told about.
-      await updateConfigTomlContestId(previousContestId).catch(() => {});
+      // The active row already names this contest with nothing recorded behind it: revert rather than
+      // leave the database naming a contest the operation was never told about.
+      await revertActiveContest(previousContestId);
       return { success: false, error: (error as Error).message };
     }
 
@@ -130,9 +133,9 @@ export async function runDeployContest(contestId: number, plan: ContestDeployPla
       await launchDetachedDeploy(operationId, buildContestDeployCommand(plan));
     } catch (error) {
       // Nothing was started, so there is no work to observe: give back the guard this operation just
-      // took (checked inside `clearActiveOperation`) and the contest id.
+      // took (checked inside `clearActiveOperation`) and the active contest.
       await clearActiveOperation(operationId);
-      await updateConfigTomlContestId(previousContestId).catch(() => {});
+      await revertActiveContest(previousContestId);
       return { success: false, error: (error as Error).message };
     }
 

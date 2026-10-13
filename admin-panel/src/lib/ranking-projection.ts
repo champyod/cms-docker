@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { readConfigTomlContestId } from '@/lib/deploy-config';
+import { readActiveContestId } from '@/lib/active-contest';
 
 /**
  * Encodes an entity id the way ProxyService.encode_id does before it reaches the
@@ -28,7 +28,7 @@ interface ProjectedUser {
  * Mirrors ProxyService.initialize() for the ranked contest: re-pushes its non-hidden
  * participants into the ranking users projection and drops every other key, so a
  * participant added, edited or removed through the panel reaches the ranking without a
- * proxy reinitialize. Only the contest config.toml names active is touched, so editing
+ * proxy reinitialize. Only the contest the database flags active is touched, so editing
  * another contest's participations cannot empty the projection.
  *
  * Best-effort: a failure is logged rather than thrown, because the ranking service
@@ -37,7 +37,7 @@ interface ProjectedUser {
  */
 export async function resyncRankingUsers(contestId: number): Promise<void> {
   try {
-    const activeContestId = await readConfigTomlContestId();
+    const activeContestId = await readActiveContestId();
     if (activeContestId === null || activeContestId !== contestId) return;
 
     const participants = await prisma.participations.findMany({
@@ -74,9 +74,18 @@ export async function resyncRankingUsers(contestId: number): Promise<void> {
   }
 }
 
-/** Resyncs whichever contest config.toml names active; for callers with no contest id. */
+/**
+ * Resyncs whichever contest the database flags active; for callers with no contest id. Best-effort
+ * like `resyncRankingUsers`: a database read that fails must not fail the change that triggered it.
+ */
 export async function resyncActiveRankingUsers(): Promise<void> {
-  const activeContestId = await readConfigTomlContestId();
+  let activeContestId: number | null;
+  try {
+    activeContestId = await readActiveContestId();
+  } catch (error) {
+    console.error('Failed to read the active contest for the ranking users projection:', error);
+    return;
+  }
   if (activeContestId === null) return;
   await resyncRankingUsers(activeContestId);
 }

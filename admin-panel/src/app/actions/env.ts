@@ -6,8 +6,7 @@ import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { validateNotificationEnvUpdates } from '@/lib/discord-webhook';
-import { CONTEST_ID_KEY, setContestId } from '@/lib/active-contest';
-import { CONFIG_TOML_FILE } from '@/lib/config-toml';
+import { CONTEST_ID_KEY, writeActiveContestId } from '@/lib/active-contest';
 
 const ALLOWED_ENV_FILES = new Set(['.env']);
 
@@ -154,14 +153,13 @@ export async function migrateFromMultiContest(): Promise<{ success: true; contes
         if (typeof firstContestId === 'number') {
           content = content.replace(/^CONTESTS_DEPLOY_CONFIG=.*\n?/m, '');
           await fs.writeFile(envPath, content);
-          // The migrated id belongs in config.toml, not in the generated .env.
-          const tomlPath = path.join(repoRoot, CONFIG_TOML_FILE);
-          const tomlContent = await fs.readFile(tomlPath, 'utf-8');
-          await fs.writeFile(tomlPath, setContestId(tomlContent, firstContestId));
+          // The migrated id belongs in the database, the single source of truth; config.toml
+          // and .env are derived from it by the sync.
+          await writeActiveContestId(firstContestId);
           await recordAudit({
             verb: 'env:update',
             entity: 'config',
-            afterValues: { file: CONFIG_TOML_FILE, [CONTEST_ID_KEY]: firstContestId, removedFrom: 'CONTESTS_DEPLOY_CONFIG' },
+            afterValues: { source: 'contests.is_active', [CONTEST_ID_KEY]: firstContestId, removedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             beforeValues: { migratedFrom: 'CONTESTS_DEPLOY_CONFIG' },
             result: 'success',
           });

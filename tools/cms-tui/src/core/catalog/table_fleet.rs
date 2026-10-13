@@ -1,8 +1,8 @@
 use super::{
-    CommandSpec, ARGS_DOMAIN_SETUP, ARGS_DOMAIN_VERB, ARGS_FUNNEL, ARGS_NONE, ARGS_TAILSCALE,
-    ARGS_WORKER, MAKE_CERT_TIMER_INSTALL, SCRIPT_CONFIG_SYNC, SCRIPT_CREATE_CONTESTS,
-    SCRIPT_DOMAIN, SCRIPT_FUNNEL, SCRIPT_TAILSCALE_SERVE, SCRIPT_UPDATE_SERVER,
-    SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
+    CommandSpec, ARGS_CONTEST_ID, ARGS_DOMAIN_SETUP, ARGS_DOMAIN_VERB, ARGS_FUNNEL, ARGS_NONE,
+    ARGS_TAILSCALE, ARGS_WORKER, MAKE_CERT_TIMER_INSTALL, SCRIPT_CONFIG_SYNC,
+    SCRIPT_CONTEST_SET_ACTIVE, SCRIPT_CREATE_CONTESTS, SCRIPT_DOMAIN, SCRIPT_FUNNEL,
+    SCRIPT_TAILSCALE_SERVE, SCRIPT_UPDATE_SERVER, SCRIPT_WORKER_CGROUP, SCRIPT_WORKER_TUI,
 };
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 
@@ -130,6 +130,15 @@ pub const FLEET_CATALOG: &[CommandSpec] = &[
         args: ARGS_NONE,
         about: "Contest create",
         requires_tty: true,
+        requires_sudo: false,
+        capture_output: false,
+    },
+    CommandSpec {
+        key: DispatchKey::ContestSetActive,
+        target: DispatchTarget::Script(SCRIPT_CONTEST_SET_ACTIVE),
+        args: ARGS_CONTEST_ID,
+        about: "Set the active contest (database is the source)",
+        requires_tty: false,
         requires_sudo: false,
         capture_output: false,
     },

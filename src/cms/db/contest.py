@@ -317,6 +317,14 @@ class Contest(Base):
         nullable=False,
         default=0)
 
+    # Whether this is the contest the stack serves. The database is the single source
+    # of truth for this: config.toml [contest] CONTEST_ID and the generated .env are
+    # derived from it (scripts/__config_sync.sh, ./cms contest set-active).
+    is_active: bool = Column(
+        Boolean,
+        nullable=False,
+        default=False)
+
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
 

@@ -288,6 +288,9 @@ fn resolve_fleet(cmd: &Commands) -> Option<(DispatchKey, Vec<String>)> {
         }
         Commands::Contest { sub } => match sub {
             ContestSub::Create => Some((DispatchKey::ContestCreate, Vec::new())),
+            ContestSub::SetActive { id } => {
+                Some((DispatchKey::ContestSetActive, vec![id.to_string()]))
+            }
         },
         Commands::UpdateServer => Some((DispatchKey::UpdateServer, Vec::new())),
         Commands::Domain { sub } => Some(domain_dispatch(sub)),
