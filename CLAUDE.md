@@ -833,7 +833,7 @@ docker-compose.vault.yml / .monitoring.yml / .socket-proxy.yml   # optional extr
 ./cms config sync   # Generate .env, cms.toml, admin-panel/.env
 make core           # Deploy core stack (DEPLOYMENT_TYPE=img → pull+up, else src build)
 make admin          # Deploy admin panel
-make contest        # Deploy contest interfaces (CONTEST_ID canonical)
+make contest        # Deploy contest interfaces (serves the DB active contest)
 make worker         # Deploy workers
 make infra          # Deploy monitor/backup stack (alias: infra → monitor)
 make proxy          # Optional contest nginx front (publishes 80/443 only with NGINX_BIND_IP)
@@ -886,7 +886,7 @@ The admin panel can:
 - **List/control containers** via Docker socket mount
 - **Edit .env files** on host via `/repo-root` mount
 - **Restart services** via `docker compose` commands
-- **Switch active contest** by setting `CONTEST_ID` in `config.toml` `[contest]` and redeploying (the Deployments page writes it there, syncs, then recreates the contest stack)
+- **Switch active contest** by marking a row active in the database (`contests.is_active`); the Deployments page writes that row, regenerates `config.toml`/`.env` from it, then recreates the contest stack (CLI: `./cms contest set-active <id>`)
 
 ---
 
@@ -1076,7 +1076,7 @@ Every runtime value lives in `config.toml` (seeded from `config.toml.example` on
 | `.env` | all compose services and shell scripts | every variable, grouped under `### [section] ###` headers |
 | `admin-panel/.env` | the Next.js server, run outside compose | `DATABASE_URL` (localhost DSN) + `AUTH_SECRET` |
 
-`.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — lives in `config.toml` `[contest]`, and the admin panel writes it there, never into a generated file.
+`.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — is a generated cache: the database (`contests.is_active`) authors it, and `./cms config sync` rewrites `config.toml` and `.env` from that row.
 
 Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead. The same chain carries the bind keys: `config.toml` → `.env` → `docker-compose.expose.yml`, so nothing to reconcile between them — see [`docs/ADDRESS-MODEL.md`](docs/ADDRESS-MODEL.md).
 
@@ -1224,7 +1224,7 @@ cms-docker/
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
 | `.env` not applied | Run `./cms config sync` to regenerate the .env file |
-| Contest not switching | Check `CONTEST_ID` in `config.toml` `[contest]` is the wanted contest id, then run `./cms config sync` and redeploy the contest stack |
+| Contest not switching | Mark the wanted contest active in the database (`./cms contest set-active <id>`), which syncs config and redeploys the contest stack; confirm `contests.is_active` has exactly one row |
 
 ---
 

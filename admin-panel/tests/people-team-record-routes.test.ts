@@ -93,6 +93,7 @@ describe('Team record header identity', () => {
     name: 'Thailand Team 1',
     organization: 'MWIT',
     leaderId: 9,
+    registerable: true,
     leader: null,
     participationCount: 2,
   };

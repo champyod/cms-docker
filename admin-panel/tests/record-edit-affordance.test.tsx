@@ -58,7 +58,7 @@ const USER_ROW = {
   timezone: 'Asia/Bangkok', preferred_languages: ['en'],
 };
 
-const TEAM_ROW = { id: 4, code: 'A-1', name: 'Alpha' };
+const TEAM_ROW = { id: 4, code: 'A-1', name: 'Alpha', registerable: true };
 
 function renderTask(permissionKeys: readonly string[]): void {
   render(

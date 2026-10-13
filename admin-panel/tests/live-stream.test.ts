@@ -8,7 +8,7 @@ import {
 } from '@/lib/constants/live-stream';
 import { GET as resourcesStream } from '@/app/api/resources/stream/route';
 import { GET as containersStream } from '@/app/api/containers/stream/route';
-import type { ContainersFrame, ResourceFrame, ServerStats, WorkerStat } from '@/lib/live-frames';
+import type { ContainersFrame, ResourceFrame, ServerStats, WorkerNodeView } from '@/lib/live-frames';
 
 /**
  * The panel's push channels: what the browser receives, and what the server does not send.
@@ -54,8 +54,26 @@ function stats(cpu: number): ServerStats {
   return { cpu, memory: 40, uptime: '3d', network: { rx: 100, tx: 200 }, loadAvg: ['0.10', '0.20', '0.30'], source: 'host' };
 }
 
-function worker(): WorkerStat {
-  return { id: 'worker-0', name: 'w0', status: 'online', tasks: 0, load: 0, activity: 'idle', health: 'healthy' };
+function worker(): WorkerNodeView {
+  return {
+    id: 'worker-0',
+    host: 'w0',
+    port: 26000,
+    shard: 0,
+    endpoint: 'w0:26000',
+    connection: 'connected',
+    state: 'running',
+    health: 'healthy',
+    activity: 'idle',
+    reachable: true,
+    tasks: 0,
+    load: 0,
+    lagging: false,
+    contest: null,
+    uptime: '',
+    restarts: 0,
+    lastLog: '',
+  };
 }
 
 function traffic(rx: string): { id: number; timestamp: string; container: string; rx: string; tx: string }[] {

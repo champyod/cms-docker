@@ -16,12 +16,14 @@ export async function PUT(
 
   try {
     const data = await req.json();
-    const beforeTeam = await prisma.teams.findUnique({ where: { id }, select: { code: true, name: true } });
+    const registerable = typeof data.registerable === 'boolean' ? data.registerable : undefined;
+    const beforeTeam = await prisma.teams.findUnique({ where: { id }, select: { code: true, name: true, registerable: true } });
     await prisma.teams.update({
       where: { id },
       data: {
         ...(data.code && { code: data.code }),
         ...(data.name && { name: data.name }),
+        ...(registerable !== undefined && { registerable }),
       }
     });
 
@@ -29,8 +31,8 @@ export async function PUT(
       verb: 'team:update',
       entity: 'team',
       entityId: String(id),
-      beforeValues: beforeTeam ? { code: beforeTeam.code, name: beforeTeam.name } : undefined,
-      afterValues: { code: data.code, name: data.name },
+      beforeValues: beforeTeam ? { code: beforeTeam.code, name: beforeTeam.name, registerable: beforeTeam.registerable } : undefined,
+      afterValues: { code: data.code, name: data.name, registerable },
       result: 'success',
     });
     revalidatePath('/[locale]/people/teams', 'page');

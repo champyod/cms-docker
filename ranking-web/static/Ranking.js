@@ -45,6 +45,6 @@ $(document).ready(function() {
         });
         Overview.init();
         Scoreboard.init();
-        Views.init();
+        Perspectives.init();
     });
 });

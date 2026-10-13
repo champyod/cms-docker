@@ -231,7 +231,8 @@ class CaptchaNotDemandedTest(unittest.TestCase):
         subject = configured()
         subject.record_failure("admin", REMOTE_IP)
         self.assertFalse(subject.is_required("admin", REMOTE_IP))
-        self.assertTrue(subject.verify("admin", REMOTE_IP, ""))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                         captcha.CaptchaOutcome.ALLOWED)
 
     def test_threshold_demands_a_token(self):
         subject = configured()
@@ -243,13 +244,15 @@ class CaptchaNotDemandedTest(unittest.TestCase):
         subject = configured(verify=lambda *_: False)
         for _ in range(3):
             subject.record_failure("admin", REMOTE_IP)
-        self.assertFalse(subject.verify("admin", REMOTE_IP, "forged"))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, "forged"),
+                         captcha.CaptchaOutcome.CHALLENGE_FAILED)
 
     def test_an_accepted_token_lets_the_attempt_through(self):
         subject = configured()
         for _ in range(3):
             subject.record_failure("admin", REMOTE_IP)
-        self.assertTrue(subject.verify("admin", REMOTE_IP, "good"))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, "good"),
+                         captcha.CaptchaOutcome.ALLOWED)
 
     def test_a_demand_from_the_address_reaches_every_account_on_it(self):
         # The address counter is what stops username rotation, so a failure against one
@@ -266,14 +269,16 @@ class UnconfiguredTest(unittest.TestCase):
         for _ in range(9):
             subject.record_failure("admin", REMOTE_IP)
         self.assertFalse(subject.is_required("admin", REMOTE_IP))
-        self.assertTrue(subject.verify("admin", REMOTE_IP, ""))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                         captcha.CaptchaOutcome.ALLOWED)
 
     def test_a_missing_secret_never_blocks(self):
         for missing in ("site_key", "secret_key"):
             with self.subTest(missing=missing):
                 subject = configured(**{missing: ""})
                 self.assertFalse(subject.is_enabled())
-                self.assertTrue(subject.verify("admin", REMOTE_IP, ""))
+                self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                                 captcha.CaptchaOutcome.ALLOWED)
 
     def test_no_widget_is_rendered_when_unconfigured(self):
         self.assertEqual(configured(enabled=False).widget_html(), "")
@@ -400,7 +405,8 @@ class VerifyTokenTest(unittest.TestCase):
         for _ in range(3):
             subject.record_failure(CONTESTANT, REMOTE_IP)
 
-        self.assertFalse(subject.verify(CONTESTANT, REMOTE_IP, "tok"))
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok"),
+                         captcha.CaptchaOutcome.PROVIDER_UNREACHABLE)
 
 
 class Attributes:
@@ -432,7 +438,7 @@ def _render(template_name: str, facts: dict) -> str:
     environment.filters["to_language"] = lambda value: Attributes(
         source_extensions=[])
     environment.filters["make_timestamp"] = lambda value: 0
-    environment.filters["format_datetime_smart"] = lambda value: "T"
+    environment.filters["format_datetime_smart"] = lambda value, with_zone=False: "T"
     return environment.get_template(template_name).render(**facts)
 
 
@@ -664,7 +670,8 @@ class ProviderFailoverTest(unittest.TestCase):
         for _ in range(3):
             subject.record_failure(CONTESTANT, REMOTE_IP)
 
-        self.assertFalse(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"))
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"),
+                         captcha.CaptchaOutcome.PROVIDER_UNREACHABLE)
         self.assertFalse(state.is_healthy("hcaptcha"))
         self.assertEqual(subject.provider(), "turnstile")
 
@@ -674,7 +681,8 @@ class ProviderFailoverTest(unittest.TestCase):
         for _ in range(3):
             subject.record_failure(CONTESTANT, REMOTE_IP)
 
-        self.assertTrue(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"))
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"),
+                         captcha.CaptchaOutcome.ALLOWED)
 
         self.assertTrue(state.is_healthy("hcaptcha"))
 

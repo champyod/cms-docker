@@ -13,6 +13,8 @@ interface AuditFiltersProps {
   verbFilter: string;
   actorIdFilter: string;
   resultFilter: string;
+  ipFilter: string;
+  showViews: boolean;
   searchFilter: string;
   fromDateFilter: string;
   toDateFilter: string;
@@ -20,6 +22,8 @@ interface AuditFiltersProps {
   onVerbFilter: (value: string) => void;
   onActorIdFilter: (value: string) => void;
   onResultFilter: (value: string) => void;
+  onIpFilter: (value: string) => void;
+  onShowViews: (value: boolean) => void;
   onSearchFilter: (value: string) => void;
   onFromDateFilter: (value: string) => void;
   onToDateFilter: (value: string) => void;
@@ -35,6 +39,8 @@ export function AuditFilters({
   verbFilter,
   actorIdFilter,
   resultFilter,
+  ipFilter,
+  showViews,
   searchFilter,
   fromDateFilter,
   toDateFilter,
@@ -42,6 +48,8 @@ export function AuditFilters({
   onVerbFilter,
   onActorIdFilter,
   onResultFilter,
+  onIpFilter,
+  onShowViews,
   onSearchFilter,
   onFromDateFilter,
   onToDateFilter,
@@ -89,6 +97,14 @@ export function AuditFilters({
             placeholder="ID"
           />
         </div>
+        <div className="min-w-35">
+          <Input
+            label={dict.ip}
+            value={ipFilter}
+            onChange={(e) => onIpFilter(e.target.value)}
+            placeholder="203.0.113.7"
+          />
+        </div>
         <div className="min-w-40">
           <label className="block text-xs font-medium text-muted-foreground mb-1">{dict.filters.result}</label>
           <select
@@ -126,6 +142,14 @@ export function AuditFilters({
             onChange={(e) => onToDateFilter(e.target.value)}
           />
         </div>
+        <label className="flex items-center gap-2 pb-2.5 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={showViews}
+            onChange={(e) => onShowViews(e.target.checked)}
+          />
+          {dict.filters.pageViews}
+        </label>
         <div className="flex gap-2 pb-0.5">
           <Button variant="positive" size="sm" type="submit" icon={Search}>
             {dict.filters.apply}

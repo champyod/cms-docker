@@ -61,9 +61,10 @@ export function ContestCountdownTab({
   const router = useRouter();
   const surfaceRef = useRef<HTMLDivElement>(null);
   const { timing, now } = useCountdownTiming(data);
-  const { timezone, setTimezone } = useCountdownTimezone();
   const { threshold, setThreshold } = useCountdownThreshold();
   const { isFullscreen, toggle: toggleFullscreen } = useElementFullscreen(surfaceRef);
+  // The polled zone, not the initial data: an edited contest zone must re-default the countdown.
+  const { timezone, setTimezone } = useCountdownTimezone({ contestTimezone: timing.timezone, isFullscreen });
   const { isPaused, togglePaused } = useContestMotion();
 
   const phase = resolveContestPhase(timing, now);

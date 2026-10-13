@@ -3,6 +3,7 @@ import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorizatio
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
+import { writeActiveContestId } from '@/lib/active-contest';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
@@ -20,7 +21,6 @@ type ContestListParams = { page?: number; search?: string; sort?: ListSortInput 
 type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };
-type ActiveResult = { success: boolean; contest?: unknown; error?: string };
 
 export async function listContests(params: ContestListParams = {}): Promise<ContestListResult> {
   await requirePermission('contest:list');
@@ -103,6 +103,7 @@ export async function addParticipant(contestId: number, userId: number): Promise
     await prisma.$executeRaw`
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+      ON CONFLICT (contest_id, user_id) DO NOTHING
     `;
     await resyncRankingUsers(contestId);
     await recordAudit({
@@ -190,7 +191,7 @@ export async function getAvailableContests(): Promise<AvailableResult> {
 export async function activateContest(id: number): Promise<MutationResult> {
   await requirePermission('contest:switch');
   try {
-    await prisma.$executeRaw`UPDATE contests SET is_active = (id = ${id})`;
+    await writeActiveContestId(id);
     await recordAudit({
       verb: 'contest:switch',
       entity: 'contest',
@@ -199,19 +200,6 @@ export async function activateContest(id: number): Promise<MutationResult> {
       result: 'success',
     });
     return { success: true };
-  } catch (error: unknown) {
-    return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function getActiveContest(): Promise<ActiveResult> {
-  await requirePermission('contest:read');
-  try {
-    const contest = await prisma.contests.findFirst({
-      where: { is_active: true },
-      include: { _count: { select: { participations: true } } },
-    });
-    return { success: true, contest };
   } catch (error: unknown) {
     return { success: false, error: (error as Error).message };
   }

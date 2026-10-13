@@ -173,3 +173,15 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!token) return null;
   return await readSessionClaims(token);
 }
+
+const SESSION_ID_FINGERPRINT_LENGTH = 16;
+
+/**
+ * A stable, non-reversible fingerprint of the session cookie, for correlating
+ * audit rows to one session without storing the token itself.
+ */
+export async function getSessionId(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (token === undefined) return null;
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, SESSION_ID_FINGERPRINT_LENGTH);
+}

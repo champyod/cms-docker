@@ -14,6 +14,7 @@ interface TeamData {
   id?: number;
   code: string | null;
   name: string | null;
+  registerable?: boolean | null;
 }
 
 interface TeamModalProps {
@@ -26,7 +27,7 @@ interface TeamModalProps {
 }
 
 export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionKeys, navigation }: TeamModalProps) {
-  const [formData, setFormData] = useState({ code: '', name: '' });
+  const [formData, setFormData] = useState({ code: '', name: '', registerable: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -37,7 +38,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
   const [renderedSession, setRenderedSession] = useState(sessionKey);
   if (renderedSession !== sessionKey) {
     setRenderedSession(sessionKey);
-    setFormData(initialData ? { code: initialData.code ?? '', name: initialData.name ?? '' } : { code: '', name: '' });
+    setFormData(initialData ? { code: initialData.code ?? '', name: initialData.name ?? '', registerable: initialData.registerable ?? true } : { code: '', name: '', registerable: true });
     setError('');
   }
 
@@ -129,6 +130,21 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
             className={inputClassName}
             placeholder="e.g. Thailand Team 1"
           />
+        </RestrictedField>
+        <RestrictedField
+          canRead={fieldAccess.registerable.canRead}
+          canUpdate={fieldAccess.registerable.canUpdate}
+          label="Registerable"
+          lockHint="Read-only — you lack team:update"
+        >
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={formData.registerable}
+              onChange={(e) => setFormData({ ...formData, registerable: e.target.checked })}
+            />
+            Offer this team to contestants at registration
+          </label>
         </RestrictedField>
 
         <ModalFooter

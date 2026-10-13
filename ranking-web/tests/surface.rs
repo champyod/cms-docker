@@ -16,6 +16,7 @@ fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearan
         footer_text: None,
         credits_text: None,
         credits: None,
+        perspectives: None,
         access_mode: "public".to_string(),
     }
 }
@@ -260,4 +261,44 @@ fn the_body_carries_the_anonymous_flag() {
     assert!(rendered.contains("data-board-anonymous=\"true\""));
     let off = render_page(Some(&appearance(None, None))).expect("the page renders");
     assert!(off.contains("data-board-anonymous=\"false\""));
+}
+
+fn with_perspectives(value: serde_json::Value) -> Appearance {
+    Appearance {
+        perspectives: Some(value),
+        ..appearance(None, None)
+    }
+}
+
+/// With no panel config the page still gets a perspective list to read, so the tab
+/// bar draws the built-in defaults rather than nothing.
+#[test]
+fn the_page_always_carries_a_perspective_config() {
+    let rendered = render_page(None).expect("the page renders");
+    assert!(rendered.contains("window.RankingPerspectives = {"));
+    assert!(rendered.contains("\"default\":\"board\""));
+    assert!(rendered.contains("\"overflow\":\"wrap\""));
+}
+
+/// A hand-edited row must not put a dead tab on the bar: the id is dropped before it
+/// reaches the page.
+#[test]
+fn an_unknown_perspective_id_never_reaches_the_page() {
+    let row = with_perspectives(serde_json::json!({
+        "tabs": [ { "id": "board" }, { "id": "evil" } ]
+    }));
+    let rendered = render_page(Some(&row)).expect("the page renders");
+    assert!(rendered.contains("\"id\":\"board\""));
+    assert!(!rendered.contains("evil"));
+}
+
+/// The injected literal is escaped, so a value in the row can never close the script
+/// tag it sits inside.
+#[test]
+fn a_perspective_value_cannot_close_the_script_tag() {
+    let row = with_perspectives(serde_json::json!({
+        "tabs": [ { "id": "board", "options": { "x": "</script><img src=x>" } } ]
+    }));
+    let rendered = render_page(Some(&row)).expect("the page renders");
+    assert!(!rendered.contains("</script><img"), "{rendered}");
 }

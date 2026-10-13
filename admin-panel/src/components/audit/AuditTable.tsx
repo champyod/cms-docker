@@ -40,6 +40,8 @@ export function AuditTable({
   const [verbFilter, setVerbFilter] = useState(filters.verb ?? '');
   const [actorIdFilter, setActorIdFilter] = useState(filters.actorId ?? '');
   const [resultFilter, setResultFilter] = useState(filters.result ?? '');
+  const [ipFilter, setIpFilter] = useState(filters.ip ?? '');
+  const [showViews, setShowViews] = useState(filters.showViews ?? false);
   const [searchFilter, setSearchFilter] = useState(filters.search ?? '');
   const [fromDateFilter, setFromDateFilter] = useState(filters.fromDate ?? '');
   const [toDateFilter, setToDateFilter] = useState(filters.toDate ?? '');
@@ -76,6 +78,7 @@ export function AuditTable({
         verb: verbFilter,
         actorId: actorIdFilter,
         result: resultFilter,
+        ip: ipFilter,
         search: searchFilter,
         fromDate: fromDateFilter,
         toDate: toDateFilter,
@@ -84,12 +87,13 @@ export function AuditTable({
       for (const [key, val] of Object.entries(merged)) {
         if (val) params.set(key, val);
       }
+      if (showViews) params.set('views', 'all');
       params.set('page', overrides?.page ?? '1');
       startTransition(() => {
         router.push(`?${params.toString()}`);
       });
     },
-    [entityFilter, verbFilter, actorIdFilter, resultFilter, searchFilter, fromDateFilter, toDateFilter, router],
+    [entityFilter, verbFilter, actorIdFilter, resultFilter, ipFilter, showViews, searchFilter, fromDateFilter, toDateFilter, router],
   );
 
   const applySearch = useDebouncedSearch({
@@ -107,6 +111,8 @@ export function AuditTable({
     setVerbFilter('');
     setActorIdFilter('');
     setResultFilter('');
+    setIpFilter('');
+    setShowViews(false);
     setSearchFilter('');
     setFromDateFilter('');
     setToDateFilter('');
@@ -183,6 +189,8 @@ export function AuditTable({
         verbFilter={verbFilter}
         actorIdFilter={actorIdFilter}
         resultFilter={resultFilter}
+        ipFilter={ipFilter}
+        showViews={showViews}
         searchFilter={searchFilter}
         fromDateFilter={fromDateFilter}
         toDateFilter={toDateFilter}
@@ -190,6 +198,8 @@ export function AuditTable({
         onVerbFilter={setVerbFilter}
         onActorIdFilter={setActorIdFilter}
         onResultFilter={setResultFilter}
+        onIpFilter={setIpFilter}
+        onShowViews={setShowViews}
         onSearchFilter={setSearchFilter}
         onFromDateFilter={setFromDateFilter}
         onToDateFilter={setToDateFilter}
@@ -208,6 +218,8 @@ export function AuditTable({
           verb: verbFilter,
           actorId: actorIdFilter,
           result: resultFilter,
+          ip: ipFilter,
+          showViews,
           search: searchFilter,
           fromDate: fromDateFilter,
           toDate: toDateFilter,

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { Dictionary } from '@/lib/dictionary';
 import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
@@ -44,10 +45,13 @@ function SummaryIdentity({ summary, locale }: {
   readonly summary: SubmissionSummary;
   readonly locale: 'en' | 'th';
 }): React.JSX.Element {
+  // Why: a submission belongs to no contest context on this route, so its instant reads in the
+  // reviewer's own zone.
+  const formatTimestamp = useFormatTimestamp();
   return (
     <Card className="space-y-4">
       <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
-        <span>Time: {new Date(summary.timestamp).toLocaleString()}</span>
+        <span>Time: {formatTimestamp(summary.timestamp)}</span>
         <span>Language: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
         <span>Official: <span className="font-medium text-foreground">{summary.official ? 'Yes' : 'No'}</span></span>
       </div>

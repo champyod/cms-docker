@@ -26,7 +26,16 @@ vi.mock('@/app/actions/questions', () => ({
 vi.mock('@/app/actions/contests', () => ({
   getContests: vi.fn(() => Promise.resolve({ contests: [] })),
   getAvailableContests: vi.fn(() => Promise.resolve({ success: true, contests: [] })),
-  activateContest: vi.fn(() => Promise.resolve({ success: true })),
+}));
+// The palette reads the deploy context for its switch action; the header test needs no real provider.
+vi.mock('@/hooks/useDeployContest', () => ({
+  useDeployContest: () => ({
+    state: { phase: 'idle', contestId: null, operationId: null, status: null, error: null, warning: null, log: '', percent: null, startedAt: null },
+    deploy: vi.fn(async () => {}),
+    resume: vi.fn(),
+    cancel: vi.fn(),
+    reset: vi.fn(),
+  }),
 }));
 vi.mock('@/app/actions/tasks', () => ({
   getTasks: vi.fn(() => Promise.resolve({ tasks: [] })),

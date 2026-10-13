@@ -4,6 +4,7 @@ import { Eye, EyeOff, Reply } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 
 export interface QuestionRow {
@@ -33,14 +34,6 @@ interface Props {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
-// Why module scope: every question row formats its own timestamp, so a per-row
-// formatter would be rebuilt for each card on every render.
-const QUESTION_TIME_FORMAT = new Intl.DateTimeFormat();
-
-function formatTime(date: Date | string): string {
-  return QUESTION_TIME_FORMAT.format(new Date(date));
-}
-
 interface QuestionGates {
   readonly showReply: boolean;
 }
@@ -61,6 +54,9 @@ function buildQuestionActions(
 
 export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, permissionKeys, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
   const dict = useDictionary();
+  // Why the contest zone: a question is asked against one contest's schedule, so its wall clock is
+  // the contest's own, whatever zone the staff member reading it happens to sit in.
+  const formatTime = useFormatTimestamp();
   if (questions.length === 0) return <p className="text-sm text-muted-foreground">No questions from contestants.</p>;
   return (
     <div className="space-y-3">

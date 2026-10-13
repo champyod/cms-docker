@@ -174,6 +174,13 @@ def validate_login(
                 "contest %s, at %s", ip_address, username, contest.name,
                 timestamp)
 
+    # WHY here and not on every authenticate_request: this is the point of
+    # credential proof — the cookie path re-authenticates via a stored hash
+    # on every page load, so stamping there would overwrite the real login
+    # time with the last page-load time. Impersonation is excluded for the
+    # same reason: the admin token proves the admin's identity, not the user's.
+    participation.user.last_login_at = timestamp
+
     # If hashing is used, the cookie stores the hashed password so that
     # the expensive bcrypt call doesn't need to be done at every request.
     return (participation,

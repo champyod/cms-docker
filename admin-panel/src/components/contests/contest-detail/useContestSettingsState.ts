@@ -9,6 +9,8 @@ import { updateContestSettings } from '@/app/actions/contests';
 import { buildConfirmationCopy, type ConfirmationCopy } from '@/lib/confirmation-copy';
 import type { ContestData } from '@/lib/contests-repo';
 import type { ContestOverviewData, ContestSettingsFields } from '@/lib/queries/contest-detail';
+import { collectZoneTimeErrors, rezoneTimeFields, toZoneInstants } from '../contest-modal/contestFormMappers';
+import { utcToZoneWallClock } from '@/lib/timezone';
 import en from '@/dictionaries/en.json';
 
 // Why the alias: the contest tab actions keep their own name while reading the
@@ -46,12 +48,12 @@ export interface ContestSettingsFormState {
   analysis_stop: string;
 }
 
-// Why: datetime-local inputs need the truncated UTC form the old detail view
-// produced, while null or unparsable values stay empty instead of crashing.
-function toLocalInput(value: string | null): string {
+// Why: datetime-local inputs show the wall clock the contest's own zone names, so an instant read
+// from the server is converted here; null or unparsable values stay empty instead of crashing.
+function toLocalInput(value: string | null, zone: string): string {
   if (!value) return '';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? '' : value.slice(0, 16);
+  return Number.isNaN(date.getTime()) ? '' : utcToZoneWallClock(date.toISOString(), zone);
 }
 
 const DEFAULT_FIELD_VALUES = {
@@ -67,24 +69,28 @@ const DEFAULT_FIELD_VALUES = {
 } as const;
 
 // Why: the overview reader carries no settings fields, so unowned inputs rest
-// on neutral defaults — the overview payload below never sends them.
+// on neutral defaults — the overview payload below never sends them. The zone is
+// the exception: the summary carries it, and the timing pickers read in it.
 export function toOverviewFormState(contest: ContestOverviewData['contest']): ContestSettingsFormState {
+  const zone = contest.timezone ?? '';
   return {
     name: contest.name,
     description: contest.description,
     ...DEFAULT_FIELD_VALUES,
-    start: toLocalInput(contest.start),
-    stop: toLocalInput(contest.stop),
-    analysis_start: toLocalInput(contest.analysis_start),
-    analysis_stop: toLocalInput(contest.analysis_stop),
+    timezone: zone,
+    start: toLocalInput(contest.start, zone),
+    stop: toLocalInput(contest.stop, zone),
+    analysis_start: toLocalInput(contest.analysis_start, zone),
+    analysis_stop: toLocalInput(contest.analysis_stop, zone),
   };
 }
 
 export function toSettingsFormState(fields: ContestSettingsFields): ContestSettingsFormState {
+  const zone = fields.timezone ?? '';
   return {
     name: fields.name,
     description: fields.description,
-    timezone: fields.timezone ?? '',
+    timezone: zone,
     allow_questions: fields.allow_questions,
     allow_user_tests: fields.allow_user_tests,
     submissions_download_allowed: fields.submissions_download_allowed,
@@ -93,10 +99,10 @@ export function toSettingsFormState(fields: ContestSettingsFields): ContestSetti
     analysis_enabled: fields.analysis_enabled,
     token_mode: fields.token_mode,
     score_precision: fields.score_precision,
-    start: toLocalInput(fields.start),
-    stop: toLocalInput(fields.stop),
-    analysis_start: toLocalInput(fields.analysis_start),
-    analysis_stop: toLocalInput(fields.analysis_stop),
+    start: toLocalInput(fields.start, zone),
+    stop: toLocalInput(fields.stop, zone),
+    analysis_start: toLocalInput(fields.analysis_start, zone),
+    analysis_stop: toLocalInput(fields.analysis_stop, zone),
   };
 }
 
@@ -109,24 +115,34 @@ export function useContestSettingsState(
   updateForm: (patch: Partial<ContestSettingsFormState>) => void;
   saving: boolean;
   justSaved: boolean;
+  timeErrors: Record<string, string>;
   handleSave: () => Promise<void>;
 } {
   const [formData, setFormData] = useState(initial);
   const [saving, setSaving] = useState(false);
+  const [timeErrors, setTimeErrors] = useState<Record<string, string>>({});
   const { justSaved, flashSaved } = useJustSavedFlag();
   const runAction = useActionFeedback();
   const refresh = useTabRefresh();
 
+  // Why: changing the zone re-projects the four wall clocks to the same instants, so the pickers
+  // follow the live timezone field and never re-read the old digits as a new wall clock.
   const updateForm = (patch: Partial<ContestSettingsFormState>): void => {
-    setFormData((previous) => ({ ...previous, ...patch }));
+    setFormData((previous) => rezoneTimeFields(previous, { ...previous, ...patch }));
   };
 
   const handleSave = async (): Promise<void> => {
+    // Why the zone check precedes the action: a DST gap or repeat has no instant to store, so the
+    // save stops on the field rather than writing a shifted time the operator never chose.
+    const blocked = Object.fromEntries(collectZoneTimeErrors(formData, formData.timezone));
+    setTimeErrors(blocked);
+    if (Object.keys(blocked).length > 0) return;
+
     setSaving(true);
     try {
       const result = await runAction(
         { pending: 'Saving contest...', success: 'Contest saved', failure: 'Save failed' },
-        () => updateContestSettings(contestId, buildPayload(formData)),
+        () => updateContestSettings(contestId, toZoneInstants(buildPayload(formData), formData.timezone)),
       );
       if (result?.success) {
         flashSaved();
@@ -137,5 +153,5 @@ export function useContestSettingsState(
     }
   };
 
-  return { formData, updateForm, saving, justSaved, handleSave };
+  return { formData, updateForm, saving, justSaved, timeErrors, handleSave };
 }

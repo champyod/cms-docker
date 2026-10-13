@@ -1,5 +1,6 @@
 import { getRanking, getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
+import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SelectField } from '@/components/core/FormField';
@@ -7,6 +8,7 @@ import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RankingTable } from '@/components/contests/contest-detail/RankingTable';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
+import { RankingBoardGraph } from '@/components/ranking/RankingBoardGraph';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
 import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
@@ -72,6 +74,10 @@ export default async function RankingBoardPage({
         </Text>
         <Text variant="muted">{boardHint}</Text>
         <Grid as="dl" cols={2} gap={3} className="text-sm">
+          <BoardEntry
+            term={copy.appearance.displayNameField}
+            value={appearance.displayName || EMPTY_VALUE}
+          />
           <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
           <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
           <BoardEntry
@@ -112,28 +118,49 @@ export default async function RankingBoardPage({
               shareable — an operator can send a colleague the board they are looking at.
               The label reuses the override form's wording: it is the same question.
             */}
-            <form method="get" className="flex items-end gap-2">
-              <SelectField
-                id="ranking-board-contest"
-                label={copy.overrides.contestId}
-                name="contest"
-                defaultValue={String(selected?.id ?? '')}
-              >
-                {contests.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    #{entry.id} — {entry.name}
-                  </option>
-                ))}
-              </SelectField>
-              <button type="submit" className="h-9 rounded-md border border-border px-3 text-sm">
-                {copy.overrides.chooseContest}
-              </button>
+            <form method="get" className="space-y-2">
+              <div className="flex items-end gap-2">
+                <SelectField
+                  id="ranking-board-contest"
+                  label={copy.overrides.contestId}
+                  name="contest"
+                  defaultValue={String(selected?.id ?? '')}
+                >
+                  {contests.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      #{entry.id} — {entry.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <Button type="submit" size="sm" variant="secondary">
+                  {copy.overrides.chooseContest}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Preview only — selecting a contest does not change the live public scoreboard.
+              </p>
             </form>
             <RankingTable ranking={board} />
+            {board && board.ranking.length > 0 ? (
+              <div className="border-t border-border/80 pt-6">
+                <RankingBoardGraph
+                  entries={board.ranking.slice(0, 20).map((entry) => ({
+                    rank: entry.rank,
+                    username: entry.user.username,
+                    displayName: entry.user.username,
+                    totalScore: entry.totalScore,
+                  }))}
+                  title="Score Progress Overview (First Board Page)"
+                />
+              </div>
+            ) : null}
           </>
         )}
       </Card>
-      <RankingLogoCard canManage={effective.has('ranking:update')} />
+      <RankingLogoCard
+        canManage={effective.has('ranking:update')}
+        displayName={appearance.displayName || appearance.title}
+      />
     </Stack>
   );
 }

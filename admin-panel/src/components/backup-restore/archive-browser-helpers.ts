@@ -1,5 +1,8 @@
 // Type-only: the runtime module pulls in node:fs and must stay out of the client bundle.
 import type { BackupArchive } from '@/lib/backup-archives';
+// Why the bare form: an archive belongs to the machine, not to a contest, so the zone of record is
+// the one this process renders in rather than any contest's.
+import { formatInZone } from '@/lib/timezone';
 
 const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 const BYTE_STEP = 1024;
@@ -24,7 +27,7 @@ export function formatBytes(bytes: number): string {
 
 export function formatDate(iso: string): string {
     const parsed = new Date(iso);
-    return Number.isNaN(parsed.getTime()) ? 'Unknown date' : parsed.toLocaleString();
+    return Number.isNaN(parsed.getTime()) ? 'Unknown date' : formatInZone(parsed.toISOString());
 }
 
 /** A growing dump keeps changing size and mtime, so either one proves the run reached the archive dir. */

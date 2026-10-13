@@ -3,10 +3,12 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { VIEW_VERB_SUFFIX } from '@/lib/audit';
 import { auditSortOrderBy } from '@/lib/audit-sorting';
 import type { ListSortInput } from '@/lib/list-sorting';
 import { loadActorNames } from '@/lib/admin-names';
 import { loadEntityNames, entityNameKey } from '@/lib/entity-names';
+import { resolveDisplayZone, zoneDayRange } from '@/lib/timezone';
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -19,6 +21,7 @@ export interface AuditLogRow {
   entity: string;
   entity_id: string | null;
   entity_name: string | null;
+  ip: string | null;
   result: string;
   reason: string | null;
 }
@@ -58,6 +61,7 @@ function serializeRow(
     verb: string;
     entity: string;
     entity_id: string | null;
+    ip: string | null;
     result: string;
     reason: string | null;
   },
@@ -73,6 +77,7 @@ function serializeRow(
     entity: row.entity,
     entity_id: row.entity_id,
     entity_name: row.entity_id === null ? null : (entityNames.get(entityNameKey(row.entity, row.entity_id)) ?? null),
+    ip: row.ip,
     result: row.result,
     reason: row.reason,
   };
@@ -85,6 +90,8 @@ export async function getAuditLog({
   entity,
   verb,
   result,
+  ip,
+  showViews = false,
   search,
   fromDate,
   toDate,
@@ -96,6 +103,8 @@ export async function getAuditLog({
   entity?: string;
   verb?: string;
   result?: string;
+  ip?: string;
+  showViews?: boolean;
   search?: string;
   fromDate?: string;
   toDate?: string;
@@ -113,17 +122,25 @@ export async function getAuditLog({
     if (entity) where.entity = entity;
     if (verb) where.verb = { contains: verb, mode: 'insensitive' };
     if (result === 'success' || result === 'failure') where.result = result;
+    if (ip) where.ip = { contains: ip, mode: 'insensitive' };
+    // Why derived and not stored: the verb suffix is the one source of truth for a page load,
+    // and the page hides them by default so real actions are not buried under :view traffic.
+    if (!showViews) where.NOT = { verb: { endsWith: VIEW_VERB_SUFFIX } };
     if (search) {
       const contains = { contains: search, mode: 'insensitive' as const };
       where.OR = [{ verb: contains }, { reason: contains }, { entity: contains }];
     }
     if (fromDate || toDate) {
-      where.timestamp = {};
-      if (fromDate) where.timestamp.gte = new Date(fromDate);
-      if (toDate) {
-        const end = new Date(toDate);
-        end.setHours(23, 59, 59, 999);
-        where.timestamp.lte = end;
+      // Why the range is built by the day helper: a date-only filter value is a day in the reader's
+      // own zone (no contest owns an audit row), not a UTC midnight — `new Date(day)` reads it as
+      // UTC and silently drops or adds hours for a day that is not the server's midnight.
+      const dayRange = zoneDayRange(fromDate, toDate, resolveDisplayZone(null));
+      if (dayRange.gte !== null && dayRange.lte !== null) {
+        where.timestamp = { gte: dayRange.gte, lte: dayRange.lte };
+      } else if (dayRange.gte !== null) {
+        where.timestamp = { gte: dayRange.gte };
+      } else if (dayRange.lte !== null) {
+        where.timestamp = { lte: dayRange.lte };
       }
     }
 
@@ -141,6 +158,7 @@ export async function getAuditLog({
           verb: true,
           entity: true,
           entity_id: true,
+          ip: true,
           result: true,
           reason: true,
         },

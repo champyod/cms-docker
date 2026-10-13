@@ -186,7 +186,14 @@ def active_contest_id() -> int | None:
         # table catalog is the call that exists across supported versions.
         if "contests" not in inspect(session.get_bind()).get_table_names():
             raise ContestsTableMissingError("the contests table does not exist yet")
-        contest = session.query(Contest).filter(Contest.is_active.is_(True)).first()
+        # Lowest id wins — the same order the admin panel and config sync use — so a database
+        # that ever holds two active rows still hands every caller one contest.
+        contest = (
+            session.query(Contest)
+            .filter(Contest.is_active.is_(True))
+            .order_by(Contest.id)
+            .first()
+        )
         return None if contest is None else contest.id
 
 

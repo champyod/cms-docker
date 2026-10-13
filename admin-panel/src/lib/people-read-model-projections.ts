@@ -30,13 +30,13 @@ export function toIntervalSeconds(value: unknown): number | null {
 }
 
 export type NamedRow = { id: number; name: string };
-export type NamedContestRow = NamedRow & { start: Date | string; stop: Date | string };
+export type NamedContestRow = NamedRow & { start: Date | string; stop: Date | string; timezone: string | null };
 export type TeamIdentityRow = { id: number; code: string; name: string };
 export type UserIdentityRow = { id: number; username: string; first_name: string; last_name: string };
 export type TeamIdentity = { id: number | null; code: string | null; name: string | null };
 export type UserIdentity = { id: number | null; username: string | null; firstName: string | null; lastName: string | null };
 export type ContestIdentity = { id: number | null; name: string | null };
-export type TeamSummaryRow = { id: number; code: string; name: string; organization: string | null; leader_id: number | null; leader: UserIdentityRow | null; _count: { participations: number } };
+export type TeamSummaryRow = { id: number; code: string; name: string; organization: string | null; leader_id: number | null; registerable: boolean; leader: UserIdentityRow | null; _count: { participations: number } };
 export type TeamSummaryAccess = { teams: FieldAccessTable<'teams'>; users: FieldAccessTable<'users'> };
 
 export function toContestIdentity(contest: NamedRow | null, access: FieldAccessTable<'contests'>): ContestIdentity {
@@ -46,9 +46,13 @@ export function toContestIdentity(contest: NamedRow | null, access: FieldAccessT
 }
 
 export function toContestRef(contest: NamedContestRow | null, access: FieldAccessTable<'contests'>): UserHistory['contests'][number] {
-  if (!contest) return { id: null, name: null, start: null, stop: null };
-  const visible = filterReadableFieldsWith(access, { id: contest.id, name: contest.name, start: contest.start, stop: contest.stop });
-  return { id: visible.id ?? null, name: visible.name ?? null, start: toIso(visible.start ?? null), stop: toIso(visible.stop ?? null) };
+  if (!contest) return { id: null, name: null, start: null, stop: null, timezone: null };
+  const visible = filterReadableFieldsWith(access, { id: contest.id, name: contest.name, start: contest.start, stop: contest.stop, timezone: contest.timezone });
+  return {
+    id: visible.id ?? null, name: visible.name ?? null,
+    start: toIso(visible.start ?? null), stop: toIso(visible.stop ?? null),
+    timezone: visible.timezone ?? null,
+  };
 }
 
 export function toTeamIdentity(team: TeamIdentityRow | null, access: FieldAccessTable<'teams'>): TeamIdentity {
@@ -76,10 +80,10 @@ function toLeader(leader: UserIdentityRow | null, access: FieldAccessTable<'user
 // record reader team:read, so two copies of this mapping drifted into handing a
 // team:list-only caller the columns only team:read governs.
 export function toTeamSummary(row: TeamSummaryRow, access: TeamSummaryAccess): TeamSummary {
-  const visible = filterReadableFieldsWith(access.teams, { code: row.code, name: row.name, organization: row.organization, leader_id: row.leader_id });
+  const visible = filterReadableFieldsWith(access.teams, { code: row.code, name: row.name, organization: row.organization, leader_id: row.leader_id, registerable: row.registerable });
   return {
     id: row.id, code: visible.code ?? null, name: visible.name ?? null, organization: visible.organization ?? null,
-    leaderId: visible.leader_id ?? null, leader: toLeader(row.leader, access.users), participationCount: row._count.participations,
+    leaderId: visible.leader_id ?? null, registerable: visible.registerable ?? null, leader: toLeader(row.leader, access.users), participationCount: row._count.participations,
   };
 }
 

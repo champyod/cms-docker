@@ -1,5 +1,7 @@
 #!/usr/bin/env bun
-// Fans the single brand source out to every surface that serves an icon; run with `bun run icons`.
+// Derives every served favicon and logo from the single source in brand/.
+//   bun run icons         write them
+//   bun run icons --check fail when a committed copy no longer matches brand/
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +12,7 @@ import sharp from 'sharp';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PANEL = path.resolve(HERE, '..');
 const REPO = path.resolve(PANEL, '..');
-const BRAND = path.join(PANEL, 'assets', 'brand');
+const BRAND = path.join(REPO, 'brand');
 
 const DENSITY = 384;
 const FAVICON_SIZES = [16, 32, 48] as const;
@@ -28,6 +30,8 @@ interface IcoImage {
   size: number;
   data: Buffer;
 }
+
+const CHECK = process.argv.includes('--check');
 
 const ICON = await readFile(path.join(BRAND, 'icon.svg'));
 const ICON_MASKABLE = await readFile(path.join(BRAND, 'icon-maskable.svg'));
@@ -127,29 +131,68 @@ async function serviceIcons(ico: Buffer, rankingLogo: Buffer): Promise<Output[]>
   ];
 }
 
-async function put(file: string, data: Buffer | string): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, data);
-}
-
-async function main(): Promise<void> {
+async function buildOutputs(): Promise<Output[]> {
   const ico = await favicon();
   const appleTouch = await squarePng(ICON_MASKABLE, APPLE_TOUCH_SIZE);
   const rankingLogo = await widthPng(LOCKUP, RANKING_LOGO_WIDTH);
 
-  const outputs = [
+  return [
     ...(await nextAppIcons(ico, appleTouch)),
     ...(await webIcons(ico, appleTouch)),
     ...(await serviceIcons(ico, rankingLogo)),
   ];
+}
 
+function sizeOf(data: Buffer | string): number {
+  return typeof data === 'string' ? Buffer.byteLength(data) : data.length;
+}
+
+function bytesOf(data: Buffer | string): Buffer {
+  return typeof data === 'string' ? Buffer.from(data) : data;
+}
+
+async function readIfExists(file: string): Promise<Buffer | null> {
+  try {
+    return await readFile(file);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+async function writeAll(outputs: Output[]): Promise<void> {
   for (const [file, data] of outputs) {
-    await put(file, data);
-    const bytes = typeof data === 'string' ? Buffer.byteLength(data) : data.length;
-    console.log(`  ${path.relative(REPO, file)}  ${bytes} B`);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, data);
+    console.log(`  ${path.relative(REPO, file)}  ${sizeOf(data)} B`);
+  }
+  console.log(`\nWrote ${outputs.length} assets from brand/.`);
+}
+
+async function checkAll(outputs: Output[]): Promise<void> {
+  const drifted: string[] = [];
+  for (const [file, data] of outputs) {
+    const existing = await readIfExists(file);
+    if (existing === null || !existing.equals(bytesOf(data))) drifted.push(path.relative(REPO, file));
   }
 
-  console.log(`\nWrote ${outputs.length} assets from assets/brand.`);
+  if (drifted.length > 0) {
+    console.error(`${drifted.length} served icon(s) no longer match brand/:`);
+    for (const file of drifted) console.error(`  ${file}`);
+    console.error('\nRun `make icons` and commit the result.');
+    process.exitCode = 1;
+    return;
+  }
+  console.log(`brand check: ${outputs.length} assets match brand/.`);
+}
+
+async function main(): Promise<void> {
+  const outputs = await buildOutputs();
+  if (CHECK) {
+    await checkAll(outputs);
+    return;
+  }
+  await writeAll(outputs);
 }
 
 await main();

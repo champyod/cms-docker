@@ -56,11 +56,16 @@ __all__ = [
     "Contest", "Announcement",
     # user
     "User", "Team", "Participation", "Message", "Question",
+    # username config
+    "ContestantGroup", "ContestantGroupMembership",
+    "UsernamePolicy", "ContestUsername", "ContestUsernameHistory",
     # admin
     "Admin",
     # permissions
     "Permission", "Group", "GroupPermission", "AdminGroup",
     "AdminPermissionOverride", "AuditLog",
+    # security
+    "SecurityBlock",
     # task
     "Task", "Statement", "Attachment", "Dataset", "Manager", "Testcase",
     # submission
@@ -101,6 +106,8 @@ from .fsobject import FSObject, LargeObject
 from .admin import Admin
 from .contest import Contest, Announcement
 from .user import User, Team, Participation, Message, Question
+from .username import ContestantGroup, ContestantGroupMembership, \
+    UsernamePolicy, ContestUsername, ContestUsernameHistory
 from .task import Task, Statement, Attachment, Dataset, Manager, Testcase
 from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
@@ -112,6 +119,10 @@ from .usertest import UserTest, UserTestFile, UserTestManager, \
 # resolution; Prisma migrations own their creation (cmsInitDB excludes them).
 from .permissions import Permission, Group, GroupPermission, AdminGroup, \
     AdminPermissionOverride, AuditLog
+# WHY imported like the RBAC models: Prisma owns the table's creation, and the
+# web servers only append the lockouts they count so the panel's block list has
+# something to read.
+from .security_block import SecurityBlock
 
 from .init import init_db
 from .drop import drop_db

@@ -97,6 +97,14 @@ class User(Base):
         nullable=False,
         default=[])
 
+    # Timestamp of the most recent successful password login through CWS.
+    # Written by validate_login on success so the admin panel can surface it
+    # under the audit:read permission. NULL when the user has never logged in
+    # or the column has not yet been backfilled.
+    last_login_at: datetime | None = Column(
+        DateTime,
+        nullable=True)
+
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
 
@@ -133,6 +141,15 @@ class Team(Base):
     name: str = Column(
         Unicode,
         nullable=False)
+
+    # Whether a contestant may pick this team when registering in a contest.
+    # A team that exists for staff (teachers, assistants) is not registerable:
+    # it is kept out of the CWS dropdown and refused on the accept path, so the
+    # team still groups its members without being offered to contestants.
+    registerable: bool = Column(
+        Boolean,
+        nullable=False,
+        default=True)
 
     participations: list["Participation"] = relationship(
         "Participation",

@@ -11,6 +11,7 @@ import {
   type RankingEntry,
   type TaskCol,
 } from '@/components/contests/contest-detail/RankingTable';
+import { RankingBoardGraph } from '@/components/ranking/RankingBoardGraph';
 
 export type ContestRankingTabProps = {
   contestId: number;
@@ -53,5 +54,24 @@ export function ContestRankingTab({ contestId }: ContestRankingTabProps): React.
     );
   }
 
-  return <RankingTable ranking={ranking} />;
+  const firstPageSlice = ranking?.ranking.slice(0, 20).map((entry) => ({
+    rank: entry.rank,
+    username: entry.user.username,
+    displayName: entry.user.username,
+    totalScore: entry.totalScore,
+  })) ?? [];
+
+  return (
+    <div className="w-full space-y-6">
+      <RankingTable ranking={ranking} />
+      {firstPageSlice.length > 0 ? (
+        <div className="w-full rounded-xl border border-border bg-card p-6 shadow-xs">
+          <RankingBoardGraph
+            entries={firstPageSlice}
+            title="Score Progress Overview"
+          />
+        </div>
+      ) : null}
+    </div>
+  );
 }

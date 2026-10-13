@@ -41,6 +41,7 @@ mod tests {
             footer_text: Some("footer".to_string()),
             credits_text: Some("credits".to_string()),
             credits: None,
+            perspectives: None,
             access_mode: "protected".to_string(),
         }
     }

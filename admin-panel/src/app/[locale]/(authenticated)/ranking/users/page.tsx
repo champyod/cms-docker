@@ -1,5 +1,6 @@
 import { getRankingOverrideOptions, getRankingUsers, type RankingUserEntry } from '@/app/actions/ranking';
 import { Card } from '@/components/core/Card';
+import { CellText } from '@/components/core/CellText';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import {
@@ -42,20 +43,28 @@ interface UserRowProps {
 function UserRow({ locale, entry, copy }: UserRowProps): React.JSX.Element {
   return (
     <TableRow className="relative">
-      <TableCell>
+      <TableCell className="max-w-[220px]">
         {/* Stretched link: the hint invites a row click, and a server row cannot take
             onClick, so the name link's overlay makes the whole row the target. */}
-        <a
-          href={userHref(locale, entry.username)}
-          className={`${ROW_LINK} after:absolute after:inset-0 after:content-['']`}
-        >
-          {entry.displayName}
-        </a>
-        <span className={`ml-2 text-xs ${MUTED}`}>{entry.username}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <a
+            href={userHref(locale, entry.username)}
+            className={`${ROW_LINK} after:absolute after:inset-0 after:content-[''] min-w-0`}
+          >
+            <CellText width="md" bold>{entry.displayName}</CellText>
+          </a>
+          <CellText width="sm" mono muted>@{entry.username}</CellText>
+        </div>
       </TableCell>
-      <TableCell className={MUTED}>{entry.teamName ?? EMPTY_VALUE}</TableCell>
-      <TableCell className={MUTED}>{score(entry.totalScore)}</TableCell>
-      <TableCell className={MUTED}>{entry.rank}</TableCell>
+      <TableCell className={MUTED}>
+        <CellText width="md" muted>{entry.teamName ?? EMPTY_VALUE}</CellText>
+      </TableCell>
+      <TableCell className={MUTED}>
+        <CellText width="id" mono muted>{score(entry.totalScore)}</CellText>
+      </TableCell>
+      <TableCell className={MUTED}>
+        <CellText width="id" mono muted>#{entry.rank}</CellText>
+      </TableCell>
       <TableCell>
         <span className={entry.hidden ? HIDDEN_FLAG : MUTED}>
           {entry.hidden ? copy.hiddenYes : copy.hiddenNo}

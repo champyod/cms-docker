@@ -105,6 +105,9 @@ async function resolveNewTeamUserIds(contestId: number, teamId: number): Promise
     select: { user_id: true },
   });
   const allUserIds = [...new Set(teamParticipations.map((p) => p.user_id))];
+  if (allUserIds.length === 0) {
+    return { allUserIds: [], newIds: [] };
+  }
 
   const existingParticipations = await prisma.participations.findMany({
     where: { contest_id: contestId, user_id: { in: allUserIds } },
@@ -139,12 +142,18 @@ export async function addTeamToContest(
     const hidden = allowed.hidden ?? false;
     const unrestricted = allowed.unrestricted ?? false;
 
-    for (const userId of newIds) {
-      await prisma.$executeRaw`
-        INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-        VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
-      `;
-    }
+    await prisma.$transaction(async (tx) => {
+      for (const userId of newIds) {
+        await tx.$executeRaw`
+          INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
+          VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
+          ON CONFLICT (contest_id, user_id) DO UPDATE
+          SET team_id = EXCLUDED.team_id,
+              hidden = EXCLUDED.hidden,
+              unrestricted = EXCLUDED.unrestricted
+        `;
+      }
+    });
 
     await resyncRankingUsers(contestId);
 

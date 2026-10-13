@@ -153,3 +153,14 @@ export function parseFail2banState(raw: string | null): Fail2banState | null {
   });
   return { updatedAt: readText(parsed, 'updatedAt'), bans };
 }
+
+/**
+ * Whether the agent's last report says *ip* is not banned in *jail*.
+ *
+ * A null state is "unknown", never "not banned": an unban is consumed when the
+ * agent next runs, so a panel that has never seen a report must still be able to
+ * queue one. Only a report that is present and does not list the ban is a refusal.
+ */
+export function isKnownUnbanned(state: Fail2banState | null, jail: string, ip: string): boolean {
+  return state !== null && !state.bans.some((ban) => ban.jail === jail && ban.ip === ip);
+}

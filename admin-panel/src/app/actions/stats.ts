@@ -3,7 +3,6 @@
 import os from 'os';
 import fs from 'fs';
 import { ensurePermission } from '@/lib/permissions';
-import { collectWorkerStats } from '@/lib/worker-stats';
 
 type CpuSample = {
   idle: number;
@@ -143,11 +142,6 @@ export async function getServerStats() {
     loadAvg: loadAvg.map(l => l.toFixed(2)),
     source: procBase === '/host/proc' ? 'host' : 'container',
   };
-}
-
-export async function getWorkerStats(): Promise<ReturnType<typeof collectWorkerStats>> {
-  await ensurePermission('resource:read');
-  return collectWorkerStats();
 }
 
 function formatUptime(seconds: number) {

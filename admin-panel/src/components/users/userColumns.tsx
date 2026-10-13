@@ -1,4 +1,5 @@
 import { Badge } from '@/components/core/Badge';
+import { CellText } from '@/components/core/CellText';
 import type { ResponsiveColumn, ResponsiveRowProps } from '@/components/core/ResponsiveTable';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 import type { BuildUserColumnsArgs, UserRow } from './userTableTypes';
@@ -28,6 +29,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
           onChange={(event) => onToggleAll(event.target.checked)}
         />
       ),
+      cellClassName: 'w-10',
       render: ({ user }) => (
         <span onClick={(event) => event.stopPropagation()}>
           <input
@@ -44,8 +46,9 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
     {
       key: 'position',
       header: '#',
+      cellClassName: 'w-12',
       render: ({ position }) => (
-        <span className="font-mono text-muted-foreground text-xs">#{position}</span>
+        <CellText width="id" mono muted>#{position}</CellText>
       ),
       hideOnMobile: true,
     },
@@ -53,27 +56,31 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       key: 'name',
       header: 'Name',
       sortKey: 'name',
+      cellClassName: 'min-w-[140px]',
       render: ({ user }) => (
-        <span className="font-medium">{user.first_name} {user.last_name}</span>
+        <CellText width="lg" bold>{user.first_name} {user.last_name}</CellText>
       ),
     },
     {
       key: 'username',
       header: 'Username',
       sortKey: 'username',
-      render: ({ user }) => <span>{user.username}</span>,
+      cellClassName: 'min-w-[100px]',
+      render: ({ user }) => <CellText width="md" mono>{user.username}</CellText>,
     },
     {
       key: 'team',
       header: 'Team',
-      render: ({ user }) => <span>{teamCodes(user)}</span>,
+      cellClassName: 'min-w-[80px]',
+      render: ({ user }) => <CellText width="sm" muted>{teamCodes(user)}</CellText>,
     },
     {
       key: 'email',
       header: 'Email',
       sortKey: 'email',
+      cellClassName: 'min-w-[160px]',
       render: ({ user }) => (
-        <span className="text-muted-foreground">{user.email || '-'}</span>
+        <CellText width="xl" muted>{user.email || '-'}</CellText>
       ),
       hideOnMobile: true,
     },
@@ -81,8 +88,9 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       key: 'id',
       header: 'ID',
       sortKey: 'id',
+      cellClassName: 'w-16',
       render: ({ user }) => (
-        <span className="font-mono text-muted-foreground text-xs">#{user.id}</span>
+        <CellText width="id" mono muted>#{user.id}</CellText>
       ),
       hideOnMobile: true,
     },
@@ -90,6 +98,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       key: 'status',
       header: 'Status',
       sortKey: 'status',
+      cellClassName: 'w-24',
       render: ({ user }) =>
         user.status ? (
           <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
@@ -101,21 +110,28 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       key: 'organization',
       header: 'Organization',
       sortKey: 'organization',
-      render: ({ user }) => <span>{user.organization ?? '—'}</span>,
+      cellClassName: 'min-w-[120px]',
+      render: ({ user }) => <CellText width="md" muted>{user.organization ?? '—'}</CellText>,
       hideOnMobile: true,
     },
     {
       key: 'country',
       header: 'Country',
       sortKey: 'country',
-      render: ({ user }) => <span>{user.country ?? '—'}</span>,
+      cellClassName: 'min-w-[80px]',
+      render: ({ user }) => <CellText width="sm" muted>{user.country ?? '—'}</CellText>,
       hideOnMobile: true,
     },
     {
       key: 'contests',
       header: 'Contests',
       sortKey: 'contests',
-      render: ({ user }) => <span>{user._count?.participations ?? 0}</span>,
+      cellClassName: 'w-20 text-center',
+      render: ({ user }) => (
+        <CellText width="id" mono muted className="text-center">
+          {user._count?.participations ?? 0}
+        </CellText>
+      ),
     },
   ];
 }

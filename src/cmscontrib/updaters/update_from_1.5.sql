@@ -51,4 +51,8 @@ DROP TABLE public.printjobs;
 -- https://github.com/cms-dev/cms/pull/1642
 ALTER TABLE evaluations ADD COLUMN admin_text VARCHAR;
 
+-- Registerable teams: a team not offered to contestants in CWS.
+ALTER TABLE public.teams ADD COLUMN registerable boolean NOT NULL DEFAULT true;
+ALTER TABLE public.teams ALTER COLUMN registerable DROP DEFAULT;
+
 COMMIT;

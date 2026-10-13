@@ -86,6 +86,7 @@ struct RankingPage<'a> {
     anonymous: bool,
     theme_block: &'a str,
     notice_extras: &'a str,
+    perspectives_json: &'a str,
 }
 
 /// The title the page ships with, used when the panel names none.
@@ -104,6 +105,9 @@ pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceErr
     let anonymous = appearance.is_some_and(Appearance::anonymous);
     let theme_block = theme_block(appearance.and_then(|row| row.theme.as_ref()));
     let notice_extras = notice_extras(appearance);
+    let perspectives_json = crate::perspectives::script_json(&crate::perspectives::normalise(
+        appearance.and_then(|row| row.perspectives.as_ref()),
+    ));
     RankingPage {
         title,
         heading,
@@ -112,6 +116,7 @@ pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceErr
         anonymous,
         theme_block: &theme_block,
         notice_extras: &notice_extras,
+        perspectives_json: &perspectives_json,
     }
     .render()
     .map_err(|error| SurfaceError::Page(error.to_string()))

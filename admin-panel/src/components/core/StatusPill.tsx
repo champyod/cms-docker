@@ -1,6 +1,6 @@
 'use client';
 
-export type StatusTone = 'emerald' | 'amber' | 'blue' | 'red';
+export type StatusTone = 'emerald' | 'amber' | 'blue' | 'red' | 'slate';
 
 /** Single tone map for every connection/service/worker status in the panel. */
 export function statusTone(status: string): StatusTone {
@@ -8,13 +8,21 @@ export function statusTone(status: string): StatusTone {
     case 'healthy':
     case 'running':
     case 'online':
+    case 'connected':
       return 'emerald';
     case 'busy':
     case 'unhealthy':
+    case 'connecting':
       return 'amber';
+    case 'idle':
     case 'starting':
       return 'blue';
+    case 'disconnected':
+    case 'offline':
     case 'stopped':
+      return 'red';
+    case 'unknown':
+      return 'slate';
     default:
       return 'red';
   }
@@ -25,6 +33,7 @@ const DOT_TONE: Record<StatusTone, string> = {
   amber: 'bg-warning',
   blue: 'bg-info',
   red: 'bg-destructive',
+  slate: 'bg-muted-foreground/50',
 };
 
 const TEXT_TONE: Record<StatusTone, string> = {
@@ -32,6 +41,7 @@ const TEXT_TONE: Record<StatusTone, string> = {
   amber: 'text-warning',
   blue: 'text-info',
   red: 'text-destructive',
+  slate: 'text-muted-foreground',
 };
 
 /** One dot plus label for a status string; the only status renderer. */

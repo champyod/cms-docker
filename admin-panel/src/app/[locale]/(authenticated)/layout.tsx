@@ -63,12 +63,15 @@ export default async function AuthenticatedLayout({
             initialExpanded={sidebarExpanded}
           />
           <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-            <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
+            {/* The provider wraps the header too, so the command palette shares the one deploy context. */}
+            <DeployContestProvider>
+              <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
-            <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-              <DeployContestProvider>{children}</DeployContestProvider>
-            </div>
-            <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
+              <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+                {children}
+              </div>
+              <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
+            </DeployContestProvider>
           </Stack>
           <MobileNav locale={locale} permissionKeys={permissionKeys} />
           <ShortcutLayer permissionKeys={permissionKeys} />

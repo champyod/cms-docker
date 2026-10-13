@@ -4,6 +4,7 @@ import {
   canonicaliseEntry,
   computeEntryHash,
   isDestructiveVerb,
+  isPageViewVerb,
   type AuditEntry,
 } from '@/lib/audit';
 
@@ -37,6 +38,22 @@ describe('isDestructiveVerb', () => {
 
   it.each(verbCases)('classifies "$verb" as destructive=$expected', ({ verb, expected }) => {
     expect(isDestructiveVerb(verb)).toBe(expected);
+  });
+});
+
+describe('isPageViewVerb', () => {
+  const viewCases: { verb: string; expected: boolean }[] = [
+    { verb: 'service:view', expected: true },
+    { verb: 'config:view', expected: true },
+    { verb: 'lockout:view', expected: true },
+    { verb: 'service:restart', expected: false },
+    { verb: 'task:update', expected: false },
+    { verb: 'view', expected: false },
+    { verb: '', expected: false },
+  ];
+
+  it.each(viewCases)('classifies "$verb" as a page view=$expected', ({ verb, expected }) => {
+    expect(isPageViewVerb(verb)).toBe(expected);
   });
 });
 

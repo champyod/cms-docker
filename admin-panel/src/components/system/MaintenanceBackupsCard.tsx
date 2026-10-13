@@ -7,6 +7,7 @@ import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { Input } from '@/components/core/Input';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { MaintenanceController } from '@/components/system/maintenance-types';
 
 const BACKUP_FIELDS = [
@@ -22,6 +23,8 @@ function formatArchiveSize(sizeBytes: number): string {
 
 function ArchiveList({ controller }: { readonly controller: MaintenanceController }): React.JSX.Element {
   const { archives, archivesLoading } = controller;
+  // Why: an archive is a property of the machine, not of a contest, so it has no owner zone.
+  const formatTimestamp = useFormatTimestamp();
   if (archives.length === 0 && !archivesLoading) {
     return <Text variant="small" color="text-muted-foreground">No archives found.</Text>;
   }
@@ -31,7 +34,7 @@ function ArchiveList({ controller }: { readonly controller: MaintenanceControlle
         <div key={archive.name} className="flex items-center justify-between gap-2 text-xs">
           <span className="font-mono truncate">{archive.name}</span>
           <span className="text-muted-foreground shrink-0">
-            {formatArchiveSize(archive.sizeBytes)} · {new Date(archive.modifiedIso).toLocaleString()}
+            {formatArchiveSize(archive.sizeBytes)} · {formatTimestamp(archive.modifiedIso)}
           </span>
         </div>
       ))}

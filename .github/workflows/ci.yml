@@ -279,6 +279,11 @@ jobs:
         working-directory: admin-panel
         run: bun run test
 
+      # WHY: the served favicons and logos are committed copies of brand/, so drift needs its own gate.
+      - name: Brand drift
+        working-directory: admin-panel
+        run: bun run icons:check
+
       # WHY blocking now: the tree audits clean at high/critical except
       # braces@3.0.3 (GHSA-vfj7-8cjw-p6xm) — no fixed release exists, and the
       # package sits only in the eslint glob chain (fast-glob > micromatch),
@@ -461,6 +466,15 @@ jobs:
       - name: Test
         working-directory: ranking-web
         run: cargo test --all-targets -- --include-ignored
+
+      # The tab bar's overflow rule and the views' aggregations are pure JavaScript with
+      # no Rust counterpart, so they are exercised on their own rather than left to the
+      # browser. Runs on the ranking paths filter this job already owns.
+      # WHY a glob and not the directory: --test takes file paths or glob patterns, not a
+      # bare directory — the runner's Node treats that as a module to load and fails with
+      # "Cannot find module .../tests".
+      - name: Perspective logic tests
+        run: node --test "ranking-web/static/tests/*.test.js"
 
       # The rehearsal drives the release binary over HTTP against a database of its own:
       # this job's database already carries the schema, and these migrations are not

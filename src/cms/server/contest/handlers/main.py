@@ -52,7 +52,7 @@ from cms.db import User, Participation, Team
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
 from cms.server import multi_contest
-from cms.server.captcha import extract_provider, extract_token
+from cms.server.captcha import CaptchaOutcome, extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
@@ -78,6 +78,29 @@ LOGIN_LOCKED_RETRY_AFTER = 15 * 60
 # Dummy function to mark translatable strings.
 def N_(msgid):
     return msgid
+
+
+def selectable_teams(sql_session) -> list[Team]:
+    """Return the teams a contestant may register into.
+
+    A team flagged as not registerable exists for staff rather than for
+    contestants, so it is never offered.
+
+    """
+    return sql_session.query(Team).filter(
+        Team.registerable.is_(True)).order_by(Team.name).all()
+
+
+def find_registerable_team(sql_session, team_code: str) -> Team:
+    """Return the registerable team carrying this code.
+
+    raise: NoResultFound if no registerable team has the code, so a request
+        naming a staff team is refused instead of honoured.
+
+    """
+    return sql_session.query(Team).filter(
+        Team.code == team_code,
+        Team.registerable.is_(True)).one()
 
 
 class MainHandler(ContestHandler):
@@ -110,11 +133,12 @@ class RegistrationHandler(ContestHandler):
         # browser's jQuery handler to tell apart from a genuine credential
         # error. 429 also describes what actually happened, and the handler's
         # own script shows the widget again after it.
-        if not self.captcha.verify(
-                self.get_argument("username", ""), self.request.remote_ip,
-                extract_token(self), extract_provider(self)):
-            logger.info("CAPTCHA rejected on registration from IP %s.",
-                        self.request.remote_ip)
+        outcome = self.captcha.verify(
+            self.get_argument("username", ""), self.request.remote_ip,
+            extract_token(self), extract_provider(self))
+        if outcome is not CaptchaOutcome.ALLOWED:
+            logger.info("CAPTCHA refused on registration from IP %s: %s.",
+                        self.request.remote_ip, outcome.value)
             raise tornado.web.HTTPError(429)
 
         create_new_user = self.get_argument("new_user") == "true"
@@ -151,8 +175,7 @@ class RegistrationHandler(ContestHandler):
 
         self.r_params["MAX_INPUT_LENGTH"] = self.MAX_INPUT_LENGTH
         self.r_params["MIN_PASSWORD_LENGTH"] = self.MIN_PASSWORD_LENGTH
-        self.r_params["teams"] = self.sql_session.query(Team)\
-                                     .order_by(Team.name).all()
+        self.r_params["teams"] = selectable_teams(self.sql_session)
 
         self.render("register.html", **self.r_params)
 
@@ -219,14 +242,16 @@ class RegistrationHandler(ContestHandler):
         return user
 
     def _get_team(self) -> Team | None:
-        # If we have teams, we assume that the 'team' field is mandatory
-        if self.sql_session.query(Team).count() > 0:
+        # If we have registerable teams, we assume that the 'team' field is
+        # mandatory. The count is over the registerable teams alone, so a
+        # contest whose only teams are staff teams leaves the field optional,
+        # exactly as a contest with no teams does.
+        if self.sql_session.query(Team).filter(
+                Team.registerable.is_(True)).count() > 0:
             try:
                 team_code: str = self.get_argument("team")
-                team: Team | None = (
-                    self.sql_session.query(Team).filter(
-                        Team.code == team_code).one()
-                )
+                team: Team | None = find_registerable_team(
+                    self.sql_session, team_code)
             except (tornado.web.MissingArgumentError, NoResultFound):
                 raise tornado.web.HTTPError(400)
         else:
@@ -284,11 +309,12 @@ class LoginHandler(ContestHandler):
         # WHY the captcha comes first: a wrong or forged answer must not be
         # worth anything to an attacker, so the credentials are not examined
         # until the captcha has passed.
-        if not self.captcha.verify(
-                username, self.request.remote_ip, extract_token(self),
-                extract_provider(self)):
-            logger.info("CAPTCHA rejected for user %r from IP %s.", username,
-                        self.request.remote_ip)
+        outcome = self.captcha.verify(
+            username, self.request.remote_ip, extract_token(self),
+            extract_provider(self))
+        if outcome is not CaptchaOutcome.ALLOWED:
+            logger.info("CAPTCHA refused for user %r from IP %s: %s.", username,
+                        self.request.remote_ip, outcome.value)
             return False
 
         # WHY the lockout comes after it and before validate_login: the password

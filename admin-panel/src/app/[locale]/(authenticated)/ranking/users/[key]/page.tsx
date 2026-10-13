@@ -76,11 +76,11 @@ interface DetailFieldProps {
 
 function DetailField({ term, value }: DetailFieldProps): React.JSX.Element {
   return (
-    <div>
+    <div className="min-w-0">
       <Text as="dt" variant="label" color={MUTED}>
         {term}
       </Text>
-      <Text as="dd" variant="small" className="text-foreground/80">
+      <Text as="dd" variant="small" className="text-foreground/80 truncate block" title={value}>
         {value}
       </Text>
     </div>
@@ -135,10 +135,10 @@ function TaskScores({ entry, tasks, copy }: TaskScoresProps): React.JSX.Element 
           <TableBody>
             {tasks.map((task) => (
               <TableRow key={task.id}>
-                <TableCell>
-                  <span title={task.title}>{task.name}</span>
+                <TableCell className="max-w-[200px]">
+                  <span className="truncate block" title={task.title}>{task.name}</span>
                 </TableCell>
-                <TableCell className={MUTED}>{taskScore(entry, task)}</TableCell>
+                <TableCell className={`${MUTED} w-24 font-mono`}>{taskScore(entry, task)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

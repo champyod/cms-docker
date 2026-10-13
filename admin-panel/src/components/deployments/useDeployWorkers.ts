@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
-import { getWorkersLiveStatus, WorkerLiveDetail } from '@/app/actions/workers';
-import { WorkerConfig } from '@/components/deployments/WorkersPanel';
+import { getWorkersLiveStatus } from '@/app/actions/workers';
+import type { WorkerConfig, WorkerNodeView } from '@/lib/worker-nodes';
 import { toast } from 'sonner';
 
 type SetSaving = React.Dispatch<React.SetStateAction<boolean>>;
@@ -12,7 +12,7 @@ type SetSaving = React.Dispatch<React.SetStateAction<boolean>>;
 export function useDeployWorkers(setSaving: SetSaving) {
     const [workers, setWorkers] = useState<WorkerConfig[]>([]);
     const [originalWorkers, setOriginalWorkers] = useState<string>('[]');
-    const [liveWorkers, setLiveWorkers] = useState<WorkerLiveDetail[]>([]);
+    const [liveWorkers, setLiveWorkers] = useState<WorkerNodeView[]>([]);
     const [workersForbidden, setWorkersForbidden] = useState(false);
     const [canManageWorkers, setCanManageWorkers] = useState(true);
 

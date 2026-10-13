@@ -70,10 +70,6 @@ export async function activateContest(id: number): Promise<Awaited<ReturnType<ty
   return result;
 }
 
-export async function getActiveContest(): Promise<Awaited<ReturnType<typeof contestService.getActiveContest>>> {
-  return contestService.getActiveContest();
-}
-
 // Why: on-demand dialog read — the record layout never loads full edit
 // fields, so the Edit Contest dialog fetches them through this wrapper.
 export async function getContestEditData(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestEditData>>> {

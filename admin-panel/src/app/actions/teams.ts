@@ -30,14 +30,14 @@ export async function getTeams() {
   });
 }
 
-export async function createTeam(data: { code: string; name: string }) {
+export async function createTeam(data: { code: string; name: string; registerable?: boolean }) {
   await ensurePermission(ACTION_PERMISSIONS.createTeam);
   const perms = await getPermissions();
   const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
 
   try {
     const team = await prisma.teams.create({
-      data: allowed as { code: string; name: string },
+      data: allowed as { code: string; name: string; registerable?: boolean },
     });
     await recordAudit({
       verb: 'team:create',
@@ -57,7 +57,7 @@ export async function createTeam(data: { code: string; name: string }) {
   }
 }
 
-export async function updateTeam(teamId: number, data: { code?: string; name?: string }) {
+export async function updateTeam(teamId: number, data: { code?: string; name?: string; registerable?: boolean }) {
   await ensurePermission(ACTION_PERMISSIONS.updateTeam);
   const perms = await getPermissions();
   const allowed = stripDisallowedFields('teams', data as Record<string, unknown>, perms);
@@ -65,7 +65,7 @@ export async function updateTeam(teamId: number, data: { code?: string; name?: s
   try {
     await prisma.teams.update({
       where: { id: teamId },
-      data: allowed as { code?: string; name?: string },
+      data: allowed as { code?: string; name?: string; registerable?: boolean },
     });
     await recordAudit({
       verb: 'team:update',

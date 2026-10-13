@@ -51,9 +51,11 @@ import tornado.web
 
 from cms import config, TOKEN_MODE_MIXED
 from cms.db import Contest, Submission, Task, UserTest
+from cms.db.username import get_display_name
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
 from cms.server.captcha import Captcha
+from cms.server.login_lockout_ledger import record_login_lockout
 from cms.server.contest.authentication import authenticate_request
 from cms.server.credits import load_credits
 from cmscommon.datetime import get_timezone
@@ -96,7 +98,8 @@ class ContestHandler(BaseHandler):
         """
         if ContestHandler._cws_captcha is None:
             ContestHandler._cws_captcha = Captcha(
-                config.contest_web_server.captcha)
+                config.contest_web_server.captcha,
+                lockout_sink=record_login_lockout)
         return ContestHandler._cws_captcha
 
     def prepare(self):
@@ -229,6 +232,14 @@ class ContestHandler(BaseHandler):
             ret["participation"] = participation
             ret["user"] = participation.user
 
+            # WHY: the navbar shows the display username the
+            # contestant chose for this contest when the policy
+            # allows one; get_display_name falls back to the real
+            # name, so every page agrees with the ranking.
+            ret["display_name"] = get_display_name(
+                self.sql_session, self.contest.id,
+                participation.user)
+
             res = compute_actual_phase(
                 self.timestamp, self.contest.start, self.contest.stop,
                 self.contest.analysis_start if self.contest.analysis_enabled
@@ -245,8 +256,9 @@ class ContestHandler(BaseHandler):
             if ret["actual_phase"] == 0:
                 ret["phase"] = 0
 
-            # set the timezone used to format timestamps
-            ret["timezone"] = get_timezone(participation.user, self.contest)
+        # the timezone must be set on the pre-login pages too, which carry no user
+        user = self.current_user.user if self.current_user is not None else None
+        ret["timezone"] = get_timezone(user, self.contest)
 
         # some information about token configuration
         ret["tokens_contest"] = self.contest.token_mode

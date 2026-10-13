@@ -15,6 +15,8 @@ export interface AuditDict {
     entity: string;
     verb: string;
     actorId: string;
+    ip: string;
+    pageViews: string;
     result: string;
     allResults: string;
     search: string;

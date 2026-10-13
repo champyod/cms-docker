@@ -9,11 +9,12 @@ interface MismatchBannerProps {
 }
 
 function listDisagreeingSources(activeContestId: number | null, dbActiveContestId: number | null, containerContestId: number | null | undefined): string[] {
-  const disagreeing: string[] = [];
-  if (activeContestId !== null && dbActiveContestId !== null && activeContestId !== dbActiveContestId) disagreeing.push('config.toml and database');
-  if (activeContestId !== null && containerContestId != null && activeContestId !== containerContestId) disagreeing.push('config.toml and running container');
-  if (dbActiveContestId !== null && containerContestId != null && dbActiveContestId !== containerContestId) disagreeing.push('database and running container');
-  return disagreeing;
+  // The id on screen is already the database's (the panel reads contests.is_active), so the only
+  // two sources that can disagree are that row and the contest the running container serves.
+  const databaseId = activeContestId ?? dbActiveContestId;
+  return databaseId !== null && containerContestId != null && databaseId !== containerContestId
+    ? ['the database and the running container']
+    : [];
 }
 
 export function MismatchBanner({ activeContestId, activeContestName, dbActiveContestId, containerContestId }: MismatchBannerProps) {
@@ -21,16 +22,11 @@ export function MismatchBanner({ activeContestId, activeContestName, dbActiveCon
     return (
         <InlineAlert tone="warning" title="Configuration Mismatch" announce="polite" className="mb-6">
             <Text variant="small">
-                The config.toml <strong className="text-foreground">[contest] CONTEST_ID</strong> setting points to contest <strong className="text-foreground">#{activeContestId}</strong>
-                {activeContestName ? ` (${activeContestName})` : ''}
-                {dbActiveContestId !== null && (
-                        <>
-                            , the database has contest <strong className="text-foreground">#{dbActiveContestId}</strong> marked as active
-                        </>
-                )}
+                The database has contest <strong className="text-foreground">#{activeContestId}</strong>
+                {activeContestName ? ` (${activeContestName})` : ''} marked as active
                 {containerContestId != null && (
                         <>
-                            , and the running container serves contest <strong className="text-foreground">#{containerContestId}</strong>
+                            , while the running container serves contest <strong className="text-foreground">#{containerContestId}</strong>
                         </>
                 )}
                 .

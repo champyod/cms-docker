@@ -17,6 +17,8 @@ interface BrandingCardProps {
   onUpload: (file: File) => Promise<void>;
   error?: string;
   readOnly: boolean;
+  /** Scoreboard display name shown below the logo */
+  displayName?: string;
 }
 
 function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: () => void }) {
@@ -47,7 +49,7 @@ function LoadingOverlay() {
   );
 }
 
-export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly }: BrandingCardProps) {
+export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly, displayName }: BrandingCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleClick = useCallback(() => {
@@ -85,6 +87,13 @@ export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly }:
         </div>
         {loading && <LoadingOverlay />}
       </div>
+
+      {displayName ? (
+        <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-center">
+          <p className="text-sm font-semibold text-foreground">{displayName}</p>
+          <p className="text-xs text-muted-foreground">Scoreboard name shown under logo</p>
+        </div>
+      ) : null}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

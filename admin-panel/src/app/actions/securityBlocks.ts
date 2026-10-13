@@ -9,9 +9,7 @@ import { getCurrentUser } from '@/app/actions/auth';
 import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
-import { clearLoginLockouts, isLoginLockoutKey, listLoginLockouts, type LoginLockout } from '@/lib/login-lockouts';
-import { lockoutRedisUrl } from '@/lib/redis-lockouts';
-import { listBlocks, type SecurityBlock } from '@/lib/security/block-ledger';
+import { expireStaleBlocks, listBlocks, type SecurityBlock } from '@/lib/security/block-ledger';
 import { releaseLoginLockout } from '@/lib/security/lockouts';
 import {
   FAIL2BAN_JAIL_FILE,
@@ -20,6 +18,7 @@ import {
   SECURITY_AGENT_RESULTS_DIR,
   SECURITY_AGENT_STATE_FILE,
   buildUnbanRequest,
+  isKnownUnbanned,
   isValidIpAddress,
   parseFail2banState,
   parseJailNames,
@@ -43,11 +42,6 @@ export interface BannedAddressView {
   readonly jailNames: readonly string[];
   readonly agentStateUpdatedAt: string | null;
   readonly agentReported: boolean;
-}
-
-export interface ServerLockoutView {
-  readonly lockouts: readonly LoginLockout[];
-  readonly error: string | null;
 }
 
 export interface BlocksActionResult {
@@ -101,9 +95,16 @@ export async function readBannedAddresses(): Promise<BannedAddressView> {
   };
 }
 
+/**
+ * Every login lockout, read from the ledger the web servers write to. The counter a
+ * lockout is enforced from lives in the shared store; this row is the operator's record
+ * of it, so a row whose expiry has passed is closed before the list is read rather than
+ * shown as a live lockout nobody can lift.
+ */
 export async function readLoginLockouts(): Promise<readonly SecurityBlock[]> {
   await ensurePermission('security:read');
   await ensurePermission('lockout:read');
+  await expireStaleBlocks();
   const open = await listBlocks({ kind: 'login_lockout', active: true });
   await recordAudit({
     verb: 'lockout:view',
@@ -112,32 +113,6 @@ export async function readLoginLockouts(): Promise<readonly SecurityBlock[]> {
     result: 'success',
   });
   return open;
-}
-
-/**
- * The contest and classic-admin lockouts are Redis counters, not ledger rows, so they are
- * read from the shared store. A missing URL is reported rather than shown as "no
- * lockouts", because an empty list and an unreachable store otherwise look identical.
- */
-export async function readServerLoginLockouts(): Promise<ServerLockoutView> {
-  await ensurePermission('security:read');
-  await ensurePermission('lockout:read');
-  const url = lockoutRedisUrl();
-  if (url === null) {
-    return { lockouts: [], error: 'REDIS_URL is not configured' };
-  }
-  try {
-    const lockouts = await listLoginLockouts(url);
-    await recordAudit({
-      verb: 'lockout:view',
-      entity: 'security',
-      afterValues: { server: lockouts.length },
-      result: 'success',
-    });
-    return { lockouts, error: null };
-  } catch (error) {
-    return { lockouts: [], error: (error as Error).message };
-  }
 }
 
 async function writeQueueRequest(request: SecurityAgentRequest): Promise<void> {
@@ -160,11 +135,12 @@ export async function queueUnban(jail: string, ip: string, reason: string): Prom
     requestedAt: new Date().toISOString(),
   });
   if (built.request === null) return { success: false, error: built.errors.join('; ') };
+  // WHY a missing agent report is not a refusal: the request is consumed when the
+  // agent next runs, so a panel that has never seen state can still queue one.
+  // Refusing without state is what made every unban dead on a host whose agent was
+  // down, leaving an operator no recovery path but a manual edit.
   const state = await readAgentState();
-  if (state === null) {
-    return { success: false, error: 'The host security agent has not reported any state, so no unban was queued' };
-  }
-  if (!state.bans.some((ban) => ban.jail === jail && ban.ip === ip)) {
+  if (isKnownUnbanned(state, jail, ip)) {
     return { success: false, error: `${ip} is not currently banned in ${jail}` };
   }
   await writeQueueRequest(built.request);
@@ -194,25 +170,3 @@ export async function unlockLoginLockout(username: string, ip: string, reason: s
   };
 }
 
-/** Lifts a contest or classic-admin lockout by deleting its counter from the shared Redis. */
-export async function unlockServerLoginLockout(key: string, reason: string): Promise<BlocksActionResult> {
-  await ensurePermission('lockout:unlock');
-  if (reason.trim().length === 0) return { success: false, error: 'A reason is required to lift a lockout' };
-  if (!isLoginLockoutKey(key)) return { success: false, error: 'Not a server login lockout key' };
-  const url = lockoutRedisUrl();
-  if (url === null) return { success: false, error: 'REDIS_URL is not configured' };
-  const cleared = await clearLoginLockouts(url, [key]);
-  await recordAudit({
-    verb: 'lockout:unlock',
-    entity: 'security',
-    entityId: key,
-    afterValues: { cleared },
-    reason,
-    result: 'success',
-  });
-  revalidatePath(BLOCKS_PAGE_PATH, 'page');
-  return {
-    success: cleared > 0,
-    message: cleared > 0 ? `Lockout lifted for ${key}` : `No live lockout for ${key}`,
-  };
-}

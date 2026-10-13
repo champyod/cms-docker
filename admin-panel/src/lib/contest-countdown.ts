@@ -7,8 +7,6 @@ export interface ContestTimingWindow {
   analysis_stop: string | Date | null;
 }
 
-export const DEFAULT_COUNTDOWN_TIMEZONE = 'Asia/Bangkok';
-
 export const PHASE_LABELS: Readonly<Record<ContestPhase, string>> = {
   not_started: 'Not Started',
   running: 'Running',

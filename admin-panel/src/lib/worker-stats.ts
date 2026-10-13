@@ -4,6 +4,13 @@ import { exec, execFile } from 'child_process';
 import util from 'util';
 import { prisma } from '@/lib/prisma';
 import { getRepoRoot } from './repo-root';
+import {
+  LAGGING_TASK_THRESHOLD,
+  mapEmitterRowsToNodes,
+  workerLoad,
+  type EmitterWorkerRow,
+  type WorkerNodeView,
+} from './worker-nodes';
 
 const execPromise = util.promisify(exec);
 const execFilePromise = util.promisify(execFile);
@@ -13,27 +20,7 @@ const execFilePromise = util.promisify(execFile);
 const EMITTER_TIMEOUT_MS = 12000;
 const EMITTER_SCRIPT = ['scripts', '__worker_status_json.sh'];
 
-export interface WorkerStat {
-  id: string;
-  name: string;
-  status: string;
-  tasks: number;
-  load: number;
-  activity: string;
-  health: string;
-}
-
-interface EmitterRow {
-  shard?: unknown;
-  endpoint?: unknown;
-  state?: unknown;
-  health?: unknown;
-  activity?: unknown;
-  reachable?: unknown;
-}
-
 type ConfiguredWorker = { shard: number; host: string; port: number };
-type RunningShard = { shard: number; status: string };
 
 const WORKER_ENV_LINE_RE = /^(?:export\s+)?WORKER_(\d+)\s*=\s*['"]?([^:'"]+)['"]?\s*:\s*(\d+)\s*$/;
 
@@ -44,7 +31,7 @@ function parseEnvCoreWorkerLine(line: string): ConfiguredWorker | null {
   return {
     shard: parseInt(match[1], 10),
     host: match[2].trim(),
-    port: parseInt(match[3], 10)
+    port: parseInt(match[3], 10),
   };
 }
 
@@ -62,69 +49,14 @@ function loadConfiguredWorkers(envCorePath: string): ConfiguredWorker[] {
   }
 }
 
-function isShardRunning(running: RunningShard[], shard: number): boolean {
-  return running.some((r) => r.shard === shard && r.status.toLowerCase().includes('up'));
-}
-
-function textOf(value: unknown, fallback: string): string {
-  return typeof value === 'string' && value ? value : fallback;
-}
-
-export function mapEmitterRowsToStats(rows: EmitterRow[], shardCounts: Record<number, number>): WorkerStat[] {
-  return rows.map((row, index) => {
-    const shard = typeof row.shard === 'number' ? row.shard : index;
-    const taskCount = shardCounts[shard] || 0;
-    const state = textOf(row.state, 'unknown');
-    // Why reachable rescues absent and remote: remote shards have no local
-    // container, so docker-only truth renders working remotes offline. The
-    // emitter labels those rows remote; absent stays rescued because a stale
-    // emitter can still produce it. Exited stays offline even if reachable;
-    // unreachable stays offline — real outages stay visible.
-    const isLive = state === 'running' || ((state === 'absent' || state === 'remote') && row.reachable === true);
-    return {
-      id: `worker-${shard}`,
-      name: textOf(row.endpoint, `worker-${shard}`),
-      status: isLive ? (taskCount > 0 ? 'busy' : 'online') : 'offline',
-      tasks: taskCount,
-      load: taskCount > 0 ? Math.min(100, (taskCount / 10) * 100) : 0,
-      activity: textOf(row.activity, 'unknown'),
-      health: textOf(row.health, 'none'),
-    };
-  });
-}
-
-async function loadEmitterRows(): Promise<EmitterRow[]> {
+async function loadEmitterRows(): Promise<EmitterWorkerRow[]> {
   const { stdout } = await execFilePromise(
     'bash',
     [path.join(getRepoRoot(), ...EMITTER_SCRIPT)],
     { cwd: getRepoRoot(), timeout: EMITTER_TIMEOUT_MS }
   );
   const parsed: unknown = JSON.parse(stdout);
-  return Array.isArray(parsed) ? (parsed as EmitterRow[]) : [];
-}
-
-function parseContainerShard(name: string): number | null {
-  const m = name.match(/cms-worker-(\d+)/);
-  return m ? parseInt(m[1], 10) : null;
-}
-
-function describeContainerWorkers(containerLines: string[], shardCounts: Record<number, number>): WorkerStat[] {
-  return containerLines.map((line) => {
-    const [name, status] = line.split('\t');
-    const isRunning = status.toLowerCase().includes('up');
-    const shard = parseContainerShard(name);
-    const tasks = shard !== null ? (shardCounts[shard] || 0) : 0;
-
-    return {
-      id: name,
-      name: name,
-      status: isRunning ? (tasks > 0 ? 'busy' : 'online') : 'offline',
-      tasks,
-      load: tasks ? Math.min(100, (tasks / 10) * 100) : 0,
-      activity: 'unknown',
-      health: 'none',
-    };
-  });
+  return Array.isArray(parsed) ? (parsed as EmitterWorkerRow[]) : [];
 }
 
 async function loadShardCounts(): Promise<Record<number, number>> {
@@ -132,60 +64,109 @@ async function loadShardCounts(): Promise<Record<number, number>> {
   const groups = await prisma.evaluations.groupBy({
     by: ['evaluation_shard'],
     where: { outcome: null },
-    _count: { _all: true }
+    _count: { _all: true },
   });
   const shardCounts: Record<number, number> = {};
-  for (const g of groups) {
-    if (g.evaluation_shard !== null) shardCounts[g.evaluation_shard] = g._count._all;
+  for (const group of groups) {
+    if (group.evaluation_shard !== null) shardCounts[group.evaluation_shard] = group._count._all;
   }
   return shardCounts;
 }
 
-export async function collectWorkerStats(): Promise<WorkerStat[]> {
+interface LocalNodeInput {
+  id: string;
+  host: string;
+  port: number;
+  shard: number | null;
+  endpoint: string;
+  running: boolean;
+  state: string;
+  shardCounts: Record<number, number>;
+}
+
+/** A node the local docker daemon can see; the emitter's fallback when it is unreachable. */
+function localNodeView({ id, host, port, shard, endpoint, running, state, shardCounts }: LocalNodeInput): WorkerNodeView {
+  const tasks = shard !== null ? (shardCounts[shard] ?? 0) : 0;
+  return {
+    id,
+    host,
+    port,
+    shard,
+    endpoint,
+    connection: running ? (tasks > 0 ? 'busy' : 'connected') : 'disconnected',
+    state,
+    health: 'none',
+    activity: 'unknown',
+    reachable: running,
+    tasks,
+    load: workerLoad(tasks),
+    lagging: tasks >= LAGGING_TASK_THRESHOLD,
+    contest: null,
+    uptime: '',
+    restarts: 0,
+    lastLog: '',
+  };
+}
+
+function parseContainerShard(name: string): number | null {
+  const match = name.match(/cms-worker-(\d+)/);
+  return match ? parseInt(match[1], 10) : null;
+}
+
+async function collectFromDocker(shardCounts: Record<number, number>): Promise<WorkerNodeView[]> {
+  const configured = loadConfiguredWorkers(path.join(getRepoRoot(), '.env'));
+  const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
+  const lines = stdout.trim() ? stdout.trim().split('\n') : [];
+
+  if (configured.length > 0) {
+    return configured.map((worker) => localNodeView({
+      id: `worker-${worker.shard}`,
+      host: worker.host,
+      port: worker.port,
+      shard: worker.shard,
+      endpoint: `${worker.host}:${worker.port}`,
+      running: lines.some((line) => {
+        const [name, status] = line.split('\t');
+        return parseContainerShard(name) === worker.shard && status.toLowerCase().includes('up');
+      }),
+      state: 'running',
+      shardCounts,
+    }));
+  }
+
+  return lines.filter(Boolean).map((line) => {
+    const [name, status] = line.split('\t');
+    const running = status.toLowerCase().includes('up');
+    const shard = parseContainerShard(name);
+    return localNodeView({
+      id: name,
+      host: name,
+      port: 0,
+      shard,
+      endpoint: name,
+      running,
+      state: running ? 'running' : 'exited',
+      shardCounts,
+    });
+  });
+}
+
+/**
+ * Every configured worker node with its live reading.
+ *
+ * Why the emitter first: it is the single service that pings every fleet shard —
+ * local docker state plus TCP reachability, remotes included. The docker pass is
+ * only the fallback for a host where the emitter itself cannot run.
+ */
+export async function collectWorkerStats(): Promise<WorkerNodeView[]> {
   try {
     const shardCounts = await loadShardCounts();
     try {
-      // Why the emitter first: it is the single service that pings every
-      // fleet shard (local docker state + TCP reachability incl. remotes).
-      return mapEmitterRowsToStats(await loadEmitterRows(), shardCounts);
+      return mapEmitterRowsToNodes(await loadEmitterRows(), shardCounts);
     } catch (emitterError) {
       console.error('Emitter failed, falling back to docker ps:', emitterError);
     }
-
-    const configuredWorkers = loadConfiguredWorkers(path.join(getRepoRoot(), '.env'));
-
-    const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
-
-    const running: RunningShard[] = stdout
-      .trim()
-      .split('\n')
-      .filter(Boolean)
-      .map((line) => {
-        const [name, status] = line.split('\t');
-        return { shard: parseContainerShard(name) ?? -1, status };
-      });
-
-    if (configuredWorkers.length > 0) {
-      return configuredWorkers.map((worker) => {
-        const tasks = shardCounts[worker.shard] || 0;
-        const live = isShardRunning(running, worker.shard);
-        return {
-          id: `worker-${worker.shard}`,
-          name: `${worker.host}:${worker.port}`,
-          status: live ? (tasks > 0 ? 'busy' : 'online') : 'offline',
-          tasks,
-          load: tasks > 0 ? Math.min(100, (tasks / 10) * 100) : 0,
-          activity: 'unknown',
-          health: 'none',
-        };
-      });
-    }
-
-    if (!stdout.trim()) {
-      return [];
-    }
-
-    return describeContainerWorkers(stdout.trim().split('\n'), shardCounts);
+    return await collectFromDocker(shardCounts);
   } catch (error) {
     console.error('Failed to get worker stats:', error);
     return [];

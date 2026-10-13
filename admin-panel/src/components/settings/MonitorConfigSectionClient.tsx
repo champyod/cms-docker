@@ -152,18 +152,15 @@ export function MonitorConfigSectionClient({
                 </p>
               </div>
 
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
+                iconOnly
+                icon={target.enabled ? ToggleRight : ToggleLeft}
                 onClick={() => handleToggle(target.id)}
-                className="flex size-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+                className={target.enabled ? 'text-success' : 'text-muted-foreground'}
                 aria-label={target.enabled ? 'Disable target' : 'Enable target'}
-              >
-                {target.enabled ? (
-                  <ToggleRight className="w-5 h-5 text-success" />
-                ) : (
-                  <ToggleLeft className="w-5 h-5" />
-                )}
-              </button>
+              />
 
               <Button
                 variant="ghost"

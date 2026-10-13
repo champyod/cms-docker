@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { WorkerGrid } from '@/components/resources/WorkerGrid';
+import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
 import { CoreServicesStatus } from '@/components/resources/CoreServicesStatus';
 import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { GaugeCard } from '@/components/resources/GaugeCard';
@@ -14,7 +14,8 @@ import { useLiveStream } from '@/hooks/useLiveStream';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
-import type { ResourceFrame, ServerStats, TrafficLog, WorkerStat, CoreServiceStatus } from '@/lib/live-frames';
+import type { ResourceFrame, ServerStats, TrafficLog, WorkerNodeView, CoreServiceStatus } from '@/lib/live-frames';
+import { rowsFromNodes } from '@/lib/worker-nodes';
 
 interface PendingFirstFrame {
   readonly resolve: () => void;
@@ -24,7 +25,7 @@ interface PendingFirstFrame {
 export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
-  const [workers, setWorkers] = useState<WorkerStat[]>([]);
+  const [workers, setWorkers] = useState<WorkerNodeView[]>([]);
   const [services, setServices] = useState<CoreServiceStatus[]>([]);
   const [traffic, setTraffic] = useState<TrafficLog[]>([]);
   const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
@@ -112,7 +113,11 @@ export function ResourceView(): React.JSX.Element {
               <Activity className="w-5 h-5 text-primary" />
               <h2 className="text-xl font-bold">{dict.resources.workerNodes}</h2>
           </div>
-          <WorkerGrid workers={workers} />
+          <WorkerNodeList
+            rows={rowsFromNodes(workers)}
+            emptyTitle="No worker nodes found"
+            emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-6">

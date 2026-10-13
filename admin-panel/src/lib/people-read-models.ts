@@ -95,7 +95,7 @@ export async function getUserTeams(userId: number): Promise<readonly UserTeamMem
 
 export async function getUserHistory(userId: number): Promise<UserHistory | null> {
   const permissions = combinePermissions(await requirePermission('user:read'), await requirePermission('participation:list'), await requirePermission('submission:read'));
-  const row = await prisma.users.findUnique({ where: { id: userId }, select: { last_login_at: true, participations: { orderBy: { contests: { start: 'desc' } }, select: { id: true, contest_id: true, team_id: true, starting_time: true, contests: { select: { id: true, name: true, start: true, stop: true } }, teams: { select: { id: true, code: true, name: true } }, submissions: { orderBy: { timestamp: 'desc' }, select: { id: true, timestamp: true, language: true, official: true, task_id: true, tasks: { select: { id: true, name: true } }, submission_results: { select: { score: true } } } } } } } });
+  const row = await prisma.users.findUnique({ where: { id: userId }, select: { last_login_at: true, participations: { orderBy: { contests: { start: 'desc' } }, select: { id: true, contest_id: true, team_id: true, starting_time: true, contests: { select: { id: true, name: true, start: true, stop: true, timezone: true } }, teams: { select: { id: true, code: true, name: true } }, submissions: { orderBy: { timestamp: 'desc' }, select: { id: true, timestamp: true, language: true, official: true, task_id: true, tasks: { select: { id: true, name: true } }, submission_results: { select: { score: true } } } } } } } });
   if (!row) return null;
   const access: HistoryAccess = {
     users: getFieldAccess('users', permissions),
@@ -115,22 +115,23 @@ export async function getUserHistory(userId: number): Promise<UserHistory | null
 
 export async function getTeamSummary(teamId: number): Promise<TeamSummary | null> {
   const permissions = await requirePermission('team:read');
-  const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true, organization: true, leader_id: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } } });
+  const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true, organization: true, leader_id: true, registerable: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } } });
   if (!row) return null;
   return toTeamSummary(row, teamSummaryAccess(permissions));
 }
 
-export type TeamEditData = Pick<TeamSummary, 'id' | 'code' | 'name'>;
+export type TeamEditData = Pick<TeamSummary, 'id' | 'code' | 'name' | 'registerable'>;
 
 export async function getTeamEditData(teamId: number): Promise<TeamEditData | null> {
   const permissions = await requirePermission('team:read');
-  const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true } });
+  const row = await prisma.teams.findUnique({ where: { id: teamId }, select: { id: true, code: true, name: true, registerable: true } });
   if (!row) return null;
-  // Why the projection: TeamModal renders code and name as inputs, so a caller
-  // who may not read one gets null rather than the stored value. Why id is not
-  // projected: it is the record key this reader was asked for, also team:read.
+  // Why the projection: TeamModal renders code, name and registerable as
+  // inputs, so a caller who may not read one gets null rather than the stored
+  // value. Why id is not projected: it is the record key this reader was asked
+  // for, also team:read.
   const visible = filterReadableFieldsWith(getFieldAccess('teams', permissions), row);
-  return { id: row.id, code: visible.code ?? null, name: visible.name ?? null };
+  return { id: row.id, code: visible.code ?? null, name: visible.name ?? null, registerable: visible.registerable ?? null };
 }
 
 export async function getTeamMembers(teamId: number): Promise<readonly TeamMember[]> {
@@ -193,7 +194,7 @@ export async function getUsers(input: { page: number; search: string; perPage: n
 export async function getTeams(sort?: ListSortInput | null): Promise<TeamsPageResult> {
   const permissions = await requirePermission('team:list');
   const access = teamSummaryAccess(permissions);
-  const rows = await prisma.teams.findMany({ select: { id: true, code: true, name: true, organization: true, leader_id: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } }, orderBy: teamSortOrderBy(sort ?? null) });
+  const rows = await prisma.teams.findMany({ select: { id: true, code: true, name: true, organization: true, leader_id: true, registerable: true, leader: { select: { id: true, username: true, first_name: true, last_name: true } }, _count: { select: { participations: true } } }, orderBy: teamSortOrderBy(sort ?? null) });
   return { teams: rows.map((row) => toTeamSummary(row, access)), effectivePermissions: permissions };
 }
 
