@@ -116,6 +116,7 @@ function renderSummary(permissionKeys: readonly string[]): HTMLElement {
     <DictionaryProvider dict={en}>
       <SubmissionSummaryTab
         summary={SUMMARY}
+        source={null}
         permissionKeys={permissionKeys}
         navigation={en.navigation}
         locale="en"

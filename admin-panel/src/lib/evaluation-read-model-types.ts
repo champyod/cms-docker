@@ -70,3 +70,16 @@ export type SubmissionTestcaseDetailModel =
       expectedOutput: string | null;
     })
   | (SubmissionTestcaseRef & { testcaseReadable: false });
+
+interface SubmissionSourceRef {
+  submissionId: number;
+  /** Selects the highlighter grammar; null when the submission records no language. */
+  language: string | null;
+}
+
+// Why a union: a submission's file row is bound to `file:read` by the files field
+// map, so a reader without it receives a payload carrying no filename and no
+// digest — there is no reference left from which to fetch the bytes.
+export type SubmissionSourceModel =
+  | (SubmissionSourceRef & { sourceReadable: true; filename: string; digest: string })
+  | (SubmissionSourceRef & { sourceReadable: false });
