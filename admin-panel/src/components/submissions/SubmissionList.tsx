@@ -1,18 +1,20 @@
 'use client';
 
-import { Eye, FileCode, HelpCircle } from 'lucide-react';
+import { BadgeCheck, Eye, FileCode, HelpCircle, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { useState } from 'react';
 
-import { Button } from '@/components/core/Button';
+import { recalculateSubmission, toggleSubmissionOfficial } from '@/app/actions/submissions';
 import { EmptyState } from '@/components/core/EmptyState';
-import { Input } from '@/components/core/Input';
+import { RowActions } from '@/components/core/RowActions';
 import { RecordList } from '@/components/list/RecordList';
 import { RecordListPager } from '@/components/list/RecordListPager';
-import { RowActionLink } from '@/components/list/RowActionLink';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Dictionary } from '@/lib/dictionary';
@@ -22,6 +24,9 @@ import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
 import { BatchRecalcBar } from './BatchRecalcBar';
+import { SubmissionFiltersCard, type SubmissionFilters } from './SubmissionFiltersCard';
+
+export type { SubmissionFilters };
 
 export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
@@ -35,109 +40,20 @@ export interface SubmissionListProps {
    */
   readonly filters?: SubmissionFilters;
   /**
-   * Whether the reader may requeue in bulk. Resolved on the server from the same four
-   * keys the action itself gates on, so the control cannot appear to someone the action
-   * would refuse.
+   * Whether the reader may requeue, single or in bulk. Resolved on the server from the
+   * same four keys both requeue paths gate on, so neither control can appear to someone
+   * the action would refuse.
    */
-  readonly canBatchRecompute?: boolean;
-}
-
-/** The contest/task/user narrowing the list query already supports. */
-export interface SubmissionFilters {
-  readonly contestId?: number;
-  readonly taskId?: number;
-  readonly userId?: number;
+  readonly canRecalculate?: boolean;
+  /**
+   * Whether the reader may flip the official flag. Resolved from `submission:update`, the
+   * key `toggleSubmissionOfficial` re-checks on every call.
+   */
+  readonly canOfficial?: boolean;
 }
 
 function recordHref(locale: string, submission: SubmissionListItem): string {
   return buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
-}
-
-/**
- * The narrowing controls, driven entirely by the URL.
- *
- * WHY a form and not local state: the filter is a property of the view, not of the
- * component, so it belongs in the address bar — an operator can share or bookmark the
- * exact list they are looking at, and a reload keeps it. Every push resets the page,
- * because page 4 of the unfiltered list is not page 4 of a filtered one.
- *
- * WHY the labels are literal strings: this component already renders its own copy that
- * way ("No submissions found", and the pager's "Page 1 of 2"), so it matches the file's
- * existing convention rather than inventing a second one for two fields. They should
- * move into the dictionary with the rest of this component's copy.
- */
-function SubmissionFiltersBar({
-  filters,
-  onApply,
-}: {
-  readonly filters: SubmissionFilters;
-  readonly onApply: (next: SubmissionFilters) => void;
-}): React.JSX.Element {
-  const [contest, setContest] = useState(filters.contestId === undefined ? '' : String(filters.contestId));
-  const [task, setTask] = useState(filters.taskId === undefined ? '' : String(filters.taskId));
-  const [user, setUser] = useState(filters.userId === undefined ? '' : String(filters.userId));
-
-  const submit = (event: React.FormEvent<HTMLFormElement>): void => {
-    event.preventDefault();
-    onApply({
-      ...(readId(contest) === undefined ? {} : { contestId: readId(contest) }),
-      ...(readId(task) === undefined ? {} : { taskId: readId(task) }),
-      ...(readId(user) === undefined ? {} : { userId: readId(user) }),
-    });
-  };
-
-  const clear = (): void => {
-    setContest('');
-    setTask('');
-    setUser('');
-    onApply({});
-  };
-
-  const hasAny = contest !== '' || task !== '' || user !== '';
-
-  return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2">
-      <Input
-        label="Contest id"
-        name="contest"
-        inputMode="numeric"
-        value={contest}
-        onChange={(event) => setContest(event.target.value)}
-        className="w-28"
-      />
-      <Input
-        label="Task id"
-        name="task"
-        inputMode="numeric"
-        value={task}
-        onChange={(event) => setTask(event.target.value)}
-        className="w-28"
-      />
-      <Input
-        label="User id"
-        name="user"
-        inputMode="numeric"
-        value={user}
-        onChange={(event) => setUser(event.target.value)}
-        className="w-28"
-      />
-      <Button type="submit" variant="secondary" size="sm">
-        Filter
-      </Button>
-      {hasAny ? (
-        <Button type="button" variant="ghost" size="sm" onClick={clear}>
-          Clear
-        </Button>
-      ) : null}
-    </form>
-  );
-}
-
-/** A positive integer, or undefined for blank and for anything that is not one. */
-function readId(raw: string): number | undefined {
-  if (raw.trim() === '') return undefined;
-  const value = Number.parseInt(raw, 10);
-  return Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function SubmissionListHeader({ locale, currentPage, totalPages }: {
@@ -158,14 +74,51 @@ function SubmissionListHeader({ locale, currentPage, totalPages }: {
   );
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canBatchRecompute = false }: SubmissionListProps): React.JSX.Element {
+// Why one fragment for the size: the desktop row and the mobile card render the same
+// cluster, so a per-layout target would drift the two apart.
+const ROW_ACTION_TARGET = 'min-h-11 min-w-11';
+
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
   const router = useAppRouter();
+  const confirm = useConfirm();
+  const runAction = useActionFeedback();
+  const { recalculateSubmissionConfirm, toggleOfficialConfirm } = useConfirmationCopy();
+  const [pendingRejudge, setPendingRejudge] = useState<number | null>(null);
   // Why the generated record label: the row action opens the submission record,
   // so its accessible name comes from the same bilingual key the record uses.
   const recordLabel = navigation.evaluation['submission-record'].label;
+
+  const openRecord = (submission: SubmissionListItem): void => {
+    router.push(recordHref(locale, submission));
+  };
+
+  // Why the record's own copy: the list and the record run the same action, so an
+  // operator sees one wording for it wherever they invoke it.
+  const rejudge = async (submissionId: number): Promise<void> => {
+    if (!(await confirm(recalculateSubmissionConfirm('score')))) return;
+    setPendingRejudge(submissionId);
+    try {
+      const outcome = await runAction(
+        { pending: 'Recalculating...', success: 'Submission queued for recalculation', failure: 'Recalculation failed' },
+        () => recalculateSubmission(submissionId),
+      );
+      if (outcome?.success) router.refresh();
+    } finally {
+      setPendingRejudge(null);
+    }
+  };
+
+  const toggleOfficial = async (submissionId: number): Promise<void> => {
+    if (!(await confirm(toggleOfficialConfirm()))) return;
+    const outcome = await runAction(
+      { pending: 'Saving official flag...', success: 'Official flag saved', failure: 'Official flag update failed' },
+      () => toggleSubmissionOfficial(submissionId),
+    );
+    if (outcome?.success) router.refresh();
+  };
 
   const handlePageChange = (newPage: number): void => {
     const url = new URL(window.location.href);
@@ -190,34 +143,64 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
   // one, so keeping it would show an empty page that looks like "no matches".
   const applyFilters = (next: SubmissionFilters): void => {
     const url = new URL(window.location.href);
-    for (const [key, value] of [
+    const narrowing: readonly (readonly [string, string | number | undefined])[] = [
       ['contest', next.contestId],
       ['task', next.taskId],
       ['user', next.userId],
-    ] as const) {
-      if (value === undefined) url.searchParams.delete(key);
+      ['search', next.search],
+    ];
+    for (const [key, value] of narrowing) {
+      if (value === undefined || value === '') url.searchParams.delete(key);
       else url.searchParams.set(key, String(value));
     }
     url.searchParams.set('page', '1');
     router.push(url.toString());
   };
 
+  const renderRowActions = (submission: SubmissionListItem): React.JSX.Element => (
+    <RowActions
+      ariaLabel="Submission actions"
+      primaryActionKey="view"
+      actions={[
+        { key: 'view', label: 'View', ariaLabel: `${recordLabel} ${submission.id}`, icon: Eye, onClick: () => openRecord(submission), className: ROW_ACTION_TARGET },
+        {
+          key: 'rejudge',
+          label: 'Rejudge',
+          ariaLabel: `Rejudge submission ${submission.id}`,
+          icon: RefreshCw,
+          onClick: () => { void rejudge(submission.id); },
+          showWhen: canRecalculate,
+          loading: pendingRejudge === submission.id,
+          disabled: pendingRejudge !== null,
+          className: ROW_ACTION_TARGET,
+        },
+        {
+          key: 'official',
+          label: submission.official ? 'Clear official' : 'Mark official',
+          ariaLabel: `${submission.official ? 'Clear' : 'Mark'} submission ${submission.id} official`,
+          icon: BadgeCheck,
+          onClick: () => { void toggleOfficial(submission.id); },
+          showWhen: canOfficial,
+          className: ROW_ACTION_TARGET,
+        },
+      ]}
+    />
+  );
+
   return (
     <div className="space-y-6">
       <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
-      <SubmissionFiltersBar filters={filters} onApply={applyFilters} />
+      <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
       <BatchRecalcBar
         scope={{ contestId: filters.contestId, taskId: filters.taskId, userId: filters.userId }}
-        canRecompute={canBatchRecompute}
+        canRecompute={canRecalculate}
       />
       <RecordList
         rows={submissions}
         columns={buildSubmissionColumns()}
         getRowKey={(submission) => submission.id}
         getRecordHref={(submission) => recordHref(locale, submission)}
-        renderRowActions={(submission) => (
-          <RowActionLink href={recordHref(locale, submission)} label={`${recordLabel} ${submission.id}`} icon={<Eye />} isPrimary />
-        )}
+        renderRowActions={renderRowActions}
         emptyState={
           <EmptyState icon={FileCode} title="No submissions found" description="Submissions will appear here once contestants start submitting." />
         }

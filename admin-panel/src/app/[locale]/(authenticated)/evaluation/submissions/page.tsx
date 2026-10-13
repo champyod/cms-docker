@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { PageSurface } from '@/components/core/PageSurface';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
+import type { SubmissionFilters } from '@/components/submissions/SubmissionList';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
@@ -11,22 +12,16 @@ import type { SubmissionsPageResult } from '@/lib/people-read-model-types';
 import { readListSort, type ListSortInput } from '@/lib/list-sorting';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 
-/** The contest/task/user narrowing the list query already supports. */
-export interface SubmissionFilters {
-  readonly contestId?: number;
-  readonly taskId?: number;
-  readonly userId?: number;
-}
-
 /**
- * Every key the bulk requeue gates on, mirrored from `recalculateSubmissions`.
+ * Every key the requeue paths gate on, mirrored from `recalculateSubmission` and
+ * `recalculateSubmissions`, which share one gate.
  *
  * WHY it is declared here rather than imported: importing the action module into this
- * server page would pull its whole dependency graph in for one constant, and the action
- * remains the authority — it re-checks each key on every call. This list only decides
- * whether the control is rendered.
+ * server page would pull its whole dependency graph in for one constant, and the actions
+ * remain the authority — they re-check each key on every call. This list only decides
+ * whether the controls are rendered.
  */
-const BATCH_RECALC_KEYS = [
+const RECALC_GATE_KEYS = [
   'submission:recompute',
   'submission:rejudge',
   'evaluation:delete',
@@ -70,23 +65,21 @@ async function loadSubmissionsListPage(
 }
 
 /**
- * The filters the list accepts, read from the URL.
+ * The narrowing the list accepts, read from the URL.
  *
- * WHY these exist: `getSubmissions` has always taken `contestId`, `taskId` and `userId`,
- * but this page only ever parsed `page`, `sort` and `dir`, so the capability was
- * unreachable from the UI. Reading them here is the whole of S1 — the query already
- * knows how to apply them.
- *
- * WHY a non-numeric value is dropped rather than defaulting to 0: contest id 0 matches
+ * WHY a non-numeric id is dropped rather than defaulting to 0: contest id 0 matches
  * nothing, so a typo would silently show an empty list that looks like "no submissions"
- * instead of a bad filter.
+ * instead of a bad filter. The free-text search is kept as typed.
  */
 function readSubmissionFilters(query: {
   contest?: string;
   task?: string;
   user?: string;
+  search?: string;
 }): SubmissionFilters {
+  const search = query.search?.trim() ?? '';
   return {
+    ...(search === '' ? {} : { search }),
     ...(readPositiveInt(query.contest) === undefined ? {} : { contestId: readPositiveInt(query.contest) }),
     ...(readPositiveInt(query.task) === undefined ? {} : { taskId: readPositiveInt(query.task) }),
     ...(readPositiveInt(query.user) === undefined ? {} : { userId: readPositiveInt(query.user) }),
@@ -104,22 +97,23 @@ export default async function EvaluationSubmissionsPage({
   searchParams,
 }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ page?: string; sort?: string; dir?: string; contest?: string; task?: string; user?: string }>;
+  searchParams: Promise<{ page?: string; sort?: string; dir?: string; contest?: string; task?: string; user?: string; search?: string }>;
 }): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const submissionsLabel = labelForDescriptor(dict, evaluationRouteDescriptor('evaluation.submissions'));
-  const { page, sort: sortParam, dir, contest, task, user } = await searchParams;
+  const { page, sort: sortParam, dir, contest, task, user, search } = await searchParams;
   const currentPage = Number(page) || 1;
   const sort = readListSort({ sort: sortParam, dir });
-  const filters = readSubmissionFilters({ contest, task, user });
+  const filters = readSubmissionFilters({ contest, task, user, search });
   const result = await loadSubmissionsListPage(currentPage, sort, filters);
-  // Why the gate is resolved here and passed down: the batch action re-checks every key
-  // server-side, so this only decides whether the control is worth showing. Resolving it
-  // from the same four keys keeps the control and the action in agreement.
-  const canBatchRecompute = BATCH_RECALC_KEYS.every((key) =>
+  // Why the gates are resolved here and passed down: the actions re-check every key
+  // server-side, so this only decides whether the controls are worth showing. Resolving
+  // them from the same keys keeps each control and its action in agreement.
+  const canRecalculate = RECALC_GATE_KEYS.every((key) =>
     hasEffectivePermission(result.effectivePermissions, key),
   );
+  const canOfficial = hasEffectivePermission(result.effectivePermissions, 'submission:update');
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
@@ -133,7 +127,8 @@ export default async function EvaluationSubmissionsPage({
         navigation={dict.navigation}
         initialSort={sort}
         filters={filters}
-        canBatchRecompute={canBatchRecompute}
+        canRecalculate={canRecalculate}
+        canOfficial={canOfficial}
       />
     </PageSurface>
   );

@@ -63,9 +63,9 @@ function renderList(totalPages = 1): HTMLElement {
   return container;
 }
 
-function recordAnchors(container: HTMLElement): HTMLAnchorElement[] {
-  return [...container.querySelectorAll('a')].filter(
-    (anchor) => anchor.getAttribute('href') === RECORD_HREF,
+function viewActionButtons(container: HTMLElement): HTMLButtonElement[] {
+  return [...container.querySelectorAll('button')].filter(
+    (button) => button.getAttribute('aria-label') === `Submission ${SUBMISSION_ROW.id}`,
   );
 }
 
@@ -94,30 +94,42 @@ describe('submission list canonical navigation', () => {
     expect(mockPush.mock.calls[0][0]).toBe(RECORD_HREF);
   });
 
-  it('exposes the canonical record as a real link in the desktop and mobile layouts', () => {
+  it('renders the view action in both the desktop and mobile layouts', () => {
     const container = renderList();
 
-    const anchors = recordAnchors(container);
-    expect(anchors).toHaveLength(2);
-    expect(anchors[0].getAttribute('href')).toBe('/en/evaluation/submissions/19');
-    expect(container.querySelector('.space-y-3.md\\:hidden a')?.getAttribute('href')).toBe(RECORD_HREF);
-    // Why: an anchor wrapping a real button announces as two controls and eats
-    // modified clicks, so the row action must be the anchor itself.
-    for (const anchor of anchors) {
-      expect(anchor.tagName).toBe('A');
-      expect(anchor.querySelector('button')).toBeNull();
-    }
+    expect(viewActionButtons(container)).toHaveLength(2);
+    expect(
+      container.querySelector('.space-y-3.md\\:hidden button[aria-label="Submission 19"]'),
+    ).not.toBeNull();
   });
 
-  it('keeps the row action from double-navigating through the row handler', () => {
+  it('marks the view action as the row shortcut and labels the cluster', () => {
+    const container = renderList();
+
+    const [desktopAction] = viewActionButtons(container);
+    if (!desktopAction) throw new Error('Missing desktop view action');
+    expect(desktopAction.getAttribute('data-shortcut-primary')).toBe('true');
+    expect(container.querySelector('[role="group"][aria-label="Submission actions"]')).not.toBeNull();
+  });
+
+  it('navigates once when the view action is clicked, not twice through the row handler', () => {
     mockPush.mockClear();
     const container = renderList();
 
-    const [desktopAction] = recordAnchors(container);
-    if (!desktopAction) throw new Error('Missing desktop record action');
+    const [desktopAction] = viewActionButtons(container);
+    if (!desktopAction) throw new Error('Missing desktop view action');
     fireEvent.click(desktopAction);
 
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    expect(mockPush.mock.calls[0][0]).toBe(RECORD_HREF);
+  });
+
+  it('hides the rejudge and official actions from a reader holding neither gate', () => {
+    const container = renderList();
+
+    expect(container.querySelector('button[aria-label="Rejudge submission 19"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Mark submission 19 official"]')).toBeNull();
+    expect(container.querySelector('button[aria-label="Clear submission 19 official"]')).toBeNull();
   });
 
   it('opens no submission dialog and keeps list pagination on the canonical route', () => {

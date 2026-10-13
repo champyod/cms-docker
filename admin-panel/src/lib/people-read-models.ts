@@ -198,11 +198,30 @@ export async function getTeams(sort?: ListSortInput | null): Promise<TeamsPageRe
   return { teams: rows.map((row) => toTeamSummary(row, access)), effectivePermissions: permissions };
 }
 
-export async function getSubmissions(input: { page: number; contestId?: number; taskId?: number; userId?: number; sort?: ListSortInput | null }): Promise<SubmissionsPageResult> {
+// Why both terms in one OR: the list has a single search field, so a term that is not
+// an id must still reach the username, and an id must not be forced through a text match.
+function submissionSearchWhere(search: string | undefined): Prisma.submissionsWhereInput {
+  const term = search?.trim() ?? '';
+  if (term === '') return {};
+  const contains = { contains: term, mode: 'insensitive' as const };
+  const asId = /^\d+$/.test(term) ? Number(term) : null;
+  return {
+    OR: [
+      ...(asId === null ? [] : [{ id: asId }]),
+      { participations: { users: { username: contains } } },
+    ],
+  };
+}
+
+export async function getSubmissions(input: { page: number; contestId?: number; taskId?: number; userId?: number; search?: string; sort?: ListSortInput | null }): Promise<SubmissionsPageResult> {
   const permissions = await requirePermission('submission:list');
   const safePage = Math.max(Number(input.page) || 1, 1);
   const participations: Record<string, number> = { ...(input.contestId ? { contest_id: input.contestId } : {}), ...(input.userId ? { user_id: input.userId } : {}) };
-  const where: Prisma.submissionsWhereInput = { ...(input.taskId ? { task_id: input.taskId } : {}), ...(Object.keys(participations).length > 0 ? { participations: participations as Prisma.submissionsWhereInput['participations'] } : {}) };
+  const where: Prisma.submissionsWhereInput = {
+    ...(input.taskId ? { task_id: input.taskId } : {}),
+    ...(Object.keys(participations).length > 0 ? { participations: participations as Prisma.submissionsWhereInput['participations'] } : {}),
+    ...submissionSearchWhere(input.search),
+  };
   const [rows, total] = await Promise.all([
     prisma.submissions.findMany({ where, skip: (safePage - 1) * SUBMISSIONS_PER_PAGE, take: SUBMISSIONS_PER_PAGE, orderBy: submissionSortOrderBy(input.sort ?? null), include: submissionsListInclude }),
     prisma.submissions.count({ where }),
