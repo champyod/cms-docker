@@ -43,6 +43,17 @@ vi.mock('@/app/actions/tasks', () => ({
 vi.mock('@/app/actions/teams', () => ({
   getTeams: vi.fn(() => Promise.resolve({ success: true, data: [] })),
 }));
+// Why: the header reads the shared notification service, whose provider wraps the shell in the real
+// app; this render supplies the header alone, so the service arrives stubbed and opens no stream.
+vi.mock('@/lib/live/notifications', () => ({
+  useLiveNotifications: () => ({
+    events: [],
+    unread: 0,
+    unansweredCount: 0,
+    clearEvents: vi.fn(),
+    markSeen: vi.fn(),
+  }),
+}));
 
 afterEach(() => {
   cleanup();

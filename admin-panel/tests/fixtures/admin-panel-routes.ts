@@ -59,6 +59,7 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'administration.admins', path: '/administration/admins', kind: 'page', tabIds: [], legacyPaths: ['/admins'], enabled: true },
   { id: 'administration.groups', path: '/administration/groups', kind: 'page', tabIds: [], legacyPaths: ['/groups'], enabled: true },
   { id: 'administration.audit', path: '/administration/audit', kind: 'page', tabIds: [], legacyPaths: ['/audit'], enabled: true },
+  { id: 'notifications', path: '/notifications', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'infrastructure.deployments', path: '/infrastructure/deployments', kind: 'page', tabIds: [], legacyPaths: ['/deployments'], enabled: true },
   { id: 'infrastructure.containers', path: '/infrastructure/containers', kind: 'page', tabIds: [], legacyPaths: ['/containers'], enabled: true },
@@ -117,6 +118,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'administration.admins': { all: ['admin:list', 'admin:read'] },
   'administration.groups': { all: ['group:list', 'group:read'] },
   'administration.audit': { all: ['audit:list', 'audit:read'] },
+  notifications: { all: ['audit:read'] },
   'security.overview': { all: ['security:read'] },
   'security.waf': { all: ['security:read', 'waf:read'] },
   'security.blocks': { all: ['security:read'], any: ['ban:read', 'lockout:read'] },
@@ -141,7 +143,7 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
 } as const satisfies Readonly<Record<RouteId, PermissionRequirement>>;
 
 export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = [
-  { id: 'direct', labelKey: 'navigation.groups.direct', routeIds: ['home', 'contests.list', 'tasks.list'] },
+  { id: 'direct', labelKey: 'navigation.groups.direct', routeIds: ['home', 'contests.list', 'tasks.list', 'notifications'] },
   { id: 'people', labelKey: 'navigation.groups.people', routeIds: ['people.users', 'people.teams'] },
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },

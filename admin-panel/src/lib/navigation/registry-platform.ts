@@ -5,13 +5,20 @@ import {
   pageRoute,
   searchRoute,
 } from '@/lib/navigation/registry-descriptors';
-import type { RouteDescriptor } from '@/lib/navigation/types';
+import type { NavigationSurface, RouteDescriptor } from '@/lib/navigation/types';
+
+// Why the alert centre is a Direct route rather than a module field: it is the bell's full-page
+// surface, mounted at the shell root like Home, and it reuses the gate the stream already checks.
+// Why it stays off mobile-primary: that bar is a fixed four, and the bell's popup carries the
+// view-all link on phones.
+const ALERT_CENTRE_SURFACES: readonly NavigationSurface[] = ['sidebar', 'mobile-more', 'palette', 'search'];
 
 // Search is deep-link-only: it declares no sidebar or mobile surface.
 export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('administration.admins', '/administration/admins', { all: ['admin:list', 'admin:read'] }, ['/admins']),
   enabledPageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read'] }, ['/groups']),
   enabledPageRoute('administration.audit', '/administration/audit', { all: ['audit:list', 'audit:read'] }, ['/audit']),
+  enabledPageRoute('notifications', '/notifications', { all: ['audit:read'] }, [], ALERT_CENTRE_SURFACES),
 
   enabledPageRoute('infrastructure.deployments', '/infrastructure/deployments', { all: ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'] }, ['/deployments']),
   enabledPageRoute('infrastructure.containers', '/infrastructure/containers', { all: ['container:list', 'container:read'] }, ['/containers']),
