@@ -51,3 +51,13 @@ export interface SubmissionEvaluationModel {
     executionMemory: string | null;
   }[];
 }
+
+export interface SubmissionTestcaseDetailModel {
+  submissionId: number;
+  testcaseId: number;
+  testcaseName: string | null;
+  input: string | null;
+  expectedOutput: string | null;
+  /** Null while the evaluation service stores no candidate output for a submission. */
+  output: string | null;
+}

@@ -6,6 +6,7 @@ import type {
   SubmissionLogsModel,
   SubmissionResultsModel,
   SubmissionSummary,
+  SubmissionTestcaseDetailModel,
 } from '@/lib/evaluation-read-model-types';
 import {
   readContest,
@@ -65,6 +66,10 @@ const SUBMISSION_EVALUATION_SELECT = {
   execution_time: true,
   execution_memory: true,
   testcases: { select: { codename: true } },
+} as const;
+
+const SUBMISSION_TESTCASE_SELECT = {
+  testcases: { select: { codename: true, input: true, output: true } },
 } as const;
 
 // Why no field projection here: every column this reader returns is bound to
@@ -161,5 +166,45 @@ export async function getSubmissionEvaluation(submissionId: number): Promise<Sub
       { ...entry, codename: entry.testcases?.codename ?? null } satisfies SubmissionEvaluationRow,
       evaluationsAccess,
     )),
+  };
+}
+
+// Why: an fsobject is a content-addressed large object, so the digest resolves
+// to stored bytes; a digest with no row is a miss, not a failure.
+async function readFsobjectText(digest: string): Promise<string | null> {
+  const rows = await prisma.$queryRaw<{ data: Buffer }[]>`
+    SELECT lo_get(loid) AS data FROM fsobjects WHERE digest = ${digest}
+  `;
+  if (rows.length === 0) return null;
+  return Buffer.from(rows[0].data).toString('utf8');
+}
+
+// Why the evaluation row is read first: it is the only link proving the testcase
+// belongs to this submission, so a testcase evaluated elsewhere is a miss rather
+// than a read of another submission's data.
+export async function getSubmissionTestcaseDetail(
+  submissionId: number,
+  testcaseId: number,
+): Promise<SubmissionTestcaseDetailModel | null> {
+  await requirePermission('submission:read');
+  const evaluation = await prisma.evaluations.findFirst({
+    where: { submission_id: submissionId, testcase_id: testcaseId },
+    select: SUBMISSION_TESTCASE_SELECT,
+  });
+  const testcase = evaluation?.testcases;
+  if (!testcase) return null;
+  const [input, expectedOutput] = await Promise.all([
+    readFsobjectText(testcase.input),
+    readFsobjectText(testcase.output),
+  ]);
+  return {
+    submissionId,
+    testcaseId,
+    testcaseName: testcase.codename,
+    input,
+    expectedOutput,
+    // Why null: `evaluations` carries no candidate-output column (only
+    // `user_test_results` does), so a submission stores no output to return here.
+    output: null,
   };
 }
