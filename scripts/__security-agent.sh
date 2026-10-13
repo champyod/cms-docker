@@ -24,19 +24,20 @@ UNIT_NAME="cms-security-agent"
 JAIL_PATTERN='^[a-z0-9][a-z0-9-]*$'
 TICK_SECONDS=30
 
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__lib/common.sh"
 log() { printf '[security-agent] %s\n' "$*" >&2; }
-die() { printf '[security-agent][FAIL] %s\n' "$*" >&2; exit 1; }
 
 usage() {
   sed -n '9,13p' "${BASH_SOURCE[0]}"
 }
 
 require_python() {
-  command -v python3 >/dev/null 2>&1 || die "python3 is required to read the request JSON"
+  command -v python3 >/dev/null 2>&1 || log_die "python3 is required to read the request JSON"
 }
 
 require_fail2ban() {
-  command -v fail2ban-client >/dev/null 2>&1 || die "fail2ban-client is not installed on this host"
+  command -v fail2ban-client >/dev/null 2>&1 || log_die "fail2ban-client is not installed on this host"
 }
 
 known_jail() {
@@ -155,7 +156,7 @@ process_queue() {
 }
 
 install_timer() {
-  [[ "${EUID}" -eq 0 ]] || die "installing the timer needs root — re-run with sudo"
+  [[ "${EUID}" -eq 0 ]] || log_die "installing the timer needs root — re-run with sudo"
   require_fail2ban
   local service_file="/etc/systemd/system/${UNIT_NAME}.service"
   local timer_file="/etc/systemd/system/${UNIT_NAME}.timer"
@@ -215,15 +216,15 @@ main() {
     --state)
       require_python
       write_state
-      [[ -f "${STATE_FILE}" ]] || die "no state file: fail2ban-client is unavailable on this host"
+      [[ -f "${STATE_FILE}" ]] || log_die "no state file: fail2ban-client is unavailable on this host"
       cat "${STATE_FILE}"
       ;;
     --unban)
       local jail="${2:-}" ip="${3:-}"
-      [[ -n "${jail}" && -n "${ip}" ]] || die "usage: --unban JAIL IP"
+      [[ -n "${jail}" && -n "${ip}" ]] || log_die "usage: --unban JAIL IP"
       require_fail2ban
-      known_jail "${jail}" || die "unknown jail: ${jail}"
-      validate_ip "${ip}" || die "invalid ip: ${ip}"
+      known_jail "${jail}" || log_die "unknown jail: ${jail}"
+      validate_ip "${ip}" || log_die "invalid ip: ${ip}"
       fail2ban-client set "${jail}" unbanip "${ip}"
       log "unbanned ${ip} from ${jail}"
       ;;
