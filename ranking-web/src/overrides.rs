@@ -10,6 +10,8 @@ use serde_json::Value;
 /// The wire spelling of a target kind in ranking_overrides.target_kind.
 const TARGET_USER: &str = "user";
 const TARGET_TEAM: &str = "team";
+/// The whole-board target: its key is always `*`, and only hide/freeze apply to it.
+const TARGET_RANKING: &str = "ranking";
 
 /// The six actions the panel may write, taken from dictionaries/en.json.
 /// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
@@ -96,6 +98,8 @@ pub struct Overrides {
     /// every other action it has nothing to key on. Later rows win by position, which
     /// is how the table already resolves one action overriding another.
     frozen_at: Option<i64>,
+    /// A `hide` on the whole-board target. The assembly reads it to blank the board.
+    board_hidden: bool,
 }
 
 impl Overrides {
@@ -138,7 +142,17 @@ impl Overrides {
         self.frozen_at
     }
 
+    /// Whether a whole-board `hide` override is active. Read by the assembly to blank
+    /// the board and its scores, the way the retired client's is_board_hidden did.
+    pub fn board_hidden(&self) -> bool {
+        self.board_hidden
+    }
+
     fn fold_row(&mut self, row: &OverrideRow) {
+        if row.target_kind == TARGET_RANKING {
+            self.fold_board_row(row);
+            return;
+        }
         let Some(kind) = TargetKind::from_wire(&row.target_kind) else {
             self.skipped += 1;
             return;
@@ -153,6 +167,22 @@ impl Overrides {
             ACTION_RENAME => self.fold_rename(kind, key, &row.payload),
             ACTION_PIN => self.fold_pin(kind, key, &row.payload),
             ACTION_SCORE => self.fold_score(kind, key, &row.payload),
+            ACTION_FREEZE => self.fold_freeze(&row.payload),
+            _ => false,
+        };
+        if !folded {
+            self.skipped += 1;
+        }
+    }
+
+    /// The whole-board target: `hide` blanks the board, `freeze` holds it at a cutoff.
+    /// Every other action names a user or a team, so on `ranking` it is refused and counted.
+    fn fold_board_row(&mut self, row: &OverrideRow) {
+        let folded = match row.action.as_str() {
+            ACTION_HIDE => {
+                self.board_hidden = true;
+                true
+            }
             ACTION_FREEZE => self.fold_freeze(&row.payload),
             _ => false,
         };

@@ -36,15 +36,16 @@ interface ValueControl {
   readonly inputMode: 'numeric' | 'decimal' | 'text';
 }
 
-// The value a verb needs is decided by the verb: a pin is a rank and a score is a
-// number, a rename names a person and a guest names a stand-in. `hide` and
-// `freeze` carry none: freeze pins the shown score, so the server drops any value.
+// The value a verb needs is decided by the verb: a pin is a rank, a score is a
+// number, a rename names a person and a guest names a stand-in. `freeze` carries the
+// projection cutoff the board holds at; `hide` carries none.
 const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
   hide: { type: 'text', inputMode: 'text' },
   guest: { type: 'text', inputMode: 'text' },
   pin: { type: 'number', inputMode: 'numeric' },
   rename: { type: 'text', inputMode: 'text' },
   score: { type: 'number', inputMode: 'decimal' },
+  freeze: { type: 'number', inputMode: 'numeric' },
 };
 
 // The pickers are fed real rows and the value control follows the chosen verb, so an
@@ -131,7 +132,7 @@ export function RankingOverrideForm({
         </SelectField>
         {action !== 'hide' && valueControl !== undefined ? (
           <Input
-            label={copy.value}
+            label={action === 'freeze' ? copy.freezeValue : copy.value}
             name="value"
             type={valueControl.type}
             inputMode={valueControl.inputMode}

@@ -175,11 +175,12 @@ fn finish(
         skipped_overrides: overrides.skipped(),
         ..Ledger::default()
     };
+    let board_hidden = overrides.board_hidden();
     let mut merged: Vec<(String, String, i64, f64)> = Vec::new();
     let mut rows: BTreeMap<String, BoardRow> = BTreeMap::new();
     for ((user, task), score) in &scores {
         let team = teams.get(user).map(String::as_str);
-        if !board::is_hidden(overrides, user, team) {
+        if !board_hidden && !board::is_hidden(overrides, user, team) {
             if score.value() > 0.0 {
                 ledger
                     .scores
@@ -196,7 +197,12 @@ fn finish(
     }
     sort_history(&mut merged);
     ledger.history = merged;
-    ledger.board = board::rank_rows(rows, overrides);
+    // A whole-board hide blanks the board, and must not let guest rows re-enter through rank_rows.
+    ledger.board = if board_hidden {
+        Vec::new()
+    } else {
+        board::rank_rows(rows, overrides)
+    };
     ledger
 }
 

@@ -324,3 +324,45 @@ fn a_guest_is_named_by_its_override_with_no_team() {
     assert_eq!(guest.team, None);
     assert_eq!(guest.score, 0.0);
 }
+
+/// A whole-board hide blanks the board and its scores, and is not counted as a skip.
+/// The panel has always offered this target; before the fix the crate dropped the row.
+#[test]
+fn a_board_hide_blanks_the_board_and_the_scores() {
+    let overrides = Overrides::fold(&[override_row("ranking", "*", "hide", None)]);
+    assert!(overrides.board_hidden());
+    assert_eq!(overrides.skipped(), 0);
+    let ledger = assemble(&overrides);
+    assert!(ledger.board().is_empty(), "no row survives a board hide");
+    assert!(ledger.scores().is_empty());
+}
+
+/// A board hide must not let a guest row re-enter through the ranking pass.
+#[test]
+fn a_board_hide_keeps_guest_rows_off_the_board() {
+    let overrides = Overrides::fold(&[
+        override_row("ranking", "*", "hide", None),
+        override_row("user", "visitor", "guest", Some("Visitor")),
+    ]);
+    let ledger = assemble(&overrides);
+    assert!(ledger.board().is_empty());
+}
+
+/// A board freeze carries the projection cutoff. It was dropped as an unknown target
+/// before, so the board never froze.
+#[test]
+fn a_board_freeze_sets_the_cutoff() {
+    let overrides = Overrides::fold(&[override_row("ranking", "*", "freeze", Some("1700000000"))]);
+    assert_eq!(overrides.frozen_at(), Some(1_700_000_000));
+    assert_eq!(overrides.skipped(), 0);
+    assert!(!overrides.board_hidden());
+}
+
+/// Only hide and freeze name the whole board; every other action needs a user or team,
+/// so on the board target it is refused and counted rather than silently dropped.
+#[test]
+fn a_board_action_that_names_nobody_is_skipped() {
+    let overrides = Overrides::fold(&[override_row("ranking", "*", "rename", Some("Board"))]);
+    assert_eq!(overrides.skipped(), 1);
+    assert!(!overrides.board_hidden());
+}

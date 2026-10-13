@@ -68,7 +68,7 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
   if (targetKind === 'ranking' && !(RANKING_ACTIONS as readonly string[]).includes(action)) {
     throw new Error(`action ${action} needs a user or team target`);
   }
-  const value = action === "hide" || action === "freeze" ? "" : readText(formData, "value");
+  const value = action === "hide" ? "" : readText(formData, "value");
   const actorId = await currentActorId();
   await prisma.ranking_overrides.create({
     data: {
