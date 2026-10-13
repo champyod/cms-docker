@@ -61,6 +61,8 @@ const CATALOG = [
   { name: 'teams', label: 'Teams', pk: ['id'] },
   { name: 'tasks', label: 'Tasks', pk: ['id'] },
   { name: 'participations', label: 'Participations', pk: ['id'] },
+  // The per-contest registration roster: a row overrides the team's own registerable flag.
+  { name: 'contest_teams', label: 'Contest Teams', pk: ['contest_id', 'team_id'] },
   // Contestant display username configuration. The groups, their
   // membership rows, the per-scope policies and the current aliases
   // exist only in the panel and the contest web server, so they
@@ -197,6 +199,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   admin_permission_overrides: [ADMIN_TABLE, 'permissions'],
   announcements: ['contests', ADMIN_TABLE],
   attachments: ['tasks'],
+  contest_teams: ['contests', 'teams'],
   contest_usernames: ['contests', 'participations', 'users', ADMIN_TABLE],
   contestant_group_memberships: ['contestant_groups', 'users'],
   datasets: ['tasks'],

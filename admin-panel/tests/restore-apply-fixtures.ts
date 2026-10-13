@@ -6,6 +6,13 @@ export const PREVIEW_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 export const STAGING = 'restore_staging_a1b2c3d4';
 export const EPOCH = Date.UTC(2026, 9, 2, 12, 0, 0);
 
+/** The tables whose primary key is composite, and the columns it is made of. */
+const COMPOSITE_KEYS: Readonly<Record<string, readonly string[]>> = {
+  contest_teams: ['contest_id', 'team_id'],
+  submission_results: ['submission_id', 'dataset_id'],
+  user_test_results: ['user_test_id', 'dataset_id'],
+};
+
 /** Every catalog table merged, unless a test narrows the selection. */
 export function mergeAll(overrides: ApplyStrategies = {}): Record<string, TableStrategy> {
   const strategies: Record<string, TableStrategy> = {};
@@ -35,7 +42,6 @@ export function privilegeFacts(overrides: Partial<PrivilegeFacts> = {}): Privile
 
 export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
   const tables = BACKUP_TABLE_NAMES;
-  const composite = new Set(['submission_results', 'user_test_results']);
   return {
     scratchAlive: true,
     archiveTables: new Set(tables),
@@ -46,11 +52,7 @@ export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
     livePkColumns: new Map(
       tables.map((table) => [
         table,
-        composite.has(table)
-          ? table === 'submission_results'
-            ? ['submission_id', 'dataset_id']
-            : ['user_test_id', 'dataset_id']
-          : [table === LARGE_OBJECT_TABLE ? 'digest' : 'id'],
+        COMPOSITE_KEYS[table] ?? [table === LARGE_OBJECT_TABLE ? 'digest' : 'id'],
       ]),
     ),
     liveFkParents: new Map([
@@ -58,6 +60,7 @@ export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
       ['admin_permission_overrides', ['admins', 'permissions']],
       ['announcements', ['contests', 'admins']],
       ['attachments', ['tasks']],
+      ['contest_teams', ['contests', 'teams']],
       ['datasets', ['tasks']],
       ['evaluations', ['datasets', 'submission_results', 'submissions', 'testcases']],
       ['files', ['submissions']],
