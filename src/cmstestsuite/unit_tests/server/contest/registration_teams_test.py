@@ -23,40 +23,77 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
 
+from cms.db import ContestTeam, engine
 from cms.server.contest.handlers.main import (
     find_registerable_team, selectable_teams)
 
 
 class TestRegistrationTeams(DatabaseMixin, unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # WHY: contest_teams is Prisma-owned, so cmsInitDB never creates it;
+        # build it here from the one ORM definition the CWS query reads.
+        ContestTeam.__table__.create(engine, checkfirst=True)
+
     def setUp(self):
         super().setUp()
 
+        self.contest = self.add_contest()
         self.contestant_team = self.add_team(
             code="MWIT-Oct-69", name="MWIT-Oct-69", registerable=True)
-        self.add_team(code="Teacher", name="Teacher", registerable=False)
+        self.staff_team = self.add_team(
+            code="Teacher", name="Teacher", registerable=False)
         self.add_team(
             code="Teacher-Assistants", name="Teacher Assistants",
             registerable=False)
 
         self.session.commit()
 
+    def add_roster_entry(self, team, registerable):
+        """Add a contest_teams row overriding this team for the contest."""
+        entry = ContestTeam(contest_id=self.contest.id, team_id=team.id,
+                            registerable=registerable)
+        self.session.add(entry)
+        self.session.commit()
+        return entry
+
     def tearDown(self):
         self.delete_data()
         super().tearDown()
 
-    def test_selectable_teams_omits_staff_teams(self):
-        codes = {team.code for team in selectable_teams(self.session)}
+    def test_no_roster_falls_back_to_the_team_default(self):
+        codes = {team.code for team in
+                 selectable_teams(self.session, self.contest)}
         self.assertEqual(codes, {"MWIT-Oct-69"})
 
-    def test_find_registerable_team_returns_contestant_team(self):
+    def test_roster_row_excludes_a_default_registerable_team(self):
+        self.add_roster_entry(self.contestant_team, registerable=False)
+        codes = {team.code for team in
+                 selectable_teams(self.session, self.contest)}
+        self.assertEqual(codes, set())
+
+    def test_roster_row_includes_a_default_staff_team(self):
+        self.add_roster_entry(self.staff_team, registerable=True)
+        codes = {team.code for team in
+                 selectable_teams(self.session, self.contest)}
+        self.assertEqual(codes, {"MWIT-Oct-69", "Teacher"})
+
+    def test_find_registerable_team_follows_the_contest_roster(self):
         team = find_registerable_team(
-            self.session, self.contestant_team.code)
+            self.session, self.contest, self.contestant_team.code)
         self.assertEqual(team.code, self.contestant_team.code)
+
+    def test_find_registerable_team_refuses_a_narrowed_contest(self):
+        self.add_roster_entry(self.contestant_team, registerable=False)
+        with self.assertRaises(NoResultFound):
+            find_registerable_team(
+                self.session, self.contest, self.contestant_team.code)
 
     def test_find_registerable_team_refuses_a_staff_team(self):
         with self.assertRaises(NoResultFound):
-            find_registerable_team(self.session, "Teacher")
+            find_registerable_team(self.session, self.contest, "Teacher")
 
 
 if __name__ == "__main__":

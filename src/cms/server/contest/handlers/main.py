@@ -49,7 +49,7 @@ import tornado.web
 from sqlalchemy.orm.exc import NoResultFound
 
 from cms import config
-from cms.db import User, Participation, Team
+from cms.db import User, Participation, Team, registerable_teams_query
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
 from cms.server import login_refusal, multi_contest
@@ -72,27 +72,26 @@ def N_(msgid):
     return msgid
 
 
-def selectable_teams(sql_session) -> list[Team]:
-    """Return the teams a contestant may register into.
+def selectable_teams(sql_session, contest) -> list[Team]:
+    """Return the teams a contestant may register into for this contest.
 
-    A team flagged as not registerable exists for staff rather than for
-    contestants, so it is never offered.
-
-    """
-    return sql_session.query(Team).filter(
-        Team.registerable.is_(True)).order_by(Team.name).all()
-
-
-def find_registerable_team(sql_session, team_code: str) -> Team:
-    """Return the registerable team carrying this code.
-
-    raise: NoResultFound if no registerable team has the code, so a request
-        naming a staff team is refused instead of honoured.
+    A team is registerable when a contest_teams row says so for the contest;
+    with no row it falls back to the team's own registerable flag.
 
     """
-    return sql_session.query(Team).filter(
-        Team.code == team_code,
-        Team.registerable.is_(True)).one()
+    return registerable_teams_query(
+        sql_session, contest).order_by(Team.name).all()
+
+
+def find_registerable_team(sql_session, contest, team_code: str) -> Team:
+    """Return the team registerable for this contest that carries this code.
+
+    raise: NoResultFound if no team registerable for the contest has the code,
+        so a request naming a staff team is refused instead of honoured.
+
+    """
+    return registerable_teams_query(sql_session, contest).filter(
+        Team.code == team_code).one()
 
 
 class MainHandler(ContestHandler):
@@ -165,7 +164,7 @@ class RegistrationHandler(ContestHandler):
 
         self.r_params["MAX_INPUT_LENGTH"] = self.MAX_INPUT_LENGTH
         self.r_params["MIN_PASSWORD_LENGTH"] = self.MIN_PASSWORD_LENGTH
-        self.r_params["teams"] = selectable_teams(self.sql_session)
+        self.r_params["teams"] = selectable_teams(self.sql_session, self.contest)
 
         self.render("register.html", **self.r_params)
 
@@ -232,16 +231,15 @@ class RegistrationHandler(ContestHandler):
         return user
 
     def _get_team(self) -> Team | None:
-        # If we have registerable teams, we assume that the 'team' field is
-        # mandatory. The count is over the registerable teams alone, so a
+        # If this contest offers registerable teams, we assume that the 'team'
+        # field is mandatory. The count is over the contest's roster, so a
         # contest whose only teams are staff teams leaves the field optional,
         # exactly as a contest with no teams does.
-        if self.sql_session.query(Team).filter(
-                Team.registerable.is_(True)).count() > 0:
+        if registerable_teams_query(self.sql_session, self.contest).count() > 0:
             try:
                 team_code: str = self.get_argument("team")
                 team: Team | None = find_registerable_team(
-                    self.sql_session, team_code)
+                    self.sql_session, self.contest, team_code)
             except (tornado.web.MissingArgumentError, NoResultFound):
                 raise tornado.web.HTTPError(400)
         else:

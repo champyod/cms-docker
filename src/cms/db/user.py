@@ -28,6 +28,7 @@
 from datetime import datetime, timedelta
 from ipaddress import IPv4Network, IPv6Network
 
+from sqlalchemy import and_, func
 from sqlalchemy.dialects.postgresql import ARRAY, CIDR
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
@@ -37,6 +38,7 @@ from sqlalchemy.types import Boolean, Integer, String, Unicode, DateTime, \
 
 from cmscommon.crypto import generate_random_password, build_password
 from . import CastingArray, Codename, Base, Admin, Contest
+from .contest import ContestTeam
 import typing
 if typing.TYPE_CHECKING:
     from . import Submission, UserTest
@@ -143,9 +145,8 @@ class Team(Base):
         nullable=False)
 
     # Whether a contestant may pick this team when registering in a contest.
-    # A team that exists for staff (teachers, assistants) is not registerable:
-    # it is kept out of the CWS dropdown and refused on the accept path, so the
-    # team still groups its members without being offered to contestants.
+    # This is the DEFAULT: a contest_teams row overrides it per contest, and a
+    # team with no such row falls back to this flag.
     registerable: bool = Column(
         Boolean,
         nullable=False,
@@ -159,6 +160,21 @@ class Team(Base):
 
     # TODO: decide if the flag images will eventually be stored here.
     # TODO: (hopefully, the same will apply for faces in User).
+
+
+def registerable_teams_query(sql_session, contest):
+    """Return the query of teams registerable for a contest.
+
+    Resolution rule: a contest_teams row decides for that contest; with no
+    row the team falls back to its own registerable flag.
+
+    """
+    return sql_session.query(Team).outerjoin(
+        ContestTeam,
+        and_(ContestTeam.team_id == Team.id,
+             ContestTeam.contest_id == contest.id)).filter(
+        func.coalesce(ContestTeam.registerable,
+                      Team.registerable).is_(True))
 
 
 class Participation(Base):

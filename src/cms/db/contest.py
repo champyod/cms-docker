@@ -349,6 +349,12 @@ class Contest(Base):
         passive_deletes=True,
         back_populates="contest")
 
+    contest_teams: list["ContestTeam"] = relationship(
+        "ContestTeam",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        back_populates="contest")
+
     def phase(self, timestamp: datetime) -> int:
         """Return: -1 if contest isn't started yet at time timestamp,
                     0 if the contest is active at time timestamp,
@@ -371,6 +377,36 @@ class Contest(Base):
             elif timestamp <= self.analysis_stop:
                 return 2
         return 3
+
+
+class ContestTeam(Base):
+    """A team's registration state within one contest.
+
+    """
+    __tablename__ = 'contest_teams'
+
+    # Composite key: one roster entry per contest-team pair, cascading on delete.
+    contest_id: int = Column(
+        Integer,
+        ForeignKey(Contest.id,
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True)
+    team_id: int = Column(
+        Integer,
+        ForeignKey("teams.id",
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True,
+        index=True)
+
+    # Overrides the team's own registerable flag for this contest.
+    registerable: bool = Column(
+        Boolean,
+        nullable=False,
+        default=True)
+
+    contest: Contest = relationship(
+        Contest,
+        back_populates="contest_teams")
 
 
 class Announcement(Base):

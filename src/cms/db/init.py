@@ -33,6 +33,7 @@ _PRISMA_OWNED_TABLES = frozenset({
     "username_policies",
     "contest_usernames",
     "contest_usernames_history",
+    "contest_teams",
 })
 
 

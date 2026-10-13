@@ -98,6 +98,7 @@ model contests {
   participations                                   participations[]
   tasks                                            tasks[]
   contest_usernames                                contest_usernames[]
+  contest_teams                                    contest_teams[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -363,6 +364,21 @@ model teams {
   registerable   Boolean          @default(true)
   leader         users?           @relation("team_leader", fields: [leader_id], references: [id])
   participations participations[]
+  contest_teams  contest_teams[]
+}
+
+/// The registration roster of a contest: a row overrides the team's own
+/// registerable flag for that contest; a team with no row falls back to
+/// teams.registerable, so a contest with no rows keeps today's behaviour.
+model contest_teams {
+  contest_id   Int
+  team_id      Int
+  registerable Boolean  @default(true)
+  contests     contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  teams        teams    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@id([contest_id, team_id])
+  @@index([team_id], map: "ix_contest_teams_team_id")
 }
 
 model testcases {
