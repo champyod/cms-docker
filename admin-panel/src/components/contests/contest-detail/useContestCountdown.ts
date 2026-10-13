@@ -68,11 +68,7 @@ export function usePhaseNotifications(name: string, phase: ContestPhase): void {
   }, [phase, name]);
 }
 
-/**
- * A zone pick kept beside the contest zone it was made against. The contest record is
- * authoritative: a pick is honored only while its basis still matches, so editing the
- * contest's own zone discards every override rather than leaving a stale one in force.
- */
+/** A zone pick kept with the contest zone it was made against; the contest record always wins. */
 interface ZoneOverride {
   readonly zone: string;
   readonly basis: string | null;
@@ -124,12 +120,7 @@ interface CountdownTimezoneOptions {
   readonly isFullscreen: boolean;
 }
 
-/**
- * The zone the countdown displays in. Defaults to the contest's own zone, else the browser
- * zone. A pick outside full screen persists per browser; a pick inside full screen lives
- * only for the session and is dropped on exit; either is forgotten once the contest zone
- * it was made against changes.
- */
+/** The zone the countdown displays in: the contest's own, overridden per full-screen session or per browser. */
 export function useCountdownTimezone({
   contestTimezone,
   isFullscreen,
@@ -138,8 +129,7 @@ export function useCountdownTimezone({
   const persisted = useSyncExternalStore(subscribeTimezone, readZoneOverride, () => null);
   const [sessionOverride, setSessionOverride] = useState<ZoneOverride | null>(null);
 
-  // Why during render, not an effect: an effect would paint the dropped zone for one frame.
-  // Leaving full screen ends the session, so its pick is cleared and a later entry starts clean.
+  // Cleared during render, not in an effect, so a dropped zone never paints for a frame.
   if (!isFullscreen && sessionOverride !== null) setSessionOverride(null);
 
   const timezone =

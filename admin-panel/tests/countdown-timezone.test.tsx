@@ -4,8 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import { useCountdownTimezone } from '@/components/contests/contest-detail/useContestCountdown';
 
-// Why: this runtime exposes a global localStorage accessor that happy-dom cannot install over, so
-// the suite supplies its own store rather than reading an undefined window.localStorage.
+// Node exposes a global localStorage accessor happy-dom cannot override, so supply our own store.
 function memoryStorage(): Storage {
   const entries = new Map<string, string>();
   return {

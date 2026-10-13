@@ -63,8 +63,7 @@ export function ContestCountdownTab({
   const { timing, now } = useCountdownTiming(data);
   const { threshold, setThreshold } = useCountdownThreshold();
   const { isFullscreen, toggle: toggleFullscreen } = useElementFullscreen(surfaceRef);
-  // Why the polling timing, not the initial data: an edit to the contest zone reaches the tab
-  // through the repoll, and the hook must re-default to it the moment it arrives.
+  // The polled zone, not the initial data: an edited contest zone must re-default the countdown.
   const { timezone, setTimezone } = useCountdownTimezone({ contestTimezone: timing.timezone, isFullscreen });
   const { isPaused, togglePaused } = useContestMotion();
 
