@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { ContestOverviewTab } from '@/components/contests/contest-detail/ContestOverviewTab';
 import { ContestTasksTab } from '@/components/contests/contest-detail/ContestTasksTab';
 import { ContestParticipantsTab } from '@/components/contests/contest-detail/ContestParticipantsTab';
 import { ContestSettingsTab } from '@/components/contests/contest-detail/ContestSettingsTab';
+import en from '@/dictionaries/en.json';
+
+// Why: the participants tab now carries the roster section, whose copy comes from the
+// dictionary the authenticated layout provides — a render with none must mount it.
+function withDictionary(node: React.JSX.Element): string {
+  return renderToStaticMarkup(<DictionaryProvider dict={en}>{node}</DictionaryProvider>);
+}
 
 const settings = {
   contestId: 7,
@@ -31,9 +39,15 @@ describe('Contest tab components', () => {
   });
 
   it('renders participant empty state and action label', () => {
-    const html = renderToStaticMarkup(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'participation:create'] }} />);
+    const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'participation:create'] }} />);
     expect(html).toContain('No participants yet');
     expect(html).toContain('Add Participant');
+  });
+
+  it('renders the registration roster beside the participants', () => {
+    const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'team:update'] }} />);
+    expect(html).toContain('Registration Roster');
+    expect(html).toContain('A row here decides for this contest');
   });
 
   it('renders settings fields and save action', () => {

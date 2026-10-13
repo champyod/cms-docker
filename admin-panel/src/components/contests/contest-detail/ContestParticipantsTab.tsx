@@ -6,6 +6,7 @@ import { ParticipantModal } from '../ParticipantModal';
 import { ParticipationModal } from '../ParticipationModal';
 import { TeamBulkAddModal } from '../TeamBulkAddModal';
 import { ContestParticipantsSection } from './ContestParticipantsSection';
+import { ContestRosterSection } from './ContestRosterSection';
 import { useTabRefresh } from './useContestSettingsState';
 import { useContestParticipantActions } from './useContestParticipantActions';
 
@@ -102,6 +103,7 @@ export function ContestParticipantsTab({ data }: ContestParticipantsTabProps): R
         onOpenSettings={(participationId, username) => actions.handleOpenParticipationSettings(participationId, username)}
         onRemove={(participationId) => { void actions.handleRemoveParticipant(participationId); }}
       />
+      <ContestRosterSection contestId={data.contestId} permissionKeys={data.permissionKeys} />
       <ParticipantDialogs data={data} inviteCandidates={inviteCandidates} actions={actions} onSuccess={refresh} />
     </div>
   );

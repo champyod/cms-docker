@@ -24,7 +24,29 @@
   "contests": {
     "title": "Contests Management",
     "subtitle": "Create and manage programming contests.",
-    "allContests": "All Contests"
+    "allContests": "All Contests",
+    "roster": {
+      "title": "Registration Roster",
+      "description": "A row here decides for this contest; a team with no row falls back to its own flag.",
+      "empty": "No teams are available for this contest",
+      "inheritedOpen": "Inherited — the team's own flag allows it",
+      "inheritedClosed": "Inherited — the team's own flag blocks it",
+      "registerableOpen": "Registerable for this contest",
+      "registerableClosed": "Not registerable for this contest",
+      "toggle": "Registerable",
+      "add": "Add to roster",
+      "remove": "Return to inherited",
+      "readOnly": "Read-only — changing the roster needs team:update",
+      "setPending": "Updating roster...",
+      "setSuccess": "Roster updated",
+      "setFailure": "Roster update failed",
+      "addPending": "Adding team...",
+      "addSuccess": "Team added to roster",
+      "addFailure": "Adding the team failed",
+      "removePending": "Removing team...",
+      "removeSuccess": "Team returned to inherited",
+      "removeFailure": "Removing the team failed"
+    }
   },
   "tasks": {
     "title": "Tasks",

@@ -34,6 +34,22 @@ export type ContestParticipantsData = {
   teams: readonly { id: number; code: string; name: string }[]; permissionKeys: readonly string[];
 };
 
+/** Which side owns the value the contestant side resolves for one team. */
+export type ContestRosterState = 'inherited' | 'registerable' | 'blocked';
+
+export type ContestRosterRow = {
+  teamId: number; code: string; name: string;
+  /** What registration resolves for this contest, row or fallback. */
+  registerable: boolean;
+  /** The team's own flag, so an inherited row can name the default it uses. */
+  teamDefault: boolean;
+  state: ContestRosterState;
+};
+
+export type ContestRosterData = {
+  contestId: number; roster: readonly ContestRosterRow[]; permissionKeys: readonly string[];
+};
+
 export type ContestSettingsFields = {
   name: string; description: string; timezone: string | null; allow_questions: boolean; allow_user_tests: boolean;
   submissions_download_allowed: boolean; allow_password_authentication: boolean;
@@ -156,6 +172,40 @@ export async function getContestParticipants(contestId: number): Promise<Contest
     contestId, participations: participations.map((entry) => toParticipantRow(entry, permissions)),
     availableUsers, teams, permissionKeys: [...permissions],
   };
+}
+
+type RosterTeam = { id: number; code: string; name: string; registerable: boolean; contest_teams: { registerable: boolean }[] };
+
+// Why: a contest_teams row decides for this contest; with no row the team's own
+// flag decides — the panel names that rule here and nowhere else.
+function toRosterRow(team: RosterTeam): ContestRosterRow {
+  const override = team.contest_teams[0]?.registerable ?? null;
+  return {
+    teamId: team.id, code: team.code, name: team.name,
+    teamDefault: team.registerable,
+    registerable: override ?? team.registerable,
+    state: override === null ? 'inherited' : override ? 'registerable' : 'blocked',
+  };
+}
+
+// Why team:read gates the whole read: every row is team data, so a reader without
+// the key gets no rows rather than a partial roster.
+async function readContestRosterRows(contestId: number, permissions: ReadonlySet<string>): Promise<readonly ContestRosterRow[]> {
+  if (!hasEffectivePermission(permissions, 'team:read')) return [];
+  const teams = await prisma.teams.findMany({
+    select: {
+      id: true, code: true, name: true, registerable: true,
+      contest_teams: { where: { contest_id: contestId }, select: { registerable: true } },
+    },
+    orderBy: { code: 'asc' },
+  });
+  return teams.map(toRosterRow);
+}
+
+export async function getContestRoster(contestId: number): Promise<ContestRosterData | null> {
+  const permissions = await requirePermission('contest:read');
+  if (!await prisma.contests.findUnique({ where: { id: contestId }, select: { id: true } })) return null;
+  return { contestId, roster: await readContestRosterRows(contestId, permissions), permissionKeys: [...permissions] };
 }
 
 const contestSettingsSelect = {

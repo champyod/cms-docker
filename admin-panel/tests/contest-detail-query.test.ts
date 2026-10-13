@@ -16,6 +16,7 @@ import {
   getContestDetailSummary,
   getContestEditData,
   getContestParticipants,
+  getContestRoster,
 } from '@/lib/queries/contest-detail';
 
 describe('contest detail read models', () => {
@@ -82,6 +83,56 @@ describe('contest detail read models', () => {
       status: 403,
       permission: 'user:read',
     });
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('contest roster read model', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    requirePermission.mockResolvedValue(new Set(['contest:read', 'team:read']));
+    findUnique.mockResolvedValue({ id: 7 });
+  });
+
+  it('lets a contest row decide over the team default', async () => {
+    findMany.mockResolvedValue([
+      { id: 1, code: 'AAA', name: 'Team A', registerable: true, contest_teams: [{ registerable: false }] },
+    ]);
+
+    const roster = await getContestRoster(7);
+
+    expect(roster?.roster).toEqual([
+      { teamId: 1, code: 'AAA', name: 'Team A', teamDefault: true, registerable: false, state: 'blocked' },
+    ]);
+  });
+
+  it('falls back to the team default when the team has no row', async () => {
+    findMany.mockResolvedValue([
+      { id: 2, code: 'BBB', name: 'Team B', registerable: false, contest_teams: [] },
+      { id: 3, code: 'CCC', name: 'Team C', registerable: true, contest_teams: [] },
+    ]);
+
+    const roster = await getContestRoster(7);
+
+    expect(roster?.roster).toEqual([
+      { teamId: 2, code: 'BBB', name: 'Team B', teamDefault: false, registerable: false, state: 'inherited' },
+      { teamId: 3, code: 'CCC', name: 'Team C', teamDefault: true, registerable: true, state: 'inherited' },
+    ]);
+  });
+
+  it('ships no rows to a reader without team:read', async () => {
+    requirePermission.mockResolvedValue(new Set(['contest:read']));
+
+    const roster = await getContestRoster(7);
+
+    expect(roster?.roster).toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('reports a missing contest as no roster', async () => {
+    findUnique.mockResolvedValue(null);
+
+    expect(await getContestRoster(404)).toBeNull();
     expect(findMany).not.toHaveBeenCalled();
   });
 });
