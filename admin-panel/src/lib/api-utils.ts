@@ -9,6 +9,14 @@ export type ApiAuthResult =
   | { authorized: false; response: NextResponse; session?: undefined }
   | { authorized: true; session: SessionPayload; response?: undefined };
 
+/** Keep only the positive integer ids of a batch request, dropping anything else. */
+export function parseIdList(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((id: unknown) => Number(id))
+    .filter((id: number) => Number.isInteger(id) && id > 0);
+}
+
 export function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || value === '$undefined') return null;
   if (typeof value === 'string' && value.trim() === '') return null;
