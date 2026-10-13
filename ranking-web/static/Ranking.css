@@ -432,6 +432,11 @@ abbr {
     width: 48px;
 }
 
+#Scoreboard_cols col.f_name,
+#Scoreboard_cols col.l_name {
+    width: 12em;
+}
+
 #Scoreboard_cols col.user_id {
     width: 48px;
 }
@@ -491,6 +496,9 @@ abbr {
     text-align: left;
     padding: 0 0.5em;
     cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 #Scoreboard_head tr th.sel {

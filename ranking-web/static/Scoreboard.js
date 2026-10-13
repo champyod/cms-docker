@@ -242,15 +242,15 @@ var Scoreboard = new function () {
         // global cells to 5, etc. This way, since all <col/>s with a width of
         // 'auto' get the same computed width, we keep the 3:4:5 ratio and are
         // able to scale well at each screen size, while keeping the constant
-        // width columns constant. (Note: we gave the first_ and last_name
-        // columns a "width" of 10 <col/> elements.)
+        // width columns constant. (Note: the first_ and last_name columns are
+        // single spanned <col/> elements with an explicit width.)
         // Suggestion on other solution that get the same result and don't mess
         // this much with JS and HTML are extremely welcome!
         var result = " \
 <col class=\"sel\"/> \
 <col class=\"rank\"/> \
-<col class=\"f_name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
-<col class=\"l_name\"/> <col/><col/><col/><col/><col/><col/><col/><col/><col/> \
+<col class=\"f_name\" span=\"10\"/> \
+<col class=\"l_name\" span=\"10\"/> \
 <col class=\"user_id\"/> \
 <col class=\"team\"/>";
 
