@@ -136,11 +136,11 @@ export async function GET(request: Request): Promise<Response> {
       // there is nothing to restate for the client's watchdog.
       heartbeatTimer = setInterval(() => { if (sentOnce) push(true); }, LIVE_HEARTBEAT_MS);
 
-      // Why both halves are collected before the first send: the opening frame is the whole page, not
-      // half of it followed by the other half a moment later.
+      // Why the counters go out alone first: the page must not wait on the docker-backed summary.
       await collectStats();
-      await collectSummary();
       push(true);
+      await collectSummary();
+      push(false);
     },
     cancel() {
       closed = true;

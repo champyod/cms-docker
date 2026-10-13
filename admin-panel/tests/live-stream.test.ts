@@ -164,17 +164,32 @@ afterEach(() => {
 });
 
 describe('resources stream', () => {
-  it('opens with one frame carrying every section, and never as an SSE comment', async () => {
+  it('opens with the counters alone, never holding them behind the docker-backed summary', async () => {
+    // The summary is the half that shells out to docker; holding it pending is what the first frame
+    // must not wait on, and a frame that never mentions those sections is how the client knows to
+    // keep those two cards pending rather than empty.
+    let releaseSummary: () => void = () => undefined;
+    mocks.collectCoreServicesStatus.mockImplementation(() => new Promise((resolve) => {
+      releaseSummary = (): void => resolve({ success: true, services: [{ name: 'cms-database', status: 'healthy' }] });
+    }));
+
     const reader = await openResources();
     await vi.advanceTimersByTimeAsync(0);
 
-    const frames = expectDataFrames(await framesWithin(reader));
-    expect(frames).toHaveLength(1);
-    const frame = toFrame<ResourceFrame>(frames[0]);
-    expect(frame.server?.cpu).toBe(21);
-    expect(frame.workers).toHaveLength(1);
-    expect(frame.services).toEqual([{ name: 'cms-database', status: 'healthy' }]);
-    expect(frame.traffic).toHaveLength(1);
+    const opening = expectDataFrames(await framesWithin(reader));
+    expect(opening).toHaveLength(1);
+    const first = toFrame<ResourceFrame>(opening[0]);
+    expect(first.server?.cpu).toBe(21);
+    expect(first.workers).toHaveLength(1);
+    expect(first.services).toBeUndefined();
+    expect(first.traffic).toBeUndefined();
+
+    releaseSummary();
+    await vi.advanceTimersByTimeAsync(0);
+    const second = toFrame<ResourceFrame>((await framesWithin(reader))[0]);
+    expect(second.server?.cpu).toBe(21);
+    expect(second.services).toEqual([{ name: 'cms-database', status: 'healthy' }]);
+    expect(second.traffic).toHaveLength(1);
     // The page size travels with the connection, so the table's selector has no request of its own.
     expect(mocks.collectNetworkTrafficLogs).toHaveBeenCalledWith(20);
   });

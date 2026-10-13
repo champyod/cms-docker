@@ -7,11 +7,12 @@ import type { ContainerInfo } from '@/app/actions/docker';
 
 interface ContainerStackControlsProps {
   containers: ContainerInfo[];
+  loading: boolean;
   actionLoading: string | null;
   onCompose: (action: 'up' | 'down' | 'restart' | 'build', serviceType?: 'core' | 'admin' | 'contest' | 'worker') => void;
 }
 
-export function ContainerStackControls({ containers, actionLoading, onCompose }: ContainerStackControlsProps): React.JSX.Element {
+export function ContainerStackControls({ containers, loading, actionLoading, onCompose }: ContainerStackControlsProps): React.JSX.Element {
   const isLoading = actionLoading === 'compose';
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -25,7 +26,7 @@ export function ContainerStackControls({ containers, actionLoading, onCompose }:
           <StackActionButton label="Worker Stack" onRestart={() => onCompose('restart', 'worker')} onUp={() => onCompose('up', 'worker')} onBuild={() => onCompose('build', 'worker')} isLoading={isLoading} />
         </div>
       </Card>
-      <SystemLogsPanel containers={containers} />
+      <SystemLogsPanel containers={containers} loading={loading} />
     </div>
   );
 }

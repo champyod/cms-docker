@@ -5,7 +5,7 @@ import { ContainerStackControls } from '@/components/containers/ContainerStackCo
 describe('ContainerStackControls', () => {
   it('renders wrapping buttons with density spacing', () => {
     const html = renderToStaticMarkup(
-      <ContainerStackControls containers={[]} actionLoading={null} onCompose={() => undefined} />,
+      <ContainerStackControls containers={[]} loading={false} actionLoading={null} onCompose={() => undefined} />,
     );
     expect(html).toContain('Stack Controls');
     expect(html).toContain('flex-wrap');

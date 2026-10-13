@@ -15,6 +15,7 @@ import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
 import type { ResourceFrame, ServerStats, TrafficLog, WorkerNodeView, CoreServiceStatus } from '@/lib/live-frames';
+import type { Dictionary } from '@/lib/dictionary';
 import { rowsFromNodes } from '@/lib/worker-nodes';
 
 interface PendingFirstFrame {
@@ -22,12 +23,18 @@ interface PendingFirstFrame {
   readonly reject: (error: unknown) => void;
 }
 
+/** Why null and not a word: the label says where the numbers came from, which is itself a claim. */
+function sourceLabel(serverStats: ServerStats | null, dict: Dictionary): string | null {
+  if (serverStats === null) return null;
+  return serverStats.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
+}
+
 export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   const [workers, setWorkers] = useState<WorkerNodeView[]>([]);
-  const [services, setServices] = useState<CoreServiceStatus[]>([]);
-  const [traffic, setTraffic] = useState<TrafficLog[]>([]);
+  const [services, setServices] = useState<CoreServiceStatus[] | null>(null);
+  const [traffic, setTraffic] = useState<TrafficLog[] | null>(null);
   const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
 
   // Why every section is optional in the frame: a section is left out when this viewer may not read
@@ -66,7 +73,7 @@ export function ResourceView(): React.JSX.Element {
     onError: onStreamError,
   });
 
-  const source = serverStats?.source === 'host' ? dict.resources.hostSource : dict.resources.containerSource;
+  const source = sourceLabel(serverStats, dict);
 
   // Why the indicator is published from here and withdrawn unless loaded: the stream status is this
   // hook's own, and the loading surface below replaces the panel body entirely.
@@ -89,7 +96,8 @@ export function ResourceView(): React.JSX.Element {
   return (
     <div className="space-y-4 density:space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <CoreServicesStatus services={services} loading={false} />
+          {/* Why "not here yet" is not "nothing to read": the summary section arrives later. */}
+          <CoreServicesStatus services={services ?? []} loading={services === null} />
 
           <GaugeCard
             icon={<Cpu className="w-4 h-4 text-primary" />}
@@ -128,7 +136,7 @@ export function ResourceView(): React.JSX.Element {
             </div>
             <MetricsCard serverStats={serverStats} />
           </div>
-          <NetworkTrafficLogs logs={traffic} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={false} />
+            <NetworkTrafficLogs logs={traffic ?? []} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={traffic === null} />
         </div>
     </div>
   );

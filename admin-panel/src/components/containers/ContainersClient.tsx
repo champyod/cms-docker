@@ -12,7 +12,7 @@ import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { BulkDialogs } from '@/components/containers/BulkDialogs';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
-import { StatsCard } from '@/components/containers/StatsCard';
+import { StatsCard, StatsCardSkeleton } from '@/components/containers/StatsCard';
 import { ContainerStackControls } from '@/components/containers/ContainerStackControls';
 import { ContainerRow } from '@/components/containers/ContainerRow';
 import { useContainersController } from '@/components/containers/useContainersController';
@@ -24,6 +24,8 @@ import { cn } from '@/lib/utils';
 
 const DEFAULT_RESTART_CONFIG = { autoRestart: false, maxRestarts: 5, currentRestarts: 0 } as const;
 const DEFAULT_ROW_CONFIG = { ...DEFAULT_RESTART_CONFIG, discordNotifications: true };
+/** The number of slots the stat grid has; its placeholders are laid out from the same count. */
+const STAT_CARD_SLOT_COUNT = 4;
 
 export function ContainersClient(): React.JSX.Element {
   const dict = useDictionary();
@@ -117,10 +119,17 @@ export function ContainersClient(): React.JSX.Element {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatsCard icon={Box} label={pageCopy.stats.total} value={controller.containers.length} color="primary" />
-          <StatsCard icon={CheckCircle2} label={pageCopy.stats.running} value={controller.containers.filter((c) => c.state === 'running').length} color="success" />
-          <StatsCard icon={AlertCircle} label={pageCopy.stats.stopped} value={controller.containers.filter((c) => c.state !== 'running').length} color="destructive" />
-          <StatsCard icon={RotateCcw} label={pageCopy.stats.uptime} value="99.9%" color="info" />
+          {/* Why placeholders and not zeros: no frame has arrived, so there is no count to state. */}
+          {controller.loading ? (
+            Array.from({ length: STAT_CARD_SLOT_COUNT }, (_, index) => <StatsCardSkeleton key={index} />)
+          ) : (
+            <>
+              <StatsCard icon={Box} label={pageCopy.stats.total} value={controller.containers.length} color="primary" />
+              <StatsCard icon={CheckCircle2} label={pageCopy.stats.running} value={controller.containers.filter((c) => c.state === 'running').length} color="success" />
+              <StatsCard icon={AlertCircle} label={pageCopy.stats.stopped} value={controller.containers.filter((c) => c.state !== 'running').length} color="destructive" />
+              <StatsCard icon={RotateCcw} label={pageCopy.stats.uptime} value="99.9%" color="info" />
+            </>
+          )}
         </div>
 
         <Card className="overflow-hidden">
@@ -165,6 +174,7 @@ export function ContainersClient(): React.JSX.Element {
 
         <ContainerStackControls
           containers={controller.containers}
+          loading={controller.loading}
           actionLoading={controller.actionLoading}
           onCompose={controller.handleCompose}
         />

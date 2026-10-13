@@ -2,6 +2,7 @@
 import type { LucideIcon } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
+import { Skeleton } from '@/components/core/Skeleton';
 import { cn } from '@/lib/utils';
 
 export type StatColor = 'primary' | 'success' | 'destructive' | 'info';
@@ -19,6 +20,19 @@ const COLOR_CLASSES: Record<StatColor, string> = {
   destructive: 'text-destructive bg-destructive/10',
   info: 'text-info bg-info/10',
 };
+
+/** Why a card-shaped placeholder: a number the panel does not have yet cannot be shown at all. */
+export function StatsCardSkeleton(): React.JSX.Element {
+  return (
+    <Card className="p-4 flex items-center gap-4">
+      <Skeleton className="size-11 rounded-xl" />
+      <div className="space-y-2">
+        <Skeleton className="h-7 w-16" />
+        <Skeleton className="h-3 w-24" />
+      </div>
+    </Card>
+  );
+}
 
 export function StatsCard({ icon: Icon, label, value, color }: StatsCardProperties): React.JSX.Element {
   return (
