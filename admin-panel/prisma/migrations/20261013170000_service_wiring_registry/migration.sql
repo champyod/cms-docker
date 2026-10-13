@@ -24,7 +24,7 @@ DO $$ BEGIN
         "contest_id" INTEGER,
         "enabled" BOOLEAN NOT NULL DEFAULT true,
         "created_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP(6) NOT NULL,
         CONSTRAINT "services_pkey" PRIMARY KEY ("id")
     );
   END IF;
