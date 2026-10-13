@@ -1,0 +1,197 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  exposureRoutes,
+  normalisePath,
+  resolveWirings,
+  servicesForContest,
+  WiringError,
+  type ExposureRow,
+  type ServiceRow,
+  type WiringRow,
+} from '@/lib/service-wiring';
+import {
+  assertSafeHostname,
+  assertSafePath,
+  certificateLineage,
+  renderNginxServers,
+  renderServeConfig,
+  RenderError,
+} from '@/lib/service-wiring-render';
+
+function service(overrides: Partial<ServiceRow> & Pick<ServiceRow, 'id' | 'name'>): ServiceRow {
+  return {
+    role: 'ContestWebServer',
+    shard: 0,
+    host: overrides.name,
+    port: 8888,
+    db_profile: 'default',
+    contest_id: null,
+    enabled: true,
+    ...overrides,
+  };
+}
+
+function exposure(overrides: Partial<ExposureRow> & Pick<ExposureRow, 'contest_id'>): ExposureRow {
+  return { hostname: 'a.example.com', path: '/', tls: true, tailnet: null, ...overrides };
+}
+
+describe('normalisePath', () => {
+  it.each([
+    ['/', '/'],
+    ['', '/'],
+    ['   ', '/'],
+    ['beta', '/beta'],
+    ['/beta', '/beta'],
+    ['beta/', '/beta'],
+    ['/beta/', '/beta'],
+    ['/a/b/', '/a/b'],
+  ])('turns %j into %j', (input, expected) => {
+    expect(normalisePath(input)).toBe(expected);
+  });
+});
+
+describe('resolveWirings', () => {
+  const evaluation = service({ id: 1, name: 'cms-evaluation-service', role: 'EvaluationService' });
+  const worker = service({ id: 2, name: 'cms-worker-0', role: 'Worker' });
+
+  it('joins both endpoints', () => {
+    const wirings: WiringRow[] = [
+      { from_service_id: 1, to_service_id: 2, relation: 'drains', enabled: true },
+    ];
+    expect(resolveWirings([evaluation, worker], wirings)).toEqual([
+      { from: evaluation, to: worker, relation: 'drains' },
+    ]);
+  });
+
+  it('drops disabled links', () => {
+    const wirings: WiringRow[] = [
+      { from_service_id: 1, to_service_id: 2, relation: 'drains', enabled: false },
+    ];
+    expect(resolveWirings([evaluation, worker], wirings)).toEqual([]);
+  });
+
+  it('fails loudly on an unregistered endpoint, even when disabled', () => {
+    const wirings: WiringRow[] = [
+      { from_service_id: 1, to_service_id: 99, relation: 'drains', enabled: false },
+    ];
+    expect(() => resolveWirings([evaluation], wirings)).toThrow(WiringError);
+  });
+});
+
+describe('servicesForContest', () => {
+  const bound = service({ id: 1, name: 'cms-contest-web-server-1', contest_id: 1 });
+  const other = service({ id: 2, name: 'cms-contest-web-server-2', contest_id: 2 });
+  const shared = service({ id: 3, name: 'cms-evaluation-service', role: 'EvaluationService' });
+  const off = service({ id: 4, name: 'cms-worker-0', role: 'Worker', enabled: false });
+
+  it('returns the bound and the shared, never another contest or a disabled row', () => {
+    expect(servicesForContest(1, [bound, other, shared, off]).map((s) => s.id)).toEqual([1, 3]);
+  });
+});
+
+describe('exposureRoutes', () => {
+  it('prefers the contest-bound server over the shared one', () => {
+    const shared = service({ id: 1, name: 'cms-contest-web-server', host: 'shared' });
+    const own = service({ id: 2, name: 'cms-contest-web-server-3', host: 'own', contest_id: 3 });
+    expect(exposureRoutes([exposure({ contest_id: 3 })], [shared, own])[0].upstream).toBe('own:8888');
+  });
+
+  it('breaks a tie on the lowest shard', () => {
+    const high = service({ id: 1, name: 'w-high', host: 'high', shard: 4, contest_id: 9 });
+    const low = service({ id: 2, name: 'w-low', host: 'low', shard: 1, contest_id: 9 });
+    expect(exposureRoutes([exposure({ contest_id: 9 })], [high, low])[0].upstream).toBe('low:8888');
+  });
+
+  it('fails when a contest has nothing to answer on', () => {
+    expect(() => exposureRoutes([exposure({ contest_id: 9 })], [])).toThrow(WiringError);
+  });
+
+  it('normalises the path it carries through', () => {
+    const own = service({ id: 1, name: 'w', contest_id: 2 });
+    expect(exposureRoutes([exposure({ contest_id: 2, path: 'beta/' })], [own])[0].path).toBe('/beta');
+  });
+});
+
+describe('renderNginxServers', () => {
+  const route = {
+    contest_id: 1,
+    hostname: 'a.example.com',
+    path: '/',
+    upstream: 'web-1:8888',
+    tls: true,
+    tailnet: null,
+  };
+
+  it('renders a TLS server block for the apex path', () => {
+    const out = renderNginxServers([route]);
+    expect(out).toContain('listen 443 ssl;');
+    expect(out).toContain('server_name a.example.com;');
+    expect(out).toContain('proxy_pass http://web-1:8888;');
+  });
+
+  it('renders a prefix block that strips the prefix and redirects the bare form', () => {
+    const out = renderNginxServers([{ ...route, path: '/beta' }]);
+    expect(out).toContain('location ^~ /beta/ {');
+    expect(out).toContain('proxy_pass http://web-1:8888/;');
+    expect(out).toContain('return 301 /beta/;');
+  });
+
+  it('refuses a hostname that could inject a directive', () => {
+    const hostile = { ...route, hostname: 'a.example.com; root /etc;' };
+    expect(() => renderNginxServers([hostile])).toThrow(RenderError);
+  });
+
+  it('refuses a path that could inject a location', () => {
+    expect(() => assertSafePath('/beta; } server {')).toThrow(RenderError);
+  });
+});
+
+describe('assertSafeHostname', () => {
+  it('lower-cases and keeps a normal FQDN', () => {
+    expect(assertSafeHostname('A.Example.COM')).toBe('a.example.com');
+  });
+
+  it.each(['http://a.example.com', 'a.example.com:443', 'a_b.example.com', 'a.example.com.', '..', 'a..b'])(
+    'refuses %j',
+    (value) => {
+      expect(() => assertSafeHostname(value)).toThrow(RenderError);
+    }
+  );
+});
+
+describe('certificateLineage', () => {
+  it.each([
+    ['a.example.com', 'example.com'],
+    ['contest.example.co.th', 'co.th'],
+    ['example.com', 'example.com'],
+    ['localhost', 'localhost'],
+  ])('maps %s to %s', (hostname, expected) => {
+    expect(certificateLineage(hostname)).toBe(expected);
+  });
+});
+
+describe('renderServeConfig', () => {
+  const route = {
+    contest_id: 1,
+    hostname: 'a.example.com',
+    path: '/',
+    upstream: 'web-1:8888',
+    tls: true,
+    tailnet: 'cms-contest-1',
+  };
+
+  it('emits nothing when no name is exposed on the tailnet', () => {
+    expect(renderServeConfig([{ ...route, tailnet: null }])).toBe('');
+  });
+
+  it('maps the path to its upstream under the substituted certificate domain', () => {
+    const parsed = JSON.parse(renderServeConfig([route])) as {
+      Web: Record<string, { Handlers: Record<string, { Proxy: string }> }>;
+      AllowFunnel: Record<string, boolean>;
+    };
+    const key = '${TS_CERT_DOMAIN}:443';
+    expect(parsed.Web[key].Handlers['/'].Proxy).toBe('http://web-1:8888');
+    expect(parsed.AllowFunnel[key]).toBe(true);
+  });
+});
