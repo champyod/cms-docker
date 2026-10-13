@@ -265,6 +265,9 @@
     },
     "appearance": {
       "title": "Scoreboard appearance",
+      "identitySection": "Identity",
+      "displaySection": "Display",
+      "advancedSection": "Advanced (JSON)",
       "displayNameField": "Display name",
       "displayNameHint": "Shown below the logo on the public scoreboard. Leave blank to use Title instead.",
       "titleField": "Title",
@@ -277,8 +280,12 @@
       "anonymousField": "Start the board anonymous",
       "footerField": "Footer text",
       "creditsField": "Credits text",
+      "themeField": "Theme (JSON)",
+      "themeHint": "Optional JSON the board reads for colours and styling.",
+      "scoreFormatField": "Score format (JSON)",
+      "scoreFormatHint": "Optional JSON describing how scores are formatted.",
       "perspectivesField": "Perspective tabs (JSON)",
-      "perspectivesHint": "Which tabs the board shows and how the bar copes when they do not fit. Tabs: board, teams, tasks, scores, progress, time. Overflow: wrap, scroll or menu.",
+      "perspectivesHint": "Which tabs the board shows and how the bar copes when they do not fit. Tabs: board, teams, tasks, scores, progress, time, group, metrics, analysis. Overflow: wrap, scroll or menu.",
       "save": "Save appearance"
     },
     "overrides": {
@@ -298,8 +305,9 @@
       "actionPin": "pin a rank",
       "actionRename": "rename the display name",
       "actionScore": "override the shown score",
-      "actionFreeze": "freeze the shown score",
+      "actionFreeze": "freeze the board at a cutoff",
       "value": "Value (rank, name or score)",
+      "freezeValue": "Freeze cutoff (Unix seconds)",
       "reason": "Reason",
       "add": "Add override",
       "end": "End"

@@ -21,7 +21,7 @@ function readSource(relativePath: string): string {
 // Route, physical page, and the server action or component the page must delegate to.
 const RANKING_PAGES: readonly [RouteId, string, string][] = [
   ['ranking.board', 'src/app/[locale]/(authenticated)/ranking/page.tsx', '<RankingLogoCard'],
-  ['ranking.appearance', 'src/app/[locale]/(authenticated)/ranking/appearance/page.tsx', 'submitRankingAppearance'],
+  ['ranking.appearance', 'src/app/[locale]/(authenticated)/ranking/appearance/page.tsx', 'AppearanceForm'],
   ['ranking.settings', 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx', 'RankingOverrideForm'],
   ['ranking.lockouts', 'src/app/[locale]/(authenticated)/ranking/lockouts/page.tsx', 'clearRankingLockout'],
   ['ranking.credits', 'src/app/[locale]/(authenticated)/ranking/credits/page.tsx', 'submitRankingCredits'],
@@ -71,6 +71,13 @@ describe('Ranking ownership and wiring', () => {
     const credits = readSource('src/app/[locale]/(authenticated)/ranking/credits/page.tsx');
     expect(credits).toContain('name="credits"');
     expect(credits).toContain('submitRankingCredits');
+  });
+
+  it('drives the appearance form from the shared schema, not hand-written fields', () => {
+    const page = readSource('src/app/[locale]/(authenticated)/ranking/appearance/page.tsx');
+    expect(page).toContain('buildAppearanceSections');
+    const form = readSource('src/components/ranking/appearance/AppearanceForm.tsx');
+    expect(form).toContain('submitRankingAppearance');
   });
 
   it('keeps the old address a redirect stub rather than a second page', () => {

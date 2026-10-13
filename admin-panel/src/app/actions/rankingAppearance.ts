@@ -29,6 +29,8 @@ export interface AppearanceFields {
   anonymous: boolean;
   footerText: string;
   creditsText: string;
+  theme: string;
+  scoreFormat: string;
   perspectives: string;
 }
 
@@ -49,6 +51,8 @@ const DEFAULTS: RankingAppearance = {
   footerText: '',
   creditsText: '',
   credits: '',
+  theme: '',
+  scoreFormat: '',
   perspectives: '',
 };
 
@@ -68,6 +72,8 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     footerText: row.footer_text ?? '',
     creditsText: row.credits_text ?? '',
     credits: formatJson(row.credits),
+    theme: formatJson(row.theme),
+    scoreFormat: formatJson(row.score_format),
     perspectives: formatJson(row.perspectives),
   };
 }
@@ -229,6 +235,27 @@ function assertPerspectiveLayout(config: Record<string, unknown>): void {
   }
 }
 
+/**
+ * Theme and score format are free-form JSON objects the board reads as-is, so only the
+ * shape is checked here: an emptied box unsets the column rather than storing `null`.
+ */
+function parseJsonObject(label: string, raw: string): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return Prisma.JsonNull;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} must be valid JSON`);
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return parsed as Prisma.InputJsonValue;
+}
+
 /** Only a real boolean turns the id column on: a missing or mistyped value must not show ids. */
 function readShowIdColumn(columns: unknown): boolean {
   if (typeof columns !== "object" || columns === null) return false;
@@ -255,6 +282,8 @@ function readForm(formData: FormData): AppearanceFields {
     anonymous: formData.get("anonymous") === "on",
     footerText: text("footerText"),
     creditsText: text("creditsText"),
+    theme: text("theme"),
+    scoreFormat: text("scoreFormat"),
     perspectives: text("perspectives"),
   };
 }
@@ -269,6 +298,8 @@ function toRow(appearance: AppearanceFields) {
     columns: { show_id_column: appearance.showIdColumn, anonymous: appearance.anonymous },
     footer_text: appearance.footerText || null,
     credits_text: appearance.creditsText || null,
+    theme: parseJsonObject('the theme', appearance.theme),
+    score_format: parseJsonObject('the score format', appearance.scoreFormat),
     perspectives: parsePerspectives(appearance.perspectives),
   };
 }

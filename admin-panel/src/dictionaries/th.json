@@ -265,6 +265,9 @@
     },
     "appearance": {
       "title": "รูปลักษณ์ของกระดานคะแนน",
+      "identitySection": "ข้อมูลระบุตัวตน",
+      "displaySection": "การแสดงผล",
+      "advancedSection": "ขั้นสูง (JSON)",
       "displayNameField": "ชื่อที่แสดง",
       "displayNameHint": "แสดงใต้โลโก้บนกระดานคะแนนสาธารณะ เว้นว่างไว้เพื่อใช้หัวเรื่องแทน",
       "titleField": "หัวเรื่อง",
@@ -277,8 +280,12 @@
       "anonymousField": "เริ่มกระดานแบบไม่ระบุชื่อ",
       "footerField": "ข้อความส่วนท้าย",
       "creditsField": "ข้อความเครดิต",
+      "themeField": "ธีม (JSON)",
+      "themeHint": "JSON ที่ไม่บังคับ ซึ่งกระดานอ่านเพื่อกำหนดสีและรูปแบบ",
+      "scoreFormatField": "รูปแบบคะแนน (JSON)",
+      "scoreFormatHint": "JSON ที่ไม่บังคับ ซึ่งอธิบายวิธีจัดรูปแบบคะแนน",
       "perspectivesField": "แท็บมุมมอง (JSON)",
-      "perspectivesHint": "เลือกแท็บที่กระดานแสดง และวิธีที่แถบแท็บจัดการเมื่อพื้นที่ไม่พอ แท็บ: board, teams, tasks, scores, progress, time โหมดล้น: wrap, scroll หรือ menu",
+      "perspectivesHint": "เลือกแท็บที่กระดานแสดง และวิธีที่แถบแท็บจัดการเมื่อพื้นที่ไม่พอ แท็บ: board, teams, tasks, scores, progress, time, group, metrics, analysis โหมดล้น: wrap, scroll หรือ menu",
       "save": "บันทึกรูปลักษณ์"
     },
     "overrides": {
@@ -298,8 +305,9 @@
       "actionPin": "ตรึงอันดับ",
       "actionRename": "เปลี่ยนชื่อที่แสดง",
       "actionScore": "แทนที่คะแนนที่แสดง",
-      "actionFreeze": "แช่แข็งคะแนนที่แสดง",
+      "actionFreeze": "ตรึงกระดานที่จุดตัดเวลา",
       "value": "ค่า (อันดับ ชื่อ หรือคะแนน)",
+      "freezeValue": "จุดตัดการตรึง (วินาที Unix)",
       "reason": "เหตุผล",
       "add": "เพิ่มการปรับ",
       "end": "สิ้นสุด"
