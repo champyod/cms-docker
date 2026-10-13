@@ -12,7 +12,7 @@
 # It drives the REAL cms.service.ProxyService, so the code under test is
 # untouched. Only the third-party import surface it needs is supplied:
 # fatal_quit_surface already provides gevent, cms, cms.io and cmscommon, and
-# this suite adds what ProxyService reaches for beyond those (sqlalchemy,
+# proxy_surface adds what ProxyService reaches for beyond those (sqlalchemy,
 # requests, the cms.db entities) plus the cms.io re-exports the package
 # initializer would normally provide. None of those are installed here, so
 # without the surface nothing would import. It lives beside tests/ for the
@@ -21,97 +21,16 @@
 #
 # Usage: python3 tests/test_proxy_score_guard.py
 
-import queue
-import sys
-import types
 import unittest
 from datetime import datetime
 
-from __lib.fatal_quit_surface import register
+from __lib.proxy_surface import Contest, Session, SessionGen, \
+    install_proxy_surface
 
 LOGGER_NAME = "cms.service.ProxyService"
 RANKING_URL = "http://user:password@ranking.example/rws/"
 
-
-class Contest:
-    """Stand-in for cms.db.Contest, serving the contest the test registered.
-
-    initialize() fetches the contest through the class, so the test registers
-    the one it wants served before it builds the service.
-    """
-
-    current = None
-
-    @classmethod
-    def get_from_id(cls, contest_id, session):
-        return cls.current
-
-
-class Session:
-    """Context manager standing in for a database session."""
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, unused_type, unused_value, unused_traceback):
-        return False
-
-
-def SessionGen():
-    """Return a session for initialize() to run its contest query in."""
-    return Session()
-
-
-def install_proxy_surface():
-    """Supply the imports ProxyService needs beyond the shared surface."""
-    gevent = sys.modules["gevent"]
-    gevent.queue = register("gevent.queue", Queue=queue.Queue)
-
-    requests = register("requests")
-    requests.exceptions = register(
-        "requests.exceptions", RequestException=Exception)
-
-    # ProxyService imports not_, text and sqlalchemy.exc.SQLAlchemyError;
-    # none runs in the initialize() path this suite drives, so placeholders
-    # suffice for the import to succeed.
-    sqlalchemy = register(
-        "sqlalchemy", not_=lambda condition: condition,
-        text=lambda statement: statement)
-    sqlalchemy.exc = register("sqlalchemy.exc", SQLAlchemyError=Exception)
-
-    database = sys.modules["cms.db"]
-    database.SessionGen = SessionGen
-    database.Contest = Contest
-    database.Participation = object
-    database.Task = object
-    database.Submission = object
-    database.get_submissions = lambda session, **kwargs: []
-
-    sys.modules["cms"].config.proxy_service = types.SimpleNamespace(
-        rankings=[RANKING_URL], https_certfile=None)
-
-    io = sys.modules["cms.io"]
-    from cms.io import priorityqueue, rpc, service
-    io.PriorityQueue = priorityqueue.PriorityQueue
-    io.QueueItem = priorityqueue.QueueItem
-    io.QueueEntry = priorityqueue.QueueEntry
-    io.Service = service.Service
-    io.rpc_method = rpc.rpc_method
-    # Only now: the module reads these back off the package it sits in.
-    from cms.io.triggeredservice import Executor, TriggeredService
-    io.Executor = Executor
-    io.TriggeredService = TriggeredService
-
-    # ProxyService resolves display usernames through cms.db.username, a package in
-    # the real tree, but the cms.db the shared surface registers is a plain module —
-    # so the submodule is registered here or the import fails as "cms.db is not a
-    # package". Neither function runs in the initialize() path this suite drives.
-    register("cms.db.username",
-             get_display_usernames=lambda *_args, **_kwargs: {},
-             resolve_username_config=lambda *_args, **_kwargs: {})
-
-
-install_proxy_surface()
+install_proxy_surface(RANKING_URL)
 
 from cms.service.ProxyService import ProxyExecutor, ProxyService  # noqa: E402
 

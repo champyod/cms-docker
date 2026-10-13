@@ -71,36 +71,36 @@ def encode_id(entity_id: str) -> str:
     return encoded_id
 
 
-def write_projection(resource: str, payloads: dict, operation: str):
-    """Write a batch of entities into the ranking projection.
+def write_projection(batches, operation):
+    """Write every (resource, payloads) batch into the ranking projection at once.
 
-    WHY one session and one commit for the batch: the executor retries the whole batch
-    after a failure, so a partial write would be re-sent anyway, and committing once
-    keeps a retry from publishing half a contest.
+    One transaction for the whole push, so a reader never sees a projection that
+    landed in some tables and not others. The executor re-sends the whole push
+    after a failure, which is what makes all-or-nothing the cheaper option.
 
-    WHY the failures are re-raised as CannotSendError: the retry loop keys on that type,
-    so a refused payload and an unreachable database must look to it exactly as a failed
-    request did.
+    The failures are re-raised as CannotSendError because the retry loop keys on
+    that type: a refused payload and an unreachable database must look to it
+    exactly as a failed request did.
 
-    resource: the plural entity name, which names the projection table.
-    payloads: entity key to payload, in the wire format.
+    batches: (resource, payloads) pairs; the resource names the projection table.
     operation: a human-readable description for the log.
 
-    raise (CannotSendError): if the projection refuses the batch.
+    raise (CannotSendError): if the projection refuses the push.
 
     """
-    statement = text(upsert_statement(resource))
     try:
         with SessionGen() as session:
-            for parameters in projection_rows(resource, payloads):
-                session.execute(statement, parameters)
+            for resource, payloads in batches:
+                statement = text(upsert_statement(resource))
+                for parameters in projection_rows(resource, payloads):
+                    session.execute(statement, parameters)
             session.commit()
     except SQLAlchemyError as error:
         msg = "%s while %s: %s." % (type(error).__name__, operation, error)
         logger.warning(msg)
         raise CannotSendError(msg)
     except ValueError as error:
-        msg = "Invalid %s payload while %s: %s." % (resource, operation, error)
+        msg = "Invalid payload while %s: %s." % (operation, error)
         logger.warning(msg)
         raise CannotSendError(msg)
 
@@ -211,19 +211,23 @@ class ProxyExecutor(Executor[ProxyOperation]):
         for entry in entries:
             data[entry.item.type_].update(entry.item.data)
 
-        try:
-            for i in range(self.TYPE_COUNT):
-                # Send entities of type i.
-                if len(data[i]) > 0:
-                    # We abuse the resource path as the English
-                    # (plural) name for the entity type.
-                    name = self.RESOURCE_PATHS[i]
-                    operation = "sending %s to ranking %s" % (
-                                    name, self._visible_ranking)
+        # We abuse the resource path as the English (plural) name for the entity
+        # type, so the batch names the tables it is about to write.
+        batches = [(self.RESOURCE_PATHS[index], data[index])
+                   for index in range(self.TYPE_COUNT) if len(data[index]) > 0]
+        if len(batches) == 0:
+            return
 
-                    logger.debug(operation.capitalize())
-                    write_projection(name, data[i], operation)
-                    data[i].clear()
+        operation = "sending %s to ranking %s" % (
+            ", ".join(batch[0] for batch in batches), self._visible_ranking)
+
+        try:
+            logger.debug(operation.capitalize())
+            write_projection(batches, operation)
+            # Cleared only after the commit: nothing was written if it raised, and
+            # the retry has to re-send all of it rather than the part that is left.
+            for batch in batches:
+                batch[1].clear()
 
         except CannotSendError:
             # A log message has already been produced.
