@@ -11,7 +11,7 @@ import { DEFAULT_GROUPS } from '@/lib/permission-groups';
  * These tests pin both halves: the seeded deploy role holds `contest:switch`, and the real
  * `contest:switch` gate accepts an admin whose only group is that role.
  */
-const DEPLOY_ROLE = 'Storage Admin';
+const DEPLOY_ROLE = 'Storage';
 
 function groupKeys(name: string): string[] {
   const group = DEFAULT_GROUPS.find((definition) => definition.name === name);
