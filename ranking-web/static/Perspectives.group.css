@@ -1,0 +1,33 @@
+.persp-group-flag-cell {
+    text-align: center;
+}
+
+.persp-group-flag {
+    max-width: 40px;
+    max-height: 20px;
+    vertical-align: middle;
+}
+
+.persp-group-toggle {
+    font: inherit;
+    padding: 0 0.5em;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    background-color: #ECECEF;
+    cursor: pointer;
+}
+
+.persp-group-members {
+    display: none;
+}
+
+.persp-group-members.open {
+    display: table-row;
+}
+
+.persp-group-members td {
+    width: auto;
+    text-align: left;
+    color: #444444;
+    font-size: 0.9em;
+}
