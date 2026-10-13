@@ -31,7 +31,7 @@ assert_absent() { # haystack needle label
 }
 
 setup_emitter() {
-  rm -rf -- "$TEST_ROOT/scripts" "$TEST_ROOT/bin" "$TEST_ROOT/.env"
+  rm -rf -- "$TEST_ROOT/scripts" "$TEST_ROOT/bin" "$TEST_ROOT/.env" "$TEST_ROOT/config.toml"
   mkdir -p "$TEST_ROOT/scripts" "$TEST_ROOT/bin"
   cp "$REPO_ROOT/scripts/__worker_status_json.sh" "$TEST_ROOT/scripts/"
   # docker is stubbed: this suite is about where the fleet is read from, never about a daemon.
@@ -85,6 +85,28 @@ assert_json_rows "$out" 2 "both keys are reported once each"
 assert_contains "$out" '"endpoint":"10.0.0.5:26005"' "the environment's value is the one used"
 assert_absent "$out" 'cms-worker-0:26000' "the file's copy of that key is not used as well"
 assert_contains "$out" '"endpoint":"cms-worker-3:26003"' "a key only the file carries is still read"
+
+echo ""
+echo "=== Test 4: config.toml is the source when the environment is silent ==="
+setup_emitter
+# The config.toml form scripts/__worker_tui.sh writes: a quoted value, and a row that
+# ends in a comment rather than the closing quote.
+printf '[worker]\nWORKER_2 = "10.0.0.2:26002" # note\nWORKER_5 = "10.0.0.5:26005"\n\n[contest]\nCONTEST_ID = 7  # active\n' > "$TEST_ROOT/config.toml"
+out="$(emit)"
+assert_json_rows "$out" 2 "config.toml's fleet is reported with no environment and no .env"
+assert_contains "$out" '"endpoint":"10.0.0.2:26002"' "a quoted row with a trailing comment decodes"
+assert_contains "$out" '"endpoint":"10.0.0.5:26005"' "a plain quoted row decodes"
+assert_contains "$out" '"contest":7' "CONTEST_ID is read from config.toml [contest]"
+
+echo ""
+echo "=== Test 5: config.toml outranks the .env render for the same shard ==="
+setup_emitter
+printf 'WORKER_2=stale.example:9999\n' > "$TEST_ROOT/.env"
+printf '[worker]\nWORKER_2 = "10.0.0.2:26002"\n' > "$TEST_ROOT/config.toml"
+out="$(emit)"
+assert_json_rows "$out" 1 "the shard is reported once"
+assert_contains "$out" '"endpoint":"10.0.0.2:26002"' "the config.toml value wins over the .env render"
+assert_absent "$out" 'stale.example:9999' "the .env value is not used"
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="

@@ -11,6 +11,8 @@ import {
   type EmitterWorkerRow,
   type WorkerNodeView,
 } from './worker-nodes';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
+import { readTomlValue } from '@/lib/discord-webhook';
 
 const execPromise = util.promisify(exec);
 const execFilePromise = util.promisify(execFile);
@@ -22,31 +24,103 @@ const EMITTER_SCRIPT = ['scripts', '__worker_status_json.sh'];
 
 type ConfiguredWorker = { shard: number; host: string; port: number };
 
-const WORKER_ENV_LINE_RE = /^(?:export\s+)?WORKER_(\d+)\s*=\s*['"]?([^:'"]+)['"]?\s*:\s*(\d+)\s*$/;
+const WORKER_TOML_SECTION = 'worker';
+const WORKER_KEY_RE = /^WORKER_(\d+)$/;
+const WORKER_ENDPOINT_RE = /^([^:]+):(\d+)$/;
 
-function parseEnvCoreWorkerLine(line: string): ConfiguredWorker | null {
-  const match = line.match(WORKER_ENV_LINE_RE);
-  if (!match) return null;
-
-  return {
-    shard: parseInt(match[1], 10),
-    host: match[2].trim(),
-    port: parseInt(match[3], 10),
-  };
+/** The shard a fleet key names, or null when the key is not a fleet row. */
+function workerShardOf(key: string): number | null {
+  const match = key.match(WORKER_KEY_RE);
+  return match ? parseInt(match[1], 10) : null;
 }
 
-function loadConfiguredWorkers(envCorePath: string): ConfiguredWorker[] {
-  try {
-    return fs.readFileSync(envCorePath, 'utf8')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
-      .map(parseEnvCoreWorkerLine)
-      .filter((worker): worker is ConfiguredWorker => worker !== null)
-      .sort((a, b) => a.shard - b.shard);
-  } catch {
-    return [];
+/** One `host:port` endpoint with any wrapping quotes dropped; null when it is not one. */
+function parseWorkerEndpoint(raw: string): { host: string; port: number } | null {
+  const value = raw.trim().replace(/^["']|["']$/g, '');
+  const match = value.match(WORKER_ENDPOINT_RE);
+  if (!match) return null;
+  return { host: match[1].trim(), port: parseInt(match[2], 10) };
+}
+
+/** The fleet the process was handed — what compose delivers to the panel container. */
+function environmentWorkers(): Map<number, ConfiguredWorker> {
+  const workers = new Map<number, ConfiguredWorker>();
+  for (const [key, raw] of Object.entries(process.env)) {
+    if (raw === undefined) continue;
+    const shard = workerShardOf(key);
+    if (shard === null) continue;
+    const endpoint = parseWorkerEndpoint(raw);
+    if (endpoint) workers.set(shard, { shard, ...endpoint });
   }
+  return workers;
+}
+
+/**
+ * The fleet config.toml [worker] declares — the source the sync renders .env from.
+ * Why readTomlValue: it is the panel's section-scoped reader, and it already decodes
+ * the `WORKER_1 = "host:port"` form, quotes and a trailing comment included.
+ */
+function tomlWorkers(content: string): Map<number, ConfiguredWorker> {
+  const workers = new Map<number, ConfiguredWorker>();
+  for (const line of content.split('\n')) {
+    const shard = workerShardOf(line.split('=')[0].trim());
+    if (shard === null) continue;
+    const raw = readTomlValue(content, WORKER_TOML_SECTION, `WORKER_${shard}`);
+    const endpoint = parseWorkerEndpoint(raw);
+    if (endpoint) workers.set(shard, { shard, ...endpoint });
+  }
+  return workers;
+}
+
+/** The fleet the generated .env carries — the last resort for a host with no config.toml. */
+function envFileWorkers(content: string): Map<number, ConfiguredWorker> {
+  const workers = new Map<number, ConfiguredWorker>();
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
+    const key = trimmed.slice(0, trimmed.indexOf('=')).trim().replace(/^export\s+/, '');
+    const shard = workerShardOf(key);
+    if (shard === null) continue;
+    const endpoint = parseWorkerEndpoint(trimmed.slice(trimmed.indexOf('=') + 1));
+    if (endpoint) workers.set(shard, { shard, ...endpoint });
+  }
+  return workers;
+}
+
+/** A file's content, or null when it is absent or unreadable (a 600 .env the panel cannot open). */
+function readWorkerFile(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function fileWorkers(
+  filePath: string,
+  parse: (content: string) => Map<number, ConfiguredWorker>,
+): Map<number, ConfiguredWorker> {
+  const content = readWorkerFile(filePath);
+  return content === null ? new Map() : parse(content);
+}
+
+/**
+ * Every configured worker, each shard taken from the first source that carries it:
+ * the process environment, then config.toml (the source), then the .env render.
+ * Why that order: the sync renders .env from config.toml, so .env can lag it, and in
+ * the panel container .env is not readable — only what compose handed over is.
+ */
+function loadConfiguredWorkers(repoRoot: string): ConfiguredWorker[] {
+  const merged = new Map<number, ConfiguredWorker>();
+  const sources = [
+    fileWorkers(path.join(repoRoot, '.env'), envFileWorkers),
+    fileWorkers(path.join(repoRoot, CONFIG_TOML_FILE), tomlWorkers),
+    environmentWorkers(),
+  ];
+  for (const source of sources) {
+    for (const [shard, worker] of source) merged.set(shard, worker);
+  }
+  return [...merged.values()].sort((a, b) => a.shard - b.shard);
 }
 
 async function loadEmitterRows(): Promise<EmitterWorkerRow[]> {
@@ -127,7 +201,7 @@ function parseContainerShard(name: string): number | null {
 }
 
 async function collectFromDocker(shardCounts: Record<number, number>): Promise<WorkerNodeView[]> {
-  const configured = loadConfiguredWorkers(path.join(getRepoRoot(), '.env'));
+  const configured = loadConfiguredWorkers(getRepoRoot());
   const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
   const lines = stdout.trim() ? stdout.trim().split('\n') : [];
 

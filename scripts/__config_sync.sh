@@ -37,16 +37,6 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/__lib/common.sh"
 log_error() { printf '[ERROR] %s\n' "$*" >&2; }
 
-# The gid the panel container runs as; the generated env files are readable by it and by nobody else.
-PANEL_GID=1000
-
-# Why the group and not just 600: the panel container is uid/gid $PANEL_GID, and a 600 file is not its.
-grant_panel_group_read() {
-  local file="$1"
-  chmod 640 "$file" 2>/dev/null || true
-  chgrp "$PANEL_GID" "$file" 2>/dev/null || log_warn "could not set the group of ${file} to gid ${PANEL_GID} — the panel may not be able to read it"
-}
-
 # --- Secret generators (mirrors Makefile env: target) ---
 gen_hex32() { openssl rand -hex 32 2>/dev/null || echo "fallback_$(date +%s)"; }
 gen_pw()    { openssl rand -base64 12 2>/dev/null | tr -d "=+/" | cut -c1-16; }
@@ -1518,7 +1508,7 @@ main() {
       write_section_block "rpc"       __RPC_KEYS
       write_section_block "backup"    __BACKUP_KEYS
     } > .env
-    grant_panel_group_read .env
+    chmod 600 .env
   else
     echo "Would write unified .env from config.toml (all sections)"
   fi
@@ -1541,7 +1531,7 @@ main() {
       printf 'DATABASE_URL=%s\n' "$(env_quote "postgresql://${db_user}:${db_pass}@localhost:${db_port}/${db_name}")"
       [[ -n "$auth_secret" ]] && printf 'AUTH_SECRET=%s\n' "$(env_quote "$auth_secret")"
     } > admin-panel/.env
-    grant_panel_group_read admin-panel/.env
+    chmod 600 admin-panel/.env
   else
     echo "Would write admin-panel/.env: DATABASE_URL=postgresql://..."
   fi
@@ -1656,8 +1646,7 @@ main() {
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
                         ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
                         ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]} + ${#__BACKUP_KEYS[@]}))
-    grant_panel_group_read .env
-    grant_panel_group_read admin-panel/.env
+    chmod 600 .env admin-panel/.env 2>/dev/null || true
     log_info "Synced ${total_vars} vars from config.toml → .env"
   fi
 

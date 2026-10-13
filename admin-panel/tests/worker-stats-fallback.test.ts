@@ -20,6 +20,8 @@ type ExecResult = { stdout: string; stderr: string };
 type ExecCallback = (error: Error | null, result: ExecResult) => void;
 
 const CONFIGURED_WORKERS_ENV = 'WORKER_0=cms-worker-0:26000\nWORKER_1=cms-worker-1:26001\n';
+// The config.toml form the fleet TUI writes: a quoted value, and a row ending in a comment.
+const CONFIGURED_WORKERS_TOML = '[worker]\nWORKER_4 = "10.0.0.4:26004" # note\nWORKER_6 = "10.0.0.6:26006"\n';
 const DOCKER_PS = 'cms-worker-0\tUp 2 hours\ncms-worker-1\tExited (0) 1 hour ago';
 
 /** Why the callback is the second argument: promisify appends it to the single command it is given. */
@@ -51,6 +53,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   fs.rmSync(repoRoot, { recursive: true, force: true });
 });
@@ -91,5 +94,54 @@ describe('collectWorkerStats with a degraded emitter', () => {
     expect(nodes.map((node) => node.id)).toEqual(['worker-7']);
     expect(nodes[0].connection).toBe('connected');
     expect(mocks.exec).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Why the fleet is read from three places: the sync renders .env from config.toml, and the panel
+ * container is handed only what compose delivers — so the source outranks its render, and the
+ * environment outranks both.
+ */
+describe('collectWorkerStats fleet sources', () => {
+  it('still yields the fleet when the .env file cannot be read', async () => {
+    const envPath = path.join(repoRoot, '.env');
+    fs.rmSync(envPath);
+    fs.mkdirSync(envPath); // a directory where a file is expected: readFileSync throws, the value must come from the environment
+    vi.stubEnv('WORKER_0', '10.0.0.10:26010');
+    vi.stubEnv('WORKER_1', '10.0.0.11:26011');
+
+    const nodes = await collectWorkerStats();
+
+    expect(nodes.map((node) => node.id)).toEqual(['worker-0', 'worker-1']);
+    expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.10:26010', '10.0.0.11:26011']);
+  });
+
+  it('reads config.toml when the environment is silent and .env is absent', async () => {
+    fs.rmSync(path.join(repoRoot, '.env'));
+    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
+
+    const nodes = await collectWorkerStats();
+
+    expect(nodes.map((node) => node.id)).toEqual(['worker-4', 'worker-6']);
+    expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.4:26004', '10.0.0.6:26006']);
+  });
+
+  it('prefers config.toml over the .env render for the same shard', async () => {
+    fs.writeFileSync(path.join(repoRoot, '.env'), 'WORKER_4=stale.example:9999\n');
+    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
+
+    const nodes = await collectWorkerStats();
+
+    expect(nodes.find((node) => node.id === 'worker-4')?.endpoint).toBe('10.0.0.4:26004');
+    expect(nodes.find((node) => node.id === 'worker-6')?.endpoint).toBe('10.0.0.6:26006');
+  });
+
+  it('lets the environment win over config.toml', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
+    vi.stubEnv('WORKER_4', '10.9.9.9:26999');
+
+    const nodes = await collectWorkerStats();
+
+    expect(nodes.find((node) => node.id === 'worker-4')?.endpoint).toBe('10.9.9.9:26999');
   });
 });

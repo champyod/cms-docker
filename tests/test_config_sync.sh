@@ -111,29 +111,20 @@ else
 fi
 
 echo ""
-echo "=== Test 3b: the generated env files are readable by the panel group, never by the world ==="
-# The panel container runs as gid 1000 (the image's node user), so 600 is unreadable to it and
-# 640 is not: the group bit is the contract, the missing other-bit is the secrecy.
+echo "=== Test 3b: the generated env files stay private to their owner ==="
+# .env carries POSTGRES_PASSWORD, AUTH_SECRET and RPC_SECRET, so it must be readable by
+# its owner and by nobody else: the panel reads the fleet from config.toml, not from it.
 file_mode() { stat -c%a "$1" 2>/dev/null || stat -f%Lp "$1" 2>/dev/null || echo unknown; }
-file_group() { stat -c%g "$1" 2>/dev/null || stat -f%Lg "$1" 2>/dev/null || echo unknown; }
 for env_file in .env admin-panel/.env; do
   if [[ ! -f "$TEST_ROOT/$env_file" ]]; then
     fail "$env_file was not generated"
     continue
   fi
   mode="$(file_mode "$TEST_ROOT/$env_file")"
-  group="$(file_group "$TEST_ROOT/$env_file")"
-  if [[ "$mode" == "640" ]]; then
-    pass "$env_file mode is 640 (no access for others)"
+  if [[ "$mode" == "600" ]]; then
+    pass "$env_file mode is 600 (owner only, no group or other access)"
   else
-    fail "$env_file mode is ${mode}, want 640"
-  fi
-  if [[ "$group" == "1000" ]]; then
-    pass "$env_file group is the panel's gid 1000"
-  elif grep -q "could not set the group of ${env_file} to gid 1000" "$TEST_ROOT/sync-output.log"; then
-    pass "$env_file group is ${group} and the sync said it could not chgrp to 1000"
-  else
-    fail "$env_file group is ${group}, want 1000 (and the sync did not report the failure)"
+    fail "$env_file mode is ${mode}, want 600"
   fi
 done
 
