@@ -75,6 +75,18 @@ async function updateConfigToml(ext: ImageExtension | null): Promise<void> {
   await fs.writeFile(tomlPath, setLogoPath(content, ext), 'utf-8');
 }
 
+/**
+ * The service reads the volume directory, so an upload still serves on a
+ * deployment without a config.toml. Losing the pointer must not fail the upload.
+ */
+async function pointConfigAtLogo(ext: ImageExtension | null): Promise<void> {
+  try {
+    await updateConfigToml(ext);
+  } catch (error) {
+    console.warn('[ranking/logo] leaving config.toml alone', error);
+  }
+}
+
 async function serveImageFile(filePath: string, ext: ImageExtension): Promise<NextResponse> {
   const data = await fs.readFile(filePath);
   const stat = await fs.stat(filePath);
@@ -141,7 +153,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     await writeLogoToDir(RANKING_LIB_DIR, upload.buffer, upload.ext);
     await writeLogoToDir(hostLogoDir(), upload.buffer, upload.ext);
-    await updateConfigToml(upload.ext);
+    await pointConfigAtLogo(upload.ext);
 
     await recordAudit({
       verb: 'ranking:update',
@@ -163,7 +175,7 @@ export async function DELETE(): Promise<NextResponse> {
   try {
     await removeOtherLogos(RANKING_LIB_DIR, null);
     await removeOtherLogos(hostLogoDir(), null);
-    await updateConfigToml(null);
+    await pointConfigAtLogo(null);
 
     await recordAudit({
       verb: 'ranking:update',
