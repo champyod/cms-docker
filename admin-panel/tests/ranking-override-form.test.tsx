@@ -39,12 +39,10 @@ describe('ranking override form value controls', () => {
     expect(valueField(renderForm())).toBeNull();
   });
 
-  it('gives freeze a numeric cutoff field instead of a text one', () => {
+  it('carries no value field for freeze, which the board reads as a flag', () => {
     const container = renderForm();
     selectAction(container, 'freeze');
-    const field = valueField(container);
-    expect(field?.type).toBe('number');
-    expect(field?.getAttribute('inputmode')).toBe('numeric');
+    expect(valueField(container)).toBeNull();
   });
 
   it('keeps the decimal field the score verb already had', () => {
