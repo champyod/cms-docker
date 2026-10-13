@@ -224,4 +224,7 @@ var Perspectives = new function () {
     DataStore.override_events.add(function () {
         self.refresh();
     });
+    DataStore.board_structure_events.add(function () {
+        self.refresh();
+    });
 };

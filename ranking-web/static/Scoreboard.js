@@ -49,6 +49,9 @@ var Scoreboard = new function () {
 
         DataStore.score_events.add(self.score_handler);
         DataStore.rank_events.add(self.rank_handler);
+        DataStore.board_structure_events.add(function () {
+            self.rebuild();
+        });
         DataStore.select_events.add(self.select_handler);
         DataStore.override_events.add(self.override_handler);
     };

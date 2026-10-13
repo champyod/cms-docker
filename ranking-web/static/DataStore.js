@@ -746,7 +746,7 @@ var DataStore = new function () {
 
     ////// Rank
 
-    self.init_ranks = function () {
+    self.assign_ranks = function () {
         // Make a list of all users
         var list = new Array();
 
@@ -777,7 +777,11 @@ var DataStore = new function () {
             }
 
             user["rank"] = rank;
-        }
+        };
+    };
+
+    self.init_ranks = function () {
+        self.assign_ranks();
 
         self.score_events.add(self.update_rank);
 
@@ -814,6 +818,10 @@ var DataStore = new function () {
         });
 
         self.create_event_source();
+        self.recompute_active();
+        self.active_timer = window.setInterval(function () {
+            self.recompute_active();
+        }, 60000);
         self.init_callback();
     };
 
@@ -1048,6 +1056,90 @@ var DataStore = new function () {
         }
     };
 
+    ////// Active contests
+    // The board shows running contests only: the maps keep every row the
+    // service sends (history and sublists need them), while contest_list —
+    // the set every view renders and scores from — holds the active ones.
+
+    self.board_structure_events = $.Callbacks();
+
+    self.active_contests = new Object();
+    self.active_task_count = 0;
+    self.active_timer = null;
+
+    self.is_active_contest = function (data, now) {
+        return typeof data["begin"] === "number" && typeof data["end"] === "number" &&
+            isFinite(data["begin"]) && isFinite(data["end"]) &&
+            data["begin"] <= now && now < data["end"];
+    };
+
+    self.recompute_active = function () {
+        var now = $.now() / 1000;
+        var active = new Object();
+        for (var key in self.contests) {
+            if (self.is_active_contest(self.contests[key], now)) {
+                active[key] = true;
+            }
+        }
+        var task_count = 0;
+        for (var t in self.tasks) {
+            if (active[self.tasks[t]["contest"]]) task_count += 1;
+        }
+        self.active_contests = active;
+        self.active_task_count = task_count;
+        var current = new Object();
+        for (var i = 0; i < self.contest_list.length; i += 1) {
+            current[self.contest_list[i]["key"]] = true;
+        }
+        var changed = false;
+        for (var a in active) {
+            if (!current[a]) changed = true;
+        }
+        for (var c in current) {
+            if (!active[c]) changed = true;
+        }
+        if (!changed) return;
+        self.contest_list = new Array();
+        for (var c_id in self.contests) {
+            if (active[c_id]) self.contest_list_insert(c_id, self.contests[c_id]);
+        }
+        self.global_max_score = 0.0;
+        self.global_score_precision = 0;
+        for (var r in self.contests) {
+            var contest = self.contests[r];
+            contest["max_score"] = 0.0;
+            if (!active[r]) continue;
+            if (contest["score_precision"] > self.global_score_precision) {
+                self.global_score_precision = contest["score_precision"];
+            }
+        }
+        for (var t_id in self.tasks) {
+            var task = self.tasks[t_id];
+            if (!active[task["contest"]]) continue;
+            self.contests[task["contest"]]["max_score"] += task["max_score"];
+            self.global_max_score += task["max_score"];
+        }
+        for (var u_id in self.users) {
+            var user = self.users[u_id];
+            for (var cc in self.contests) {
+                if (!active[cc]) continue;
+                var sum = 0.0;
+                var ctasks = self.contests[cc]["tasks"];
+                for (var ti = 0; ti < ctasks.length; ti += 1) {
+                    sum += user["t_" + ctasks[ti]["key"]] || 0;
+                }
+                user["c_" + cc] = sum;
+            }
+            var total = 0.0;
+            for (var li = 0; li < self.contest_list.length; li += 1) {
+                total += user["c_" + self.contest_list[li]["key"]] || 0;
+            }
+            user["global"] = total;
+        }
+        self.assign_ranks();
+        self.board_structure_events.fire();
+    };
+
     self.contest_create.add(function (key, data) {
         data["tasks"] = new Array();
         self.contest_list_insert(key, data);
@@ -1061,6 +1153,15 @@ var DataStore = new function () {
     self.contest_delete.add(function (key, old_data) {
         delete old_data["tasks"];
         self.contest_list_remove(key, old_data);
+    });
+    self.contest_create.add(function () {
+        self.recompute_active();
+    });
+    self.contest_update.add(function () {
+        self.recompute_active();
+    });
+    self.contest_delete.add(function () {
+        self.recompute_active();
     });
 
 

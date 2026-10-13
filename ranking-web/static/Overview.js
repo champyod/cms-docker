@@ -74,6 +74,7 @@ var Overview = new function () {
         DataStore.rank_events.add(self.rank_handler);
         DataStore.override_events.add(self.override_handler);
         DataStore.select_events.add(self.select_handler);
+        DataStore.board_structure_events.add(self.structure_handler);
 
 
         // HEADERS ("Score" and "Rank")
@@ -603,6 +604,14 @@ var Overview = new function () {
         for (var i in listed) {
             self.delete_marker(listed[i], 0);
         }
+    };
+
+
+    // This callback is called when the set of shown contests changes.
+    self.structure_handler = function () {
+        self.recompute();
+        self.update_score_chart(0);
+        self.update_markers(0);
     };
 
 

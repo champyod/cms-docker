@@ -85,6 +85,7 @@ var PerspectiveViews = new function () {
     self.draw_tasks = function (context, $el, setChosen, getChosen) {
         var keys = [];
         for (var key in DataStore.tasks) {
+            if (!DataStore.active_contests[DataStore.tasks[key]["contest"]]) continue;
             keys.push(key);
         }
         keys.sort(function (left, right) {
@@ -95,7 +96,8 @@ var PerspectiveViews = new function () {
             return;
         }
         var chosen = getChosen();
-        if (chosen === null || DataStore.tasks[chosen] === undefined) {
+        if (chosen === null || DataStore.tasks[chosen] === undefined ||
+                !DataStore.active_contests[DataStore.tasks[chosen]["contest"]]) {
             chosen = keys[0];
             setChosen(chosen);
         }
