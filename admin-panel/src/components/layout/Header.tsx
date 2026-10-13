@@ -1,108 +1,75 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
-import { toast } from 'sonner';
-import { getUnansweredQuestions } from '@/app/actions/questions';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildRoute } from '@/lib/navigation/routes';
+import { LiveNotificationProvider, useLiveNotifications } from '@/lib/live/notifications';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
-export const Header: React.FC<{ className?: string; username?: string; permissionKeys: readonly string[] }> = ({ className, username, permissionKeys }) => {
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [hasNotifications, setHasNotifications] = useState(false);
-  const lastCheckTimeRef = useRef(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const authenticationExpiredRef = useRef(false);
+/**
+ * The header's two live signals: the alert bell and the unanswered-question dot.
+ *
+ * Why they render together: both read the one notification service, which holds the connections and
+ * the alerting, so neither component has to know where its alerts came from.
+ */
+function HeaderNotifications({ permissionKeys }: { permissionKeys: readonly string[] }): React.JSX.Element {
+  const keys = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const { events, unread, unansweredCount, clearEvents, markSeen } = useLiveNotifications();
   const router = useAppRouter();
-  const canReadQuestions = hasEffectivePermission(new Set(permissionKeys), 'question:list');
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const handleAuthenticationExpired = useCallback(() => {
-    // Why: after 401 the session is invalid so polling would spam errors — stop and redirect once
-    if (authenticationExpiredRef.current) return;
-    authenticationExpiredRef.current = true;
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    const segments = window.location.pathname.split('/');
-    const locale = segments[1] || 'en';
-    router.push(`/${locale}/auth/login`);
-  }, [router]);
-
-  useEffect(() => {
-    const checkNotifications = async () => {
-      if (!canReadQuestions) return;
-      if (authenticationExpiredRef.current) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        return;
-      }
-      try {
-        const questions = await getUnansweredQuestions(null);
-
-        if (questions && questions.length > 0) {
-          setHasNotifications(true);
-
-          const latest = questions[0];
-          const qTime = new Date(latest.question_timestamp).getTime();
-
-          if (qTime > lastCheckTimeRef.current) {
-            toast.warning('New Question Received!', {
-              // Why: the alert must survive until an admin acknowledges the question.
-              description: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
-              duration: Infinity
-            });
-            lastCheckTimeRef.current = Date.now();
-          }
-        } else {
-          setHasNotifications(false);
-        }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : '';
-        const isAuthenticationError = message.includes('Unauthorized') || message.includes('Missing') || message.includes('permission');
-        if (isAuthenticationError) {
-          handleAuthenticationExpired();
-          return;
-        }
-        console.error('Failed to check notifications', error);
-      }
-    };
-
-    const handleExternalExpiration = () => {
-      handleAuthenticationExpired();
-    };
-
-    window.addEventListener('cms-authentication-expired', handleExternalExpiration);
-
-      checkNotifications();
-
-    intervalRef.current = setInterval(checkNotifications, 30 * 1000);
-
-    return () => {
-      window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [canReadQuestions, handleAuthenticationExpired, stopPolling]);
-
-  const handleNotificationsClick = () => {
+  const openContestQuestions = (): void => {
     const locale = window.location.pathname.split('/')[1] || 'en';
     router.push(buildRoute(locale, 'contests.list'));
   };
+
+  return (
+    <>
+      {hasEffectivePermission(keys, 'audit:read') && (
+        <NotificationBell
+          events={events}
+          unread={unread}
+          onClear={clearEvents}
+          onSeen={markSeen}
+        />
+      )}
+      {hasEffectivePermission(keys, 'question:list') && (
+        <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={openContestQuestions}>
+          <span className="relative flex">
+            <Bell className="size-4" />
+            {unansweredCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-destructive animate-pulse" />
+            )}
+          </span>
+        </Button>
+      )}
+    </>
+  );
+}
+
+export const Header: React.FC<{ className?: string; username?: string; permissionKeys: readonly string[] }> = ({ className, username, permissionKeys }) => {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const authenticationExpiredRef = useRef(false);
+  const router = useAppRouter();
+
+  // Why the header answers a dead session: it is mounted on every authenticated page, so it is the one
+  // place a 401 raised anywhere in the panel is turned into a single redirect to the login page.
+  useEffect(() => {
+    const handleAuthenticationExpired = (): void => {
+      if (authenticationExpiredRef.current) return;
+      authenticationExpiredRef.current = true;
+      const segments = window.location.pathname.split('/');
+      router.push(`/${segments[1] || 'en'}/auth/login`);
+    };
+
+    window.addEventListener('cms-authentication-expired', handleAuthenticationExpired);
+    return () => window.removeEventListener('cms-authentication-expired', handleAuthenticationExpired);
+  }, [router]);
 
   return (
     <header
@@ -126,17 +93,9 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         </kbd>
       </button>
       <ThemeToggle />
-      {hasEffectivePermission(new Set(permissionKeys), 'audit:read') && <NotificationBell />}
-      {canReadQuestions && (
-      <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
-        <span className="relative flex">
-          <Bell className="size-4" />
-          {hasNotifications && (
-            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-destructive animate-pulse" />
-          )}
-        </span>
-      </Button>
-      )}
+      <LiveNotificationProvider permissionKeys={permissionKeys}>
+        <HeaderNotifications permissionKeys={permissionKeys} />
+      </LiveNotificationProvider>
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>

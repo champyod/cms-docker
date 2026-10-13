@@ -21,6 +21,15 @@ function Harness(): React.JSX.Element {
   return <span>{status}</span>;
 }
 
+function DisabledHarness(): React.JSX.Element {
+  const { status } = useLiveStream<{ ok: true }>({
+    url: '/api/questions/stream',
+    onFrame: () => undefined,
+    enabled: false,
+  });
+  return <span>{status}</span>;
+}
+
 beforeEach(() => {
   FakeEventSource.instances = [];
   vi.useFakeTimers();
@@ -44,5 +53,11 @@ describe('Infrastructure stream route regression', () => {
     act(() => vi.runOnlyPendingTimers());
     expect(FakeEventSource.instances).toHaveLength(2);
     expect(FakeEventSource.instances[1].url).toBe('/api/resources/stream');
+  });
+
+  it('opens no source while the channel is not enabled, and reports the pause', () => {
+    render(<DisabledHarness />);
+    expect(screen.getByText('paused')).toBeTruthy();
+    expect(FakeEventSource.instances).toHaveLength(0);
   });
 });

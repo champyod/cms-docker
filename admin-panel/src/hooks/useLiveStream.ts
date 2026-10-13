@@ -20,6 +20,11 @@ interface UseLiveStreamOptions<TFrame> {
    * load uses this to tell "not yet" apart from "never" — the status alone only says reconnecting.
    */
   onError?: () => void;
+  /**
+   * When false the channel stays closed. A surface turns this on from the state that asks for live
+   * data — a viewer who may not read the stream, or a table whose auto-refresh is off.
+   */
+  enabled?: boolean;
 }
 
 export interface LiveStream {
@@ -39,7 +44,7 @@ export interface LiveStream {
  * was hidden, and a stream would otherwise keep the server sampling for a tab nobody is looking at.
  * The reconnect on focus brings the panel back with a fresh snapshot.
  */
-export function useLiveStream<TFrame>({ url, onFrame, onError }: UseLiveStreamOptions<TFrame>): LiveStream {
+export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }: UseLiveStreamOptions<TFrame>): LiveStream {
   // Why the initial state is read from the document: a tab that mounted in the background must not
   // open a connection at all, and a status set from inside the effect would be a cascading render.
   const [status, setStatus] = useState<LiveStatus>(() =>
@@ -60,6 +65,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError }: UseLiveStreamOp
   });
 
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
 
     const clearReconnect = (): void => {
@@ -169,9 +175,11 @@ export function useLiveStream<TFrame>({ url, onFrame, onError }: UseLiveStreamOp
       }
       refreshRef.current = () => undefined;
     };
-  }, [url]);
+  }, [url, enabled]);
 
   const refresh = useCallback((): void => refreshRef.current(), []);
 
-  return { status, refresh };
+  // Why the status is derived here: a disabled channel has no connection state of its own, and the
+  // pause is the surface's own choice, not something the stream discovered.
+  return { status: enabled ? status : 'paused', refresh };
 }

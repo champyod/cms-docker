@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { NotificationBell } from '@/components/layout/NotificationBell';
 
@@ -7,19 +7,21 @@ import { NotificationBell } from '@/components/layout/NotificationBell';
 // automatic afterEach cleanup does not run; see audit-detail-error.test.tsx.
 afterEach(() => cleanup());
 
-vi.mock('@/hooks/useLiveStream', () => ({
-  useLiveStream: () => ({ status: 'live', refresh: vi.fn() }),
-}));
+const noop = (): void => undefined;
+
+function renderBell(): ReturnType<typeof render> {
+  return render(<NotificationBell events={[]} unread={0} onClear={noop} onSeen={noop} />);
+}
 
 describe('NotificationBell dropdown', () => {
   it('opens the alerts list on bell click', () => {
-    const view = render(<NotificationBell />);
+    const view = renderBell();
     fireEvent.click(view.getByRole('button', { name: 'System alerts' }));
     expect(view.getByText('No alerts yet.')).toBeTruthy();
   });
 
   it('uses viewport insets on phones and restores the anchored dropdown at sm', () => {
-    const view = render(<NotificationBell />);
+    const view = renderBell();
     fireEvent.click(view.getByRole('button', { name: 'System alerts' }));
     const dropdown = view.getByText('No alerts yet.').parentElement as HTMLElement;
     expect(dropdown.className).toContain('fixed');
