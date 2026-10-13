@@ -14,7 +14,7 @@ interface MemberRow {
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('contestant_group:read');
   if (!authorized) return response;
 
@@ -39,7 +39,7 @@ export async function GET(
 export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('contestant_group:update');
   if (!authorized) return response;
 
@@ -81,7 +81,7 @@ export async function PUT(
 export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('contestant_group:delete');
   if (!authorized) return response;
 

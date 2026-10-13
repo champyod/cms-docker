@@ -11,14 +11,12 @@ interface ContestantGroupRow {
   member_count: number;
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('contestant_group:list');
   if (!authorized) return response;
 
   try {
-    // WHY the raw query: the member count comes from a single
-    // grouped join, which no prisma client relation can express
-    // without loading every membership.
+    // Raw query: the member count needs one grouped join prisma relations cannot express.
     const groups = (await prisma.$queryRaw`
       SELECT g.id, g.name, g.description,
              COUNT(m.user_id)::int AS member_count
@@ -32,7 +30,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('contestant_group:create');
   if (!authorized) return response;
 
