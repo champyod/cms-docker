@@ -11,6 +11,8 @@ interface AuditSearchParams {
   verb?: string;
   actorId?: string;
   result?: string;
+  ip?: string;
+  views?: string;
   search?: string;
   fromDate?: string;
   toDate?: string;
@@ -37,6 +39,8 @@ export default async function AuditPage({
     verb: query.verb,
     actorId: query.actorId,
     result: query.result,
+    ip: query.ip,
+    showViews: query.views === 'all',
     search: query.search,
     fromDate: query.fromDate,
     toDate: query.toDate,
@@ -64,6 +68,8 @@ export default async function AuditPage({
         verb: query.verb,
         actorId: query.actorId,
         result: query.result,
+        ip: query.ip,
+        showViews: query.views === 'all',
         search: query.search,
         fromDate: query.fromDate,
         toDate: query.toDate,

@@ -56,6 +56,13 @@ export function buildAuditColumns(
       ),
     },
     {
+      key: 'ip',
+      header: dict.ip,
+      render: (entry) => (
+        <span className="font-mono text-xs text-muted-foreground">{entry.ip ?? '—'}</span>
+      ),
+    },
+    {
       key: 'verb',
       header: dict.columns.verb,
       sortKey: 'verb',

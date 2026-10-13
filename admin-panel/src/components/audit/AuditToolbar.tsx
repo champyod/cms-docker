@@ -11,6 +11,8 @@ export interface AuditToolbarFilters {
   verb?: string;
   actorId?: string;
   result?: string;
+  ip?: string;
+  showViews?: boolean;
   search?: string;
   fromDate?: string;
   toDate?: string;
@@ -46,6 +48,8 @@ export function AuditToolbar({
         verb: filters.verb || undefined,
         actorId: filters.actorId || undefined,
         result: filters.result || undefined,
+        ip: filters.ip || undefined,
+        showViews: filters.showViews,
         search: filters.search || undefined,
         fromDate: filters.fromDate || undefined,
         toDate: filters.toDate || undefined,

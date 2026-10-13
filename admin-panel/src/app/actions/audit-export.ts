@@ -3,7 +3,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
-import { recordAudit } from '@/lib/audit';
+import { recordAudit, VIEW_VERB_SUFFIX } from '@/lib/audit';
 import { loadActorNames } from '@/lib/admin-names';
 import { resolveDisplayZone, zoneDayRange } from '@/lib/timezone';
 
@@ -19,6 +19,8 @@ export interface AuditExportFilters {
   entity?: string;
   verb?: string;
   result?: string;
+  ip?: string;
+  showViews?: boolean;
   search?: string;
   fromDate?: string;
   toDate?: string;
@@ -40,6 +42,8 @@ export async function exportAuditLog(
     if (filters.entity) where.entity = filters.entity;
     if (filters.verb) where.verb = { contains: filters.verb, mode: 'insensitive' };
     if (filters.result === 'success' || filters.result === 'failure') where.result = filters.result;
+    if (filters.ip) where.ip = { contains: filters.ip, mode: 'insensitive' };
+    if (!filters.showViews) where.NOT = { verb: { endsWith: VIEW_VERB_SUFFIX } };
     if (filters.search) {
       const contains = { contains: filters.search, mode: 'insensitive' as const };
       where.OR = [{ verb: contains }, { reason: contains }, { entity: contains }];
@@ -66,13 +70,14 @@ export async function exportAuditLog(
       rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
     );
 
-    const header = 'id,timestamp,actor_id,actor_name,verb,entity,entity_id,result,reason';
+    const header = 'id,timestamp,actor_id,actor_name,ip,verb,entity,entity_id,result,reason';
     const lines = rows.map((row) =>
       [
         row.id.toString(),
         row.timestamp.toISOString(),
         row.actor_id === null ? '' : String(row.actor_id),
         escapeCsvCell(row.actor_id === null ? null : (actorNames.get(row.actor_id) ?? null)),
+        escapeCsvCell(row.ip),
         escapeCsvCell(row.verb),
         escapeCsvCell(row.entity),
         escapeCsvCell(row.entity_id),

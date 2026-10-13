@@ -345,6 +345,8 @@
       "entity": "Entity",
       "verb": "Verb",
       "actorId": "Actor ID",
+      "ip": "IP Address",
+      "pageViews": "Show page views",
       "result": "Result",
       "allResults": "All results",
       "search": "Search",

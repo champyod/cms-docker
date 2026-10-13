@@ -9,6 +9,8 @@ export interface AuditFilterValues {
   verb?: string;
   actorId?: string;
   result?: string;
+  ip?: string;
+  showViews?: boolean;
   search?: string;
   fromDate?: string;
   toDate?: string;
