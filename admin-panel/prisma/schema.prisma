@@ -26,6 +26,9 @@ model admins {
   questions            questions[]
   admin_groups         admin_groups[]
   permission_overrides admin_permission_overrides[]
+  username_policies    username_policies[]
+  contest_usernames    contest_usernames[]
+  contest_usernames_history contest_usernames_history[]
 }
 
 model announcements {
@@ -94,6 +97,7 @@ model contests {
   announcements                                    announcements[]
   participations                                   participations[]
   tasks                                            tasks[]
+  contest_usernames                                contest_usernames[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -223,6 +227,7 @@ model participations {
   questions     questions[]
   submissions   submissions[]
   user_tests    user_tests[]
+  contest_usernames contest_usernames[]
 
   @@unique([contest_id, user_id])
   @@index([contest_id], map: "ix_participations_contest_id")
@@ -538,6 +543,8 @@ model users {
   country             String?
   participations      participations[]
   led_teams           teams[]          @relation("team_leader")
+  contestant_group_memberships contestant_group_memberships[]
+  contest_usernames   contest_usernames[]
 }
 
 enum compilation_outcome {
@@ -645,6 +652,99 @@ model audit_log {
   @@index([actor_id], map: "ix_audit_log_actor_id")
   @@index([entity], map: "ix_audit_log_entity")
   @@index([timestamp], map: "ix_audit_log_timestamp")
+}
+
+/// A group of contestants. Unlike the RBAC `groups`, which hold
+/// admin permissions, these groups hold contestants only: a
+/// username policy on a group applies to every member, which is
+/// how the display username feature is toggled in bulk.
+model contestant_groups {
+  id          Int                            @id @default(autoincrement())
+  name        String                         @unique @db.VarChar
+  description String?                        @db.VarChar
+  created_at  DateTime                       @default(now())
+  memberships contestant_group_memberships[]
+}
+
+/// The membership of a contestant in a contestant group.
+model contestant_group_memberships {
+  id              Int                @id @default(autoincrement())
+  user_id         Int
+  group_id        Int
+  created_at      DateTime           @default(now())
+  contestant_groups contestant_groups @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  users           users              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, group_id])
+  @@index([user_id], map: "ix_contestant_group_memberships_user_id")
+  @@index([group_id], map: "ix_contestant_group_memberships_group_id")
+}
+
+/// Whether a contestant may configure their display username,
+/// resolved with the precedence contest > user > group; the
+/// absence of a row for a scope means "unset" and the
+/// resolution falls through to the next level.
+model username_policies {
+  id         Int                    @id @default(autoincrement())
+  scope      username_policy_scope
+  scope_id   Int
+  policy     username_policy
+  updated_at DateTime               @default(now())
+  updated_by Int?
+  admins     admins?                @relation(fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@unique([scope, scope_id])
+  @@index([scope_id], map: "ix_username_policies_scope_id")
+  @@index([updated_by], map: "ix_username_policies_updated_by")
+}
+
+/// The current display username of a contestant in a contest,
+/// shown by the contest pages and the rankings instead of their
+/// real name. The login username is untouched.
+model contest_usernames {
+  id                  Int            @id @default(autoincrement())
+  participation_id    Int            @unique
+  contest_id          Int
+  user_id             Int
+  username            String         @db.VarChar
+  updated_at          DateTime       @default(now())
+  updated_by_admin_id Int?
+  admins              admins?        @relation(fields: [updated_by_admin_id], references: [id], onDelete: SetNull)
+  contests            contests       @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  participations      participations @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+  users               users          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([contest_id, username])
+  @@index([contest_id], map: "ix_contest_usernames_contest_id")
+  @@index([user_id], map: "ix_contest_usernames_user_id")
+  @@index([updated_by_admin_id], map: "ix_contest_usernames_updated_by_admin_id")
+}
+
+/// The append-only history of the display username changes, for
+/// audit and dispute resolution.
+model contest_usernames_history {
+  id              Int       @id @default(autoincrement())
+  contest_id      Int
+  user_id         Int
+  username        String?   @db.VarChar
+  set_at          DateTime  @default(now()) @db.Timestamp(6)
+  set_by_admin_id Int?
+  admins          admins?   @relation(fields: [set_by_admin_id], references: [id], onDelete: SetNull)
+
+  @@index([contest_id], map: "ix_contest_usernames_history_contest_id")
+  @@index([user_id], map: "ix_contest_usernames_history_user_id")
+  @@index([set_by_admin_id], map: "ix_contest_usernames_history_set_by_admin_id")
+}
+
+enum username_policy_scope {
+  contest
+  user
+  group
+}
+
+enum username_policy {
+  allow
+  deny
 }
 
 /// One security block event — a fail2ban ban, a login lockout or a WAF block.

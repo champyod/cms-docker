@@ -67,10 +67,9 @@ $(document).ready(function () {
                         <button type="submit" class="btn btn-warning">{% trans %}Logout{% endtrans %}</button>
                     </form>
                     <p class="navbar-text pull-right">
-                        {% trans first_name=user.first_name,
-                                 last_name=user.last_name,
+                        {% trans display_name=display_name,
                                  username=user.username %}
-                            Logged in as <strong>{{ first_name }} {{ last_name }}</strong> <em>({{ username }})</em>
+                            Logged in as <strong>{{ display_name }}</strong> <em>({{ username }})</em>
                         {% endtrans %}
                     </p>
 {% endif %}

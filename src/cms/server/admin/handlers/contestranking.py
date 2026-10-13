@@ -32,6 +32,7 @@ import io
 from sqlalchemy.orm import joinedload
 
 from cms.db import Contest
+from cms.db.username import get_display_usernames, resolve_username_config
 from cms.grading.scoring import task_score
 from .base import BaseHandler, require_permission
 
@@ -73,6 +74,21 @@ class RankingHandler(BaseHandler):
             total_score = round(total_score, self.contest.score_precision)
             p.total_score = (total_score, partial)
 
+        # WHY: the ranking shows the display username each
+        # contestant chose for this contest when the policy
+        # allows one; resolving every participant in a handful
+        # of queries keeps the page from issuing one query per
+        # row.
+        user_ids = [p.user_id for p in self.contest.participations]
+        username_allowed = resolve_username_config(
+            self.sql_session, contest_id, user_ids)
+        display_usernames = get_display_usernames(
+            self.sql_session, contest_id, user_ids)
+        for p in self.contest.participations:
+            p.display_name = (
+                display_usernames.get(p.user_id)
+                if username_allowed.get(p.user_id) else None)
+
         self.r_params = self.render_params()
         self.r_params["show_teams"] = show_teams
         if format == "txt":
@@ -112,7 +128,9 @@ class RankingHandler(BaseHandler):
                     continue
 
                 row = [p.user.username,
-                       "%s %s" % (p.user.first_name, p.user.last_name)]
+                       p.display_name if p.display_name is not None
+                       else "%s %s" % (p.user.first_name,
+                                       p.user.last_name)]
                 if show_teams:
                     row.append(p.team.name if p.team else "")
                 assert len(contest.tasks) == len(p.scores)

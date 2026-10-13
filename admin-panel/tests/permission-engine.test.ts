@@ -176,13 +176,8 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  // 200 + 5 RESERVED keys, minus 5 retired, plus 7 backup keys (list, read, create,
-  // restore, schedule, settle, delete), plus 2 lane keys, plus 2 platform-boundary
-  // keys (waf:control, domain:control), plus 9 security-surface keys
-  // (security:read, waf:read, waf:config, ban:read, ban:unban, lockout:read,
-  // lockout:unlock, tls:read, tls:renew), plus admin:login.
-  it('holds exactly 222 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(222);
+  it('holds exactly 230 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(230);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {

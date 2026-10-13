@@ -23,6 +23,7 @@ const MODULES: readonly string[] = [
   'permission',
   'audit',
   'contest',
+  'contestant_group',
   'task',
   'dataset',
   'testcase',
@@ -122,6 +123,13 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   // stay system-reserved per RESERVED_KEYS.
   { module: 'evaluation', verb: 'lane_assign' },
   { module: 'evaluation', verb: 'lane_move' },
+  // Why username verbs: the display username feature has no CRUD
+  // surface of its own — the policy is read and set per scope, and
+  // an admin may set a contestant's alias — so each action is gated
+  // on its own compound key rather than on username CRUD keys.
+  { module: 'username', verb: 'policy:read' },
+  { module: 'username', verb: 'policy:update' },
+  { module: 'username', verb: 'set' },
 ];
 
 function describePermission(module: string, verb: string): string {

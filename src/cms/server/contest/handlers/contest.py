@@ -51,6 +51,7 @@ import tornado.web
 
 from cms import config, TOKEN_MODE_MIXED
 from cms.db import Contest, Submission, Task, UserTest
+from cms.db.username import get_display_name
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
 from cms.server.captcha import Captcha
@@ -230,6 +231,14 @@ class ContestHandler(BaseHandler):
             participation = self.current_user
             ret["participation"] = participation
             ret["user"] = participation.user
+
+            # WHY: the navbar shows the display username the
+            # contestant chose for this contest when the policy
+            # allows one; get_display_name falls back to the real
+            # name, so every page agrees with the ranking.
+            ret["display_name"] = get_display_name(
+                self.sql_session, self.contest.id,
+                participation.user)
 
             res = compute_actual_phase(
                 self.timestamp, self.contest.start, self.contest.stop,
