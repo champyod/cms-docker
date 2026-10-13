@@ -24,6 +24,11 @@ interface CaptchaUiState {
   enabled: boolean;
   provider: CaptchaProvider;
   siteKey: string;
+  // The two thresholds, so the form can say when the challenge appears and when
+  // the account locks out — the host-level bans are a different layer and are
+  // not counted here.
+  threshold: number;
+  banThreshold: number;
 }
 
 export default function LoginPage() {
@@ -45,6 +50,8 @@ export default function LoginPage() {
         enabled: result.enabled,
         provider: result.provider,
         siteKey: result.siteKey,
+        threshold: result.threshold,
+        banThreshold: result.banThreshold,
       });
     } catch {
       setCaptchaUi(null);
@@ -63,6 +70,8 @@ export default function LoginPage() {
           enabled: true,
           provider: (state.captchaProvider as CaptchaProvider) ?? 'turnstile',
           siteKey: state.captchaSiteKey ?? captchaUi?.siteKey ?? '',
+          threshold: captchaUi?.threshold ?? 0,
+          banThreshold: captchaUi?.banThreshold ?? 0,
         });
         const username = usernameRef.current?.value ?? '';
         if (username) void fetchCaptchaState(username);
@@ -164,6 +173,12 @@ export default function LoginPage() {
 
             {showCaptcha && (
               <>
+                {captchaUi && captchaUi.banThreshold > 0 && (
+                  <Text variant="muted" className="text-xs">
+                    A challenge is required after {captchaUi.threshold} failed attempts; the
+                    account and address lock out at {captchaUi.banThreshold}.
+                  </Text>
+                )}
                 <CaptchaWidget provider={activeProvider} siteKey={activeSiteKey} onToken={setCaptchaToken} />
                 <input type="hidden" name="captchaToken" value={captchaToken} />
                 <input type="hidden" name="cf-turnstile-response" value={captchaToken} />

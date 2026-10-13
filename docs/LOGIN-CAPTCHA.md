@@ -125,6 +125,22 @@ status is what tells a client, a proxy or a WAF to stop, as opposed to the `302`
 cannot be acted on. An API login carrying a non-empty `admin_token` is exempt, because
 the token proves the caller without the contestant's password.
 
+### The lockout is not fail2ban
+
+These are two different layers, and lifting one does not lift the other:
+
+- **The captcha hard limit** (the lockout counted here) is per *account and source
+  address*, kept by the web servers in their failure counters. It refuses a *login*.
+  `CAPTCHA_THRESHOLD` decides when the challenge appears; the refusal comes at the ban
+  threshold — `CAPTCHA_BAN_THRESHOLD` on the Python servers, the hardcoded
+  `MAX_LOGIN_ATTEMPTS` on the panel.
+- **fail2ban** bans a *source address* at the proxy, in front of the web servers, from the
+  nginx logs. It never sees a login, and the web servers never see its bans.
+
+The panel's `/security/blocks` page shows both, in separate sections: the host bans
+fail2ban reports, and the login lockouts the servers record in the `security_blocks`
+ledger. Each is lifted from its own section.
+
 ### Where the counts are kept
 
 The counters are held in memory per web-server process, so a restart clears them. They

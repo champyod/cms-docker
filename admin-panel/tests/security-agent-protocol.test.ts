@@ -8,6 +8,7 @@ import {
   SECURITY_AGENT_ACTIONS,
   buildRenewRequest,
   buildUnbanRequest,
+  isKnownUnbanned,
   isValidIpAddress,
   parseFail2banState,
   parseJailNames,
@@ -119,6 +120,23 @@ describe('parseFail2banState', () => {
     expect(parseFail2banState(null)).toBeNull();
     expect(parseFail2banState('not json')).toBeNull();
     expect(parseFail2banState('{"bans": []}')).toEqual({ updatedAt: null, bans: [] });
+  });
+});
+
+describe('isKnownUnbanned', () => {
+  const state = {
+    updatedAt: '2026-10-09T10:00:00Z',
+    bans: [{ jail: 'nginx-limit-req', ip: '203.0.113.7', bannedAt: null, expiresAt: null }],
+  };
+
+  it('treats a missing report as unknown, so an unban can still be queued', () => {
+    expect(isKnownUnbanned(null, 'nginx-limit-req', '203.0.113.7')).toBe(false);
+  });
+
+  it('refuses only an address a present report does not list', () => {
+    expect(isKnownUnbanned(state, 'nginx-limit-req', '203.0.113.7')).toBe(false);
+    expect(isKnownUnbanned(state, 'nginx-limit-req', '203.0.113.8')).toBe(true);
+    expect(isKnownUnbanned(state, 'nginx-http-auth', '203.0.113.7')).toBe(true);
   });
 });
 
