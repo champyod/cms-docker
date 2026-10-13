@@ -30,6 +30,7 @@ export interface TeamOverviewTabProps {
 interface TeamFormData {
   readonly code: string;
   readonly name: string;
+  readonly registerable: boolean;
 }
 
 interface TeamFormFieldProps {
@@ -61,7 +62,8 @@ function useTeamOverviewForm(team: TeamSummary, canUpdateTeam: boolean, refresh:
   readonly formData: TeamFormData;
   readonly saving: boolean;
   readonly justSaved: boolean;
-  readonly changeField: (id: keyof TeamFormData, value: string) => void;
+  readonly changeField: (id: 'code' | 'name', value: string) => void;
+  readonly setRegisterable: (value: boolean) => void;
   readonly save: () => Promise<void>;
 } {
   const runAction = useActionFeedback();
@@ -70,10 +72,14 @@ function useTeamOverviewForm(team: TeamSummary, canUpdateTeam: boolean, refresh:
   // Why the empty seed: the overview route requires team:read, so both values are
   // present there, and an unreadable field stays empty rather than showing a
   // value the caller was never given.
-  const [formData, setFormData] = useState<TeamFormData>({ code: team.code ?? '', name: team.name ?? '' });
+  const [formData, setFormData] = useState<TeamFormData>({ code: team.code ?? '', name: team.name ?? '', registerable: team.registerable ?? true });
 
-  const changeField = (id: keyof TeamFormData, value: string): void => {
+  const changeField = (id: 'code' | 'name', value: string): void => {
     setFormData((previous) => ({ ...previous, [id]: value }));
+  };
+
+  const setRegisterable = (value: boolean): void => {
+    setFormData((previous) => ({ ...previous, registerable: value }));
   };
 
   const save = async (): Promise<void> => {
@@ -90,7 +96,7 @@ function useTeamOverviewForm(team: TeamSummary, canUpdateTeam: boolean, refresh:
     }
   };
 
-  return { formData, saving, justSaved, changeField, save };
+  return { formData, saving, justSaved, changeField, setRegisterable, save };
 }
 
 function useTeamDeletion(team: TeamSummary, locale: 'en' | 'th', push: (href: string) => void): () => Promise<void> {
@@ -114,7 +120,7 @@ export function TeamOverviewTab({ team, permissionKeys, navigation, copy, locale
   const fieldAccess = getFieldAccess('teams', effective);
   const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
   const canDeleteTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTeam);
-  const { formData, saving, justSaved, changeField, save } = useTeamOverviewForm(team, canUpdateTeam, router.refresh);
+  const { formData, saving, justSaved, changeField, setRegisterable, save } = useTeamOverviewForm(team, canUpdateTeam, router.refresh);
   const removeTeam = useTeamDeletion(team, locale, router.push);
   const fields = copy.overview;
   return (
@@ -124,6 +130,16 @@ export function TeamOverviewTab({ team, permissionKeys, navigation, copy, locale
         <TeamFormField id="code" label={fields.code} access={fieldAccess.code} value={formData.code} onChange={(value) => changeField('code', value)} lockHint={fields.readOnlyHint} />
         <TeamFormField id="name" label={fields.name} access={fieldAccess.name} value={formData.name} onChange={(value) => changeField('name', value)} lockHint={fields.readOnlyHint} />
       </div>
+      <RestrictedField canRead={fieldAccess.registerable.canRead} canUpdate={fieldAccess.registerable.canUpdate} label={fields.registerable} lockHint={fields.readOnlyHint}>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            checked={formData.registerable}
+            onChange={(event) => setRegisterable(event.target.checked)}
+          />
+          {fields.registerableHint}
+        </label>
+      </RestrictedField>
       <div className="flex items-center justify-end gap-3">
         {canDeleteTeam && (
           <Button variant="negativeOutline" icon={Trash2} iconOnly tooltip={copy.deleteTeamTooltip} onClick={() => { void removeTeam(); }} />

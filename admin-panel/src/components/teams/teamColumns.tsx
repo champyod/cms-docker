@@ -35,6 +35,13 @@ export function buildTeamColumns(): ResponsiveColumn<TeamSummary>[] {
       render: (team) => <CellText width="lg" bold>{team.name ?? '—'}</CellText>,
     },
     {
+      key: 'registerable',
+      header: 'Registerable',
+      cellClassName: 'w-28',
+      hideOnMobile: true,
+      render: (team) => <CellText width="sm" muted>{team.registerable === null ? '—' : team.registerable ? 'Yes' : 'No'}</CellText>,
+    },
+    {
       key: 'members',
       header: 'Members',
       sortKey: 'members',

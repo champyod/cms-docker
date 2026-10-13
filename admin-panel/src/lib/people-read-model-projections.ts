@@ -36,7 +36,7 @@ export type UserIdentityRow = { id: number; username: string; first_name: string
 export type TeamIdentity = { id: number | null; code: string | null; name: string | null };
 export type UserIdentity = { id: number | null; username: string | null; firstName: string | null; lastName: string | null };
 export type ContestIdentity = { id: number | null; name: string | null };
-export type TeamSummaryRow = { id: number; code: string; name: string; organization: string | null; leader_id: number | null; leader: UserIdentityRow | null; _count: { participations: number } };
+export type TeamSummaryRow = { id: number; code: string; name: string; organization: string | null; leader_id: number | null; registerable: boolean; leader: UserIdentityRow | null; _count: { participations: number } };
 export type TeamSummaryAccess = { teams: FieldAccessTable<'teams'>; users: FieldAccessTable<'users'> };
 
 export function toContestIdentity(contest: NamedRow | null, access: FieldAccessTable<'contests'>): ContestIdentity {
@@ -80,10 +80,10 @@ function toLeader(leader: UserIdentityRow | null, access: FieldAccessTable<'user
 // record reader team:read, so two copies of this mapping drifted into handing a
 // team:list-only caller the columns only team:read governs.
 export function toTeamSummary(row: TeamSummaryRow, access: TeamSummaryAccess): TeamSummary {
-  const visible = filterReadableFieldsWith(access.teams, { code: row.code, name: row.name, organization: row.organization, leader_id: row.leader_id });
+  const visible = filterReadableFieldsWith(access.teams, { code: row.code, name: row.name, organization: row.organization, leader_id: row.leader_id, registerable: row.registerable });
   return {
     id: row.id, code: visible.code ?? null, name: visible.name ?? null, organization: visible.organization ?? null,
-    leaderId: visible.leader_id ?? null, leader: toLeader(row.leader, access.users), participationCount: row._count.participations,
+    leaderId: visible.leader_id ?? null, registerable: visible.registerable ?? null, leader: toLeader(row.leader, access.users), participationCount: row._count.participations,
   };
 }
 

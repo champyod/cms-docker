@@ -85,6 +85,7 @@ const FIELD_PERMISSION_TABLE = {
     name: { read: 'team:read', update: 'team:update' },
     organization: { read: 'team:read', update: 'team:update' },
     leader_id: { read: 'team:read', update: 'team:update' },
+    registerable: { read: 'team:read', update: 'team:update' },
     participations: { read: 'participation:list' },
   },
   tasks: {

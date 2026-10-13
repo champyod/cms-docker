@@ -16,17 +16,19 @@ export async function POST(req: NextRequest) {
     if (!/^[A-Za-z0-9_-]+$/.test(code)) return apiError({ message: 'Team code must contain only letters, numbers, hyphens and underscores', status: 400 });
     if (!name) return apiError({ message: 'Team name is required', status: 400 });
     if (name.length > 200) return apiError({ message: 'Team name must be at most 200 characters', status: 400 });
+    const registerable = typeof data.registerable === 'boolean' ? data.registerable : true;
     const createdTeam = await prisma.teams.create({
       data: {
         code,
         name,
+        registerable,
       }
     });
     await recordAudit({
       verb: 'team:create',
       entity: 'team',
       entityId: String(createdTeam.id),
-      afterValues: { code, name },
+      afterValues: { code, name, registerable },
       result: 'success',
     });
     revalidatePath('/[locale]/people/teams', 'page');

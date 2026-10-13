@@ -24,6 +24,7 @@ const TEAM_ROW = {
   name: 'Thailand Team 1',
   organization: 'MWIT',
   leaderId: 17,
+  registerable: true,
   leader: { id: 17, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' },
   participationCount: 2,
 };

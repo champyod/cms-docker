@@ -527,15 +527,15 @@ describe('Record edit payloads', () => {
     expect(Object.keys(safeUserSelect)).not.toContain('password');
   });
 
-  it('requires team:read and returns the code and name the team edit form reads', async () => {
+  it('requires team:read and returns the fields the team edit form reads', async () => {
     grant(['team:read']);
-    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha' } as never);
+    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha', registerable: true } as never);
 
     const result = await getTeamEditData(4);
 
     expect(mockRequirePermission).toHaveBeenCalledWith('team:read');
-    expect(Object.keys(mockTeamFindUnique.mock.calls[0][0].select ?? {}).sort()).toEqual(['code', 'id', 'name']);
-    expect(result).toEqual({ id: 4, code: 'A-1', name: 'Alpha' });
+    expect(Object.keys(mockTeamFindUnique.mock.calls[0][0].select ?? {}).sort()).toEqual(['code', 'id', 'name', 'registerable']);
+    expect(result).toEqual({ id: 4, code: 'A-1', name: 'Alpha', registerable: true });
   });
 
   it('nulls a team field the caller cannot read instead of returning the stored value', async () => {
@@ -543,9 +543,9 @@ describe('Record edit payloads', () => {
     // whatever is granted, so granting only team:list is the one way to observe a
     // field the access table strips.
     grant(['team:list']);
-    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha' } as never);
+    mockTeamFindUnique.mockResolvedValue({ id: 4, code: 'A-1', name: 'Alpha', registerable: true } as never);
 
-    expect(await getTeamEditData(4)).toEqual({ id: 4, code: null, name: null });
+    expect(await getTeamEditData(4)).toEqual({ id: 4, code: null, name: null, registerable: null });
   });
 
   it('reports a missing record as null rather than an empty payload', async () => {

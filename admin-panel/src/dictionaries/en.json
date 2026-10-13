@@ -111,6 +111,8 @@
     "overview": {
       "code": "Team Code",
       "name": "Team Name",
+      "registerable": "Registerable",
+      "registerableHint": "Offer this team to contestants at registration",
       "readOnlyHint": "Read-only — you lack team:update",
       "saveChanges": "Save Changes"
     },

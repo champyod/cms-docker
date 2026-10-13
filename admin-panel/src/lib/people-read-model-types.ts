@@ -75,6 +75,7 @@ export interface TeamSummary {
   name: string | null;
   organization: string | null;
   leaderId: number | null;
+  registerable: boolean | null;
   leader: { id: number; username: string; firstName: string; lastName: string } | null;
   participationCount: number;
 }
