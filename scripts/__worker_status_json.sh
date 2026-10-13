@@ -18,7 +18,19 @@ cd "$(dirname "$0")/.."
 
 CORE_ENV=".env"
 
-env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }
+# Why the environment wins: inside the panel container .env is unreadable and the value it was given lives here.
+env_val() { # file key -> the environment's value for key, or the file's
+  local file="$1" key="$2" from_environment="${!2-}"
+  if [ -n "$from_environment" ]; then printf '%s\n' "$from_environment"; return 0; fi
+  awk -F= -v k="$key" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$file" 2>/dev/null || true
+}
+
+# Why both sources: a fleet a container was given lives only in its environment when .env is unreadable.
+worker_lines() {
+  { env | grep -E '^WORKER_[0-9]+=' || true
+    awk -F= '/^WORKER_[0-9]+=/ {print}' "$CORE_ENV" 2>/dev/null || true
+  } | awk -F= '!seen[$1]++' | sort -t_ -k3,3n
+}
 
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr '\n' ' ' | sed 's/[[:cntrl:]]//g'; }
 
@@ -89,7 +101,7 @@ worker_row() { # shard host port
 
 rows=()
 tmp="$(mktemp)"
-awk -F= '/^WORKER_[0-9]+=/ {print}' "$CORE_ENV" 2>/dev/null | sort -t_ -k3,3n > "$tmp" || true
+worker_lines > "$tmp"
 while IFS= read -r line || [ -n "$line" ]; do
   [ -z "$line" ] && continue
   key="${line%%=*}"; hp="${line#*=}"

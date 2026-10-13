@@ -59,6 +59,19 @@ async function loadEmitterRows(): Promise<EmitterWorkerRow[]> {
   return Array.isArray(parsed) ? (parsed as EmitterWorkerRow[]) : [];
 }
 
+/** Why empty counts as failed: an emitter that read nothing cannot claim the fleet is empty. */
+async function loadEmitterRowsOrNull(): Promise<EmitterWorkerRow[] | null> {
+  try {
+    const rows = await loadEmitterRows();
+    if (rows.length > 0) return rows;
+    console.error('Emitter reported no workers, falling back to docker ps');
+    return null;
+  } catch (emitterError) {
+    console.error('Emitter failed, falling back to docker ps:', emitterError);
+    return null;
+  }
+}
+
 async function loadShardCounts(): Promise<Record<number, number>> {
   // Open evaluations per shard — the real busy/backlog signal.
   const groups = await prisma.evaluations.groupBy({
@@ -161,11 +174,8 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
 export async function collectWorkerStats(): Promise<WorkerNodeView[]> {
   try {
     const shardCounts = await loadShardCounts();
-    try {
-      return mapEmitterRowsToNodes(await loadEmitterRows(), shardCounts);
-    } catch (emitterError) {
-      console.error('Emitter failed, falling back to docker ps:', emitterError);
-    }
+    const emitterRows = await loadEmitterRowsOrNull();
+    if (emitterRows !== null) return mapEmitterRowsToNodes(emitterRows, shardCounts);
     return await collectFromDocker(shardCounts);
   } catch (error) {
     console.error('Failed to get worker stats:', error);
