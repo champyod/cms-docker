@@ -1324,6 +1324,40 @@ db_active_contest_id() {
   return 0
 }
 
+# Is a [db_<name>] profile present in config.toml? Mirrors resolve_active_db_profile's
+# prefix scan so both agree on what counts as a profile.
+has_db_profile() {
+  local prefix="db_$1.POSTGRES_" key
+  for key in "${!__TOML[@]}"; do
+    [[ "$key" == "${prefix}"* ]] && return 0
+  done
+  return 1
+}
+
+# Every enabled service names a DB profile, and that profile must exist as a
+# [db_<name>] section. WHY fatal instead of falling back to the active profile: a
+# typo would silently point one service at the live database while its row claims
+# another, and the symptom would be wrong data rather than a failed start.
+validate_service_db_profiles() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local active="${__TOML[core.ACTIVE_DATABASE]:-default}"
+  local profiles profile
+  profiles="$(db_query "SELECT DISTINCT db_profile FROM services WHERE enabled;")" || return 1
+  while IFS= read -r profile; do
+    [[ -z "$profile" ]] && continue
+    [[ "$profile" == "$active" ]] && continue
+    if ! has_db_profile "$profile"; then
+      log_error "services.db_profile names \"${profile}\" but ${TOML_FILE} has no [db_${profile}] section with POSTGRES_* keys; add it or correct the service row."
+      return 1
+    fi
+  done <<< "$profiles"
+  return 0
+}
+
 # Rewrite the [contest] CONTEST_ID value in place, keeping everything after the number
 # (an inline comment) and every other byte of the file. Returns non-zero when the key is
 # absent, because a file the merge should have populated yet does not carry the key is a
@@ -1475,6 +1509,11 @@ main() {
   # values that step projects from the active [db_<name>] profile, and WHY before the .env
   # writer: the derived id has to reach .env (compose reads ${CONTEST_ID}) on this run.
   derive_contest_id_from_db
+
+  # WHY after derive_contest_id_from_db: both read the database, and this one must
+  # run before the .env writer so an unknown profile fails the sync rather than
+  # leaving a service pointed at a database its row does not name.
+  validate_service_db_profiles
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or
