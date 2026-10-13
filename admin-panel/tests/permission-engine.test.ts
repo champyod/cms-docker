@@ -210,8 +210,9 @@ describe('PERMISSION_REGISTRY', () => {
 describe('DEFAULT_GROUPS', () => {
   const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
 
-  it('defines exactly ten groups with unique names', () => {
-    expect(DEFAULT_GROUPS).toHaveLength(10);
+  it('defines exactly sixteen code groups with unique names', () => {
+    // The roster is seventeen with the root actor, seeded separately in prisma/seed-permissions.ts.
+    expect(DEFAULT_GROUPS).toHaveLength(16);
     const names = DEFAULT_GROUPS.map((group) => group.name);
     expect(new Set(names).size).toBe(names.length);
   });
@@ -239,9 +240,9 @@ describe('DEFAULT_GROUPS', () => {
     expect(hasEffectivePermission(effective, 'contest:list')).toBe(true);
   });
 
-  it('grants Security Admin the security surface and admin:login', () => {
-    const securityAdmin = DEFAULT_GROUPS.find((group) => group.name === 'Security Admin');
-    expect(securityAdmin?.permissions).toEqual([
+  it('grants Security the security surface and admin:login', () => {
+    const security = DEFAULT_GROUPS.find((group) => group.name === 'Security');
+    expect(security?.permissions).toEqual([
       'admin:login',
       'security:read',
       'waf:read',
@@ -256,7 +257,7 @@ describe('DEFAULT_GROUPS', () => {
       'tls:renew',
     ]);
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
-    for (const key of securityAdmin?.permissions ?? []) {
+    for (const key of security?.permissions ?? []) {
       expect(superadmin?.permissions).toContain(key);
     }
   });
@@ -274,11 +275,13 @@ describe('DEFAULT_GROUPS', () => {
     }
   });
 
-  it('keeps backup:schedule out of every default group', () => {
-    for (const group of DEFAULT_GROUPS) {
-      expect(group.permissions).not.toContain('backup:schedule');
-    }
+  it('grants backup:schedule to Backup Operator alone', () => {
+    // Superadmin still lacks it: the engine carve-out keeps it out of all:all, so
+    // scheduling a recurring backup takes this group's explicit grant.
+    const holders = DEFAULT_GROUPS.filter((group) => group.permissions.includes('backup:schedule'));
+    expect(holders.map((group) => group.name)).toEqual(['Backup Operator']);
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin?.permissions).toContain('backup:restore');
+    expect(superadmin?.permissions).not.toContain('backup:schedule');
   });
 });
