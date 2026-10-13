@@ -19,9 +19,7 @@
 
 from . import metadata
 
-# WHY: the 6 RBAC tables, security_blocks and the 5 contestant-username tables
-# are Prisma-owned; cmsInitDB must not create them or fresh installs collide
-# with the migration history and prod never receives them via migrations.
+# Prisma-owned: cmsInitDB must not create these, or fresh installs collide with the migration history.
 _PRISMA_OWNED_TABLES = frozenset({
     "permissions",
     "groups",
@@ -44,9 +42,7 @@ def init_db() -> bool:
     return: True if successful.
 
     """
-    # WHY: restrict create_all to CMS-owned tables; the
-    # Prisma-owned tables are created by Prisma migrations (see
-    # src/cms/db/__init__.py import comment).
+    # Restrict create_all to CMS-owned tables; Prisma creates the rest via migrations.
     metadata.create_all(
         tables=[t for t in metadata.tables.values()
                 if t.name not in _PRISMA_OWNED_TABLES]
