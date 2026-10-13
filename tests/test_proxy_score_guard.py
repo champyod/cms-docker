@@ -102,6 +102,14 @@ def install_proxy_surface():
     io.Executor = Executor
     io.TriggeredService = TriggeredService
 
+    # ProxyService resolves display usernames through cms.db.username, a package in
+    # the real tree, but the cms.db the shared surface registers is a plain module —
+    # so the submodule is registered here or the import fails as "cms.db is not a
+    # package". Neither function runs in the initialize() path this suite drives.
+    register("cms.db.username",
+             get_display_usernames=lambda *_args, **_kwargs: {},
+             resolve_username_config=lambda *_args, **_kwargs: {})
+
 
 install_proxy_surface()
 
