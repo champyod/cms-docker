@@ -803,6 +803,10 @@ services:
       # __backup.sh warns each cycle when a dump credential is missing.
       - POSTGRES_BACKUP_PASSWORD=${POSTGRES_BACKUP_PASSWORD:-}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      # WHY: __backup.sh dumps "${POSTGRES_DB:-cmsdb}"; without the active profile's
+      # database name here the scheduled backup targets a non-existent "cmsdb".
+      - POSTGRES_DB=${POSTGRES_DB:-cmsdb}
+      - POSTGRES_USER=${POSTGRES_USER:-cmsuser}
       - BACKUP_INTERVAL_MINS=${BACKUP_INTERVAL_MINS:-1440}
       - BACKUP_MAX_COUNT=${BACKUP_MAX_COUNT:-50}
       - BACKUP_MAX_AGE_DAYS=${BACKUP_MAX_AGE_DAYS:-10}
