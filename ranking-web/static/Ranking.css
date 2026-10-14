@@ -434,6 +434,9 @@ abbr {
 
 #Scoreboard_cols col.f_name,
 #Scoreboard_cols col.l_name {
+    /* One <col/> each (see Scoreboard.js). A col's width applies to every column it
+       spans, so folding a name into one spanned <col/> would multiply this width by
+       the span and starve the auto-width task columns. */
     width: 12em;
 }
 

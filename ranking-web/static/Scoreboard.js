@@ -242,15 +242,17 @@ var Scoreboard = new function () {
         // global cells to 5, etc. This way, since all <col/>s with a width of
         // 'auto' get the same computed width, we keep the 3:4:5 ratio and are
         // able to scale well at each screen size, while keeping the constant
-        // width columns constant. (Note: the first_ and last_name columns are
-        // single spanned <col/> elements with an explicit width.)
+        // width columns constant. (Note: the first_ and last_name columns are one
+        // <col/> each with an explicit width. A spanned <col/> would instead be given
+        // that width per spanned column, so a "span" of 10 would multiply the name
+        // width by ten — which is exactly how the name columns once ate the table.)
         // Suggestion on other solution that get the same result and don't mess
         // this much with JS and HTML are extremely welcome!
         var result = " \
 <col class=\"sel\"/> \
 <col class=\"rank\"/> \
-<col class=\"f_name\" span=\"10\"/> \
-<col class=\"l_name\" span=\"10\"/> \
+<col class=\"f_name\"/> \
+<col class=\"l_name\"/> \
 <col class=\"user_id\"/> \
 <col class=\"team\"/>";
 
@@ -289,8 +291,8 @@ var Scoreboard = new function () {
 <tr> \
     <th class=\"sel\"></th> \
     <th class=\"rank\">Rank</th> \
-    <th colspan=\"10\" class=\"f_name\">First Name</th> \
-    <th colspan=\"10\" class=\"l_name\">Last Name</th>" +
+    <th class=\"f_name\">First Name</th> \
+    <th class=\"l_name\">Last Name</th>" +
             (PublicConfig.show_id_column ? "<th class=\"user_id\">ID</th>" : "") +
             "<th class=\"team\">Team</th>";
 
@@ -340,8 +342,8 @@ var Scoreboard = new function () {
 <tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\"> \
     <td class=\"sel\"></td> \
     <td class=\"rank\">" + self.display_rank(user) + "</td> \
-    <td colspan=\"10\" class=\"f_name\">" + escapeHTML(name["first"]) + "</td> \
-    <td colspan=\"10\" class=\"l_name\">" + escapeHTML(name["last"]) + "</td>" +
+    <td class=\"f_name\">" + escapeHTML(name["first"]) + "</td> \
+    <td class=\"l_name\">" + escapeHTML(name["last"]) + "</td>" +
             (PublicConfig.show_id_column ? "<td class=\"user_id\">" + user["key"] + "</td>" : "");
 
         if (user['team']) {
