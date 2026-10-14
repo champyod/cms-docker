@@ -925,13 +925,19 @@ model ranking_overrides {
 /// One service instance this deployment runs: what role it holds, which shard it
 /// is, where it lives, and which DB profile it dials. The database authors this,
 /// together with wirings; config.toml keeps only the DB pointer and secrets.
+///
+/// WHY two ports: a contest web server answers HTTP on one port (what a front door
+/// proxies to) and its peers call it on another (the CMS RPC port). One `port`
+/// column would make the renderer proxy to the RPC port, so they stay separate and
+/// each stays nullable — an evaluation service has no HTTP port at all.
 model services {
   id         Int       @id @default(autoincrement())
   name       String    @unique @db.VarChar
   role       String    @db.VarChar
   shard      Int       @default(0)
   host       String    @db.VarChar
-  port       Int
+  http_port  Int?
+  rpc_port   Int?
   db_profile String    @default("default") @db.VarChar
   contest_id Int?
   enabled    Boolean   @default(true)

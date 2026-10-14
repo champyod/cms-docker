@@ -25,7 +25,8 @@ function service(overrides: Partial<ServiceRow> & Pick<ServiceRow, 'id' | 'name'
     role: 'ContestWebServer',
     shard: 0,
     host: overrides.name,
-    port: 8888,
+    http_port: 8888,
+    rpc_port: 21000,
     db_profile: 'default',
     contest_id: null,
     enabled: true,
@@ -106,6 +107,11 @@ describe('exposureRoutes', () => {
 
   it('fails when a contest has nothing to answer on', () => {
     expect(() => exposureRoutes([exposure({ contest_id: 9 })], [])).toThrow(WiringError);
+  });
+
+it('refuses to proxy to a server with no http port', () => {
+    const noHttp = service({ id: 1, name: 'web-x', host: 'web-x', contest_id: 4, http_port: null });
+    expect(() => exposureRoutes([exposure({ contest_id: 4 })], [noHttp])).toThrow(/http_port/);
   });
 
   it('normalises the path it carries through', () => {

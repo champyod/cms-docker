@@ -14,7 +14,8 @@ export interface ServiceRow {
   role: string;
   shard: number;
   host: string;
-  port: number;
+  http_port: number | null;
+  rpc_port: number | null;
   db_profile: string;
   contest_id: number | null;
   enabled: boolean;
@@ -134,7 +135,7 @@ export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[])
       contest_id: exposure.contest_id,
       hostname: exposure.hostname.trim(),
       path: normalisePath(exposure.path),
-      upstream: `${upstream.host}:${upstream.port}`,
+      upstream: toHttpEndpoint(upstream),
       tls: exposure.tls,
       tailnet: exposure.tailnet,
     });
@@ -143,6 +144,18 @@ export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[])
 }
 
 const CONTEST_WEB_SERVER_ROLE = 'ContestWebServer';
+
+/**
+ * The endpoint a front door proxies to. WHY http_port and not rpc_port: the two are
+ * genuinely different ports on the same process, and a front door that dialled the
+ * RPC port would hang rather than fail, so a missing HTTP port is refused here.
+ */
+function toHttpEndpoint(service: ServiceRow): string {
+  if (service.http_port === null) {
+    throw new WiringError(`service ${service.name} has no http_port to proxy to`);
+  }
+  return `${service.host}:${service.http_port}`;
+}
 
 /** A contest's own server wins over the shared one; ties break on the lowest shard. */
 function pickUpstream(contestId: number, candidates: ServiceRow[]): ServiceRow {

@@ -23,7 +23,7 @@ SANDBOXES=()
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
-PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","port":8888,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"contest_id":7,"hostname":"a.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
+PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"contest_id":7,"hostname":"a.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
 
 # $1 exposures, $2 services-table ("t"|"f")
 new_sandbox() {
