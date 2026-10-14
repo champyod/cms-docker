@@ -43,6 +43,9 @@ new_sandbox() {
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-cli.ts" "${SB}/admin-panel/src/lib/"
   printf '%s' "${PAYLOAD}" > "${SB}/payload.json"
+  # Test 6 passes an empty third argument to make the registry name no contest.
+  local registry_primary="5"
+  [[ "$#" -ge 3 ]] && registry_primary="$3"
 
   cat > "${SB}/bin/docker" <<'STUB'
 #!/usr/bin/env bash
@@ -56,6 +59,7 @@ if [[ "${1:-}" == "exec" ]]; then
     *"DISTINCT hostname FROM contest_exposures"*) printf '%s\n' "@TLS_HOST@" ;;
     *"DISTINCT tailnet FROM contest_exposures"*) printf '%s\n' "@TAILNET_NODE@" ;;
     *"COALESCE(contest_id::text, 'ALL')"*) printf '%s\n' "@EVAL_BINDING@" ;;
+    *"role = 'ContestWebServer'"*) printf '%s\n' "@REGISTRY_PRIMARY@" ;;
     *"count(*) FROM contest_exposures"*) printf '%s\n' "@EXPOSED@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
@@ -68,7 +72,7 @@ fi
 exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
-    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" \
+    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" -e "s|@REGISTRY_PRIMARY@|$registry_primary|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
@@ -102,6 +106,10 @@ grep -q 'TS_AUTHKEY=${TAILSCALE_AUTHKEY}' "${SB}/docker-compose.tailscale.genera
   && ok "references the authkey instead of copying it" || no "the authkey is not referenced by name"
 grep -q '^EVALUATION_CONTEST_ARG=.*-c ALL' "${SB}/.env" 2>/dev/null \
   && ok "publishes the multi-contest launcher argument" || no "missing EVALUATION_CONTEST_ARG"
+grep -q '^CONTEST_ID = 5' "${SB}/config.toml" 2>/dev/null \
+  && ok "takes CONTEST_ID from the registry, not from is_active" || no "CONTEST_ID did not follow the registry"
+grep -q 'derived from the service registry' "${SB}/sync.log" 2>/dev/null \
+  && ok "reports which authority answered" || no "did not report the registry as the source"
 if command -v docker >/dev/null 2>&1; then
   TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
     && ok "the generated compose file validates" || no "the generated compose file is invalid"
@@ -142,6 +150,17 @@ rc=$?
 [[ -e "${SB}/config/generated/contest-routes.conf" ]] && no "left a partial route file" \
   || ok "removed the partial route file"
 grep -q 'refused the registry' "${SB}/sync.log" && ok "reports why it refused" || no "silent refusal"
+
+echo ""
+echo "=== Test 6: an empty registry falls back to contests.is_active ==="
+new_sandbox 1 t ""
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}"
+grep -q '^CONTEST_ID = 7' "${SB}/config.toml" 2>/dev/null \
+  && ok "falls back to is_active when the registry names no contest" || no "the fallback lost is_active"
+grep -q 'derived from contests.is_active' "${SB}/sync.log" 2>/dev/null \
+  && ok "says the singleton answered" || no "did not attribute the fallback"
 
 echo ""
 echo "=== Test 5: a TLS exposure with no certificate lineage fails the sync ==="

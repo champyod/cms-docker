@@ -1575,11 +1575,67 @@ apply_contest_id_to_config_toml() {
   rm -f "$tmp"
 }
 
-# Point [contest] CONTEST_ID at the database's active contest, or fail loud. A reachable
-# database that reports no active contest, a read that fails, and a non-numeric id all stop
-# the sync: silently keeping the previous value would let the file and the stack diverge,
-# which is the class of bug this derivation exists to remove.
+# The contest the service registry binds its own contest web server to, or empty.
+#
+# WHY the registry outranks contests.is_active: is_active is a singleton, so it can only
+# ever name one contest, while the registry binds a server per contest. The singleton
+# survives as the fallback for every deployment whose registry is still empty, which is
+# how the authority moves without breaking one.
+registry_primary_contest_id() {
+  REGISTRY_PRIMARY_ID=""
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local id
+  id="$(db_query "SELECT contest_id FROM services WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL ORDER BY shard, id LIMIT 1;")" || return 1
+  [[ -n "$id" ]] || return 0
+  REGISTRY_PRIMARY_ID="$id"
+  return 0
+}
+
+# Writes one derived contest id into [contest] CONTEST_ID, or reports why it cannot.
+#
+# WHY the id is validated here rather than by each caller: a non-numeric or missing value
+# silently kept would let the file and the stack diverge, which is the class of bug this
+# derivation exists to remove.
+set_contest_id() {
+  local id="$1" source="$2"
+  if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+    log_error "${source} returned a non-numeric contest id '${id}' — refusing to write it."
+    exit 1
+  fi
+  if [[ "${__TOML[contest.CONTEST_ID]:-}" == "$id" ]]; then
+    return 0
+  fi
+  __TOML[contest.CONTEST_ID]="$id"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf 'Would set [contest] CONTEST_ID = %s from %s\n' "$id" "$source"
+    return 0
+  fi
+  if ! apply_contest_id_to_config_toml "$id"; then
+    log_error "could not write [contest] CONTEST_ID = ${id} into $TOML_FILE — the key is missing from [contest]."
+    exit 1
+  fi
+  log_info "active contest CONTEST_ID=${id} derived from ${source}"
+}
+
+# Point [contest] CONTEST_ID at the contest the deployment serves, or fail loud.
+#
+# The service registry answers first; contests.is_active answers when the registry names
+# no contest. A reachable database that reports no active contest, a read that fails, and
+# a non-numeric id all stop the sync.
 derive_contest_id_from_db() {
+  if ! registry_primary_contest_id; then
+    log_error "cms-database is running but the service registry could not be read — refusing to guess the active contest."
+    exit 1
+  fi
+  if [[ -n "$REGISTRY_PRIMARY_ID" ]]; then
+    set_contest_id "$REGISTRY_PRIMARY_ID" "the service registry (services.contest_id)"
+    return 0
+  fi
+
   if ! db_active_contest_id; then
     log_error "cms-database is running but contests.is_active could not be read — refusing to guess the active contest."
     exit 1
@@ -1589,26 +1645,10 @@ derive_contest_id_from_db() {
     return 0
   fi
   if [[ "$DB_STATE" == "empty" ]]; then
-    log_error "no active contest: contests.is_active holds no active row. Set one with './cms contest set-active <id>'."
+    log_error "no active contest: neither the service registry nor contests.is_active names one. Set one with './cms contest set-active <id>'."
     exit 1
   fi
-  if [[ ! "$DB_ACTIVE_ID" =~ ^[0-9]+$ ]]; then
-    log_error "contests.is_active returned a non-numeric id '${DB_ACTIVE_ID}' — refusing to write it."
-    exit 1
-  fi
-  if [[ "${__TOML[contest.CONTEST_ID]:-}" == "$DB_ACTIVE_ID" ]]; then
-    return 0
-  fi
-  __TOML[contest.CONTEST_ID]="$DB_ACTIVE_ID"
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf 'Would set [contest] CONTEST_ID = %s from the database (contests.is_active)\n' "$DB_ACTIVE_ID"
-    return 0
-  fi
-  if ! apply_contest_id_to_config_toml "$DB_ACTIVE_ID"; then
-    log_error "could not write [contest] CONTEST_ID = ${DB_ACTIVE_ID} into $TOML_FILE — the key is missing from [contest]."
-    exit 1
-  fi
-  log_info "active contest CONTEST_ID=${DB_ACTIVE_ID} derived from the database (contests.is_active)"
+  set_contest_id "$DB_ACTIVE_ID" "contests.is_active"
 }
 
 # --- Main ---
