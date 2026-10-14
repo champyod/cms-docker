@@ -495,6 +495,13 @@ services:
 
       MONITOR_ENHANCED: ${MONITOR_ENHANCED:-0}
 
+      # WHY: the panel reads these from process.env (its evaluation RPC target, its
+      # public base path and its session cookie name), so compose is what puts them in
+      # the container. Without them the value reaches .env and stops there.
+      EVALUATION_RPC_TARGET: ${EVALUATION_RPC_TARGET:-}
+      NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
+
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
       IS_DOCKER: "true"

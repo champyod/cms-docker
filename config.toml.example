@@ -137,6 +137,9 @@ MAX_LOGO_UPLOAD_BYTES = 5242880 # num; bytes; largest ranking logo the panel acc
 MAX_AVATAR_UPLOAD_BYTES = 2097152 # num; bytes; largest contestant face the panel accepts, 2 MB
 MAX_STATEMENT_UPLOAD_BYTES = 10485760 # num; bytes; largest task statement the panel accepts, 10 MB
 MAX_ATTACHMENT_UPLOAD_BYTES = 10485760 # num; bytes; largest task attachment the panel accepts, 10 MB
+NEXT_PUBLIC_BASE_PATH = ""      # str; base path the panel is served under when it sits behind a sub-path (e.g. /cms); empty=served at the root
+SESSION_COOKIE_NAME = "session" # str; name of the panel's session cookie
+EVALUATION_RPC_TARGET = ""      # str; host:port the panel dials for evaluation RPC; empty=the default cms-evaluation-service endpoint
 BACKUP_DIR = "/app/backups"   # str; path INSIDE the monitor and admin-panel containers where archives live — one value for both, since they mount the same host directory; change it only alongside the compose volumes that back it
 SOCKET_PROXY = 0                # enum:0,1; reserved toggle — no code reads it; the filtered-Docker-API proxy for the panel is started manually via docker-compose.socket-proxy.yml
 MONITOR_ENHANCED = 0            # enum:0,1; enables the monitor-targets editor in the admin panel settings (HTTP health checks)

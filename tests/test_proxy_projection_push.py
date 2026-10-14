@@ -36,6 +36,8 @@ class FakeContest:
         self.score_precision = 0
         self.participations = []
         self.tasks = []
+        # initialize() walks the contest's ContestTask rows; this contest holds none.
+        self.task_contests = []
 
 
 class Item:

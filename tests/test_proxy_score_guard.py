@@ -23,6 +23,7 @@
 
 import unittest
 from datetime import datetime
+from types import SimpleNamespace
 
 from __lib.proxy_surface import Contest, Session, SessionGen, \
     install_proxy_surface
@@ -87,6 +88,9 @@ class FakeContest:
         self.score_precision = 0
         self.participations = []
         self.tasks = tasks
+        # initialize() walks the contest's ContestTask rows, each carrying its task and
+        # the position it holds in the contest, rather than contest.tasks directly.
+        self.task_contests = [SimpleNamespace(task=task, num=task.num) for task in tasks]
 
 
 class ProbeProxyService(ProxyService):

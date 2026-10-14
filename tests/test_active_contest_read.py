@@ -38,6 +38,7 @@ def install_surface():
     sqlalchemy.union = lambda *queries: queries
     sqlalchemy.inspect = lambda bind: types.SimpleNamespace(
         get_table_names=lambda: ["contests"])
+    sqlalchemy.text = lambda statement: statement
     sqlalchemy.exc = types.ModuleType("sqlalchemy.exc")
     sqlalchemy.exc.OperationalError = type("OperationalError", (Exception,), {})
     sqlalchemy.orm = types.ModuleType("sqlalchemy.orm")
@@ -49,7 +50,7 @@ def install_surface():
     database = types.ModuleType("cms.db")
     database.__path__ = [os.path.join(SRC_ROOT, "cms", "db")]
     for name in (
-        "SessionGen", "Digest", "Contest", "Participation", "Statement",
+        "SessionGen", "Digest", "Contest", "ContestTask", "Participation", "Statement",
         "Attachment", "Task", "Manager", "Dataset", "Testcase", "Submission",
         "File", "SubmissionResult", "Executable", "UserTest", "UserTestFile",
         "UserTestManager", "UserTestResult", "UserTestExecutable", "Session",
@@ -124,6 +125,9 @@ class FakeContest:
 class TestActiveContestRead(unittest.TestCase):
     def setUp(self):
         util.Contest = FakeContestModel
+        # The resolver caches its answer for a few seconds, so a later test would read
+        # the previous one's result unless the cache is cleared between cases.
+        util._active_contest_cache = None
 
     def read_with(self, session):
         util.SessionGen = lambda: session
