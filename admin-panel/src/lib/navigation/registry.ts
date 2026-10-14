@@ -34,7 +34,7 @@ export const NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = [
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: [...ADMINISTRATION_ROUTE_IDS] },
   { id: 'security', labelKey: 'navigation.groups.security', routeIds: [...SECURITY_ROUTE_IDS] },
-  { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources'] },
+  { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.services'] },
   { id: 'ranking', labelKey: 'navigation.groups.ranking', routeIds: ['ranking.board', 'ranking.users', 'ranking.settings', 'ranking.appearance', 'ranking.lockouts', 'ranking.credits'] },
   { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

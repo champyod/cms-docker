@@ -41,6 +41,7 @@ const CHORD_KEY_BY_ROUTE: ReadonlyMap<RouteId, string> = new Map<RouteId, string
   ['administration.audit', 'i'],
   ['infrastructure.resources', 'r'],
   ['infrastructure.containers', 'o'],
+  ['infrastructure.services', 'y'],
   ['ranking.board', 'n'],
   ['system.appearance', 'v'],
   ['system.maintenance', 'w'],

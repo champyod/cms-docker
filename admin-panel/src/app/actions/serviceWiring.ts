@@ -10,14 +10,16 @@ import {
   saveExposure,
   saveService,
   saveWiring,
-  type ExposureInput,
-  type ExposureRecord,
-  type ServiceInput,
-  type ServiceRecord,
-  type WiringInput,
-  type WiringRecord,
-  type WriteResult,
 } from '@/lib/service-wiring-store';
+import type {
+  ExposureInput,
+  ExposureRecord,
+  ServiceInput,
+  ServiceRecord,
+  WiringInput,
+  WiringRecord,
+  WriteResult,
+} from '@/lib/service-wiring-contract';
 
 /**
  * The server boundary for the registry screen.

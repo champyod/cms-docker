@@ -16,7 +16,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { saveService, saveWiring, type ServiceInput } from '@/lib/service-wiring-store';
+import { saveService, saveWiring } from '@/lib/service-wiring-store';
+import type { ServiceInput } from '@/lib/service-wiring-contract';
 
 function service(overrides: Partial<ServiceInput> = {}): ServiceInput {
   return {

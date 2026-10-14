@@ -751,7 +751,8 @@
     "infrastructure": {
       "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },
       "containers": { "label": "Containers", "description": "Manage and monitor Docker services in real time." },
-      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." }
+      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." },
+      "services": { "label": "Services & wiring", "description": "Declare the services this deployment runs and wire them to each contest." }
     },
     "ranking": {
       "board": { "label": "Board", "description": "Review what the public scoreboard opens with and set the logo it carries." },
