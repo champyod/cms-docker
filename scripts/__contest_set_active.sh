@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# scripts/__contest_set_active.sh — set the active contest in the database.
+# scripts/__contest_set_active.sh — set the deployment's default contest in the database.
 #
 # WHY the database and not config.toml: contests.is_active is the deployment's default contest,
 # and a service registry row names the contest one instance serves and outranks it
 # (cms.db.contest_binding reads that row per call). Nothing derives config.toml [contest]
 # CONTEST_ID from either, so writing the file here would be a second writable copy of a value no
 # process reads it for. The `cms` shim and the Rust CLI both route `contest set-active` to this
-# script, so the mutation lives in one place.
+# script, so the mutation lives in one place — and since a service reads the default per call,
+# the write reaches a running one within a few seconds: nothing is regenerated or restarted.
 #
 # Usage:
 #   __contest_set_active.sh <id>
@@ -30,8 +31,9 @@ usage() {
 Usage:
   __contest_set_active.sh <id>
 
-  Sets contests.is_active in the database to <id>, regenerates config.toml and .env
-  from it, and restarts the contest stack so it serves that contest.
+  Sets contests.is_active: the contest a service the registry does not bind serves. Refuses
+  while a ContestWebServer row names a contest, because that row decides what is served. The
+  change reaches a running service within a few seconds; nothing is restarted.
 USAGE
 }
 
@@ -79,6 +81,19 @@ require_existing_contest() {
   [[ "$exists" == "1" ]] || log_die "no contest with id ${id} in '$POSTGRES_DB_VAL' — nothing to activate." 1
 }
 
+# Refuse while a row decides: an enabled ContestWebServer row that names a contest outranks the
+# flag, so writing it would report a change nothing serves. The rows are named because editing
+# them is what the operator has to do; a deployment with no registry table has none to name.
+require_unshadowed_default() {
+  local present bound
+  present="$(db_exec "SELECT to_regclass('public.services') IS NOT NULL;")"
+  [[ "$present" == "t" ]] || return 0
+  bound="$(db_exec "SELECT string_agg(name || ' -> contest ' || contest_id, ', ' ORDER BY shard, id)
+    FROM services WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL;")"
+  [[ -z "$bound" ]] \
+    || log_die "these registry rows decide what is served, so contests.is_active would change nothing: ${bound}. Edit them in the panel's service registry (Infrastructure, Services) or clear their binding." 1
+}
+
 # Move is_active onto <id> in one statement, so exactly one row stays active.
 set_active_contest() {
   local id="$1" before
@@ -88,25 +103,7 @@ set_active_contest() {
     return 0
   fi
   db_exec "UPDATE contests SET is_active = (id = ${id});" >/dev/null
-  log_info "active contest set to ${id} in '$POSTGRES_DB_VAL' (contests.is_active)"
-}
-
-# WHY restart: the Python services resolve the active contest once at start, so a running
-# stack keeps serving the previous one until it is recreated. compose's `up -d` recreates
-# only the services whose config changed, which is exactly the contest profile.
-restart_contest_stack() {
-  local deploy_type
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qE '^cms-(contest-web-server|evaluation-service|proxy-service)$'; then
-    log_info "contest stack is not running — nothing to restart; 'make contest' will serve the active contest"
-    return 0
-  fi
-  deploy_type="$(read_env_value DEPLOYMENT_TYPE)"
-  log_info "restarting the contest stack to serve the active contest..."
-  if [[ "$deploy_type" == "img" ]]; then
-    make -e DEPLOYMENT_TYPE_OVERRIDE=img contest
-  else
-    make contest
-  fi
+  log_info "active contest set to ${id} in '$POSTGRES_DB_VAL' (contests.is_active); a service the registry does not bind picks it up within a few seconds"
 }
 
 main() {
@@ -121,13 +118,8 @@ main() {
 
   require_database
   require_existing_contest "$id"
+  require_unshadowed_default
   set_active_contest "$id"
-
-  if ! bash scripts/__config_sync.sh; then
-    log_die "contests.is_active now names ${id}, but './cms config sync' failed — config.toml/.env may still describe the previous contest. Fix the error above, then run './cms config sync'." 1
-  fi
-
-  restart_contest_stack
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
