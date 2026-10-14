@@ -24,6 +24,7 @@ import {
 } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
 import { parseForwardedFor, resolveClientIp } from '@/lib/request-identity';
+import type { LoginAttemptContext } from '@/lib/login-attempts';
 import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
@@ -60,17 +61,40 @@ function isLoopbackIp(ip: string): boolean {
 // trivially bypassed. Loopback is the one exception: funnel, tailscale serve and
 // direct local access all present the same address to every user, so an IP
 // bucket there would be one shared counter that locks out unrelated accounts.
-async function resolveBucketKeys(username: string): Promise<readonly string[]> {
+async function resolveRequestIdentity(
+  username: string,
+): Promise<{ readonly bucketKeys: readonly string[]; readonly attempt: LoginAttemptContext }> {
   const requestHeaders = await headers();
   const ip = parseForwardedFor(requestHeaders.get('x-forwarded-for'));
   const accountKey = buildAccountBucketKey(username, ip);
-  if (isLoopbackIp(ip)) return [accountKey];
-  return [accountKey, buildIpBucketKey(ip)];
+  const bucketKeys = isLoopbackIp(ip) ? [accountKey] : [accountKey, buildIpBucketKey(ip)];
+  return {
+    bucketKeys,
+    attempt: {
+      ip,
+      surfaceKey: 'admin-panel',
+      path: loginPathFrom(requestHeaders.get('referer')),
+      ua: requestHeaders.get('user-agent'),
+    },
+  };
+}
+
+function loginPathFrom(referer: string | null): string {
+  if (referer === null) return '/auth/login';
+  try {
+    return new URL(referer).pathname;
+  } catch {
+    return '/auth/login';
+  }
 }
 
 /** One ledger row per lockout, never per attempt; the counter itself stays in memory. */
-async function recordLoginFailure(bucketKeys: readonly string[], username: string): Promise<void> {
-  await recordFailedAttempt(bucketKeys);
+async function recordLoginFailure(
+  bucketKeys: readonly string[],
+  username: string,
+  attempt: LoginAttemptContext,
+): Promise<void> {
+  await recordFailedAttempt(bucketKeys, attempt);
   if (!(await isRateLimited(bucketKeys))) return;
   const ip = bucketKeys[0].split('|')[1] ?? 'local';
   await recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) });
@@ -133,10 +157,15 @@ async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
   return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
 }
 
-async function refuseLogin(bucketKeys: readonly string[], username: string, exempt: boolean): Promise<LoginActionState> {
+async function refuseLogin(
+  bucketKeys: readonly string[],
+  username: string,
+  exempt: boolean,
+  attempt: LoginAttemptContext,
+): Promise<LoginActionState> {
   // An exempt identity is not counted and not challenged, so its wrong passwords
   // cannot re-arm a counter or summon a challenge that would block it.
-  if (!exempt) await recordLoginFailure(bucketKeys, username);
+  if (!exempt) await recordLoginFailure(bucketKeys, username, attempt);
   const nextState: LoginActionState = { error: 'Invalid credentials' };
   if (!exempt && (await shouldRequireCaptcha(bucketKeys[0]))) Object.assign(nextState, buildCaptchaRequiredState());
   return nextState;
@@ -146,7 +175,7 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   const username = String(formData.get('username') ?? '');
   const password = String(formData.get('password') ?? '');
   if (!username || !password) return { error: 'Username and password are required' };
-  const bucketKeys = await resolveBucketKeys(username);
+  const { bucketKeys, attempt } = await resolveRequestIdentity(username);
   // WHY before every gate: an exempt account or address is not policed at all, so
   // the lockout refusal, the challenge and the failure count are all skipped. A
   // lift that only cleared the counters could be re-earned; this cannot.
@@ -165,13 +194,13 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
     const admin = await findActiveAdmin(username);
     if (!admin) {
       await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
-      return refuseLogin(bucketKeys, username, exempt);
+      return refuseLogin(bucketKeys, username, exempt, attempt);
     }
     if (!(await verifyStoredPassword(password, admin.authentication))) {
-      return refuseLogin(bucketKeys, username, exempt);
+      return refuseLogin(bucketKeys, username, exempt, attempt);
     }
     if (!(await maySignIn(admin))) {
-      return refuseLogin(bucketKeys, username, exempt);
+      return refuseLogin(bucketKeys, username, exempt, attempt);
     }
     await completeLogin(admin, bucketKeys);
   } catch (error) {

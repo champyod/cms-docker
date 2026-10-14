@@ -1,5 +1,13 @@
 import { createClient } from 'redis';
 
+import {
+  LOGIN_ATTEMPT_LIMIT,
+  attemptListKey,
+  buildAttempt,
+  serializeAttempt,
+  type LoginAttemptContext,
+} from '@/lib/login-attempts';
+
 const MAX_LOGIN_ATTEMPTS = 5;
 export const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
 const MAX_LOGIN_BUCKETS = 1000;
@@ -112,8 +120,16 @@ export async function isRateLimited(bucketKeys: readonly string[]): Promise<bool
   return counts.some((count) => count >= MAX_LOGIN_ATTEMPTS);
 }
 
-/** Count one failure against each key, restarting that key's window. */
-export async function recordFailedAttempt(bucketKeys: readonly string[]): Promise<void> {
+/**
+ * Count one failure against each key, restarting that key's window, and append the
+ * attempt to each key's list when the caller supplies the request context. The
+ * counter and its attempt log are written in one pipeline so they share a window
+ * and a successful login clears both together.
+ */
+export async function recordFailedAttempt(
+  bucketKeys: readonly string[],
+  context?: LoginAttemptContext,
+): Promise<void> {
   const url = redisUrl();
   if (url === null) {
     for (const bucketKey of bucketKeys) memoryIncrement(bucketKey);
@@ -121,13 +137,19 @@ export async function recordFailedAttempt(bucketKeys: readonly string[]): Promis
     return;
   }
   const connection = await client(url);
+  const entry = context === undefined ? null : serializeAttempt(buildAttempt(context));
   await Promise.all(bucketKeys.map((bucketKey) => {
     const key = redisKey(bucketKey);
-    return connection.multi().incr(key).expire(key, WINDOW_SECONDS).exec();
+    const counter = connection.multi().incr(key).expire(key, WINDOW_SECONDS);
+    if (entry === null) return counter.exec();
+    const attempts = attemptListKey(REDIS_KEY_PREFIX, bucketKey);
+    return counter
+      .rPush(attempts, entry).expire(attempts, WINDOW_SECONDS).lTrim(attempts, -LOGIN_ATTEMPT_LIMIT, -1)
+      .exec();
   }));
 }
 
-/** Forget every key, as a successful login does. */
+/** Forget every key and its attempt list, as a successful login does. */
 export async function clearBucket(bucketKeys: readonly string[]): Promise<void> {
   const url = redisUrl();
   if (url === null) {
@@ -137,7 +159,11 @@ export async function clearBucket(bucketKeys: readonly string[]): Promise<void> 
   }
   if (bucketKeys.length === 0) return;
   const connection = await client(url);
-  await connection.del(bucketKeys.map(redisKey));
+  const keys = bucketKeys.flatMap((bucketKey) => [
+    redisKey(bucketKey),
+    attemptListKey(REDIS_KEY_PREFIX, bucketKey),
+  ]);
+  await connection.del(keys);
 }
 
 /** Drop lapsed local buckets. Under Redis each key expires on its own. */
