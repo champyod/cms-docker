@@ -30,6 +30,7 @@ from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
+from cms.server.login_counters import login_attempt_context
 from cms.server.login_refusal import LoginRefusal
 from .contest import ContestHandler, api_login_required
 from ..phase_management import actual_phase_required
@@ -89,7 +90,7 @@ class ApiLoginHandler(ApiContestHandler):
 
         """
         if participation is None:
-            self.captcha.record_failure(username, self.request.remote_ip)
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
             self._refuse(login_refusal.CREDENTIALS)
         elif login_data is not None:
             # WHY record_success here and in the branch below: whoever ends up

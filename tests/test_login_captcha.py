@@ -22,6 +22,7 @@ Usage: python3 tests/test_login_captcha.py
 """
 
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -818,7 +819,9 @@ class ApiLoginHandler:
     def __init__(self, subject, arguments=None):
         self.captcha = subject
         self.arguments = arguments if arguments is not None else {}
-        self.request = Attributes(remote_ip=REMOTE_IP)
+        self.request = Attributes(
+            remote_ip=REMOTE_IP, path="/login/",
+            headers=Attributes(get=lambda _name, default=None: default))
         self.answers: list = []
         self.headers: dict = {}
         self.contest = None
@@ -1080,6 +1083,73 @@ class LoginPageRefusalTest(unittest.TestCase):
     def test_a_credential_failure_still_reads_as_one(self):
         self.assertIn("Failed to log in.", self._contest_page("credentials"))
         self.assertIn("Failed to log in.", self._admin_page("credentials"))
+
+
+class _AttemptRecordingBackend:
+    """A backend that counts in a dict and keeps the attempts it is handed."""
+
+    def __init__(self):
+        self.buckets: dict = {}
+        self.attempts: list = []
+
+    def read(self, key):
+        return self.buckets.get(key)
+
+    def write(self, key, count, expires_in):
+        self.buckets[key] = (count, expires_in)
+
+    def delete(self, keys):
+        for key in keys:
+            self.buckets.pop(key, None)
+
+    def keys(self):
+        return list(self.buckets)
+
+    def clear(self):
+        self.buckets.clear()
+
+    def record_attempt(self, key, entry, window):
+        self.attempts.append((key, entry))
+
+
+class AttemptLogTest(unittest.TestCase):
+    """One failure appends its attempt to each family's list, keyed to the counter."""
+
+    def test_a_failure_appends_the_attempt_to_both_families(self):
+        subject = counters.LoginFailureCounters(_AttemptRecordingBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua="pytest-agent")
+
+        subject.record_failure(CONTESTANT, REMOTE_IP, context)
+
+        logged = subject._backend.attempts
+        self.assertEqual([key for key, _ in logged],
+                         [f"{CONTESTANT}|{REMOTE_IP}", f"ip#{REMOTE_IP}"])
+        entry = json.loads(logged[0][1])
+        self.assertEqual(entry["surfaceKey"], "contest")
+        self.assertEqual(entry["ip"], REMOTE_IP)
+        self.assertEqual(entry["path"], "/login/")
+        self.assertEqual(entry["ua"], "pytest-agent")
+        self.assertIsInstance(entry["at"], int)
+
+    def test_a_loopback_client_logs_only_the_account_family(self):
+        subject = counters.LoginFailureCounters(_AttemptRecordingBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua=None)
+
+        subject.record_failure(CONTESTANT, "127.0.0.1", context)
+
+        self.assertEqual([key for key, _ in subject._backend.attempts],
+                         [f"{CONTESTANT}|127.0.0.1"])
+
+    def test_a_backend_without_attempts_still_counts(self):
+        subject = counters.LoginFailureCounters(backend.InProcessBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua=None)
+
+        subject.record_failure(CONTESTANT, REMOTE_IP, context)
+
+        self.assertEqual(subject.count(CONTESTANT, REMOTE_IP), 1)
 
 
 if __name__ == "__main__":

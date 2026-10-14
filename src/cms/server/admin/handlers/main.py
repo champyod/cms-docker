@@ -34,6 +34,7 @@ from cms.server import login_refusal
 from cms.server.captcha import Captcha, extract_provider, extract_token
 from cms.server.credits import get_surface
 from cms.server.jinja2_toolbox import markdown_filter
+from cms.server.login_counters import login_attempt_context
 from cmscommon.crypto import validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
 from .base import BaseHandler, SimpleHandler, require_permission
@@ -97,7 +98,7 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
 
         if admin is None:
             logger.warning("Nonexistent admin account: %s", username)
-            self.captcha.record_failure(username, client_ip)
+            self.captcha.record_failure(username, client_ip, login_attempt_context("admin-classic", self.request))
             self.redirect(error_page)
             return
 
@@ -112,7 +113,7 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
             if not allowed:
                 logger.info("Login error for admin %r from IP %s.", username,
                             client_ip)
-                self.captcha.record_failure(username, client_ip)
+                self.captcha.record_failure(username, client_ip, login_attempt_context("admin-classic", self.request))
             elif not admin.enabled:
                 logger.info("Login successful for admin %r from IP %s, but "
                             "account is disabled.", username, client_ip)

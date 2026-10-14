@@ -14,9 +14,12 @@ when the threshold is reached re-arms itself on every subsequent attempt, so an
 attacker who keeps guessing walks past the boundary meant to stop them.
 """
 
+import dataclasses
 import ipaddress
+import json
 import logging
 import threading
+import time
 import typing
 
 from cms.server.login_counter_backend import (CounterBackend, InProcessBackend,
@@ -34,6 +37,46 @@ FAILURE_WINDOW = 15 * 60
 # BUCKETS); without a cap, a run of failed logins on fresh usernames would
 # otherwise grow this map without bound.
 MAX_BUCKETS = 1000
+
+# The longest User-Agent kept, so one oversized header cannot bloat an entry.
+MAX_UA_LENGTH = 512
+
+
+@dataclasses.dataclass(frozen=True)
+class LoginAttemptContext:
+    """The request facts one failure records beyond the account and address.
+
+    The counter namespace names only the store, not the face: `cms:login:` is
+    written by the contest, classic-admin and panel servers alike. The writer
+    stamps the face it is (`surface_key`) and the request it saw, and the panel
+    maps the key to its label.
+
+    """
+
+    surface_key: str
+    path: str
+    ua: typing.Optional[str]
+
+
+def login_attempt_context(surface_key: str, request: typing.Any
+                          ) -> LoginAttemptContext:
+    """Build the attempt context from a Tornado request."""
+    return LoginAttemptContext(
+        surface_key=surface_key,
+        path=request.path,
+        ua=request.headers.get("User-Agent"))
+
+
+def _attempt_entry(ip: str, context: LoginAttemptContext) -> str:
+    """Serialise one attempt in the shape the panel reads."""
+    ua = context.ua
+    return json.dumps({
+        "at": int(time.time() * 1000),
+        "ip": ip,
+        "surfaceKey": context.surface_key,
+        "path": context.path,
+        "ua": None if ua is None else ua[:MAX_UA_LENGTH],
+    })
 
 
 def is_loopback(ip: str) -> bool:
@@ -168,12 +211,16 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
         spans = [bucket[1] for bucket in buckets if bucket is not None]
         return max(spans) if spans else 0.0
 
-    def record_failure(self, username: str, ip: str) -> None:
+    def record_failure(self, username: str, ip: str,
+                       context: LoginAttemptContext | None = None) -> None:
         """Count one more failed attempt against this account and address.
 
         The attempt that crosses the ban threshold is reported to the sink, once,
         outside the lock: that crossing is the lockout an operator has to be able
         to see, and a slow sink must not serialise concurrent logins behind it.
+        The attempt itself is appended to each key's list when a context names the
+        request and the backend keeps a list.
+
         """
         ban_threshold = self._ban_threshold
         with self._lock:
@@ -182,8 +229,25 @@ Mirrors the panel's `loginBuckets` map: keys are `"{username}|{ip}"` for
             if not is_loopback(ip):
                 self._increment(self._ip_key(ip), ban_threshold)
             now_limited = self._count_unlocked(username, ip) >= ban_threshold
+        self._record_attempt(username, ip, context)
         if self._lockout_sink is not None and now_limited and not was_limited:
             self._lockout_sink(username, ip, FAILURE_WINDOW)
+
+    def _record_attempt(self, username: str, ip: str,
+                        context: LoginAttemptContext | None) -> None:
+        """Append one attempt to each live key's list, when the backend keeps one.
+
+        A backend without the capability (the in-process fallback) skips it: a
+        deployment with no Redis has no shared list for the panel to read.
+
+        """
+        record = getattr(self._backend, "record_attempt", None)
+        if record is None or context is None:
+            return
+        entry = _attempt_entry(ip, context)
+        record(f"{username}|{ip}", entry, FAILURE_WINDOW)
+        if not is_loopback(ip):
+            record(self._ip_key(ip), entry, FAILURE_WINDOW)
 
     def set_ban_threshold(self, value: int) -> None:
         """Set the failure count at which the account or address is refused.
@@ -280,5 +344,6 @@ def build_counters(config: typing.Any,
     return LoginFailureCounters(backend, degraded, lockout_sink)
 
 
-__all__ = ["LoginFailureCounters", "build_counters", "is_loopback",
-           "FAILURE_WINDOW", "MAX_BUCKETS"]
+__all__ = ["LoginFailureCounters", "LoginAttemptContext", "build_counters",
+           "login_attempt_context", "is_loopback", "FAILURE_WINDOW",
+           "MAX_BUCKETS"]

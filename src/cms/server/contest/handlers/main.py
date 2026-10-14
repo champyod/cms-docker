@@ -57,6 +57,7 @@ from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
+from cms.server.login_counters import login_attempt_context
 from cms.server.login_refusal import LoginRefusal
 from cmscommon.crypto import hash_password, validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
@@ -225,7 +226,7 @@ class RegistrationHandler(ContestHandler):
             # WHY count this: joining an existing account is the only
             # registration path that guesses a credential, so it is the one
             # that has to escalate into a captcha.
-            self.captcha.record_failure(username, self.request.remote_ip)
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
             raise tornado.web.HTTPError(403)
 
         return user
@@ -276,7 +277,7 @@ class LoginHandler(ContestHandler):
         self._apply_login_cookie(cookie)
 
         if participation is None:
-            self.captcha.record_failure(username, self.request.remote_ip)
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
             self.redirect(self._error_page(login_refusal.CREDENTIALS.reason))
         else:
             # WHY record_success here: whoever finally gets the password right

@@ -49,8 +49,8 @@ from cms.server.captcha_health import ProviderHealth, build_health
 from cms.server.captcha_provider import (PROVIDER_SCRIPT, PROVIDER_WIDGET_CLASS,
                                          TOKEN_FIELDS, ProviderUnreachable,
                                          extract_token, verify_token)
-from cms.server.login_counters import (LoginFailureCounters, build_counters,
-                                        is_loopback)
+from cms.server.login_counters import (LoginFailureCounters, LoginAttemptContext,
+                                        build_counters, is_loopback)
 
 
 logger = logging.getLogger(__name__)
@@ -276,15 +276,17 @@ class Captcha:
             return CaptchaOutcome.ALLOWED
         return CaptchaOutcome.CHALLENGE_FAILED
 
-    def record_failure(self, username: str, ip: str) -> None:
+    def record_failure(self, username: str, ip: str,
+                       context: LoginAttemptContext | None = None) -> None:
         """Count a failed attempt, which may make the next one need a captcha.
 
         An exempt identity is not counted: a lift that still accumulated failures
-        would re-arm the very lockout it exists to prevent.
+        would re-arm the very lockout it exists to prevent. The context, when the
+        caller passes it, is what the attempt log records beside the count.
         """
         if self._is_exempt is not None and self._is_exempt(username, ip):
             return
-        self._counters.record_failure(username, ip)
+        self._counters.record_failure(username, ip, context)
 
     def record_success(self, username: str, ip: str) -> None:
         """Forget the failures behind this account and address."""

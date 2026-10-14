@@ -28,6 +28,15 @@ logger = logging.getLogger(__name__)
 # with an unrelated key that happens to share a name.
 REDIS_KEY_PREFIX = "cms:login:"
 
+# One attempt list per counter key holds at most this many entries, so a
+# brute-force run cannot grow a list without bound. The panel trims to the same.
+ATTEMPT_LIMIT = 50
+
+# The attempt list's own infix. It drops the counter prefix's trailing colon, so
+# the key (`cms:login-attempts:`) falls outside the counter scan (`cms:login:*`)
+# that would otherwise read a list key as a counter and GET it.
+ATTEMPTS_INFIX = "-attempts:"
+
 
 class CounterBackend(typing.Protocol):
     """Where the login failure buckets are kept.
@@ -186,8 +195,9 @@ class RedisBackend:
 
     def delete(self, key: typing.Iterable[str]) -> None:
         namespaced = [self._key(one) for one in key]
+        attempts = [self._attempt_key(one) for one in key]
         if namespaced:
-            self._client.delete(*namespaced)
+            self._client.delete(*namespaced, *attempts)
 
     def keys(self) -> typing.List[str]:
         """Return the tracked keys with the namespace stripped off.
@@ -218,9 +228,26 @@ class RedisBackend:
         total, _ = pipe.execute()
         return int(total)
 
+    def record_attempt(self, key: str, entry: str, window: float) -> None:
+        """Append one attempt to *key*'s list, keeping the newest ATTEMPT_LIMIT.
+
+        The entry shares the counter's window, so a lapsed counter takes its
+        attempts with it, and the trim keeps a brute-force run bounded.
+        """
+        namespaced = self._attempt_key(key)
+        pipe = self._client.pipeline()
+        pipe.rpush(namespaced, entry)
+        pipe.expire(namespaced, max(1, int(window)))
+        pipe.ltrim(namespaced, -ATTEMPT_LIMIT, -1)
+        pipe.execute()
+
     def _key(self, key: str) -> str:
         """Return the Redis key for a counter key."""
         return f"{self._prefix}{key}"
+
+    def _attempt_key(self, key: str) -> str:
+        """Return the attempt-list key for a counter key."""
+        return f"{self._prefix.rstrip(':')}{ATTEMPTS_INFIX}{key}"
 
 
 def build_backend(config: typing.Any, window: float,
