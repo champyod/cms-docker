@@ -1,6 +1,8 @@
 import { apiClient } from '@/lib/apiClient';
+import { generateRun, renderTemplate, USERNAME_CHARS, type GeneratorConfig } from '@/lib/credential-template';
 import { openServerDownload } from '@/lib/csv-download';
 import type { PasswordKind } from '@/lib/password-format';
+import type { CredentialTemplates } from './csvPreview';
 
 export interface ContestOption {
   id: number;
@@ -60,6 +62,53 @@ export function collectCredentialUpdates(
       return row.username !== original.username || Boolean(row.password);
     })
     .map((row) => ({ id: row.id, username: row.username, password: row.password }));
+}
+
+export type RegenerateMode = 'username' | 'password';
+
+const MAX_USERNAME_ATTEMPTS = 30;
+const USERNAME_SUFFIX_LENGTH = 4;
+
+/** A username may only use the alphabet the users API accepts, whatever the config asks for. */
+function renderUsernameTemplate(templates: CredentialTemplates): string {
+  return renderTemplate(templates.username, templates.usernameConfig, { charset: USERNAME_CHARS });
+}
+
+function usernameSuffix(config: GeneratorConfig): string {
+  return generateRun({ ...config, length: USERNAME_SUFFIX_LENGTH }, USERNAME_CHARS);
+}
+
+/**
+ * Why the suffix: a template with no `*` renders the same name on every attempt, so extending
+ * the name is the only way left to keep the batch unique. Uniqueness in the database is
+ * enforced by the batch endpoint's unique constraint when the credentials are applied.
+ */
+function renderUniqueUsername(templates: CredentialTemplates, usedUsernames: Set<string>): string {
+  const base = renderUsernameTemplate(templates);
+  let candidate = base;
+  let attempts = 0;
+
+  while (attempts < MAX_USERNAME_ATTEMPTS && usedUsernames.has(candidate)) {
+    const rerolled = renderUsernameTemplate(templates);
+    candidate = rerolled === base ? `${base}${usernameSuffix(templates.usernameConfig)}` : rerolled;
+    attempts += 1;
+  }
+
+  usedUsernames.add(candidate);
+  return candidate;
+}
+
+/** Renders the templates over the selected rows, one credential at a time, keeping the usernames unique. */
+export function regenerateCredentials(
+  rows: readonly SelectedUser[],
+  mode: RegenerateMode,
+  templates: CredentialTemplates,
+): SelectedUser[] {
+  const usedUsernames = new Set<string>();
+  return rows.map((row) => {
+    if (mode === 'username') return { ...row, username: renderUniqueUsername(templates, usedUsernames) };
+    return { ...row, password: renderTemplate(templates.password, templates.passwordConfig) };
+  });
 }
 
 export async function submitCredentialUpdates(

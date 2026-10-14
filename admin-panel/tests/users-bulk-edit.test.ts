@@ -1,11 +1,32 @@
 import { describe, expect, it } from 'vitest';
 
 import type { SelectedUser } from '@/components/users/bulkEditActions';
-import { collectCredentialUpdates } from '@/components/users/bulkEditActions';
+import { collectCredentialUpdates, regenerateCredentials } from '@/components/users/bulkEditActions';
+import type { CredentialTemplates } from '@/components/users/csvPreview';
 import { countUnreachableSelection } from '@/components/users/useUserSelection';
+import { PASSWORD_CONFIG, USERNAME_CONFIG, type GeneratorConfig } from '@/lib/credential-template';
 
 function selectedUser(id: number, username: string): SelectedUser {
   return { id, first_name: `First${id}`, last_name: 'Last', username, password: null };
+}
+
+const DIGITS: GeneratorConfig = {
+  length: 4,
+  letters: false,
+  caseMode: 'both',
+  numbers: true,
+  specials: false,
+  operators: false,
+};
+
+function templates(overrides: Partial<CredentialTemplates> = {}): CredentialTemplates {
+  return {
+    username: 'camp1*',
+    password: 'pass*',
+    usernameConfig: USERNAME_CONFIG,
+    passwordConfig: PASSWORD_CONFIG,
+    ...overrides,
+  };
 }
 
 describe('bulk credential change collection', () => {
@@ -33,6 +54,53 @@ describe('bulk credential change collection', () => {
     const baseline = [selectedUser(1, 'alice')];
 
     expect(collectCredentialUpdates([...baseline, selectedUser(9, 'ghost')], baseline)).toEqual([]);
+  });
+});
+
+describe('bulk edit credential templates', () => {
+  it('renders the username template and leaves the password untouched', () => {
+    const [row] = regenerateCredentials([selectedUser(1, 'alice')], 'username', templates());
+
+    expect(row.username).toMatch(/^camp1[A-Za-z0-9]{8}$/);
+    expect(row.password).toBeNull();
+  });
+
+  it('keeps the username run to the alphabet the users API accepts, whatever the config asks for', () => {
+    const withSymbols: GeneratorConfig = { ...DIGITS, letters: true, specials: true, operators: true, length: 12 };
+
+    const [row] = regenerateCredentials([selectedUser(1, 'alice')], 'username', templates({ usernameConfig: withSymbols }));
+
+    expect(row.username).toMatch(/^camp1[A-Za-z0-9]{12}$/);
+  });
+
+  it('treats a blank username template as one full random run', () => {
+    const [row] = regenerateCredentials([selectedUser(1, 'alice')], 'username', templates({ username: '' }));
+
+    expect(row.username).toMatch(/^[A-Za-z0-9]{8}$/);
+  });
+
+  it('re-rolls a username the batch already holds, so two rows cannot share a name', () => {
+    const rows = regenerateCredentials(
+      [selectedUser(1, 'alice'), selectedUser(2, 'bob')],
+      'username',
+      templates({ username: 'team01' }),
+    );
+
+    expect(rows[0].username).toBe('team01');
+    expect(rows[1].username).toMatch(/^team01[A-Za-z0-9]{4}$/);
+  });
+
+  it('renders the password template and leaves the username untouched', () => {
+    const [row] = regenerateCredentials([selectedUser(1, 'alice')], 'password', templates({ password: 'pass*', passwordConfig: DIGITS }));
+
+    expect(row.password).toMatch(/^pass[0-9]{4}$/);
+    expect(row.username).toBe('alice');
+  });
+
+  it('gives each wildcard its own run', () => {
+    const [row] = regenerateCredentials([selectedUser(1, 'alice')], 'password', templates({ password: '*_*', passwordConfig: DIGITS }));
+
+    expect(row.password).toMatch(/^[0-9]{4}_[0-9]{4}$/);
   });
 });
 
