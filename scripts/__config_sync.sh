@@ -1591,7 +1591,35 @@ registry_primary_contest_id() {
   local id
   id="$(db_query "SELECT contest_id FROM services WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL ORDER BY shard, id LIMIT 1;")" || return 1
   [[ -n "$id" ]] || return 0
+  # WHY validated here and not only at the write: this value is interpolated into an
+  # UPDATE below, so a value that is not a plain integer never reaches a statement.
+  if [[ ! "$id" =~ ^[0-9]+$ ]]; then
+    log_error "services.contest_id returned a non-numeric id '${id}' — refusing to use it."
+    return 1
+  fi
   REGISTRY_PRIMARY_ID="$id"
+  return 0
+}
+
+# Mirrors the registry's choice onto contests.is_active.
+#
+# WHY the singleton is written rather than read: the registry now authors which contest
+# the deployment serves, and contests.is_active is the cache the panel and the Python
+# services read. Left stale it would make the panel disagree with the stack it describes.
+# WHY the whole-table form: it is the statement ./cms contest set-active already issues, so
+# exactly one row can be active no matter what the table held.
+sync_active_contest_flag() {
+  [[ -n "$REGISTRY_PRIMARY_ID" ]] || return 0
+  local current
+  current="$(db_query "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")" || return 1
+  [[ "$current" == "$REGISTRY_PRIMARY_ID" ]] && return 0
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    printf 'Would move contests.is_active from %s to %s (service registry)\n' "${current:-none}" "$REGISTRY_PRIMARY_ID"
+    return 0
+  fi
+  db_query "UPDATE contests SET is_active = (id = ${REGISTRY_PRIMARY_ID});" >/dev/null || return 1
+  log_info "active contest flag moved to ${REGISTRY_PRIMARY_ID} from the service registry"
   return 0
 }
 
@@ -1745,6 +1773,10 @@ main() {
   # WHY after the profile check: a service whose profile does not exist is a broken
   # registry, and rendering it would publish routes for a service that cannot start.
   render_wiring_artifacts
+
+  # WHY after derive_contest_id_from_db: it is that step which resolves the registry's own
+  # choice into REGISTRY_PRIMARY_ID, and this mirror has nothing to write until it has.
+  sync_active_contest_flag || log_error "could not mirror the registry's contest onto contests.is_active"
 
   # WHY before the .env writer: the launcher argument has to reach .env on this run, since
   # compose reads it to decide whether this evaluation service serves one contest or all.

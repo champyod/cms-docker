@@ -53,6 +53,7 @@ if [[ "${1:-}" == "ps" ]]; then printf '%s\n' "cms-database"; exit 0; fi
 if [[ "${1:-}" == "exec" ]]; then
   sql=""; prev=""
   for a in "$@"; do [[ "$prev" == "-c" ]] && sql="$a"; prev="$a"; done
+  printf '%s\n' "$sql" >> "@SQL_LOG@"
   case "$sql" in
     *to_regclass*services*) printf '%s\n' "@SERVICES_TABLE@" ;;
     *"count(*) FROM contest_exposures WHERE tls"*) printf '%s\n' "@TLS_EXPOSED@" ;;
@@ -72,12 +73,13 @@ fi
 exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
-    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" -e "s|@REGISTRY_PRIMARY@|$registry_primary|" \
+    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" -e "s|@REGISTRY_PRIMARY@|$registry_primary|" -e "s|@SQL_LOG@|${SB}/sql.log|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
 
 run_sync() {
+  : > "${SB}/sql.log"
   CMS_DOCKER_ROOT="${SB}" PATH="${SB}/bin:${PATH}" bash "${SYNC}" > "${SB}/sync.log" 2>&1
 }
 
@@ -110,6 +112,8 @@ grep -q '^CONTEST_ID = 5' "${SB}/config.toml" 2>/dev/null \
   && ok "takes CONTEST_ID from the registry, not from is_active" || no "CONTEST_ID did not follow the registry"
 grep -q 'derived from the service registry' "${SB}/sync.log" 2>/dev/null \
   && ok "reports which authority answered" || no "did not report the registry as the source"
+grep -qF 'UPDATE contests SET is_active = (id = 5)' "${SB}/sql.log" 2>/dev/null \
+  && ok "mirrors the registry's choice onto contests.is_active" || no "did not write the active flag back"
 if command -v docker >/dev/null 2>&1; then
   TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
     && ok "the generated compose file validates" || no "the generated compose file is invalid"
@@ -161,6 +165,9 @@ grep -q '^CONTEST_ID = 7' "${SB}/config.toml" 2>/dev/null \
   && ok "falls back to is_active when the registry names no contest" || no "the fallback lost is_active"
 grep -q 'derived from contests.is_active' "${SB}/sync.log" 2>/dev/null \
   && ok "says the singleton answered" || no "did not attribute the fallback"
+grep -q 'UPDATE contests' "${SB}/sql.log" 2>/dev/null \
+  && no "rewrote the active flag when the registry named no contest" \
+  || ok "leaves the active flag alone when the registry is silent"
 
 echo ""
 echo "=== Test 5: a TLS exposure with no certificate lineage fails the sync ==="
