@@ -20,6 +20,7 @@ import {
 } from '@/app/actions/rankingAppearance';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
+import { withBasePath } from '@/lib/base-path';
 
 type TabKey = 'branding' | 'services' | 'display';
 
@@ -265,7 +266,7 @@ export function AppearanceClient(): React.JSX.Element {
           onAccessModeChange={handleAccessModeChange}
           onSave={handleSave}
           saving={saving}
-          logoPreview={logoPreview}
+          logoPreview={withBasePath(logoPreview)}
         />
       ) : active === 'services' ? (
         <ServicesTab values={values} />

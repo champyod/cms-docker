@@ -113,7 +113,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
       params.delete('dir');
     }
     const query = params.toString();
-    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+    router.replace(query.length > 0 ? `?${query}` : pathname);
   };
 
   return (

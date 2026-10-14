@@ -1,7 +1,15 @@
 import type { NextConfig } from "next";
 
+const basePath = process.env.PANEL_BASE_PATH ?? "";
+
 const nextConfig: NextConfig = {
   /* config options here */
+  basePath,
+  env: {
+    // Why inlined: basePath is fixed at build time, and a URL the panel hands to fetch,
+    // EventSource, or a plain href never passes through Next's own prefixing.
+    NEXT_PUBLIC_BASE_PATH: basePath,
+  },
   output: "standalone",
   experimental: {
     // WHY set explicitly: a server action buffers its body, and the framework

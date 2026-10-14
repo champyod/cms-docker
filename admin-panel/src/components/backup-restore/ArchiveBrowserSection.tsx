@@ -12,6 +12,7 @@ import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
+import { withBasePath } from '@/lib/base-path';
 import {
     archiveFingerprint,
     describeError,
@@ -191,7 +192,7 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
                                     </p>
                                 </div>
                                 <a
-                                    href={`/api/backups/${encodeURIComponent(archive.name)}${locationId === undefined ? '' : `?location=${encodeURIComponent(locationId)}`}`}
+                                    href={withBasePath(`/api/backups/${encodeURIComponent(archive.name)}${locationId === undefined ? '' : `?location=${encodeURIComponent(locationId)}`}`)}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors shrink-0"

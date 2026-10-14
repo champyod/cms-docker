@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
@@ -38,6 +39,8 @@ export function AuditTable({
 }: AuditTableProps): React.JSX.Element {
   const router = useAppRouter();
   const [isPending, startTransition] = useTransition();
+  // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
+  const pathname = usePathname();
 
   const [entityFilter, setEntityFilter] = useState(filters.entity ?? '');
   const [verbFilter, setVerbFilter] = useState(filters.verb ?? '');
@@ -145,8 +148,8 @@ export function AuditTable({
     }
     params.set('page', '1');
     const query = params.toString();
-    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
-  }, [router]);
+    router.replace(query.length > 0 ? `?${query}` : pathname);
+  }, [router, pathname]);
 
   const handlePageChange = (newPage: number) => {
     setPageInput(String(newPage));

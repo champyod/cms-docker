@@ -5,11 +5,25 @@ export interface EvaluationEndpoint {
   port: number;
 }
 
-/** The compose service name and RPC port a deployment without a registry uses. */
-export const DEFAULT_EVALUATION_ENDPOINT: EvaluationEndpoint = {
-  host: 'cms-evaluation-service',
-  port: 25000,
-};
+/**
+ * The endpoint a deployment without a registry uses.
+ *
+ * WHY configurable: a deployment that runs its own evaluation service sets
+ * `EVALUATION_RPC_TARGET` (host:port); an unset value keeps the shared core stack's
+ * service name and port. The registry still outranks this whenever it has a usable row.
+ */
+function resolveDefaultEndpoint(): EvaluationEndpoint {
+  const target = process.env.EVALUATION_RPC_TARGET?.trim();
+  if (!target) return { host: 'cms-evaluation-service', port: 25000 };
+  const separator = target.lastIndexOf(':');
+  const port = separator > 0 ? Number(target.slice(separator + 1)) : Number.NaN;
+  return {
+    host: separator > 0 ? target.slice(0, separator) : target,
+    port: Number.isInteger(port) && port > 0 ? port : 25000,
+  };
+}
+
+export const DEFAULT_EVALUATION_ENDPOINT: EvaluationEndpoint = resolveDefaultEndpoint();
 
 export class EvaluationTargetError extends Error {
   constructor(message: string) {

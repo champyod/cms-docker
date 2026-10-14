@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { deleteTeam, updateTeam } from '@/app/actions/teams';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
+import { withBasePath } from '@/lib/base-path';
 
 interface TeamMember {
   user: {
@@ -171,7 +172,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                     <span className="text-xs text-muted-foreground">+{member.contests.length - 3} more</span>
                   )}
                   <a
-                    href={`/${locale}/users/${member.user.id}`}
+                    href={withBasePath(`/${locale}/users/${member.user.id}`)}
                     className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
                   >
                     <ExternalLink className="w-4 h-4" />
@@ -215,7 +216,7 @@ export function TeamDetailView({ team }: TeamDetailViewProps) {
                   </div>
                 </div>
                 <a
-                  href={`/${locale}/contests/${contest.id}`}
+                  href={withBasePath(`/${locale}/contests/${contest.id}`)}
                   className="p-1.5 text-muted-foreground hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-4 h-4" />

@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
@@ -44,6 +44,8 @@ export function AdminList({
   const [editingAdmin, setEditingAdmin] = useState<AdminWithLogin | null>(null);
   const dict = useDictionary();
   const router = useRouter();
+  // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
+  const pathname = usePathname();
   const confirm = useConfirm();
   // Why: an admin account outlives every contest, so its sign-in time has no owner contest and
   // reads in the operator's own zone.
@@ -127,7 +129,7 @@ export function AdminList({
       params.delete('dir');
     }
     const query = params.toString();
-    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+    router.replace(query.length > 0 ? `?${query}` : pathname);
   };
 
   const columns = useMemo<ResponsiveColumn<AdminWithLogin>[]>(() => [

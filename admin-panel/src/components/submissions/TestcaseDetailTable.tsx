@@ -7,6 +7,7 @@ import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { withBasePath } from '@/lib/base-path';
 import type {
   SubmissionEvaluationModel,
   SubmissionTestcaseDetailModel,
@@ -157,7 +158,7 @@ export function TestcaseDetailTable({ model, canReadTestcase }: TestcaseDetailTa
     if (!canReadTestcase) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/submissions/${model.submissionId}/testcase/${row.testcaseId}`);
+      const response = await fetch(withBasePath(`/api/submissions/${model.submissionId}/testcase/${row.testcaseId}`));
       const payload = await response.json() as SubmissionTestcaseDetailModel & { error?: string };
       if (!response.ok) {
         setError(payload.error ?? 'Could not load this testcase.');

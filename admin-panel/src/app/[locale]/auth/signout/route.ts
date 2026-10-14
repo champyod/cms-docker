@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { redirect } from 'next/navigation';
+import { withBasePath } from '@/lib/base-path';
 import { deleteSession } from '@/lib/auth';
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 
@@ -25,5 +26,7 @@ export async function GET(
 
   await deleteSession();
 
-  redirect(`/${locale}/auth/login`);
+  // Why the prefix is explicit: a Route Handler's redirect is emitted as a bare Location
+  // header, while only a redirect thrown while rendering a page gets basePath added.
+  redirect(withBasePath(`/${locale}/auth/login`));
 }

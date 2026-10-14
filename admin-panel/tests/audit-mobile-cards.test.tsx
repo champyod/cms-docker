@@ -6,6 +6,7 @@ import type { AuditLogRow } from '@/app/actions/audit';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => '/en/audit',
 }));
 
 vi.mock('@/app/actions/audit', () => ({

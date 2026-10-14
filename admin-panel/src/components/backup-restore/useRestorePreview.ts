@@ -13,6 +13,7 @@ import { usePromoteProgress } from '@/components/backup-restore/usePromoteProgre
 // The leaf module, not the `@/lib/restore-apply` barrel: the barrel reaches
 // `node:os` through the preview store and cannot be bundled for the browser.
 import { buildRestoreStrategies, displayValues } from '@/lib/restore-apply-conflicts';
+import { withBasePath } from '@/lib/base-path';
 import type { AccountUsernameConflict, RestoreConflict, RestoreMode, UniqueValueConflict } from '@/lib/restore-apply-conflicts';
 // Type-only: the runtime modules reach node:os through restore-preview-store and must stay out of the client bundle.
 import type { TableDiffRow } from '@/lib/restore-preview';
@@ -65,7 +66,7 @@ function uploadDump(file: File, onProgress: (fraction: number) => void): Promise
         const request = new XMLHttpRequest();
         const form = new FormData();
         form.append(UPLOAD_FIELD, file);
-        request.open('POST', UPLOAD_URL);
+        request.open('POST', withBasePath(UPLOAD_URL));
         request.upload.addEventListener('progress', (event) => {
             if (event.lengthComputable) onProgress(event.loaded / event.total);
         });

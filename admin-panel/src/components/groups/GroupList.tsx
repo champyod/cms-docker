@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import { Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
@@ -27,6 +28,8 @@ export function GroupList({
 }: GroupListProps): React.JSX.Element {
   const list = useGroupList(permissionKeys);
   const router = useAppRouter();
+  // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
+  const pathname = usePathname();
   // Why the hook, not the prop: the group label lives outside the groups copy
   // block, and only the full dictionary carries it.
   const actionGroupLabel = rowActionGroupLabel(useDictionary(), 'groups');
@@ -87,7 +90,7 @@ export function GroupList({
       params.delete('dir');
     }
     const query = params.toString();
-    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+    router.replace(query.length > 0 ? `?${query}` : pathname);
   };
 
   return (

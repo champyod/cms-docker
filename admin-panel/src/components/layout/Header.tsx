@@ -4,8 +4,10 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildRoute } from '@/lib/navigation/routes';
+import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
 import { useLiveNotifications } from '@/lib/live/notifications';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
@@ -22,10 +24,10 @@ function HeaderNotifications({ permissionKeys }: { permissionKeys: readonly stri
   const keys = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const { events, unread, unansweredCount, clearEvents, markSeen } = useLiveNotifications();
   const router = useAppRouter();
+  const pathname = usePathname();
 
   const openContestQuestions = (): void => {
-    const locale = window.location.pathname.split('/')[1] || 'en';
-    router.push(buildRoute(locale, 'contests.list'));
+    router.push(buildRoute(localeFromPathname(pathname), 'contests.list'));
   };
 
   return (
@@ -56,6 +58,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
   const [paletteOpen, setPaletteOpen] = useState(false);
   const authenticationExpiredRef = useRef(false);
   const router = useAppRouter();
+  const pathname = usePathname();
 
   // Why the header answers a dead session: it is mounted on every authenticated page, so it is the one
   // place a 401 raised anywhere in the panel is turned into a single redirect to the login page.
@@ -63,13 +66,12 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
     const handleAuthenticationExpired = (): void => {
       if (authenticationExpiredRef.current) return;
       authenticationExpiredRef.current = true;
-      const segments = window.location.pathname.split('/');
-      router.push(`/${segments[1] || 'en'}/auth/login`);
+      router.push(`/${localeFromPathname(pathname)}/auth/login`);
     };
 
     window.addEventListener('cms-authentication-expired', handleAuthenticationExpired);
     return () => window.removeEventListener('cms-authentication-expired', handleAuthenticationExpired);
-  }, [router]);
+  }, [router, pathname]);
 
   return (
     <header

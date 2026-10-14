@@ -13,6 +13,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useFormatDay, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
 import { buildRoute } from '@/lib/navigation/routes';
+import { withBasePath } from '@/lib/base-path';
 import type { Dictionary } from '@/lib/dictionary';
 import { cn } from '@/lib/utils';
 
@@ -88,7 +89,7 @@ function formatUploadDate(uploadedAt: string | null | undefined, formatDay: Time
 function renderStatementActions(stmt: StatementRow, onDelete: (statementId: number) => void): React.JSX.Element {
   return (
     <>
-      <a href={`/api/statements/${stmt.digest}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-xs text-primary hover:underline">Download</a>
+      <a href={withBasePath(`/api/statements/${stmt.digest}`)} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center px-2 text-xs text-primary hover:underline">Download</a>
       <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete statement" onClick={() => onDelete(stmt.id)} className="text-destructive" />
     </>
   );
