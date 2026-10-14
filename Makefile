@@ -385,6 +385,19 @@ pull: expose
 	if [ -n "$(GENERATED_COMPOSE_FLAGS)" ]; then $(COMPOSE_CMD) $(GENERATED_COMPOSE_FLAGS) pull || { echo "[WARN] generated-compose pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; fi; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
+# The composes ./cms config sync derives from the registry: one container per service row
+# and one tailscale container per exposed node. Started on their own -f set, never merged
+# with COMPOSE_FILES, because a row may name the same container as a declared service and
+# merging the two definitions would let one override the other.
+.PHONY: registry-up
+registry-up:
+	@if [ -n "$(GENERATED_COMPOSE_FLAGS)" ]; then \
+		echo "Starting the services the registry declares..."; \
+		$(COMPOSE_CMD) $(GENERATED_COMPOSE_FLAGS) up -d --no-build; \
+	else \
+		echo "No generated compose to apply — run './cms config sync' first."; \
+	fi
+
 # ---------------------------------------------------------------------------
 # Deprecated aliases — each prints [deprecated] to stderr then delegates
 # *-img aliases FORCE image mode via DEPLOYMENT_TYPE_OVERRIDE

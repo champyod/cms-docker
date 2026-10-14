@@ -223,6 +223,13 @@ log "Syncing database schema via Prisma Migrate..."
 make cms-init || log_die "make cms-init failed."
 make prisma-sync || log_die "make prisma-sync failed."
 
+# WHY after the migration and not with the stacks: the generated registry compose names
+# containers the sync derived from the services table, and they only start correctly once
+# the schema they read is current. WHY a hard failure: the registry renders that topology,
+# so a box that cannot bring it up is not running what the registry describes.
+log "Starting the services the registry declares..."
+make registry-up || log_die "make registry-up failed — the registry topology is rendered but not running."
+
 # ---------------------------------------------------------------------------
 # (f) Post-update verification
 # ---------------------------------------------------------------------------
