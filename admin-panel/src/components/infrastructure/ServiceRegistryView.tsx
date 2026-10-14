@@ -7,7 +7,7 @@ import { Tabs } from '@/components/core/Tabs';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useToast } from '@/components/providers/ToastProvider';
-import { collectWiringProblems } from '@/lib/service-wiring';
+import { collectWiringProblems } from '@/lib/service-wiring-problems';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { interpolate } from '@/lib/interpolate';
 import {

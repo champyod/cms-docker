@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  collectWiringProblems,
   exposureRoutes,
   normalisePath,
   resolveWirings,
@@ -11,6 +10,7 @@ import {
   type ServiceRow,
   type WiringRow,
 } from '@/lib/service-wiring';
+import { collectWiringProblems } from '@/lib/service-wiring-problems';
 import {
   parseCertificate,
   parsePayload,
@@ -130,9 +130,22 @@ it('refuses to proxy to a server with no http port', () => {
     expect(exposureRoutes([exposure({ contest_id: 2, path: 'beta/' })], [own])[0].path).toBe('/beta');
   });
 
-  it('omits a path-only exposure from the standalone server blocks', () => {
+  it('answers a path-only exposure under the vhost its contest already claims', () => {
     const own = service({ id: 1, name: 'w', contest_id: 2 });
-    expect(exposureRoutes([exposure({ contest_id: 2, hostname: null })], [own])).toEqual([]);
+    const routes = exposureRoutes(
+      [
+        exposure({ contest_id: 2, hostname: 'cms2.example.com', path: '/' }),
+        exposure({ contest_id: 2, hostname: null, path: '/beta' }),
+      ],
+      [own],
+    );
+    expect(routes.map((route) => route.hostname)).toEqual(['cms2.example.com', 'cms2.example.com']);
+    expect(routes[1].path).toBe('/beta');
+  });
+
+  it('refuses a path-only exposure whose contest owns no vhost', () => {
+    const own = service({ id: 1, name: 'w', contest_id: 2 });
+    expect(() => exposureRoutes([exposure({ contest_id: 2, hostname: null })], [own])).toThrow(/no vhost/);
   });
 });
 
@@ -165,6 +178,22 @@ describe('renderNginxServers', () => {
     expect(out.match(/server \{/g)).toHaveLength(1);
     expect(out.indexOf('location / {')).toBeLessThan(out.indexOf('location ^~ /beta/ {'));
     expect(out).toContain('proxy_pass http://web-2:8888/;');
+  });
+
+  it('renders a contest root and its path-only exposure into one block', () => {
+    const own = service({ id: 1, name: 'web-3', host: 'web-3', contest_id: 3 });
+    const out = renderNginxServers(
+      exposureRoutes(
+        [
+          exposure({ contest_id: 3, hostname: 'cms3.example.com', path: '/' }),
+          exposure({ contest_id: 3, hostname: null, path: '/beta' }),
+        ],
+        [own],
+      ),
+    );
+    expect(out.match(/server \{/g)).toHaveLength(1);
+    expect(out).toContain('location ^~ /beta/ {');
+    expect(out).toContain('proxy_pass http://web-3:8888/;');
   });
 
   it('keeps one block per hostname', () => {
@@ -402,6 +431,13 @@ describe('collectWiringProblems', () => {
 
   it('treats a shared ContestWebServer as serving every contest', () => {
     expect(collectWiringProblems([shared], [], [exposure({ contest_id: 5 })])).toEqual([]);
+  });
+
+  it('reports a path-only exposure whose contest owns no vhost', () => {
+    const problems = collectWiringProblems([shared], [], [exposure({ contest_id: 5, hostname: null })]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('no vhost of its own');
   });
 
   it('reports two exposures that normalise onto one location', () => {
