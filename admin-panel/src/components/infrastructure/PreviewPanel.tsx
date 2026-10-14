@@ -9,6 +9,7 @@ import { Loading } from '@/components/core/Loading';
 import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { previewRegistryAction, type PreviewResult } from '@/app/actions/serviceWiring';
+import { PANEL_READ_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout';
 import type { RegistryArtifact } from '@/lib/service-wiring-cli';
 
 type PreviewState =
@@ -31,7 +32,7 @@ export function PreviewPanel(): React.JSX.Element {
   useEffect(() => {
     let active = true;
     // Why `active`: the tab can unmount mid-read, and a late result must not set state on it.
-    void previewRegistryAction()
+    void withTimeout(previewRegistryAction(), PANEL_READ_TIMEOUT_MS, copy.errorFallback)
       .then((result: PreviewResult): void => {
         if (active) {
           setState(result.success ? { kind: 'ready', artifacts: result.artifacts } : { kind: 'error', message: result.error });
