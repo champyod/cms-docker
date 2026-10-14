@@ -114,6 +114,11 @@ BACKUP_SCRIPT="scripts/__backup.sh"
 # override ensure_backup_dir_perms and the preflight repair and check.
 BACKUP_ROOT_HOST="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
 if [ -x "$BACKUP_SCRIPT" ]; then
+    # WHY refuse instead of skipping: an update with no rollback point is worse than a clear
+    # refusal, and a box with no local database has to be told what it is missing.
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+        log_die "no local cms-database to back up before the update — this box is a worker, or its database is down. Run './cms update-server' on the main box, or start cms-database here, then re-run."
+    fi
     log "Running safety backup..."
     # WHY the status is read instead of collapsed into one "backup failed" line: the backup
     # contract separates "no usable backup" (1) from "the dump was kept but the run is not
