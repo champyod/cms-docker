@@ -279,15 +279,17 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 | Renderer: nginx blocks, tailnet serve config, injection rejection | `admin-panel/src/lib/service-wiring-render.ts` | 33 vitest cases |
 | Per-service DB profile validation, fatal on an unknown `[db_<name>]` | `scripts/__config_sync.sh` | `bash -n` clean; no new shellcheck warnings |
 | Backup catalog placement | `admin-panel/src/lib/backup-table-catalog.ts` | 54 catalog tests pass |
+| Renderer CLI: payload on stdin, validation before render, non-zero exit on refusal | `admin-panel/src/lib/service-wiring-cli.ts` | 9 vitest cases |
+| `config sync` renders the generated route artifacts from the registry | `scripts/__config_sync.sh` (`render_wiring_artifacts`) | `tests/test_service_wiring_render.sh` — 11 assertions |
 
-Branch gate: `tsc --noEmit` clean, `vitest run` **249 files / 3232 tests passed**, RLS coverage 53 tables.
+Gates: `tsc --noEmit` clean · `vitest run` **249 files / 3241 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
 
 ### 11.2 Not landed
 
 | Phase | Missing | Why it stopped |
 |---|---|---|
-| 3 — renderer wiring | `./cms config sync` does not emit the N contest blocks or per-contest `serve.json`; the renderer has no caller yet | Integrating it needs a live database or a container, neither available here |
-| 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID` | Python is unrunnable (no `sqlalchemy`, no `tornado`, no database); a concurrent-service edit that cannot be run is the half-built surface to avoid |
+| 3 — renderer wiring (partly done) | The sync now renders `config/generated/contest-routes.conf` and `tailscale-serve.json` from the registry, but **nothing populates `services`/`wirings`/`contest_exposures` yet** — no seed and no panel CRUD — so the step is inert until rows exist. The generated artifacts are also not yet consumed by the nginx containers, and the host-side `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows | The remaining work is consumption plus a data-entry surface, which needs a running stack |
+| 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID`; `workers_status` has no contest dimension; `evaluation-rpc.ts:3-4` still hardcodes one endpoint | Python is unrunnable on this host (no `sqlalchemy`, no `tornado`) and no database is up, so the change could not be exercised. Docker is available now, so this is the next phase that can be verified inside a container |
 | 5 — panel surface | No Services & Wiring screen | Needs phase 3 exposed via a server action, and the panel cannot be exercised here |
 
 Still true and important: `contests.is_active` remains the authority in `scripts/__config_sync.sh`. The schema and the profile validation for per-service binding landed; the authority switch (5.1) did not. N=1 behaves exactly as before.
