@@ -100,7 +100,8 @@
         "serveTitle": "Tailnet serve config for {node}",
         "serveHotApply": "New tailnet name: recreate that node",
         "mountedNote": "Anything mounted is never instant.",
-        "errorTitle": "Preview unavailable"
+        "errorTitle": "Preview unavailable",
+        "errorFallback": "The artifacts could not be rendered."
       }
     }
   },

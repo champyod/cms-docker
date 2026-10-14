@@ -15,6 +15,7 @@ import {
   parseCertificate,
   parsePayload,
   renderFromPayload,
+  renderRegistryArtifacts,
   type WiringPayload,
 } from '@/lib/service-wiring-cli';
 import {
@@ -412,6 +413,49 @@ describe('collectWiringProblems', () => {
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('exposure');
     expect(problems[0].message).toContain('a.example.com/');
+  });
+});
+
+describe('renderRegistryArtifacts', () => {
+  const web = service({ id: 1, name: 'web-1', host: 'web-1', contest_id: 1 });
+  const payload: WiringPayload = {
+    services: [web],
+    wirings: [],
+    exposures: [exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' })],
+  };
+
+  it('renders the nginx blocks through the same renderer the sync uses', () => {
+    const [nginx] = renderRegistryArtifacts(payload);
+    expect(nginx.mode).toBe('nginx');
+    expect(nginx.node).toBeNull();
+    expect(nginx.content).toBe(renderFromPayload(payload, 'nginx'));
+    expect(nginx.content).toContain('server_name a.example.com;');
+  });
+
+  it('renders one serve config per tailnet node an exposure claims', () => {
+    const serve = renderRegistryArtifacts(payload).filter((artifact) => artifact.mode === 'serve');
+    expect(serve.map((artifact) => artifact.node)).toEqual(['cms-1']);
+    expect(serve[0].content).toBe(renderFromPayload(payload, 'serve', CONTEST_PROXY_CERTIFICATE, 'cms-1'));
+    expect(serve[0].content).toContain('AllowFunnel');
+  });
+
+  it('renders a node claimed by more than one exposure once', () => {
+    const twoNodes: WiringPayload = {
+      ...payload,
+      exposures: [
+        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ contest_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-1' }),
+      ],
+    };
+    expect(renderRegistryArtifacts(twoNodes).filter((artifact) => artifact.mode === 'serve')).toHaveLength(1);
+  });
+
+  it('refuses a registry the sync would refuse', () => {
+    const broken: WiringPayload = {
+      ...payload,
+      wirings: [{ from_service_id: 1, to_service_id: 99, relation: 'drains', enabled: true }],
+    };
+    expect(() => renderRegistryArtifacts(broken)).toThrow(WiringError);
   });
 });
 

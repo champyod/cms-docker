@@ -75,6 +75,44 @@ export function renderFromPayload(
   return renderServeConfigs(routes).get(assertSafeTailnetNode(node)) ?? '';
 }
 
+/** One artifact the next config sync would write, with the node a serve config belongs to. */
+export interface RegistryArtifact {
+  readonly mode: RenderMode;
+  readonly node: string | null;
+  readonly content: string;
+}
+
+/** The tailnet nodes the exposures claim, canonicalised and deduplicated so each renders once. */
+function tailnetNodes(payload: WiringPayload): string[] {
+  const nodes = new Set<string>();
+  for (const exposure of payload.exposures) {
+    if (exposure.tailnet === null || exposure.tailnet.trim() === '') continue;
+    nodes.add(assertSafeTailnetNode(exposure.tailnet));
+  }
+  return [...nodes];
+}
+
+/**
+ * Renders every artifact the next config sync would write, in-process.
+ *
+ * WHY the panel imports this instead of shelling out to the CLI: the CLI exists so the
+ * shell control plane and the panel share one renderer, and a preview that spawned it
+ * would add a process and a stdin round trip for output the panel can compute directly.
+ */
+export function renderRegistryArtifacts(payload: WiringPayload): RegistryArtifact[] {
+  const artifacts: RegistryArtifact[] = [
+    { mode: 'nginx', node: null, content: renderFromPayload(payload, 'nginx') },
+  ];
+  for (const node of tailnetNodes(payload)) {
+    artifacts.push({
+      mode: 'serve',
+      node,
+      content: renderFromPayload(payload, 'serve', CONTEST_PROXY_CERTIFICATE, node),
+    });
+  }
+  return artifacts;
+}
+
 /**
  * Reads --cert/--key/--ssl-include. WHY flags and not environment: the choice belongs
  * to the caller that knows which front will read the file, and a flag cannot leak into

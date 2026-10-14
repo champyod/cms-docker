@@ -23,6 +23,7 @@ import {
 } from '@/lib/service-wiring-contract';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistrySection } from './RegistrySection';
+import { PreviewPanel } from './PreviewPanel';
 import { exposureColumns, registryRowActions, serviceColumns, wiringColumns } from './registry-columns';
 import { persist } from './registry-mutations';
 import {
@@ -47,7 +48,9 @@ interface ServiceRegistryViewProps {
   permissionKeys: readonly string[];
 }
 
-const TAB_IDS: readonly Kind[] = ['service', 'wiring', 'exposure'];
+type TabId = Kind | 'preview';
+
+const TAB_IDS: readonly TabId[] = ['service', 'wiring', 'exposure', 'preview'];
 
 export function ServiceRegistryView({
   services,
@@ -61,7 +64,7 @@ export function ServiceRegistryView({
   const copy = useDictionary().infrastructure.services;
   const router = useRouter();
   const { addToast } = useToast();
-  const [activeTab, setActiveTab] = useState<Kind>('service');
+  const [activeTab, setActiveTab] = useState<TabId>('service');
   const [kind, setKind] = useState<Kind | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
@@ -116,10 +119,11 @@ export function ServiceRegistryView({
 
   const nameOf = (id: number): string => services.find((service) => service.id === id)?.name ?? `#${id}`;
 
-  const tabLabels: Record<Kind, string> = {
+  const tabLabels: Record<TabId, string> = {
     service: copy.tabs.services,
     wiring: copy.tabs.wirings,
     exposure: copy.tabs.exposures,
+    preview: copy.tabs.preview,
   };
 
   return (
@@ -146,7 +150,7 @@ export function ServiceRegistryView({
         items={TAB_IDS.map((id) => ({ id, label: tabLabels[id] }))}
         activeId={activeTab}
         ariaLabel={copy.tabs.ariaLabel}
-        onSelect={(id): void => setActiveTab(id as Kind)}
+        onSelect={(id): void => setActiveTab(id as TabId)}
       />
 
       {activeTab === 'service' && (
@@ -212,6 +216,8 @@ export function ServiceRegistryView({
           })}
         />
       )}
+
+      {activeTab === 'preview' && <PreviewPanel />}
 
       <RegistryEntryDialog
         kind={kind}

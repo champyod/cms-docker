@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
+import { renderRegistryArtifacts, type RegistryArtifact } from '@/lib/service-wiring-cli';
 import {
   readRegistry,
   removeExposure,
@@ -118,6 +119,30 @@ export async function getRegistryAction(): Promise<RegistryResult> {
   }
   try {
     return { success: true, registry: await readRegistry() };
+  } catch (error) {
+    return { success: false, error: denialMessage(error) };
+  }
+}
+
+export type PreviewResult =
+  | { success: true; artifacts: RegistryArtifact[] }
+  | { success: false; error: string };
+
+/**
+ * The artifacts the next config sync would write, rendered in-process.
+ *
+ * WHY the renderer is imported rather than the CLI shelled out: the panel must preview
+ * exactly what the sync writes, and importing `renderRegistryArtifacts` keeps both on one
+ * implementation, so a preview can never disagree with the sync about the registry's shape.
+ */
+export async function previewRegistryAction(): Promise<PreviewResult> {
+  try {
+    await ensurePermission('container:control');
+  } catch (error) {
+    return { success: false, error: denialMessage(error) };
+  }
+  try {
+    return { success: true, artifacts: renderRegistryArtifacts(await readRegistry()) };
   } catch (error) {
     return { success: false, error: denialMessage(error) };
   }
