@@ -16,10 +16,12 @@
 TUI_STANDALONE=0
 [[ "${BASH_SOURCE[0]}" == "$0" ]] && { TUI_STANDALONE=1; set -euo pipefail; }
 
+# shellcheck source=/dev/null
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/__lib/common.sh"
+
 CONTEST_ENV=".env.contest"
 ADMIN_ENV=".env.admin"
 
-log_info() { printf '[INFO] %s\n' "$*"; }
 die() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
 # name|envfile|bindkey|backend_port|serve_env_key|default_https_port
@@ -53,10 +55,7 @@ env_set() {
 
 ts_ip() { command -v tailscale >/dev/null 2>&1 && tailscale ip -4 2>/dev/null | head -1 || true; }
 
-ts_serve() {  # args passthrough with sudo fallback
-  if tailscale debug prefs >/dev/null 2>&1; then tailscale serve "$@"
-  else sudo tailscale serve "$@"; fi
-}
+ts_serve() { run_tailscale serve "$@"; }
 
 supports_ts_https() { [ -n "$(row_field "${ROWS[$1]}" skey)" ]; }
 

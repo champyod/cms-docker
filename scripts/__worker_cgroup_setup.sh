@@ -7,7 +7,10 @@ fi
 
 CGROUP_PATH="${1:-/sys/fs/cgroup/cms-isolate}"
 
-if [ "$(id -u)" -ne 0 ]; then
+# shellcheck source=/dev/null
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/__lib/common.sh"
+
+if ! is_root; then
   echo "Run as root: sudo $0 [cgroup-path]"
   exit 1
 fi

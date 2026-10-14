@@ -40,13 +40,7 @@ require_ts() {
   tailscale status >/dev/null 2>&1 || log_die "tailscale daemon not connected — run 'sudo tailscale up' first"
 }
 
-ts_run() {  # try unprivileged first, fall back to sudo
-  if tailscale version >/dev/null 2>&1 && tailscale debug prefs >/dev/null 2>&1; then
-    tailscale "$@"
-  else
-    sudo tailscale "$@"
-  fi
-}
+ts_run() { run_tailscale "$@"; }
 
 port_of() { env_val "$ADMIN_ENV" "$1"; }
 https_port() {
@@ -157,7 +151,7 @@ cmd_remove() {
 }
 
 cmd_status() {
-  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || log_die "unable to query tailscale serve status"
+  run_tailscale serve status 2>/dev/null || log_die "unable to query tailscale serve status"
   echo ""
   echo "Planned mapping:"
   serve_map | while IFS='|' read -r hp bp label; do

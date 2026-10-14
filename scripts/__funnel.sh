@@ -32,10 +32,7 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 
 env_val() { awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true; }
 
-ts_run() {
-  if tailscale debug prefs >/dev/null 2>&1; then tailscale "$@"
-  else sudo tailscale "$@"; fi
-}
+ts_run() { run_tailscale "$@"; }
 
 require_ready() {
   command -v tailscale >/dev/null 2>&1 || log_die "tailscale CLI missing"
@@ -108,7 +105,7 @@ cmd_remove() {
 }
 
 cmd_status() {
-  tailscale serve status 2>/dev/null || sudo tailscale serve status 2>/dev/null || true
+  tailscale serve status 2>/dev/null || run_tailscale serve status 2>/dev/null || true
   echo "--- planned funnel mapping ---"
   funnel_ports | while IFS='|' read -r fp lp label; do
     printf '  https://<node>.ts.net:%-6s -> 127.0.0.1:%-6s (%s)\n' "$fp" "$lp" "$label"; done

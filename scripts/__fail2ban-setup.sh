@@ -189,36 +189,37 @@ cmd_apply() {
     return 1
   fi
 
-  # Check if we can sudo
-  if ! sudo -n true 2>/dev/null; then
-    log_warn "sudo not available without password — cannot deploy to /etc/fail2ban/"
+  # WHY the pre-check and not a prompt per step: --apply is also reached from the TUI,
+  # where a password dialog would hang, and run_privileged prints the command to run.
+  if ! can_escalate; then
+    log_warn "not root and sudo is not available without a password — cannot deploy to /etc/fail2ban/"
     log_warn "Run with: sudo $0 --apply"
     return 1
   fi
 
   # Create target directory if needed
-  sudo mkdir -p /etc/fail2ban/jail.d
+  run_privileged mkdir -p /etc/fail2ban/jail.d
 
   # Deploy the jail with the resolved volume log path
   local rendered
   rendered="$(mktemp)"
   sed "s#${LOG_GLOB_PLACEHOLDER}#$(nginx_log_glob)#g" "$JAIL_SOURCE" > "$rendered"
-  sudo cp -f "$rendered" "$JAIL_DEST"
+  run_privileged cp -f "$rendered" "$JAIL_DEST"
   rm -f "$rendered"
-  sudo chmod 644 "$JAIL_DEST"
+  run_privileged chmod 644 "$JAIL_DEST"
   log_info "deployed $JAIL_SOURCE -> $JAIL_DEST (log path $(nginx_log_glob))"
 
   # Reload fail2ban
-  if sudo fail2ban-client reload 2>/dev/null; then
+  if run_privileged fail2ban-client reload 2>/dev/null; then
     log_info "fail2ban reloaded"
   else
     log_warn "fail2ban-client reload failed — restart manually: systemctl restart fail2ban"
   fi
 
   # Verify jails are active
-  if sudo fail2ban-client status 2>/dev/null; then
+  if run_privileged fail2ban-client status 2>/dev/null; then
     log_info "fail2ban status:"
-    sudo fail2ban-client status 2>/dev/null || true
+    run_privileged fail2ban-client status 2>/dev/null || true
   fi
 
   log_info "fail2ban jail config applied"

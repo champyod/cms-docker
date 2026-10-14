@@ -242,6 +242,16 @@ run_tailscale() {
   tailscale "$@" 2>/dev/null || run_privileged tailscale "$@"
 }
 
+# True when privileged work can run without prompting: already root, or sudo without
+# a password. Callers that cannot wait on a prompt (the TUI, a cron, CI) check this
+# before starting, so a half-applied change cannot be left behind a password dialog.
+can_escalate() {
+  if is_root; then
+    return 0
+  fi
+  command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null
+}
+
 # ---------------------------------------------------------------------------
 # backup_dir_writable_by_container
 # ---------------------------------------------------------------------------
@@ -325,18 +335,17 @@ backup_dir_dual_writable() {
 # group is granted no write on the data and every file keeps the mode it was created
 # with. The operator still removes archives, because unlinking needs write on the
 # parent directory, which the group now has.
-# Runs directly as root and otherwise behind one `sudo -v` followed by one
-# privileged pass — one prompt, never a loop, never an assumed passwordless sudo.
+# Runs directly as root and otherwise through run_privileged — one prompt, never a
+# loop, never an assumed passwordless sudo.
 backup_dir_repair() {
   local root="$1" uid="$2"
-  if [[ "$(id -u)" -eq 0 ]]; then
+  if is_root; then
     chown -R "$uid" "$root" || return 1
     find "$root" -type d -exec chmod g+rwx,g+s {} +
     return
   fi
-  sudo -v 2>/dev/null || return 1
-  sudo chown -R "$uid" "$root" || return 1
-  sudo find "$root" -type d -exec chmod g+rwx,g+s {} +
+  run_privileged chown -R "$uid" "$root" || return 1
+  run_privileged find "$root" -type d -exec chmod g+rwx,g+s {} +
 }
 
 # ---------------------------------------------------------------------------

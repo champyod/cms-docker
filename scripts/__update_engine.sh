@@ -151,7 +151,7 @@ ensure_worker_cgroup_setup() {
         if [ "$AUTO_CGROUP" = "y" ]; then
             print_info "Running __worker_cgroup_setup.sh..."
             chmod +x ./scripts/__worker_cgroup_setup.sh
-            if sudo ./scripts/__worker_cgroup_setup.sh; then
+            if run_privileged ./scripts/__worker_cgroup_setup.sh; then
                 print_success "Worker cgroups configured successfully."
             else
                 print_error "Failed to configure cgroups. Worker might not start correctly."
