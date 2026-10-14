@@ -29,11 +29,17 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * `audit_log`: it is the append-only trail of display username changes,
  * and replaying it into a restore would put changes in the trail that
  * never happened on the restored database.
+ *
+ * `login_surfaces` is a fixed lookup seeded by its own migration and read only to
+ * label an attempt's surface key, so a restored database already holds the four
+ * rows and a dump would carry nothing a restore needs. The seed is write-if-absent,
+ * so a restore keeps the seeded label rather than a hand-edited one.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log',
   'security_blocks',
   'contest_usernames_history',
+  'login_surfaces',
   'ranking_contests',
   'ranking_tasks',
   'ranking_teams',

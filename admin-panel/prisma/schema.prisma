@@ -769,23 +769,41 @@ enum username_policy {
 /// A row is written per event, never per failed attempt: the login counter stays
 /// in memory so a brute-force run cannot amplify into database writes.
 model security_blocks {
-  id         BigInt    @id @default(autoincrement())
-  kind       String    @db.VarChar
-  source     String    @db.VarChar
-  ip         String?   @db.VarChar
-  subject    String?   @db.VarChar
+  id         BigInt          @id @default(autoincrement())
+  kind       String          @db.VarChar
+  source     String          @db.VarChar
+  ip         String?         @db.VarChar
+  subject    String?         @db.VarChar
+  surface_id Int?
   detail     Json?
-  started_at DateTime  @default(now())
+  started_at DateTime        @default(now())
   expires_at DateTime?
   ended_at   DateTime?
   ended_by   Int?
-  active     Boolean   @default(true)
-  created_at DateTime  @default(now())
+  active     Boolean         @default(true)
+  created_at DateTime        @default(now())
+  surfaces   login_surfaces? @relation(fields: [surface_id], references: [id], onDelete: SetNull)
 
   @@index([active, kind], map: "ix_security_blocks_active_kind")
   @@index([ip], map: "ix_security_blocks_ip")
   @@index([started_at], map: "ix_security_blocks_started_at")
+  @@index([surface_id], map: "ix_security_blocks_surface_id")
   @@map("security_blocks")
+}
+
+/// The login faces a failed attempt can come from. The Redis counter namespace
+/// says only which store family a counter belongs to — `cms:login:` is shared by
+/// the contest, classic-admin and panel faces — so this table names the precise
+/// face and its label. An attempt carries only its key; the panel resolves the id
+/// and label from here, so a new face is a row, not a code branch.
+model login_surfaces {
+  id         Int               @id @default(autoincrement())
+  key        String            @unique @db.VarChar
+  label      String            @db.VarChar
+  created_at DateTime          @default(now()) @db.Timestamp(6)
+  blocks     security_blocks[]
+
+  @@map("login_surfaces")
 }
 
 /// The ranking projection the proxy pushes: one table per entity kind, so the
