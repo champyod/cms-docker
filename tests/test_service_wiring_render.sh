@@ -135,8 +135,13 @@ grep -q '^CONTEST_ID = 5' "${SB}/config.toml" 2>/dev/null \
   && ok "takes CONTEST_ID from the registry, not from is_active" || no "CONTEST_ID did not follow the registry"
 grep -q 'derived from the service registry' "${SB}/sync.log" 2>/dev/null \
   && ok "reports which authority answered" || no "did not report the registry as the source"
-grep -qF 'UPDATE contests SET is_active = (id = 5)' "${SB}/sql.log" 2>/dev/null \
-  && ok "mirrors the registry's choice onto contests.is_active" || no "did not write the active flag back"
+grep -q 'UPDATE contests' "${SB}/sql.log" 2>/dev/null \
+  && no "the sync still writes contests.is_active" \
+  || ok "the sync issues no UPDATE contests"
+# The stub answers contests.is_active with 7 while the registry names 5, so the two
+# disagree: the sync must report that and leave the flag alone.
+grep -q 'contests.is_active names contest 7 while the service registry serves contest 5' "${SB}/sync.log" 2>/dev/null \
+  && ok "warns when the registry and contests.is_active disagree" || no "did not report the divergence"
 if command -v docker >/dev/null 2>&1; then
   TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
     && ok "the generated compose file validates" || no "the generated compose file is invalid"

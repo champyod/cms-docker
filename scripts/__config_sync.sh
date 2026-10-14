@@ -1591,8 +1591,8 @@ registry_primary_contest_id() {
   local id
   id="$(db_query "SELECT contest_id FROM services WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL ORDER BY shard, id LIMIT 1;")" || return 1
   [[ -n "$id" ]] || return 0
-  # WHY validated here and not only at the write: this value is interpolated into an
-  # UPDATE below, so a value that is not a plain integer never reaches a statement.
+  # WHY validated here and not only at the write: this value is interpolated into
+  # [contest] CONTEST_ID, so a value that is not a plain integer never reaches the file.
   if [[ ! "$id" =~ ^[0-9]+$ ]]; then
     log_error "services.contest_id returned a non-numeric id '${id}' — refusing to use it."
     return 1
@@ -1601,26 +1601,21 @@ registry_primary_contest_id() {
   return 0
 }
 
-# Mirrors the registry's choice onto contests.is_active.
+# Reports when contests.is_active names a contest other than the registry's own.
 #
-# WHY the singleton is written rather than read: the registry now authors which contest
-# the deployment serves, and contests.is_active is the cache the panel and the Python
-# services read. Left stale it would make the panel disagree with the stack it describes.
-# WHY the whole-table form: it is the statement ./cms contest set-active already issues, so
-# exactly one row can be active no matter what the table held.
-sync_active_contest_flag() {
-  [[ -n "$REGISTRY_PRIMARY_ID" ]] || return 0
-  local current
-  current="$(db_query "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")" || return 1
-  [[ "$current" == "$REGISTRY_PRIMARY_ID" ]] && return 0
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf 'Would move contests.is_active from %s to %s (service registry)\n' "${current:-none}" "$REGISTRY_PRIMARY_ID"
+# WHY read-only: the service registry authors which contest the deployment serves, and
+# contests.is_active is a cache the panel reads. A sync that wrote the flag would revert
+# the panel's own activation with no audit trail, so divergence is reported and the
+# operator resolves it with './cms contest set-active'. Called only when the registry
+# named a contest, which is the only case that can disagree with the singleton.
+warn_divergent_is_active() {
+  if ! db_active_contest_id; then
+    log_warn "could not read contests.is_active to compare it with the service registry — leaving it untouched"
     return 0
   fi
-  db_query "UPDATE contests SET is_active = (id = ${REGISTRY_PRIMARY_ID});" >/dev/null || return 1
-  log_info "active contest flag moved to ${REGISTRY_PRIMARY_ID} from the service registry"
-  return 0
+  [[ "$DB_STATE" == "active" ]] || return 0
+  [[ "$DB_ACTIVE_ID" == "$REGISTRY_PRIMARY_ID" ]] && return 0
+  log_warn "contests.is_active names contest ${DB_ACTIVE_ID} while the service registry serves contest ${REGISTRY_PRIMARY_ID} — the sync leaves the flag untouched; align it with './cms contest set-active ${REGISTRY_PRIMARY_ID}'"
 }
 
 # Writes one derived contest id into [contest] CONTEST_ID, or reports why it cannot.
@@ -1653,7 +1648,8 @@ set_contest_id() {
 #
 # The service registry answers first; contests.is_active answers when the registry names
 # no contest. A reachable database that reports no active contest, a read that fails, and
-# a non-numeric id all stop the sync.
+# a non-numeric id all stop the sync. Read-only toward contests.is_active: the registry
+# branch reports any divergence instead of writing the flag.
 derive_contest_id_from_db() {
   if ! registry_primary_contest_id; then
     log_error "cms-database is running but the service registry could not be read — refusing to guess the active contest."
@@ -1661,6 +1657,7 @@ derive_contest_id_from_db() {
   fi
   if [[ -n "$REGISTRY_PRIMARY_ID" ]]; then
     set_contest_id "$REGISTRY_PRIMARY_ID" "the service registry (services.contest_id)"
+    warn_divergent_is_active
     return 0
   fi
 
@@ -1773,10 +1770,6 @@ main() {
   # WHY after the profile check: a service whose profile does not exist is a broken
   # registry, and rendering it would publish routes for a service that cannot start.
   render_wiring_artifacts
-
-  # WHY after derive_contest_id_from_db: it is that step which resolves the registry's own
-  # choice into REGISTRY_PRIMARY_ID, and this mirror has nothing to write until it has.
-  sync_active_contest_flag || log_error "could not mirror the registry's contest onto contests.is_active"
 
   # WHY before the .env writer: the launcher argument has to reach .env on this run, since
   # compose reads it to decide whether this evaluation service serves one contest or all.
