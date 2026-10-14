@@ -15,6 +15,16 @@ use crate::AppState;
 
 use super::gate::client_address;
 
+/// The path a failed sign-in is recorded against; the page and its POST share it.
+const LOGIN_PATH: &str = "/login";
+
+/// The request facts one failure records beside the count.
+struct AttemptFacts<'a> {
+    username: &'a str,
+    address: &'a str,
+    ua: Option<&'a str>,
+}
+
 /// Refuses when the console cannot count failures or sign a session: both are
 /// prerequisites for a login that means anything, and neither has a safe fallback.
 pub async fn submit(
@@ -36,22 +46,22 @@ pub async fn submit(
     let address = client_address(&headers);
     let account_key = lockout::account_key(&username, &address);
     let address_key = lockout::address_key(&address);
-    if let Some(response) = enforce_throttle(
-        &state,
-        counter,
-        &fields,
-        &account_key,
-        &address_key,
-        &address,
-    )
-    .await
+    let facts = AttemptFacts {
+        username: &username,
+        address: &address,
+        ua: headers
+            .get(header::USER_AGENT)
+            .and_then(|value| value.to_str().ok()),
+    };
+    if let Some(response) =
+        enforce_throttle(&state, counter, &fields, &account_key, &address_key, &facts).await
     {
         return response;
     }
     match authenticate(&state, &username, &password).await {
         Ok(Some(user)) => accept(&state, counter, &secret, user, &account_key, &address_key).await,
         Ok(None) => {
-            record_failure(counter, &account_key, &address_key).await;
+            record_failure(counter, &account_key, &address_key, &facts).await;
             Redirect::to("/login?error=credentials").into_response()
         }
         Err(refusal) => refusal.response(),
@@ -65,8 +75,9 @@ async fn enforce_throttle(
     fields: &HashMap<String, String>,
     account_key: &str,
     address_key: &str,
-    address: &str,
+    facts: &AttemptFacts<'_>,
 ) -> Option<Response> {
+    let address = facts.address;
     let (verdict, failures) = match standing(counter, account_key, address_key).await {
         Ok(standing) => standing,
         Err(error) => return Some(refuse(&error)),
@@ -95,7 +106,7 @@ async fn enforce_throttle(
         )
         .await;
         if verified.is_err() {
-            record_failure(counter, account_key, address_key).await;
+            record_failure(counter, account_key, address_key, facts).await;
             return Some(Redirect::to("/login?error=challenge").into_response());
         }
     }
@@ -190,9 +201,48 @@ async fn standing(
     Ok((lockout::verdict(account, address), count))
 }
 
-async fn record_failure(counter: &Counter, account_key: &str, address_key: &str) {
+async fn record_failure(
+    counter: &Counter,
+    account_key: &str,
+    address_key: &str,
+    facts: &AttemptFacts<'_>,
+) {
     let _ = counter.record_failure(account_key, lockout::WINDOW).await;
     let _ = counter.record_failure(address_key, lockout::WINDOW).await;
+    let entry = attempt_entry(facts);
+    let _ = counter
+        .record_attempt(
+            &lockout::attempt_account_key(facts.username, facts.address),
+            &entry,
+            lockout::WINDOW,
+        )
+        .await;
+    let _ = counter
+        .record_attempt(
+            &lockout::attempt_address_key(facts.address),
+            &entry,
+            lockout::WINDOW,
+        )
+        .await;
+}
+
+/// One failed sign-in as the panel reads it: the request facts beside the count.
+fn attempt_entry(facts: &AttemptFacts<'_>) -> String {
+    serde_json::json!({
+        "at": now_ms(),
+        "ip": facts.address,
+        "surfaceKey": "ranking",
+        "path": LOGIN_PATH,
+        "ua": facts.ua,
+    })
+    .to_string()
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as i64)
+        .unwrap_or(0)
 }
 
 fn captcha_token(fields: &HashMap<String, String>, provider: CaptchaProvider) -> String {

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use redis::AsyncCommands;
 
+use crate::auth::lockout;
 use crate::config::CaptchaProvider;
 
 /// Provider health for the CAPTCHA chain, in the same Redis as the counters but
@@ -11,6 +12,8 @@ const HEALTH_NAMESPACE: &str = "cms:captcha:health:";
 /// Unreachable checks within one cooldown before a provider is skipped.
 const HEALTH_FAILURES: u32 = 3;
 const HEALTH_COOLDOWN_SECONDS: u64 = 60;
+/// One attempt list holds at most this many entries; the panel trims to the same.
+const ATTEMPT_LIMIT: isize = 50;
 
 fn health_key(provider: CaptchaProvider) -> String {
     format!("{HEALTH_NAMESPACE}{}", provider.wire_name())
@@ -66,8 +69,33 @@ impl Counter {
         if keys.is_empty() {
             return Ok(());
         }
+        // The attempt list is cleared with its counter, so a successful sign-in
+        // leaves neither a count nor the attempts behind it.
+        let mut all: Vec<String> = Vec::with_capacity(keys.len() * 2);
+        for key in keys {
+            all.push(key.clone());
+            all.push(lockout::attempt_key_for(key));
+        }
         let mut connection = self.manager.clone();
-        let _: () = connection.del(keys).await?;
+        let _: () = connection.del(all).await?;
+        Ok(())
+    }
+
+    /// Append one attempt to *key*'s list, keeping the newest `ATTEMPT_LIMIT`.
+    ///
+    /// The entry shares the counter's window, so a lapsed counter takes its
+    /// attempts with it, and the trim keeps a brute-force run bounded.
+    pub async fn record_attempt(
+        &self,
+        key: &str,
+        entry: &str,
+        window: Duration,
+    ) -> Result<(), redis::RedisError> {
+        let seconds = window.as_secs().max(1) as i64;
+        let mut connection = self.manager.clone();
+        let _: () = connection.rpush(key, entry).await?;
+        let _: () = connection.expire(key, seconds).await?;
+        let _: () = connection.ltrim(key, -ATTEMPT_LIMIT, -1).await?;
         Ok(())
     }
 

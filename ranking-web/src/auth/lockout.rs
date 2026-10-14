@@ -19,6 +19,28 @@ pub fn address_key(address: &str) -> String {
     format!("{NAMESPACE}ip#{address}")
 }
 
+/// The attempt-list namespace. It drops the counter namespace's trailing colon so
+/// the key (`cms:ranking:login-attempts:`) falls outside the counter scan
+/// (`cms:ranking:login:*`), which would otherwise read a list key as a counter.
+pub const ATTEMPTS_NAMESPACE: &str = "cms:ranking:login-attempts:";
+
+/// The attempt list paired with [`account_key`], mirroring the two counter families.
+pub fn attempt_account_key(username: &str, address: &str) -> String {
+    format!("{ATTEMPTS_NAMESPACE}{username}|{address}")
+}
+
+pub fn attempt_address_key(address: &str) -> String {
+    format!("{ATTEMPTS_NAMESPACE}ip#{address}")
+}
+
+/// The attempt list a counter key pairs with, so a clear can forget both together.
+pub fn attempt_key_for(counter_key: &str) -> String {
+    match counter_key.strip_prefix(NAMESPACE) {
+        Some(suffix) => format!("{ATTEMPTS_NAMESPACE}{suffix}"),
+        None => counter_key.to_string(),
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Verdict {
     pub locked: bool,
@@ -60,6 +82,24 @@ mod tests {
     fn the_keys_carry_the_namespace_and_the_two_families() {
         assert_eq!(account_key("u", "1.2.3.4"), "cms:ranking:login:u|1.2.3.4");
         assert_eq!(address_key("1.2.3.4"), "cms:ranking:login:ip#1.2.3.4");
+    }
+
+    #[test]
+    fn the_attempt_keys_mirror_the_counters_outside_the_counter_scan() {
+        assert_eq!(
+            attempt_account_key("u", "1.2.3.4"),
+            "cms:ranking:login-attempts:u|1.2.3.4"
+        );
+        assert_eq!(
+            attempt_address_key("1.2.3.4"),
+            "cms:ranking:login-attempts:ip#1.2.3.4"
+        );
+        assert_eq!(
+            attempt_key_for(&account_key("u", "1.2.3.4")),
+            attempt_account_key("u", "1.2.3.4")
+        );
+        // A key outside the namespace is left as it is rather than mis-prefixed.
+        assert_eq!(attempt_key_for("other:key"), "other:key");
     }
 
     #[test]
