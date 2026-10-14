@@ -213,6 +213,36 @@ resolve_bun() {
 }
 
 # ---------------------------------------------------------------------------
+# Privileged execution
+# ---------------------------------------------------------------------------
+# One place decides how an action becomes root, so a new privileged step cannot
+# grow its own escalation with its own availability check and its own advice.
+
+# Compared as a string, not with -eq: an unreadable uid is empty, and "" -eq 0 is
+# true, which would run privileged work as though it were already root.
+is_root() { [[ "$(id -u)" == "0" ]]; }
+
+# Run a command as root: directly when we are root, otherwise through sudo, and
+# when sudo is absent refuse loudly with the exact command to run by hand.
+run_privileged() {
+  if is_root; then
+    "$@"
+    return
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    log_warn "not root and sudo is not installed — run this as root yourself: $*"
+    return 1
+  fi
+  sudo "$@"
+}
+
+# tailscale answers the operator when tailscaled runs as one user and root
+# otherwise, so it is tried as-is first and escalated only when that fails.
+run_tailscale() {
+  tailscale "$@" 2>/dev/null || run_privileged tailscale "$@"
+}
+
+# ---------------------------------------------------------------------------
 # backup_dir_writable_by_container
 # ---------------------------------------------------------------------------
 # <owner_uid> <group_gid> <mode> <container_uid> <container_gid> — returns 0 when
