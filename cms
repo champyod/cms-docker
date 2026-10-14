@@ -189,14 +189,12 @@ declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
 declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
 declare -F is_root  >/dev/null || is_root()  { [[ "$(id -u)" == "0" ]]; }
 
-# The actions whose whole job is privileged. The Rust catalog marks the same actions
-# requires_sudo (tools/cms-tui/src/core/catalog/table_fleet.rs), so this list mirrors it
-# and a privileged action is escalated once here instead of being prompted for mid-run.
-ROOT_ACTIONS="worker:cgroup"
-action_needs_root() { [[ ",${ROOT_ACTIONS}," == *",$1:$2,"* ]]; }
+# The Rust catalog owns which actions need root (requires_sudo); the shim asks it rather
+# than keeping a second copy of the list, so a new privileged action needs no change here.
+action_needs_root() { [[ "$(run_tui --needs-sudo "$@" 2>/dev/null || true)" == "yes" ]]; }
 
 if [[ $# -gt 0 ]]; then
-  if action_needs_root "${1:-}" "${2:-}" && ! is_root; then
+  if action_needs_root "$@" && ! is_root; then
     command -v sudo >/dev/null 2>&1 \
       || log_die "root is required for '$*' and sudo is not installed — run: sudo $0 $*" 1
     exec sudo -E "$0" "$@"

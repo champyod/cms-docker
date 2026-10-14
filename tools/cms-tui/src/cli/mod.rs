@@ -277,3 +277,9 @@ pub enum Commands {
 pub fn handle_command(cmd: Commands) -> Result<(), Box<dyn std::error::Error>> {
     commands::handle(cmd)
 }
+
+/// The catalog key a parsed command resolves to, so a caller can ask the catalog about it
+/// without repeating the argv mapping.
+pub fn resolve_catalog_key(cmd: &Commands) -> Option<crate::core::dispatch::DispatchKey> {
+    resolve::resolve_catalog(cmd).map(|(key, _args)| key)
+}

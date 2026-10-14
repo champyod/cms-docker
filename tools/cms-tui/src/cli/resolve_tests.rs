@@ -8,6 +8,16 @@ fn parse(argv: &[&str]) -> Option<(crate::core::dispatch::DispatchKey, Vec<Strin
 }
 
 #[test]
+fn the_catalog_answers_which_actions_need_root() {
+    let needs_root = |argv: &[&str]| {
+        let (key, _) = parse(argv).expect("resolves");
+        crate::core::catalog::spec_for(key).is_some_and(|spec| spec.requires_sudo)
+    };
+    assert!(needs_root(&["cms", "worker", "cgroup"]));
+    assert!(!needs_root(&["cms", "config", "sync"]));
+}
+
+#[test]
 fn config_sync_forwards_no_args() {
     let (key, args) = parse(&["cms", "config", "sync"]).expect("resolves");
     assert_eq!(key, crate::core::dispatch::DispatchKey::ConfigSync);
