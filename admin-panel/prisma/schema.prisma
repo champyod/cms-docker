@@ -998,18 +998,19 @@ model wirings {
 
 /// Where one contest answers. A contest may hold several rows: one per hostname,
 /// per path prefix, or per tailnet name, which is what makes every exposure form
-/// in the design a data question rather than a code branch.
+/// in the design a data question rather than a code branch. A null hostname is a
+/// path-only exposure, answered at a path of the vhost its contest already owns.
 model contest_exposures {
   id         Int      @id @default(autoincrement())
   contest_id Int
-  hostname   String   @db.VarChar
+  hostname   String?  @db.VarChar
   path       String   @default("/") @db.VarChar
   tls        Boolean  @default(true)
   tailnet    String?  @db.VarChar
   created_at DateTime @default(now()) @db.Timestamp(6)
   contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
 
-  @@unique([hostname, path])
+  @@unique([contest_id, hostname, path])
   @@index([contest_id], map: "ix_contest_exposures_contest_id")
 }
 

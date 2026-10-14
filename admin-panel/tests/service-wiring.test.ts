@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectWiringProblems,
   exposureRoutes,
   normalisePath,
   resolveWirings,
@@ -14,6 +15,7 @@ import {
   parseCertificate,
   parsePayload,
   renderFromPayload,
+  renderRegistryArtifacts,
   type WiringPayload,
 } from '@/lib/service-wiring-cli';
 import {
@@ -127,6 +129,11 @@ it('refuses to proxy to a server with no http port', () => {
     const own = service({ id: 1, name: 'w', contest_id: 2 });
     expect(exposureRoutes([exposure({ contest_id: 2, path: 'beta/' })], [own])[0].path).toBe('/beta');
   });
+
+  it('omits a path-only exposure from the standalone server blocks', () => {
+    const own = service({ id: 1, name: 'w', contest_id: 2 });
+    expect(exposureRoutes([exposure({ contest_id: 2, hostname: null })], [own])).toEqual([]);
+  });
 });
 
 describe('renderNginxServers', () => {
@@ -151,6 +158,27 @@ describe('renderNginxServers', () => {
     expect(out).toContain('location ^~ /beta/ {');
     expect(out).toContain('proxy_pass http://web-1:8888/;');
     expect(out).toContain('return 301 /beta/;');
+  });
+
+  it('groups a root and a path exposure of one hostname into one block, owner first', () => {
+    const out = renderNginxServers([route, { ...route, contest_id: 2, path: '/beta', upstream: 'web-2:8888' }]);
+    expect(out.match(/server \{/g)).toHaveLength(1);
+    expect(out.indexOf('location / {')).toBeLessThan(out.indexOf('location ^~ /beta/ {'));
+    expect(out).toContain('proxy_pass http://web-2:8888/;');
+  });
+
+  it('keeps one block per hostname', () => {
+    const out = renderNginxServers([route, { ...route, hostname: 'b.example.com' }]);
+    expect(out.match(/server \{/g)).toHaveLength(2);
+  });
+
+  it("carries the front's proxy headers and location security headers", () => {
+    const out = renderNginxServers([route]);
+    expect(out).toContain('proxy_set_header Host $host;');
+    expect(out).toContain('proxy_set_header X-Real-IP $remote_addr;');
+    expect(out).toContain('proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
+    expect(out).toContain('proxy_set_header X-Forwarded-Proto $scheme;');
+    expect(out).toContain('add_header Strict-Transport-Security "max-age=300; includeSubDomains" always;');
   });
 
   it('refuses a hostname that could inject a directive', () => {
@@ -348,6 +376,86 @@ describe('parseCertificate', () => {
 
   it('falls back to the contest proxy pair', () => {
     expect(parseCertificate(['nginx'])).toEqual(CONTEST_PROXY_CERTIFICATE);
+  });
+});
+
+describe('collectWiringProblems', () => {
+  const shared = service({ id: 1, name: 'cms-contest-web-server' });
+
+  it('reports nothing for a clean registry', () => {
+    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 1 })])).toEqual([]);
+  });
+
+  it('names a wiring whose endpoint does not exist', () => {
+    const wirings: WiringRow[] = [{ from_service_id: 1, to_service_id: 9, relation: 'drains', enabled: true }];
+    const problems = collectWiringProblems([shared], wirings, []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('wiring');
+    expect(problems[0].message).toContain('9');
+  });
+
+  it('reports a contest with no ContestWebServer to answer on', () => {
+    const problems = collectWiringProblems([], [], [exposure({ contest_id: 5 })]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('contest');
+  });
+
+  it('treats a shared ContestWebServer as serving every contest', () => {
+    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 5 })])).toEqual([]);
+  });
+
+  it('reports two exposures that normalise onto one location', () => {
+    const exposures = [
+      exposure({ contest_id: 1, hostname: 'a.example.com', path: '/' }),
+      exposure({ contest_id: 2, hostname: 'A.EXAMPLE.COM', path: '' }),
+    ];
+    const problems = collectWiringProblems([shared], [], exposures);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('a.example.com/');
+  });
+});
+
+describe('renderRegistryArtifacts', () => {
+  const web = service({ id: 1, name: 'web-1', host: 'web-1', contest_id: 1 });
+  const payload: WiringPayload = {
+    services: [web],
+    wirings: [],
+    exposures: [exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' })],
+  };
+
+  it('renders the nginx blocks through the same renderer the sync uses', () => {
+    const [nginx] = renderRegistryArtifacts(payload);
+    expect(nginx.mode).toBe('nginx');
+    expect(nginx.node).toBeNull();
+    expect(nginx.content).toBe(renderFromPayload(payload, 'nginx'));
+    expect(nginx.content).toContain('server_name a.example.com;');
+  });
+
+  it('renders one serve config per tailnet node an exposure claims', () => {
+    const serve = renderRegistryArtifacts(payload).filter((artifact) => artifact.mode === 'serve');
+    expect(serve.map((artifact) => artifact.node)).toEqual(['cms-1']);
+    expect(serve[0].content).toBe(renderFromPayload(payload, 'serve', CONTEST_PROXY_CERTIFICATE, 'cms-1'));
+    expect(serve[0].content).toContain('AllowFunnel');
+  });
+
+  it('renders a node claimed by more than one exposure once', () => {
+    const twoNodes: WiringPayload = {
+      ...payload,
+      exposures: [
+        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ contest_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-1' }),
+      ],
+    };
+    expect(renderRegistryArtifacts(twoNodes).filter((artifact) => artifact.mode === 'serve')).toHaveLength(1);
+  });
+
+  it('refuses a registry the sync would refuse', () => {
+    const broken: WiringPayload = {
+      ...payload,
+      wirings: [{ from_service_id: 1, to_service_id: 99, relation: 'drains', enabled: true }],
+    };
+    expect(() => renderRegistryArtifacts(broken)).toThrow(WiringError);
   });
 });
 

@@ -5,28 +5,25 @@ export type ComposeProfile = 'core' | 'admin' | 'contest' | 'proxy' | 'monitor';
 
 const PROFILE_ORDER: readonly ComposeProfile[] = ['core', 'admin', 'contest', 'proxy', 'monitor'];
 
-/**
- * Every service of the unified project and the profile gating it, as docker-compose.yml declares
- * them (checked with `docker compose --profile <p> config --services`). Requests reach the planner
- * in two shapes — the UI asks for a compose service (`monitor`), while config/restart_policies.json
- * names containers (`cms-database`) — and a compose `up` accepts only the service name, so this
- * table is what turns a request into an argument and into the profile that exposes it.
- */
-const SERVICE_PROFILES: Readonly<Record<string, ComposeProfile>> = {
-  database: 'core',
-  'log-service': 'core',
-  'resource-service': 'core',
-  'scoring-service': 'core',
-  'checker-service': 'core',
-  'admin-panel-next': 'admin',
-  'admin-web-server': 'admin',
-  'ranking-web-server': 'admin',
-  'evaluation-service': 'contest',
-  'proxy-service': 'contest',
-  'contest-web-server': 'contest',
-  'nginx-proxy': 'proxy',
-  monitor: 'monitor',
+/** The services each profile exposes in the unified project, `monitor` included. */
+const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
+  core: STACK_SERVICES.core,
+  admin: STACK_SERVICES.admin,
+  contest: STACK_SERVICES.contest,
+  proxy: ['nginx-proxy'],
+  monitor: ['monitor'],
 };
+
+/**
+ * Every service of the unified project and the profile gating it, derived from the one table that
+ * lists each profile's services rather than a second hand-written map. Requests reach the planner
+ * in two shapes — the UI asks for a compose service (`monitor`), while config/restart_policies.json
+ * names containers (`cms-database`) — and a compose `up` accepts only the service name, so this map
+ * is what turns a request into an argument and into the profile that exposes it.
+ */
+const SERVICE_PROFILES: Readonly<Record<string, ComposeProfile>> = Object.fromEntries(
+  PROFILE_ORDER.flatMap((profile) => PROFILE_SERVICES[profile].map((service) => [service, profile] as const)),
+);
 
 /** Container names that are not their service name behind a `cms-` prefix. */
 const CONTAINER_ALIASES: Readonly<Record<string, string>> = {
@@ -65,15 +62,6 @@ export function profilesForServices(services: readonly string[]): readonly Compo
   return PROFILE_ORDER.filter(profile => wanted.has(profile));
 }
 
-/** The services each profile exposes in the unified project, `monitor` included. */
-const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
-  core: STACK_SERVICES.core,
-  admin: STACK_SERVICES.admin,
-  contest: STACK_SERVICES.contest,
-  proxy: ['nginx-proxy'],
-  monitor: ['monitor'],
-};
-
 /**
  * The services a restart of these profiles is scoped to.
  *
@@ -84,4 +72,38 @@ const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
  */
 export function servicesForProfiles(profiles: readonly ComposeProfile[]): readonly string[] {
   return scopedServiceList(profiles.flatMap(profile => PROFILE_SERVICES[profile]));
+}
+
+/** The hot-apply class of a registry change, from the design's hot-apply map. */
+export type RegistryChangeClass = 'front-reload' | 'service-recreate' | 'tailnet-node';
+
+/** The script the front reloads its routed config with, and the project a tailnet node container lives in. */
+export const FRONT_RELOAD_COMMAND = 'bash scripts/__domain_proxy_reload.sh';
+export const TAILSCALE_COMPOSE_FILE = 'docker-compose.tailscale.generated.yml';
+
+/** A service name safe to reach a shell: the alphabet docker compose and this project use. */
+const SAFE_SERVICE_NAME = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * The plan one registry change class applies.
+ *
+ * WHY a closed class set and a resolved plan rather than a command from the caller: a class names
+ * how a change is picked up, and the command it maps to is reviewable here. Anything the request
+ * contributes is filtered to a safe service name before it can reach a shell. front-reload: the
+ * next sync rewrites the routes and the front reloads them, so nothing restarts and nothing mounted
+ * is disturbed. recreate: a targeted compose recreate of exactly the named services, on the main
+ * stack or on the generated tailnet project that owns a node's own container.
+ */
+export type RegistryApplyPlan =
+  | { readonly kind: 'front-reload' }
+  | { readonly kind: 'recreate'; readonly compose: 'stack' | 'tailscale'; readonly services: readonly string[] };
+
+export function registryApplyPlan(changeClass: RegistryChangeClass, services: readonly string[]): RegistryApplyPlan {
+  if (changeClass === 'front-reload') return { kind: 'front-reload' };
+  const safe = services.filter((service) => SAFE_SERVICE_NAME.test(service));
+  return {
+    kind: 'recreate',
+    compose: changeClass === 'tailnet-node' ? 'tailscale' : 'stack',
+    services: scopedServiceList(safe),
+  };
 }

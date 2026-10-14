@@ -1,6 +1,7 @@
 import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
+import { getPermissions } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { readRegistry } from '@/lib/service-wiring-store';
 
@@ -16,10 +17,11 @@ export default async function InfrastructureServicesPage({
 }): Promise<React.JSX.Element> {
   await authorizeRoutePage('infrastructure.services');
 
-  const [{ locale }, registry, contests] = await Promise.all([
+  const [{ locale }, registry, contests, permissions] = await Promise.all([
     params,
     readRegistry(),
     prisma.contests.findMany({ select: { id: true, name: true }, orderBy: { id: 'asc' } }),
+    getPermissions(),
   ]);
   const copy = (await getDictionary(locale)).navigation.infrastructure.services;
 
@@ -31,6 +33,7 @@ export default async function InfrastructureServicesPage({
       contests={contests}
       title={copy.label}
       description={copy.description}
+      permissionKeys={[...permissions]}
     />
   );
 }

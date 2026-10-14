@@ -222,8 +222,10 @@ server {
 }
 # @end block
 
-# Contest routes rendered from the service registry by ./cms config sync.
-# WHY a glob and not the literal file name: an include of a missing file is a hard
-# nginx error, while a glob matching nothing is accepted, so a deployment with no
-# exposures starts exactly as it did before this feature existed.
-include /etc/nginx/generated/*.conf;
+# Whole server blocks for hostnames the registry introduces (names this template does
+# not declare), rendered by ./cms config sync. WHY the contest- prefix: the same
+# directory also holds locations-<vhost>.conf fragments, which are valid only inside a
+# server block and would make nginx reject this one if included here. WHY a glob and not
+# the literal name: an include of a missing file is a hard nginx error, while a glob
+# matching nothing is accepted, so a deployment with no exposures starts as before.
+include /etc/nginx/generated/contest-*.conf;

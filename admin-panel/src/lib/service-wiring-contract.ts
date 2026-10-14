@@ -20,6 +20,7 @@ export const SERVICE_ROLES = [
 export type ServiceRole = (typeof SERVICE_ROLES)[number];
 
 export interface ServiceInput {
+  id?: number;
   name: string;
   role: ServiceRole;
   shard: number;
@@ -32,6 +33,7 @@ export interface ServiceInput {
 }
 
 export interface WiringInput {
+  id?: number;
   from_service_id: number;
   to_service_id: number;
   relation: string;
@@ -39,6 +41,7 @@ export interface WiringInput {
 }
 
 export interface ExposureInput {
+  id?: number;
   contest_id: number;
   hostname: string;
   path: string;

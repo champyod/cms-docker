@@ -290,6 +290,12 @@ _routes_render_vhost() {
     fi
     if (( owner )); then
       matcher='/'
+      # The row owning a vhost's root is the vhost a path exposure of its domain joins:
+      # the registry renders those locations into locations-<label>.conf, and this include
+      # pulls them in beside the vhost's curated locations. WHY the glob and not the
+      # literal name: the fragment may not exist yet on a deployment whose registry names
+      # no path exposure for this vhost, and a missing literal include stops nginx.
+      blocks+="    include /etc/nginx/generated/locations-${ROUTE_LABEL[$index]}*.conf;"$'\n'
     else
       matcher="$(_route_matcher "${ROUTE_PATH[$index]}")"
     fi
