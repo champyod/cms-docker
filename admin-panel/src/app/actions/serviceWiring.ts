@@ -33,7 +33,7 @@ import type {
  * hostnames and ports, so knowing the deployment's shape is an infrastructure
  * privilege rather than a general one.
  */
-const REGISTRY_PATH = '/[locale]/settings';
+const REGISTRY_PATH = '/[locale]/infrastructure/services';
 
 export interface RegistryView {
   services: ServiceRecord[];
