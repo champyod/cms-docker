@@ -43,6 +43,7 @@ docker-compose.expose.yml
 docker-compose.contests.generated.yml
 # Rendered by ./cms config sync from the service registry; regenerated on every run.
 config/generated/
+docker-compose.tailscale.generated.yml
 admin-panel/.env
 
 # Agent tools

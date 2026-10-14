@@ -18,6 +18,8 @@ export class RenderError extends Error {
 }
 
 const HOSTNAME_PATTERN = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/;
+// A tailscale node name also becomes a config file name, so it stays a single DNS label.
+const TAILNET_NODE_PATTERN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const PATH_PATTERN = /^\/[A-Za-z0-9._~\-/]*$/;
 const TLS_LISTEN_PORT = 443;
 const PLAIN_LISTEN_PORT = 80;
@@ -120,9 +122,49 @@ export function renderNginxServers(
 }
 
 /**
- * The tailnet serve config. WHY the placeholder and not a literal hostname:
- * tailscaled substitutes TS_CERT_DOMAIN with its own node certificate domain, so
- * the file stays identical across hosts and no hostname is baked into git.
+ * A tailnet node name, held to one DNS label.
+ *
+ * WHY this is validated and not merely trimmed: the name names a container and a file
+ * on disk, so `../..` in this field would be a path traversal out of the generated
+ * directory, and a name carrying a slash would write somewhere nobody chose.
+ */
+export function assertSafeTailnetNode(node: string): string {
+  const value = node.trim();
+  if (!TAILNET_NODE_PATTERN.test(value)) {
+    throw new RenderError(`unsafe tailnet node: ${JSON.stringify(node)}`);
+  }
+  return value;
+}
+
+/**
+ * One serve config per tailnet node.
+ *
+ * WHY grouped: each exposed contest gets its own tailscale container, and a container
+ * reads exactly one serve config. One file for every name would have every container
+ * claim every contest, which is the opposite of per-contest exposure.
+ */
+export function renderServeConfigs(routes: Route[]): Map<string, string> {
+  const byNode = new Map<string, Route[]>();
+  for (const route of routes) {
+    if (route.tailnet === null || route.tailnet.trim() === '') continue;
+    const node = assertSafeTailnetNode(route.tailnet);
+    const path = assertSafePath(route.path);
+    const nodeRoutes = byNode.get(node) ?? [];
+    if (nodeRoutes.some((existing) => assertSafePath(existing.path) === path)) {
+      throw new RenderError(`node ${node} serves two contests on ${path}`);
+    }
+    nodeRoutes.push(route);
+    byNode.set(node, nodeRoutes);
+  }
+  const rendered = new Map<string, string>();
+  for (const [node, nodeRoutes] of byNode) rendered.set(node, renderServeConfig(nodeRoutes));
+  return rendered;
+}
+
+/**
+ * One node's tailnet serve config. WHY the placeholder and not a literal hostname:
+ * tailscaled substitutes TS_CERT_DOMAIN with its own node certificate domain, so the
+ * file stays identical across hosts and no hostname is baked into git.
  */
 export function renderServeConfig(routes: Route[]): string {
   const served = routes.filter((route) => route.tailnet !== null && route.tailnet.trim() !== '');

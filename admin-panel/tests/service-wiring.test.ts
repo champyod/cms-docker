@@ -21,9 +21,11 @@ import {
   assertSafeHostname,
   assertSafePath,
   certificateLineage,
+  assertSafeTailnetNode,
   CONTEST_PROXY_CERTIFICATE,
   renderNginxServers,
   renderServeConfig,
+  renderServeConfigs,
   RenderError,
 } from '@/lib/service-wiring-render';
 
@@ -242,7 +244,7 @@ describe('renderFromPayload', () => {
       ...payload,
       exposures: [exposure({ contest_id: 1, tailnet: 'cms-1' })],
     };
-    expect(renderFromPayload(withTailnet, 'serve')).toContain('AllowFunnel');
+    expect(renderFromPayload(withTailnet, 'serve', CONTEST_PROXY_CERTIFICATE, 'cms-1')).toContain('AllowFunnel');
   });
 
   it('refuses a registry with a wiring naming a service it lost', () => {
@@ -283,6 +285,58 @@ describe('the certificate a TLS block points at', () => {
   it('refuses a certificate path that could inject a directive', () => {
     expect(() => assertSafeIncludePath('/x/c.pem; root /etc;')).toThrow(RenderError);
     expect(() => assertSafeIncludePath('relative/c.pem')).toThrow(RenderError);
+  });
+});
+
+
+describe('per-node tailnet configs', () => {
+  const web = service({ id: 1, name: 'web-1', host: 'web-1', contest_id: 1 });
+
+  it('gives each node only its own contests', () => {
+    const routes = exposureRoutes(
+      [
+        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ contest_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-2' }),
+      ],
+      [web]
+    );
+    const configs = renderServeConfigs(routes);
+    expect([...configs.keys()]).toEqual(['cms-1', 'cms-2']);
+    expect(configs.get('cms-1')).not.toContain('/b');
+  });
+
+  it('skips an exposure with no tailnet name', () => {
+    const routes = exposureRoutes([exposure({ contest_id: 1, tailnet: null })], [web]);
+    expect(renderServeConfigs(routes).size).toBe(0);
+  });
+
+  it('refuses two contests claiming the same path on one node', () => {
+    const routes = exposureRoutes(
+      [
+        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ contest_id: 1, hostname: 'b.example.com', tailnet: 'cms-1' }),
+      ],
+      [web]
+    );
+    expect(() => renderServeConfigs(routes)).toThrow(RenderError);
+  });
+
+  it.each(['../escape', 'a/b', 'UPPER', '-leading', ''])('refuses the node name %j', (node) => {
+    expect(() => assertSafeTailnetNode(node)).toThrow(RenderError);
+  });
+
+  it('refuses a traversal node before it can name a file', () => {
+    const routes = exposureRoutes([exposure({ contest_id: 1, tailnet: '../../etc/nginx' })], [web]);
+    expect(() => renderServeConfigs(routes)).toThrow(RenderError);
+  });
+
+  it('needs a node to render serve mode', () => {
+    const payload: WiringPayload = {
+      services: [web],
+      wirings: [],
+      exposures: [exposure({ contest_id: 1, tailnet: 'cms-1' })],
+    };
+    expect(() => renderFromPayload(payload, 'serve')).toThrow(WiringError);
   });
 });
 

@@ -16,10 +16,11 @@ import {
   type WiringRow,
 } from './service-wiring';
 import {
+  assertSafeTailnetNode,
   CONTEST_PROXY_CERTIFICATE,
   RenderError,
   renderNginxServers,
-  renderServeConfig,
+  renderServeConfigs,
   type CertificateSpec,
 } from './service-wiring-render';
 
@@ -31,7 +32,7 @@ export interface WiringPayload {
 
 export type RenderMode = 'nginx' | 'serve';
 
-const USAGE = 'usage: service-wiring-cli <nginx|serve> < payload.json';
+const USAGE = 'usage: service-wiring-cli <nginx|serve <node>> [--cert P --key P --ssl-include P] < payload.json';
 
 /** A payload that is not the shape the renderer consumes is refused, never coerced. */
 export function parsePayload(raw: string): WiringPayload {
@@ -61,11 +62,17 @@ export function parsePayload(raw: string): WiringPayload {
 export function renderFromPayload(
   payload: WiringPayload,
   mode: RenderMode,
-  certificate: CertificateSpec = CONTEST_PROXY_CERTIFICATE
+  certificate: CertificateSpec = CONTEST_PROXY_CERTIFICATE,
+  node?: string
 ): string {
   resolveWirings(payload.services, payload.wirings);
   const routes = exposureRoutes(payload.exposures, payload.services);
-  return mode === 'serve' ? renderServeConfig(routes) : renderNginxServers(routes, certificate);
+  if (mode === 'nginx') return renderNginxServers(routes, certificate);
+  if (node === undefined) {
+    throw new WiringError('serve mode needs a tailnet node, because each node serves its own contests');
+  }
+  // Rendering every node and selecting one keeps the node-name validation on this path.
+  return renderServeConfigs(routes).get(assertSafeTailnetNode(node)) ?? '';
 }
 
 /**
@@ -103,9 +110,10 @@ async function main(): Promise<void> {
   const mode = process.argv[2];
   if (mode !== 'nginx' && mode !== 'serve') fail(USAGE);
   const certificate = parseCertificate(process.argv.slice(2));
+  const node = mode === 'serve' ? process.argv[3] : undefined;
   const raw = await readStdin();
   try {
-    process.stdout.write(renderFromPayload(parsePayload(raw), mode, certificate));
+    process.stdout.write(renderFromPayload(parsePayload(raw), mode, certificate, node));
   } catch (error) {
     if (error instanceof WiringError || error instanceof RenderError) fail(error.message);
     fail(error instanceof Error ? error.message : String(error));

@@ -16,7 +16,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { saveService, saveWiring } from '@/lib/service-wiring-store';
+import { saveExposure, saveService, saveWiring } from '@/lib/service-wiring-store';
 import type { ServiceInput } from '@/lib/service-wiring-contract';
 
 function service(overrides: Partial<ServiceInput> = {}): ServiceInput {
@@ -61,6 +61,23 @@ describe('saveService', () => {
 
   it('allows a service with only an rpc port', async () => {
     expect(await saveService(service({ http_port: null }))).toEqual({ success: true });
+  });
+});
+
+describe('saveExposure', () => {
+  it.each(['../escape', 'a/b', 'UPPER node', '-leading'])(
+    'refuses the tailnet name %j before the database sees it',
+    async (tailnet) => {
+      const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet });
+      expect(result.success).toBe(false);
+      expect(mocks.upsertExposure).not.toHaveBeenCalled();
+    }
+  );
+
+  it('accepts a single-label node name', async () => {
+    mocks.upsertExposure.mockResolvedValue({ id: 1 });
+    const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: 'cms-7' });
+    expect(result).toEqual({ success: true });
   });
 });
 

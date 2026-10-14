@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { assertSafeHostname, assertSafePath, RenderError } from './service-wiring-render';
+import { assertSafeHostname, assertSafePath, assertSafeTailnetNode, RenderError } from './service-wiring-render';
 import { WiringError } from './service-wiring';
 import {
   SERVICE_ROLES,
@@ -50,13 +50,18 @@ export function validateService(input: ServiceInput): void {
   if (input.db_profile.trim() === '') throw new WiringError('db_profile cannot be empty');
 }
 
-/** An exposure becomes an nginx server block, so its hostname and path are checked here too. */
+/**
+ * An exposure becomes an nginx server block and, when named, a tailnet file on disk, so
+ * its hostname, path and node are all checked here as well as at render time.
+ */
 export function validateExposure(input: ExposureInput): void {
   assertSafeHostname(input.hostname);
   assertSafePath(input.path);
-  if (input.tailnet !== null && input.tailnet.trim() === '') {
-    throw new WiringError('tailnet must be a name or null, never empty');
+  if (input.tailnet === null) return;
+  if (input.tailnet.trim() === '') {
+    throw new WiringError('tailnet must be a node name or null, never empty');
   }
+  assertSafeTailnetNode(input.tailnet);
 }
 
 function messageOf(error: unknown): string {

@@ -54,6 +54,7 @@ if [[ "${1:-}" == "exec" ]]; then
     *to_regclass*services*) printf '%s\n' "@SERVICES_TABLE@" ;;
     *"count(*) FROM contest_exposures WHERE tls"*) printf '%s\n' "@TLS_EXPOSED@" ;;
     *"DISTINCT hostname FROM contest_exposures"*) printf '%s\n' "@TLS_HOST@" ;;
+    *"DISTINCT tailnet FROM contest_exposures"*) printf '%s\n' "@TAILNET_NODE@" ;;
     *"count(*) FROM contest_exposures"*) printf '%s\n' "@EXPOSED@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
@@ -66,7 +67,7 @@ fi
 exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
-    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" \
+    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
@@ -84,14 +85,24 @@ grep -q 'server_name a.example.com;' "${SB}/config/generated/contest-routes.conf
   && ok "renders the contest server block" || no "missing contest server block"
 grep -q 'proxy_pass http://web-1:8888;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "proxies to the registered upstream" || no "wrong or missing upstream"
-grep -q 'AllowFunnel' "${SB}/config/generated/tailscale-serve.json" 2>/dev/null \
-  && ok "renders the tailnet serve config" || no "missing tailnet serve config"
+grep -q 'AllowFunnel' "${SB}/config/generated/tailscale/cms-7.json" 2>/dev/null \
+  && ok "renders one serve config per tailnet node" || no "missing the per-node serve config"
 grep -q 'ssl_certificate /etc/letsencrypt/live/' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "points TLS at the domain proxy lineage" || no "TLS does not use the domain cert path"
 grep -q 'include /etc/nginx/conf.d/nginx-ssl.conf;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "carries the shared ssl parameters" || no "missing the shared ssl include"
 grep -q '^a.example.com$' "${SB}/config/generated/exposed-hosts.txt" 2>/dev/null \
   && ok "publishes the TLS hostnames for the certificate" || no "missing the exposed host list"
+grep -q 'cms-tailscale-cms-7:' "${SB}/docker-compose.tailscale.generated.yml" 2>/dev/null \
+  && ok "generates one tailscale container per node" || no "missing the generated tailscale compose"
+grep -q 'tailscale/cms-7.json:/config/serve.json' "${SB}/docker-compose.tailscale.generated.yml" 2>/dev/null \
+  && ok "mounts that node's own serve config" || no "the container does not mount its node config"
+grep -q 'TS_AUTHKEY=${TAILSCALE_AUTHKEY}' "${SB}/docker-compose.tailscale.generated.yml" 2>/dev/null \
+  && ok "references the authkey instead of copying it" || no "the authkey is not referenced by name"
+if command -v docker >/dev/null 2>&1; then
+  TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
+    && ok "the generated compose file validates" || no "the generated compose file is invalid"
+fi
 
 echo ""
 echo "=== Test 2: nothing exposed leaves the N=1 path untouched ==="
@@ -101,6 +112,8 @@ rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0 with no exposures" || no "sync exit ${rc}"
 [[ -e "${SB}/config/generated" ]] && no "wrote artifacts with nothing exposed" \
   || ok "wrote no artifacts with nothing exposed"
+[[ -e "${SB}/docker-compose.tailscale.generated.yml" ]] && no "left a generated tailscale compose behind" \
+  || ok "removes the generated tailscale compose"
 
 echo ""
 echo "=== Test 3: an absent registry table is a no-op, not a failure ==="
