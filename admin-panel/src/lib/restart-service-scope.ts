@@ -5,28 +5,25 @@ export type ComposeProfile = 'core' | 'admin' | 'contest' | 'proxy' | 'monitor';
 
 const PROFILE_ORDER: readonly ComposeProfile[] = ['core', 'admin', 'contest', 'proxy', 'monitor'];
 
-/**
- * Every service of the unified project and the profile gating it, as docker-compose.yml declares
- * them (checked with `docker compose --profile <p> config --services`). Requests reach the planner
- * in two shapes — the UI asks for a compose service (`monitor`), while config/restart_policies.json
- * names containers (`cms-database`) — and a compose `up` accepts only the service name, so this
- * table is what turns a request into an argument and into the profile that exposes it.
- */
-const SERVICE_PROFILES: Readonly<Record<string, ComposeProfile>> = {
-  database: 'core',
-  'log-service': 'core',
-  'resource-service': 'core',
-  'scoring-service': 'core',
-  'checker-service': 'core',
-  'admin-panel-next': 'admin',
-  'admin-web-server': 'admin',
-  'ranking-web-server': 'admin',
-  'evaluation-service': 'contest',
-  'proxy-service': 'contest',
-  'contest-web-server': 'contest',
-  'nginx-proxy': 'proxy',
-  monitor: 'monitor',
+/** The services each profile exposes in the unified project, `monitor` included. */
+const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
+  core: STACK_SERVICES.core,
+  admin: STACK_SERVICES.admin,
+  contest: STACK_SERVICES.contest,
+  proxy: ['nginx-proxy'],
+  monitor: ['monitor'],
 };
+
+/**
+ * Every service of the unified project and the profile gating it, derived from the one table that
+ * lists each profile's services rather than a second hand-written map. Requests reach the planner
+ * in two shapes — the UI asks for a compose service (`monitor`), while config/restart_policies.json
+ * names containers (`cms-database`) — and a compose `up` accepts only the service name, so this map
+ * is what turns a request into an argument and into the profile that exposes it.
+ */
+const SERVICE_PROFILES: Readonly<Record<string, ComposeProfile>> = Object.fromEntries(
+  PROFILE_ORDER.flatMap((profile) => PROFILE_SERVICES[profile].map((service) => [service, profile] as const)),
+);
 
 /** Container names that are not their service name behind a `cms-` prefix. */
 const CONTAINER_ALIASES: Readonly<Record<string, string>> = {
@@ -64,15 +61,6 @@ export function profilesForServices(services: readonly string[]): readonly Compo
   }
   return PROFILE_ORDER.filter(profile => wanted.has(profile));
 }
-
-/** The services each profile exposes in the unified project, `monitor` included. */
-const PROFILE_SERVICES: Readonly<Record<ComposeProfile, readonly string[]>> = {
-  core: STACK_SERVICES.core,
-  admin: STACK_SERVICES.admin,
-  contest: STACK_SERVICES.contest,
-  proxy: ['nginx-proxy'],
-  monitor: ['monitor'],
-};
 
 /**
  * The services a restart of these profiles is scoped to.
