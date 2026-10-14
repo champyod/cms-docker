@@ -2,6 +2,7 @@
 
 import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { CredentialTemplateField } from '@/components/core/CredentialTemplateField';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { InlineAlert } from '@/components/core/InlineAlert';
@@ -33,6 +34,10 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailable
     timezone, setTimezone,
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
+    usernameTemplate, setUsernameTemplate,
+    passwordTemplate, setPasswordTemplate,
+    usernameConfig, setUsernameConfig,
+    passwordConfig, setPasswordConfig,
     rows, teamsOptions,
     revealedIds, revealingIds, allRevealed,
     revealRowPassword, toggleAllRevealed,
@@ -76,6 +81,30 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailable
         <div className="flex items-center gap-2">
           <span className="text-xs uppercase tracking-wider text-muted-foreground">New password storage</span>
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CredentialTemplateField
+            label="Username template"
+            value={usernameTemplate}
+            onChange={setUsernameTemplate}
+            config={usernameConfig}
+            onConfigChange={setUsernameConfig}
+            symbolsAllowed={false}
+            placeholder="camp1*"
+          />
+          <CredentialTemplateField
+            label="Password template"
+            value={passwordTemplate}
+            onChange={setPasswordTemplate}
+            config={passwordConfig}
+            onConfigChange={setPasswordConfig}
+            placeholder="*"
+          />
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            Each * becomes a random run, and a blank template is one full random run. Regenerating
+            overwrites the credentials of every selected row.
+          </p>
         </div>
 
         <div className="flex flex-wrap gap-2">

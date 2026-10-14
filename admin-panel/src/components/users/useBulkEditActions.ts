@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getTeams } from '@/app/actions/teams';
+import { PASSWORD_CONFIG, USERNAME_CONFIG, type GeneratorConfig } from '@/lib/credential-template';
 import { downloadCsvFile } from '@/lib/csv-download';
 import type { PasswordKind } from '@/lib/password-format';
-import { collectCredentialUpdates, submitCredentialUpdates } from './bulkEditActions';
-import type { BatchFailure, ContestOption, SelectedUser } from './bulkEditActions';
-import { makePassword, makeUsername } from './csvPreview';
+import { collectCredentialUpdates, regenerateCredentials, submitCredentialUpdates } from './bulkEditActions';
+import type { BatchFailure, ContestOption, RegenerateMode, SelectedUser } from './bulkEditActions';
 import { useBulkReveal } from './useBulkReveal';
 import { useBulkBatch } from './useBulkBatch';
 
@@ -32,6 +32,10 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [emailDomain, setEmailDomain] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
+  const [usernameTemplate, setUsernameTemplate] = useState('');
+  const [passwordTemplate, setPasswordTemplate] = useState('');
+  const [usernameConfig, setUsernameConfig] = useState<GeneratorConfig>(USERNAME_CONFIG);
+  const [passwordConfig, setPasswordConfig] = useState<GeneratorConfig>(PASSWORD_CONFIG);
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
   const [renderedUsers, setRenderedUsers] = useState<SelectedUser[] | null>(null);
@@ -104,21 +108,15 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     onSuccess,
   });
 
-  const runRegenerate = (mode: 'username' | 'password'): void => {
+  // Why the templates are read on the call: regeneration is the operator's action, so the
+  // fields must render as they stand now, after any later edit to them.
+  const runRegenerate = (mode: RegenerateMode): void => {
     if (selectedUserIds.length === 0) return;
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
-    const used = new Set<string>();
-    setRows((previous) =>
-      previous.map((user) => {
-        if (!selectedUserIds.includes(user.id)) return user;
-        const next = { ...user };
-        if (mode === 'username') next.username = makeUsername(next.first_name || '', next.last_name || '', used);
-        if (mode === 'password') next.password = makePassword();
-        return next;
-      })
-    );
+    const templates = { username: usernameTemplate, password: passwordTemplate, usernameConfig, passwordConfig };
+    setRows((previous) => regenerateCredentials(previous, mode, templates));
     setStatusMessage(`Locally regenerated ${mode} for ${selectedUserIds.length} user(s)`);
     setLoading(false);
   };
@@ -161,6 +159,14 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     setEmailDomain,
     passwordKind,
     setPasswordKind,
+    usernameTemplate,
+    setUsernameTemplate,
+    passwordTemplate,
+    setPasswordTemplate,
+    usernameConfig,
+    setUsernameConfig,
+    passwordConfig,
+    setPasswordConfig,
     rows,
     teamsOptions,
     revealedIds,
