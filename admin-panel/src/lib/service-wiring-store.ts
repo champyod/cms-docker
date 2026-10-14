@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { assertSafeHostname, assertSafePath, assertSafeTailnetNode, RenderError } from './service-wiring-render';
-import { WiringError } from './service-wiring';
+import { normalisePath, WiringError } from './service-wiring';
 import {
   SERVICE_ROLES,
   type ExposureInput,
@@ -19,11 +19,18 @@ import {
  * put in an nginx directive, so a row that reached the table without passing the same
  * check would turn a bad edit into a failed deployment instead of a rejected form.
  * The validators are the renderer's own, so there is one definition of 'safe'.
+ *
+ * WHY an edit targets the row id while a create refuses a collision: a service name, a
+ * wiring triple and an exposure location each name an existing row, so an upsert on that
+ * key silently rewrites whichever row holds it — another contest's, for an exposure. An
+ * edit therefore updates by id, and a create that would collide is a domain error the
+ * operator resolves rather than a second row that replaces the first.
  */
 
 const HOST_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
+const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
 
 function assertPort(port: number | null, field: string): void {
   if (port === null) return;
@@ -53,10 +60,14 @@ export function validateService(input: ServiceInput): void {
 /**
  * An exposure becomes an nginx server block and, when named, a tailnet file on disk, so
  * its hostname, path and node are all checked here as well as at render time.
+ *
+ * WHY the path is normalised before the check: `/beta/` and `/beta` render to one
+ * location, so only the normalised form can be the stored key — otherwise the same
+ * location exists twice and the unique index cannot see it.
  */
 export function validateExposure(input: ExposureInput): void {
   assertSafeHostname(input.hostname);
-  assertSafePath(input.path);
+  assertSafePath(normalisePath(input.path));
   if (input.tailnet === null) return;
   if (input.tailnet.trim() === '') {
     throw new WiringError('tailnet must be a node name or null, never empty');
@@ -69,12 +80,32 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : 'unexpected failure';
 }
 
+function isUniqueViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  return (error as { code?: unknown }).code === PRISMA_UNIQUE_CONSTRAINT;
+}
+
+/** Runs a write and turns the database's unique-key rejection into a domain error. */
+async function persistUnique(subject: string, write: () => Promise<unknown>): Promise<void> {
+  try {
+    await write();
+  } catch (error) {
+    if (isUniqueViolation(error)) throw new WiringError(`${subject} already exists`);
+    throw error;
+  }
+}
+
 /** One service by name, created or corrected — the name is the stable key. */
 export async function saveService(input: ServiceInput): Promise<WriteResult> {
   try {
     validateService(input);
     const data = { ...input, name: input.name.trim(), host: input.host.trim() };
-    await prisma.services.upsert({ where: { name: data.name }, create: data, update: data });
+    const id = input.id;
+    await persistUnique(`a service named ${data.name}`, () =>
+      id === undefined
+        ? prisma.services.create({ data })
+        : prisma.services.update({ where: { id }, data })
+    );
     return { success: true };
   } catch (error) {
     return { success: false, error: messageOf(error) };
@@ -90,23 +121,25 @@ export async function removeService(id: number): Promise<WriteResult> {
   }
 }
 
-/** A wiring is a triple, so re-adding an existing edge is an update rather than a duplicate. */
+/** A wiring is a triple, so an edit corrects that triple's row rather than adding a second edge. */
 export async function saveWiring(input: WiringInput): Promise<WriteResult> {
   try {
     if (input.from_service_id === input.to_service_id) {
       throw new WiringError('a service cannot be wired to itself');
     }
     if (input.relation.trim() === '') throw new WiringError('a wiring needs a relation');
-    const key = {
+    const data = {
       from_service_id: input.from_service_id,
       to_service_id: input.to_service_id,
       relation: input.relation.trim(),
+      enabled: input.enabled,
     };
-    await prisma.wirings.upsert({
-      where: { from_service_id_to_service_id_relation: key },
-      create: { ...key, enabled: input.enabled },
-      update: { enabled: input.enabled },
-    });
+    const id = input.id;
+    await persistUnique('a wiring with this relation', () =>
+      id === undefined
+        ? prisma.wirings.create({ data })
+        : prisma.wirings.update({ where: { id }, data })
+    );
     return { success: true };
   } catch (error) {
     return { success: false, error: messageOf(error) };
@@ -125,9 +158,14 @@ export async function removeWiring(id: number): Promise<WriteResult> {
 export async function saveExposure(input: ExposureInput): Promise<WriteResult> {
   try {
     validateExposure(input);
-    const key = { hostname: input.hostname.trim().toLowerCase(), path: input.path };
+    const key = { hostname: input.hostname.trim().toLowerCase(), path: normalisePath(input.path) };
     const data = { ...input, ...key };
-    await prisma.contest_exposures.upsert({ where: { hostname_path: key }, create: data, update: data });
+    const id = input.id;
+    await persistUnique('an exposure on this location', () =>
+      id === undefined
+        ? prisma.contest_exposures.create({ data })
+        : prisma.contest_exposures.update({ where: { id }, data })
+    );
     return { success: true };
   } catch (error) {
     return { success: false, error: messageOf(error) };

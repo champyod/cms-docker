@@ -1,18 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  upsertService: vi.fn(),
+  createService: vi.fn(),
+  updateService: vi.fn(),
   deleteService: vi.fn(),
-  upsertWiring: vi.fn(),
-  upsertExposure: vi.fn(),
+  createWiring: vi.fn(),
+  updateWiring: vi.fn(),
+  createExposure: vi.fn(),
+  updateExposure: vi.fn(),
   findManyServices: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    services: { upsert: mocks.upsertService, delete: mocks.deleteService, findMany: mocks.findManyServices },
-    wirings: { upsert: mocks.upsertWiring, findMany: vi.fn() },
-    contest_exposures: { upsert: mocks.upsertExposure, findMany: vi.fn() },
+    services: {
+      create: mocks.createService,
+      update: mocks.updateService,
+      delete: mocks.deleteService,
+      findMany: mocks.findManyServices,
+    },
+    wirings: { create: mocks.createWiring, update: mocks.updateWiring, findMany: vi.fn() },
+    contest_exposures: { create: mocks.createExposure, update: mocks.updateExposure, findMany: vi.fn() },
   },
 }));
 
@@ -34,15 +42,39 @@ function service(overrides: Partial<ServiceInput> = {}): ServiceInput {
   };
 }
 
+const UNIQUE_VIOLATION = { code: 'P2002' };
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.upsertService.mockResolvedValue({ id: 1 });
+  mocks.createService.mockResolvedValue({ id: 1 });
+  mocks.updateService.mockResolvedValue({ id: 1 });
+  mocks.createWiring.mockResolvedValue({ id: 1 });
+  mocks.updateWiring.mockResolvedValue({ id: 1 });
+  mocks.createExposure.mockResolvedValue({ id: 1 });
+  mocks.updateExposure.mockResolvedValue({ id: 1 });
 });
 
 describe('saveService', () => {
-  it('accepts a well-formed service and upserts by name', async () => {
+  it('accepts a well-formed service and creates it', async () => {
     expect(await saveService(service())).toEqual({ success: true });
-    expect(mocks.upsertService).toHaveBeenCalledTimes(1);
+    expect(mocks.createService).toHaveBeenCalledTimes(1);
+    expect(mocks.updateService).not.toHaveBeenCalled();
+  });
+
+  it('updates the named row in place when the input carries an id', async () => {
+    expect(await saveService(service({ id: 7, name: 'renamed' }))).toEqual({ success: true });
+    expect(mocks.updateService).toHaveBeenCalledWith({
+      where: { id: 7 },
+      data: expect.objectContaining({ name: 'renamed' }),
+    });
+    expect(mocks.createService).not.toHaveBeenCalled();
+  });
+
+  it('refuses a create that collides with an existing name', async () => {
+    mocks.createService.mockRejectedValue(UNIQUE_VIOLATION);
+    const result = await saveService(service());
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('already exists');
   });
 
   it.each([
@@ -56,7 +88,8 @@ describe('saveService', () => {
   ])('refuses %s without touching the database', async (_label, overrides) => {
     const result = await saveService(service(overrides));
     expect(result.success).toBe(false);
-    expect(mocks.upsertService).not.toHaveBeenCalled();
+    expect(mocks.createService).not.toHaveBeenCalled();
+    expect(mocks.updateService).not.toHaveBeenCalled();
   });
 
   it('allows a service with only an rpc port', async () => {
@@ -70,14 +103,39 @@ describe('saveExposure', () => {
     async (tailnet) => {
       const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet });
       expect(result.success).toBe(false);
-      expect(mocks.upsertExposure).not.toHaveBeenCalled();
+      expect(mocks.createExposure).not.toHaveBeenCalled();
     }
   );
 
   it('accepts a single-label node name', async () => {
-    mocks.upsertExposure.mockResolvedValue({ id: 1 });
     const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: 'cms-7' });
     expect(result).toEqual({ success: true });
+  });
+
+  it.each(['/beta/', '/beta'])('stores %j as the one normalised location', async (path) => {
+    expect(await saveExposure({ contest_id: 1, hostname: 'a.example.com', path, tls: true, tailnet: null })).toEqual({
+      success: true,
+    });
+    expect(mocks.createExposure).toHaveBeenCalledWith({
+      data: expect.objectContaining({ hostname: 'a.example.com', path: '/beta' }),
+    });
+  });
+
+  it('updates the named row in place when the input carries an id', async () => {
+    const result = await saveExposure({ id: 9, contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
+    expect(result).toEqual({ success: true });
+    expect(mocks.updateExposure).toHaveBeenCalledWith({
+      where: { id: 9 },
+      data: expect.objectContaining({ contest_id: 1 }),
+    });
+    expect(mocks.createExposure).not.toHaveBeenCalled();
+  });
+
+  it('refuses a create that collides with an existing location', async () => {
+    mocks.createExposure.mockRejectedValue(UNIQUE_VIOLATION);
+    const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('already exists');
   });
 });
 
@@ -85,12 +143,29 @@ describe('saveWiring', () => {
   it('refuses a self-link', async () => {
     const result = await saveWiring({ from_service_id: 2, to_service_id: 2, relation: 'drains', enabled: true });
     expect(result.success).toBe(false);
-    expect(mocks.upsertWiring).not.toHaveBeenCalled();
+    expect(mocks.createWiring).not.toHaveBeenCalled();
   });
 
   it('refuses an empty relation', async () => {
     const result = await saveWiring({ from_service_id: 1, to_service_id: 2, relation: '  ', enabled: true });
     expect(result.success).toBe(false);
-    expect(mocks.upsertWiring).not.toHaveBeenCalled();
+    expect(mocks.createWiring).not.toHaveBeenCalled();
+  });
+
+  it('updates the named row in place when the input carries an id', async () => {
+    const result = await saveWiring({ id: 4, from_service_id: 1, to_service_id: 2, relation: 'drains', enabled: false });
+    expect(result).toEqual({ success: true });
+    expect(mocks.updateWiring).toHaveBeenCalledWith({
+      where: { id: 4 },
+      data: expect.objectContaining({ relation: 'drains', enabled: false }),
+    });
+    expect(mocks.createWiring).not.toHaveBeenCalled();
+  });
+
+  it('refuses a create that collides with an existing triple', async () => {
+    mocks.createWiring.mockRejectedValue(UNIQUE_VIOLATION);
+    const result = await saveWiring({ from_service_id: 1, to_service_id: 2, relation: 'drains', enabled: true });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('already exists');
   });
 });
