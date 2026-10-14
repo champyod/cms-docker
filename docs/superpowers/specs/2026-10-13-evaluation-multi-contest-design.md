@@ -289,6 +289,7 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 | The certificate a TLS block points at is a parameter, with the shared ssl include | `admin-panel/src/lib/service-wiring-render.ts` (`CertificateSpec`), CLI `--cert/--key/--ssl-include` | 6 vitest cases |
 | The domain proxy consumes the generated routes | `config/grader.nginx.conf.template` (glob include), `docker-compose.domain.yml` (mount) | `docker compose -f docker-compose.domain.yml config` valid; 15 shell assertions |
 | A TLS exposure with no certificate lineage fails the sync instead of rendering an unpointable cert | `scripts/__config_sync.sh` | `tests/test_service_wiring_render.sh` Test 5 |
+| Contest hostnames join the domain certificate's SAN list, deduplicated against the configured domains | `scripts/__config_sync.sh` (producer), `scripts/__domain.sh` (`wired_tls_hostnames`, `build_cert_domains`) | `tests/test_cert_domains.sh` — 5 assertions |
 
 Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
 
@@ -296,7 +297,7 @@ Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** ·
 
 | Phase | Missing | Why it stopped |
 |---|---|---|
-| 3 — renderer wiring (domain front consumed; two gaps left) | The generated routes are now consumed: the domain proxy mounts `config/generated` and the template includes it at http scope with a glob. Still missing: (a) the **host-side** `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows, and (b) contest hostnames are **not yet added to the certificate SAN list**, so a per-contest hostname needs an operator to add it to `EXTRA_DOMAINS` until that lands | (a) needs the per-contest tailnet containers from answer 4, (b) needs a DB read in `build_cert_domains`; both are next |
+| 3 — renderer wiring (one gap left) | The domain front consumes the generated routes and now certifies them: `config sync` publishes `config/generated/exposed-hosts.txt` and `__domain.sh` folds those names into the same lineage certificate every domain vhost shares. Still missing: the **host-side** `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is hand-written to three admin surfaces rather than rendered from the same rows | Needs the per-contest tailnet containers from answer 4; that is the last piece of the exposure path |
 | 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID`; `workers_status` has no contest dimension; `evaluation-rpc.ts:3-4` still hardcodes one endpoint | Python is unrunnable on this host (no `sqlalchemy`, no `tornado`) and no database is up, so the change could not be exercised. Docker is available now, so this is the next phase that can be verified inside a container |
 | 5 — panel surface | Done for its scope: create, edit in place and remove for all three collections, destructive removals confirmed through the panel's own confirmation store, the screen gated on `container:control`. Not attempted: bulk edit, and an import that seeds the registry from an existing single-contest deployment | — |
 
