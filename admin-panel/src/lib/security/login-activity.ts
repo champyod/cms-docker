@@ -1,7 +1,9 @@
 import { LOGIN_LOCKOUT_MS } from '@/lib/auth-rate-limit';
 import { describeLockoutActor, listLoginLockouts, type LockoutActor } from '@/lib/login-lockouts';
-import type { LockoutSurface } from '@/lib/lockout-namespaces';
+import { listAttempts, type LoginAttempt } from '@/lib/login-attempts';
+import { lockoutNamespaceFor, type LockoutSurface } from '@/lib/lockout-namespaces';
 import { prisma } from '@/lib/prisma';
+import { lockoutRedisUrl } from '@/lib/redis-lockouts';
 
 const WINDOW_SECONDS = Math.ceil(LOGIN_LOCKOUT_MS / 1000);
 
@@ -93,4 +95,26 @@ export async function listLoginActivity(url: string): Promise<LoginActivity[]> {
     });
   }
   return rows;
+}
+
+export type CounterAttemptsResult =
+  | { readonly ok: true; readonly attempts: readonly LoginAttempt[] }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * The stored attempts for one live counter key, newest first. The key names its
+ * own namespace, so a ranking or a contest counter reads its list without the
+ * caller having to know which store family it came from.
+ */
+export async function listCounterAttempts(key: string): Promise<CounterAttemptsResult> {
+  const namespace = lockoutNamespaceFor(key);
+  if (namespace === null) return { ok: false, error: 'Unknown counter key' };
+  const url = lockoutRedisUrl();
+  if (url === null) return { ok: false, error: 'REDIS_URL is not configured' };
+  const bucketKey = key.slice(namespace.namespace.length);
+  try {
+    return { ok: true, attempts: await listAttempts(url, namespace.namespace, bucketKey) };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
 }

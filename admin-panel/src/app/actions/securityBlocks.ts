@@ -12,7 +12,12 @@ import { ensurePermission } from '@/lib/permissions';
 import { lockoutRedisUrl } from '@/lib/redis-lockouts';
 import { getRepoRoot } from '@/lib/repo-root';
 import { expireStaleBlocks, listBlocks, type SecurityBlock } from '@/lib/security/block-ledger';
-import { listLoginActivity, type LoginActivity } from '@/lib/security/login-activity';
+import {
+  listCounterAttempts,
+  listLoginActivity,
+  type CounterAttemptsResult,
+  type LoginActivity,
+} from '@/lib/security/login-activity';
 import { releaseLoginLockout } from '@/lib/security/lockouts';
 import {
   FAIL2BAN_JAIL_FILE,
@@ -193,6 +198,17 @@ export async function readLoginActivity(): Promise<LoginActivityResult> {
   } catch (error) {
     return { ok: false, error: (error as Error).message };
   }
+}
+
+/**
+ * The attempts behind one live counter, read lazily when an operator expands the
+ * row. It is a detail of the already-audited list above, so it writes no audit row
+ * of its own.
+ */
+export async function readCounterAttempts(key: string): Promise<CounterAttemptsResult> {
+  await ensurePermission('security:read');
+  await ensurePermission('lockout:read');
+  return listCounterAttempts(key);
 }
 
 /**
