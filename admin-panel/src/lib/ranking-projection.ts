@@ -17,6 +17,12 @@ export function encodeId(entityId: string): string {
   return encoded;
 }
 
+/** The participation fields the projection is built from. */
+interface ParticipationRow {
+  readonly users: { username: string; first_name: string; last_name: string };
+  readonly teams: { code: string; name: string } | null;
+}
+
 interface ProjectedUser {
   key: string;
   f_name: string;
@@ -24,9 +30,69 @@ interface ProjectedUser {
   team: string | null;
 }
 
+interface ProjectedTeam {
+  key: string;
+  name: string;
+}
+
+type RankingWrite = ReturnType<typeof prisma.$executeRaw>;
+
+function projectUsers(participants: ReadonlyArray<ParticipationRow>): ProjectedUser[] {
+  return participants.map((participation) => ({
+    key: encodeId(participation.users.username),
+    f_name: participation.users.first_name,
+    l_name: participation.users.last_name,
+    team: participation.teams ? encodeId(participation.teams.code) : null,
+  }));
+}
+
+/**
+ * The distinct teams the participants belong to.
+ *
+ * WHY the panel writes them: a user row names its team by key, and a board that reads a team
+ * it was never told about cannot place the user — the proxy's initialize writes both tables,
+ * so the panel mirrors it. Teams are shared across contests, so none is pruned here.
+ */
+function projectTeams(participants: ReadonlyArray<ParticipationRow>): ProjectedTeam[] {
+  const teams = new Map<string, ProjectedTeam>();
+  for (const participation of participants) {
+    const team = participation.teams;
+    if (team === null) continue;
+    const key = encodeId(team.code);
+    teams.set(key, { key, name: team.name });
+  }
+  return [...teams.values()];
+}
+
+function upsertTeamStatement(team: ProjectedTeam): RankingWrite {
+  return prisma.$executeRaw`
+    INSERT INTO ranking_teams (key, name)
+    VALUES (${team.key}, ${team.name})
+    ON CONFLICT (key) DO UPDATE SET
+      name = EXCLUDED.name,
+      updated_at = CURRENT_TIMESTAMP
+  `;
+}
+
+function upsertUserStatement(user: ProjectedUser): RankingWrite {
+  return prisma.$executeRaw`
+    INSERT INTO ranking_users (key, f_name, l_name, team)
+    VALUES (${user.key}, ${user.f_name}, ${user.l_name}, ${user.team})
+    ON CONFLICT (key) DO UPDATE SET
+      f_name = EXCLUDED.f_name,
+      l_name = EXCLUDED.l_name,
+      team = EXCLUDED.team,
+      updated_at = CURRENT_TIMESTAMP
+  `;
+}
+
+function deleteStaleUsersStatement(users: readonly ProjectedUser[]): RankingWrite {
+  return prisma.$executeRaw`DELETE FROM ranking_users WHERE key <> ALL(${users.map((user) => user.key)}::text[])`;
+}
+
 /**
  * Mirrors ProxyService.initialize() for the ranked contest: re-pushes its non-hidden
- * participants into the ranking users projection and drops every other key, so a
+ * participants into the ranking projection and drops every other user key, so a
  * participant added, edited or removed through the panel reaches the ranking without a
  * proxy reinitialize. Only the contest the database flags active is touched, so editing
  * another contest's participations cannot empty the projection.
@@ -44,30 +110,15 @@ export async function resyncRankingUsers(contestId: number): Promise<void> {
       where: { contest_id: contestId, hidden: false },
       select: {
         users: { select: { username: true, first_name: true, last_name: true } },
-        teams: { select: { code: true } },
+        teams: { select: { code: true, name: true } },
       },
     });
 
-    const rows: ProjectedUser[] = participants.map((participation) => ({
-      key: encodeId(participation.users.username),
-      f_name: participation.users.first_name,
-      l_name: participation.users.last_name,
-      team: participation.teams ? encodeId(participation.teams.code) : null,
-    }));
-
+    const users = projectUsers(participants);
     await prisma.$transaction([
-      ...rows.map(
-        (row) => prisma.$executeRaw`
-          INSERT INTO ranking_users (key, f_name, l_name, team)
-          VALUES (${row.key}, ${row.f_name}, ${row.l_name}, ${row.team})
-          ON CONFLICT (key) DO UPDATE SET
-            f_name = EXCLUDED.f_name,
-            l_name = EXCLUDED.l_name,
-            team = EXCLUDED.team,
-            updated_at = CURRENT_TIMESTAMP
-        `,
-      ),
-      prisma.$executeRaw`DELETE FROM ranking_users WHERE key <> ALL(${rows.map((row) => row.key)}::text[])`,
+      ...projectTeams(participants).map(upsertTeamStatement),
+      ...users.map(upsertUserStatement),
+      deleteStaleUsersStatement(users),
     ]);
   } catch (error) {
     console.error('Failed to resync the ranking users projection:', error);
