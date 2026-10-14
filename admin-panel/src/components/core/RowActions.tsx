@@ -113,7 +113,7 @@ export function RowActions({ actions, ariaLabel, permissionKeys, primaryActionKe
       role="group"
       aria-label={ariaLabel}
       onClick={(event): void => event.stopPropagation()}
-      className={cn('flex items-center gap-1', className)}
+      className={cn('flex items-center justify-end gap-1', className)}
     >
       {visible.map((action) => (
         <Button

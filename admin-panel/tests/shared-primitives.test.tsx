@@ -60,6 +60,14 @@ describe('SelectField', () => {
 });
 
 describe('RowActions', () => {
+  it('right-aligns the cluster so the actions hug the row edge', () => {
+    // Why pinned: the row is a right-aligned action column, so the cluster owns its
+    // own right alignment instead of every caller passing justify-end and one
+    // forgetting it.
+    render(<RowActions ariaLabel="Task actions" actions={EDIT_DELETE} />);
+    expect(screen.getByRole('group', { name: 'Task actions' }).className).toContain('justify-end');
+  });
+
   it('stops parent row propagation and keeps 44px targets', () => {
     const onRowClick = vi.fn();
     render(<div onClick={onRowClick}><RowActions ariaLabel="Task actions" actions={EDIT_DELETE} /></div>);

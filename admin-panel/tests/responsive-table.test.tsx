@@ -62,6 +62,27 @@ describe('ResponsiveTable', () => {
     expect(clusters).toHaveLength(2);
   });
 
+  it('aligns a sortable header control with its column alignment', () => {
+    // Why pinned: SortableHeader was a block-level flex button, so it filled the
+    // header cell and ignored its text-align — a right-aligned column (e.g. the
+    // submission Score) rendered its sort control on the left, over a right-aligned
+    // column. The control must stay inline-level so the cell's alignment reaches it.
+    const columns: ResponsiveColumn<Person>[] = [
+      { key: 'name', header: 'Name', render: (row) => row.name },
+      { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', render: (row) => row.email },
+    ];
+    const { container } = render(
+      <ResponsiveTable {...baseProps()} columns={columns} sort={null} onSortChange={() => undefined} />,
+    );
+    const head = container.querySelectorAll('thead th')[1];
+    expect(head?.className).toContain('text-right');
+    const control = head?.querySelector('button');
+    const display = Array.from(control?.classList ?? []).filter(
+      (name) => name === 'flex' || name === 'inline-flex',
+    );
+    expect(display).toEqual(['inline-flex']);
+  });
+
   it('passes a custom empty state through when rows are empty', () => {
     const { getByText } = render(
       <ResponsiveTable {...baseProps()} rows={[]} emptyState={<p>No people yet</p>} />

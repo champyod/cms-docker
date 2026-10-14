@@ -22,7 +22,7 @@ export function SortableHeader({ label, sortKey, sort, onSortChange, className }
       type="button"
       onClick={() => onSortChange(toggleListSort(sort, sortKey))}
       className={cn(
-        'group -mx-2 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
+        'group -mx-2 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium uppercase tracking-wider text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50',
         active && 'text-foreground',
         className,
       )}
