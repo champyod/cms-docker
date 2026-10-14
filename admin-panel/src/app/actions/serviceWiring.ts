@@ -1,6 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { recordAudit } from '@/lib/audit';
+import { runConfigSync } from '@/lib/deploy-config';
 import { ensurePermission } from '@/lib/permissions';
 import { renderRegistryArtifacts, type RegistryArtifact } from '@/lib/service-wiring-cli';
 import {
@@ -145,5 +147,30 @@ export async function previewRegistryAction(): Promise<PreviewResult> {
     return { success: true, artifacts: renderRegistryArtifacts(await readRegistry()) };
   } catch (error) {
     return { success: false, error: denialMessage(error) };
+  }
+}
+
+/**
+ * Re-runs the config sync from the panel.
+ *
+ * WHY the command is fixed and never operator text: the sync is the one writer of the
+ * generated artifacts, and a request that chose the command would turn the panel into an
+ * arbitrary shell. WHY an audit row: a sync rewrites the front's routes, so who ran it and
+ * whether it succeeded has to outlive the toast.
+ */
+export async function resyncRegistryAction(): Promise<WriteResult> {
+  try {
+    await ensurePermission('container:control');
+  } catch (error) {
+    return { success: false, error: denialMessage(error) };
+  }
+  try {
+    await runConfigSync();
+    await recordAudit({ verb: 'service-wiring:resync', entity: 'service_registry', result: 'success' });
+    return { success: true };
+  } catch (error) {
+    const message = denialMessage(error);
+    await recordAudit({ verb: 'service-wiring:resync', entity: 'service_registry', result: 'failure', reason: message });
+    return { success: false, error: message };
   }
 }
