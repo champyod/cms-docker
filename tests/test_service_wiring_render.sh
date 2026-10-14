@@ -224,7 +224,7 @@ resolved="$(HOME="${SB}/home" PATH="${SB}/pb" BUN_INSTALL="" "$BASH_BIN" -c 'sou
 
 echo ""
 echo "=== Test 10: the generated registry compose binds each row's own port ==="
-new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3|ghcr.io/champyod/cms-docker-core:test-tag|always'
+new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|ghcr.io/champyod/cms-docker-core:test-tag|always'
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
@@ -239,10 +239,15 @@ grep -q 'image: ghcr.io/champyod/cms-docker-core:test-tag' "$compose" 2>/dev/nul
   && ok "runs the row's own image" || no "did not use the row's image"
 grep -q 'pull_policy: always' "$compose" 2>/dev/null \
   && ok "carries the row's pull policy" || no "missing the row's pull policy"
+grep -qE 'cmsContestWebServer [0-9]|cmsEvaluationService [0-9]' "$compose" 2>/dev/null \
+  && ok "generates a container per registry row" || no "missing the generated registry compose"
+grep -qE 'cmsContestWebServer [0-9]+ -c|cmsEvaluationService [0-9]+ -c' "$compose" 2>/dev/null \
+  && no "the generated command still binds a contest the process has to read from the database" \
+  || ok "leaves the contest to the process, so a re-pointed row reaches a running container"
 
 echo ""
 echo "=== Test 11: a row with no image keeps the deployment's IMG_TAG ==="
-new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3||missing'
+new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default||missing'
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"

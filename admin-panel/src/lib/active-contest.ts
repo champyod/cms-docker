@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/prisma';
 
-// The active contest lives in exactly one place: contests.is_active in the database.
-// config.toml [contest] CONTEST_ID and the generated .env are derived from it by
-// scripts/__config_sync.sh (see ./cms contest set-active), so neither is a writable copy
-// and nothing here reads or writes them. This module is the panel's only accessor of it.
+// The deployment's default contest: contests.is_active, and nothing more. A service registry row
+// names the contest one instance serves and outranks it (cms.db.contest_binding reads that row
+// per call), so this flag decides what an instance no row names serves. config.toml [contest]
+// CONTEST_ID is not derived from it — nothing derives it — so this module neither reads nor writes
+// the file, and is the panel's only accessor of the flag.
 export const CONTEST_ID_KEY = 'CONTEST_ID';
 
 /**

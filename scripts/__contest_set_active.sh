@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # scripts/__contest_set_active.sh — set the active contest in the database.
 #
-# WHY the database and not config.toml: contests.is_active is the single source of truth
-# for the active contest. config.toml [contest] CONTEST_ID and the generated .env are
-# derived from it by scripts/__config_sync.sh (database -> config.toml -> .env); writing
-# the file here would be the second writable copy this change removes. The `cms` shim and
-# the Rust CLI both route `contest set-active` to this script, so the mutation lives in one
-# place: database -> config sync -> contest stack restart.
+# WHY the database and not config.toml: contests.is_active is the deployment's default contest,
+# and a service registry row names the contest one instance serves and outranks it
+# (cms.db.contest_binding reads that row per call). Nothing derives config.toml [contest]
+# CONTEST_ID from either, so writing the file here would be a second writable copy of a value no
+# process reads it for. The `cms` shim and the Rust CLI both route `contest set-active` to this
+# script, so the mutation lives in one place.
 #
 # Usage:
 #   __contest_set_active.sh <id>
