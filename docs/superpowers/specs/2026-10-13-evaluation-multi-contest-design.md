@@ -290,6 +290,9 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 | The domain proxy consumes the generated routes | `config/grader.nginx.conf.template` (glob include), `docker-compose.domain.yml` (mount) | `docker compose -f docker-compose.domain.yml config` valid; 15 shell assertions |
 | A TLS exposure with no certificate lineage fails the sync instead of rendering an unpointable cert | `scripts/__config_sync.sh` | `tests/test_service_wiring_render.sh` Test 5 |
 | Contest hostnames join the domain certificate's SAN list, deduplicated against the configured domains | `scripts/__config_sync.sh` (producer), `scripts/__domain.sh` (`wired_tls_hostnames`, `build_cert_domains`) | `tests/test_cert_domains.sh` — 5 assertions |
+| One tailnet serve config per node, with the node name held to a single DNS label | `admin-panel/src/lib/service-wiring-render.ts` (`renderServeConfigs`, `assertSafeTailnetNode`) | 10 vitest cases including a traversal refusal |
+| One generated tailscale container per node, each mounting its own serve config and referencing the authkey rather than copying it | `scripts/__config_sync.sh` (`render_tailscale_compose`) | `tests/test_service_wiring_render.sh` — the file is validated with `docker compose config` |
+| The write boundary rejects an unsafe tailnet name too, so a traversal never reaches the table | `admin-panel/src/lib/service-wiring-store.ts` | 5 vitest cases |
 
 Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
 
@@ -297,7 +300,7 @@ Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** ·
 
 | Phase | Missing | Why it stopped |
 |---|---|---|
-| 3 — renderer wiring (one gap left) | The domain front consumes the generated routes and now certifies them: `config sync` publishes `config/generated/exposed-hosts.txt` and `__domain.sh` folds those names into the same lineage certificate every domain vhost shares. Still missing: the **host-side** `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is hand-written to three admin surfaces rather than rendered from the same rows | Needs the per-contest tailnet containers from answer 4; that is the last piece of the exposure path |
+| 3 — renderer wiring | **Done.** The domain front consumes the generated routes and certifies them, and the tailnet side is per-contest: one serve config per node, one generated tailscale container per node. Still hand-written and left alone deliberately: the *host-side* `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) for the three admin surfaces — that is a different mechanism (host CLI, not a container funnel) and this change did not touch it | — |
 | 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID`; `workers_status` has no contest dimension; `evaluation-rpc.ts:3-4` still hardcodes one endpoint | Python is unrunnable on this host (no `sqlalchemy`, no `tornado`) and no database is up, so the change could not be exercised. Docker is available now, so this is the next phase that can be verified inside a container |
 | 5 — panel surface | Done for its scope: create, edit in place and remove for all three collections, destructive removals confirmed through the panel's own confirmation store, the screen gated on `container:control`. Not attempted: bulk edit, and an import that seeds the registry from an existing single-contest deployment | — |
 
