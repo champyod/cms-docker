@@ -6,7 +6,6 @@ import { InlineAlert } from '@/components/core/InlineAlert';
 import { useDictionary } from '@/hooks/useDictionary';
 import { IpAllowlistInput } from './IpAllowlistInput';
 import { EXPECTED_FIELDS } from './csvTemplate';
-import type { GenerationMode } from './csvPreview';
 
 export interface BulkSubmitFailure {
   rowIndex: number;
@@ -143,7 +142,7 @@ interface BulkCreateInputSectionProps {
   onDownloadTemplate: () => void;
   onUploadFile: (file: File | undefined) => void;
   onRebuildPreview: () => void;
-  onFillEmpty: (mode: GenerationMode) => void;
+  onFillEmpty: () => void;
 }
 
 const SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
@@ -229,14 +228,8 @@ export function BulkCreateInputSection({
         <Button variant="ghost" icon={FileSpreadsheet} onClick={onRebuildPreview}>
           Parse &amp; Preview
         </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('both')}>
-          Random Username + Password
-        </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('username')}>
-          Random Username
-        </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('password')}>
-          Random Password
+        <Button variant="ghost" icon={Wand2} onClick={onFillEmpty}>
+          Fill Empty Credentials
         </Button>
       </div>
     </>

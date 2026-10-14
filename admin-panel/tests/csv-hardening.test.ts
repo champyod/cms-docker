@@ -14,7 +14,7 @@ describe('parseCsv', () => {
   });
 
   it('keeps a BOM-prefixed file fully mappable, header aliases included', () => {
-    const { rows, warnings } = buildPreviewRows(`${BOM}first_name,last_name\n${BOM}Ada,Lovelace\n`, 'none');
+    const { rows, warnings } = buildPreviewRows(`${BOM}first_name,last_name\n${BOM}Ada,Lovelace\n`);
 
     expect(warnings).toEqual([]);
     expect(rows[0].first_name).toBe('Ada');
@@ -50,7 +50,6 @@ describe('buildPreviewRows field mismatch reporting', () => {
   it('surfaces the mismatch on the row that caused it, with the row number', () => {
     const { rows, warnings } = buildPreviewRows(
       'first_name,last_name,username,password\nAda,Lovelace,ada99,secret\nAda,Byron\n',
-      'none',
     );
 
     expect(rows[0].rowIndex).toBe(2);
@@ -63,7 +62,6 @@ describe('buildPreviewRows field mismatch reporting', () => {
   it('maps a short row by position, so a dropped tail cannot shift later values', () => {
     const { rows } = buildPreviewRows(
       'first_name,last_name,username,password\nAda,Lovelace,ada99,secret\nGrace,Hopper,gh01\n',
-      'none',
     );
 
     expect(rows[1].username).toBe('gh01');

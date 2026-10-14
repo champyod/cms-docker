@@ -1,6 +1,5 @@
+import { renderTemplate, USERNAME_CHARS, type GeneratorConfig } from '@/lib/credential-template';
 import { detectFieldMismatches, formatMismatch, parseCsv } from './csvParsing';
-
-export type GenerationMode = 'none' | 'username' | 'password' | 'both';
 
 export interface PreviewRow {
   rowIndex: number;
@@ -16,6 +15,14 @@ export interface PreviewRow {
 }
 
 export type PreviewFieldKey = keyof Omit<PreviewRow, 'rowIndex' | 'issues' | 'selected'>;
+
+/** One template per credential, each with the alphabet its runs are drawn from. */
+export interface CredentialTemplates {
+  username: string;
+  password: string;
+  usernameConfig: GeneratorConfig;
+  passwordConfig: GeneratorConfig;
+}
 
 export const HEADER_ALIASES: Record<string, PreviewFieldKey> = {
   firstname: 'first_name',
@@ -45,6 +52,9 @@ function randomToken(length: number): string {
   }
   return token;
 }
+
+const MAX_USERNAME_ATTEMPTS = 30;
+const USERNAME_SUFFIX_LENGTH = 4;
 
 export function makeUsername(firstName: string, lastName: string, usedUsernames?: Set<string>): string {
   const firstAscii = firstName.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -80,18 +90,29 @@ function collectIssues(row: PreviewRow): string[] {
   return issues;
 }
 
-export function applyGeneration(row: PreviewRow, mode: GenerationMode, usedUsernames?: Set<string>): PreviewRow {
-  const next = { ...row };
+/** A username may only use the alphabet the users API accepts, whatever the config asks for. */
+function renderUsernameTemplate(templates: CredentialTemplates): string {
+  return renderTemplate(templates.username, templates.usernameConfig, { charset: USERNAME_CHARS });
+}
 
-  if (!next.username && (mode === 'username' || mode === 'both')) {
-    next.username = makeUsername(next.first_name, next.last_name, usedUsernames);
+/**
+ * Why the suffix: a random run can repeat within one batch, and a template with no `*`
+ * renders the same name forever, so extending the name is the only way left to keep the
+ * batch unique. The database side of the rule is enforced by the bulk endpoint.
+ */
+function renderUniqueUsername(templates: CredentialTemplates, usedUsernames: Set<string>): string {
+  const base = renderUsernameTemplate(templates);
+  let candidate = base;
+  let attempts = 0;
+
+  while (attempts < MAX_USERNAME_ATTEMPTS && usedUsernames.has(candidate)) {
+    const rerolled = renderUsernameTemplate(templates);
+    candidate = rerolled === base ? `${base}${randomToken(USERNAME_SUFFIX_LENGTH).toLowerCase()}` : rerolled;
+    attempts += 1;
   }
 
-  if (!next.password && (mode === 'password' || mode === 'both')) {
-    next.password = makePassword();
-  }
-
-  return next;
+  usedUsernames.add(candidate);
+  return candidate;
 }
 
 function assignField(row: PreviewRow, field: PreviewFieldKey, value: string): void {
@@ -107,17 +128,21 @@ function assignField(row: PreviewRow, field: PreviewFieldKey, value: string): vo
 }
 
 /** Fills empty credentials in-place for already-parsed rows, tracking existing usernames to avoid batch collisions. */
-export function fillRowCredentials(row: PreviewRow, mode: GenerationMode, usedUsernames: Set<string>): PreviewRow {
+export function fillRowCredentials(
+  row: PreviewRow,
+  templates: CredentialTemplates,
+  usedUsernames: Set<string>
+): PreviewRow {
   const next = { ...row };
 
-  if (!next.username && (mode === 'username' || mode === 'both')) {
-    next.username = makeUsername(next.first_name, next.last_name, usedUsernames);
-  } else if (next.username) {
+  if (next.username) {
     usedUsernames.add(next.username);
+  } else {
+    next.username = renderUniqueUsername(templates, usedUsernames);
   }
 
-  if (!next.password && (mode === 'password' || mode === 'both')) {
-    next.password = makePassword();
+  if (!next.password) {
+    next.password = renderTemplate(templates.password, templates.passwordConfig);
   }
 
   next.issues = collectIssues(next);
@@ -152,13 +177,7 @@ function emptyPreviewRow(rowIndex: number): PreviewRow {
   };
 }
 
-function mapMatrixRow(
-  cells: string[],
-  mappedHeaders: (PreviewFieldKey | null)[],
-  rowIndex: number,
-  mode: GenerationMode,
-  usedUsernames: Set<string>
-): PreviewRow {
+function mapMatrixRow(cells: string[], mappedHeaders: (PreviewFieldKey | null)[], rowIndex: number): PreviewRow {
   const mapped = emptyPreviewRow(rowIndex);
 
   mappedHeaders.forEach((field, colIndex) => {
@@ -166,16 +185,12 @@ function mapMatrixRow(
     assignField(mapped, field, (cells[colIndex] ?? '').trim());
   });
 
-  const withGenerated = applyGeneration(mapped, mode, usedUsernames);
-  withGenerated.issues = collectIssues(withGenerated);
-
-  return withGenerated;
+  mapped.issues = collectIssues(mapped);
+  return mapped;
 }
 
-export function buildPreviewRows(
-  text: string,
-  mode: GenerationMode
-): { warnings: string[]; rows: PreviewRow[] } {
+/** Parses the draft exactly as written; credentials arrive only from the reader's fill action. */
+export function buildPreviewRows(text: string): { warnings: string[]; rows: PreviewRow[] } {
   const matrix = parseCsv(text);
   if (matrix.length === 0) {
     return { warnings: ['CSV is empty'], rows: [] };
@@ -183,12 +198,11 @@ export function buildPreviewRows(
 
   const rawHeaders = matrix[0].map((header) => header.trim());
   const mappedHeaders = rawHeaders.map((header) => HEADER_ALIASES[header.toLowerCase()] || null);
-  const usedUsernames = new Set<string>();
   const mismatches = detectFieldMismatches(matrix);
   const mismatchByMatrixIndex = new Map(mismatches.map((mismatch) => [mismatch.rowIndex - 1, mismatch]));
 
   const rows = matrix.slice(1).map((cells, rowIndex) => {
-    const preview = mapMatrixRow(cells, mappedHeaders, rowIndex + 2, mode, usedUsernames);
+    const preview = mapMatrixRow(cells, mappedHeaders, rowIndex + 2);
     const mismatch = mismatchByMatrixIndex.get(rowIndex + 1);
     return mismatch === undefined ? preview : { ...preview, issues: [...preview.issues, formatMismatch(mismatch)] };
   });

@@ -17,9 +17,9 @@ import { recordAudit } from '@/lib/audit';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   prepareRow,
-  shouldGeneratePassword,
+  readCredentialTemplates,
   type BulkUserRow,
-  type GenerationMode,
+  type CredentialTemplates,
   type PreparedRow,
 } from './bulkRowPreparation';
 
@@ -61,14 +61,14 @@ async function resolveBulkAllowlist(raw: unknown, contestId: number): Promise<{ 
 async function processBulkRow(
   row: BulkUserRow,
   index: number,
-  generationMode: GenerationMode,
+  templates: CredentialTemplates,
   contestId: number,
   passwordKind: PasswordKind,
   validIps: string[],
   seenUsernames: Set<string>,
   outcome: BulkOutcome
 ): Promise<void> {
-  const prepared = await prepareRow(row, index + 2, generationMode, contestId, seenUsernames);
+  const prepared = await prepareRow(row, index + 2, templates, contestId, seenUsernames);
   if ('reason' in prepared) {
     outcome.failed.push({ rowIndex: prepared.rowIndex, reason: prepared.reason });
     return;
@@ -89,13 +89,13 @@ async function processBulkRow(
   outcome.created.push({
     rowIndex: prepared.rowIndex,
     username: prepared.username,
-    plainPassword: shouldGeneratePassword(generationMode) && !prepared.hadExplicitPassword ? prepared.plainPassword : undefined,
+    plainPassword: prepared.hadExplicitPassword ? undefined : prepared.plainPassword,
   });
 }
 
 async function processBulkRows(
   rows: BulkUserRow[],
-  generationMode: GenerationMode,
+  templates: CredentialTemplates,
   contestId: number,
   passwordKind: PasswordKind,
   validIps: string[]
@@ -104,7 +104,7 @@ async function processBulkRows(
   const seenUsernames = new Set<string>();
 
   for (let index = 0; index < rows.length; index += 1) {
-    await processBulkRow(rows[index], index, generationMode, contestId, passwordKind, validIps, seenUsernames, outcome);
+    await processBulkRow(rows[index], index, templates, contestId, passwordKind, validIps, seenUsernames, outcome);
   }
 
   return outcome;
@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
       return apiError({ message: 'No rows provided', status: 400 });
     }
 
-    const generationMode: GenerationMode = body?.generationMode ?? 'none';
+    const templates = readCredentialTemplates(body);
     const contestId = Number(body?.contestId || 0);
     if (!Number.isInteger(contestId) || contestId < 0) {
       return apiError({ message: 'Invalid contestId', status: 400 });
@@ -163,7 +163,7 @@ export async function POST(req: NextRequest) {
     const passwordKind = isPasswordKind(body?.passwordKind) ? body.passwordKind : DEFAULT_PASSWORD_KIND;
     const { validIps, error } = await resolveBulkAllowlist(body?.ip, contestId);
     if (error) return apiError({ message: error, status: 400 });
-    const outcome = await processBulkRows(rows, generationMode, contestId, passwordKind, validIps);
+    const outcome = await processBulkRows(rows, templates, contestId, passwordKind, validIps);
     if (contestId > 0) await resyncRankingUsers(contestId);
 
     await recordAudit({

@@ -1,8 +1,16 @@
 import { prisma } from '@/lib/prisma';
 import { randomToken } from '@/lib/creds-file';
 import { normalizeLanguageCode } from '@/lib/constants/languages';
-
-export type GenerationMode = 'none' | 'username' | 'password' | 'both';
+import {
+  MAX_GENERATOR_LENGTH,
+  MIN_GENERATOR_LENGTH,
+  PASSWORD_CONFIG,
+  renderTemplate,
+  USERNAME_CHARS,
+  USERNAME_CONFIG,
+  type CaseMode,
+  type GeneratorConfig,
+} from '@/lib/credential-template';
 
 export interface BulkUserRow {
   first_name?: string;
@@ -34,34 +42,87 @@ export interface RowFailure {
   reason: string;
 }
 
-const MAX_USERNAME_ATTEMPTS = 30;
-
-function normalizeUsernameBase(firstName: string, lastName: string): string {
-  const joined = `${firstName}.${lastName}`.toLowerCase().replace(/[^a-z0-9._-]/g, '');
-  if (joined.length >= 3) return joined;
-  return `user${randomToken(6)}`;
+/** One credential template per field, each with the alphabet its runs are drawn from. */
+export interface CredentialTemplates {
+  username: string;
+  password: string;
+  usernameConfig: GeneratorConfig;
+  passwordConfig: GeneratorConfig;
 }
 
-async function ensureUniqueUsername(base: string): Promise<string> {
+const MAX_USERNAME_ATTEMPTS = 30;
+const USERNAME_SUFFIX_LENGTH = 4;
+const USERNAME_FALLBACK_SUFFIX_LENGTH = 8;
+
+const CASE_MODES: readonly CaseMode[] = ['both', 'upper', 'lower'];
+
+function readBoolean(value: unknown, fallback: boolean): boolean {
+  return typeof value === 'boolean' ? value : fallback;
+}
+
+function readLength(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(MIN_GENERATOR_LENGTH, Math.min(MAX_GENERATOR_LENGTH, Math.trunc(parsed)));
+}
+
+/**
+ * Why the payload is re-read rather than trusted: the config decides how a run is drawn,
+ * so a length or a case mode outside the popup would let a caller shape credentials the
+ * panel never offered.
+ */
+function readGeneratorConfig(raw: unknown, fallback: GeneratorConfig): GeneratorConfig {
+  if (typeof raw !== 'object' || raw === null) return fallback;
+  const record = raw as Record<string, unknown>;
+  return {
+    length: readLength(record.length, fallback.length),
+    letters: readBoolean(record.letters, fallback.letters),
+    caseMode: CASE_MODES.find((mode) => mode === record.caseMode) ?? fallback.caseMode,
+    numbers: readBoolean(record.numbers, fallback.numbers),
+    specials: readBoolean(record.specials, fallback.specials),
+    operators: readBoolean(record.operators, fallback.operators),
+  };
+}
+
+export function readCredentialTemplates(body: unknown): CredentialTemplates {
+  const source = (typeof body === 'object' && body !== null ? body : {}) as Record<string, unknown>;
+  return {
+    username: typeof source.usernameTemplate === 'string' ? source.usernameTemplate : '',
+    password: typeof source.passwordTemplate === 'string' ? source.passwordTemplate : '',
+    usernameConfig: readGeneratorConfig(source.usernameConfig, USERNAME_CONFIG),
+    passwordConfig: readGeneratorConfig(source.passwordConfig, PASSWORD_CONFIG),
+  };
+}
+
+/** Only the alphabet the users API accepts, whatever the config asks for. */
+function renderUsernameTemplate(templates: CredentialTemplates): string {
+  return renderTemplate(templates.username, templates.usernameConfig, { charset: USERNAME_CHARS });
+}
+
+async function usernameTaken(candidate: string, seenUsernames: Set<string>): Promise<boolean> {
+  if (seenUsernames.has(candidate)) return true;
+  const existing = await prisma.users.findUnique({ where: { username: candidate }, select: { id: true } });
+  return existing !== null;
+}
+
+/**
+ * Re-rolls the template's random run until the name is free within the batch and in the
+ * database. A template with no `*` renders the same name on every attempt, so a suffix is
+ * the only way to tell such rows apart, and the longer one ends a crowded search.
+ */
+async function ensureUniqueUsername(templates: CredentialTemplates, seenUsernames: Set<string>): Promise<string> {
+  const base = renderUsernameTemplate(templates);
   let candidate = base;
   let attempts = 0;
 
   while (attempts < MAX_USERNAME_ATTEMPTS) {
-    const exists = await prisma.users.findUnique({ where: { username: candidate }, select: { id: true } });
-    if (!exists) return candidate;
-    candidate = `${base}${randomToken(4)}`;
+    if (!(await usernameTaken(candidate, seenUsernames))) return candidate;
+    const rerolled = renderUsernameTemplate(templates);
+    candidate = rerolled === base ? `${base}${randomToken(USERNAME_SUFFIX_LENGTH)}` : rerolled;
     attempts += 1;
   }
 
-  return `${base}${randomToken(8)}`;
-}
-
-function shouldGenerateUsername(mode: GenerationMode): boolean {
-  return mode === 'username' || mode === 'both';
-}
-
-export function shouldGeneratePassword(mode: GenerationMode): boolean {
-  return mode === 'password' || mode === 'both';
+  return `${base}${randomToken(USERNAME_FALLBACK_SUFFIX_LENGTH)}`;
 }
 
 function readRowFields(row: BulkUserRow, fallbackIndex: number) {
@@ -107,17 +168,11 @@ function parsePreferredLanguages(raw: string | string[] | undefined): string[] {
 
 async function generateMissingCredentials(
   fields: ReturnType<typeof readRowFields>,
-  generationMode: GenerationMode
+  templates: CredentialTemplates,
+  seenUsernames: Set<string>
 ): Promise<{ username: string; plainPassword: string }> {
-  let username = fields.username;
-  if (!username && shouldGenerateUsername(generationMode)) {
-    username = await ensureUniqueUsername(normalizeUsernameBase(fields.firstName, fields.lastName));
-  }
-
-  let plainPassword = fields.plainPassword;
-  if (!plainPassword && shouldGeneratePassword(generationMode)) {
-    plainPassword = randomToken(14);
-  }
+  const username = fields.username || await ensureUniqueUsername(templates, seenUsernames);
+  const plainPassword = fields.plainPassword || renderTemplate(templates.password, templates.passwordConfig);
 
   return { username, plainPassword };
 }
@@ -125,7 +180,7 @@ async function generateMissingCredentials(
 export async function prepareRow(
   row: BulkUserRow,
   fallbackIndex: number,
-  generationMode: GenerationMode,
+  templates: CredentialTemplates,
   contestId: number,
   seenUsernames: Set<string>
 ): Promise<PreparedRow | RowFailure> {
@@ -135,13 +190,13 @@ export async function prepareRow(
     return { rowIndex: fields.rowIndex, reason: 'first_name and last_name are required' };
   }
 
-  const { username, plainPassword } = await generateMissingCredentials(fields, generationMode);
+  const { username, plainPassword } = await generateMissingCredentials(fields, templates, seenUsernames);
 
   if (!username) {
-    return { rowIndex: fields.rowIndex, reason: 'username is required (or enable username generation)' };
+    return { rowIndex: fields.rowIndex, reason: 'username is required' };
   }
   if (!plainPassword) {
-    return { rowIndex: fields.rowIndex, reason: 'password is required (or enable password generation)' };
+    return { rowIndex: fields.rowIndex, reason: 'password is required' };
   }
   if (fields.teamCode && !contestId) {
     return { rowIndex: fields.rowIndex, reason: 'contestId is required when team is provided' };
