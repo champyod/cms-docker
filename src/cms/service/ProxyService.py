@@ -39,7 +39,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from cms import config
 from cms.service.ranking_projection import rows as projection_rows, \
-    upsert_statement
+    prune_statement, snapshot_prune, upsert_statement
 from cms.db import SessionGen, Contest, Participation, Task, Submission, \
     get_submissions
 from cms.db.username import get_display_usernames, resolve_username_config
@@ -78,6 +78,10 @@ def write_projection(batches, operation):
     landed in some tables and not others. The executor re-sends the whole push
     after a failure, which is what makes all-or-nothing the cheaper option.
 
+    A snapshot resource also reclaims the keys its push dropped: the mapping names
+    which resources a full push replaces and how the delete is scoped to the owner it
+    is about, so a renamed task leaves no stale key and another contest's rows survive.
+
     The failures are re-raised as CannotSendError because the retry loop keys on
     that type: a refused payload and an unreachable database must look to it
     exactly as a failed request did.
@@ -94,6 +98,9 @@ def write_projection(batches, operation):
                 statement = text(upsert_statement(resource))
                 for parameters in projection_rows(resource, payloads):
                     session.execute(statement, parameters)
+                snapshot = snapshot_prune(resource, payloads)
+                if snapshot is not None:
+                    session.execute(text(prune_statement(resource)), snapshot)
             session.commit()
     except SQLAlchemyError as error:
         msg = "%s while %s: %s." % (type(error).__name__, operation, error)

@@ -11,7 +11,7 @@ unchanged, which is what lets the mapping be a rename rather than a translation.
 """
 
 import json
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 # The plural resource names ProxyService already uses as its type order.
 TABLES = {
@@ -65,6 +65,13 @@ RESERVED = frozenset({"begin", "end", "user"})
 PAYLOAD_NAMES = {"display_order": "order"}
 
 KEY_COLUMN = "key"
+
+# The snapshot resources a full push replaces, and the payload field that scopes the delete to
+# the owner the push is about. Only tasks qualify: a task belongs to exactly one contest, so a
+# delete scoped by that field cannot reach another contest's rows. Teams and users are shared
+# across contests and carry no owner field to scope by, and submissions and subchanges arrive
+# incrementally, so all four stay upsert-only and a key dropped from their payload persists.
+SNAPSHOT_SCOPE_FIELD = {"tasks": "contest"}
 
 
 def columns_for(resource: str) -> tuple:
@@ -123,6 +130,34 @@ def rows(resource: str, payloads: dict) -> Iterable[dict]:
     """Every entity of one resource, in a stable order so a retry is repeatable."""
     for key in sorted(payloads):
         yield row(resource, key, payloads[key])
+
+
+def snapshot_prune(resource: str, payloads: dict) -> Optional[dict]:
+    """The owner scope and key set a snapshot delete needs, or None for an incremental resource.
+
+    WHY a full push prunes: it is the whole truth for the resource, so a key it omits was
+    renamed or removed, and an upsert-only write would leave it behind. Scoping the delete by
+    the owner field the payloads themselves carry reclaims those keys and leaves every other
+    owner's rows untouched. A resource with no scope field is upsert-only, and an empty scope
+    list has nothing safe to delete, so both answer None.
+    """
+    field = SNAPSHOT_SCOPE_FIELD.get(resource)
+    if field is None:
+        return None
+    scopes = sorted({payload[field] for payload in payloads.values() if field in payload})
+    if not scopes:
+        return None
+    return {"scopes": scopes, "keys": sorted(payloads)}
+
+
+def prune_statement(resource: str) -> str:
+    """A delete of the snapshot rows a push no longer carries, for a resource that has a scope."""
+    try:
+        field = SNAPSHOT_SCOPE_FIELD[resource]
+    except KeyError:
+        raise ValueError("no snapshot scope for resource: %s" % resource) from None
+    return "DELETE FROM %s WHERE %s = ANY(:scopes) AND %s <> ALL(:keys)" % (
+        TABLES[resource], _identifier(field), KEY_COLUMN)
 
 
 def _identifier(column: str) -> str:

@@ -146,6 +146,24 @@ class ProjectionTest(unittest.TestCase):
         keys = [item["key"] for item in ranking_projection.rows("teams", payloads)]
         self.assertEqual(keys, ["a", "b"])
 
+    def test_a_full_task_push_prunes_only_its_own_contest(self):
+        statement = ranking_projection.prune_statement("tasks")
+        self.assertIn("DELETE FROM ranking_tasks", statement)
+        self.assertIn("contest = ANY(:scopes)", statement)
+        self.assertIn("key <> ALL(:keys)", statement)
+
+    def test_an_incremental_resource_is_never_pruned(self):
+        self.assertIsNone(ranking_projection.snapshot_prune("submissions", {"1": {}}))
+        with self.assertRaises(ValueError):
+            ranking_projection.prune_statement("submissions")
+
+    def test_the_prune_scope_comes_from_the_payloads(self):
+        payloads = {"t0": {"contest": "c0"}, "t1": {"contest": "c0"}}
+        self.assertEqual(
+            ranking_projection.snapshot_prune("tasks", payloads),
+            {"scopes": ["c0"], "keys": ["t0", "t1"]},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
