@@ -5,6 +5,7 @@ import { Card } from '@/components/core/Card';
 import { Text } from '@/components/core/Typography';
 import { Stack } from '@/components/core/Layout';
 import { Badge } from '@/components/core/Badge';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
 import type { WorkerConfig, WorkerNodeListRow, WorkerNodeView } from '@/lib/worker-nodes';
 
@@ -12,6 +13,7 @@ interface WorkersPanelProps {
   workers: WorkerConfig[];
   status: WorkerNodeView[];
   forbidden?: boolean;
+  error?: string | null;
   canManage: boolean;
   saving: boolean;
   workersDirty: boolean;
@@ -47,6 +49,10 @@ export function WorkersPanel(props: WorkersPanelProps): ReactElement {
       <Card className="p-4 density:p-3">
         {props.forbidden ? (
           <Text variant="muted">Worker status requires operator permission.</Text>
+        ) : props.error ? (
+          <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
+            {props.error}
+          </InlineAlert>
         ) : (
           <WorkerNodeList
             rows={joinStatus(props.workers, props.status)}

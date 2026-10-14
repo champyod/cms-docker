@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
+import { readConfigFile } from '@/lib/config-file';
 import { recordAudit } from '@/lib/audit';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
@@ -82,57 +83,73 @@ function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: n
     .map(({ host, port }) => ({ host, port }));
 }
 
-/**
- * The worker endpoints, taken from cms.toml's Worker block when it declares any and from the
- * generated env file otherwise. Kept separate from the audit call so the read reports one result
- * per request rather than one per candidate source.
- */
-async function readWorkerEndpoints(configPath: string | null): Promise<WorkerEntry[]> {
-  if (configPath) {
-    const content = await fs.readFile(configPath, 'utf-8');
-    const workerBlock = extractWorkerBlock(content);
-    if (workerBlock) {
-      const workers = parseWorkersFromBlock(workerBlock);
-      if (workers.length > 0) return workers;
-    }
-  }
+type WorkerEntry = { host: string; port: number };
 
-  const envCorePath = path.join(getRepoRoot(), '.env');
-  const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
-  return parseWorkersFromEnvCore(envCoreContent);
+/** The endpoints one source declares, and the refusal when it exists but could not be read. */
+interface WorkerSource {
+  readonly workers: WorkerEntry[];
+  readonly unreadable: string[];
 }
 
-export async function getWorkers() {
+/** One source's endpoints: cms.toml's Worker block first, then the generated WORKER_n rows. */
+async function parseWorkerSource(filePath: string): Promise<WorkerSource> {
+  const read = await readConfigFile(filePath);
+  if (read.kind === 'unreadable') return { workers: [], unreadable: [read.reason] };
+  if (read.kind === 'absent') return { workers: [], unreadable: [] };
+  const workerBlock = extractWorkerBlock(read.content);
+  if (workerBlock) {
+    const workers = parseWorkersFromBlock(workerBlock);
+    if (workers.length > 0) return { workers, unreadable: [] };
+  }
+  return { workers: parseWorkersFromEnvCore(read.content), unreadable: [] };
+}
+
+/**
+ * The worker endpoints, taken from cms.toml when it declares any and from the generated env file
+ * otherwise. WHY the refusals travel with the endpoints: a source that exists but cannot be read
+ * is not an empty source, and reporting only its absence renders a permission problem as none.
+ */
+async function readWorkerEndpoints(configPath: string | null): Promise<WorkerSource> {
+  const unreadable: string[] = [];
+  const candidates = [...(configPath === null ? [] : [configPath]), path.join(getRepoRoot(), '.env')];
+  for (const candidate of candidates) {
+    const source = await parseWorkerSource(candidate);
+    unreadable.push(...source.unreadable);
+    if (source.workers.length > 0) return { workers: source.workers, unreadable };
+  }
+  return { workers: [], unreadable };
+}
+
+/** The configured worker endpoints and the fault that emptied them, if any. */
+export interface WorkerConfigRead {
+  readonly workers: WorkerEntry[];
+  readonly error: string | null;
+}
+
+export async function getWorkers(): Promise<WorkerConfigRead> {
   await ensurePermission('settings:read');
   await ensurePermission('settings:list');
 
-  const configPath = await getCmsConfigPath();
+  const { workers, unreadable } = await readWorkerEndpoints(await getCmsConfigPath());
+  const error = workers.length === 0 && unreadable.length > 0
+    ? `Worker configuration could not be read: ${unreadable.join(', ')}`
+    : null;
 
+  // Why count and not the endpoints: these are the deployment's internal hosts and ports, and
+  // an audit table is the wrong place to keep them. The row answers who asked and how much
+  // the request revealed, which is what a later disclosure has to be weighed against.
   try {
-    const workers = await readWorkerEndpoints(configPath);
-    // Why count and not the endpoints: these are the deployment's internal hosts and ports, and
-    // an audit table is the wrong place to keep them. The row answers who asked and how much
-    // the request revealed, which is what a later disclosure has to be weighed against.
     await recordAudit({
       verb: 'worker_config:view',
       entity: 'worker_config',
       afterValues: { count: workers.length },
-      result: 'success',
+      result: error === null ? 'success' : 'failure',
     });
-    return workers;
-  } catch (error) {
-    console.error('Failed to parse workers from cms.toml', error);
-    await recordAudit({
-      verb: 'worker_config:view',
-      entity: 'worker_config',
-      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
-      result: 'failure',
-    });
-    return [];
+  } catch (auditError) {
+    console.error('Failed to record the worker configuration view', auditError);
   }
+  return { workers, error };
 }
-
-type WorkerEntry = { host: string; port: number };
 
 function findInvalidWorkerEntries(workers: WorkerEntry[]): string[] {
   const invalidEntries: string[] = [];

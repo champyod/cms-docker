@@ -19,6 +19,6 @@ export const GET = createLiveStreamRoute<WorkersFrame>({
     polledSource<WorkersFrame>({
       initial: { workers: [] },
       fingerprint: workersFrameFingerprint,
-      tracks: [{ intervalMs: DEPLOY_WORKERS_POLL_MS, read: async () => ({ workers: await collectWorkerStats() }) }],
+      tracks: [{ intervalMs: DEPLOY_WORKERS_POLL_MS, read: () => collectWorkerStats() }],
     })(connection),
 });

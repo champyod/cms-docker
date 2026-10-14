@@ -1,8 +1,8 @@
-import fs from 'fs';
 import path from 'path';
 import { exec, execFile } from 'child_process';
 import util from 'util';
 import { prisma } from '@/lib/prisma';
+import { readConfigFile } from '@/lib/config-file';
 import { getRepoRoot } from './repo-root';
 import {
   LAGGING_TASK_THRESHOLD,
@@ -87,40 +87,57 @@ function envFileWorkers(content: string): Map<number, ConfiguredWorker> {
   return workers;
 }
 
-/** A file's content, or null when it is absent or unreadable (a 600 .env the panel cannot open). */
-function readWorkerFile(filePath: string): string | null {
-  try {
-    return fs.readFileSync(filePath, 'utf8');
-  } catch {
-    return null;
-  }
-}
+/** A file the fleet is read from, and the parser that understands its shape. */
+const WORKER_CONFIG_SOURCES: ReadonlyArray<{
+  file: string;
+  parse: (content: string) => Map<number, ConfiguredWorker>;
+}> = [
+  { file: '.env', parse: envFileWorkers },
+  { file: CONFIG_TOML_FILE, parse: tomlWorkers },
+];
 
-function fileWorkers(
-  filePath: string,
-  parse: (content: string) => Map<number, ConfiguredWorker>,
-): Map<number, ConfiguredWorker> {
-  const content = readWorkerFile(filePath);
-  return content === null ? new Map() : parse(content);
+/** The fleet the configuration yields, and the sources that exist but could not be read. */
+interface ConfiguredFleet {
+  readonly workers: ConfiguredWorker[];
+  readonly unreadable: string[];
 }
 
 /**
  * Every configured worker, each shard taken from the first source that carries it:
- * the process environment, then config.toml (the source), then the .env render.
- * Why that order: the sync renders .env from config.toml, so .env can lag it, and in
- * the panel container .env is not readable — only what compose handed over is.
+ * the .env render, then config.toml (the source), then the process environment.
+ * Why that order: the sync renders .env from config.toml, so .env can lag it, and what
+ * compose handed the process overrides both.
+ *
+ * WHY the read failures are kept: a source that exists but cannot be read is not an empty
+ * source, and folding the two together renders a permission problem as a worker-less fleet.
  */
-function loadConfiguredWorkers(repoRoot: string): ConfiguredWorker[] {
+async function loadConfiguredWorkers(repoRoot: string): Promise<ConfiguredFleet> {
   const merged = new Map<number, ConfiguredWorker>();
-  const sources = [
-    fileWorkers(path.join(repoRoot, '.env'), envFileWorkers),
-    fileWorkers(path.join(repoRoot, CONFIG_TOML_FILE), tomlWorkers),
-    environmentWorkers(),
-  ];
-  for (const source of sources) {
-    for (const [shard, worker] of source) merged.set(shard, worker);
+  const unreadable: string[] = [];
+  for (const source of WORKER_CONFIG_SOURCES) {
+    const read = await readConfigFile(path.join(repoRoot, source.file));
+    if (read.kind === 'unreadable') {
+      unreadable.push(read.reason);
+      continue;
+    }
+    if (read.kind === 'absent') continue;
+    for (const [shard, worker] of source.parse(read.content)) merged.set(shard, worker);
   }
-  return [...merged.values()].sort((a, b) => a.shard - b.shard);
+  for (const [shard, worker] of environmentWorkers()) merged.set(shard, worker);
+  return { workers: [...merged.values()].sort((a, b) => a.shard - b.shard), unreadable };
+}
+
+/** WHY: an empty fleet beside an unreadable source is a read fault, not "no workers". */
+function unreadableFault(fleet: ConfiguredFleet): string | null {
+  return fleet.unreadable.length === 0
+    ? null
+    : `Worker configuration could not be read: ${fleet.unreadable.join(', ')}`;
+}
+
+/** The worker nodes and the fault that emptied them, if any. */
+export interface WorkerFleet {
+  readonly workers: WorkerNodeView[];
+  readonly error: string | null;
 }
 
 async function loadEmitterRows(): Promise<EmitterWorkerRow[]> {
@@ -200,13 +217,13 @@ function parseContainerShard(name: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-async function collectFromDocker(shardCounts: Record<number, number>): Promise<WorkerNodeView[]> {
-  const configured = loadConfiguredWorkers(getRepoRoot());
+async function collectFromDocker(shardCounts: Record<number, number>): Promise<WorkerFleet> {
+  const fleet = await loadConfiguredWorkers(getRepoRoot());
   const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
   const lines = stdout.trim() ? stdout.trim().split('\n') : [];
 
-  if (configured.length > 0) {
-    return configured.map((worker) => localNodeView({
+  if (fleet.workers.length > 0) {
+    const configured = fleet.workers.map((worker) => localNodeView({
       id: `worker-${worker.shard}`,
       host: worker.host,
       port: worker.port,
@@ -219,9 +236,10 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
       state: 'running',
       shardCounts,
     }));
+    return { workers: configured, error: null };
   }
 
-  return lines.filter(Boolean).map((line) => {
+  const discovered = lines.filter(Boolean).map((line) => {
     const [name, status] = line.split('\t');
     const running = status.toLowerCase().includes('up');
     const shard = parseContainerShard(name);
@@ -236,6 +254,7 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
       shardCounts,
     });
   });
+  return { workers: discovered, error: discovered.length === 0 ? unreadableFault(fleet) : null };
 }
 
 /**
@@ -244,15 +263,19 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
  * Why the emitter first: it is the single service that pings every fleet shard —
  * local docker state plus TCP reachability, remotes included. The docker pass is
  * only the fallback for a host where the emitter itself cannot run.
+ *
+ * WHY an empty reading carries a fault: docker and the emitter can each come back with
+ * nothing, and only the configuration says which of "no workers" and "unreadable
+ * configuration" it is — a fault the caller must show rather than render as empty.
  */
-export async function collectWorkerStats(): Promise<WorkerNodeView[]> {
+export async function collectWorkerStats(): Promise<WorkerFleet> {
   try {
     const shardCounts = await loadShardCounts();
     const emitterRows = await loadEmitterRowsOrNull();
-    if (emitterRows !== null) return mapEmitterRowsToNodes(emitterRows, shardCounts);
+    if (emitterRows !== null) return { workers: mapEmitterRowsToNodes(emitterRows, shardCounts), error: null };
     return await collectFromDocker(shardCounts);
   } catch (error) {
     console.error('Failed to get worker stats:', error);
-    return [];
+    return { workers: [], error: null };
   }
 }

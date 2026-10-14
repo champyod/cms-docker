@@ -44,7 +44,8 @@ async function readResourceScope(userId: string): Promise<ResourceScope> {
 
 async function readStats(frame: ResourceFrame, scope: ResourceScope): Promise<ResourceFrame> {
   if (!scope.stats) return frame;
-  return { ...frame, server: await collectServerStats(), workers: await collectWorkerStats() };
+  const fleet = await collectWorkerStats();
+  return { ...frame, server: await collectServerStats(), workers: fleet.workers };
 }
 
 async function readSummary(frame: ResourceFrame, scope: ResourceScope, trafficLimit: number): Promise<ResourceFrame> {

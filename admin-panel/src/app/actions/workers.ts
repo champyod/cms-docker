@@ -17,16 +17,18 @@ export async function getWorkersLiveStatus(): Promise<{
   forbidden: boolean;
   canManage: boolean;
   workers: WorkerNodeView[];
+  error: string | null;
 }> {
   const session = await getSession();
-  if (!session) return { forbidden: true, canManage: false, workers: [] };
+  if (!session) return { forbidden: true, canManage: false, workers: [], error: null };
   const fresh = await getFreshPermissions(session.userId);
-  if (!fresh) return { forbidden: true, canManage: false, workers: [] };
+  if (!fresh) return { forbidden: true, canManage: false, workers: [], error: null };
 
   // Viewing worker health is an operator concern (tasks); management stays superadmin.
   const canView = hasEffectivePermission(fresh, 'task:read');
   const canManage = hasEffectivePermission(fresh, 'all:all');
-  if (!canView) return { forbidden: true, canManage, workers: [] };
+  if (!canView) return { forbidden: true, canManage, workers: [], error: null };
 
-  return { forbidden: false, canManage, workers: await collectWorkerStats() };
+  const fleet = await collectWorkerStats();
+  return { forbidden: false, canManage, workers: fleet.workers, error: fleet.error };
 }

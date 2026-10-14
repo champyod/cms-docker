@@ -17,22 +17,24 @@ export function useDeployWorkers(setSaving: SetSaving) {
     const [liveWorkers, setLiveWorkers] = useState<WorkerNodeView[]>([]);
     const [workersForbidden, setWorkersForbidden] = useState(false);
     const [canManageWorkers, setCanManageWorkers] = useState(true);
+    const [workersError, setWorkersError] = useState<string | null>(null);
 
     const workersDirty = JSON.stringify(workers) !== originalWorkers;
 
     useEffect(() => {
         void (async () => {
-            const [workersResult, statusResult] = await Promise.all([getWorkers(), getWorkersLiveStatus()]);
-            const normalized = Array.isArray(workersResult) ? workersResult : [];
-            setWorkers(normalized);
-            setOriginalWorkers(JSON.stringify(normalized));
+            const [workersRead, statusResult] = await Promise.all([getWorkers(), getWorkersLiveStatus()]);
+            setWorkers(workersRead.workers);
+            setOriginalWorkers(JSON.stringify(workersRead.workers));
 
             if (statusResult && !statusResult.forbidden) {
-                setLiveWorkers(statusResult.workers ?? []);
+                setLiveWorkers(statusResult.workers);
                 setCanManageWorkers(statusResult.canManage);
                 setWorkersForbidden(false);
+                setWorkersError(workersRead.error ?? statusResult.error ?? null);
             } else {
                 setWorkersForbidden(true);
+                setWorkersError(workersRead.error);
             }
         })();
     }, []);
@@ -41,6 +43,7 @@ export function useDeployWorkers(setSaving: SetSaving) {
     // shows, so the panel keeps its last reading until the next one arrives.
     const onWorkersFrame = useCallback((frame: WorkersFrame): void => {
         setLiveWorkers(frame.workers);
+        if (frame.error !== undefined) setWorkersError(frame.error);
     }, []);
 
     const { status: liveStatus } = useLiveStream<WorkersFrame>({
@@ -86,6 +89,7 @@ export function useDeployWorkers(setSaving: SetSaving) {
         liveWorkers,
         liveStatus,
         workersForbidden,
+        workersError,
         canManageWorkers,
         handleSaveWorkers,
         addGlobalWorker,

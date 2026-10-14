@@ -107,7 +107,7 @@ beforeEach(() => {
   mocks.collectServerStats.mockReset();
   mocks.collectServerStats.mockResolvedValue(stats(21));
   mocks.collectWorkerStats.mockReset();
-  mocks.collectWorkerStats.mockResolvedValue([worker()]);
+  mocks.collectWorkerStats.mockResolvedValue({ workers: [worker()], error: null });
   mocks.collectCoreServicesStatus.mockReset();
   mocks.collectCoreServicesStatus.mockResolvedValue({ success: true, services: [{ name: 'cms-database', status: 'healthy' }] });
   mocks.collectNetworkTrafficLogs.mockReset();

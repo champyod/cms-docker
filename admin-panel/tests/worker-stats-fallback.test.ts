@@ -64,7 +64,7 @@ afterEach(() => {
  */
 describe('collectWorkerStats with a degraded emitter', () => {
   it('reads the fleet from docker when the emitter reports no workers', async () => {
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(mocks.execFile).toHaveBeenCalledTimes(1);
     expect(mocks.exec).toHaveBeenCalledTimes(1);
@@ -78,7 +78,7 @@ describe('collectWorkerStats with a degraded emitter', () => {
       callback(new Error('EACCES: permission denied'), { stdout: '', stderr: '' });
     });
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.map((node) => node.id)).toEqual(['worker-0', 'worker-1']);
     expect(mocks.exec).toHaveBeenCalledTimes(1);
@@ -89,7 +89,7 @@ describe('collectWorkerStats with a degraded emitter', () => {
       { shard: 7, endpoint: 'cms-worker-7:26007', state: 'running', reachable: true },
     ])));
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.map((node) => node.id)).toEqual(['worker-7']);
     expect(nodes[0].connection).toBe('connected');
@@ -110,7 +110,7 @@ describe('collectWorkerStats fleet sources', () => {
     vi.stubEnv('WORKER_0', '10.0.0.10:26010');
     vi.stubEnv('WORKER_1', '10.0.0.11:26011');
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.map((node) => node.id)).toEqual(['worker-0', 'worker-1']);
     expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.10:26010', '10.0.0.11:26011']);
@@ -120,7 +120,7 @@ describe('collectWorkerStats fleet sources', () => {
     fs.rmSync(path.join(repoRoot, '.env'));
     fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.map((node) => node.id)).toEqual(['worker-4', 'worker-6']);
     expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.4:26004', '10.0.0.6:26006']);
@@ -130,7 +130,7 @@ describe('collectWorkerStats fleet sources', () => {
     fs.writeFileSync(path.join(repoRoot, '.env'), 'WORKER_4=stale.example:9999\n');
     fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.find((node) => node.id === 'worker-4')?.endpoint).toBe('10.0.0.4:26004');
     expect(nodes.find((node) => node.id === 'worker-6')?.endpoint).toBe('10.0.0.6:26006');
@@ -140,8 +140,27 @@ describe('collectWorkerStats fleet sources', () => {
     fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
     vi.stubEnv('WORKER_4', '10.9.9.9:26999');
 
-    const nodes = await collectWorkerStats();
+    const { workers: nodes } = await collectWorkerStats();
 
     expect(nodes.find((node) => node.id === 'worker-4')?.endpoint).toBe('10.9.9.9:26999');
+  });
+
+  /**
+   * Why this is the whole point of the read: docker reporting nothing is not evidence of an empty
+   * fleet when the configuration itself could not be opened — that is a read fault, and it must be
+   * named rather than rendered as "No worker nodes configured".
+   */
+  it('names an unreadable configuration instead of rendering an empty fleet', async () => {
+    const envPath = path.join(repoRoot, '.env');
+    fs.rmSync(envPath);
+    fs.mkdirSync(envPath); // a directory where a file is expected: readFile throws EISDIR
+    fs.writeFileSync(path.join(repoRoot, 'config.toml'), '');
+    mocks.exec.mockImplementation(execSucceeds(''));
+
+    const { workers, error } = await collectWorkerStats();
+
+    expect(workers).toEqual([]);
+    expect(error).toContain('EISDIR');
+    expect(error).toContain(envPath);
   });
 });

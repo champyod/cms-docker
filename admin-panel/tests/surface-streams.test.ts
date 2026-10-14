@@ -72,7 +72,7 @@ beforeEach(() => {
   mocks.subchangesCount.mockReset();
   mocks.subchangesCount.mockResolvedValue(3);
   mocks.collectWorkerStats.mockReset();
-  mocks.collectWorkerStats.mockResolvedValue([worker()]);
+  mocks.collectWorkerStats.mockResolvedValue({ workers: [worker()], error: null });
 });
 
 afterEach(() => {
@@ -176,19 +176,20 @@ describe('deployments workers stream', () => {
   it('sends every node reading, and only when a reading moves', async () => {
     const reader = await openStream(() => import('@/app/api/workers/stream/route'), '/api/workers/stream');
 
-    expect(toFrame<WorkersFrame>((await nextFrame(reader)) as string)).toEqual({ workers: [worker()] });
+    expect(toFrame<WorkersFrame>((await nextFrame(reader)) as string)).toEqual({ workers: [worker()], error: null });
 
     await vi.advanceTimersByTimeAsync(DEPLOY_WORKERS_POLL_MS);
     expect(mocks.collectWorkerStats.mock.calls.length).toBeGreaterThan(1);
     // The window crossed the heartbeat, so every frame in it is that same reading restated.
     for (const frame of await framesWithin(reader)) {
-      expect(toFrame<WorkersFrame>(frame)).toEqual({ workers: [worker()] });
+      expect(toFrame<WorkersFrame>(frame)).toEqual({ workers: [worker()], error: null });
     }
 
-    mocks.collectWorkerStats.mockResolvedValue([{ ...worker(), activity: 'evaluating' }]);
+    mocks.collectWorkerStats.mockResolvedValue({ workers: [{ ...worker(), activity: 'evaluating' }], error: null });
     await vi.advanceTimersByTimeAsync(DEPLOY_WORKERS_POLL_MS);
     expect(toFrame<WorkersFrame>(await lastFrame(reader))).toEqual({
       workers: [{ ...worker(), activity: 'evaluating' }],
+      error: null,
     });
 
     await reader.cancel();

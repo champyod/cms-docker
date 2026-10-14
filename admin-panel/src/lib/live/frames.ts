@@ -49,6 +49,8 @@ export interface CursorFrame {
 /** Worker telemetry, as the deployments panel and the resources page both read it. */
 export interface WorkersFrame {
   workers: WorkerNodeView[];
+  /** Set when the reading is empty because the fleet's configuration could not be read. */
+  error?: string | null;
 }
 
 export function cursorFrameFingerprint(frame: CursorFrame): string {
@@ -56,5 +58,5 @@ export function cursorFrameFingerprint(frame: CursorFrame): string {
 }
 
 export function workersFrameFingerprint(frame: WorkersFrame): string {
-  return JSON.stringify(frame.workers);
+  return JSON.stringify([frame.workers, frame.error ?? null]);
 }
