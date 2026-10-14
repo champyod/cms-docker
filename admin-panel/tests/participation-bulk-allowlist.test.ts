@@ -45,9 +45,9 @@ vi.mock('@/lib/password-format', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/password-format')>()),
   formatStoredPassword: vi.fn(async () => 'stored-hash'),
 }));
-vi.mock('@/app/api/users/bulk/bulkRowPreparation', () => ({
+vi.mock('@/app/api/users/bulk/bulkRowPreparation', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/app/api/users/bulk/bulkRowPreparation')>()),
   prepareRow: mocks.prepareRow,
-  shouldGeneratePassword: () => false,
 }));
 
 import { applyBulkParticipationSettings } from '@/app/actions/participation-settings';
@@ -144,7 +144,7 @@ describe('the shared action strips an allowlist the caller may not set', () => {
 describe('bulk create carries the validated allowlist', () => {
   it('inserts each created participation with the ip column', async () => {
     const response = await bulkCreate(
-      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: ALLOWLIST }),
+      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], contestId: CONTEST_ID, ip: ALLOWLIST }),
     );
 
     expect(response.status).toBe(200);
@@ -156,7 +156,7 @@ describe('bulk create carries the validated allowlist', () => {
 
   it('refuses an invalid allowlist before creating any user', async () => {
     const response = await bulkCreate(
-      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], generationMode: 'none', contestId: CONTEST_ID, ip: '10.10.0.0/10' }),
+      jsonRequest({ rows: [{ first_name: 'Ada', last_name: 'Lovelace' }], contestId: CONTEST_ID, ip: '10.10.0.0/10' }),
     );
 
     expect(response.status).toBe(400);

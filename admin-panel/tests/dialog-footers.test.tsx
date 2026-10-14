@@ -324,7 +324,7 @@ describe('the bulk user dialogs lead with their hint and outline cancel', () => 
     expect(buttonNamed('Cancel').className).toContain('border-destructive/50');
   });
 
-  it('leads the bulk create row with the generation-mode hint', () => {
+  it('leads the bulk create row with the credential-template hint', () => {
     render(
       <UserBulkCreateCsv
         isOpen
@@ -335,7 +335,7 @@ describe('the bulk user dialogs lead with their hint and outline cancel', () => 
         navigation={en.navigation}
       />,
     );
-    expect(footerRow()?.firstElementChild?.textContent).toContain('Generation mode:');
+    expect(footerRow()?.firstElementChild?.textContent).toContain('Credential templates:');
     expect(isLocked(buttonNamed('Create Users from Preview'))).toBe(true);
   });
 });

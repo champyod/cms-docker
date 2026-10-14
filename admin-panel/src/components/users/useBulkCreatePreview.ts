@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 
+import { PASSWORD_CONFIG, USERNAME_CONFIG, type GeneratorConfig } from '@/lib/credential-template';
 import {
   blockingRowIndices,
   buildConfirmLabel,
@@ -13,7 +14,7 @@ import {
 import {
   buildPreviewRows,
   fillRowCredentials,
-  type GenerationMode,
+  type CredentialTemplates,
   type PreviewRow,
 } from './csvPreview';
 
@@ -22,7 +23,14 @@ export interface BulkCreatePreview {
   readonly setCsvText: (value: string) => void;
   readonly headerWarnings: string[];
   readonly previewRows: PreviewRow[];
-  readonly generationMode: GenerationMode;
+  readonly usernameTemplate: string;
+  readonly setUsernameTemplate: (value: string) => void;
+  readonly passwordTemplate: string;
+  readonly setPasswordTemplate: (value: string) => void;
+  readonly usernameConfig: GeneratorConfig;
+  readonly setUsernameConfig: (config: GeneratorConfig) => void;
+  readonly passwordConfig: GeneratorConfig;
+  readonly setPasswordConfig: (config: GeneratorConfig) => void;
   readonly selectedRowIndices: ReadonlySet<number>;
   readonly skipInvalid: boolean;
   readonly stalePreview: boolean;
@@ -30,9 +38,9 @@ export interface BulkCreatePreview {
   readonly blockingSelectedCount: number;
   readonly canSubmit: boolean;
   readonly confirmLabel: string;
-  readonly buildPreview: (text: string, mode: GenerationMode) => void;
+  readonly buildPreview: (text: string) => void;
   readonly uploadFile: (file: File | undefined) => void;
-  readonly fillEmptyInPreview: (mode: GenerationMode) => void;
+  readonly fillEmptyInPreview: () => void;
   readonly toggleRow: (rowIndex: number, checked: boolean) => void;
   readonly selectAll: (checked: boolean) => void;
   readonly toggleSkipInvalid: () => void;
@@ -44,12 +52,22 @@ export function useBulkCreatePreview(): BulkCreatePreview {
   const [parsedText, setParsedText] = useState('');
   const [headerWarnings, setHeaderWarnings] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('none');
+  const [usernameTemplate, setUsernameTemplate] = useState('');
+  const [passwordTemplate, setPasswordTemplate] = useState('');
+  const [usernameConfig, setUsernameConfig] = useState<GeneratorConfig>(USERNAME_CONFIG);
+  const [passwordConfig, setPasswordConfig] = useState<GeneratorConfig>(PASSWORD_CONFIG);
   const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
   const [skipInvalid, setSkipInvalid] = useState(false);
 
-  const buildPreview = (text: string, mode: GenerationMode): void => {
-    const { warnings, rows } = buildPreviewRows(text, mode);
+  const templates: CredentialTemplates = {
+    username: usernameTemplate,
+    password: passwordTemplate,
+    usernameConfig,
+    passwordConfig,
+  };
+
+  const buildPreview = (text: string): void => {
+    const { warnings, rows } = buildPreviewRows(text);
     setHeaderWarnings(warnings);
     setPreviewRows(rows);
     // A fresh parse selects every row, since the checkboxes are the create set.
@@ -64,15 +82,16 @@ export function useBulkCreatePreview(): BulkCreatePreview {
     reader.onload = (event) => {
       const text = String(event.target?.result ?? '');
       setCsvText(text);
-      buildPreview(text, generationMode);
+      buildPreview(text);
     };
     reader.readAsText(file);
   };
 
-  const fillEmptyInPreview = (mode: GenerationMode): void => {
-    setGenerationMode(mode);
+  // Why the templates are read on the call and not on the parse: filling is the reader's
+  // action, so it must use the fields as they stand now, after any later edit to them.
+  const fillEmptyInPreview = (): void => {
     const usedUsernames = new Set<string>();
-    setPreviewRows((previousRows) => previousRows.map((row) => fillRowCredentials(row, mode, usedUsernames)));
+    setPreviewRows((previousRows) => previousRows.map((row) => fillRowCredentials(row, templates, usedUsernames)));
   };
 
   const toggleRow = (rowIndex: number, checked: boolean): void => {
@@ -110,7 +129,14 @@ export function useBulkCreatePreview(): BulkCreatePreview {
     setCsvText,
     headerWarnings,
     previewRows,
-    generationMode,
+    usernameTemplate,
+    setUsernameTemplate,
+    passwordTemplate,
+    setPasswordTemplate,
+    usernameConfig,
+    setUsernameConfig,
+    passwordConfig,
+    setPasswordConfig,
     selectedRowIndices,
     skipInvalid,
     stalePreview,

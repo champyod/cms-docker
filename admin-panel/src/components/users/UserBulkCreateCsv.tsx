@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
+import { CredentialTemplateField } from '@/components/core/CredentialTemplateField';
 import { Dialog } from '@/components/core/Dialog';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
@@ -80,7 +81,10 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
           timezone: row.timezone,
           team: row.team,
         })),
-        generationMode: preview.generationMode,
+        usernameTemplate: preview.usernameTemplate,
+        passwordTemplate: preview.passwordTemplate,
+        usernameConfig: preview.usernameConfig,
+        passwordConfig: preview.passwordConfig,
         contestId: contestId || undefined,
         ip: ip.trim() || undefined,
         passwordKind,
@@ -127,9 +131,33 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
           onIpChange={setIp}
           onDownloadTemplate={handleDownloadTemplate}
           onUploadFile={preview.uploadFile}
-          onRebuildPreview={() => preview.buildPreview(preview.csvText, preview.generationMode)}
+          onRebuildPreview={() => preview.buildPreview(preview.csvText)}
           onFillEmpty={preview.fillEmptyInPreview}
         />
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CredentialTemplateField
+            label="Username template"
+            value={preview.usernameTemplate}
+            onChange={preview.setUsernameTemplate}
+            config={preview.usernameConfig}
+            onConfigChange={preview.setUsernameConfig}
+            symbolsAllowed={false}
+            placeholder="camp1*"
+          />
+          <CredentialTemplateField
+            label="Password template"
+            value={preview.passwordTemplate}
+            onChange={preview.setPasswordTemplate}
+            config={preview.passwordConfig}
+            onConfigChange={preview.setPasswordConfig}
+            placeholder="*"
+          />
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            Each * becomes a random run, and a blank template is one full random run. Only empty cells are
+            filled, so credentials the CSV already carries are kept.
+          </p>
+        </div>
 
         <HeaderWarnings warnings={preview.headerWarnings} />
 
@@ -137,7 +165,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
           stalePreview={preview.stalePreview}
           blockingSelectedCount={preview.blockingSelectedCount}
           skipInvalid={preview.skipInvalid}
-          onReparse={() => preview.buildPreview(preview.csvText, preview.generationMode)}
+          onReparse={() => preview.buildPreview(preview.csvText)}
           onToggleSkipInvalid={preview.toggleSkipInvalid}
         />
 
@@ -171,7 +199,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canRea
         onConfirm={handleSubmitBulk}
         confirmLoading={submitting}
         confirmDisabled={submitting || !preview.canSubmit}
-        leadingAction={<span className="text-xs text-muted-foreground">Generation mode: {preview.generationMode}</span>}
+        leadingAction={<span className="text-xs text-muted-foreground">Credential templates: {preview.usernameTemplate || '*'} / {preview.passwordTemplate || '*'}</span>}
       />
     </Dialog>
   );
