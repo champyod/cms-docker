@@ -38,6 +38,7 @@ from sqlalchemy import not_, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from cms import config
+from cms.db import NO_OVERRIDE, NoOverride, contest_binding
 from cms.service.ranking_projection import rows as projection_rows, \
     prune_statement, snapshot_prune, upsert_statement
 from cms.db import SessionGen, Contest, Participation, Task, Submission, \
@@ -262,7 +263,7 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
     """
 
-    def __init__(self, shard: int, contest_id: int):
+    def __init__(self, shard: int, contest_id: "int | None | NoOverride" = NO_OVERRIDE):
         """Start the service with the given parameters.
 
         Create an instance of the ProxyService and make it listen on
@@ -278,7 +279,7 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         """
         super().__init__(shard)
 
-        self.contest_id = contest_id
+        self._contest_override = contest_id
 
         # Store what data we already sent to rankings, to avoid
         # sending it twice.
@@ -297,6 +298,16 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         self.initialize()
 
         self.start_sweeper(347.0)
+
+    @property
+    def contest_id(self) -> int:
+        """The contest this service relays, re-read from the registry for every pass.
+
+        A registry that names no contest for this instance is fatal: this service serves one
+        contest, so there is nothing to relay and nothing to guess.
+        """
+        return contest_binding(
+            self.name, self.shard, self._contest_override, serves_one_contest=True)
 
     def _missing_operations(self):
         """Return a generator of data to be sent to the rankings..

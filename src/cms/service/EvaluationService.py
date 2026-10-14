@@ -40,6 +40,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from cms import ServiceCoord, get_service_shards
+from cms.db import NO_OVERRIDE, NoOverride, contest_binding
 from cms.db.session import Session
 from cms.io.priorityqueue import QueueEntry, QueueEntryDict, QueueItem
 from cmscommon.datetime import make_timestamp
@@ -267,10 +268,10 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
     RESULT_CACHE_SIZE = 100
     # The maximum time since the last result before processing.
     MAX_FLUSHING_TIME_SECONDS = 2
-    def __init__(self, shard: int, contest_id: int | None = None):
+    def __init__(self, shard: int, contest_id: "int | None | NoOverride" = NO_OVERRIDE):
         super().__init__(shard)
 
-        self.contest_id = contest_id
+        self._contest_override = contest_id
 
         # Cache holding the results from the worker until they are
         # written to the DB.
@@ -316,6 +317,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                          EvaluationService.WORKER_CONNECTION_CHECK_TIME
                          .total_seconds(),
                          immediately=False)
+
+    @property
+    def contest_id(self) -> int | None:
+        """The contest this service evaluates, re-read from the registry for every pass.
+
+        None means every contest, the multicontest mode this service supports.
+        """
+        return contest_binding(self.name, self.shard, self._contest_override)
 
     def submission_enqueue_operations(self, submission: Submission, archive_sandbox: bool = False) -> int:
         """Push in queue the operations required by a submission.

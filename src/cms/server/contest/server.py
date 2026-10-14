@@ -44,6 +44,7 @@ import os
 from werkzeug.middleware.shared_data import SharedDataMiddleware
 
 from cms import ConfigError, ServiceCoord, config
+from cms.db import NO_OVERRIDE, NoOverride, contest_binding
 from cms.io import WebService
 from cms.locale import get_translations
 from cms.server.contest.jinja2_toolbox import CWS_ENVIRONMENT
@@ -63,7 +64,7 @@ class ContestWebServer(WebService):
     """Service that runs the web server serving the contestants.
 
     """
-    def __init__(self, shard: int, contest_id: int | None = None):
+    def __init__(self, shard: int, contest_id: "int | None | NoOverride" = NO_OVERRIDE):
         parameters = {
             "static_files": [("cms.server", "static"),
                              ("cms.server.contest", "static")],
@@ -87,9 +88,15 @@ class ContestWebServer(WebService):
                               "listen_address and listen_port "
                               "in cms.toml." % __name__)
 
-        self.contest_id = contest_id
+        self._contest_override = contest_id
+        # WHY the shape is settled here and the contest is not: the routing table below
+        # describes one URL scheme — a single contest, or all of them behind /<name>/ — and a
+        # running table cannot follow a change of scheme. Which contest that scheme serves is
+        # read per request (see contest_id below), so only the shape is fixed here.
+        self._multi_contest_shape = contest_binding(
+            self.__class__.__name__, shard, contest_id) is None
 
-        if self.contest_id is None:
+        if self._multi_contest_shape:
             HANDLERS.append((r"", MainHandler))
             handlers = [(r'/', ContestListHandler)]
             for h in HANDLERS:
@@ -132,6 +139,22 @@ class ContestWebServer(WebService):
         self.proxy_service = self.connect_to(
             ServiceCoord("ProxyService", 0),
             must_be_present=ranking_enabled)
+
+    @property
+    def contest_id(self) -> int | None:
+        """The contest this server serves, re-read from the registry for every request.
+
+        A different contest is picked up within the registry TTL without a restart. A change
+        of shape — between one contest and all of them — is refused instead: the routing
+        table built at start-up describes one URL scheme, so that change needs a recreate.
+        """
+        contest_id = contest_binding(self.name, self.shard, self._contest_override)
+        if (contest_id is None) != self._multi_contest_shape:
+            raise ConfigError(
+                "the registry changed whether %s serves one contest or all of them, which "
+                "changes the URL scheme a running routing table cannot follow — recreate "
+                "this service ('./cms deploy contest')." % self.name)
+        return contest_id
 
     def add_notification(
         self, username: str, timestamp: datetime, subject: str, text: str, level: str

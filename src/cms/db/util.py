@@ -26,6 +26,7 @@
 import sys
 import os
 import time
+import typing
 import logging
 
 from sqlalchemy import inspect, text, union
@@ -174,36 +175,75 @@ REGISTRY_CONTEST_TTL_SECONDS = 5.0
 _active_contest_cache: "tuple[float, int | None] | None" = None
 
 
-def _registry_contest_id(session) -> int | None:
-    """The contest the service registry's ContestWebServer row names, or None.
+class NoOverride:
+    """The absence of a -c override: the instance then resolves its own contest per call."""
 
-    WHY the registry before contests.is_active: the registry binds a server per contest, so
-    it can name a contest the singleton cannot, and it is the authority the panel writes.
-    contests.is_active stays the fallback for a deployment whose registry is still empty.
+
+NO_OVERRIDE = NoOverride()
+
+
+class ServiceBinding(typing.NamedTuple):
+    """What the registry says about one running service instance.
+
+    named: a services row names this (role, shard), so its contest_id is the answer — a null
+        one included, which means the instance serves every contest.
+    contest_id: the contest that row names, or None.
 
     """
+
+    named: bool
+    contest_id: int | None
+
+
+_service_binding_cache: "dict[tuple[str, int], tuple[float, ServiceBinding]]" = {}
+
+
+def _read_service_binding(session, role: str, shard: int) -> ServiceBinding:
+    """The registry's row for one (role, shard), or that no row names it.
+
+    WHY (role, shard) and not the first ContestWebServer row: the registry authors one row
+    per instance and each instance serves the contest its own row names. Reading the first
+    one handed every server the same contest.
+    """
     if "services" not in inspect(session.get_bind()).get_table_names():
-        return None
+        return ServiceBinding(named=False, contest_id=None)
     row = session.execute(
         text(
             "SELECT contest_id FROM services"
-            " WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL"
-            " ORDER BY shard, id LIMIT 1"
-        )
+            " WHERE role = :role AND shard = :shard AND enabled"
+            " ORDER BY id LIMIT 1"
+        ),
+        {"role": role, "shard": shard},
     ).first()
-    return None if row is None else int(row[0])
+    if row is None:
+        return ServiceBinding(named=False, contest_id=None)
+    return ServiceBinding(named=True, contest_id=None if row[0] is None else int(row[0]))
+
+
+def service_binding(role: str, shard: int) -> ServiceBinding:
+    """The registry's binding for one service instance, cached for a few seconds.
+
+    WHY per call rather than once at start-up: the registry is what an operator edits, so a
+    running instance has to pick up a re-pointed row without being recreated.
+    """
+    now = time.monotonic()
+    cached = _service_binding_cache.get((role, shard))
+    if cached is not None and now - cached[0] < REGISTRY_CONTEST_TTL_SECONDS:
+        return cached[1]
+    with SessionGen() as session:
+        binding = _read_service_binding(session, role, shard)
+    _service_binding_cache[(role, shard)] = (now, binding)
+    return binding
 
 
 def active_contest_id() -> int | None:
-    """Return the id of the contest the stack serves, cached for a few seconds.
+    """Return the contest contests.is_active names, cached for a few seconds.
 
-    The registry's ContestWebServer row answers first; contests.is_active answers when the
-    registry names no contest. WHY the short TTL cache: the value is asked as services work,
-    so a hit is answered from memory, while a registry change still hot-applies within the
-    TTL — no restart, and no query per request.
+    This is the deployment default, not an instance's answer: a services row names one
+    instance, and the registry layer is answered per instance by contest_binding(). What
+    reaches here is a deployment with an empty registry, or an instance no row names.
 
-    return: the active contest id, or None when neither the registry nor the active flag
-        names a contest.
+    return: the active contest id, or None when the flag names no contest.
 
     raises ContestsTableMissingError: the contests table does not exist yet. A database
         that cannot be reached is not caught here: its error propagates so a running stack
@@ -219,17 +259,15 @@ def active_contest_id() -> int | None:
         # table catalog is the call that exists across supported versions.
         if "contests" not in inspect(session.get_bind()).get_table_names():
             raise ContestsTableMissingError("the contests table does not exist yet")
-        contest_id = _registry_contest_id(session)
-        if contest_id is None:
-            # Lowest id wins — the same order the admin panel and config sync use — so a
-            # database that ever holds two active rows still hands every caller one contest.
-            contest = (
-                session.query(Contest)
-                .filter(Contest.is_active.is_(True))
-                .order_by(Contest.id)
-                .first()
-            )
-            contest_id = None if contest is None else contest.id
+        # Lowest id wins — the same order the admin panel and config sync use — so a
+        # database that ever holds two active rows still hands every caller one contest.
+        contest = (
+            session.query(Contest)
+            .filter(Contest.is_active.is_(True))
+            .order_by(Contest.id)
+            .first()
+        )
+        contest_id = None if contest is None else contest.id
     _active_contest_cache = (now, contest_id)
     return contest_id
 
@@ -275,6 +313,43 @@ def ask_for_active_contest() -> int:
             "'./cms contest set-active <id>'.")
         sys.exit(1)
     return active
+
+
+def contest_binding(
+    role: str, shard: int, override: "int | None | NoOverride" = NO_OVERRIDE,
+    serves_one_contest: bool = False,
+) -> int | None:
+    """The contest one service instance serves right now.
+
+    One flat precedence: an explicit -c override, else the row the registry authors for this
+    (role, shard), else the deployment default. A null row means every contest (None), which
+    is the multicontest mode a contest server serves behind a /<name>/ prefix.
+
+    role, shard: the instance asking, which is how the registry names it.
+    override: the contest a -c argument fixed it to, NO_OVERRIDE to resolve per call.
+    serves_one_contest: whether the caller can serve every contest at once. One that cannot
+        is refused rather than handed None.
+
+    return: the contest id, or None for every contest.
+
+    """
+    contest_id = _resolved_contest(role, shard, override)
+    if contest_id is None and serves_one_contest:
+        raise ConfigError(
+            "the registry names no contest for %s shard %d, and this service serves one "
+            "contest: bind that row to a contest in the service registry, or start the "
+            "process with -c <contest_id>." % (role, shard))
+    return contest_id
+
+
+def _resolved_contest(role: str, shard: int, override: "int | None | NoOverride") -> int | None:
+    """The contest the override, else the registry row, else the deployment default names."""
+    if not isinstance(override, NoOverride):
+        return override
+    binding = service_binding(role, shard)
+    if binding.named:
+        return binding.contest_id
+    return ask_for_active_contest()
 
 
 def get_submissions(

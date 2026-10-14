@@ -82,7 +82,8 @@ __all__ = [
     # util
     "test_db_connection", "get_contest_list", "is_contest_id",
     "ask_for_contest", "ask_for_active_contest", "active_contest_id",
-    "ContestsTableMissingError",
+    "ContestsTableMissingError", "contest_binding", "service_binding",
+    "ServiceBinding", "NoOverride", "NO_OVERRIDE",
     "get_submissions", "get_submission_results",
     "get_datasets_to_judge", "enumerate_files"
 ]
@@ -131,8 +132,9 @@ from .drop import drop_db
 
 from .util import test_db_connection, get_contest_list, is_contest_id, \
     ask_for_contest, ask_for_active_contest, active_contest_id, \
-    ContestsTableMissingError, get_submissions, get_submission_results, \
-    get_datasets_to_judge, enumerate_files
+    ContestsTableMissingError, contest_binding, service_binding, \
+    ServiceBinding, NoOverride, NO_OVERRIDE, get_submissions, \
+    get_submission_results, get_datasets_to_judge, enumerate_files
 
 
 configure_mappers()

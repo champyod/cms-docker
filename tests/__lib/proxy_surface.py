@@ -71,6 +71,29 @@ def SessionGen():
     return Session()
 
 
+class NoOverride:
+    """Stand-in for cms.db.NoOverride: the absence of a -c override."""
+
+
+NO_OVERRIDE = NoOverride()
+
+
+def contest_binding(role, shard, override=NO_OVERRIDE, serves_one_contest=False):
+    """Stand-in for cms.db.contest_binding: these suites bind the contest by argument.
+
+    The real resolver reads the registry row for (role, shard) on every call. No suite here
+    authors a registry, and what the resolver does with one is pinned by
+    tests/test_service_contest_binding.py, so the override is the whole answer here — and a
+    service started without one is refused rather than quietly served something else.
+
+    """
+    if isinstance(override, NoOverride):
+        raise RuntimeError(
+            "these suites start a service with a contest id; %s shard %d has none"
+            % (role, shard))
+    return override
+
+
 def install_proxy_surface(ranking_url):
     """Supply the imports ProxyService needs beyond the shared surface."""
     gevent = sys.modules["gevent"]
@@ -97,6 +120,9 @@ def install_proxy_surface(ranking_url):
     database.Task = object
     database.Submission = object
     database.get_submissions = lambda session, **kwargs: []
+    database.NoOverride = NoOverride
+    database.NO_OVERRIDE = NO_OVERRIDE
+    database.contest_binding = contest_binding
 
     sys.modules["cms"].config.proxy_service = types.SimpleNamespace(
         rankings=[ranking_url], https_certfile=None)
