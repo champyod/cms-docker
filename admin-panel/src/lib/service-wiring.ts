@@ -30,7 +30,7 @@ export interface WiringRow {
 
 export interface ExposureRow {
   contest_id: number;
-  hostname: string;
+  hostname: string | null;
   path: string;
   tls: boolean;
   tailnet: string | null;
@@ -123,17 +123,21 @@ export function servicesForContest(contestId: number, services: ServiceRow[]): S
 }
 
 /**
- * Builds one route per exposure, resolving its upstream to the contest's own
- * ContestWebServer when it has one and to the shared one otherwise.
+ * Builds one route per named exposure, resolving its upstream to the contest's own
+ * ContestWebServer when it has one and to the shared one otherwise. A null hostname is
+ * a path-only exposure: it answers inside its contest's vhost, so it yields no server
+ * block here and would otherwise be a `server_name ;` nginx rejects.
  */
 export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[]): Route[] {
   const candidates = services.filter((s) => s.enabled && s.role === CONTEST_WEB_SERVER_ROLE);
   const routes: Route[] = [];
   for (const exposure of exposures) {
+    const hostname = (exposure.hostname ?? '').trim();
+    if (hostname === '') continue;
     const upstream = pickUpstream(exposure.contest_id, candidates);
     routes.push({
       contest_id: exposure.contest_id,
-      hostname: exposure.hostname.trim(),
+      hostname,
       path: normalisePath(exposure.path),
       upstream: toHttpEndpoint(upstream),
       tls: exposure.tls,
@@ -227,7 +231,7 @@ function unservedContestProblems(services: ServiceRow[], exposures: ExposureRow[
 function duplicateLocationProblems(exposures: ExposureRow[]): WiringProblem[] {
   const countByLocation = new Map<string, number>();
   for (const exposure of exposures) {
-    const location = `${exposure.hostname.trim().toLowerCase()}${normalisePath(exposure.path)}`;
+    const location = `${(exposure.hostname ?? '').trim().toLowerCase()}${normalisePath(exposure.path)}`;
     countByLocation.set(location, (countByLocation.get(location) ?? 0) + 1);
   }
   const problems: WiringProblem[] = [];

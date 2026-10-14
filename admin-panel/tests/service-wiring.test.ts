@@ -128,6 +128,11 @@ it('refuses to proxy to a server with no http port', () => {
     const own = service({ id: 1, name: 'w', contest_id: 2 });
     expect(exposureRoutes([exposure({ contest_id: 2, path: 'beta/' })], [own])[0].path).toBe('/beta');
   });
+
+  it('omits a path-only exposure from the standalone server blocks', () => {
+    const own = service({ id: 1, name: 'w', contest_id: 2 });
+    expect(exposureRoutes([exposure({ contest_id: 2, hostname: null })], [own])).toEqual([]);
+  });
 });
 
 describe('renderNginxServers', () => {

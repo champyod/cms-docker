@@ -66,7 +66,7 @@ export function validateService(input: ServiceInput): void {
  * location exists twice and the unique index cannot see it.
  */
 export function validateExposure(input: ExposureInput): void {
-  assertSafeHostname(input.hostname);
+  if (input.hostname.trim() !== '') assertSafeHostname(input.hostname);
   assertSafePath(normalisePath(input.path));
   if (input.tailnet === null) return;
   if (input.tailnet.trim() === '') {
@@ -158,7 +158,12 @@ export async function removeWiring(id: number): Promise<WriteResult> {
 export async function saveExposure(input: ExposureInput): Promise<WriteResult> {
   try {
     validateExposure(input);
-    const key = { hostname: input.hostname.trim().toLowerCase(), path: normalisePath(input.path) };
+    const hostname = input.hostname.trim().toLowerCase();
+    const key = {
+      contest_id: input.contest_id,
+      hostname: hostname === '' ? null : hostname,
+      path: normalisePath(input.path),
+    };
     const data = { ...input, ...key };
     const id = input.id;
     await persistUnique('an exposure on this location', () =>
@@ -192,5 +197,8 @@ export async function readRegistry(): Promise<{
     prisma.wirings.findMany({ orderBy: { id: 'asc' } }),
     prisma.contest_exposures.findMany({ orderBy: { contest_id: 'asc' } }),
   ]);
-  return { services, wirings, exposures };
+  // WHY the panel sees '' and not null: a path-only row has no hostname, and the form
+  // edits that absence as an empty field, so the two representations meet here.
+  const panelExposures = exposures.map((exposure) => ({ ...exposure, hostname: exposure.hostname ?? '' }));
+  return { services, wirings, exposures: panelExposures };
 }

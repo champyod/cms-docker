@@ -121,6 +121,14 @@ describe('saveExposure', () => {
     });
   });
 
+  it('stores a blank hostname as null for a path-only exposure', async () => {
+    const result = await saveExposure({ contest_id: 1, hostname: '  ', path: '/beta', tls: true, tailnet: null });
+    expect(result).toEqual({ success: true });
+    expect(mocks.createExposure).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contest_id: 1, hostname: null, path: '/beta' }),
+    });
+  });
+
   it('updates the named row in place when the input carries an id', async () => {
     const result = await saveExposure({ id: 9, contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
     expect(result).toEqual({ success: true });
