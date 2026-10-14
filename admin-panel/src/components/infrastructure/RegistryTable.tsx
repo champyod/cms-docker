@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
+import { useDictionary } from '@/hooks/useDictionary';
 
 interface RegistryTableProps {
   headers: readonly string[];
@@ -40,10 +41,11 @@ interface RowButtonsProps {
 }
 
 export function RowButtons({ onEdit, onDelete }: RowButtonsProps): React.JSX.Element {
+  const copy = useDictionary().infrastructure.services;
   return (
     <span className="flex justify-end gap-2">
-      {onEdit !== undefined && <Button size="sm" variant="ghost" onClick={onEdit}>Edit</Button>}
-      <Button size="sm" variant="ghost" onClick={onDelete}>Remove</Button>
+      {onEdit !== undefined && <Button size="sm" variant="ghost" onClick={onEdit}>{copy.actions.edit}</Button>}
+      <Button size="sm" variant="ghost" onClick={onDelete}>{copy.actions.remove}</Button>
     </span>
   );
 }

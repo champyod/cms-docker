@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
+import en from '@/dictionaries/en.json';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
 import {
   draftOfExposure,
@@ -51,29 +53,31 @@ const SERVICE: ServiceRecord = {
 
 function renderView(services: ServiceRecord[] = [SERVICE]): void {
   render(
-    <ServiceRegistryView
-      services={services}
-      wirings={[]}
-      exposures={[]}
-      contests={[{ id: 1, name: 'Autumn' }]}
-      title="Services"
-      description="The service registry"
-    />,
+    <DictionaryProvider dict={en}>
+      <ServiceRegistryView
+        services={services}
+        wirings={[]}
+        exposures={[]}
+        contests={[{ id: 1, name: 'Autumn' }]}
+        title="Services"
+        description="The service registry"
+      />
+    </DictionaryProvider>,
   );
 }
 
 describe('registry-spec carries the row id and refuses a blank number', () => {
   it('reads a whole number only when one is present', () => {
-    expect(requiredInt('7')).toBe(7);
-    expect(() => requiredInt('')).toThrow();
-    expect(() => requiredInt(undefined)).toThrow();
-    expect(() => requiredInt('abc')).toThrow();
+    expect(requiredInt('7', 'a whole number is required')).toBe(7);
+    expect(() => requiredInt('', 'a whole number is required')).toThrow('a whole number is required');
+    expect(() => requiredInt(undefined, 'a whole number is required')).toThrow();
+    expect(() => requiredInt('abc', 'a whole number is required')).toThrow();
   });
 
   it('names the role or throws rather than casting an unknown one', () => {
-    expect(resolveRole('ContestWebServer')).toBe('ContestWebServer');
-    expect(() => resolveRole('NotARole')).toThrow();
-    expect(() => resolveRole(undefined)).toThrow();
+    expect(resolveRole('ContestWebServer', 'unknown role')).toBe('ContestWebServer');
+    expect(() => resolveRole('NotARole', 'unknown role')).toThrow();
+    expect(() => resolveRole(undefined, 'unknown role')).toThrow();
   });
 
   it('seeds every draft with the record id', () => {

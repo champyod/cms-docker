@@ -5,14 +5,14 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/core/Button';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useDictionary } from '@/hooks/useDictionary';
 import { useToast } from '@/components/providers/ToastProvider';
+import { collectWiringProblems } from '@/lib/service-wiring';
+import { interpolate } from '@/lib/interpolate';
 import {
   removeExposureAction,
   removeServiceAction,
   removeWiringAction,
-  saveExposureAction,
-  saveServiceAction,
-  saveWiringAction,
 } from '@/app/actions/serviceWiring';
 import {
   type ExposureRecord,
@@ -20,21 +20,21 @@ import {
   type WiringRecord,
   type WriteResult,
 } from '@/lib/service-wiring-contract';
-import { collectWiringProblems } from '@/lib/service-wiring';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistryTable, RowButtons } from './RegistryTable';
+import { persist } from './registry-mutations';
 import {
   BLANK,
+  COLUMNS,
+  KIND_LABEL_KEY,
+  copyText,
   draftOfExposure,
   draftOfService,
   draftOfWiring,
-  optionalInt,
-  optionalText,
-  requiredInt,
-  resolveRole,
   type ContestOption,
   type Draft,
   type Kind,
+  type ServicesCopy,
 } from './registry-spec';
 
 interface ServiceRegistryViewProps {
@@ -46,42 +46,10 @@ interface ServiceRegistryViewProps {
   description: string;
 }
 
-/** Dispatches one draft to the action that owns its kind, as an edit when the draft carries an id. */
-async function persist(kind: Kind, draft: Draft): Promise<WriteResult> {
-  const id = optionalInt(draft.id) ?? undefined;
-  if (kind === 'service') {
-    return saveServiceAction({
-      id,
-      name: draft.name ?? '',
-      role: resolveRole(draft.role),
-      shard: requiredInt(draft.shard),
-      host: draft.host ?? '',
-      http_port: optionalInt(draft.http_port),
-      rpc_port: optionalInt(draft.rpc_port),
-      db_profile: draft.db_profile ?? 'default',
-      contest_id: optionalInt(draft.contest_id),
-      enabled: draft.enabled === 'true',
-    });
-  }
-  if (kind === 'wiring') {
-    return saveWiringAction({
-      id,
-      from_service_id: requiredInt(draft.from_service_id),
-      to_service_id: requiredInt(draft.to_service_id),
-      relation: draft.relation ?? '',
-      enabled: draft.enabled === 'true',
-    });
-  }
-  return saveExposureAction({
-    id,
-    contest_id: requiredInt(draft.contest_id),
-    hostname: draft.hostname ?? '',
-    path: draft.path ?? '/',
-    tls: draft.tls === 'true',
-    tailnet: optionalText(draft.tailnet),
-  });
+/** The header cells one kind's table shows, resolved from the dictionary by path. */
+function headersFor(kind: Kind, copy: ServicesCopy): string[] {
+  return COLUMNS[kind].map((column) => copyText(copy, column.labelKey));
 }
-
 
 export function ServiceRegistryView({
   services,
@@ -91,6 +59,7 @@ export function ServiceRegistryView({
   title,
   description,
 }: ServiceRegistryViewProps): React.JSX.Element {
+  const copy = useDictionary().infrastructure.services;
   const router = useRouter();
   const { addToast } = useToast();
   const [kind, setKind] = useState<Kind | null>(null);
@@ -111,31 +80,32 @@ export function ServiceRegistryView({
       router.refresh();
       return;
     }
-    addToast({ type: 'error', title: 'Not saved', message: result.error ?? 'unknown failure' });
+    addToast({ type: 'error', title: copy.toast.errorTitle, message: result.error ?? copy.toast.errorFallback });
   };
 
   /** A removal is destructive, so it is confirmed before the row is touched. */
   const remove = async (label: string, action: () => Promise<WriteResult>): Promise<void> => {
     const agreed = await confirm({
       kind: 'destructive',
-      title: `Remove ${label}`,
-      description: `Remove ${label} from the registry? The next config sync stops rendering it.`,
-      confirmLabel: 'Remove',
+      title: interpolate(copy.confirm.title, { label }),
+      description: interpolate(copy.confirm.description, { label }),
+      confirmLabel: copy.confirm.confirmLabel,
     });
     if (!agreed) return;
-    finish(await action(), `${label} removed`);
+    finish(await action(), interpolate(copy.toast.removedTitle, { label }));
   };
 
   const submit = async (): Promise<void> => {
     if (kind === null) return;
     setPending(true);
     try {
-      finish(await persist(kind, draft), `${kind} saved`);
+      const label = copyText(copy, KIND_LABEL_KEY[kind]);
+      finish(await persist(kind, draft, copy), interpolate(copy.toast.savedTitle, { kind: label }));
     } catch (error) {
       addToast({
         type: 'error',
-        title: 'Not saved',
-        message: error instanceof Error ? error.message : 'unexpected failure',
+        title: copy.toast.errorTitle,
+        message: error instanceof Error ? error.message : copy.toast.unexpected,
       });
     } finally {
       setPending(false);
@@ -154,7 +124,7 @@ export function ServiceRegistryView({
       {problems.length > 0 && (
         <section className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
           <h2 className="text-sm font-medium text-destructive">
-            {problems.length} problem{problems.length === 1 ? '' : 's'} before a sync
+            {interpolate(problems.length === 1 ? copy.problems.one : copy.problems.title, { count: problems.length })}
           </h2>
           <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
             {problems.map((problem) => (
@@ -166,22 +136,23 @@ export function ServiceRegistryView({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">Services ({services.length})</h2>
-          <Button size="sm" onClick={(): void => open('service', { ...BLANK.service })}>Add service</Button>
+          <h2 className="text-sm font-medium text-foreground">{copy.kinds.service} ({services.length})</h2>
+          <Button size="sm" onClick={(): void => open('service', { ...BLANK.service })}>{copy.actions.addService}</Button>
         </div>
         <RegistryTable
-          headers={['Name', 'Role', 'Host', 'Ports', 'DB profile', 'Contest', 'Enabled', '']}
-          empty="No service is registered yet."
+          headers={headersFor('service', copy)}
+          empty={copy.empty.service}
           rows={services.map((service) => [
             service.name,
             service.role,
             service.host,
-            [service.http_port === null ? null : `http ${service.http_port}`, service.rpc_port === null ? null : `rpc ${service.rpc_port}`]
-              .filter((part) => part !== null)
-              .join(' / '),
+            [
+              service.http_port === null ? null : `${copy.values.http} ${service.http_port}`,
+              service.rpc_port === null ? null : `${copy.values.rpc} ${service.rpc_port}`,
+            ].filter((part) => part !== null).join(' / '),
             service.db_profile,
-            service.contest_id === null ? 'all contests' : `#${service.contest_id}`,
-            service.enabled ? 'yes' : 'no',
+            service.contest_id === null ? copy.values.allContests : `#${service.contest_id}`,
+            service.enabled ? copy.values.yes : copy.values.no,
             <RowButtons
               key={service.id}
               onEdit={(): void => open('service', draftOfService(service))}
@@ -193,17 +164,17 @@ export function ServiceRegistryView({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">Wirings ({wirings.length})</h2>
-          <Button size="sm" onClick={(): void => open('wiring', { ...BLANK.wiring })}>Add wiring</Button>
+          <h2 className="text-sm font-medium text-foreground">{copy.kinds.wiring} ({wirings.length})</h2>
+          <Button size="sm" onClick={(): void => open('wiring', { ...BLANK.wiring })}>{copy.actions.addWiring}</Button>
         </div>
         <RegistryTable
-          headers={['From', 'Relation', 'To', 'Enabled', '']}
-          empty="No wiring is registered yet."
+          headers={headersFor('wiring', copy)}
+          empty={copy.empty.wiring}
           rows={wirings.map((wiring) => [
             nameOf(wiring.from_service_id),
             wiring.relation,
             nameOf(wiring.to_service_id),
-            wiring.enabled ? 'yes' : 'no',
+            wiring.enabled ? copy.values.yes : copy.values.no,
             <RowButtons
               key={wiring.id}
               onEdit={(): void => open('wiring', draftOfWiring(wiring))}
@@ -215,18 +186,18 @@ export function ServiceRegistryView({
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">Exposures ({exposures.length})</h2>
-          <Button size="sm" onClick={(): void => open('exposure', { ...BLANK.exposure })}>Add exposure</Button>
+          <h2 className="text-sm font-medium text-foreground">{copy.kinds.exposure} ({exposures.length})</h2>
+          <Button size="sm" onClick={(): void => open('exposure', { ...BLANK.exposure })}>{copy.actions.addExposure}</Button>
         </div>
         <RegistryTable
-          headers={['Contest', 'Hostname', 'Path', 'TLS', 'Tailnet', '']}
-          empty="No contest is exposed yet, so no generated route is rendered."
+          headers={headersFor('exposure', copy)}
+          empty={copy.empty.exposure}
           rows={exposures.map((exposure) => [
             `#${exposure.contest_id}`,
             exposure.hostname,
             exposure.path,
-            exposure.tls ? 'yes' : 'no',
-            exposure.tailnet ?? '—',
+            exposure.tls ? copy.values.yes : copy.values.no,
+            exposure.tailnet ?? copy.values.none,
             <RowButtons
               key={exposure.id}
               onEdit={(): void => open('exposure', draftOfExposure(exposure))}

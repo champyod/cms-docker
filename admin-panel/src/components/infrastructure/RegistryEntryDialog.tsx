@@ -3,8 +3,9 @@
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { ServiceRecord } from '@/lib/service-wiring-contract';
-import { FIELDS, KIND_LABEL, type ContestOption, type Draft, type FieldSpec, type Kind } from './registry-spec';
+import { FIELDS, KIND_LABEL_KEY, copyText, type ContestOption, type Draft, type FieldSpec, type Kind } from './registry-spec';
 
 interface RegistryEntryDialogProps {
   kind: Kind | null;
@@ -27,16 +28,17 @@ export function RegistryEntryDialog({
   onClose,
   onSubmit,
 }: RegistryEntryDialogProps): React.JSX.Element {
+  const copy = useDictionary().infrastructure.services;
   return (
     <Dialog
       open={kind !== null}
       pending={pending}
       onOpenChange={(next): void => { if (!next) onClose(); }}
-      title={kind === null ? '' : KIND_LABEL[kind]}
+      title={kind === null ? '' : copyText(copy, KIND_LABEL_KEY[kind])}
       footer={
         <ModalFooter
-          cancelLabel="Cancel"
-          confirmLabel="Save"
+          cancelLabel={copy.actions.cancel}
+          confirmLabel={copy.actions.save}
           confirmLoading={pending}
           onCancel={onClose}
           onConfirm={onSubmit}
@@ -48,6 +50,7 @@ export function RegistryEntryDialog({
           <FieldInput
             key={field.key}
             field={field}
+            label={copyText(copy, field.labelKey)}
             value={draft[field.key] ?? ''}
             contests={contests}
             services={services}
@@ -61,13 +64,14 @@ export function RegistryEntryDialog({
 
 interface FieldInputProps {
   field: FieldSpec;
+  label: string;
   value: string;
   contests: ContestOption[];
   services: ServiceRecord[];
   onChange: (value: string) => void;
 }
 
-function FieldInput({ field, value, contests, services, onChange }: FieldInputProps): React.JSX.Element {
+function FieldInput({ field, label, value, contests, services, onChange }: FieldInputProps): React.JSX.Element {
   if (field.kind === 'boolean') {
     return (
       <label className="flex items-center gap-2 text-sm text-foreground">
@@ -76,7 +80,7 @@ function FieldInput({ field, value, contests, services, onChange }: FieldInputPr
           checked={value === 'true'}
           onChange={(event): void => onChange(String(event.target.checked))}
         />
-        {field.label}
+        {label}
       </label>
     );
   }
@@ -84,7 +88,7 @@ function FieldInput({ field, value, contests, services, onChange }: FieldInputPr
   if (field.kind === 'select' || field.kind === 'contest' || field.kind === 'service') {
     return (
       <ChoiceField
-        field={field}
+        label={label}
         value={value}
         options={optionsFor(field, contests, services)}
         onChange={onChange}
@@ -94,7 +98,7 @@ function FieldInput({ field, value, contests, services, onChange }: FieldInputPr
 
   return (
     <Input
-      label={field.label}
+      label={label}
       value={value}
       inputMode={field.kind === 'number' ? 'numeric' : undefined}
       onChange={(event): void => onChange(event.target.value)}
@@ -117,16 +121,16 @@ function optionsFor(
 }
 
 interface ChoiceFieldProps {
-  field: FieldSpec;
+  label: string;
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
 }
 
-function ChoiceField({ field, value, options, onChange }: ChoiceFieldProps): React.JSX.Element {
+function ChoiceField({ label, value, options, onChange }: ChoiceFieldProps): React.JSX.Element {
   return (
     <label className="block text-sm text-foreground">
-      <span className="mb-1 block text-muted-foreground">{field.label}</span>
+      <span className="mb-1 block text-muted-foreground">{label}</span>
       <select
         className="w-full rounded-xl border border-border bg-background px-3 py-2"
         value={value}
