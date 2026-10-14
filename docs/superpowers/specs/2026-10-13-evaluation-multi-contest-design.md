@@ -281,16 +281,19 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 | Backup catalog placement | `admin-panel/src/lib/backup-table-catalog.ts` | 54 catalog tests pass |
 | Renderer CLI: payload on stdin, validation before render, non-zero exit on refusal | `admin-panel/src/lib/service-wiring-cli.ts` | 9 vitest cases |
 | `config sync` renders the generated route artifacts from the registry | `scripts/__config_sync.sh` (`render_wiring_artifacts`) | `tests/test_service_wiring_render.sh` — 11 assertions |
+| A service carries two ports: `http_port` (what a front door proxies to) and `rpc_port` (what its peers dial) | `admin-panel/prisma/schema.prisma` | DDL column-for-column with `prisma migrate diff` |
+| Store: validation before every write, upsert-by-key, records that carry their id | `admin-panel/src/lib/service-wiring-store.ts` | 12 vitest cases |
+| Server actions, each demanding `container:control` in its own body | `admin-panel/src/app/actions/serviceWiring.ts` | the repository's own `permission-coverage` suite passes |
 
-Gates: `tsc --noEmit` clean · `vitest run` **249 files / 3241 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
+Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
 
 ### 11.2 Not landed
 
 | Phase | Missing | Why it stopped |
 |---|---|---|
-| 3 — renderer wiring (partly done) | The sync now renders `config/generated/contest-routes.conf` and `tailscale-serve.json` from the registry, but **nothing populates `services`/`wirings`/`contest_exposures` yet** — no seed and no panel CRUD — so the step is inert until rows exist. The generated artifacts are also not yet consumed by the nginx containers, and the host-side `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows | The remaining work is consumption plus a data-entry surface, which needs a running stack |
+| 3 — renderer wiring (partly done) | The sync now renders `config/generated/contest-routes.conf` and `tailscale-serve.json` from the registry, but **nothing populates `services`/`wirings`/`contest_exposures` yet** — the write path (store plus gated actions) now exists, but no screen or import calls it, so the step stays inert until rows can be entered. The generated artifacts are also not yet consumed by the nginx containers, and the host-side `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows | The remaining work is consumption plus a data-entry surface, which needs a running stack |
 | 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID`; `workers_status` has no contest dimension; `evaluation-rpc.ts:3-4` still hardcodes one endpoint | Python is unrunnable on this host (no `sqlalchemy`, no `tornado`) and no database is up, so the change could not be exercised. Docker is available now, so this is the next phase that can be verified inside a container |
-| 5 — panel surface | No Services & Wiring screen | Needs phase 3 exposed via a server action, and the panel cannot be exercised here |
+| 5 — panel surface (backend done) | The store and the seven gated server actions exist, but there is **no screen**: no page, no client component, no navigation entry, no `en`/`th` dictionary keys. Nothing calls `getRegistryAction` yet | The UI is the next step; it needs the panel's core components and both dictionaries |
 
 Still true and important: `contests.is_active` remains the authority in `scripts/__config_sync.sh`. The schema and the profile validation for per-service binding landed; the authority switch (5.1) did not. N=1 behaves exactly as before.
 
