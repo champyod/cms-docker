@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 
 import { useDictionary } from '@/hooks/useDictionary';
 import { apiClient } from '@/lib/apiClient';
+import { withBasePath } from '@/lib/base-path';
 
 import { BrandingCard } from './BrandingCard';
 
@@ -49,7 +50,7 @@ export function RankingLogoCard({
 
   return (
     <BrandingCard
-      previewUrl={logoUrl}
+      previewUrl={withBasePath(logoUrl)}
       loading={uploading}
       onUpload={handleUpload}
       error={error}

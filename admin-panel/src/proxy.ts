@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 import { slideSessionCookie } from "@/lib/auth";
 
@@ -19,7 +20,9 @@ function resolveLocaleRedirect(request: NextRequest): NextResponse | undefined {
     (locale) => pathname.startsWith(`/${locale}`) || pathname === `/${locale}`
   );
   if (hasLocale) return undefined;
-  const localePath = `/${DEFAULT_LOCALE}${pathname === "/" ? "" : pathname}${search}`;
+  // Why the prefix is applied here: middleware emits the Location header itself, and the
+  // framework adds basePath to a redirect it renders, never to one this function returns.
+  const localePath = `${withBasePath(`/${DEFAULT_LOCALE}`)}${pathname === "/" ? "" : pathname}${search}`;
   return NextResponse.redirect(new URL(localePath, request.url));
 }
 

@@ -40,7 +40,7 @@ export function TeamList({ initialTeams, permissionKeys, navigation, copy, docsL
       params.delete('dir');
     }
     const query = params.toString();
-    router.replace(query.length > 0 ? `?${query}` : window.location.pathname);
+    router.replace(query.length > 0 ? `?${query}` : pathname);
   };
 
   return (

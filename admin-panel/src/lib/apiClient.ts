@@ -1,3 +1,5 @@
+import { withBasePath } from '@/lib/base-path';
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   error?: string;
@@ -36,7 +38,7 @@ class ApiClient {
         defaultHeaders['Content-Type'] = 'application/json';
       }
 
-      const resp = await fetch(path, {
+      const resp = await fetch(withBasePath(path), {
         ...options,
         headers: {
           ...defaultHeaders,

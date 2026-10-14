@@ -1,3 +1,5 @@
+import { withBasePath } from '@/lib/base-path';
+
 const UTF8_BOM = '\uFEFF';
 
 function triggerDownload(href: string, filename: string): void {
@@ -18,5 +20,5 @@ export function downloadCsvFile(filename: string, content: string): void {
 
 /** Opens a CSV the server already holds behind a token instead of copying its bytes into the page. */
 export function openServerDownload(downloadUrl: string, filename: string): void {
-  triggerDownload(downloadUrl, filename);
+  triggerDownload(withBasePath(downloadUrl), filename);
 }

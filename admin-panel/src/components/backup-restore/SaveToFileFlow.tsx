@@ -10,6 +10,7 @@ import { Stack } from '@/components/core/Layout';
 import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Text } from '@/components/core/Typography';
 import { BACKUP_TABLES, withRequiredTables } from '@/lib/backup-table-catalog';
+import { withBasePath } from '@/lib/base-path';
 import { SelectableGridTable } from '@/components/backup-restore/SelectableGridTable';
 import type { BackupTable } from '@/lib/backup-table-catalog';
 
@@ -24,7 +25,7 @@ export const EXPORT_URL = '/api/backups/export';
  * encoded too, and the route would read one long unknown table name.
  */
 export function exportUrl(tables: readonly string[]): string {
-    return `${EXPORT_URL}?tables=${encodeURIComponent(tables.join(','))}`;
+    return `${withBasePath(EXPORT_URL)}?tables=${encodeURIComponent(tables.join(','))}`;
 }
 
 const COLUMNS: readonly ResponsiveColumn<BackupTable>[] = [

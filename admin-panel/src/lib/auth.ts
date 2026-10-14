@@ -11,7 +11,9 @@ const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 // token more than half its life remaining while still sliding the 7-day cookie window
 const SESSION_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
-const SESSION_COOKIE_NAME = "session";
+// Why the name is configurable: two panels on one host — a /beta deployment beside the root one —
+// share a cookie namespace, and a name only one of them writes is what keeps their sessions apart.
+const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME?.trim() || "session";
 
 // Why: a clear must repeat the path the cookie was written with. Without it the browser
 // scopes the expiring cookie to the request directory and keeps the original session alive

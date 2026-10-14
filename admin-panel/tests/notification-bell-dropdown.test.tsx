@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+
+// Why: the popup resolves the locale it links with from the router's pathname, which a bare
+// render does not provide.
+vi.mock('next/navigation', () => ({
+  usePathname: () => '/en/notifications',
+}));
 
 // Why: globals are disabled in vitest.config.ts, so @testing-library/react's
 // automatic afterEach cleanup does not run; see audit-detail-error.test.tsx.

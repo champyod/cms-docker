@@ -1,7 +1,22 @@
 import { createConnection } from 'node:net';
 
-const EVALUATION_RPC_HOST = 'cms-evaluation-service';
-const EVALUATION_RPC_PORT = 25000;
+const DEFAULT_EVALUATION_RPC_PORT = 25_000;
+const DEFAULT_EVALUATION_RPC_TARGET = `cms-evaluation-service:${DEFAULT_EVALUATION_RPC_PORT}`;
+
+function parseRpcTarget(target: string): { host: string; port: number } {
+  const separator = target.lastIndexOf(':');
+  if (separator <= 0) return { host: target, port: DEFAULT_EVALUATION_RPC_PORT };
+  const port = Number(target.slice(separator + 1));
+  return {
+    host: target.slice(0, separator),
+    port: Number.isInteger(port) && port > 0 ? port : DEFAULT_EVALUATION_RPC_PORT,
+  };
+}
+
+// Why configurable: a deployment that runs its own evaluation service has to point the panel at
+// it, while an unset value keeps the shared core stack's service name and port.
+const EVALUATION_RPC = parseRpcTarget(process.env.EVALUATION_RPC_TARGET?.trim() || DEFAULT_EVALUATION_RPC_TARGET);
+
 export const EVALUATION_RPC_TIMEOUT_MS = 10_000;
 // Mirrors cms.io.rpc.RPCBase.MAX_MESSAGE_SIZE — larger frames are rejected by the service.
 const MAX_RPC_FRAME_BYTES = 1024 * 1024;
@@ -45,7 +60,7 @@ export async function invalidateViaRpc(
   return await new Promise<RpcResult>((resolve) => {
     let settled = false;
     let buffer = '';
-    const socket = createConnection({ host: EVALUATION_RPC_HOST, port: EVALUATION_RPC_PORT });
+    const socket = createConnection({ host: EVALUATION_RPC.host, port: EVALUATION_RPC.port });
 
     // Declared as a hoisted function so it can close over `timer`, which is
     // created after it but always fires (or is cleared) only after that.

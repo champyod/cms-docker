@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
@@ -31,7 +32,7 @@ const ACTION_CLASS = 'text-xs text-muted-foreground hover:text-foreground';
  */
 export function NotificationPopup({ events, onClear, onMarkAllRead }: NotificationPopupProps): React.JSX.Element {
   const formatTimestamp = useFormatTimestamp();
-  const locale = localeFromPathname(window.location.pathname);
+  const locale = localeFromPathname(usePathname());
   // Why every alert opens the log rather than its own row: the live frame carries the alert's wording
   // and its row id only, so the log is the only page that can show the record it came from.
   const auditLogHref = buildRoute(locale, 'administration.audit');

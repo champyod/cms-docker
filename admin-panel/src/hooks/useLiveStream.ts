@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { withBasePath } from '@/lib/base-path';
 import {
   LIVE_IDLE_TIMEOUT_MS,
   LIVE_RECONNECT_MAX_MS,
@@ -103,7 +104,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
       lastFrameAtRef.current = Date.now();
       setStatus('connecting');
 
-      const source = new EventSource(url);
+      const source = new EventSource(withBasePath(url));
       sourceRef.current = source;
 
       source.onopen = () => {

@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
+import { withBasePath } from '@/lib/base-path';
 import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_POLL_MS } from '@/lib/constants/deploy';
 import { createDeployToast, showDeployResult } from '@/lib/deployToast';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -62,7 +63,7 @@ export function useDeployStream(
     (operationId: string, contestId: number) => {
       stopStreaming();
       lastFrameAtRef.current = Date.now();
-      const source = new EventSource(`/api/deploy/status/${operationId}`);
+      const source = new EventSource(withBasePath(`/api/deploy/status/${operationId}`));
       eventSourceRef.current = source;
 
       // Why this clock measures frames and not build output: the route sends a status frame at least

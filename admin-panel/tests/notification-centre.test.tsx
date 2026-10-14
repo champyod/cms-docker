@@ -22,6 +22,7 @@ vi.mock('next/navigation', () => ({
     refresh: vi.fn(),
     prefetch: vi.fn(),
   }),
+  usePathname: () => '/en/notifications',
 }));
 
 // Why the service is mocked rather than mounted: both surfaces must read its state, and a real
