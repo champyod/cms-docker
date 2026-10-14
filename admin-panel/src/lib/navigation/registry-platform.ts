@@ -29,7 +29,6 @@ export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('ranking.users', '/ranking/users', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.settings', '/ranking/settings', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.appearance', '/ranking/appearance', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
-  enabledPageRoute('ranking.lockouts', '/ranking/lockouts', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute('ranking.credits', '/ranking/credits', { all: ['ranking:list', 'ranking:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
 
   enabledPageRoute('system.appearance', '/system/appearance', { all: ['appearance:read', 'appearance:list'] }, ['/appearance']),

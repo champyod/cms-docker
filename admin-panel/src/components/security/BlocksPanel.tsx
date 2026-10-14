@@ -13,9 +13,12 @@ import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { ReasonDialog } from '@/components/core/ReasonDialog';
+import { CaptchaStatusCard } from '@/components/security/CaptchaStatusCard';
 import { ExemptionsPanel } from '@/components/security/ExemptionsPanel';
 import { LoginActivityCard } from '@/components/security/LoginActivityCard';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
+import type { CaptchaStatus } from '@/lib/captcha-status';
+import type { Dictionary } from '@/lib/dictionary';
 import type { SecurityBlock } from '@/lib/security/block-ledger';
 
 interface BlocksPanelProps {
@@ -23,6 +26,8 @@ interface BlocksPanelProps {
   readonly lockouts: readonly SecurityBlock[];
   readonly exemptions: readonly SecurityBlock[];
   readonly activity: LoginActivityResult;
+  readonly captcha: CaptchaStatus;
+  readonly captchaCopy: Dictionary['security']['blocks'];
 }
 
 // The native select is the one control with no core wrapper, so it carries the
@@ -34,7 +39,7 @@ function unbanDescription(ip: string, jail: string): string {
   return `Queue an unban for ${ip} in the ${jail} jail. The host agent applies it on its next tick.`;
 }
 
-export function BlocksPanel({ banned, lockouts, exemptions, activity }: BlocksPanelProps): React.JSX.Element {
+export function BlocksPanel({ banned, lockouts, exemptions, activity, captcha, captchaCopy }: BlocksPanelProps): React.JSX.Element {
   const prompt = useReasonPrompt();
   const [manualJail, setManualJail] = useState('');
   const [manualIp, setManualIp] = useState('');
@@ -138,6 +143,8 @@ export function BlocksPanel({ banned, lockouts, exemptions, activity }: BlocksPa
           })
         }
       />
+
+      <CaptchaStatusCard status={captcha} copy={captchaCopy} />
 
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Login lockouts</h2>

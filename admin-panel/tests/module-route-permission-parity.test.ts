@@ -52,10 +52,6 @@ const ROUTE_CASES = [
     requiredKeys: ['ranking:list', 'ranking:read'],
   },
   {
-    routeId: 'ranking.lockouts',
-    requiredKeys: ['ranking:list', 'ranking:read'],
-  },
-  {
     routeId: 'ranking.credits',
     requiredKeys: ['ranking:list', 'ranking:read'],
   },
@@ -83,7 +79,6 @@ const MODULE_ROUTE_IDS = [
   'ranking.board',
   'ranking.settings',
   'ranking.appearance',
-  'ranking.lockouts',
   'ranking.credits',
   'system.appearance',
   'system.maintenance',

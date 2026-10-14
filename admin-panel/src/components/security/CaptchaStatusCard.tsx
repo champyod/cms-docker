@@ -13,11 +13,11 @@ import { Text } from '@/components/core/Typography';
 import type { CaptchaStatus } from '@/lib/captcha-status';
 import type { Dictionary } from '@/lib/dictionary';
 
-type LockoutCopy = Dictionary['ranking']['lockouts'];
+type BlocksCopy = Dictionary['security']['blocks'];
 
 interface CaptchaStatusCardProps {
   readonly status: CaptchaStatus;
-  readonly copy: LockoutCopy;
+  readonly copy: BlocksCopy;
 }
 
 export function CaptchaStatusCard({ status, copy }: CaptchaStatusCardProps): React.JSX.Element {

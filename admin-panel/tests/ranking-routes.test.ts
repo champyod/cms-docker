@@ -23,16 +23,14 @@ const RANKING_PAGES: readonly [RouteId, string, string][] = [
   ['ranking.board', 'src/app/[locale]/(authenticated)/ranking/page.tsx', '<RankingLogoCard'],
   ['ranking.appearance', 'src/app/[locale]/(authenticated)/ranking/appearance/page.tsx', 'AppearanceForm'],
   ['ranking.settings', 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx', 'RankingOverrideForm'],
-  ['ranking.lockouts', 'src/app/[locale]/(authenticated)/ranking/lockouts/page.tsx', 'clearRankingLockout'],
   ['ranking.credits', 'src/app/[locale]/(authenticated)/ranking/credits/page.tsx', 'submitRankingCredits'],
 ];
 
 describe('Ranking target registry', () => {
-  it('enables the five sub-routes with their canonical paths', () => {
+  it('enables the four sub-routes with their canonical paths', () => {
     expect(buildRoute('en', 'ranking.board')).toBe('/en/ranking');
     expect(buildRoute('en', 'ranking.settings')).toBe('/en/ranking/settings');
     expect(buildRoute('en', 'ranking.appearance')).toBe('/en/ranking/appearance');
-    expect(buildRoute('en', 'ranking.lockouts')).toBe('/en/ranking/lockouts');
     expect(buildRoute('en', 'ranking.credits')).toBe('/en/ranking/credits');
     for (const [routeId] of RANKING_PAGES) expect(route(routeId).enabled).toBe(true);
   });

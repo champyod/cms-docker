@@ -50,7 +50,6 @@ export type RouteId =
   | 'ranking.users'
   | 'ranking.settings'
   | 'ranking.appearance'
-  | 'ranking.lockouts'
   | 'ranking.credits'
   | 'system.appearance'
   | 'system.maintenance'

@@ -61,8 +61,6 @@ describe('module navigation dictionary parity', () => {
       'navigation.ranking.settings.description',
       'navigation.ranking.appearance.label',
       'navigation.ranking.appearance.description',
-      'navigation.ranking.lockouts.label',
-      'navigation.ranking.lockouts.description',
       'navigation.ranking.credits.label',
       'navigation.ranking.credits.description',
       'navigation.system.appearance.label',

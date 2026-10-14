@@ -69,7 +69,6 @@ export const EXPECTED_ROUTE_MANIFEST: readonly RouteFixture[] = [
   { id: 'ranking.users', path: '/ranking/users', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.settings', path: '/ranking/settings', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.appearance', path: '/ranking/appearance', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
-  { id: 'ranking.lockouts', path: '/ranking/lockouts', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
   { id: 'ranking.credits', path: '/ranking/credits', kind: 'page', tabIds: [], legacyPaths: [], enabled: true },
 
   { id: 'system.appearance', path: '/system/appearance', kind: 'page', tabIds: [], legacyPaths: ['/appearance'], enabled: true },
@@ -132,7 +131,6 @@ export const EXPECTED_ROUTE_PERMISSIONS = {
   'ranking.users': { all: ['ranking:list', 'ranking:read'] },
   'ranking.settings': { all: ['ranking:list', 'ranking:read'] },
   'ranking.appearance': { all: ['ranking:list', 'ranking:read'] },
-  'ranking.lockouts': { all: ['ranking:list', 'ranking:read'] },
   'ranking.credits': { all: ['ranking:list', 'ranking:read'] },
   'system.appearance': { all: ['appearance:read', 'appearance:list'] },
   'system.maintenance': { any: ['maintenance:update', 'backup:create'] },
@@ -151,6 +149,6 @@ export const EXPECTED_NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = 
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: ['administration.admins', 'administration.groups', 'administration.audit'] },
   { id: 'security', labelKey: 'navigation.groups.security', routeIds: ['security.overview', 'security.waf', 'security.blocks', 'security.tls'] },
   { id: 'infrastructure', labelKey: 'navigation.groups.infrastructure', routeIds: ['infrastructure.deployments', 'infrastructure.containers', 'infrastructure.resources', 'infrastructure.services'] },
-  { id: 'ranking', labelKey: 'navigation.groups.ranking', routeIds: ['ranking.board', 'ranking.users', 'ranking.settings', 'ranking.appearance', 'ranking.lockouts', 'ranking.credits'] },
+  { id: 'ranking', labelKey: 'navigation.groups.ranking', routeIds: ['ranking.board', 'ranking.users', 'ranking.settings', 'ranking.appearance', 'ranking.credits'] },
   { id: 'system', labelKey: 'navigation.groups.system', routeIds: ['system.appearance', 'system.maintenance', 'system.backup-restore', 'system.settings', 'system.docs', 'system.about'] },
 ];

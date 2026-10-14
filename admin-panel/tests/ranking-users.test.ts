@@ -160,7 +160,6 @@ describe('ranking users route', () => {
       'ranking.users',
       'ranking.settings',
       'ranking.appearance',
-      'ranking.lockouts',
       'ranking.credits',
     ]);
   });

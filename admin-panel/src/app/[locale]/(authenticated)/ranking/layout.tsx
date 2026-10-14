@@ -24,7 +24,6 @@ export default async function RankingLayout({
     'ranking.users': dict['navigation']['ranking']['users']['description'],
     'ranking.settings': dict['navigation']['ranking']['settings']['description'],
     'ranking.appearance': dict['navigation']['ranking']['appearance']['description'],
-    'ranking.lockouts': dict['navigation']['ranking']['lockouts']['description'],
     'ranking.credits': dict['navigation']['ranking']['credits']['description'],
   };
   // Every control is bound to state its own page owns, so each publishes its own.

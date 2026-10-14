@@ -7,9 +7,12 @@ import { revalidatePath } from 'next/cache';
 
 import { getCurrentUser } from '@/app/actions/auth';
 import { recordAudit } from '@/lib/audit';
+import { clearLoginLockout } from '@/lib/login-lockouts';
 import { ensurePermission } from '@/lib/permissions';
+import { lockoutRedisUrl } from '@/lib/redis-lockouts';
 import { getRepoRoot } from '@/lib/repo-root';
 import { expireStaleBlocks, listBlocks, type SecurityBlock } from '@/lib/security/block-ledger';
+import { listLoginActivity, type LoginActivity } from '@/lib/security/login-activity';
 import { releaseLoginLockout } from '@/lib/security/lockouts';
 import {
   FAIL2BAN_JAIL_FILE,
@@ -168,5 +171,50 @@ export async function unlockLoginLockout(username: string, ip: string, reason: s
     success: true,
     message: closed > 0 ? `Lockout lifted for ${username}` : `No open lockout row for ${username} — the in-memory counter was cleared`,
   };
+}
+
+export type LoginActivityResult =
+  | { readonly ok: true; readonly rows: readonly LoginActivity[] }
+  | { readonly ok: false; readonly error: string };
+
+/**
+ * Every live login-failure counter, read from the shared store. The counters are
+ * the enforcement; the ledger read above is the record of the lockouts they
+ * produced. Absent Redis the counters are unreadable, which is reported rather
+ * than shown as an empty list.
+ */
+export async function readLoginActivity(): Promise<LoginActivityResult> {
+  await ensurePermission('security:read');
+  await ensurePermission('lockout:read');
+  const url = lockoutRedisUrl();
+  if (url === null) return { ok: false, error: 'REDIS_URL is not configured' };
+  try {
+    return { ok: true, rows: await listLoginActivity(url) };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * Lifts one live counter. The clear routes through the counter's own namespace,
+ * so a ranking-surface key is cleared from this page exactly as a contest one is
+ * — the divergence the ranking screen used to paper over with its own prefix.
+ */
+export async function clearLoginActivity(key: string, reason: string): Promise<BlocksActionResult> {
+  await ensurePermission('lockout:unlock');
+  if (reason.trim().length === 0) return { success: false, error: 'A reason is required to lift a lockout' };
+  const url = lockoutRedisUrl();
+  if (url === null) return { success: false, error: 'REDIS_URL is not configured' };
+  const cleared = await clearLoginLockout(url, key);
+  await recordAudit({
+    verb: 'lockout:unlock',
+    entity: 'security',
+    entityId: key,
+    afterValues: { cleared },
+    reason,
+    result: 'success',
+  });
+  revalidatePath(BLOCKS_PAGE_PATH, 'page');
+  return { success: true, message: cleared > 0 ? `Cleared the counter for ${key}` : 'No counter held that key' };
 }
 

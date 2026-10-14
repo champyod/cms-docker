@@ -84,7 +84,6 @@ const RANKING_ROUTE_IDS = [
   'ranking.users',
   'ranking.settings',
   'ranking.appearance',
-  'ranking.lockouts',
   'ranking.credits',
 ] as const satisfies readonly RouteId[];
 
@@ -327,7 +326,6 @@ describe('route permissions', () => {
       ['ranking.board', ['ranking:list', 'ranking:read']],
       ['ranking.settings', ['ranking:list', 'ranking:read']],
       ['ranking.appearance', ['ranking:list', 'ranking:read']],
-      ['ranking.lockouts', ['ranking:list', 'ranking:read']],
       ['ranking.credits', ['ranking:list', 'ranking:read']],
       ['system.appearance', ['appearance:read', 'appearance:list']],
       ['system.settings', ['env:read', 'env:list', 'monitor:read', 'monitor:list']],
