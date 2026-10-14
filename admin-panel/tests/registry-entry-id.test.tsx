@@ -61,6 +61,7 @@ function renderView(services: ServiceRecord[] = [SERVICE]): void {
         contests={[{ id: 1, name: 'Autumn' }]}
         title="Services"
         description="The service registry"
+        permissionKeys={['container:control']}
       />
     </DictionaryProvider>,
   );

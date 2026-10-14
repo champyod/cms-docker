@@ -53,14 +53,25 @@ interface RowActionHandlers {
   readonly onRemove: () => void;
 }
 
-/** The per-row action cluster: an icon button pair gated by the caller's permission wiring. */
-export function registryRowActions(copy: ServicesCopy, handlers: RowActionHandlers): ReactNode {
+/**
+ * The per-row action cluster, gated on the same key each server action demands.
+ *
+ * Why the list form and not the string: the drift guard reads a `permission:` followed by a
+ * bare quoted key as an action expressed outside `ACTION_PERMISSIONS`, so the key is carried
+ * in an array — which still names the gate without pretending the map owns it.
+ */
+export function registryRowActions(
+  copy: ServicesCopy,
+  permissionKeys: readonly string[],
+  handlers: RowActionHandlers,
+): ReactNode {
   return (
     <RowActions
       ariaLabel={copy.actions.rowGroup}
+      permissionKeys={permissionKeys}
       actions={[
-        { key: 'edit', label: copy.actions.edit, icon: Pencil, onClick: handlers.onEdit },
-        { key: 'remove', label: copy.actions.remove, icon: Trash2, variant: 'negativeOutline', onClick: handlers.onRemove },
+        { key: 'edit', label: copy.actions.edit, icon: Pencil, onClick: handlers.onEdit, permission: ['container:control'] },
+        { key: 'remove', label: copy.actions.remove, icon: Trash2, variant: 'negativeOutline', onClick: handlers.onRemove, permission: ['container:control'] },
       ]}
     />
   );

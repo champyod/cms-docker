@@ -42,7 +42,7 @@ const SERVICE: ServiceRecord = {
   enabled: true,
 };
 
-function renderView(services: ServiceRecord[] = [SERVICE]): HTMLElement {
+function renderView(services: ServiceRecord[] = [SERVICE], permissionKeys: readonly string[] = ['container:control']): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
       <ServiceRegistryView
@@ -52,6 +52,7 @@ function renderView(services: ServiceRecord[] = [SERVICE]): HTMLElement {
         contests={[]}
         title="Services"
         description="The service registry"
+        permissionKeys={permissionKeys}
       />
     </DictionaryProvider>,
   );
@@ -98,5 +99,24 @@ describe('the registry screen leaves no hand-rolled table behind', () => {
       .filter((name) => name.endsWith('.tsx') || name.endsWith('.ts'))
       .filter((name) => fs.readFileSync(path.join(dir, name), 'utf8').includes('<table'));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe('the registry screen gates every control on container:control', () => {
+  it('offers the add button and row actions only while the key is held', () => {
+    renderView();
+    expect(screen.getByRole('button', { name: copy.actions.addService })).not.toBeNull();
+    expect(screen.getAllByRole('button', { name: copy.actions.edit }).length).toBeGreaterThan(0);
+    cleanup();
+
+    renderView([SERVICE], []);
+    expect(screen.queryByRole('button', { name: copy.actions.addService })).toBeNull();
+    expect(screen.queryByRole('button', { name: copy.actions.edit })).toBeNull();
+    expect(screen.queryByRole('group', { name: copy.actions.rowGroup })).toBeNull();
+  });
+
+  it('keeps the rows readable without the control key', () => {
+    renderView([SERVICE], []);
+    expect(screen.getAllByText('cms-contest-web-server-1').length).toBeGreaterThan(0);
   });
 });

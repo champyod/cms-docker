@@ -8,6 +8,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useToast } from '@/components/providers/ToastProvider';
 import { collectWiringProblems } from '@/lib/service-wiring';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { interpolate } from '@/lib/interpolate';
 import {
   removeExposureAction,
@@ -43,6 +44,7 @@ interface ServiceRegistryViewProps {
   contests: ContestOption[];
   title: string;
   description: string;
+  permissionKeys: readonly string[];
 }
 
 const TAB_IDS: readonly Kind[] = ['service', 'wiring', 'exposure'];
@@ -54,6 +56,7 @@ export function ServiceRegistryView({
   contests,
   title,
   description,
+  permissionKeys,
 }: ServiceRegistryViewProps): React.JSX.Element {
   const copy = useDictionary().infrastructure.services;
   const router = useRouter();
@@ -64,6 +67,8 @@ export function ServiceRegistryView({
   const [pending, setPending] = useState(false);
   const confirm = useConfirm();
   const problems = collectWiringProblems(services, wirings, exposures);
+  // Why the same key on both: the screen offers only what its server actions already demand.
+  const canControl = hasEffectivePermission(new Set(permissionKeys), 'container:control');
 
   const open = (next: Kind, seed: Draft): void => {
     setDraft(seed);
@@ -151,12 +156,12 @@ export function ServiceRegistryView({
           empty={copy.empty.service}
           addLabel={copy.actions.addService}
           onAdd={(): void => open('service', { ...BLANK.service })}
-          canAdd
+          canAdd={canControl}
           columns={serviceColumns(copy)}
           rows={services}
           getRowKey={(service) => service.id}
           actionsHeader={copy.columns.actions}
-          renderRowActions={(service) => registryRowActions(copy, {
+          renderRowActions={(service) => registryRowActions(copy, permissionKeys, {
             onEdit: (): void => open('service', draftOfService(service)),
             onRemove: (): void => { void remove(service.name, () => removeServiceAction(service.id)); },
           })}
@@ -170,12 +175,12 @@ export function ServiceRegistryView({
           empty={copy.empty.wiring}
           addLabel={copy.actions.addWiring}
           onAdd={(): void => open('wiring', { ...BLANK.wiring })}
-          canAdd
+          canAdd={canControl}
           columns={wiringColumns(copy, nameOf)}
           rows={wirings}
           getRowKey={(wiring) => wiring.id}
           actionsHeader={copy.columns.actions}
-          renderRowActions={(wiring) => registryRowActions(copy, {
+          renderRowActions={(wiring) => registryRowActions(copy, permissionKeys, {
             onEdit: (): void => open('wiring', draftOfWiring(wiring)),
             onRemove: (): void => {
               void remove(
@@ -194,12 +199,12 @@ export function ServiceRegistryView({
           empty={copy.empty.exposure}
           addLabel={copy.actions.addExposure}
           onAdd={(): void => open('exposure', { ...BLANK.exposure })}
-          canAdd
+          canAdd={canControl}
           columns={exposureColumns(copy)}
           rows={exposures}
           getRowKey={(exposure) => exposure.id}
           actionsHeader={copy.columns.actions}
-          renderRowActions={(exposure) => registryRowActions(copy, {
+          renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
             onEdit: (): void => open('exposure', draftOfExposure(exposure)),
             onRemove: (): void => {
               void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
