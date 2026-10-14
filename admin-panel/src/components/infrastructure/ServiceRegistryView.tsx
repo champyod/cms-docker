@@ -20,6 +20,7 @@ import {
   type WiringRecord,
   type WriteResult,
 } from '@/lib/service-wiring-contract';
+import { collectWiringProblems } from '@/lib/service-wiring';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistryTable, RowButtons } from './RegistryTable';
 import {
@@ -96,6 +97,7 @@ export function ServiceRegistryView({
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
   const confirm = useConfirm();
+  const problems = collectWiringProblems(services, wirings, exposures);
 
   const open = (next: Kind, seed: Draft): void => {
     setDraft(seed);
@@ -148,6 +150,19 @@ export function ServiceRegistryView({
         <h1 className="text-lg font-medium text-foreground">{title}</h1>
         <p className="text-sm text-muted-foreground">{description}</p>
       </header>
+
+      {problems.length > 0 && (
+        <section className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+          <h2 className="text-sm font-medium text-destructive">
+            {problems.length} problem{problems.length === 1 ? '' : 's'} before a sync
+          </h2>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
+            {problems.map((problem) => (
+              <li key={`${problem.area}:${problem.message}`}>{problem.message}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

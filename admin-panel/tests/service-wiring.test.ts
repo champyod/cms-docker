@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  collectWiringProblems,
   exposureRoutes,
   normalisePath,
   resolveWirings,
@@ -348,6 +349,43 @@ describe('parseCertificate', () => {
 
   it('falls back to the contest proxy pair', () => {
     expect(parseCertificate(['nginx'])).toEqual(CONTEST_PROXY_CERTIFICATE);
+  });
+});
+
+describe('collectWiringProblems', () => {
+  const shared = service({ id: 1, name: 'cms-contest-web-server' });
+
+  it('reports nothing for a clean registry', () => {
+    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 1 })])).toEqual([]);
+  });
+
+  it('names a wiring whose endpoint does not exist', () => {
+    const wirings: WiringRow[] = [{ from_service_id: 1, to_service_id: 9, relation: 'drains', enabled: true }];
+    const problems = collectWiringProblems([shared], wirings, []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('wiring');
+    expect(problems[0].message).toContain('9');
+  });
+
+  it('reports a contest with no ContestWebServer to answer on', () => {
+    const problems = collectWiringProblems([], [], [exposure({ contest_id: 5 })]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('contest');
+  });
+
+  it('treats a shared ContestWebServer as serving every contest', () => {
+    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 5 })])).toEqual([]);
+  });
+
+  it('reports two exposures that normalise onto one location', () => {
+    const exposures = [
+      exposure({ contest_id: 1, hostname: 'a.example.com', path: '/' }),
+      exposure({ contest_id: 2, hostname: 'A.EXAMPLE.COM', path: '' }),
+    ];
+    const problems = collectWiringProblems([shared], [], exposures);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('a.example.com/');
   });
 });
 

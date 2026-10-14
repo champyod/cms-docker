@@ -173,3 +173,66 @@ function pickUpstream(contestId: number, candidates: ServiceRow[]): ServiceRow {
   }
   return best;
 }
+
+export type WiringProblemArea = 'contest' | 'wiring' | 'exposure';
+
+export interface WiringProblem {
+  area: WiringProblemArea;
+  message: string;
+}
+
+/**
+ * The faults a sync would hit, collected rather than thrown so the screen can list every
+ * one before an operator runs a sync. Mirrors the resolver's rules: a wiring needs both
+ * endpoints to exist, an exposed contest needs an enabled ContestWebServer (own or
+ * shared), and one normalised location can only answer for one exposure.
+ */
+export function collectWiringProblems(
+  services: ServiceRow[],
+  wirings: WiringRow[],
+  exposures: ExposureRow[],
+): WiringProblem[] {
+  const problems: WiringProblem[] = [];
+  const endpointIds = new Set(services.map((service) => service.id));
+  for (const wiring of wirings) {
+    const missing = !endpointIds.has(wiring.from_service_id) || !endpointIds.has(wiring.to_service_id);
+    if (missing) {
+      problems.push({
+        area: 'wiring',
+        message: `wiring ${wiring.from_service_id} -> ${wiring.to_service_id} names a service that does not exist`,
+      });
+    }
+  }
+  problems.push(...unservedContestProblems(services, exposures));
+  problems.push(...duplicateLocationProblems(exposures));
+  return problems;
+}
+
+/** A contest is served when any enabled ContestWebServer is bound to it or shared. */
+function unservedContestProblems(services: ServiceRow[], exposures: ExposureRow[]): WiringProblem[] {
+  const servers = services.filter((service) => service.enabled && service.role === CONTEST_WEB_SERVER_ROLE);
+  const shared = servers.some((service) => service.contest_id === null);
+  const bound = new Set(servers.map((service) => service.contest_id));
+  const problems: WiringProblem[] = [];
+  const seen = new Set<number>();
+  for (const { contest_id } of exposures) {
+    if (seen.has(contest_id)) continue;
+    seen.add(contest_id);
+    if (shared || bound.has(contest_id)) continue;
+    problems.push({ area: 'contest', message: `contest ${contest_id} is exposed but no ContestWebServer serves it` });
+  }
+  return problems;
+}
+
+function duplicateLocationProblems(exposures: ExposureRow[]): WiringProblem[] {
+  const countByLocation = new Map<string, number>();
+  for (const exposure of exposures) {
+    const location = `${exposure.hostname.trim().toLowerCase()}${normalisePath(exposure.path)}`;
+    countByLocation.set(location, (countByLocation.get(location) ?? 0) + 1);
+  }
+  const problems: WiringProblem[] = [];
+  for (const [location, count] of countByLocation) {
+    if (count > 1) problems.push({ area: 'exposure', message: `${count} exposures claim ${location}` });
+  }
+  return problems;
+}
