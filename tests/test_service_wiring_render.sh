@@ -53,6 +53,7 @@ if [[ "${1:-}" == "exec" ]]; then
   case "$sql" in
     *to_regclass*services*) printf '%s\n' "@SERVICES_TABLE@" ;;
     *"count(*) FROM contest_exposures WHERE tls"*) printf '%s\n' "@TLS_EXPOSED@" ;;
+    *"DISTINCT hostname FROM contest_exposures"*) printf '%s\n' "@TLS_HOST@" ;;
     *"count(*) FROM contest_exposures"*) printf '%s\n' "@EXPOSED@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
@@ -65,7 +66,7 @@ fi
 exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
-    -e "s|@TLS_EXPOSED@|${1:-1}|" \
+    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
@@ -89,6 +90,8 @@ grep -q 'ssl_certificate /etc/letsencrypt/live/' "${SB}/config/generated/contest
   && ok "points TLS at the domain proxy lineage" || no "TLS does not use the domain cert path"
 grep -q 'include /etc/nginx/conf.d/nginx-ssl.conf;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "carries the shared ssl parameters" || no "missing the shared ssl include"
+grep -q '^a.example.com$' "${SB}/config/generated/exposed-hosts.txt" 2>/dev/null \
+  && ok "publishes the TLS hostnames for the certificate" || no "missing the exposed host list"
 
 echo ""
 echo "=== Test 2: nothing exposed leaves the N=1 path untouched ==="

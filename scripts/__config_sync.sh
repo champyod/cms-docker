@@ -1440,6 +1440,15 @@ render_wiring_artifacts() {
     return 1
   fi
   printf '%s' "$payload" | bun "$WIRING_RENDERER" serve > "$WIRING_OUT_DIR/tailscale-serve.json" || return 1
+
+  # The SANs the domain front must cover. WHY only tls rows: a plain :80 vhost needs no
+  # certificate, and a name in the SAN that is never served over TLS only widens the cert.
+  # WHY a file and not .env: __domain.sh certifies from the host and never reads the
+  # database, so the hostnames it must cover have to reach it as data it already reads.
+  local tls_hosts
+  tls_hosts="$(db_query "SELECT DISTINCT hostname FROM contest_exposures WHERE tls ORDER BY hostname;")" || return 1
+  printf '%s\n' "$tls_hosts" > "$WIRING_OUT_DIR/exposed-hosts.txt" || return 1
+
   log_info "Rendered $exposed contest route(s) into $WIRING_OUT_DIR/"
   return 0
 }

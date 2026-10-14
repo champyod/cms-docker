@@ -779,15 +779,41 @@ _retry_certbot() {
 # certbot request a SAN with no name, which fails validation for the whole
 # certificate — not just the missing name. An unconfigured domain has to be absent
 # from the command line entirely.
+# Hostnames the service registry exposes over TLS, one per line.
+#
+# WHY a rendered file and not a query: this script runs on the host and never reads the
+# database, so ./cms config sync publishes the list beside the routes it renders. Prints
+# nothing when the file is absent, which is how a deployment that never used the registry
+# certifies exactly as it did before.
+wired_tls_hostnames() {
+  local file="${REPO_ROOT}/config/generated/exposed-hosts.txt"
+  [[ -f "$file" ]] || return 0
+  grep -v '^[[:space:]]*$' "$file" 2>/dev/null || true
+  return 0
+}
+
 build_cert_domains() {
   CERT_DOMAINS=()
-  local domain extra
+  local domain extra host named=" "
   while read -r domain; do
+    [[ -n "$domain" ]] || continue
     CERT_DOMAINS+=(-d "$domain")
+    named="$named$domain "
   done < <(_configured_domains)
   for extra in $EXTRA_DOMAINS; do
     CERT_DOMAINS+=(-d "$extra")
+    named="$named$extra "
   done
+  # A contest hostname joins the same lineage certificate every domain vhost already
+  # shares. WHY the space-delimited dedup: repeating a name certbot already has would ask
+  # for the same SAN twice, while an exact match keeps a name that merely ends with
+  # another from being skipped.
+  while read -r host; do
+    [[ -n "$host" ]] || continue
+    [[ "$named" == *" $host "* ]] && continue
+    CERT_DOMAINS+=(-d "$host")
+    named="$named$host "
+  done < <(wired_tls_hostnames)
   # Explicit success: CERT_DOMAINS must carry at least one -d or certbot is called
   # with no names at all, which fails with an error that names no domain.
   (( ${#CERT_DOMAINS[@]} > 0 )) || log_die "no domain to certify — configure at least one domain" 1
