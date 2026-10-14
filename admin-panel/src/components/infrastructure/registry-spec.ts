@@ -1,4 +1,4 @@
-import { SERVICE_ROLES } from '@/lib/service-wiring-contract';
+import { SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type WiringRecord } from '@/lib/service-wiring-contract';
 
 /** The three collections the screen edits, and the shape each form collects. */
 export type Kind = 'service' | 'wiring' | 'exposure';
@@ -70,4 +70,38 @@ export function requiredInt(raw: string | undefined): number {
 export function optionalText(raw: string | undefined): string | null {
   const trimmed = (raw ?? '').trim();
   return trimmed === '' ? null : trimmed;
+}
+
+/** A record as the form that edits it expects, with empty meaning absent. */
+export function draftOfService(service: ServiceRecord): Draft {
+  return {
+    name: service.name,
+    role: service.role,
+    shard: String(service.shard),
+    host: service.host,
+    http_port: service.http_port === null ? '' : String(service.http_port),
+    rpc_port: service.rpc_port === null ? '' : String(service.rpc_port),
+    db_profile: service.db_profile,
+    contest_id: service.contest_id === null ? '' : String(service.contest_id),
+    enabled: String(service.enabled),
+  };
+}
+
+export function draftOfWiring(wiring: WiringRecord): Draft {
+  return {
+    from_service_id: String(wiring.from_service_id),
+    to_service_id: String(wiring.to_service_id),
+    relation: wiring.relation,
+    enabled: String(wiring.enabled),
+  };
+}
+
+export function draftOfExposure(exposure: ExposureRecord): Draft {
+  return {
+    contest_id: String(exposure.contest_id),
+    hostname: exposure.hostname,
+    path: exposure.path,
+    tls: String(exposure.tls),
+    tailnet: exposure.tailnet ?? '',
+  };
 }

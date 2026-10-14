@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/core/Button';
+import { useConfirm } from '@/hooks/useConfirm';
 import { useToast } from '@/components/providers/ToastProvider';
 import {
   removeExposureAction,
@@ -22,7 +23,18 @@ import {
 } from '@/lib/service-wiring-contract';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistryTable, RowButtons } from './RegistryTable';
-import { BLANK, optionalInt, optionalText, requiredInt, type ContestOption, type Draft, type Kind } from './registry-spec';
+import {
+  BLANK,
+  draftOfExposure,
+  draftOfService,
+  draftOfWiring,
+  optionalInt,
+  optionalText,
+  requiredInt,
+  type ContestOption,
+  type Draft,
+  type Kind,
+} from './registry-spec';
 
 interface ServiceRegistryViewProps {
   services: ServiceRecord[];
@@ -65,19 +77,6 @@ async function persist(kind: Kind, draft: Draft): Promise<WriteResult> {
   });
 }
 
-function draftOfService(service: ServiceRecord): Draft {
-  return {
-    name: service.name,
-    role: service.role,
-    shard: String(service.shard),
-    host: service.host,
-    http_port: service.http_port === null ? '' : String(service.http_port),
-    rpc_port: service.rpc_port === null ? '' : String(service.rpc_port),
-    db_profile: service.db_profile,
-    contest_id: service.contest_id === null ? '' : String(service.contest_id),
-    enabled: String(service.enabled),
-  };
-}
 
 export function ServiceRegistryView({
   services,
@@ -92,6 +91,7 @@ export function ServiceRegistryView({
   const [kind, setKind] = useState<Kind | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
+  const confirm = useConfirm();
 
   const open = (next: Kind, seed: Draft): void => {
     setDraft(seed);
@@ -106,6 +106,18 @@ export function ServiceRegistryView({
       return;
     }
     addToast({ type: 'error', title: 'Not saved', message: result.error ?? 'unknown failure' });
+  };
+
+  /** A removal is destructive, so it is confirmed before the row is touched. */
+  const remove = async (label: string, action: () => Promise<WriteResult>): Promise<void> => {
+    const agreed = await confirm({
+      kind: 'destructive',
+      title: `Remove ${label}`,
+      description: `Remove ${label} from the registry? The next config sync stops rendering it.`,
+      confirmLabel: 'Remove',
+    });
+    if (!agreed) return;
+    finish(await action(), `${label} removed`);
   };
 
   const submit = async (): Promise<void> => {
@@ -148,7 +160,7 @@ export function ServiceRegistryView({
             <RowButtons
               key={service.id}
               onEdit={(): void => open('service', draftOfService(service))}
-              onDelete={(): void => { void removeServiceAction(service.id).then((r) => finish(r, 'Service removed')); }}
+              onDelete={(): void => { void remove(service.name, () => removeServiceAction(service.id)); }}
             />,
           ])}
         />
@@ -169,7 +181,8 @@ export function ServiceRegistryView({
             wiring.enabled ? 'yes' : 'no',
             <RowButtons
               key={wiring.id}
-              onDelete={(): void => { void removeWiringAction(wiring.id).then((r) => finish(r, 'Wiring removed')); }}
+              onEdit={(): void => open('wiring', draftOfWiring(wiring))}
+              onDelete={(): void => { void remove(`${nameOf(wiring.from_service_id)} -> ${nameOf(wiring.to_service_id)}`, () => removeWiringAction(wiring.id)); }}
             />,
           ])}
         />
@@ -191,7 +204,8 @@ export function ServiceRegistryView({
             exposure.tailnet ?? '—',
             <RowButtons
               key={exposure.id}
-              onDelete={(): void => { void removeExposureAction(exposure.id).then((r) => finish(r, 'Exposure removed')); }}
+              onEdit={(): void => open('exposure', draftOfExposure(exposure))}
+              onDelete={(): void => { void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id)); }}
             />,
           ])}
         />

@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import { Input } from '@/components/core/Input';
 import { ModalFooter } from '@/components/core/ModalFooter';
