@@ -1440,7 +1440,7 @@ render_tailscale_compose() {
 wiring_payload_json() {
   db_query "SELECT json_build_object(
     'services', COALESCE((SELECT json_agg(row_to_json(s)) FROM (
-        SELECT id, name, role, shard, host, port, db_profile, contest_id, enabled
+        SELECT id, name, role, shard, host, http_port, rpc_port, db_profile, contest_id, enabled
         FROM services) s), '[]'::json),
     'wirings', COALESCE((SELECT json_agg(row_to_json(w)) FROM (
         SELECT from_service_id, to_service_id, relation, enabled

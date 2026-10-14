@@ -19,6 +19,29 @@ fail=0
 ok() { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
 no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 
+SCHEMA="${REPO_ROOT}/admin-panel/prisma/schema.prisma"
+
+# The scalar columns a model declares, one per line, attributes and comments dropped.
+# WHY the schema and not the stub: the stub answers the payload query from a fixture,
+# so only the model itself can tell whether the SELECT names a column that exists.
+model_columns() {
+  awk -v model="$1" '
+    $1 == "model" && $2 == model && $3 == "{" { inside = 1; next }
+    inside && $0 == "}" { exit }
+    inside && NF == 0 { next }
+    inside && $1 ~ /^\/\/|^@@/ { next }
+    inside { print $1 }
+  ' "${SCHEMA}"
+}
+
+# The column list the registry payload names for `services`, the one table whose
+# model block the sync must agree with.
+payload_services_select() {
+  awk '/FROM services\) s/ { print line; exit } { line = $0 }' "${SYNC}" \
+    | sed -e 's/^[[:space:]]*SELECT[[:space:]]*//' | tr ',' '\n' \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | grep -v '^$'
+}
+
 SANDBOXES=()
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
@@ -177,6 +200,23 @@ run_sync
 rc=$?
 [[ ${rc} -ne 0 ]] && ok "sync refuses to render an unpointable certificate" || no "rendered a TLS route with no lineage"
 grep -q 'no certificate lineage' "${SB}/sync.log" && ok "says which key to set" || no "silent refusal"
+
+echo ""
+echo "=== Test 7: the payload selects only columns the services model declares ==="
+MODEL_COLUMNS="$(model_columns services)"
+SELECTED_COLUMNS="$(payload_services_select)"
+if [[ -z "${SELECTED_COLUMNS}" ]]; then
+  no "could not read the services SELECT out of ${SYNC}"
+elif [[ -z "${MODEL_COLUMNS}" ]]; then
+  no "could not read the services model out of ${SCHEMA}"
+else
+  unknown="$(grep -vxFf <(printf '%s\n' "${MODEL_COLUMNS}") <<< "${SELECTED_COLUMNS}" | tr '\n' ' ')"
+  if [[ -z "${unknown// /}" ]]; then
+    ok "every selected service column exists in the model"
+  else
+    no "the payload selects column(s) absent from model services: ${unknown% }"
+  fi
+fi
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"
