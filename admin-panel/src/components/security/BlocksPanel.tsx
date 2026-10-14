@@ -28,6 +28,7 @@ interface BlocksPanelProps {
   readonly activity: LoginActivityResult;
   readonly captcha: CaptchaStatus;
   readonly captchaCopy: Dictionary['security']['blocks'];
+  readonly labels: Readonly<Record<string, string>>;
 }
 
 // The native select is the one control with no core wrapper, so it carries the
@@ -39,7 +40,7 @@ function unbanDescription(ip: string, jail: string): string {
   return `Queue an unban for ${ip} in the ${jail} jail. The host agent applies it on its next tick.`;
 }
 
-export function BlocksPanel({ banned, lockouts, exemptions, activity, captcha, captchaCopy }: BlocksPanelProps): React.JSX.Element {
+export function BlocksPanel({ banned, lockouts, exemptions, activity, captcha, captchaCopy, labels }: BlocksPanelProps): React.JSX.Element {
   const prompt = useReasonPrompt();
   const [manualJail, setManualJail] = useState('');
   const [manualIp, setManualIp] = useState('');
@@ -134,6 +135,7 @@ export function BlocksPanel({ banned, lockouts, exemptions, activity, captcha, c
 
       <LoginActivityCard
         activity={activity}
+        labels={labels}
         onClear={(key) =>
           prompt.ask({
             title: `Clear the counter for ${key}?`,

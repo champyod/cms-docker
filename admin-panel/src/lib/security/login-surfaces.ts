@@ -18,9 +18,9 @@ export async function listLoginSurfaces(): Promise<LoginSurface[]> {
   });
 }
 
-/** The label for each surface key, for a client that only sees an attempt's key. */
+/** The label for each surface key, as a plain object a client component can hold. */
 export function surfaceLabels(
   surfaces: readonly LoginSurface[],
-): ReadonlyMap<string, string> {
-  return new Map(surfaces.map((surface) => [surface.key, surface.label]));
+): Readonly<Record<string, string>> {
+  return Object.fromEntries(surfaces.map((surface) => [surface.key, surface.label]));
 }

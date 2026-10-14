@@ -4,6 +4,7 @@ import { readLoginExemptions } from '@/app/actions/securityExemptions';
 import { BlocksPanel } from '@/components/security/BlocksPanel';
 import { getDictionary } from '@/i18n';
 import { readCaptchaStatus } from '@/lib/captcha-status';
+import { listLoginSurfaces, surfaceLabels } from '@/lib/security/login-surfaces';
 
 export default async function SecurityBlocksPage({
   params,
@@ -18,9 +19,10 @@ export default async function SecurityBlocksPage({
     readLoginExemptions(),
     readLoginActivity(),
   ]);
-  const [captcha, dict] = await Promise.all([
+  const [captcha, dict, surfaces] = await Promise.all([
     readCaptchaStatus(activity.ok),
     getDictionary(locale),
+    listLoginSurfaces(),
   ]);
   return (
     <BlocksPanel
@@ -30,6 +32,7 @@ export default async function SecurityBlocksPage({
       activity={activity}
       captcha={captcha}
       captchaCopy={dict.security.blocks}
+      labels={surfaceLabels(surfaces)}
     />
   );
 }
