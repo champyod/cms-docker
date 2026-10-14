@@ -99,6 +99,8 @@ model contests {
   tasks                                            tasks[]
   contest_usernames                                contest_usernames[]
   contest_teams                                    contest_teams[]
+  contest_exposures                                contest_exposures[]
+  services                                         services[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -919,3 +921,68 @@ model ranking_overrides {
   @@index([target_kind, target_key], map: "ix_ranking_overrides_target")
   @@map("ranking_overrides")
 }
+
+/// One service instance this deployment runs: what role it holds, which shard it
+/// is, where it lives, and which DB profile it dials. The database authors this,
+/// together with wirings; config.toml keeps only the DB pointer and secrets.
+///
+/// WHY two ports: a contest web server answers HTTP on one port (what a front door
+/// proxies to) and its peers call it on another (the CMS RPC port). One `port`
+/// column would make the renderer proxy to the RPC port, so they stay separate and
+/// each stays nullable — an evaluation service has no HTTP port at all.
+model services {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique @db.VarChar
+  role       String    @db.VarChar
+  shard      Int       @default(0)
+  host       String    @db.VarChar
+  http_port  Int?
+  rpc_port   Int?
+  db_profile String    @default("default") @db.VarChar
+  contest_id Int?
+  enabled    Boolean   @default(true)
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  updated_at DateTime  @updatedAt @db.Timestamp(6)
+  contests   contests? @relation(fields: [contest_id], references: [id], onDelete: SetNull)
+  wire_from  wirings[] @relation("wiring_from")
+  wire_to    wirings[] @relation("wiring_to")
+
+  @@index([role], map: "ix_services_role")
+  @@index([contest_id], map: "ix_services_contest_id")
+  @@index([role, shard], map: "ix_services_role_shard")
+}
+
+/// A directed link between two services. `relation` names what the link means
+/// (drains, fronts, proxies) so the renderer never infers intent from the roles.
+model wirings {
+  id              Int      @id @default(autoincrement())
+  from_service_id Int
+  to_service_id   Int
+  relation        String   @db.VarChar
+  enabled         Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+  from_service    services @relation("wiring_from", fields: [from_service_id], references: [id], onDelete: Cascade)
+  to_service      services @relation("wiring_to", fields: [to_service_id], references: [id], onDelete: Cascade)
+
+  @@unique([from_service_id, to_service_id, relation])
+  @@index([from_service_id], map: "ix_wirings_from_service_id")
+  @@index([to_service_id], map: "ix_wirings_to_service_id")
+}
+
+/// Where one contest answers. A contest may hold several rows: one per hostname,
+/// per path prefix, or per tailnet name, which is what makes every exposure form
+/// in the design a data question rather than a code branch.
+model contest_exposures {
+  id         Int      @id @default(autoincrement())
+  contest_id Int
+  hostname   String   @db.VarChar
+  path       String   @default("/") @db.VarChar
+  tls        Boolean  @default(true)
+  tailnet    String?  @db.VarChar
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+
+  @@unique([hostname, path])
+  @@index([contest_id], map: "ix_contest_exposures_contest_id")
+}
+

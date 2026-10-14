@@ -23,6 +23,7 @@ export default async function InfrastructureLayout({
     'infrastructure.deployments': dict['navigation']['infrastructure']['deployments']['description'],
     'infrastructure.containers': dict['navigation']['infrastructure']['containers']['description'],
     'infrastructure.resources': dict['navigation']['infrastructure']['resources']['description'],
+    'infrastructure.services': dict['navigation']['infrastructure']['services']['description'],
   };
   // Every control is bound to state its own panel owns, so each publishes its own.
   const actionsMap: ModuleActions = {};

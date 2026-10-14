@@ -104,6 +104,11 @@ const CATALOG = [
   // appearance and override rows exist only in the panel.
   { name: 'ranking_settings', label: 'Ranking Settings', pk: ['id'] },
   { name: 'ranking_overrides', label: 'Ranking Overrides', pk: ['id'] },
+  // Service wiring. WHY services sits before wirings: wirings is its edge table,
+  // and the catalog order is the parent-before-child order a restore needs.
+  { name: 'services', label: 'Services', pk: ['id'] },
+  { name: 'wirings', label: 'Wirings', pk: ['id'] },
+  { name: 'contest_exposures', label: 'Contest Exposures', pk: ['id'] },
   { name: 'fsobjects', label: 'File System Objects', pk: ['digest'], needsLargeObjects: true },
 ] as const satisfies readonly BackupTable[];
 
@@ -199,6 +204,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   admin_permission_overrides: [ADMIN_TABLE, 'permissions'],
   announcements: ['contests', ADMIN_TABLE],
   attachments: ['tasks'],
+  contest_exposures: ['contests'],
   contest_teams: ['contests', 'teams'],
   contest_usernames: ['contests', 'participations', 'users', ADMIN_TABLE],
   contestant_group_memberships: ['contestant_groups', 'users'],
@@ -224,6 +230,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   user_test_results: ['datasets', 'user_tests'],
   user_tests: ['participations', 'tasks'],
   username_policies: [ADMIN_TABLE],
+  wirings: ['services'],
 };
 
 /**
@@ -237,6 +244,7 @@ const NULLABLE_PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly
   contest_usernames: [ADMIN_TABLE],
   messages: [ADMIN_TABLE],
   questions: [ADMIN_TABLE],
+  services: ['contests'],
   username_policies: [ADMIN_TABLE],
 };
 

@@ -191,7 +191,7 @@ async function requeueOne(submissionId: number, type: RecalcType): Promise<strin
   const context = await getRecalcContext(submissionId);
   if (!context) return 'Submission not found';
 
-  const rpcResult = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type));
+  const rpcResult = await invalidateViaRpc(submissionId, context.datasetId, rpcLevelFor(type), context.contestId);
   if (rpcResult.timedOut) return 'Evaluation service did not respond in time';
   if (!rpcResult.accepted) return 'Resubmission failed: evaluation service did not accept the request';
 
@@ -291,18 +291,23 @@ export async function recalculateSubmissions(
   };
 }
 
-async function getRecalcContext(submissionId: number): Promise<{ datasetId: number | null } | null> {
+async function getRecalcContext(
+  submissionId: number
+): Promise<{ datasetId: number | null; contestId: number | null } | null> {
   const submission = await prisma.submissions.findUnique({
     where: { id: submissionId },
     include: {
-      tasks: { select: { active_dataset_id: true } },
+      tasks: { select: { active_dataset_id: true, contest_id: true } },
       submission_results: { select: { dataset_id: true } }
     }
   });
 
   if (!submission) return null;
 
-  return { datasetId: submission.submission_results?.[0]?.dataset_id || submission.tasks?.active_dataset_id };
+  return {
+    datasetId: submission.submission_results?.[0]?.dataset_id || submission.tasks?.active_dataset_id,
+    contestId: submission.tasks?.contest_id ?? null,
+  };
 }
 
 function rpcLevelFor(type: RecalcType): string {

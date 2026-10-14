@@ -76,6 +76,7 @@ const INFRASTRUCTURE_ROUTE_IDS = [
   'infrastructure.deployments',
   'infrastructure.containers',
   'infrastructure.resources',
+  'infrastructure.services',
 ] as const satisfies readonly RouteId[];
 
 const RANKING_ROUTE_IDS = [
