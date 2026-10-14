@@ -38,6 +38,8 @@ function service(overrides: Partial<ServiceInput> = {}): ServiceInput {
     db_profile: 'default',
     contest_id: 1,
     enabled: true,
+    image: '',
+    pull_policy: 'missing',
     ...overrides,
   };
 }
@@ -59,6 +61,24 @@ describe('saveService', () => {
     expect(await saveService(service())).toEqual({ success: true });
     expect(mocks.createService).toHaveBeenCalledTimes(1);
     expect(mocks.updateService).not.toHaveBeenCalled();
+  });
+
+  it('stores the row image and keeps a blank one null', async () => {
+    expect(await saveService(service({ image: '  ghcr.io/acme/core:v2 ' }))).toEqual({ success: true });
+    expect(mocks.createService.mock.calls[0][0].data.image).toBe('ghcr.io/acme/core:v2');
+    mocks.createService.mockClear();
+    expect(await saveService(service({ image: '' }))).toEqual({ success: true });
+    expect(mocks.createService.mock.calls[0][0].data.image).toBeNull();
+  });
+
+  it('refuses an image reference that could break the generated compose', async () => {
+    expect(await saveService(service({ image: 'core:tag\n    privileged: true' }))).toMatchObject({ success: false });
+    expect(mocks.createService).not.toHaveBeenCalled();
+  });
+
+  it('refuses a pull policy compose does not accept', async () => {
+    expect(await saveService(service({ pull_policy: 'sometimes' }))).toMatchObject({ success: false });
+    expect(mocks.createService).not.toHaveBeenCalled();
   });
 
   it('updates the named row in place when the input carries an id', async () => {

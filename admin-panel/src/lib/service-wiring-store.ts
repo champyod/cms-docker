@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { assertSafeHostname, assertSafePath, assertSafeTailnetNode, RenderError } from './service-wiring-render';
 import { normalisePath, WiringError } from './service-wiring';
 import {
+  PULL_POLICIES,
   SERVICE_ROLES,
   type ExposureInput,
   type ExposureRecord,
@@ -28,6 +29,9 @@ import {
  */
 
 const HOST_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
+// A container image reference reaches the generated compose verbatim, so it is held to what
+// an image name can be: registry[:port]/path[:tag]@digest — never whitespace or a newline.
+const IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._\-/:@]*$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
 const PRISMA_UNIQUE_CONSTRAINT = 'P2002';
@@ -55,6 +59,12 @@ export function validateService(input: ServiceInput): void {
   assertPort(input.rpc_port, 'rpc_port');
   if (input.shard < 0) throw new WiringError('shard cannot be negative');
   if (input.db_profile.trim() === '') throw new WiringError('db_profile cannot be empty');
+  if (input.image.trim() !== '' && !IMAGE_PATTERN.test(input.image.trim())) {
+    throw new WiringError(`unsafe image reference: ${JSON.stringify(input.image)}`);
+  }
+  if (!(PULL_POLICIES as readonly string[]).includes(input.pull_policy)) {
+    throw new WiringError(`unknown pull policy: ${input.pull_policy}`);
+  }
 }
 
 /**
@@ -99,7 +109,8 @@ async function persistUnique(subject: string, write: () => Promise<unknown>): Pr
 export async function saveService(input: ServiceInput): Promise<WriteResult> {
   try {
     validateService(input);
-    const data = { ...input, name: input.name.trim(), host: input.host.trim() };
+    const image = input.image.trim();
+    const data = { ...input, name: input.name.trim(), host: input.host.trim(), image: image === '' ? null : image };
     const id = input.id;
     await persistUnique(`a service named ${data.name}`, () =>
       id === undefined
@@ -197,8 +208,10 @@ export async function readRegistry(): Promise<{
     prisma.wirings.findMany({ orderBy: { id: 'asc' } }),
     prisma.contest_exposures.findMany({ orderBy: { contest_id: 'asc' } }),
   ]);
-  // WHY the panel sees '' and not null: a path-only row has no hostname, and the form
-  // edits that absence as an empty field, so the two representations meet here.
+  // WHY the panel sees '' and not null: a path-only row has no hostname and a row with no
+  // image has no tag, so the form edits each absence as an empty field and the two
+  // representations meet here.
   const panelExposures = exposures.map((exposure) => ({ ...exposure, hostname: exposure.hostname ?? '' }));
-  return { services, wirings, exposures: panelExposures };
+  const panelServices = services.map((service) => ({ ...service, image: service.image ?? '' }));
+  return { services: panelServices, wirings, exposures: panelExposures };
 }

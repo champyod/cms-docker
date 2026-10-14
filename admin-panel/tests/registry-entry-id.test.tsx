@@ -49,6 +49,8 @@ const SERVICE: ServiceRecord = {
   db_profile: 'default',
   contest_id: 1,
   enabled: true,
+  image: '',
+  pull_policy: 'missing',
 };
 
 function renderView(services: ServiceRecord[] = [SERVICE]): void {

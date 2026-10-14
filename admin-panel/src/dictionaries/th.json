@@ -38,6 +38,8 @@
         "httpPort": "พอร์ต HTTP",
         "rpcPort": "พอร์ต RPC",
         "dbProfile": "โปรไฟล์ฐานข้อมูล",
+        "image": "อิมเมจ",
+        "pullPolicy": "นโยบายการดึง",
         "contest": "การแข่งขัน",
         "enabled": "เปิดใช้งาน",
         "from": "จาก",

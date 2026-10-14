@@ -27,6 +27,8 @@ export async function persist(kind: Kind, draft: Draft, copy: ServicesCopy): Pro
       http_port: optionalInt(draft.http_port),
       rpc_port: optionalInt(draft.rpc_port),
       db_profile: draft.db_profile ?? 'default',
+      image: draft.image ?? '',
+      pull_policy: draft.pull_policy ?? 'missing',
       contest_id: optionalInt(draft.contest_id),
       enabled: draft.enabled === 'true',
     });

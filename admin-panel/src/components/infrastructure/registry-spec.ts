@@ -1,4 +1,4 @@
-import { SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type ServiceRole, type WiringRecord } from '@/lib/service-wiring-contract';
+import { PULL_POLICIES, SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type ServiceRole, type WiringRecord } from '@/lib/service-wiring-contract';
 import type { Dictionary } from '@/lib/dictionary';
 
 /** The registry screen's copy, resolved from `infrastructure.services` in the active dictionary. */
@@ -30,6 +30,8 @@ export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
     { key: 'http_port', labelKey: 'fields.httpPort', kind: 'number' },
     { key: 'rpc_port', labelKey: 'fields.rpcPort', kind: 'number' },
     { key: 'db_profile', labelKey: 'fields.dbProfile' },
+    { key: 'image', labelKey: 'fields.image' },
+    { key: 'pull_policy', labelKey: 'fields.pullPolicy', kind: 'select', options: PULL_POLICIES },
     { key: 'contest_id', labelKey: 'fields.contest', kind: 'contest' },
     { key: 'enabled', labelKey: 'fields.enabled', kind: 'boolean' },
   ],
@@ -49,7 +51,7 @@ export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
 };
 
 export const BLANK: Record<Kind, Draft> = {
-  service: { name: '', role: 'ContestWebServer', shard: '0', host: '', http_port: '', rpc_port: '', db_profile: 'default', contest_id: '', enabled: 'true' },
+  service: { name: '', role: 'ContestWebServer', shard: '0', host: '', http_port: '', rpc_port: '', db_profile: 'default', image: '', pull_policy: 'missing', contest_id: '', enabled: 'true' },
   wiring: { from_service_id: '', to_service_id: '', relation: 'drains', enabled: 'true' },
   exposure: { contest_id: '', hostname: '', path: '/', tls: 'true', tailnet: '' },
 };
@@ -109,6 +111,8 @@ export function draftOfService(service: ServiceRecord): Draft {
     http_port: service.http_port === null ? '' : String(service.http_port),
     rpc_port: service.rpc_port === null ? '' : String(service.rpc_port),
     db_profile: service.db_profile,
+    image: service.image,
+    pull_policy: service.pull_policy,
     contest_id: service.contest_id === null ? '' : String(service.contest_id),
     enabled: String(service.enabled),
   };

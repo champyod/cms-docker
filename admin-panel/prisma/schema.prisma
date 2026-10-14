@@ -968,6 +968,10 @@ model services {
   db_profile String    @default("default") @db.VarChar
   contest_id Int?
   enabled    Boolean   @default(true)
+  /// Null means the global IMG_TAG, so one row pins its own tag without a second deployment.
+  image       String?   @db.VarChar
+  /// always | missing | never.
+  pull_policy String    @default("missing") @db.VarChar
   created_at DateTime  @default(now()) @db.Timestamp(6)
   updated_at DateTime  @updatedAt @db.Timestamp(6)
   contests   contests? @relation(fields: [contest_id], references: [id], onDelete: SetNull)

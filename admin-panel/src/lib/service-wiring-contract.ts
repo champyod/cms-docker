@@ -19,6 +19,11 @@ export const SERVICE_ROLES = [
 
 export type ServiceRole = (typeof SERVICE_ROLES)[number];
 
+/** The pull policies compose accepts for a service row. */
+export const PULL_POLICIES = ['always', 'missing', 'never'] as const;
+
+export type PullPolicy = (typeof PULL_POLICIES)[number];
+
 export interface ServiceInput {
   id?: number;
   name: string;
@@ -30,6 +35,8 @@ export interface ServiceInput {
   db_profile: string;
   contest_id: number | null;
   enabled: boolean;
+  image: string;
+  pull_policy: string;
 }
 
 export interface WiringInput {
@@ -71,6 +78,8 @@ export interface ServiceRecord {
   db_profile: string;
   contest_id: number | null;
   enabled: boolean;
+  image: string;
+  pull_policy: string;
 }
 
 export interface WiringRecord {

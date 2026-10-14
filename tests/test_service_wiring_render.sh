@@ -224,7 +224,7 @@ resolved="$(HOME="${SB}/home" PATH="${SB}/pb" BUN_INSTALL="" "$BASH_BIN" -c 'sou
 
 echo ""
 echo "=== Test 10: the generated registry compose binds each row's own port ==="
-new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3'
+new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3|ghcr.io/champyod/cms-docker-core:test-tag|always'
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
@@ -235,6 +235,21 @@ grep -q 'SERVICE_RPC_PORT: 21000' "$compose" 2>/dev/null \
   && ok "binds the row's rpc port" || no "missing SERVICE_RPC_PORT"
 grep -q '8894:8894' "$compose" 2>/dev/null \
   && ok "publishes the same port it binds" || no "the publish map does not match the bind port"
+grep -q 'image: ghcr.io/champyod/cms-docker-core:test-tag' "$compose" 2>/dev/null \
+  && ok "runs the row's own image" || no "did not use the row's image"
+grep -q 'pull_policy: always' "$compose" 2>/dev/null \
+  && ok "carries the row's pull policy" || no "missing the row's pull policy"
+
+echo ""
+echo "=== Test 11: a row with no image keeps the deployment's IMG_TAG ==="
+new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3||missing'
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+grep -q 'image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}' "${SB}/docker-compose.registry.generated.yml" 2>/dev/null \
+  && ok "leaves the IMG_TAG for compose to resolve" || no "did not fall back to IMG_TAG"
+grep -q 'pull_policy: missing' "${SB}/docker-compose.registry.generated.yml" 2>/dev/null \
+  && ok "carries the row's pull policy" || no "missing the row's pull policy"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

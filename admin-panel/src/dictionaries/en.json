@@ -38,6 +38,8 @@
         "httpPort": "HTTP port",
         "rpcPort": "RPC port",
         "dbProfile": "DB profile",
+        "image": "Image",
+        "pullPolicy": "Pull policy",
         "contest": "Contest",
         "enabled": "Enabled",
         "from": "From",
