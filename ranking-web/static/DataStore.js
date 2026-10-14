@@ -212,11 +212,12 @@ var DataStore = new function () {
     self.create_task = function (key, data) {
         if (self.contests[data["contest"]] === undefined)
         {
+            /* A task whose contest is missing is a data fault, not a dropped connection: keep
+               the stream open and skip the one entity, so a single unknown reference cannot
+               blank the whole board.
+             */
             console.error("Could not find contest " + data["contest"] + " for task " + key);
-            if (self.es) {
-                self.es.close();
-            }
-            self.update_network_status(4);
+            self.update_network_status(5);
             return;
         }
 
@@ -413,11 +414,12 @@ var DataStore = new function () {
     self.create_user = function (key, data) {
         if (data["team"] !== null && self.teams[data["team"]] === undefined)
         {
+            /* A user whose team is missing is a data fault, not a dropped connection: keep the
+               stream open and skip the one entity, so a single unknown reference cannot blank
+               the whole board.
+             */
             console.error("Could not find team " + data["team"] + " for user " + key);
-            if (self.es) {
-                self.es.close();
-            }
-            self.update_network_status(4);
+            self.update_network_status(5);
             return;
         }
 
@@ -694,11 +696,18 @@ var DataStore = new function () {
     };
 
     self.set_score = function (u_id, t_id, new_t_score) {
-        /* It may be "nice" to check that the user and task do actually exists,
-           even if the server should already ensure it!
-         */
         var user = self.users[u_id];
         var task = self.tasks[t_id];
+
+        /* A score for an entity the store does not hold is a data fault; skipping it keeps
+           the rest of the board alive instead of aborting the whole initialisation on a null
+           lookup. A user skipped by create_user for a missing team lands here.
+         */
+        if (user === undefined || task === undefined) {
+            console.error("Score for unknown user " + u_id + " or task " + t_id);
+            self.update_network_status(5);
+            return;
+        }
 
         var c_id = task["contest"];
         var contest = self.contests[c_id];
@@ -915,7 +924,7 @@ var DataStore = new function () {
 
         self.es.addEventListener("open", self.es_open_handler, false);
         self.es.addEventListener("error", self.es_error_handler, false);
-        self.es.addEventListener("reload", self.es_reload_handler, false);
+        self.es.addEventListener("reinit", self.es_reinit_handler, false);
         self.es.addEventListener("contest", function (event) {
             var timestamp = parseInt(event.lastEventId, 16) / 1000000;
             if (timestamp > self.contest_init_time) {
@@ -967,12 +976,15 @@ var DataStore = new function () {
         } else if (state == 2) { // self.es.CLOSED
             $("#ConnectionStatus_box").attr("data-status", "disconnected");
             $("#ConnectionStatus_text").html("You are disconnected from the server but you can <a onclick=\"DataStore.create_event_source();\">try to connect</a>.");
-        } else if (state == 3) { // "reload" event received
+        } else if (state == 3) { // "reinit" event received
             $("#ConnectionStatus_box").attr("data-status", "outdated");
             $("#ConnectionStatus_text").html("Your local data cannot be updated. Please <a onclick=\"window.location.reload();\">reload the page</a>.");
         } else if (state == 4) { // an init failed
             $("#ConnectionStatus_box").attr("data-status", "init_error");
             $("#ConnectionStatus_text").html("An error occurred while loading the data. Check your connection and <a onclick=\"window.location.reload();\">reload the page</a>.");
+        } else if (state == 5) { // the data referenced something the store does not hold
+            $("#ConnectionStatus_box").attr("data-status", "data_fault");
+            $("#ConnectionStatus_text").html("The ranking data refers to something that was not loaded. <a onclick=\"window.location.reload();\">Reload the page</a>.");
         }
     };
 
@@ -997,13 +1009,16 @@ var DataStore = new function () {
         }
     };
 
-    self.es_reload_handler = function () {
+    /* The service sends `reinit` when a Last-Event-ID is too old for its cache: the client's
+       state cannot be brought up to date from the stream alone, so it must reload.
+     */
+    self.es_reinit_handler = function () {
         if (self.es.readyState == self.es.OPEN) {
-            console.info("Received a 'reload' event");
+            console.info("Received a 'reinit' event");
             self.es.close();
             self.update_network_status(3);
         } else {
-            console.error("EventSource shouldn't be in state " + self.es.readyState + " during a 'reload' event!");
+            console.error("EventSource shouldn't be in state " + self.es.readyState + " during a 'reinit' event!");
         }
     };
 

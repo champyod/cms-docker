@@ -1205,7 +1205,9 @@ abbr {
 #ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_label,
 #ConnectionStatus_box[data-status="outdated"] #ConnectionStatus_text,
 #ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_label,
-#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_text {
+#ConnectionStatus_box[data-status="init_error"] #ConnectionStatus_text,
+#ConnectionStatus_box[data-status="data_fault"] #ConnectionStatus_label,
+#ConnectionStatus_box[data-status="data_fault"] #ConnectionStatus_text {
     background-color: red;
     color: white;
     border-color: red;
