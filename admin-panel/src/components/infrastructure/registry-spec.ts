@@ -1,4 +1,4 @@
-import { SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type WiringRecord } from '@/lib/service-wiring-contract';
+import { SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type ServiceRole, type WiringRecord } from '@/lib/service-wiring-contract';
 
 /** The three collections the screen edits, and the shape each form collects. */
 export type Kind = 'service' | 'wiring' | 'exposure';
@@ -63,8 +63,19 @@ export function optionalInt(raw: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** A required whole number: a blank or unparseable entry is refused, never read as zero. */
 export function requiredInt(raw: string | undefined): number {
-  return optionalInt(raw) ?? 0;
+  const parsed = optionalInt(raw);
+  if (parsed === null) throw new Error('a whole number is required');
+  return parsed;
+}
+
+/** The role a draft names, refused rather than cast when it is not one the build offers. */
+export function resolveRole(raw: string | undefined): ServiceRole {
+  const value = raw ?? '';
+  const role = SERVICE_ROLES.find((candidate) => candidate === value);
+  if (role === undefined) throw new Error(`unknown role: ${value}`);
+  return role;
 }
 
 export function optionalText(raw: string | undefined): string | null {
@@ -75,6 +86,7 @@ export function optionalText(raw: string | undefined): string | null {
 /** A record as the form that edits it expects, with empty meaning absent. */
 export function draftOfService(service: ServiceRecord): Draft {
   return {
+    id: String(service.id),
     name: service.name,
     role: service.role,
     shard: String(service.shard),
@@ -89,6 +101,7 @@ export function draftOfService(service: ServiceRecord): Draft {
 
 export function draftOfWiring(wiring: WiringRecord): Draft {
   return {
+    id: String(wiring.id),
     from_service_id: String(wiring.from_service_id),
     to_service_id: String(wiring.to_service_id),
     relation: wiring.relation,
@@ -98,6 +111,7 @@ export function draftOfWiring(wiring: WiringRecord): Draft {
 
 export function draftOfExposure(exposure: ExposureRecord): Draft {
   return {
+    id: String(exposure.id),
     contest_id: String(exposure.contest_id),
     hostname: exposure.hostname,
     path: exposure.path,

@@ -15,7 +15,6 @@ import {
   saveWiringAction,
 } from '@/app/actions/serviceWiring';
 import {
-  SERVICE_ROLES,
   type ExposureRecord,
   type ServiceRecord,
   type WiringRecord,
@@ -31,6 +30,7 @@ import {
   optionalInt,
   optionalText,
   requiredInt,
+  resolveRole,
   type ContestOption,
   type Draft,
   type Kind,
@@ -45,12 +45,14 @@ interface ServiceRegistryViewProps {
   description: string;
 }
 
-/** Dispatches one draft to the action that owns its kind. */
+/** Dispatches one draft to the action that owns its kind, as an edit when the draft carries an id. */
 async function persist(kind: Kind, draft: Draft): Promise<WriteResult> {
+  const id = optionalInt(draft.id) ?? undefined;
   if (kind === 'service') {
     return saveServiceAction({
+      id,
       name: draft.name ?? '',
-      role: (draft.role ?? 'ContestWebServer') as (typeof SERVICE_ROLES)[number],
+      role: resolveRole(draft.role),
       shard: requiredInt(draft.shard),
       host: draft.host ?? '',
       http_port: optionalInt(draft.http_port),
@@ -62,6 +64,7 @@ async function persist(kind: Kind, draft: Draft): Promise<WriteResult> {
   }
   if (kind === 'wiring') {
     return saveWiringAction({
+      id,
       from_service_id: requiredInt(draft.from_service_id),
       to_service_id: requiredInt(draft.to_service_id),
       relation: draft.relation ?? '',
@@ -69,6 +72,7 @@ async function persist(kind: Kind, draft: Draft): Promise<WriteResult> {
     });
   }
   return saveExposureAction({
+    id,
     contest_id: requiredInt(draft.contest_id),
     hostname: draft.hostname ?? '',
     path: draft.path ?? '/',
@@ -125,6 +129,12 @@ export function ServiceRegistryView({
     setPending(true);
     try {
       finish(await persist(kind, draft), `${kind} saved`);
+    } catch (error) {
+      addToast({
+        type: 'error',
+        title: 'Not saved',
+        message: error instanceof Error ? error.message : 'unexpected failure',
+      });
     } finally {
       setPending(false);
     }
