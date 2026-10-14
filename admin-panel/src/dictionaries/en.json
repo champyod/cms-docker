@@ -5,7 +5,8 @@
         "services": "Services",
         "wirings": "Wirings",
         "exposures": "Exposures",
-        "preview": "Preview"
+        "preview": "Preview",
+        "ariaLabel": "Registry sections"
       },
       "kinds": {
         "service": "Service",

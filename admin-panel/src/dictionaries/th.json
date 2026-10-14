@@ -5,7 +5,8 @@
         "services": "บริการ",
         "wirings": "การเชื่อมต่อ",
         "exposures": "การเปิดเผย",
-        "preview": "ตัวอย่าง"
+        "preview": "ตัวอย่าง",
+        "ariaLabel": "ส่วนของรีจิสทรี"
       },
       "kinds": {
         "service": "บริการ",

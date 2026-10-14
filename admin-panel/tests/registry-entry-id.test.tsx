@@ -95,7 +95,9 @@ describe('the registry dialog edits by id', () => {
     actions.saveServiceAction.mockResolvedValue({ success: true });
     renderView();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // Why the first of two: ResponsiveTable mounts the action cluster in both
+    // the desktop row and the mobile card, so the same action appears twice.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
 
     expect(screen.getByDisplayValue('cms-contest-web-server-1')).not.toBeNull();
 
@@ -123,6 +125,7 @@ describe('the registry dialog edits by id', () => {
   it('refuses a blank required number instead of writing zero', async () => {
     renderView();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Wirings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add wiring' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 

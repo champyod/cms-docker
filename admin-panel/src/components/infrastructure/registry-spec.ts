@@ -16,11 +16,6 @@ export interface FieldSpec {
   options?: readonly string[];
 }
 
-export interface ColumnSpec {
-  key: string;
-  labelKey: string;
-}
-
 export interface ContestOption {
   id: number;
   name: string;
@@ -50,32 +45,6 @@ export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
     { key: 'path', labelKey: 'fields.path' },
     { key: 'tls', labelKey: 'fields.tls', kind: 'boolean' },
     { key: 'tailnet', labelKey: 'fields.tailnet' },
-  ],
-};
-
-/** The columns each kind renders, as dictionary paths the table resolves to headers. */
-export const COLUMNS: Record<Kind, readonly ColumnSpec[]> = {
-  service: [
-    { key: 'name', labelKey: 'columns.name' },
-    { key: 'role', labelKey: 'columns.role' },
-    { key: 'host', labelKey: 'columns.host' },
-    { key: 'ports', labelKey: 'columns.ports' },
-    { key: 'db_profile', labelKey: 'columns.dbProfile' },
-    { key: 'contest', labelKey: 'columns.contest' },
-    { key: 'enabled', labelKey: 'columns.enabled' },
-  ],
-  wiring: [
-    { key: 'from', labelKey: 'columns.from' },
-    { key: 'relation', labelKey: 'columns.relation' },
-    { key: 'to', labelKey: 'columns.to' },
-    { key: 'enabled', labelKey: 'columns.enabled' },
-  ],
-  exposure: [
-    { key: 'contest', labelKey: 'columns.contest' },
-    { key: 'hostname', labelKey: 'columns.hostname' },
-    { key: 'path', labelKey: 'columns.path' },
-    { key: 'tls', labelKey: 'columns.tls' },
-    { key: 'tailnet', labelKey: 'columns.tailnet' },
   ],
 };
 

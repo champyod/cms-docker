@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-import { Button } from '@/components/core/Button';
+import { Tabs } from '@/components/core/Tabs';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useToast } from '@/components/providers/ToastProvider';
@@ -21,11 +21,11 @@ import {
   type WriteResult,
 } from '@/lib/service-wiring-contract';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
-import { RegistryTable, RowButtons } from './RegistryTable';
+import { RegistrySection } from './RegistrySection';
+import { exposureColumns, registryRowActions, serviceColumns, wiringColumns } from './registry-columns';
 import { persist } from './registry-mutations';
 import {
   BLANK,
-  COLUMNS,
   KIND_LABEL_KEY,
   copyText,
   draftOfExposure,
@@ -34,7 +34,6 @@ import {
   type ContestOption,
   type Draft,
   type Kind,
-  type ServicesCopy,
 } from './registry-spec';
 
 interface ServiceRegistryViewProps {
@@ -46,10 +45,7 @@ interface ServiceRegistryViewProps {
   description: string;
 }
 
-/** The header cells one kind's table shows, resolved from the dictionary by path. */
-function headersFor(kind: Kind, copy: ServicesCopy): string[] {
-  return COLUMNS[kind].map((column) => copyText(copy, column.labelKey));
-}
+const TAB_IDS: readonly Kind[] = ['service', 'wiring', 'exposure'];
 
 export function ServiceRegistryView({
   services,
@@ -62,6 +58,7 @@ export function ServiceRegistryView({
   const copy = useDictionary().infrastructure.services;
   const router = useRouter();
   const { addToast } = useToast();
+  const [activeTab, setActiveTab] = useState<Kind>('service');
   const [kind, setKind] = useState<Kind | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
@@ -112,7 +109,13 @@ export function ServiceRegistryView({
     }
   };
 
-  const nameOf = (id: number): string => services.find((s) => s.id === id)?.name ?? `#${id}`;
+  const nameOf = (id: number): string => services.find((service) => service.id === id)?.name ?? `#${id}`;
+
+  const tabLabels: Record<Kind, string> = {
+    service: copy.tabs.services,
+    wiring: copy.tabs.wirings,
+    exposure: copy.tabs.exposures,
+  };
 
   return (
     <div className="space-y-6">
@@ -134,78 +137,76 @@ export function ServiceRegistryView({
         </section>
       )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">{copy.kinds.service} ({services.length})</h2>
-          <Button size="sm" onClick={(): void => open('service', { ...BLANK.service })}>{copy.actions.addService}</Button>
-        </div>
-        <RegistryTable
-          headers={headersFor('service', copy)}
+      <Tabs
+        items={TAB_IDS.map((id) => ({ id, label: tabLabels[id] }))}
+        activeId={activeTab}
+        ariaLabel={copy.tabs.ariaLabel}
+        onSelect={(id): void => setActiveTab(id as Kind)}
+      />
+
+      {activeTab === 'service' && (
+        <RegistrySection
+          title={copy.kinds.service}
+          count={services.length}
           empty={copy.empty.service}
-          rows={services.map((service) => [
-            service.name,
-            service.role,
-            service.host,
-            [
-              service.http_port === null ? null : `${copy.values.http} ${service.http_port}`,
-              service.rpc_port === null ? null : `${copy.values.rpc} ${service.rpc_port}`,
-            ].filter((part) => part !== null).join(' / '),
-            service.db_profile,
-            service.contest_id === null ? copy.values.allContests : `#${service.contest_id}`,
-            service.enabled ? copy.values.yes : copy.values.no,
-            <RowButtons
-              key={service.id}
-              onEdit={(): void => open('service', draftOfService(service))}
-              onDelete={(): void => { void remove(service.name, () => removeServiceAction(service.id)); }}
-            />,
-          ])}
+          addLabel={copy.actions.addService}
+          onAdd={(): void => open('service', { ...BLANK.service })}
+          canAdd
+          columns={serviceColumns(copy)}
+          rows={services}
+          getRowKey={(service) => service.id}
+          actionsHeader={copy.columns.actions}
+          renderRowActions={(service) => registryRowActions(copy, {
+            onEdit: (): void => open('service', draftOfService(service)),
+            onRemove: (): void => { void remove(service.name, () => removeServiceAction(service.id)); },
+          })}
         />
-      </section>
+      )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">{copy.kinds.wiring} ({wirings.length})</h2>
-          <Button size="sm" onClick={(): void => open('wiring', { ...BLANK.wiring })}>{copy.actions.addWiring}</Button>
-        </div>
-        <RegistryTable
-          headers={headersFor('wiring', copy)}
+      {activeTab === 'wiring' && (
+        <RegistrySection
+          title={copy.kinds.wiring}
+          count={wirings.length}
           empty={copy.empty.wiring}
-          rows={wirings.map((wiring) => [
-            nameOf(wiring.from_service_id),
-            wiring.relation,
-            nameOf(wiring.to_service_id),
-            wiring.enabled ? copy.values.yes : copy.values.no,
-            <RowButtons
-              key={wiring.id}
-              onEdit={(): void => open('wiring', draftOfWiring(wiring))}
-              onDelete={(): void => { void remove(`${nameOf(wiring.from_service_id)} -> ${nameOf(wiring.to_service_id)}`, () => removeWiringAction(wiring.id)); }}
-            />,
-          ])}
+          addLabel={copy.actions.addWiring}
+          onAdd={(): void => open('wiring', { ...BLANK.wiring })}
+          canAdd
+          columns={wiringColumns(copy, nameOf)}
+          rows={wirings}
+          getRowKey={(wiring) => wiring.id}
+          actionsHeader={copy.columns.actions}
+          renderRowActions={(wiring) => registryRowActions(copy, {
+            onEdit: (): void => open('wiring', draftOfWiring(wiring)),
+            onRemove: (): void => {
+              void remove(
+                `${nameOf(wiring.from_service_id)} -> ${nameOf(wiring.to_service_id)}`,
+                () => removeWiringAction(wiring.id),
+              );
+            },
+          })}
         />
-      </section>
+      )}
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-foreground">{copy.kinds.exposure} ({exposures.length})</h2>
-          <Button size="sm" onClick={(): void => open('exposure', { ...BLANK.exposure })}>{copy.actions.addExposure}</Button>
-        </div>
-        <RegistryTable
-          headers={headersFor('exposure', copy)}
+      {activeTab === 'exposure' && (
+        <RegistrySection
+          title={copy.kinds.exposure}
+          count={exposures.length}
           empty={copy.empty.exposure}
-          rows={exposures.map((exposure) => [
-            `#${exposure.contest_id}`,
-            exposure.hostname,
-            exposure.path,
-            exposure.tls ? copy.values.yes : copy.values.no,
-            exposure.tailnet ?? copy.values.none,
-            <RowButtons
-              key={exposure.id}
-              onEdit={(): void => open('exposure', draftOfExposure(exposure))}
-              onDelete={(): void => { void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id)); }}
-            />,
-          ])}
+          addLabel={copy.actions.addExposure}
+          onAdd={(): void => open('exposure', { ...BLANK.exposure })}
+          canAdd
+          columns={exposureColumns(copy)}
+          rows={exposures}
+          getRowKey={(exposure) => exposure.id}
+          actionsHeader={copy.columns.actions}
+          renderRowActions={(exposure) => registryRowActions(copy, {
+            onEdit: (): void => open('exposure', draftOfExposure(exposure)),
+            onRemove: (): void => {
+              void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
+            },
+          })}
         />
-      </section>
+      )}
 
       <RegistryEntryDialog
         kind={kind}
