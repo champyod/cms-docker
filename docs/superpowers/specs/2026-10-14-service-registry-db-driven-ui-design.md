@@ -56,6 +56,34 @@ in the front · new tailnet name: recreate that node · TLS/new hostname: `./cms
 `db_profile`: that service restarts · compose topology: render + targeted `up -d` · `contests.is_active`:
 `./cms contest set-active` only. The rule to state in the UI: anything **mounted** is never instant.
 
+## Config model (settled 2026-10-14)
+Three layers, each may read only the layer below it — no cycles.
+
+| Layer | Holds | Rule |
+|---|---|---|
+| **config.toml** (hand; never derived) | the DB connection (`[core]` host/port/user/password/db + backup password), the `[db_*]` profiles + `ACTIVE_DATABASE`, **all secrets** (`AUTH_SECRET`, `RPC_SECRET`, tailnet authkey, Postgres passwords), the bootstrap identity for the first bring-up | the irreducible root; a service may read it only as a **fallback** |
+| **The DB** (source of truth) | `services`, `contest_exposures`, `wirings`, `contests.is_active`, RBAC, panel settings | everything that can be data |
+| **Derived artifacts** (never a source) | `.env`, nginx routes, tailnet `serve.json`, generated compose | rendered from the DB by the sync |
+
+**Secrets stay in config.toml** — never a DB row, never a panel field.
+
+**Services ask the DB, not the launcher.** The Python services MUST resolve their bindings from the DB
+through the same short-TTL cache the panel uses (5 s), not from boot-time args/`.env` — so a registry
+change hot-applies to them within the TTL. `.env`/`config.toml` remain only the **fallback** when the
+registry has no row (the `ask_for_active_contest` pattern). Services hold the DB **read-only**; only the
+panel writes it.
+
+**Boot order (a strict chain):** config.toml → the database container → `db init`/`migrate` (creates the
+registry tables) → seed (write-if-absent) → `__config_sync.sh` renders the artifacts → services start and
+resolve from the DB → the proxy serves. The DB must be up before the sync and every service.
+
+**Forbidden edges (no loop deps):** config.toml must never be derived from the DB; the DB must never read
+a service or an artifact; the sync must never write domain data (C1/D2); the seed is write-if-absent only.
+
+**Hot-reload:** panel reads + service bindings — **hot** (5 s TTL) · exposures → sync + `nginx -s reload`
+(near-hot) · tailnet name → recreate that node · TLS/new hostname → `./cms domain` · compose topology →
+render + targeted `up -d` · DB connection/secrets → restart.
+
 ## Boundary
 Untouched: `contests.is_active`'s panel path, the `container:control` key set, the tailnet authkey.
 Verify on prod with `\d services` before step 1 (C5 assumes no stray `port` column).
