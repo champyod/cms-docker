@@ -1,4 +1,8 @@
 import { SERVICE_ROLES, type ExposureRecord, type ServiceRecord, type ServiceRole, type WiringRecord } from '@/lib/service-wiring-contract';
+import type { Dictionary } from '@/lib/dictionary';
+
+/** The registry screen's copy, resolved from `infrastructure.services` in the active dictionary. */
+export type ServicesCopy = Dictionary['infrastructure']['services'];
 
 /** The three collections the screen edits, and the shape each form collects. */
 export type Kind = 'service' | 'wiring' | 'exposure';
@@ -6,7 +10,8 @@ export type Draft = Record<string, string>;
 
 export interface FieldSpec {
   key: string;
-  label: string;
+  /** A path under `infrastructure.services`, never the label itself, so copy stays in the dictionary. */
+  labelKey: string;
   kind?: 'text' | 'number' | 'boolean' | 'select' | 'contest' | 'service';
   options?: readonly string[];
 }
@@ -18,28 +23,28 @@ export interface ContestOption {
 
 export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
   service: [
-    { key: 'name', label: 'Name' },
-    { key: 'role', label: 'Role', kind: 'select', options: SERVICE_ROLES },
-    { key: 'shard', label: 'Shard', kind: 'number' },
-    { key: 'host', label: 'Host' },
-    { key: 'http_port', label: 'HTTP port', kind: 'number' },
-    { key: 'rpc_port', label: 'RPC port', kind: 'number' },
-    { key: 'db_profile', label: 'DB profile' },
-    { key: 'contest_id', label: 'Contest', kind: 'contest' },
-    { key: 'enabled', label: 'Enabled', kind: 'boolean' },
+    { key: 'name', labelKey: 'fields.name' },
+    { key: 'role', labelKey: 'fields.role', kind: 'select', options: SERVICE_ROLES },
+    { key: 'shard', labelKey: 'fields.shard', kind: 'number' },
+    { key: 'host', labelKey: 'fields.host' },
+    { key: 'http_port', labelKey: 'fields.httpPort', kind: 'number' },
+    { key: 'rpc_port', labelKey: 'fields.rpcPort', kind: 'number' },
+    { key: 'db_profile', labelKey: 'fields.dbProfile' },
+    { key: 'contest_id', labelKey: 'fields.contest', kind: 'contest' },
+    { key: 'enabled', labelKey: 'fields.enabled', kind: 'boolean' },
   ],
   wiring: [
-    { key: 'from_service_id', label: 'From', kind: 'service' },
-    { key: 'to_service_id', label: 'To', kind: 'service' },
-    { key: 'relation', label: 'Relation' },
-    { key: 'enabled', label: 'Enabled', kind: 'boolean' },
+    { key: 'from_service_id', labelKey: 'fields.from', kind: 'service' },
+    { key: 'to_service_id', labelKey: 'fields.to', kind: 'service' },
+    { key: 'relation', labelKey: 'fields.relation' },
+    { key: 'enabled', labelKey: 'fields.enabled', kind: 'boolean' },
   ],
   exposure: [
-    { key: 'contest_id', label: 'Contest', kind: 'contest' },
-    { key: 'hostname', label: 'Hostname' },
-    { key: 'path', label: 'Path' },
-    { key: 'tls', label: 'TLS', kind: 'boolean' },
-    { key: 'tailnet', label: 'Tailnet name' },
+    { key: 'contest_id', labelKey: 'fields.contest', kind: 'contest' },
+    { key: 'hostname', labelKey: 'fields.hostname' },
+    { key: 'path', labelKey: 'fields.path' },
+    { key: 'tls', labelKey: 'fields.tls', kind: 'boolean' },
+    { key: 'tailnet', labelKey: 'fields.tailnet' },
   ],
 };
 
@@ -49,11 +54,21 @@ export const BLANK: Record<Kind, Draft> = {
   exposure: { contest_id: '', hostname: '', path: '/', tls: 'true', tailnet: '' },
 };
 
-export const KIND_LABEL: Record<Kind, string> = {
-  service: 'Service',
-  wiring: 'Wiring',
-  exposure: 'Exposure',
+export const KIND_LABEL_KEY: Record<Kind, string> = {
+  service: 'kinds.service',
+  wiring: 'kinds.wiring',
+  exposure: 'kinds.exposure',
 };
+
+/** Resolves an `infrastructure.services` path to its copy, leaving the path visible when a key is missing. */
+export function copyText(copy: ServicesCopy, path: string): string {
+  let current: unknown = copy;
+  for (const segment of path.split('.')) {
+    if (typeof current !== 'object' || current === null) return path;
+    current = Reflect.get(current, segment) as unknown;
+  }
+  return typeof current === 'string' ? current : path;
+}
 
 /** Empty means null, not zero: a blank optional port is an absent port. */
 export function optionalInt(raw: string | undefined): number | null {
@@ -63,18 +78,18 @@ export function optionalInt(raw: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-/** A required whole number: a blank or unparseable entry is refused, never read as zero. */
-export function requiredInt(raw: string | undefined): number {
+/** A required whole number: a blank or unparseable entry is refused with the caller's copy, never read as zero. */
+export function requiredInt(raw: string | undefined, message: string): number {
   const parsed = optionalInt(raw);
-  if (parsed === null) throw new Error('a whole number is required');
+  if (parsed === null) throw new Error(message);
   return parsed;
 }
 
-/** The role a draft names, refused rather than cast when it is not one the build offers. */
-export function resolveRole(raw: string | undefined): ServiceRole {
+/** The role a draft names, refused with the caller's copy rather than cast when it is not one the build offers. */
+export function resolveRole(raw: string | undefined, message: string): ServiceRole {
   const value = raw ?? '';
   const role = SERVICE_ROLES.find((candidate) => candidate === value);
-  if (role === undefined) throw new Error(`unknown role: ${value}`);
+  if (role === undefined) throw new Error(message);
   return role;
 }
 

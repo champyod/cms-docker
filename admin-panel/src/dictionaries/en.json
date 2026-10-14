@@ -1,4 +1,109 @@
 {
+  "infrastructure": {
+    "services": {
+      "tabs": {
+        "services": "Services",
+        "wirings": "Wirings",
+        "exposures": "Exposures",
+        "preview": "Preview",
+        "ariaLabel": "Registry sections"
+      },
+      "kinds": {
+        "service": "Service",
+        "wiring": "Wiring",
+        "exposure": "Exposure"
+      },
+      "columns": {
+        "actions": "Actions",
+        "name": "Name",
+        "role": "Role",
+        "host": "Host",
+        "ports": "Ports",
+        "dbProfile": "DB profile",
+        "contest": "Contest",
+        "enabled": "Enabled",
+        "from": "From",
+        "relation": "Relation",
+        "to": "To",
+        "hostname": "Hostname",
+        "path": "Path",
+        "tls": "TLS",
+        "tailnet": "Tailnet"
+      },
+      "fields": {
+        "name": "Name",
+        "role": "Role",
+        "shard": "Shard",
+        "host": "Host",
+        "httpPort": "HTTP port",
+        "rpcPort": "RPC port",
+        "dbProfile": "DB profile",
+        "contest": "Contest",
+        "enabled": "Enabled",
+        "from": "From",
+        "to": "To",
+        "relation": "Relation",
+        "hostname": "Hostname",
+        "path": "Path",
+        "tls": "TLS",
+        "tailnet": "Tailnet name"
+      },
+      "actions": {
+        "addService": "Add service",
+        "addWiring": "Add wiring",
+        "addExposure": "Add exposure",
+        "edit": "Edit",
+        "remove": "Remove",
+        "save": "Save",
+        "cancel": "Cancel",
+        "rowGroup": "Registry actions"
+      },
+      "values": {
+        "yes": "yes",
+        "no": "no",
+        "allContests": "all contests",
+        "none": "—",
+        "http": "http",
+        "rpc": "rpc"
+      },
+      "empty": {
+        "service": "No service is registered yet.",
+        "wiring": "No wiring is registered yet.",
+        "exposure": "No contest is exposed yet, so no generated route is rendered.",
+        "preview": "No artifact is rendered for this registry yet."
+      },
+      "confirm": {
+        "title": "Remove {label}",
+        "description": "Remove {label} from the registry? The next config sync stops rendering it.",
+        "confirmLabel": "Remove"
+      },
+      "toast": {
+        "savedTitle": "{kind} saved",
+        "removedTitle": "{label} removed",
+        "errorTitle": "Not saved",
+        "errorFallback": "Unknown failure",
+        "unexpected": "Unexpected failure"
+      },
+      "errors": {
+        "numberRequired": "A whole number is required.",
+        "unknownRole": "Choose a role this build offers."
+      },
+      "problems": {
+        "title": "{count} problems before a sync",
+        "one": "1 problem before a sync"
+      },
+      "preview": {
+        "title": "Generated artifacts",
+        "description": "What the next config sync renders from this registry.",
+        "nginxTitle": "Nginx server blocks",
+        "nginxHotApply": "Exposures: re-sync, then reload nginx in the front",
+        "serveTitle": "Tailnet serve config for {node}",
+        "serveHotApply": "New tailnet name: recreate that node",
+        "mountedNote": "Anything mounted is never instant.",
+        "errorTitle": "Preview unavailable"
+      }
+    }
+  },
   "dashboard": {
     "welcome": "Welcome back, Admin",
     "description": "Here is what is happening with your contests today.",
