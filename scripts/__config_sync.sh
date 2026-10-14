@@ -1490,7 +1490,8 @@ render_wiring_artifacts() {
   exposed="$(db_query "SELECT count(*) FROM contest_exposures;")" || return 1
   [[ -n "$exposed" && "$exposed" != "0" ]] || return 0
 
-  if ! command -v bun >/dev/null 2>&1; then
+  local bun_bin
+  if ! bun_bin="$(resolve_bun)"; then
     log_error "service wiring has $exposed exposure row(s) but bun is not installed, so the route renderer cannot run."
     return 1
   fi
@@ -1525,7 +1526,7 @@ render_wiring_artifacts() {
   [[ -n "$payload" ]] || return 1
 
   mkdir -p "$WIRING_OUT_DIR"
-  if ! printf '%s' "$payload" | bun "$WIRING_RENDERER" nginx \
+  if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
       --ssl-include /etc/nginx/conf.d/nginx-ssl.conf \
@@ -1546,7 +1547,7 @@ render_wiring_artifacts() {
     mkdir -p "$WIRING_OUT_DIR/tailscale" || return 1
     while IFS= read -r node; do
       [[ -n "$node" ]] || continue
-      if ! printf '%s' "$payload" | bun "$WIRING_RENDERER" serve "$node" > "$WIRING_OUT_DIR/tailscale/$node.json"; then
+      if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" serve "$node" > "$WIRING_OUT_DIR/tailscale/$node.json"; then
         rm -f "$WIRING_OUT_DIR/tailscale/$node.json"
         log_error "the wiring renderer refused tailnet node \"$node\"; fix the exposure rows."
         return 1

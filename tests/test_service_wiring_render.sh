@@ -42,7 +42,7 @@ new_sandbox() {
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-cli.ts" "${SB}/admin-panel/src/lib/"
-  printf '%s' "${PAYLOAD}" > "${SB}/payload.json"
+  printf '%s' "${4:-$PAYLOAD}" > "${SB}/payload.json"
   # Test 6 passes an empty third argument to make the registry name no contest.
   local registry_primary="5"
   [[ "$#" -ge 3 ]] && registry_primary="$3"
@@ -174,6 +174,49 @@ run_sync
 rc=$?
 [[ ${rc} -ne 0 ]] && ok "sync refuses to render an unpointable certificate" || no "rendered a TLS route with no lineage"
 grep -q 'no certificate lineage' "${SB}/sync.log" && ok "says which key to set" || no "silent refusal"
+
+echo ""
+echo "=== Test 7: a path-only exposure joins its contest's vhost ==="
+PATH_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"contest_id":3,"hostname":"cms3.example.com","path":"/","tls":true,"tailnet":null},{"contest_id":3,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
+new_sandbox 2 t 5 "$PATH_PAYLOAD"
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+routes="${SB}/config/generated/contest-routes.conf"
+[[ "$(grep -c 'server {' "$routes" 2>/dev/null)" -eq 1 ]] \
+  && ok "keeps one server block for the contest" || no "did not keep one server block"
+grep -q 'server_name cms3.example.com;' "$routes" 2>/dev/null \
+  && ok "answers the contest's vhost" || no "missing the contest vhost"
+grep -q 'location ^~ /beta/ {' "$routes" 2>/dev/null \
+  && ok "adds the path-only location" || no "missing the path-only location"
+grep -q 'proxy_pass http://web-3:8888/;' "$routes" 2>/dev/null \
+  && ok "proxies the path-only location to the contest" || no "wrong or missing path-only upstream"
+
+echo ""
+echo "=== Test 8: a path-only exposure with no vhost fails the sync ==="
+NO_VHOST_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"contest_id":3,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
+new_sandbox 1 t 5 "$NO_VHOST_PAYLOAD"
+run_sync
+rc=$?
+[[ ${rc} -ne 0 ]] && ok "sync fails when a path-only exposure has no vhost" || no "sync succeeded without a vhost"
+grep -q 'refused the registry' "${SB}/sync.log" && ok "reports the refusal" || no "silent refusal"
+[[ -e "${SB}/config/generated/contest-routes.conf" ]] && no "left a partial route file" \
+  || ok "removed the partial route file"
+
+echo ""
+echo "=== Test 9: resolve_bun locates a bun off PATH ==="
+new_sandbox 0 t
+mkdir -p "${SB}/home/.bun/bin" "${SB}/pb" "${SB}/empty"
+printf '#!/bin/sh\nexit 0\n' > "${SB}/home/.bun/bin/bun"
+printf '#!/bin/sh\nexit 0\n' > "${SB}/pb/bun"
+chmod +x "${SB}/home/.bun/bin/bun" "${SB}/pb/bun"
+LIB="${SB}/scripts/__lib/common.sh"
+BASH_BIN="$(command -v bash)"
+resolved="$(HOME="${SB}/home" PATH="${SB}/empty" BUN_INSTALL="" "$BASH_BIN" -c 'source "$0"; resolve_bun' "$LIB")"
+[[ "${resolved}" == "${SB}/home/.bun/bin/bun" ]] \
+  && ok "falls back to ~/.bun/bin when PATH has no bun" || no "resolved '${resolved}' instead"
+resolved="$(HOME="${SB}/home" PATH="${SB}/pb" BUN_INSTALL="" "$BASH_BIN" -c 'source "$0"; resolve_bun' "$LIB")"
+[[ "${resolved}" == "${SB}/pb/bun" ]] && ok "prefers the bun on PATH" || no "resolved '${resolved}' instead"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

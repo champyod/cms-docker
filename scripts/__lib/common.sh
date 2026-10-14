@@ -191,6 +191,28 @@ env_unquote() {
 }
 
 # ---------------------------------------------------------------------------
+# resolve_bun
+# ---------------------------------------------------------------------------
+# Print the bun binary to run, or return 1 when none is installed. PATH first, then
+# the two locations a bun installer writes without touching PATH: a non-interactive
+# shell — a `docker exec`, a cron job, the panel's apply — never sources the profile
+# that adds ~/.bun/bin, so a box with bun installed still looks bun-less to it.
+resolve_bun() {
+  if command -v bun >/dev/null 2>&1; then
+    command -v bun
+    return 0
+  fi
+  local candidate
+  for candidate in "${BUN_INSTALL:+$BUN_INSTALL/bin/bun}" "${HOME:+$HOME/.bun/bin/bun}"; do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # backup_dir_writable_by_container
 # ---------------------------------------------------------------------------
 # <owner_uid> <group_gid> <mode> <container_uid> <container_gid> — returns 0 when
