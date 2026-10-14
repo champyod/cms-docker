@@ -286,6 +286,9 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 | Server actions, each demanding `container:control` in its own body | `admin-panel/src/app/actions/serviceWiring.ts` | the repository's own `permission-coverage` suite passes |
 | The screen: route `infrastructure.services`, page, view, dialog, tables | `admin-panel/src/app/[locale]/(authenticated)/infrastructure/services/page.tsx`, `components/infrastructure/` | `tsc` clean, full suite green, `en`/`th` keys at parity, the navigation and shortcut guards updated |
 | A client-safe contract module, so no screen imports Prisma | `admin-panel/src/lib/service-wiring-contract.ts` | the store keeps Prisma; components import only the contract |
+| The certificate a TLS block points at is a parameter, with the shared ssl include | `admin-panel/src/lib/service-wiring-render.ts` (`CertificateSpec`), CLI `--cert/--key/--ssl-include` | 6 vitest cases |
+| The domain proxy consumes the generated routes | `config/grader.nginx.conf.template` (glob include), `docker-compose.domain.yml` (mount) | `docker compose -f docker-compose.domain.yml config` valid; 15 shell assertions |
+| A TLS exposure with no certificate lineage fails the sync instead of rendering an unpointable cert | `scripts/__config_sync.sh` | `tests/test_service_wiring_render.sh` Test 5 |
 
 Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** · `make test` **all suites passed** · RLS coverage 53 tables · `bash -n` and shellcheck clean on `__config_sync.sh`.
 
@@ -293,7 +296,7 @@ Gates: `tsc --noEmit` clean · `vitest run` **250 files / 3253 tests passed** ·
 
 | Phase | Missing | Why it stopped |
 |---|---|---|
-| 3 — renderer wiring (rendering done, consumption not) | The sync renders `config/generated/contest-routes.conf` and `tailscale-serve.json` from the registry, and the screen populates the rows. Still missing: nothing consumes the generated artifacts — the nginx containers do not include them, and the host-side `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows | Consumption needs a running stack to verify, which is the next step that needs Docker |
+| 3 — renderer wiring (domain front consumed; two gaps left) | The generated routes are now consumed: the domain proxy mounts `config/generated` and the template includes it at http scope with a glob. Still missing: (a) the **host-side** `tailscale serve` map (`scripts/__tailscale_serve.sh:62-66`) is still hand-written to three admin surfaces rather than rendered from the same rows, and (b) contest hostnames are **not yet added to the certificate SAN list**, so a per-contest hostname needs an operator to add it to `EXTRA_DOMAINS` until that lands | (a) needs the per-contest tailnet containers from answer 4, (b) needs a DB read in `build_cert_domains`; both are next |
 | 4 — evaluation multi-tenancy | `EvaluationService` still filters on one `contest_id`; `_bootstrap_contest_id` still reads env `CONTEST_ID`; `workers_status` has no contest dimension; `evaluation-rpc.ts:3-4` still hardcodes one endpoint | Python is unrunnable on this host (no `sqlalchemy`, no `tornado`) and no database is up, so the change could not be exercised. Docker is available now, so this is the next phase that can be verified inside a container |
 | 5 — panel surface | Done for its scope: create, edit in place and remove for all three collections, destructive removals confirmed through the panel's own confirmation store, the screen gated on `container:control`. Not attempted: bulk edit, and an import that seeds the registry from an existing single-contest deployment | — |
 
