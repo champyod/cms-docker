@@ -9,21 +9,22 @@
 import {
   contestVhosts,
   effectiveHostname,
+  indexServices,
   normalisePath,
-  CONTEST_WEB_SERVER_ROLE,
+  primaryVhost,
   type ExposureRow,
   type ServiceRow,
   type WiringRow,
 } from './service-wiring';
 
-export type WiringProblemArea = 'contest' | 'wiring' | 'exposure';
+export type WiringProblemArea = 'wiring' | 'exposure';
 
 export interface WiringProblem {
   area: WiringProblemArea;
   message: string;
 }
 
-/** A wiring needs both endpoints, an exposed contest a server, a path exposure a vhost. */
+/** A wiring needs both endpoints, an exposure a service that can answer on its vhost. */
 export function collectWiringProblems(
   services: ServiceRow[],
   wirings: WiringRow[],
@@ -40,48 +41,68 @@ export function collectWiringProblems(
       });
     }
   }
-  problems.push(...unservedContestProblems(services, exposures));
-  problems.push(...unhostedPathProblems(exposures));
-  problems.push(...duplicateLocationProblems(exposures));
+  problems.push(...exposedServiceProblems(services, exposures));
+  problems.push(...unhostedPathProblems(services, exposures));
+  problems.push(...duplicateLocationProblems(services, exposures));
   return problems;
 }
 
-/** A path-only exposure whose contest names no hostname of its own has no vhost to answer in. */
-function unhostedPathProblems(exposures: ExposureRow[]): WiringProblem[] {
-  const vhosts = contestVhosts(exposures);
+/** An exposure needs a service the registry carries, enabled, with an HTTP port to dial. */
+function exposedServiceProblems(services: ServiceRow[], exposures: ExposureRow[]): WiringProblem[] {
+  const byId = indexServices(services);
+  const problems: WiringProblem[] = [];
+  const reported = new Set<number>();
+  for (const exposure of exposures) {
+    if (reported.has(exposure.service_id)) continue;
+    reported.add(exposure.service_id);
+    const service = byId.get(exposure.service_id);
+    if (service === undefined) {
+      problems.push({
+        area: 'exposure',
+        message: `exposure names service ${exposure.service_id}, which the registry does not carry`,
+      });
+      continue;
+    }
+    if (!service.enabled) {
+      problems.push({ area: 'exposure', message: `service ${service.name} is exposed but not enabled` });
+      continue;
+    }
+    if (service.http_port === null) {
+      problems.push({ area: 'exposure', message: `service ${service.name} is exposed but has no http_port to dial` });
+    }
+  }
+  return problems;
+}
+
+/** A path-only exposure whose service's contest claims no hostname has no vhost to answer in. */
+function unhostedPathProblems(services: ServiceRow[], exposures: ExposureRow[]): WiringProblem[] {
+  const byId = indexServices(services);
+  const vhosts = contestVhosts(exposures, services);
+  const primary = primaryVhost(exposures);
   const problems: WiringProblem[] = [];
   for (const exposure of exposures) {
-    if ((exposure.hostname ?? '').trim() !== '' || vhosts.has(exposure.contest_id)) continue;
+    const service = byId.get(exposure.service_id);
+    if (service === undefined) continue;
+    if ((exposure.hostname ?? '').trim() !== '') continue;
+    if (effectiveHostname(exposure, service, vhosts, primary) !== '') continue;
     problems.push({
       area: 'exposure',
-      message: `contest ${exposure.contest_id} exposes ${normalisePath(exposure.path)} with no hostname and no vhost of its own`,
+      message: `service ${service.name} exposes ${normalisePath(exposure.path)} with no hostname and no vhost of its own`,
     });
   }
   return problems;
 }
 
-/** A contest is served when any enabled ContestWebServer is bound to it or shared. */
-function unservedContestProblems(services: ServiceRow[], exposures: ExposureRow[]): WiringProblem[] {
-  const servers = services.filter((service) => service.enabled && service.role === CONTEST_WEB_SERVER_ROLE);
-  const shared = servers.some((service) => service.contest_id === null);
-  const bound = new Set(servers.map((service) => service.contest_id));
-  const problems: WiringProblem[] = [];
-  const seen = new Set<number>();
-  for (const { contest_id } of exposures) {
-    if (seen.has(contest_id)) continue;
-    seen.add(contest_id);
-    if (shared || bound.has(contest_id)) continue;
-    problems.push({ area: 'contest', message: `contest ${contest_id} is exposed but no ContestWebServer serves it` });
-  }
-  return problems;
-}
-
 /** Two exposures that resolve to one rendered location, whichever vhost each one named. */
-function duplicateLocationProblems(exposures: ExposureRow[]): WiringProblem[] {
-  const vhosts = contestVhosts(exposures);
+function duplicateLocationProblems(services: ServiceRow[], exposures: ExposureRow[]): WiringProblem[] {
+  const byId = indexServices(services);
+  const vhosts = contestVhosts(exposures, services);
+  const primary = primaryVhost(exposures);
   const countByLocation = new Map<string, number>();
   for (const exposure of exposures) {
-    const location = `${effectiveHostname(exposure, vhosts).toLowerCase()}${normalisePath(exposure.path)}`;
+    const service = byId.get(exposure.service_id);
+    if (service === undefined) continue;
+    const location = `${effectiveHostname(exposure, service, vhosts, primary).toLowerCase()}${normalisePath(exposure.path)}`;
     countByLocation.set(location, (countByLocation.get(location) ?? 0) + 1);
   }
   const problems: WiringProblem[] = [];

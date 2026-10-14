@@ -86,7 +86,7 @@ describe('registry-spec carries the row id and refuses a blank number', () => {
   it('seeds every draft with the record id', () => {
     const service: ServiceRecord = SERVICE;
     const wiring: WiringRecord = { id: 2, from_service_id: 1, to_service_id: 3, relation: 'drains', enabled: true };
-    const exposure: ExposureRecord = { id: 3, contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null };
+    const exposure: ExposureRecord = { id: 3, service_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null };
     expect(draftOfService(service).id).toBe('1');
     expect(draftOfWiring(wiring).id).toBe('2');
     expect(draftOfExposure(exposure).id).toBe('3');

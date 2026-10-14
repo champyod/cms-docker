@@ -99,7 +99,6 @@ model contests {
   contest_tasks                                    contest_tasks[]
   contest_usernames                                contest_usernames[]
   contest_teams                                    contest_teams[]
-  contest_exposures                                contest_exposures[]
   services                                         services[]
 }
 
@@ -977,6 +976,7 @@ model services {
   contests   contests? @relation(fields: [contest_id], references: [id], onDelete: SetNull)
   wire_from  wirings[] @relation("wiring_from")
   wire_to    wirings[] @relation("wiring_to")
+  contest_exposures contest_exposures[]
 
   @@index([role], map: "ix_services_role")
   @@index([contest_id], map: "ix_services_contest_id")
@@ -1000,21 +1000,22 @@ model wirings {
   @@index([to_service_id], map: "ix_wirings_to_service_id")
 }
 
-/// Where one contest answers. A contest may hold several rows: one per hostname,
+/// Where one service answers. A service may hold several rows: one per hostname,
 /// per path prefix, or per tailnet name, which is what makes every exposure form
 /// in the design a data question rather than a code branch. A null hostname is a
-/// path-only exposure, answered at a path of the vhost its contest already owns.
+/// path-only exposure, answered at a path of the vhost its service's contest
+/// already owns — or of the deployment's own host, for a service no contest owns.
 model contest_exposures {
   id         Int      @id @default(autoincrement())
-  contest_id Int
+  service_id Int
   hostname   String?  @db.VarChar
   path       String   @default("/") @db.VarChar
   tls        Boolean  @default(true)
   tailnet    String?  @db.VarChar
   created_at DateTime @default(now()) @db.Timestamp(6)
-  contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  services   services @relation(fields: [service_id], references: [id], onDelete: Cascade)
 
-  @@unique([contest_id, hostname, path])
-  @@index([contest_id], map: "ix_contest_exposures_contest_id")
+  @@unique([service_id, hostname, path])
+  @@index([service_id], map: "ix_contest_exposures_service_id")
 }
 

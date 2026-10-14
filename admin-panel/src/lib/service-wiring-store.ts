@@ -172,7 +172,7 @@ export async function saveExposure(input: ExposureInput): Promise<WriteResult> {
     validateExposure(input);
     const hostname = input.hostname.trim().toLowerCase();
     const key = {
-      contest_id: input.contest_id,
+      service_id: input.service_id,
       hostname: hostname === '' ? null : hostname,
       path: normalisePath(input.path),
     };
@@ -208,7 +208,7 @@ export async function readRegistry(): Promise<{
     Promise.all([
       prisma.services.findMany({ orderBy: [{ role: 'asc' }, { shard: 'asc' }] }),
       prisma.wirings.findMany({ orderBy: { id: 'asc' } }),
-      prisma.contest_exposures.findMany({ orderBy: { contest_id: 'asc' } }),
+      prisma.contest_exposures.findMany({ orderBy: { id: 'asc' } }),
     ]),
     PANEL_READ_TIMEOUT_MS,
     'The registry read did not finish in time.',

@@ -1,6 +1,6 @@
 /**
- * The one place that turns the service registry, its wirings and each contest's
- * exposure into the concrete routes the renderers consume.
+ * The one place that turns the service registry, its wirings and each exposure into the
+ * concrete routes the renderers consume.
  *
  * WHY a resolver rather than four ad-hoc queries: nginx, the tailnet serve entries
  * and the panel all read the same rows, so one validated shape stops the three from
@@ -28,17 +28,24 @@ export interface WiringRow {
   enabled: boolean;
 }
 
+/**
+ * Where a service answers. WHY the exposure names a service and not a contest: the row is
+ * what runs, so one statement decides both what is served and where it is reachable, and a
+ * service no contest owns — the admin panel, the ranking board — can be exposed too.
+ *
+ * Rows reach here ordered by id, which is what makes the first hostname a contest claims the
+ * one a path-only exposure of that contest joins.
+ */
 export interface ExposureRow {
-  contest_id: number;
+  service_id: number;
   hostname: string | null;
   path: string;
   tls: boolean;
   tailnet: string | null;
 }
 
-/** One server block: where a contest answers, and which endpoint serves it. */
+/** One server block: where a service answers, and the endpoint that serves it. */
 export interface Route {
-  contest_id: number;
   hostname: string;
   path: string;
   upstream: string;
@@ -66,8 +73,6 @@ export class WiringError extends Error {
 }
 
 const ROOT_PATH = '/';
-
-export const CONTEST_WEB_SERVER_ROLE = 'ContestWebServer';
 
 /** O(1) lookup by id for the join every other function performs. */
 export function indexServices(services: ServiceRow[]): Map<number, ServiceRow> {
@@ -124,41 +129,82 @@ export function servicesForContest(contestId: number, services: ServiceRow[]): S
   });
 }
 
-/** The vhost each contest claims through a hostname exposure; a path-only exposure answers there. */
-export function contestVhosts(exposures: ExposureRow[]): Map<number, string> {
+/** The service an exposure routes to. An id the registry lost is fatal, never skipped. */
+export function exposedService(exposure: ExposureRow, byId: Map<number, ServiceRow>): ServiceRow {
+  const service = byId.get(exposure.service_id);
+  if (service === undefined) {
+    throw new WiringError(`exposure names unknown service id ${exposure.service_id}`);
+  }
+  return service;
+}
+
+/**
+ * The vhost each contest claims through the hostname of an exposure routing to one of its
+ * services, so a path-only exposure answers on the site that contest already serves.
+ *
+ * WHY keyed on the contest and not the service: two servers of one contest are one site, so a
+ * path exposure needs no hostname of its own. A service no contest owns claims nothing here,
+ * and takes the deployment's own hostname instead (see primaryVhost).
+ */
+export function contestVhosts(exposures: ExposureRow[], services: ServiceRow[]): Map<number, string> {
+  const byId = indexServices(services);
   const vhosts = new Map<number, string>();
   for (const exposure of exposures) {
     const hostname = (exposure.hostname ?? '').trim();
     if (hostname === '') continue;
-    if (!vhosts.has(exposure.contest_id) || normalisePath(exposure.path) === ROOT_PATH) {
-      vhosts.set(exposure.contest_id, hostname);
+    const service = byId.get(exposure.service_id);
+    if (service === undefined || service.contest_id === null) continue;
+    if (!vhosts.has(service.contest_id) || normalisePath(exposure.path) === ROOT_PATH) {
+      vhosts.set(service.contest_id, hostname);
     }
   }
   return vhosts;
 }
 
-/** The vhost an exposure answers under: its own hostname, or its contest's when it names none. */
-export function effectiveHostname(exposure: ExposureRow, vhosts: Map<number, string>): string {
-  return (exposure.hostname ?? '').trim() || vhosts.get(exposure.contest_id) || '';
+/**
+ * The deployment's own hostname: the root exposure named first, else the first one named at
+ * all. A path-only exposure of a service no contest owns answers there, because no contest
+ * site exists for it to join.
+ */
+export function primaryVhost(exposures: ExposureRow[]): string {
+  const named = exposures.filter((exposure) => (exposure.hostname ?? '').trim() !== '');
+  const root = named.find((exposure) => normalisePath(exposure.path) === ROOT_PATH);
+  return ((root ?? named[0])?.hostname ?? '').trim();
 }
 
-/** One route per exposure; a blank hostname takes its contest's vhost, and having none is fatal. */
+/** The vhost an exposure answers under; empty means there is none and the caller must refuse. */
+export function effectiveHostname(
+  exposure: ExposureRow,
+  service: ServiceRow,
+  vhosts: Map<number, string>,
+  primary: string,
+): string {
+  const own = (exposure.hostname ?? '').trim();
+  if (own !== '') return own;
+  if (service.contest_id === null) return primary;
+  return vhosts.get(service.contest_id) ?? '';
+}
+
+/** One route per exposure: its service's endpoint, under the vhost the exposure answers on. */
 export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[]): Route[] {
-  const candidates = services.filter((s) => s.enabled && s.role === CONTEST_WEB_SERVER_ROLE);
-  const vhosts = contestVhosts(exposures);
+  const byId = indexServices(services);
+  const vhosts = contestVhosts(exposures, services);
+  const primary = primaryVhost(exposures);
   const routes: Route[] = [];
   for (const exposure of exposures) {
-    const path = normalisePath(exposure.path);
-    const hostname = effectiveHostname(exposure, vhosts);
-    if (hostname === '') {
-      throw new WiringError(`contest ${exposure.contest_id} exposes ${path} with no hostname and no vhost of its own to answer under`);
+    const service = exposedService(exposure, byId);
+    if (!service.enabled) {
+      throw new WiringError(`service ${service.name} is exposed but not enabled`);
     }
-    const upstream = pickUpstream(exposure.contest_id, candidates);
+    const path = normalisePath(exposure.path);
+    const hostname = effectiveHostname(exposure, service, vhosts, primary);
+    if (hostname === '') {
+      throw new WiringError(`service ${service.name} exposes ${path} with no hostname and no vhost of its own to answer under`);
+    }
     routes.push({
-      contest_id: exposure.contest_id,
       hostname,
       path,
-      upstream: toHttpEndpoint(upstream),
+      upstream: toHttpEndpoint(service),
       tls: exposure.tls,
       tailnet: exposure.tailnet,
     });
@@ -176,21 +222,4 @@ function toHttpEndpoint(service: ServiceRow): string {
     throw new WiringError(`service ${service.name} has no http_port to proxy to`);
   }
   return `${service.host}:${service.http_port}`;
-}
-
-/** A contest's own server wins over the shared one; ties break on the lowest shard. */
-function pickUpstream(contestId: number, candidates: ServiceRow[]): ServiceRow {
-  let best: ServiceRow | null = null;
-  for (const service of candidates) {
-    if (service.contest_id !== null && service.contest_id !== contestId) continue;
-    if (best === null) { best = service; continue; }
-    const closer = service.contest_id === contestId && best.contest_id !== contestId;
-    if (closer || (service.contest_id === best.contest_id && service.shard < best.shard)) {
-      best = service;
-    }
-  }
-  if (best === null) {
-    throw new WiringError(`contest ${contestId} has no ContestWebServer to answer on`);
-  }
-  return best;
 }

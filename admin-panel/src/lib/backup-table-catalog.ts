@@ -207,7 +207,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   admin_permission_overrides: [ADMIN_TABLE, 'permissions'],
   announcements: ['contests', ADMIN_TABLE],
   attachments: ['tasks'],
-  contest_exposures: ['contests'],
+  contest_exposures: ['services'],
   contest_teams: ['contests', 'teams'],
   contest_tasks: ['contests', 'tasks'],
   contest_usernames: ['contests', 'participations', 'users', ADMIN_TABLE],

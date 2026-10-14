@@ -121,19 +121,19 @@ describe('saveExposure', () => {
   it.each(['../escape', 'a/b', 'UPPER node', '-leading'])(
     'refuses the tailnet name %j before the database sees it',
     async (tailnet) => {
-      const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet });
+      const result = await saveExposure({ service_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet });
       expect(result.success).toBe(false);
       expect(mocks.createExposure).not.toHaveBeenCalled();
     }
   );
 
   it('accepts a single-label node name', async () => {
-    const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: 'cms-7' });
+    const result = await saveExposure({ service_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: 'cms-7' });
     expect(result).toEqual({ success: true });
   });
 
   it.each(['/beta/', '/beta'])('stores %j as the one normalised location', async (path) => {
-    expect(await saveExposure({ contest_id: 1, hostname: 'a.example.com', path, tls: true, tailnet: null })).toEqual({
+    expect(await saveExposure({ service_id: 1, hostname: 'a.example.com', path, tls: true, tailnet: null })).toEqual({
       success: true,
     });
     expect(mocks.createExposure).toHaveBeenCalledWith({
@@ -142,26 +142,26 @@ describe('saveExposure', () => {
   });
 
   it('stores a blank hostname as null for a path-only exposure', async () => {
-    const result = await saveExposure({ contest_id: 1, hostname: '  ', path: '/beta', tls: true, tailnet: null });
+    const result = await saveExposure({ service_id: 1, hostname: '  ', path: '/beta', tls: true, tailnet: null });
     expect(result).toEqual({ success: true });
     expect(mocks.createExposure).toHaveBeenCalledWith({
-      data: expect.objectContaining({ contest_id: 1, hostname: null, path: '/beta' }),
+      data: expect.objectContaining({ service_id: 1, hostname: null, path: '/beta' }),
     });
   });
 
   it('updates the named row in place when the input carries an id', async () => {
-    const result = await saveExposure({ id: 9, contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
+    const result = await saveExposure({ id: 9, service_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
     expect(result).toEqual({ success: true });
     expect(mocks.updateExposure).toHaveBeenCalledWith({
       where: { id: 9 },
-      data: expect.objectContaining({ contest_id: 1 }),
+      data: expect.objectContaining({ service_id: 1 }),
     });
     expect(mocks.createExposure).not.toHaveBeenCalled();
   });
 
   it('refuses a create that collides with an existing location', async () => {
     mocks.createExposure.mockRejectedValue(UNIQUE_VIOLATION);
-    const result = await saveExposure({ contest_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
+    const result = await saveExposure({ service_id: 1, hostname: 'a.example.com', path: '/', tls: true, tailnet: null });
     expect(result.success).toBe(false);
     expect(result.error).toContain('already exists');
   });

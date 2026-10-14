@@ -42,7 +42,7 @@ export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
     { key: 'enabled', labelKey: 'fields.enabled', kind: 'boolean' },
   ],
   exposure: [
-    { key: 'contest_id', labelKey: 'fields.contest', kind: 'contest' },
+    { key: 'service_id', labelKey: 'fields.service', kind: 'service' },
     { key: 'hostname', labelKey: 'fields.hostname' },
     { key: 'path', labelKey: 'fields.path' },
     { key: 'tls', labelKey: 'fields.tls', kind: 'boolean' },
@@ -53,7 +53,7 @@ export const FIELDS: Record<Kind, readonly FieldSpec[]> = {
 export const BLANK: Record<Kind, Draft> = {
   service: { name: '', role: 'ContestWebServer', shard: '0', host: '', http_port: '', rpc_port: '', db_profile: 'default', image: '', pull_policy: 'missing', contest_id: '', enabled: 'true' },
   wiring: { from_service_id: '', to_service_id: '', relation: 'drains', enabled: 'true' },
-  exposure: { contest_id: '', hostname: '', path: '/', tls: 'true', tailnet: '' },
+  exposure: { service_id: '', hostname: '', path: '/', tls: 'true', tailnet: '' },
 };
 
 export const KIND_LABEL_KEY: Record<Kind, string> = {
@@ -131,7 +131,7 @@ export function draftOfWiring(wiring: WiringRecord): Draft {
 export function draftOfExposure(exposure: ExposureRecord): Draft {
   return {
     id: String(exposure.id),
-    contest_id: String(exposure.contest_id),
+    service_id: String(exposure.service_id),
     hostname: exposure.hostname,
     path: exposure.path,
     tls: String(exposure.tls),

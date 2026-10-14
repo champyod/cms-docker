@@ -204,7 +204,7 @@ export function ServiceRegistryView({
           addLabel={copy.actions.addExposure}
           onAdd={(): void => open('exposure', { ...BLANK.exposure })}
           canAdd={canControl}
-          columns={exposureColumns(copy)}
+          columns={exposureColumns(copy, nameOf)}
           rows={exposures}
           getRowKey={(exposure) => exposure.id}
           actionsHeader={copy.columns.actions}

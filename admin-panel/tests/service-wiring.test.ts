@@ -45,7 +45,7 @@ function service(overrides: Partial<ServiceRow> & Pick<ServiceRow, 'id' | 'name'
   };
 }
 
-function exposure(overrides: Partial<ExposureRow> & Pick<ExposureRow, 'contest_id'>): ExposureRow {
+function exposure(overrides: Partial<ExposureRow> & Pick<ExposureRow, 'service_id'>): ExposureRow {
   return { hostname: 'a.example.com', path: '/', tls: true, tailnet: null, ...overrides };
 }
 
@@ -104,54 +104,66 @@ describe('servicesForContest', () => {
 });
 
 describe('exposureRoutes', () => {
-  it('prefers the contest-bound server over the shared one', () => {
-    const shared = service({ id: 1, name: 'cms-contest-web-server', host: 'shared' });
-    const own = service({ id: 2, name: 'cms-contest-web-server-3', host: 'own', contest_id: 3 });
-    expect(exposureRoutes([exposure({ contest_id: 3 })], [shared, own])[0].upstream).toBe('own:8888');
+  const web3 = service({ id: 1, name: 'web-3', host: 'web-3', contest_id: 3, http_port: 8888 });
+
+  it('routes to the service the exposure names, whatever role it carries', () => {
+    const ranking = service({ id: 2, name: 'cms-ranking-board', role: 'RankingWebServer', host: 'rank', contest_id: null, http_port: 8890 });
+    const routes = exposureRoutes(
+      [exposure({ service_id: 2, hostname: 'rank.example.com' }), exposure({ service_id: 1 })],
+      [web3, ranking],
+    );
+    expect(routes.map((route) => route.upstream)).toEqual(['rank:8890', 'web-3:8888']);
   });
 
-  it('breaks a tie on the lowest shard', () => {
-    const high = service({ id: 1, name: 'w-high', host: 'high', shard: 4, contest_id: 9 });
-    const low = service({ id: 2, name: 'w-low', host: 'low', shard: 1, contest_id: 9 });
-    expect(exposureRoutes([exposure({ contest_id: 9 })], [high, low])[0].upstream).toBe('low:8888');
+  it('fails when the exposure names a service the registry lost', () => {
+    expect(() => exposureRoutes([exposure({ service_id: 9 })], [web3])).toThrow(/unknown service id 9/);
   });
 
-  it('fails when a contest has nothing to answer on', () => {
-    expect(() => exposureRoutes([exposure({ contest_id: 9 })], [])).toThrow(WiringError);
+  it('refuses to proxy to a service that is not enabled', () => {
+    const off = service({ id: 4, name: 'web-off', enabled: false });
+    expect(() => exposureRoutes([exposure({ service_id: 4 })], [off])).toThrow(/not enabled/);
   });
 
-it('refuses to proxy to a server with no http port', () => {
-    const noHttp = service({ id: 1, name: 'web-x', host: 'web-x', contest_id: 4, http_port: null });
-    expect(() => exposureRoutes([exposure({ contest_id: 4 })], [noHttp])).toThrow(/http_port/);
+  it('refuses to proxy to a service with no http port', () => {
+    const noHttp = service({ id: 5, name: 'web-x', host: 'web-x', http_port: null });
+    expect(() => exposureRoutes([exposure({ service_id: 5 })], [noHttp])).toThrow(/http_port/);
   });
 
   it('normalises the path it carries through', () => {
-    const own = service({ id: 1, name: 'w', contest_id: 2 });
-    expect(exposureRoutes([exposure({ contest_id: 2, path: 'beta/' })], [own])[0].path).toBe('/beta');
+    expect(exposureRoutes([exposure({ service_id: 1, path: 'beta/' })], [web3])[0].path).toBe('/beta');
   });
 
-  it('answers a path-only exposure under the vhost its contest already claims', () => {
-    const own = service({ id: 1, name: 'w', contest_id: 2 });
+  it("answers a path-only exposure under the vhost its service's contest claims", () => {
     const routes = exposureRoutes(
       [
-        exposure({ contest_id: 2, hostname: 'cms2.example.com', path: '/' }),
-        exposure({ contest_id: 2, hostname: null, path: '/beta' }),
+        exposure({ service_id: 1, hostname: 'cms3.example.com', path: '/' }),
+        exposure({ service_id: 1, hostname: null, path: '/beta' }),
       ],
-      [own],
+      [web3],
     );
-    expect(routes.map((route) => route.hostname)).toEqual(['cms2.example.com', 'cms2.example.com']);
+    expect(routes.map((route) => route.hostname)).toEqual(['cms3.example.com', 'cms3.example.com']);
     expect(routes[1].path).toBe('/beta');
   });
 
-  it('refuses a path-only exposure whose contest owns no vhost', () => {
-    const own = service({ id: 1, name: 'w', contest_id: 2 });
-    expect(() => exposureRoutes([exposure({ contest_id: 2, hostname: null })], [own])).toThrow(/no vhost/);
+  it("answers a path-only exposure of a service no contest owns on the deployment's own host", () => {
+    const ranking = service({ id: 2, name: 'cms-ranking-board', role: 'RankingWebServer', host: 'rank', contest_id: null, http_port: 8890 });
+    const routes = exposureRoutes(
+      [
+        exposure({ service_id: 1, hostname: 'cms.example.com', path: '/' }),
+        exposure({ service_id: 2, hostname: null, path: '/rank' }),
+      ],
+      [web3, ranking],
+    );
+    expect(routes[1].hostname).toBe('cms.example.com');
+  });
+
+  it("refuses a path-only exposure whose service's contest owns no vhost", () => {
+    expect(() => exposureRoutes([exposure({ service_id: 1, hostname: null })], [web3])).toThrow(/no vhost/);
   });
 });
 
 describe('renderNginxServers', () => {
   const route = {
-    contest_id: 1,
     hostname: 'a.example.com',
     path: '/',
     upstream: 'web-1:8888',
@@ -174,7 +186,7 @@ describe('renderNginxServers', () => {
   });
 
   it('groups a root and a path exposure of one hostname into one block, owner first', () => {
-    const out = renderNginxServers([route, { ...route, contest_id: 2, path: '/beta', upstream: 'web-2:8888' }]);
+    const out = renderNginxServers([route, { ...route, path: '/beta', upstream: 'web-2:8888' }]);
     expect(out.match(/server \{/g)).toHaveLength(1);
     expect(out.indexOf('location / {')).toBeLessThan(out.indexOf('location ^~ /beta/ {'));
     expect(out).toContain('proxy_pass http://web-2:8888/;');
@@ -185,8 +197,8 @@ describe('renderNginxServers', () => {
     const out = renderNginxServers(
       exposureRoutes(
         [
-          exposure({ contest_id: 3, hostname: 'cms3.example.com', path: '/' }),
-          exposure({ contest_id: 3, hostname: null, path: '/beta' }),
+          exposure({ service_id: 1, hostname: 'cms3.example.com', path: '/' }),
+          exposure({ service_id: 1, hostname: null, path: '/beta' }),
         ],
         [own],
       ),
@@ -246,7 +258,6 @@ describe('certificateLineage', () => {
 
 describe('renderServeConfig', () => {
   const route = {
-    contest_id: 1,
     hostname: 'a.example.com',
     path: '/',
     upstream: 'web-1:8888',
@@ -289,7 +300,7 @@ describe('renderFromPayload', () => {
   const payload: WiringPayload = {
     services: [web],
     wirings: [],
-    exposures: [exposure({ contest_id: 1, hostname: 'a.example.com' })],
+    exposures: [exposure({ service_id: 1, hostname: 'a.example.com' })],
   };
 
   it('renders nginx blocks for the registry', () => {
@@ -299,7 +310,7 @@ describe('renderFromPayload', () => {
   it('renders the tailnet serve config for the registry', () => {
     const withTailnet: WiringPayload = {
       ...payload,
-      exposures: [exposure({ contest_id: 1, tailnet: 'cms-1' })],
+      exposures: [exposure({ service_id: 1, tailnet: 'cms-1' })],
     };
     expect(renderFromPayload(withTailnet, 'serve', CONTEST_PROXY_CERTIFICATE, 'cms-1')).toContain('AllowFunnel');
   });
@@ -312,13 +323,13 @@ describe('renderFromPayload', () => {
     expect(() => renderFromPayload(broken, 'nginx')).toThrow(WiringError);
   });
 
-  it('refuses an exposure whose contest has nothing to answer on', () => {
+  it('refuses an exposure naming a service the registry lost', () => {
     expect(() => renderFromPayload({ ...payload, services: [] }, 'nginx')).toThrow(WiringError);
   });
 });
 
 describe('the certificate a TLS block points at', () => {
-  const route = { contest_id: 1, hostname: 'a.example.com', path: '/', upstream: 'w:8888', tls: true, tailnet: null };
+  const route = { hostname: 'a.example.com', path: '/', upstream: 'w:8888', tls: true, tailnet: null };
 
   it('defaults to the contest proxy pair', () => {
     expect(renderNginxServers([route])).toContain(`ssl_certificate ${CONTEST_PROXY_CERTIFICATE.certificate};`);
@@ -349,11 +360,11 @@ describe('the certificate a TLS block points at', () => {
 describe('per-node tailnet configs', () => {
   const web = service({ id: 1, name: 'web-1', host: 'web-1', contest_id: 1 });
 
-  it('gives each node only its own contests', () => {
+  it('gives each node only its own exposures', () => {
     const routes = exposureRoutes(
       [
-        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
-        exposure({ contest_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-2' }),
+        exposure({ service_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ service_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-2' }),
       ],
       [web]
     );
@@ -363,15 +374,15 @@ describe('per-node tailnet configs', () => {
   });
 
   it('skips an exposure with no tailnet name', () => {
-    const routes = exposureRoutes([exposure({ contest_id: 1, tailnet: null })], [web]);
+    const routes = exposureRoutes([exposure({ service_id: 1, tailnet: null })], [web]);
     expect(renderServeConfigs(routes).size).toBe(0);
   });
 
-  it('refuses two contests claiming the same path on one node', () => {
+  it('refuses two exposures claiming the same path on one node', () => {
     const routes = exposureRoutes(
       [
-        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
-        exposure({ contest_id: 1, hostname: 'b.example.com', tailnet: 'cms-1' }),
+        exposure({ service_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ service_id: 1, hostname: 'b.example.com', tailnet: 'cms-1' }),
       ],
       [web]
     );
@@ -383,7 +394,7 @@ describe('per-node tailnet configs', () => {
   });
 
   it('refuses a traversal node before it can name a file', () => {
-    const routes = exposureRoutes([exposure({ contest_id: 1, tailnet: '../../etc/nginx' })], [web]);
+    const routes = exposureRoutes([exposure({ service_id: 1, tailnet: '../../etc/nginx' })], [web]);
     expect(() => renderServeConfigs(routes)).toThrow(RenderError);
   });
 
@@ -391,7 +402,7 @@ describe('per-node tailnet configs', () => {
     const payload: WiringPayload = {
       services: [web],
       wirings: [],
-      exposures: [exposure({ contest_id: 1, tailnet: 'cms-1' })],
+      exposures: [exposure({ service_id: 1, tailnet: 'cms-1' })],
     };
     expect(() => renderFromPayload(payload, 'serve')).toThrow(WiringError);
   });
@@ -412,7 +423,7 @@ describe('collectWiringProblems', () => {
   const shared = service({ id: 1, name: 'cms-contest-web-server' });
 
   it('reports nothing for a clean registry', () => {
-    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 1 })])).toEqual([]);
+    expect(collectWiringProblems([shared], [], [exposure({ service_id: 1 })])).toEqual([]);
   });
 
   it('names a wiring whose endpoint does not exist', () => {
@@ -423,29 +434,42 @@ describe('collectWiringProblems', () => {
     expect(problems[0].message).toContain('9');
   });
 
-  it('reports a contest with no ContestWebServer to answer on', () => {
-    const problems = collectWiringProblems([], [], [exposure({ contest_id: 5 })]);
+  it('reports an exposure naming a service the registry lost', () => {
+    const problems = collectWiringProblems([shared], [], [exposure({ service_id: 5 })]);
     expect(problems).toHaveLength(1);
-    expect(problems[0].area).toBe('contest');
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('service 5');
   });
 
-  it('treats a shared ContestWebServer as serving every contest', () => {
-    expect(collectWiringProblems([shared], [], [exposure({ contest_id: 5 })])).toEqual([]);
+  it('reports an exposed service that is not enabled', () => {
+    const off = service({ id: 2, name: 'web-off', enabled: false });
+    const problems = collectWiringProblems([shared, off], [], [exposure({ service_id: 2 })]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toContain('not enabled');
+  });
+
+  it('reports an exposed service with no http_port to dial', () => {
+    const noHttp = service({ id: 3, name: 'rank', role: 'RankingWebServer', http_port: null });
+    const problems = collectWiringProblems([shared, noHttp], [], [exposure({ service_id: 3 })]);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].message).toContain('no http_port');
   });
 
   it('reports a path-only exposure whose contest owns no vhost', () => {
-    const problems = collectWiringProblems([shared], [], [exposure({ contest_id: 5, hostname: null })]);
+    const own = service({ id: 4, name: 'web-4', contest_id: 4 });
+    const problems = collectWiringProblems([shared, own], [], [exposure({ service_id: 4, hostname: null })]);
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('exposure');
     expect(problems[0].message).toContain('no vhost of its own');
   });
 
   it('reports two exposures that normalise onto one location', () => {
+    const other = service({ id: 6, name: 'web-6', contest_id: 6 });
     const exposures = [
-      exposure({ contest_id: 1, hostname: 'a.example.com', path: '/' }),
-      exposure({ contest_id: 2, hostname: 'A.EXAMPLE.COM', path: '' }),
+      exposure({ service_id: 1, hostname: 'a.example.com', path: '/' }),
+      exposure({ service_id: 6, hostname: 'A.EXAMPLE.COM', path: '' }),
     ];
-    const problems = collectWiringProblems([shared], [], exposures);
+    const problems = collectWiringProblems([shared, other], [], exposures);
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('exposure');
     expect(problems[0].message).toContain('a.example.com/');
@@ -457,7 +481,7 @@ describe('renderRegistryArtifacts', () => {
   const payload: WiringPayload = {
     services: [web],
     wirings: [],
-    exposures: [exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' })],
+    exposures: [exposure({ service_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' })],
   };
 
   it('renders the nginx blocks through the same renderer the sync uses', () => {
@@ -479,8 +503,8 @@ describe('renderRegistryArtifacts', () => {
     const twoNodes: WiringPayload = {
       ...payload,
       exposures: [
-        exposure({ contest_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
-        exposure({ contest_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-1' }),
+        exposure({ service_id: 1, hostname: 'a.example.com', tailnet: 'cms-1' }),
+        exposure({ service_id: 1, hostname: 'b.example.com', path: '/b', tailnet: 'cms-1' }),
       ],
     };
     expect(renderRegistryArtifacts(twoNodes).filter((artifact) => artifact.mode === 'serve')).toHaveLength(1);

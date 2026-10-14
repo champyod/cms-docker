@@ -49,7 +49,7 @@ export interface WiringInput {
 
 export interface ExposureInput {
   id?: number;
-  contest_id: number;
+  service_id: number;
   hostname: string;
   path: string;
   tls: boolean;
@@ -92,7 +92,7 @@ export interface WiringRecord {
 
 export interface ExposureRecord {
   id: number;
-  contest_id: number;
+  service_id: number;
   hostname: string;
   path: string;
   tls: boolean;

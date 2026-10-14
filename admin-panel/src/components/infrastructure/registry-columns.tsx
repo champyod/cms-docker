@@ -38,9 +38,9 @@ export function wiringColumns(copy: ServicesCopy, nameOf: (id: number) => string
   ];
 }
 
-export function exposureColumns(copy: ServicesCopy): ResponsiveColumn<ExposureRecord>[] {
+export function exposureColumns(copy: ServicesCopy, nameOf: (id: number) => string): ResponsiveColumn<ExposureRecord>[] {
   return [
-    { key: 'contest', header: copy.columns.contest, render: (exposure) => `#${exposure.contest_id}` },
+    { key: 'service', header: copy.kinds.service, render: (exposure) => nameOf(exposure.service_id) },
     { key: 'hostname', header: copy.columns.hostname, render: (exposure) => exposure.hostname },
     { key: 'path', header: copy.columns.path, render: (exposure) => exposure.path },
     { key: 'tls', header: copy.columns.tls, render: (exposure) => (exposure.tls ? copy.values.yes : copy.values.no) },

@@ -45,6 +45,7 @@
         "from": "From",
         "to": "To",
         "relation": "Relation",
+        "service": "Service",
         "hostname": "Hostname",
         "path": "Path",
         "tls": "TLS",

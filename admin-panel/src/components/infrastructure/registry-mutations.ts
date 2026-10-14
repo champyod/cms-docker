@@ -44,7 +44,7 @@ export async function persist(kind: Kind, draft: Draft, copy: ServicesCopy): Pro
   }
   return saveExposureAction({
     id,
-    contest_id: requiredInt(draft.contest_id, copy.errors.numberRequired),
+    service_id: requiredInt(draft.service_id, copy.errors.numberRequired),
     hostname: draft.hostname ?? '',
     path: draft.path ?? '/',
     tls: draft.tls === 'true',

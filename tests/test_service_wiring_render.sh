@@ -23,7 +23,7 @@ SANDBOXES=()
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
-PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"contest_id":7,"hostname":"a.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
+PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"service_id":1,"hostname":"a.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
 
 # $1 exposures, $2 services-table ("t"|"f")
 new_sandbox() {
@@ -181,7 +181,7 @@ grep -q 'no certificate lineage' "${SB}/sync.log" && ok "says which key to set" 
 
 echo ""
 echo "=== Test 7: a path-only exposure joins its contest's vhost ==="
-PATH_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"contest_id":3,"hostname":"cms3.example.com","path":"/","tls":true,"tailnet":null},{"contest_id":3,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
+PATH_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"service_id":2,"hostname":"cms3.example.com","path":"/","tls":true,"tailnet":null},{"service_id":2,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
 new_sandbox 2 t 5 "$PATH_PAYLOAD"
 run_sync
 rc=$?
@@ -198,7 +198,7 @@ grep -q 'proxy_pass http://web-3:8888/;' "$routes" 2>/dev/null \
 
 echo ""
 echo "=== Test 8: a path-only exposure with no vhost fails the sync ==="
-NO_VHOST_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"contest_id":3,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
+NO_VHOST_PAYLOAD='{"services":[{"id":2,"name":"web-3","role":"ContestWebServer","shard":0,"host":"web-3","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":3,"enabled":true}],"wirings":[],"exposures":[{"service_id":2,"hostname":"","path":"/beta","tls":true,"tailnet":null}]}'
 new_sandbox 1 t 5 "$NO_VHOST_PAYLOAD"
 run_sync
 rc=$?

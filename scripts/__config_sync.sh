@@ -1481,8 +1481,8 @@ wiring_payload_json() {
         SELECT from_service_id, to_service_id, relation, enabled
         FROM wirings) w), '[]'::json),
     'exposures', COALESCE((SELECT json_agg(row_to_json(e)) FROM (
-        SELECT contest_id, hostname, path, tls, tailnet
-        FROM contest_exposures) e), '[]'::json))::text;"
+        SELECT service_id, hostname, path, tls, tailnet
+        FROM contest_exposures ORDER BY id) e), '[]'::json))::text;"
 }
 
 # Renders the generated route artifacts from the registry.
