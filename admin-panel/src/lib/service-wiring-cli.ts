@@ -15,7 +15,13 @@ import {
   type ServiceRow,
   type WiringRow,
 } from './service-wiring';
-import { RenderError, renderNginxServers, renderServeConfig } from './service-wiring-render';
+import {
+  CONTEST_PROXY_CERTIFICATE,
+  RenderError,
+  renderNginxServers,
+  renderServeConfig,
+  type CertificateSpec,
+} from './service-wiring-render';
 
 export interface WiringPayload {
   services: ServiceRow[];
@@ -52,10 +58,31 @@ export function parsePayload(raw: string): WiringPayload {
  * lost is a broken deployment, and reporting it here beats serving confidence
  * from a half-known registry.
  */
-export function renderFromPayload(payload: WiringPayload, mode: RenderMode): string {
+export function renderFromPayload(
+  payload: WiringPayload,
+  mode: RenderMode,
+  certificate: CertificateSpec = CONTEST_PROXY_CERTIFICATE
+): string {
   resolveWirings(payload.services, payload.wirings);
   const routes = exposureRoutes(payload.exposures, payload.services);
-  return mode === 'serve' ? renderServeConfig(routes) : renderNginxServers(routes);
+  return mode === 'serve' ? renderServeConfig(routes) : renderNginxServers(routes, certificate);
+}
+
+/**
+ * Reads --cert/--key/--ssl-include. WHY flags and not environment: the choice belongs
+ * to the caller that knows which front will read the file, and a flag cannot leak into
+ * an unrelated process the way an exported variable can.
+ */
+export function parseCertificate(argv: readonly string[]): CertificateSpec {
+  const spec: CertificateSpec = { ...CONTEST_PROXY_CERTIFICATE };
+  for (let index = 0; index < argv.length; index += 1) {
+    const flag = argv[index];
+    const value = argv[index + 1];
+    if (flag === '--cert' && value !== undefined) spec.certificate = value;
+    else if (flag === '--key' && value !== undefined) spec.key = value;
+    else if (flag === '--ssl-include' && value !== undefined) spec.sslInclude = value;
+  }
+  return spec;
 }
 
 async function readStdin(): Promise<string> {
@@ -75,9 +102,10 @@ function fail(message: string): never {
 async function main(): Promise<void> {
   const mode = process.argv[2];
   if (mode !== 'nginx' && mode !== 'serve') fail(USAGE);
+  const certificate = parseCertificate(process.argv.slice(2));
   const raw = await readStdin();
   try {
-    process.stdout.write(renderFromPayload(parsePayload(raw), mode));
+    process.stdout.write(renderFromPayload(parsePayload(raw), mode, certificate));
   } catch (error) {
     if (error instanceof WiringError || error instanceof RenderError) fail(error.message);
     fail(error instanceof Error ? error.message : String(error));

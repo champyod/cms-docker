@@ -10,11 +10,18 @@ import {
   type ServiceRow,
   type WiringRow,
 } from '@/lib/service-wiring';
-import { parsePayload, renderFromPayload, type WiringPayload } from '@/lib/service-wiring-cli';
 import {
+  parseCertificate,
+  parsePayload,
+  renderFromPayload,
+  type WiringPayload,
+} from '@/lib/service-wiring-cli';
+import {
+  assertSafeIncludePath,
   assertSafeHostname,
   assertSafePath,
   certificateLineage,
+  CONTEST_PROXY_CERTIFICATE,
   renderNginxServers,
   renderServeConfig,
   RenderError,
@@ -250,4 +257,44 @@ describe('renderFromPayload', () => {
     expect(() => renderFromPayload({ ...payload, services: [] }, 'nginx')).toThrow(WiringError);
   });
 });
+
+describe('the certificate a TLS block points at', () => {
+  const route = { contest_id: 1, hostname: 'a.example.com', path: '/', upstream: 'w:8888', tls: true, tailnet: null };
+
+  it('defaults to the contest proxy pair', () => {
+    expect(renderNginxServers([route])).toContain(`ssl_certificate ${CONTEST_PROXY_CERTIFICATE.certificate};`);
+  });
+
+  it('renders a domain proxy lineage, key and shared ssl include when asked', () => {
+    const out = renderNginxServers([route], {
+      certificate: '/etc/letsencrypt/live/a.example.com/fullchain.pem',
+      key: '/etc/letsencrypt/live/a.example.com/privkey.pem',
+      sslInclude: '/etc/nginx/conf.d/nginx-ssl.conf',
+    });
+    expect(out).toContain('ssl_certificate /etc/letsencrypt/live/a.example.com/fullchain.pem;');
+    expect(out).toContain('ssl_certificate_key /etc/letsencrypt/live/a.example.com/privkey.pem;');
+    expect(out).toContain('include /etc/nginx/conf.d/nginx-ssl.conf;');
+  });
+
+  it('omits the ssl include when none is given', () => {
+    expect(renderNginxServers([route], { certificate: '/x/c.pem', key: '/x/k.pem' })).not.toContain('include /etc/nginx');
+  });
+
+  it('refuses a certificate path that could inject a directive', () => {
+    expect(() => assertSafeIncludePath('/x/c.pem; root /etc;')).toThrow(RenderError);
+    expect(() => assertSafeIncludePath('relative/c.pem')).toThrow(RenderError);
+  });
+});
+
+describe('parseCertificate', () => {
+  it('reads the three flags and ignores the mode argument', () => {
+    const spec = parseCertificate(['nginx', '--cert', '/a/c.pem', '--key', '/a/k.pem', '--ssl-include', '/a/s.conf']);
+    expect(spec).toEqual({ certificate: '/a/c.pem', key: '/a/k.pem', sslInclude: '/a/s.conf' });
+  });
+
+  it('falls back to the contest proxy pair', () => {
+    expect(parseCertificate(['nginx'])).toEqual(CONTEST_PROXY_CERTIFICATE);
+  });
+});
+
 

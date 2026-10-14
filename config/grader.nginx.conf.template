@@ -221,3 +221,9 @@ server {
     error_log /var/log/nginx/ranking_error.log;
 }
 # @end block
+
+# Contest routes rendered from the service registry by ./cms config sync.
+# WHY a glob and not the literal file name: an include of a missing file is a hard
+# nginx error, while a glob matching nothing is accepted, so a deployment with no
+# exposures starts exactly as it did before this feature existed.
+include /etc/nginx/generated/*.conf;

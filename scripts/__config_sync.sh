@@ -1406,12 +1406,35 @@ render_wiring_artifacts() {
     return 0
   fi
 
+  # The cert the domain front actually serves. WHY this mirror of CERT_LINEAGE_DOMAIN's
+  # fallback: the domain proxy reads a certbot lineage named after that key, so a block
+  # pointing at any other path makes nginx refuse to start.
+  # WHY only these three: the domain proxy entrypoint signs a stand-in certificate for
+  # exactly this chain, so any other fallback names a lineage nobody creates and nginx
+  # then refuses to start. A TLS exposure with no lineage to point at is a configuration
+  # error to report, not a file to render.
+  local lineage="${__TOML[admin.CERT_LINEAGE_DOMAIN]:-}"
+  [[ -n "$lineage" ]] || lineage="${__TOML[admin.DOMAIN_NAME]:-}"
+  [[ -n "$lineage" ]] || lineage="${__TOML[contest.CONTEST_DOMAIN]:-}"
+
+  local tls_exposed
+  tls_exposed="$(db_query 'SELECT count(*) FROM contest_exposures WHERE tls;')" || return 1
+  if [[ -n "$tls_exposed" && "$tls_exposed" != "0" && -z "$lineage" ]]; then
+    log_error "$tls_exposed exposure(s) need TLS but no certificate lineage is configured; set [admin] CERT_LINEAGE_DOMAIN or DOMAIN_NAME."
+    return 1
+  fi
+  [[ -n "$lineage" ]] || lineage="${__TOML[core.CMS_DOMAIN]:-cms.local}"
+
   local payload
   payload="$(wiring_payload_json)" || return 1
   [[ -n "$payload" ]] || return 1
 
   mkdir -p "$WIRING_OUT_DIR"
-  if ! printf '%s' "$payload" | bun "$WIRING_RENDERER" nginx > "$WIRING_OUT_DIR/contest-routes.conf"; then
+  if ! printf '%s' "$payload" | bun "$WIRING_RENDERER" nginx \
+      --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
+      --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
+      --ssl-include /etc/nginx/conf.d/nginx-ssl.conf \
+      > "$WIRING_OUT_DIR/contest-routes.conf"; then
     rm -f "$WIRING_OUT_DIR/contest-routes.conf"
     log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
     return 1
