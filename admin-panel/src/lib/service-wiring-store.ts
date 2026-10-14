@@ -56,6 +56,42 @@ export interface WriteResult {
   error?: string;
 }
 
+/**
+ * What a read returns. WHY the role is a plain string here and a union on write: the
+ * table is the authority and may hold a role this build no longer offers, and a screen
+ * that refused to render such a row would hide the very entry an operator must edit.
+ * The id rides along because removing a row is the screen's other job.
+ */
+export interface ServiceRecord {
+  id: number;
+  name: string;
+  role: string;
+  shard: number;
+  host: string;
+  http_port: number | null;
+  rpc_port: number | null;
+  db_profile: string;
+  contest_id: number | null;
+  enabled: boolean;
+}
+
+export interface WiringRecord {
+  id: number;
+  from_service_id: number;
+  to_service_id: number;
+  relation: string;
+  enabled: boolean;
+}
+
+export interface ExposureRecord {
+  id: number;
+  contest_id: number;
+  hostname: string;
+  path: string;
+  tls: boolean;
+  tailnet: string | null;
+}
+
 const HOST_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 const MIN_PORT = 1;
 const MAX_PORT = 65535;
@@ -175,9 +211,9 @@ export async function removeExposure(id: number): Promise<WriteResult> {
 
 /** Everything the panel renders, in one round trip per table. */
 export async function readRegistry(): Promise<{
-  services: ServiceInput[];
-  wirings: WiringInput[];
-  exposures: ExposureInput[];
+  services: ServiceRecord[];
+  wirings: WiringRecord[];
+  exposures: ExposureRecord[];
 }> {
   const [services, wirings, exposures] = await Promise.all([
     prisma.services.findMany({ orderBy: [{ role: 'asc' }, { shard: 'asc' }] }),

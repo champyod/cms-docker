@@ -11,8 +11,11 @@ import {
   saveService,
   saveWiring,
   type ExposureInput,
+  type ExposureRecord,
   type ServiceInput,
+  type ServiceRecord,
   type WiringInput,
+  type WiringRecord,
   type WriteResult,
 } from '@/lib/service-wiring-store';
 
@@ -31,9 +34,9 @@ import {
 const REGISTRY_PATH = '/[locale]/settings';
 
 export interface RegistryView {
-  services: ServiceInput[];
-  wirings: WiringInput[];
-  exposures: ExposureInput[];
+  services: ServiceRecord[];
+  wirings: WiringRecord[];
+  exposures: ExposureRecord[];
 }
 
 export type RegistryResult =
