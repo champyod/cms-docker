@@ -1358,6 +1358,69 @@ validate_service_db_profiles() {
   return 0
 }
 
+# --- Service wiring: the database authors the routes, config sync renders them ---
+WIRING_OUT_DIR="config/generated"
+WIRING_RENDERER="admin-panel/src/lib/service-wiring-cli.ts"
+
+# Every row as one JSON document. WHY one query rather than three passes: the
+# renderer validates the whole registry at once, so three reads would only widen
+# the window in which the tables disagree with each other.
+wiring_payload_json() {
+  db_query "SELECT json_build_object(
+    'services', COALESCE((SELECT json_agg(row_to_json(s)) FROM (
+        SELECT id, name, role, shard, host, port, db_profile, contest_id, enabled
+        FROM services) s), '[]'::json),
+    'wirings', COALESCE((SELECT json_agg(row_to_json(w)) FROM (
+        SELECT from_service_id, to_service_id, relation, enabled
+        FROM wirings) w), '[]'::json),
+    'exposures', COALESCE((SELECT json_agg(row_to_json(e)) FROM (
+        SELECT contest_id, hostname, path, tls, tailnet
+        FROM contest_exposures) e), '[]'::json))::text;"
+}
+
+# Renders the generated route artifacts from the registry.
+#
+# WHY a no-op with nothing exposed: a deployment that never used the registry must
+# stay exactly as it was, so the N=1 path renders as it always has.
+# WHY fatal when rows exist but bun does not: the operator asked for wiring that
+# cannot be rendered, and leaving a stale artifact would serve routes the database
+# no longer describes.
+render_wiring_artifacts() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local exposed
+  exposed="$(db_query "SELECT count(*) FROM contest_exposures;")" || return 1
+  [[ -n "$exposed" && "$exposed" != "0" ]] || return 0
+
+  if ! command -v bun >/dev/null 2>&1; then
+    log_error "service wiring has $exposed exposure row(s) but bun is not installed, so the route renderer cannot run."
+    return 1
+  fi
+  [[ -f "$WIRING_RENDERER" ]] || { log_error "missing wiring renderer: $WIRING_RENDERER"; return 1; }
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "Would render $exposed contest route(s) into $WIRING_OUT_DIR/"
+    return 0
+  fi
+
+  local payload
+  payload="$(wiring_payload_json)" || return 1
+  [[ -n "$payload" ]] || return 1
+
+  mkdir -p "$WIRING_OUT_DIR"
+  if ! printf '%s' "$payload" | bun "$WIRING_RENDERER" nginx > "$WIRING_OUT_DIR/contest-routes.conf"; then
+    rm -f "$WIRING_OUT_DIR/contest-routes.conf"
+    log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
+    return 1
+  fi
+  printf '%s' "$payload" | bun "$WIRING_RENDERER" serve > "$WIRING_OUT_DIR/tailscale-serve.json" || return 1
+  log_info "Rendered $exposed contest route(s) into $WIRING_OUT_DIR/"
+  return 0
+}
+
 # Rewrite the [contest] CONTEST_ID value in place, keeping everything after the number
 # (an inline comment) and every other byte of the file. Returns non-zero when the key is
 # absent, because a file the merge should have populated yet does not carry the key is a
@@ -1514,6 +1577,10 @@ main() {
   # run before the .env writer so an unknown profile fails the sync rather than
   # leaving a service pointed at a database its row does not name.
   validate_service_db_profiles
+
+  # WHY after the profile check: a service whose profile does not exist is a broken
+  # registry, and rendering it would publish routes for a service that cannot start.
+  render_wiring_artifacts
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or
