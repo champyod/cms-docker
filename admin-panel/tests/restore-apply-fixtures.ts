@@ -9,6 +9,7 @@ export const EPOCH = Date.UTC(2026, 9, 2, 12, 0, 0);
 /** The tables whose primary key is composite, and the columns it is made of. */
 const COMPOSITE_KEYS: Readonly<Record<string, readonly string[]>> = {
   contest_teams: ['contest_id', 'team_id'],
+  contest_tasks: ['contest_id', 'task_id'],
   submission_results: ['submission_id', 'dataset_id'],
   user_test_results: ['user_test_id', 'dataset_id'],
 };
@@ -61,6 +62,7 @@ export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
       ['announcements', ['contests', 'admins']],
       ['attachments', ['tasks']],
       ['contest_teams', ['contests', 'teams']],
+      ['contest_tasks', ['contests', 'tasks']],
       ['datasets', ['tasks']],
       ['evaluations', ['datasets', 'submission_results', 'submissions', 'testcases']],
       ['files', ['submissions']],
@@ -71,7 +73,6 @@ export function liveFacts(overrides: Partial<ApplyFacts> = {}): ApplyFacts {
       ['statements', ['tasks']],
       ['submission_results', ['datasets', 'submissions']],
       ['submissions', ['participations', 'tasks']],
-      ['tasks', ['contests']],
       ['teams', ['users']],
       ['testcases', ['datasets']],
       ['tokens', ['submissions']],

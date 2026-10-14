@@ -6,7 +6,7 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { removeTaskFromContest } from '@/app/actions/contests';
 import { useTabConfirmationCopy, useTabRefresh } from './useContestSettingsState';
 
-export function useContestTaskActions(): {
+export function useContestTaskActions(contestId: number): {
   isTaskModalOpen: boolean;
   setIsTaskModalOpen: (open: boolean) => void;
   handleRemoveTask: (taskId: number) => Promise<void>;
@@ -21,7 +21,7 @@ export function useContestTaskActions(): {
     if (!(await confirm(copy.removeTaskFromContestConfirm()))) return;
     const result = await runAction(
       { pending: 'Removing task...', success: 'Task removed', failure: 'Remove failed' },
-      () => removeTaskFromContest(taskId),
+      () => removeTaskFromContest(contestId, taskId),
     );
     if (result?.success) refresh();
   };

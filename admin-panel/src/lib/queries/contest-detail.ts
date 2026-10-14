@@ -129,17 +129,23 @@ function toContestTaskRow(row: { id: number; name: string; title: string; num: n
 export async function getContestTasks(contestId: number): Promise<ContestTasksData | null> {
   const permissions = new Set<string>([...await requirePermission('contest:read'), ...await requirePermission('task:read')]);
   if (!await prisma.contests.findUnique({ where: { id: contestId }, select: { id: true } })) return null;
-  const taskSelect = { id: true, name: true, title: true, num: true };
-  const tasks = await prisma.tasks.findMany({ where: { contest_id: contestId }, select: taskSelect, orderBy: { num: 'asc' } });
-  // Why: link candidates are unassigned tasks, listed only with task:update (not just task:read).
+  const memberships = await prisma.contest_tasks.findMany({
+    where: { contest_id: contestId },
+    select: { num: true, tasks: { select: { id: true, name: true, title: true } } },
+    orderBy: { num: 'asc' },
+  });
+  const tasks = memberships.map((membership) => toContestTaskRow({ ...membership.tasks, num: membership.num }, permissions));
+  // Why: link candidates are the tasks not already in this contest, listed only
+  // with task:update (not just task:read). A task may already be in other contests.
   const canAssign = hasEffectivePermission(permissions, 'task:update');
   const availableTasks = canAssign
-    ? await prisma.tasks.findMany({ where: { contest_id: null }, select: taskSelect, orderBy: { name: 'asc' } })
+    ? (await prisma.tasks.findMany({
+        where: { contest_tasks: { none: { contest_id: contestId } } },
+        select: { id: true, name: true, title: true },
+        orderBy: { name: 'asc' },
+      })).map((task) => toContestTaskRow({ ...task, num: null }, permissions))
     : [];
-  return {
-    contestId, tasks: tasks.map((row) => toContestTaskRow(row, permissions)),
-    availableTasks: availableTasks.map((row) => toContestTaskRow(row, permissions)), permissionKeys: [...permissions],
-  };
+  return { contestId, tasks, availableTasks, permissionKeys: [...permissions] };
 }
 
 function toParticipantRow(entry: ParticipationEntry, permissions: ReadonlySet<string>): ContestParticipantRow {

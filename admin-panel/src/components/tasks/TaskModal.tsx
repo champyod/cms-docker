@@ -1,7 +1,8 @@
 'use client';
 
 import { createContext, useContext, useMemo, useState } from 'react';
-import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
+import { FileCode, Clock, Cpu, FileType, FileText, CheckSquare } from 'lucide-react';
+import { toast } from 'sonner';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -12,6 +13,9 @@ import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { uploadStatements, type QueuedStatement } from '@/lib/statement-upload';
+import { StatementQueueField } from './StatementQueueField';
 import { GeneralTab, GradingTab, LimitsTab, TokensTab, LanguagesTab } from './task-modal-sections';
 
 // Why: child tab components can consume this context to wrap individual fields with RestrictedField.
@@ -46,11 +50,11 @@ interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   task?: TaskRecord | null;
-  onSuccess: () => void;
+  onSuccess: (createdTaskId?: number) => void;
   permissionKeys?: readonly string[];
 }
 
-type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
+type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages' | 'statements';
 
 const TAB_CONFIG: Array<{ id: Tab; label: string; icon: typeof FileCode }> = [
   { id: 'general', label: 'General', icon: FileCode },
@@ -58,6 +62,7 @@ const TAB_CONFIG: Array<{ id: Tab; label: string; icon: typeof FileCode }> = [
   { id: 'limits', label: 'Limits', icon: Clock },
   { id: 'tokens', label: 'Tokens', icon: Cpu },
   { id: 'languages', label: 'Files & Languages', icon: FileType },
+  { id: 'statements', label: 'Statements', icon: FileText },
 ];
 
 const EMPTY_FORM: TaskData = {
@@ -114,6 +119,7 @@ function mapTaskToForm(task: TaskRecord): TaskData {
 export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: TaskModalProps): React.JSX.Element | null {
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<TaskData>(EMPTY_FORM);
+  const [statementQueue, setStatementQueue] = useState<QueuedStatement[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -122,12 +128,18 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
     return getFieldAccess('tasks', perms);
   }, [permissionKeys]);
 
+  const canCreateStatement = useMemo(
+    () => hasEffectivePermission(new Set(permissionKeys ?? []), 'statement:create'),
+    [permissionKeys],
+  );
+
   const [prevTask, setPrevTask] = useState<TaskRecord | null | undefined>(undefined);
   const [prevOpen, setPrevOpen] = useState(isOpen);
   if (task !== prevTask || isOpen !== prevOpen) {
     setPrevTask(task);
     setPrevOpen(isOpen);
     setFormData(task ? mapTaskToForm(task) : EMPTY_FORM);
+    setStatementQueue([]);
     setError('');
   }
 
@@ -151,12 +163,19 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
             : apiClient.post('/api/tasks', formData)
       );
       if (!result) return;
-      if (result.success) {
-        onSuccess();
-        onClose();
-      } else {
+      if (!result.success) {
         setError(result.error ?? 'An error occurred');
+        return;
       }
+      const savedTaskId = task ? task.id : (typeof result.id === 'number' ? result.id : undefined);
+      // The task is already saved, so a statement failure is reported without
+      // blocking the close — the file can be re-added from the Overview tab.
+      if (savedTaskId !== undefined && statementQueue.length > 0) {
+        const { failed } = await uploadStatements(savedTaskId, statementQueue);
+        if (failed.length > 0) toast.error(`Task saved, but these statements failed: ${failed.join(', ')}`);
+      }
+      onSuccess(savedTaskId);
+      onClose();
     } finally {
       setLoading(false);
     }
@@ -205,7 +224,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         <ResponsiveModalShell
           sidebar={
             <>
-              {TAB_CONFIG.map((tab) => (
+              {TAB_CONFIG.filter((tab) => tab.id !== 'statements' || canCreateStatement).map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
@@ -241,6 +260,9 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
               {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
               {activeTab === 'languages' && (
                 <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
+              )}
+              {activeTab === 'statements' && (
+                <StatementQueueField queue={statementQueue} onChange={setStatementQueue} disabled={loading} />
               )}
             </form>
           </div>

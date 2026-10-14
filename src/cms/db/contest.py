@@ -30,9 +30,9 @@
 from datetime import datetime, timedelta
 
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import relationship
-from sqlalchemy.schema import Column, ForeignKey, CheckConstraint
+from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
+    UniqueConstraint
 from sqlalchemy.types import Integer, Unicode, DateTime, Interval, Enum, \
     Boolean, String
 
@@ -328,13 +328,21 @@ class Contest(Base):
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
 
-    tasks: list["Task"] = relationship(
-        "Task",
-        collection_class=ordering_list("num"),
-        order_by="[Task.num]",
-        cascade="all",
+    # Many-to-many with tasks through the contest_tasks association, whose rows
+    # carry the per-contest ordering (`num`) and are the source of truth.
+    task_contests: list["ContestTask"] = relationship(
+        "ContestTask",
+        order_by="[ContestTask.num]",
+        cascade="all, delete-orphan",
         passive_deletes=True,
         back_populates="contest")
+    # Convenience read-only view of the contest's tasks in order; deletions are
+    # handled by task_contests so a shared task is never cascaded away here.
+    tasks: list["Task"] = relationship(
+        "Task",
+        secondary="contest_tasks",
+        order_by="ContestTask.num",
+        viewonly=True)
 
     announcements: list["Announcement"] = relationship(
         "Announcement",
@@ -407,6 +415,41 @@ class ContestTeam(Base):
     contest: Contest = relationship(
         Contest,
         back_populates="contest_teams")
+
+
+class ContestTask(Base):
+    """A task's membership in one contest, with its ordering number.
+
+    """
+    __tablename__ = 'contest_tasks'
+    __table_args__ = (
+        # Ordering is per contest; NULL is allowed so reordering can use a
+        # temporary sentinel without colliding on the unique index.
+        UniqueConstraint('contest_id', 'num',
+                         name='contest_tasks_contest_id_num_key'),
+    )
+
+    contest_id: int = Column(
+        Integer,
+        ForeignKey(Contest.id,
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True)
+    task_id: int = Column(
+        Integer,
+        ForeignKey("tasks.id",
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True,
+        index=True)
+    num: int | None = Column(
+        Integer,
+        nullable=True)
+
+    contest: Contest = relationship(
+        Contest,
+        back_populates="task_contests")
+    task: "Task" = relationship(
+        "Task",
+        back_populates="contest_tasks")
 
 
 class Announcement(Base):

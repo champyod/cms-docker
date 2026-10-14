@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     participations: { findMany: vi.fn(), findFirst: vi.fn() },
-    tasks: { findMany: vi.fn() },
+    contest_tasks: { findMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/permissions', () => ({ ensurePermission: vi.fn(async () => undefined) }));
@@ -20,7 +20,7 @@ import { prisma } from '@/lib/prisma';
 
 const mockParticipationsFindMany = vi.mocked(prisma.participations.findMany);
 const mockParticipationsFindFirst = vi.mocked(prisma.participations.findFirst);
-const mockTasksFindMany = vi.mocked(prisma.tasks.findMany);
+const mockContestTasksFindMany = vi.mocked(prisma.contest_tasks.findMany);
 const mockEnsurePermission = vi.mocked(ensurePermission);
 
 const LIST_PAGE = 'src/app/[locale]/(authenticated)/ranking/users/page.tsx';
@@ -114,8 +114,8 @@ describe('ranking users read model', () => {
     mockParticipationsFindMany.mockResolvedValue([
       participation({ id: 11, contestId: 3, userId: 9, username: 'ada', score: 80, teamName: 'Alpha' }),
     ] as never);
-    mockTasksFindMany.mockResolvedValue([
-      { id: 5, name: 'sum', title: 'Sum', score_precision: 0 },
+    mockContestTasksFindMany.mockResolvedValue([
+      { tasks: { id: 5, name: 'sum', title: 'Sum', score_precision: 0 } },
     ] as never);
 
     const detail = await getRankingUserDetail('ada');

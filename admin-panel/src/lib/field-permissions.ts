@@ -90,8 +90,6 @@ const FIELD_PERMISSION_TABLE = {
   },
   tasks: {
     id: { read: 'task:read' },
-    num: { read: 'task:read' },
-    contest_id: { read: 'task:read', update: 'task:update' },
     name: { read: 'task:read', update: 'task:update' },
     title: { read: 'task:read', update: 'task:update' },
     submission_format: { read: 'task:read', update: 'task:update' },

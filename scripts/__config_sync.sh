@@ -1307,23 +1307,6 @@ db_query() {
     -d "${__TOML[core.POSTGRES_DB]:-cmsdb}" -tA -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
 }
 
-# The id of the contest flagged active, read into DB_ACTIVE_ID and reported through DB_STATE:
-# "missing" (no database or no contests table yet — bootstrap), "empty" (table exists, no
-# active row) or "active". Returns non-zero only when the database is reachable but the read
-# failed, which the caller treats as fatal rather than guessing.
-db_active_contest_id() {
-  DB_STATE="missing"
-  DB_ACTIVE_ID=""
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
-  local table_present
-  table_present="$(db_query "SELECT to_regclass('public.contests') IS NOT NULL;")" || return 1
-  [[ "$table_present" == "t" ]] || return 0
-  DB_ACTIVE_ID="$(db_query "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")" || return 1
-  DB_STATE="empty"
-  [[ -n "$DB_ACTIVE_ID" ]] && DB_STATE="active"
-  return 0
-}
-
 # Is a [db_<name>] profile present in config.toml? Mirrors resolve_active_db_profile's
 # prefix scan so both agree on what counts as a profile.
 has_db_profile() {
@@ -1355,30 +1338,6 @@ validate_service_db_profiles() {
       return 1
     fi
   done <<< "$profiles"
-  return 0
-}
-
-# The launcher argument the evaluation service needs, from its registry row.
-#
-# WHY the database decides: one evaluation service may serve a single contest or every
-# contest, and the registry row is where that choice already lives. The launcher upstream
-# already understands `-c ALL` (cms/util.py contest_id_from_args), so this step only has to
-# publish which of the two applies. WHY an empty default: a deployment with no registry
-# table keeps today's behaviour, where the service asks the database for the active contest.
-derive_evaluation_contest_arg() {
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
-  local table_present
-  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
-  [[ "$table_present" == "t" ]] || return 0
-
-  local binding
-  binding="$(db_query "SELECT COALESCE(contest_id::text, 'ALL') FROM services WHERE role = 'EvaluationService' AND enabled ORDER BY shard, id LIMIT 1;")" || return 1
-  [[ -n "$binding" ]] || return 0
-
-  __TOML["contest.EVALUATION_CONTEST_ARG"]="-c $binding"
-  if [[ " ${__CONTEST_KEYS[*]} " != *" EVALUATION_CONTEST_ARG "* ]]; then
-    __CONTEST_KEYS+=("EVALUATION_CONTEST_ARG")
-  fi
   return 0
 }
 
@@ -1545,140 +1504,6 @@ render_wiring_artifacts() {
   return 0
 }
 
-# Rewrite the [contest] CONTEST_ID value in place, keeping everything after the number
-# (an inline comment) and every other byte of the file. Returns non-zero when the key is
-# absent, because a file the merge should have populated yet does not carry the key is a
-# state to report rather than to invent a section for.
-apply_contest_id_to_config_toml() {
-  local id="$1" tmp line trimmed sec="" written=0
-  tmp="$(mktemp)" || return 1
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    trimmed="$(toml_trim "${line%%#*}")"
-    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
-      sec="${BASH_REMATCH[1]}"
-    elif [[ "$sec" == "contest" && "$line" =~ ^([[:space:]]*CONTEST_ID[[:space:]]*=[[:space:]]*)(\"?[0-9]+\"?)(.*)$ ]]; then
-      printf '%s%s%s\n' "${BASH_REMATCH[1]}" "$id" "${BASH_REMATCH[3]}" >> "$tmp"
-      written=1
-      continue
-    fi
-    printf '%s\n' "$line" >> "$tmp"
-  done < "$TOML_FILE"
-  if [[ "$written" -ne 1 ]]; then
-    rm -f "$tmp"
-    return 1
-  fi
-  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
-  if ! cat "$tmp" > "$TOML_FILE"; then
-    rm -f "$tmp"
-    return 1
-  fi
-  rm -f "$tmp"
-}
-
-# The contest the service registry binds its own contest web server to, or empty.
-#
-# WHY the registry outranks contests.is_active: is_active is a singleton, so it can only
-# ever name one contest, while the registry binds a server per contest. The singleton
-# survives as the fallback for every deployment whose registry is still empty, which is
-# how the authority moves without breaking one.
-registry_primary_contest_id() {
-  REGISTRY_PRIMARY_ID=""
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
-  local table_present
-  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
-  [[ "$table_present" == "t" ]] || return 0
-
-  local id
-  id="$(db_query "SELECT contest_id FROM services WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL ORDER BY shard, id LIMIT 1;")" || return 1
-  [[ -n "$id" ]] || return 0
-  # WHY validated here and not only at the write: this value is interpolated into an
-  # UPDATE below, so a value that is not a plain integer never reaches a statement.
-  if [[ ! "$id" =~ ^[0-9]+$ ]]; then
-    log_error "services.contest_id returned a non-numeric id '${id}' — refusing to use it."
-    return 1
-  fi
-  REGISTRY_PRIMARY_ID="$id"
-  return 0
-}
-
-# Mirrors the registry's choice onto contests.is_active.
-#
-# WHY the singleton is written rather than read: the registry now authors which contest
-# the deployment serves, and contests.is_active is the cache the panel and the Python
-# services read. Left stale it would make the panel disagree with the stack it describes.
-# WHY the whole-table form: it is the statement ./cms contest set-active already issues, so
-# exactly one row can be active no matter what the table held.
-sync_active_contest_flag() {
-  [[ -n "$REGISTRY_PRIMARY_ID" ]] || return 0
-  local current
-  current="$(db_query "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")" || return 1
-  [[ "$current" == "$REGISTRY_PRIMARY_ID" ]] && return 0
-
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf 'Would move contests.is_active from %s to %s (service registry)\n' "${current:-none}" "$REGISTRY_PRIMARY_ID"
-    return 0
-  fi
-  db_query "UPDATE contests SET is_active = (id = ${REGISTRY_PRIMARY_ID});" >/dev/null || return 1
-  log_info "active contest flag moved to ${REGISTRY_PRIMARY_ID} from the service registry"
-  return 0
-}
-
-# Writes one derived contest id into [contest] CONTEST_ID, or reports why it cannot.
-#
-# WHY the id is validated here rather than by each caller: a non-numeric or missing value
-# silently kept would let the file and the stack diverge, which is the class of bug this
-# derivation exists to remove.
-set_contest_id() {
-  local id="$1" source="$2"
-  if [[ ! "$id" =~ ^[0-9]+$ ]]; then
-    log_error "${source} returned a non-numeric contest id '${id}' — refusing to write it."
-    exit 1
-  fi
-  if [[ "${__TOML[contest.CONTEST_ID]:-}" == "$id" ]]; then
-    return 0
-  fi
-  __TOML[contest.CONTEST_ID]="$id"
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    printf 'Would set [contest] CONTEST_ID = %s from %s\n' "$id" "$source"
-    return 0
-  fi
-  if ! apply_contest_id_to_config_toml "$id"; then
-    log_error "could not write [contest] CONTEST_ID = ${id} into $TOML_FILE — the key is missing from [contest]."
-    exit 1
-  fi
-  log_info "active contest CONTEST_ID=${id} derived from ${source}"
-}
-
-# Point [contest] CONTEST_ID at the contest the deployment serves, or fail loud.
-#
-# The service registry answers first; contests.is_active answers when the registry names
-# no contest. A reachable database that reports no active contest, a read that fails, and
-# a non-numeric id all stop the sync.
-derive_contest_id_from_db() {
-  if ! registry_primary_contest_id; then
-    log_error "cms-database is running but the service registry could not be read — refusing to guess the active contest."
-    exit 1
-  fi
-  if [[ -n "$REGISTRY_PRIMARY_ID" ]]; then
-    set_contest_id "$REGISTRY_PRIMARY_ID" "the service registry (services.contest_id)"
-    return 0
-  fi
-
-  if ! db_active_contest_id; then
-    log_error "cms-database is running but contests.is_active could not be read — refusing to guess the active contest."
-    exit 1
-  fi
-  if [[ "$DB_STATE" == "missing" ]]; then
-    log_info "contests table not available yet — keeping config.toml CONTEST_ID as the bootstrap value"
-    return 0
-  fi
-  if [[ "$DB_STATE" == "empty" ]]; then
-    log_error "no active contest: neither the service registry nor contests.is_active names one. Set one with './cms contest set-active <id>'."
-    exit 1
-  fi
-  set_contest_id "$DB_ACTIVE_ID" "contests.is_active"
-}
-
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -1760,27 +1585,13 @@ main() {
 
   resolve_active_db_profile
 
-  # WHY after resolve_active_db_profile: the database read needs the [core] POSTGRES_*
-  # values that step projects from the active [db_<name>] profile, and WHY before the .env
-  # writer: the derived id has to reach .env (compose reads ${CONTEST_ID}) on this run.
-  derive_contest_id_from_db
-
-  # WHY after derive_contest_id_from_db: both read the database, and this one must
-  # run before the .env writer so an unknown profile fails the sync rather than
-  # leaving a service pointed at a database its row does not name.
+  # WHY before the .env writer: the profile check must run so an unknown profile fails the
+  # sync rather than leaving a service pointed at a database its row does not name.
   validate_service_db_profiles
 
   # WHY after the profile check: a service whose profile does not exist is a broken
   # registry, and rendering it would publish routes for a service that cannot start.
   render_wiring_artifacts
-
-  # WHY after derive_contest_id_from_db: it is that step which resolves the registry's own
-  # choice into REGISTRY_PRIMARY_ID, and this mirror has nothing to write until it has.
-  sync_active_contest_flag || log_error "could not mirror the registry's contest onto contests.is_active"
-
-  # WHY before the .env writer: the launcher argument has to reach .env on this run, since
-  # compose reads it to decide whether this evaluation service serves one contest or all.
-  derive_evaluation_contest_arg
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or

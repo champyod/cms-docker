@@ -102,7 +102,7 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
     if (!(await confirm(removeTaskFromContestConfirm()))) return;
     const result = await runAction(
       { pending: 'Unassigning tasks...', success: 'Tasks unassigned', failure: 'Failed to unassign tasks' },
-      () => apiClient.post('/api/tasks/batch', { action: 'assign', taskIds: [...selection.selectedIds], contestId: null }),
+      () => apiClient.post('/api/tasks/batch', { action: 'assign', taskIds: [...selection.selectedIds], contestIds: [] }),
     );
     if (result?.success) handleAssigned();
   };
@@ -185,7 +185,7 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
         <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
       )}
 
-      <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} />
+      <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} permissionKeys={permissionKeys} />
 
       <TaskBulkAssignDialog
         isOpen={isAssignOpen}

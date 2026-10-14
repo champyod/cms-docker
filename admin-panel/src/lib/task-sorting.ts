@@ -20,7 +20,7 @@ const ORDER_BY_KEY: Record<TaskSortKey, (direction: 'asc' | 'desc') => Prisma.ta
   id: (direction) => [{ id: direction }],
   name: (direction) => [{ name: direction }],
   title: (direction) => [{ title: direction }],
-  contests: (direction) => [{ contests: { name: direction } }],
+  contests: (direction) => [{ contest_tasks: { _count: direction } }],
   submissions: (direction) => [{ submissions: { _count: direction } }],
 };
 

@@ -24,7 +24,7 @@ const ORDER_BY_KEY: Record<ContestSortKey, (direction: 'asc' | 'desc') => Prisma
   is_active: (direction) => [{ is_active: direction }],
   start: (direction) => [{ start: direction }],
   stop: (direction) => [{ stop: direction }],
-  tasks: (direction) => [{ tasks: { _count: direction } }],
+  tasks: (direction) => [{ contest_tasks: { _count: direction } }],
   participants: (direction) => [{ participations: { _count: direction } }],
 };
 

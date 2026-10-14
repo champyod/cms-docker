@@ -96,7 +96,7 @@ model contests {
   score_precision                                  Int
   announcements                                    announcements[]
   participations                                   participations[]
-  tasks                                            tasks[]
+  contest_tasks                                    contest_tasks[]
   contest_usernames                                contest_usernames[]
   contest_teams                                    contest_teams[]
   contest_exposures                                contest_exposures[]
@@ -321,8 +321,6 @@ model submissions {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model tasks {
   id                                            Int                      @id @default(autoincrement())
-  num                                           Int?
-  contest_id                                    Int?
   name                                          String                   @unique @db.VarChar
   title                                         String                   @db.VarChar
   submission_format                             String[]                 @db.VarChar
@@ -348,13 +346,24 @@ model tasks {
   statements                                    statements[]
   submissions                                   submissions[]
   datasets_tasks_id_active_dataset_idTodatasets datasets?                @relation("tasks_id_active_dataset_idTodatasets", fields: [id, active_dataset_id], references: [task_id, id], onDelete: SetNull, onUpdate: SetNull, map: "fk_active_dataset_id")
-  contests                                      contests?                @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  contest_tasks                                 contest_tasks[]
   user_tests                                    user_tests[]
 
-  @@unique([contest_id, name])
-  @@unique([contest_id, num])
   @@unique([id, active_dataset_id])
-  @@index([contest_id], map: "ix_tasks_contest_id")
+}
+
+/// The membership of a task in a contest, carrying the per-contest ordering.
+/// A task may belong to many contests; this join table is the source of truth.
+model contest_tasks {
+  contest_id Int
+  task_id    Int
+  num        Int?
+  contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  tasks      tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@id([contest_id, task_id])
+  @@unique([contest_id, num])
+  @@index([task_id], map: "ix_contest_tasks_task_id")
 }
 
 model teams {

@@ -140,7 +140,15 @@ export async function removeParticipant(participationId: number): Promise<Mutati
 export async function addTaskToContest(contestId: number, taskId: number): Promise<MutationResult> {
   await requirePermission('task:update');
   try {
-    await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId } });
+    const existing = await prisma.contest_tasks.findUnique({
+      where: { contest_id_task_id: { contest_id: contestId, task_id: taskId } },
+    });
+    if (!existing) {
+      const aggregate = await prisma.contest_tasks.aggregate({ where: { contest_id: contestId }, _max: { num: true } });
+      await prisma.contest_tasks.create({
+        data: { contest_id: contestId, task_id: taskId, num: (aggregate._max.num ?? 0) + 1 },
+      });
+    }
     await recordAudit({
       verb: 'task:update',
       entity: 'task',
@@ -154,10 +162,10 @@ export async function addTaskToContest(contestId: number, taskId: number): Promi
   }
 }
 
-export async function removeTaskFromContest(taskId: number): Promise<MutationResult> {
+export async function removeTaskFromContest(contestId: number, taskId: number): Promise<MutationResult> {
   await requirePermission('task:update');
   try {
-    await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: null } });
+    await prisma.contest_tasks.deleteMany({ where: { contest_id: contestId, task_id: taskId } });
     await recordAudit({
       verb: 'task:update',
       entity: 'task',

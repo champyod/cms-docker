@@ -297,7 +297,7 @@ async function getRecalcContext(
   const submission = await prisma.submissions.findUnique({
     where: { id: submissionId },
     include: {
-      tasks: { select: { active_dataset_id: true, contest_id: true } },
+      tasks: { select: { active_dataset_id: true, contest_tasks: { select: { contest_id: true } } } },
       submission_results: { select: { dataset_id: true } }
     }
   });
@@ -306,7 +306,7 @@ async function getRecalcContext(
 
   return {
     datasetId: submission.submission_results?.[0]?.dataset_id || submission.tasks?.active_dataset_id,
-    contestId: submission.tasks?.contest_id ?? null,
+    contestId: submission.tasks?.contest_tasks?.[0]?.contest_id ?? null,
   };
 }
 

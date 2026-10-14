@@ -53,7 +53,7 @@ __all__ = [
     # fsobject
     "FSObject", "LargeObject",
     # contest
-    "Contest", "Announcement", "ContestTeam",
+    "Contest", "Announcement", "ContestTeam", "ContestTask",
     # user
     "User", "Team", "Participation", "Message", "Question",
     "registerable_teams_query",
@@ -90,7 +90,7 @@ __all__ = [
 
 # Instantiate or import these objects.
 
-version = 49
+version = 50
 
 engine = create_engine(config.database.url, echo=config.database.debug,
                        pool_timeout=60, pool_recycle=120)
@@ -105,7 +105,7 @@ from .types import CastingArray, Codename, Filename, FilenameSchema, \
 from .base import Base
 from .fsobject import FSObject, LargeObject
 from .admin import Admin
-from .contest import Contest, Announcement, ContestTeam
+from .contest import Contest, Announcement, ContestTeam, ContestTask
 from .user import User, Team, Participation, Message, Question, \
     registerable_teams_query
 from .username import ContestantGroup, ContestantGroupMembership, \

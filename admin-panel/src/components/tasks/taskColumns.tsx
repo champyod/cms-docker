@@ -12,7 +12,7 @@ export interface TaskRow {
   id: number;
   name: string;
   title: string;
-  contests: { name: string } | null;
+  contest_tasks: Array<{ contests: { id: number; name: string } }>;
   statements: Array<{ id: number }>;
   datasets_datasets_task_idTotasks: Array<{ id: number }>;
   _count: { submissions: number };
@@ -92,11 +92,15 @@ export function buildTaskColumns({ selection, onOpen }: TaskColumnArgs): Respons
     },
     {
       key: 'contest',
-      header: 'Contest',
+      header: 'Contests',
       sortKey: 'contests',
       render: (task) =>
-        task.contests ? (
-          <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{task.contests.name}</span>
+        task.contest_tasks.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {task.contest_tasks.map((membership) => (
+              <span key={membership.contests.id} className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{membership.contests.name}</span>
+            ))}
+          </div>
         ) : (
           <span className="text-muted-foreground text-xs italic">Unassigned</span>
         ),

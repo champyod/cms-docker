@@ -63,10 +63,16 @@ $("select[name=task_type_{{ dataset.id }}]").change(function() {
       </tr>
       <tr>
         <td>
-          <span class="info" title="The index of the task within the contest, if the task is associated with a contest."></span>
-          Position
+          <span class="info" title="The contests this task belongs to; a task may be shared across several contests."></span>
+          Contests
         </td>
-        <td>{{ task.num }}</td>
+        <td>
+          {% if task.contests|length == 0 %}
+          Not in any contest
+          {% else %}
+          {% for contest in task.contests %}{{ contest.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+          {% endif %}
+        </td>
       </tr>
       <tr>
         <td>

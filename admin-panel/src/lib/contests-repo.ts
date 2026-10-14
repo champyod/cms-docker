@@ -63,7 +63,7 @@ export async function fetchContestsPage({ page = 1, search = '', sort = null }: 
       take: CONTESTS_PER_PAGE,
       orderBy: contestSortOrderBy(sort),
       include: {
-        _count: { select: { participations: true, tasks: true } },
+        _count: { select: { participations: true, contest_tasks: true } },
       },
     }),
     prisma.contests.count({ where }),

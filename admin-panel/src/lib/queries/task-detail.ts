@@ -55,12 +55,12 @@ export async function getTaskDetailSummary(taskId: number): Promise<TaskDetailSu
   // the query skips the relation and the result carries contest: null.
   const canReadContest = hasEffectivePermission(permissions, 'contest:read');
   const row = canReadContest
-    ? await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, name: true, title: true, contests: { select: { id: true, name: true } } } })
+    ? await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, name: true, title: true, contest_tasks: { select: { contests: { select: { id: true, name: true } } } } } })
     : await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, name: true, title: true } });
   if (!row) return null;
   const visible = filterReadableFields('tasks', { id: row.id, name: row.name, title: row.title }, permissions);
-  const contestRelation = canReadContest ? (row as { contests?: { id: number; name: string } | null }).contests : undefined;
-  const contest = contestRelation ? { id: contestRelation.id, name: contestRelation.name } : null;
+  const memberships = canReadContest ? (row as { contest_tasks?: Array<{ contests: { id: number; name: string } }> }).contest_tasks : undefined;
+  const contest = memberships && memberships.length > 0 ? { id: memberships[0].contests.id, name: memberships[0].contests.name } : null;
   return {
     id: visible.id ?? row.id, name: visible.name ?? row.name, title: visible.title ?? row.title,
     contest, permissionKeys: [...permissions],

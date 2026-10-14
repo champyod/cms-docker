@@ -38,7 +38,7 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Query
 
 from cms.db import Task, Submission
-from cms.db.contest import Contest
+from cms.db.contest import Contest, ContestTask
 from cms.db.session import Session
 from cms.db.user import Participation
 from cms.db.usertest import UserTest
@@ -69,12 +69,12 @@ def _filter_submission_query(
 
     """
     if task is not None:
-        if contest is not None and contest is not task.contest:
+        if contest is not None and contest not in task.contests:
             raise ValueError("contest and task don't match")
         q = q.filter(cls.task == task)
     elif contest is not None:
         q = q.join(cls.task) \
-            .filter(Task.contest == contest)
+            .filter(Task.contest_tasks.any(ContestTask.contest == contest))
     else:
         raise ValueError("need at least one of contest and task")
     q = q.filter(cls.participation == participation)

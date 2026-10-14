@@ -23,7 +23,7 @@
 from cms.db import Dataset, UserTestFile, UserTest
 from cms.grading.languagemanager import safe_get_lang_filename
 
-from .base import BaseHandler, FileHandler, require_permission
+from .base import BaseHandler, FileHandler, first_contest, require_permission
 
 
 class UserTestHandler(BaseHandler):
@@ -32,7 +32,7 @@ class UserTestHandler(BaseHandler):
     def get(self, user_test_id, dataset_id=None):
         user_test = self.safe_get_item(UserTest, user_test_id)
         task = user_test.task
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         if dataset_id is not None:
             dataset = self.safe_get_item(Dataset, dataset_id)

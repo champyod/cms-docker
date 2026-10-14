@@ -19,9 +19,11 @@ interface TaskSelectionModalProps {
   contestId: number;
   availableTasks: AvailableTask[];
   onSuccess?: () => void;
+  canCreateTask?: boolean;
+  onRequestCreate?: () => void;
 }
 
-export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks, onSuccess }: TaskSelectionModalProps) {
+export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks, onSuccess, canCreateTask = false, onRequestCreate }: TaskSelectionModalProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState<number | null>(null);
@@ -82,6 +84,12 @@ export function TaskSelectionModal({ isOpen, onClose, contestId, availableTasks,
           ))
         )}
       </div>
+
+      {canCreateTask && onRequestCreate && (
+        <div className="mt-4 border-t border-border pt-4">
+          <Button variant="secondary" className="w-full" onClick={onRequestCreate}>Create new task</Button>
+        </div>
+      )}
     </Dialog>
   );
 }

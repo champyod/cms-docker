@@ -87,7 +87,7 @@ export function useContestDetailState(contest: ContestLike) {
   };
 
   const handleRemoveTask = async (taskId: number) => {
-    if (confirm('Remove this task from the contest?')) { await removeTaskFromContest(taskId); window.location.reload(); }
+    if (confirm('Remove this task from the contest?')) { await removeTaskFromContest(contest.id, taskId); window.location.reload(); }
   };
 
   const handleSave = async () => {

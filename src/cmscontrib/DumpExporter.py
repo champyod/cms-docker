@@ -179,7 +179,8 @@ class DumpExporter:
                 else:
                     self.users_ids = []
                 tasks: list[Task] = (
-                    session.query(Task).filter(Task.contest_id.is_(None)).all()
+                    session.query(Task)
+                    .filter(~Task.contest_tasks.any()).all()
                 )
                 self.tasks_ids = [task.id for task in tasks]
         else:
@@ -344,6 +345,11 @@ class DumpExporter:
             data[prp.key] = encode_value(col.type, val)
 
         for prp in cls._rel_props:
+            # The task<->contest convenience views are read-only mirrors of the
+            # contest_tasks association rows, which are exported themselves.
+            if prp.viewonly:
+                continue
+
             other_cls = prp.mapper.class_
 
             # Skip submissions if requested

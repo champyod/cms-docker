@@ -229,7 +229,7 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/EvaluationService-${EVALUATION_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0} ${EVALUATION_CONTEST_ARG:-}"
+             cmsEvaluationService ${EVALUATION_SERVICE_SHARD:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep -f cmsEvaluationService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 25000))\" || exit 1"]
       interval: 10s

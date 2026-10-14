@@ -391,7 +391,8 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
             tasks = dict()
 
-            for task in contest.tasks:
+            for contest_task in contest.task_contests:
+                task = contest_task.task
                 # A task with no active dataset has no score type, and so
                 # no max score or extra headers, to announce.
                 if task.active_dataset is None:
@@ -417,7 +418,7 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                     "short_name": task.name,
                     "name": task.title,
                     "contest": encode_id(contest.name),
-                    "order": task.num,
+                    "order": contest_task.num,
                     "max_score": score_type.max_score,
                     "extra_headers": score_type.ranking_headers,
                     "score_precision": task.score_precision,
@@ -528,10 +529,10 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
             # ScoringService sent us a submission of another contest, they
             # do not know about our contest_id in multicontest setup.
-            if submission.task.contest_id != self.contest_id:
+            if submission.participation.contest_id != self.contest_id:
                 logger.debug("Ignoring submission %d of contest %d "
                              "(this ProxyService considers contest %d only).",
-                             submission.id, submission.task.contest_id,
+                             submission.id, submission.participation.contest_id,
                              self.contest_id)
                 return
 
@@ -572,10 +573,10 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
             # ScoringService sent us a submission of another contest, they
             # do not know about our contest_id in multicontest setup.
-            if submission.task.contest_id != self.contest_id:
+            if submission.participation.contest_id != self.contest_id:
                 logger.debug("Ignoring submission %d of contest %d "
                              "(this ProxyService considers contest %d only).",
-                             submission.id, submission.task.contest_id,
+                             submission.id, submission.participation.contest_id,
                              self.contest_id)
                 return
 
@@ -615,11 +616,11 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
             # This ProxyService may focus on a different contest, and it should
             # ignore this update.
-            if task.contest_id != self.contest_id:
-                logger.debug("Ignoring dataset change for task %d of contest "
-                             "%d (this ProxyService considers contest %d "
-                             "only).", task_id, task.contest.id,
-                             self.contest_id)
+            if not any(ct.contest_id == self.contest_id
+                       for ct in task.contest_tasks):
+                logger.debug("Ignoring dataset change for task %d (this "
+                             "ProxyService considers contest %d only).",
+                             task_id, self.contest_id)
                 return
 
             # Without an active dataset there is nothing to rescore: the

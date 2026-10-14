@@ -25,7 +25,7 @@
 
 """
 
-from cms.db import Contest, Submission, UserTest, Task
+from cms.db import Contest, ContestTask, Submission, UserTest, Task
 
 from .base import BaseHandler, require_permission
 
@@ -40,7 +40,7 @@ class ContestSubmissionsHandler(BaseHandler):
         self.contest = contest
 
         query = self.sql_session.query(Submission).join(Task)\
-            .filter(Task.contest == contest)
+            .filter(Task.contest_tasks.any(ContestTask.contest == contest))
         page = int(self.get_query_argument("page", 0))
         self.render_params_for_submissions(query, page)
 
@@ -57,7 +57,7 @@ class ContestUserTestsHandler(BaseHandler):
         self.contest = contest
 
         query = self.sql_session.query(UserTest).join(Task)\
-            .filter(Task.contest == contest)
+            .filter(Task.contest_tasks.any(ContestTask.contest == contest))
         page = int(self.get_query_argument("page", 0))
         self.render_params_for_user_tests(query, page)
 

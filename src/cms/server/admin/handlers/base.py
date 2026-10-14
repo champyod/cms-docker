@@ -177,6 +177,18 @@ _CACHE_TTL_SECONDS: float = 5.0
 _ALL_PERMISSION = "all:all"
 
 
+def first_contest(task) -> "Contest | None":
+    """Return the contest a task's admin page is scoped to.
+
+    A task may belong to several contests; the task pages use the first
+    (lowest-numbered) one for their breadcrumb and context, or None when the
+    task is attached to no contest.
+
+    """
+    contests = task.contests
+    return contests[0] if contests else None
+
+
 def _all_permission_keys(sql_session) -> set[str]:
     """Return every permission key registered in the database."""
     rows = sql_session.query(Permission.key).all()

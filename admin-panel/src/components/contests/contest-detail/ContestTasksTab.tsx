@@ -3,6 +3,10 @@
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import type { ContestTasksData } from '@/lib/queries/contest-detail';
+import { addTaskToContest } from '@/app/actions/contests';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskSelectionModal } from '../TaskSelectionModal';
 import { ContestTasksSection } from './ContestTasksSection';
 import { useTabRefresh } from './useContestSettingsState';
@@ -21,9 +25,26 @@ function useTabLocale(): string {
 
 export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Element {
   const [expanded, setExpanded] = useState(true);
-  const actions = useContestTaskActions();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const actions = useContestTaskActions(data.contestId);
   const refresh = useTabRefresh();
   const locale = useTabLocale();
+  const runAction = useActionFeedback();
+  const canCreateTask = hasEffectivePermission(new Set(data.permissionKeys), 'task:create');
+
+  // A task created here is not yet on the contest, so it is linked once the
+  // create dialog reports the new id.
+  const handleCreateSuccess = async (createdTaskId?: number): Promise<void> => {
+    if (createdTaskId !== undefined) {
+      const result = await runAction(
+        { pending: 'Adding task to contest...', success: 'Task added', failure: 'Failed to add task' },
+        () => addTaskToContest(data.contestId, createdTaskId),
+      );
+      if (!result?.success) return;
+    }
+    refresh();
+  };
+
   return (
     <div className="space-y-6">
       <ContestTasksSection
@@ -42,6 +63,16 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
           contestId={data.contestId}
           availableTasks={[...data.availableTasks]}
           onSuccess={refresh}
+          canCreateTask={canCreateTask}
+          onRequestCreate={() => { actions.setIsTaskModalOpen(false); setIsCreateOpen(true); }}
+        />
+      )}
+      {isCreateOpen && (
+        <TaskModal
+          isOpen
+          onClose={() => setIsCreateOpen(false)}
+          onSuccess={(createdTaskId) => { void handleCreateSuccess(createdTaskId); }}
+          permissionKeys={data.permissionKeys}
         />
       )}
     </div>

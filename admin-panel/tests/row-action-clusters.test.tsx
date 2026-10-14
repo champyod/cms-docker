@@ -33,7 +33,7 @@ const CONTAINER = { id: 'abc123', name: 'api', image: 'cms/api', status: 'Up 2 d
 const CONTEST: ContestRowData = { id: 4, name: 'Autumn', is_active: true, start: new Date('2026-01-01'), stop: new Date('2026-12-01'), timezone: 'Asia/Bangkok' };
 const GROUP: GroupWithPermissions = { id: 3, name: 'Judges', description: null, is_seeded: false, permissionKeys: [] };
 const QUESTION: QuestionRow = { id: 9, subject: 'Scoring', text: 'How is it scored?', ignored: false, reply_timestamp: null, reply_subject: null, reply_text: null, question_timestamp: '2026-01-02T03:04:00Z', participations: { users: { username: 'ada' } } };
-const TASK = { id: 5, name: 'sum', title: 'Sum', contests: null, statements: [], datasets_datasets_task_idTotasks: [], _count: { submissions: 0 }, diagnostics: [] };
+const TASK = { id: 5, name: 'sum', title: 'Sum', contest_tasks: [], statements: [], datasets_datasets_task_idTotasks: [], _count: { submissions: 0 }, diagnostics: [] };
 
 type QuestionsPanelProps = React.ComponentProps<typeof QuestionsPanel>;
 

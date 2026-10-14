@@ -24,7 +24,7 @@ import argparse
 import sys
 
 from cms import utf8_decoder
-from cms.db import SessionGen, Task
+from cms.db import ContestTask, SessionGen, Task
 
 
 def ask(task_name: str):
@@ -44,19 +44,21 @@ def remove_task(task_name: str):
         if not ask(task_name):
             print("Not removing task `%s'." % task_name)
             return False
-        num = task.num
-        contest_id = task.contest_id
+        # Capture the memberships before the task (and its rows) go away.
+        memberships = [(ct.contest_id, ct.num) for ct in task.contest_tasks]
         session.delete(task)
         session.flush()
-        # Keeping the tasks' nums to the range 0... n - 1.
-        if contest_id is not None:
-            following_tasks = session.query(Task)\
-                .filter(Task.contest_id == contest_id)\
-                .filter(Task.num > num)\
-                .order_by(Task.num)\
+        # Keeping each contest's nums to the range 0... n - 1.
+        for contest_id, num in memberships:
+            if num is None:
+                continue
+            following_tasks = session.query(ContestTask)\
+                .filter(ContestTask.contest_id == contest_id)\
+                .filter(ContestTask.num > num)\
+                .order_by(ContestTask.num)\
                 .all()
-            for task in following_tasks:
-                task.num -= 1
+            for contest_task in following_tasks:
+                contest_task.num -= 1
                 session.flush()
         session.commit()
         print("Task `%s' removed." % task_name)

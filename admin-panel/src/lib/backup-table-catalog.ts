@@ -63,6 +63,9 @@ const CATALOG = [
   { name: 'participations', label: 'Participations', pk: ['id'] },
   // The per-contest registration roster: a row overrides the team's own registerable flag.
   { name: 'contest_teams', label: 'Contest Teams', pk: ['contest_id', 'team_id'] },
+  // The task<->contest membership: a task may belong to many contests, and each
+  // row carries that task's position in the contest.
+  { name: 'contest_tasks', label: 'Contest Tasks', pk: ['contest_id', 'task_id'] },
   // Contestant display username configuration. The groups, their
   // membership rows, the per-scope policies and the current aliases
   // exist only in the panel and the contest web server, so they
@@ -206,6 +209,7 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   attachments: ['tasks'],
   contest_exposures: ['contests'],
   contest_teams: ['contests', 'teams'],
+  contest_tasks: ['contests', 'tasks'],
   contest_usernames: ['contests', 'participations', 'users', ADMIN_TABLE],
   contestant_group_memberships: ['contestant_groups', 'users'],
   datasets: ['tasks'],
@@ -220,7 +224,6 @@ const PARENT_TABLES: Readonly<Partial<Record<CatalogTableName, readonly string[]
   statements: ['tasks'],
   submission_results: ['datasets', 'submissions'],
   submissions: ['participations', 'tasks'],
-  tasks: ['contests'],
   teams: ['users'],
   testcases: ['datasets'],
   tokens: ['submissions'],

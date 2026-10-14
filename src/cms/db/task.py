@@ -46,7 +46,7 @@ import typing
 if typing.TYPE_CHECKING:
     from cms.grading.scoretypes import ScoreType
     from cms.grading.tasktypes import TaskType
-    from . import Submission, UserTest
+    from . import Submission, UserTest, ContestTask
 
 
 class Task(Base):
@@ -55,8 +55,6 @@ class Task(Base):
     """
     __tablename__ = 'tasks'
     __table_args__ = (
-        UniqueConstraint('contest_id', 'num'),
-        UniqueConstraint('contest_id', 'name'),
         ForeignKeyConstraint(
             ("id", "active_dataset_id"),
             ("datasets.task_id", "datasets.id"),
@@ -78,21 +76,18 @@ class Task(Base):
         # are referenced by a foreign key defined on this table.
         autoincrement='ignore_fk')
 
-    # Number of the task for sorting.
-    num: int | None = Column(
-        Integer,
-        nullable=True)
-
-    # Contest (id and object) owning the task.
-    contest_id: int | None = Column(
-        Integer,
-        ForeignKey(Contest.id,
-                   onupdate="CASCADE", ondelete="CASCADE"),
-        nullable=True,
-        index=True)
-    contest: Contest | None = relationship(
+    # Contests this task is offered in, through the contest_tasks association
+    # (many-to-many). The association rows carry the per-contest ordering.
+    contest_tasks: list["ContestTask"] = relationship(
+        "ContestTask",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        back_populates="task")
+    contests: list[Contest] = relationship(
         Contest,
-        back_populates="tasks")
+        secondary="contest_tasks",
+        order_by="ContestTask.num",
+        viewonly=True)
 
     # Short name and long human readable title of the task.
     name: str = Column(
@@ -299,8 +294,11 @@ class Task(Base):
         if self.allowed_languages is not None:
             return self.allowed_languages
 
-        # Otherwise, use contest language restrictions
-        return self.contest.languages if self.contest else None
+        # Otherwise, fall back to the contest's restrictions when the task
+        # belongs to exactly one contest (ambiguous once it is shared).
+        if len(self.contests) == 1:
+            return self.contests[0].languages
+        return None
 
 
 class Statement(Base):

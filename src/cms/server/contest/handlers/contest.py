@@ -50,7 +50,7 @@ except:
 import tornado.web
 
 from cms import config, TOKEN_MODE_MIXED
-from cms.db import Contest, Submission, Task, UserTest
+from cms.db import Contest, ContestTask, Submission, Task, UserTest
 from cms.db.username import get_display_name
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
@@ -303,7 +303,7 @@ class ContestHandler(BaseHandler):
 
         """
         return self.sql_session.query(Task) \
-            .filter(Task.contest == self.contest) \
+            .filter(Task.contest_tasks.any(ContestTask.contest == self.contest)) \
             .filter(Task.name == task_name) \
             .one_or_none()
 

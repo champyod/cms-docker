@@ -106,14 +106,12 @@ grep -q 'tailscale/cms-7.json:/config/serve.json' "${SB}/docker-compose.tailscal
   && ok "mounts that node's own serve config" || no "the container does not mount its node config"
 grep -q 'TS_AUTHKEY=${TAILSCALE_AUTHKEY}' "${SB}/docker-compose.tailscale.generated.yml" 2>/dev/null \
   && ok "references the authkey instead of copying it" || no "the authkey is not referenced by name"
-grep -q '^EVALUATION_CONTEST_ARG=.*-c ALL' "${SB}/.env" 2>/dev/null \
-  && ok "publishes the multi-contest launcher argument" || no "missing EVALUATION_CONTEST_ARG"
-grep -q '^CONTEST_ID = 5' "${SB}/config.toml" 2>/dev/null \
-  && ok "takes CONTEST_ID from the registry, not from is_active" || no "CONTEST_ID did not follow the registry"
-grep -q 'derived from the service registry' "${SB}/sync.log" 2>/dev/null \
-  && ok "reports which authority answered" || no "did not report the registry as the source"
-grep -qF 'UPDATE contests SET is_active = (id = 5)' "${SB}/sql.log" 2>/dev/null \
-  && ok "mirrors the registry's choice onto contests.is_active" || no "did not write the active flag back"
+grep -q '^EVALUATION_CONTEST_ARG=' "${SB}/.env" 2>/dev/null \
+  && no "the sync still publishes EVALUATION_CONTEST_ARG" \
+  || ok "the sync leaves the launcher to ask the database"
+grep -q 'UPDATE contests' "${SB}/sql.log" 2>/dev/null \
+  && no "the sync still writes contests.is_active" \
+  || ok "the sync issues no UPDATE contests"
 if command -v docker >/dev/null 2>&1; then
   TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
     && ok "the generated compose file validates" || no "the generated compose file is invalid"
@@ -156,18 +154,17 @@ rc=$?
 grep -q 'refused the registry' "${SB}/sync.log" && ok "reports why it refused" || no "silent refusal"
 
 echo ""
-echo "=== Test 6: an empty registry falls back to contests.is_active ==="
+echo "=== Test 6: the sync never rewrites contests.is_active or CONTEST_ID ==="
 new_sandbox 1 t ""
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}"
-grep -q '^CONTEST_ID = 7' "${SB}/config.toml" 2>/dev/null \
-  && ok "falls back to is_active when the registry names no contest" || no "the fallback lost is_active"
-grep -q 'derived from contests.is_active' "${SB}/sync.log" 2>/dev/null \
-  && ok "says the singleton answered" || no "did not attribute the fallback"
 grep -q 'UPDATE contests' "${SB}/sql.log" 2>/dev/null \
-  && no "rewrote the active flag when the registry named no contest" \
-  || ok "leaves the active flag alone when the registry is silent"
+  && no "the sync still writes contests.is_active" \
+  || ok "the sync leaves contests.is_active alone"
+grep -qE '^CONTEST_ID = (5|7)' "${SB}/config.toml" 2>/dev/null \
+  && no "the sync rewrote [contest] CONTEST_ID" \
+  || ok "the sync leaves config.toml CONTEST_ID to the operator"
 
 echo ""
 echo "=== Test 5: a TLS exposure with no certificate lineage fails the sync ==="

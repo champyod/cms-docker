@@ -25,7 +25,7 @@
 
 """
 
-from cms.db import Contest, Task
+from cms.db import Contest, ContestTask, Task
 from cmscommon.datetime import make_datetime
 
 from .base import BaseHandler, require_permission
@@ -38,15 +38,30 @@ class ContestTasksHandler(BaseHandler):
     MOVE_TOP = "to the top"
     MOVE_BOTTOM = "to the bottom"
 
+    def _get_contest_task(self, task_id) -> ContestTask | None:
+        return self.sql_session.query(ContestTask)\
+            .filter(ContestTask.contest == self.contest)\
+            .filter(ContestTask.task_id == task_id)\
+            .one_or_none()
+
+    def _contest_tasks(self, criteria) -> list[ContestTask]:
+        return self.sql_session.query(ContestTask)\
+            .filter(ContestTask.contest == self.contest)\
+            .filter(criteria)\
+            .all()
+
     @require_permission(BaseHandler.AUTHENTICATED)
     def get(self, contest_id):
         self.contest = self.safe_get_item(Contest, contest_id)
 
         self.r_params = self.render_params()
         self.r_params["contest"] = self.contest
+        # A task is a candidate when it has no membership row for this contest;
+        # it may already belong to other contests.
         self.r_params["unassigned_tasks"] = \
             self.sql_session.query(Task)\
-                .filter(Task.contest_id.is_(None))\
+                .filter(~Task.contest_tasks.any(
+                    ContestTask.contest_id == self.contest.id))\
                 .all()
         self.render("contest_tasks.html", **self.r_params)
 
@@ -73,79 +88,81 @@ class ContestTasksHandler(BaseHandler):
             return
 
         task = self.safe_get_item(Task, task_id)
-        task2 = None
+        contest_task = self._get_contest_task(task.id)
+        if contest_task is None:
+            self.service.add_notification(
+                make_datetime(), "Invalid field(s)",
+                "Task is not part of this contest")
+            self.redirect(fallback_page)
+            return
+        contest_task2 = None
 
-        # Save the current task_num (position in the contest).
-        task_num = task.num
+        # Save the current position in the contest.
+        task_num = contest_task.num
 
         if operation == self.REMOVE_FROM_CONTEST:
-            # Unassign the task to the contest.
-            task.contest = None
-            task.num = None  # not strictly necessary
-
+            # Drop the membership row; the task survives for other contests.
+            self.sql_session.delete(contest_task)
             self.sql_session.flush()
 
-            # Decrease by 1 the num of every subsequent task.
-            for t in self.sql_session.query(Task)\
-                         .filter(Task.contest == self.contest)\
-                         .filter(Task.num > task_num)\
-                         .order_by(Task.num)\
-                         .all():
-                t.num -= 1
-                self.sql_session.flush()
+            # Decrease by 1 the num of every subsequent membership.
+            for ct in self._contest_tasks(ContestTask.num > task_num):
+                if ct.num is not None:
+                    ct.num -= 1
+                    self.sql_session.flush()
 
         elif operation == self.MOVE_UP:
-            task2 = self.sql_session.query(Task)\
-                        .filter(Task.contest == self.contest)\
-                        .filter(Task.num == task.num - 1)\
-                        .first()
+            contest_task2 = self.sql_session.query(ContestTask)\
+                .filter(ContestTask.contest == self.contest)\
+                .filter(ContestTask.num == contest_task.num - 1)\
+                .first()
 
         elif operation == self.MOVE_DOWN:
-            task2 = self.sql_session.query(Task)\
-                        .filter(Task.contest == self.contest)\
-                        .filter(Task.num == task.num + 1)\
-                        .first()
+            contest_task2 = self.sql_session.query(ContestTask)\
+                .filter(ContestTask.contest == self.contest)\
+                .filter(ContestTask.num == contest_task.num + 1)\
+                .first()
 
         elif operation == self.MOVE_TOP:
-            task.num = None
+            contest_task.num = None
             self.sql_session.flush()
 
-            # Increase by 1 the num of every previous task.
-            for t in self.sql_session.query(Task)\
-                         .filter(Task.contest == self.contest)\
-                         .filter(Task.num < task_num)\
-                         .order_by(Task.num.desc())\
-                         .all():
-                t.num += 1
+            # Increase by 1 the num of every previous membership.
+            for ct in self.sql_session.query(ContestTask)\
+                    .filter(ContestTask.contest == self.contest)\
+                    .filter(ContestTask.num < task_num)\
+                    .order_by(ContestTask.num.desc())\
+                    .all():
+                ct.num += 1
                 self.sql_session.flush()
 
-            task.num = 0
+            contest_task.num = 0
 
         elif operation == self.MOVE_BOTTOM:
-            task.num = None
+            contest_task.num = None
             self.sql_session.flush()
 
-            # Decrease by 1 the num of every subsequent task.
-            for t in self.sql_session.query(Task)\
-                         .filter(Task.contest == self.contest)\
-                         .filter(Task.num > task_num)\
-                         .order_by(Task.num)\
-                         .all():
-                t.num -= 1
-                self.sql_session.flush()
+            # Decrease by 1 the num of every subsequent membership.
+            for ct in self._contest_tasks(ContestTask.num > task_num):
+                if ct.num is not None:
+                    ct.num -= 1
+                    self.sql_session.flush()
 
             self.sql_session.flush()
-            task.num = len(self.contest.tasks) - 1
+            member_count = self.sql_session.query(ContestTask)\
+                .filter(ContestTask.contest == self.contest)\
+                .count()
+            contest_task.num = member_count - 1
 
-        # Swap task.num and task2.num, if needed
-        if task2 is not None:
-            tmp_a, tmp_b = task.num, task2.num
-            task.num, task2.num = None, None
+        # Swap the two nums, if needed.
+        if contest_task2 is not None:
+            tmp_a, tmp_b = contest_task.num, contest_task2.num
+            contest_task.num, contest_task2.num = None, None
             self.sql_session.flush()
-            task.num, task2.num = tmp_b, tmp_a
+            contest_task.num, contest_task2.num = tmp_b, tmp_a
 
         if self.try_commit():
-            # Create the user on RWS.
+            # Update the ranking.
             self.service.proxy_service.reinitialize()
 
         # Maybe they'll want to do this again (for another task)
@@ -171,12 +188,20 @@ class AddContestTaskHandler(BaseHandler):
 
         task = self.safe_get_item(Task, task_id)
 
-        # Assign the task to the contest.
-        task.num = len(self.contest.tasks)
-        task.contest = self.contest
+        # Add the membership row unless the task is already in this contest.
+        already_member = self.sql_session.query(ContestTask)\
+            .filter(ContestTask.contest == self.contest)\
+            .filter(ContestTask.task_id == task.id)\
+            .first() is not None
+        if not already_member:
+            next_num = self.sql_session.query(ContestTask)\
+                .filter(ContestTask.contest == self.contest)\
+                .count()
+            self.sql_session.add(ContestTask(
+                contest=self.contest, task=task, num=next_num))
 
         if self.try_commit():
-            # Create the user on RWS.
+            # Update the ranking.
             self.service.proxy_service.reinitialize()
 
         # Maybe they'll want to do this again (for another task)

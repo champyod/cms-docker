@@ -9,7 +9,7 @@ const rankingParticipationsInclude = {
   submissions: {
     where: { official: true },
     include: {
-      tasks: { select: { id: true, name: true, title: true, num: true } },
+      tasks: { select: { id: true, name: true, title: true } },
       submission_results: {
         where: {
           datasets: {
@@ -87,7 +87,7 @@ export interface RankingUserDetail {
 export async function getRanking(contestId: number): Promise<RankingBoard> {
   await ensurePermission('ranking:list');
 
-  const [participations, tasks] = await Promise.all([
+  const [participations, taskMemberships] = await Promise.all([
     prisma.participations.findMany({
       where: {
         contest_id: contestId,
@@ -95,13 +95,14 @@ export async function getRanking(contestId: number): Promise<RankingBoard> {
       },
       include: rankingParticipationsInclude,
     }),
-    prisma.tasks.findMany({
+    prisma.contest_tasks.findMany({
       where: { contest_id: contestId },
       orderBy: { num: 'asc' },
-      select: { id: true, name: true, title: true, num: true, score_precision: true }
+      select: { num: true, tasks: { select: { id: true, name: true, title: true, score_precision: true } } },
     }),
   ]);
 
+  const tasks = taskMemberships.map((row) => ({ ...row.tasks, num: row.num }));
   return { ranking: buildRanking(participations), tasks };
 }
 
@@ -169,16 +170,16 @@ export async function getRankingUserDetail(username: string): Promise<RankingUse
 }
 
 async function listRankingTasks(contestId: number): Promise<RankingTask[]> {
-  const rows = await prisma.tasks.findMany({
+  const rows = await prisma.contest_tasks.findMany({
     where: { contest_id: contestId },
     orderBy: { num: 'asc' },
-    select: { id: true, name: true, title: true, score_precision: true },
+    select: { tasks: { select: { id: true, name: true, title: true, score_precision: true } } },
   });
   return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    title: row.title,
-    scorePrecision: row.score_precision,
+    id: row.tasks.id,
+    name: row.tasks.name,
+    title: row.tasks.title,
+    scorePrecision: row.tasks.score_precision,
   }));
 }
 

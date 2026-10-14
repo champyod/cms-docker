@@ -119,7 +119,7 @@ def accept_submission(
 
     """
     contest = participation.contest
-    assert task.contest is contest
+    assert contest in task.contests
 
     # Check whether the contestant is allowed to submit.
 
@@ -336,7 +336,7 @@ def accept_user_test(
 
     """
     contest = participation.contest
-    assert task.contest is contest
+    assert contest in task.contests
 
     # Check whether the task is testable.
 

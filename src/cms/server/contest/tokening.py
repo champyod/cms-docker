@@ -230,7 +230,7 @@ def tokens_available(
 
     """
     contest = participation.contest
-    assert task.contest is contest
+    assert contest in task.contests
 
     # Take the list of the tokens already played (sorted by time).
     token_timestamps: list[tuple[datetime, int]] = (

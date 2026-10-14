@@ -122,6 +122,7 @@ describe('overwriteParentConflicts', () => {
       tasks: 'skip',
       announcements: 'skip',
       contest_teams: 'skip',
+      contest_tasks: 'skip',
     }).resolved;
     expect(overwriteParentConflicts(liveFacts(), strategies)).toEqual([]);
   });
@@ -294,7 +295,7 @@ describe('the conflicts a plan carries', () => {
   it('carries an overwrite-parent conflict structurally, and the same fact in the error list', () => {
     const plan = planApply(normalizeStrategies({ contests: 'overwrite' }).resolved, liveFacts());
     expect(plan.conflicts).toEqual([
-      { id: 'fk:contests', kind: 'fk-overwrite', table: 'contests', children: ['announcements', 'tasks', 'participations', 'contest_teams'] },
+      { id: 'fk:contests', kind: 'fk-overwrite', table: 'contests', children: ['announcements', 'participations', 'contest_teams', 'contest_tasks'] },
     ]);
     expect(plan.errors).toContain(fkOverwriteConflictMessage(plan.conflicts[0] as FkOverwriteConflict));
     expect(plan.errors).toContain(conflictMessage(plan.conflicts[0]!));

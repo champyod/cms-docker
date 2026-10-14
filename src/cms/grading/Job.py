@@ -370,7 +370,7 @@ class CompilationJob(Job):
                          "but the operation is %s.", operation.type_)
             raise ValueError("Operation is not a compilation")
 
-        multithreaded = _is_contest_multithreaded(submission.task.contest)
+        multithreaded = _is_contest_multithreaded(submission.participation.contest)
 
         # dict() is required to detach the dictionary that gets added
         # to the Job from the control of SQLAlchemy
@@ -433,7 +433,7 @@ class CompilationJob(Job):
                          operation.type_)
             raise ValueError("Operation is not a user test compilation")
 
-        multithreaded = _is_contest_multithreaded(user_test.task.contest)
+        multithreaded = _is_contest_multithreaded(user_test.participation.contest)
 
         # Add the managers to be got from the Task.
         # dict() is required to detach the dictionary that gets added
@@ -619,7 +619,7 @@ class EvaluationJob(Job):
                          "but the operation is %s.", operation.type_)
             raise ValueError("Operation is not an evaluation")
 
-        multithreaded = _is_contest_multithreaded(submission.task.contest)
+        multithreaded = _is_contest_multithreaded(submission.participation.contest)
 
         submission_result = submission.get_result(dataset)
         # This should have been created by now.
@@ -692,7 +692,7 @@ class EvaluationJob(Job):
                          operation.type_)
             raise ValueError("Operation is not a user test evaluation")
 
-        multithreaded = _is_contest_multithreaded(user_test.task.contest)
+        multithreaded = _is_contest_multithreaded(user_test.participation.contest)
 
         user_test_result = user_test.get_result(dataset)
         # This should have been created by now.

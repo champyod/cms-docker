@@ -21,7 +21,7 @@ export interface ContestRowData {
   stop: Date;
   /** The row's own contest zone: a list of contests shows each contest's wall clocks in its zone. */
   timezone: string | null;
-  _count?: { tasks: number; participations: number };
+  _count?: { contest_tasks: number; participations: number };
 }
 
 type StatusVariant = 'warning' | 'neutral' | 'success';
@@ -90,7 +90,7 @@ export function buildContestColumns(onOpenContest: (id: number) => void): Respon
     { key: 'name', header: 'Name', sortKey: 'name', render: (contest) => renderNameCell(contest, onOpenContest) },
     { key: 'status', header: 'Status', sortKey: 'is_active', render: renderStatusCell },
     { key: 'timeline', header: 'Timeline', sortKey: 'start', render: renderTimelineCell },
-    { key: 'tasks', header: 'Tasks', sortKey: 'tasks', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.tasks ?? 0}</span> },
+    { key: 'tasks', header: 'Tasks', sortKey: 'tasks', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.contest_tasks ?? 0}</span> },
     { key: 'participants', header: 'Participants', sortKey: 'participants', render: (contest) => <span className="text-xs text-muted-foreground">{contest._count?.participations ?? 0}</span> },
   ];
 }

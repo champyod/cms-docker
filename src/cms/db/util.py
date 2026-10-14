@@ -25,9 +25,10 @@
 
 import sys
 import os
+import time
 import logging
 
-from sqlalchemy import union
+from sqlalchemy import inspect, text, union
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Query
 
@@ -36,6 +37,7 @@ from . import (
     SessionGen,
     Digest,
     Contest,
+    ContestTask,
     Participation,
     Statement,
     Attachment,
@@ -165,36 +167,71 @@ class ContestsTableMissingError(RuntimeError):
     """
 
 
+# The registry can re-point the served contest at any time, so the resolver is cached for a
+# few seconds: a request within the TTL is answered from memory, and a change is picked up
+# within the TTL without restarting the service.
+REGISTRY_CONTEST_TTL_SECONDS = 5.0
+_active_contest_cache: "tuple[float, int | None] | None" = None
+
+
+def _registry_contest_id(session) -> int | None:
+    """The contest the service registry's ContestWebServer row names, or None.
+
+    WHY the registry before contests.is_active: the registry binds a server per contest, so
+    it can name a contest the singleton cannot, and it is the authority the panel writes.
+    contests.is_active stays the fallback for a deployment whose registry is still empty.
+
+    """
+    if "services" not in inspect(session.get_bind()).get_table_names():
+        return None
+    row = session.execute(
+        text(
+            "SELECT contest_id FROM services"
+            " WHERE role = 'ContestWebServer' AND enabled AND contest_id IS NOT NULL"
+            " ORDER BY shard, id LIMIT 1"
+        )
+    ).first()
+    return None if row is None else int(row[0])
+
+
 def active_contest_id() -> int | None:
-    """Return the id of the contest flagged active in the database.
+    """Return the id of the contest the stack serves, cached for a few seconds.
 
-    WHY the database: contests.is_active is the single source of truth for the active
-    contest; config.toml [contest] CONTEST_ID and the generated .env are derived from it,
-    so reading either here would reintroduce the copy this change removes.
+    The registry's ContestWebServer row answers first; contests.is_active answers when the
+    registry names no contest. WHY the short TTL cache: the value is asked as services work,
+    so a hit is answered from memory, while a registry change still hot-applies within the
+    TTL — no restart, and no query per request.
 
-    return: the active contest id, or None when the contests table exists but no row is
-        flagged active.
+    return: the active contest id, or None when neither the registry nor the active flag
+        names a contest.
 
     raises ContestsTableMissingError: the contests table does not exist yet. A database
         that cannot be reached is not caught here: its error propagates so a running stack
         fails loud instead of serving a contest the database does not name.
 
     """
-    from sqlalchemy import inspect
+    global _active_contest_cache
+    now = time.monotonic()
+    if _active_contest_cache is not None and now - _active_contest_cache[0] < REGISTRY_CONTEST_TTL_SECONDS:
+        return _active_contest_cache[1]
     with SessionGen() as session:
         # Inspector.has_table was removed from the SQLAlchemy 2.0 inspector; listing the
         # table catalog is the call that exists across supported versions.
         if "contests" not in inspect(session.get_bind()).get_table_names():
             raise ContestsTableMissingError("the contests table does not exist yet")
-        # Lowest id wins — the same order the admin panel and config sync use — so a database
-        # that ever holds two active rows still hands every caller one contest.
-        contest = (
-            session.query(Contest)
-            .filter(Contest.is_active.is_(True))
-            .order_by(Contest.id)
-            .first()
-        )
-        return None if contest is None else contest.id
+        contest_id = _registry_contest_id(session)
+        if contest_id is None:
+            # Lowest id wins — the same order the admin panel and config sync use — so a
+            # database that ever holds two active rows still hands every caller one contest.
+            contest = (
+                session.query(Contest)
+                .filter(Contest.is_active.is_(True))
+                .order_by(Contest.id)
+                .first()
+            )
+            contest_id = None if contest is None else contest.id
+    _active_contest_cache = (now, contest_id)
+    return contest_id
 
 
 def _bootstrap_contest_id() -> int:
@@ -294,7 +331,9 @@ def get_submissions(
     if contest_id is not None:
         query = query.join(Participation) \
             .filter(Participation.contest_id == contest_id) \
-            .join(Task).filter(Task.contest_id == contest_id)
+            .join(Task).filter(
+                Task.contest_tasks.any(
+                    ContestTask.contest_id == contest_id))
     return query
 
 
@@ -360,7 +399,9 @@ def get_submission_results(
     if contest_id is not None:
         query = query.join(Participation) \
             .filter(Participation.contest_id == contest_id)\
-            .join(Task).filter(Task.contest_id == contest_id)
+            .join(Task).filter(
+                Task.contest_tasks.any(
+                    ContestTask.contest_id == contest_id))
     return query
 
 
@@ -407,7 +448,7 @@ def enumerate_files(
 
     queries = list()
 
-    task_q = contest_q.join(Contest.tasks)
+    task_q = contest_q.join(Contest.task_contests).join(ContestTask.task)
     queries.append(task_q.join(Task.statements).with_entities(Statement.digest))
     queries.append(task_q.join(Task.attachments)
                    .with_entities(Attachment.digest))

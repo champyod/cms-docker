@@ -33,26 +33,26 @@ describe('tasks batch route', () => {
   it('assigns each id in order and reports the clean count', async () => {
     mockAssign.mockResolvedValue({ success: true });
     const { POST } = await loadTasksRoute();
-    const res = await POST(makeReq({ action: 'assign', taskIds: [3, 1, 2], contestId: 7 }) as never);
+    const res = await POST(makeReq({ action: 'assign', taskIds: [3, 1, 2], contestIds: [7] }) as never);
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body).toMatchObject({ success: true, assignedCount: 3, failed: [], contestId: 7 });
+    expect(body).toMatchObject({ success: true, assignedCount: 3, failed: [], contestIds: [7] });
     expect(mockAssign.mock.calls.map(([id]) => id)).toEqual([3, 1, 2]);
     expect(mockAssign.mock.calls.every(([, contestId]) => contestId === 7)).toBe(true);
   });
 
-  it('carries a null contestId through as an unassign', async () => {
+  it('carries an empty contestIds through as an unassign', async () => {
     mockAssign.mockResolvedValue({ success: true });
     const { POST } = await loadTasksRoute();
-    await POST(makeReq({ action: 'assign', taskIds: [5], contestId: null }) as never);
+    await POST(makeReq({ action: 'assign', taskIds: [5], contestIds: [] }) as never);
     expect(mockAssign).toHaveBeenCalledWith(5, null);
   });
 
   it('keeps going when one task fails and names it', async () => {
     mockAssign.mockResolvedValueOnce({ success: true }).mockResolvedValueOnce({ success: false, error: 'Task not found' });
     const { POST } = await loadTasksRoute();
-    const res = await POST(makeReq({ action: 'assign', taskIds: [1, 2], contestId: 7 }) as never);
+    const res = await POST(makeReq({ action: 'assign', taskIds: [1, 2], contestIds: [7] }) as never);
     const body = await res.json();
 
     expect(body).toMatchObject({ assignedCount: 1, failed: [{ id: 2, reason: 'Task not found' }] });
@@ -60,21 +60,21 @@ describe('tasks batch route', () => {
 
   it('rejects an empty id list', async () => {
     const { POST } = await loadTasksRoute();
-    const res = await POST(makeReq({ action: 'assign', taskIds: [], contestId: 7 }) as never);
+    const res = await POST(makeReq({ action: 'assign', taskIds: [], contestIds: [7] }) as never);
     expect(res.status).toBe(400);
     expect(mockAssign).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown action', async () => {
     const { POST } = await loadTasksRoute();
-    const res = await POST(makeReq({ action: 'nope', taskIds: [1], contestId: 7 }) as never);
+    const res = await POST(makeReq({ action: 'nope', taskIds: [1], contestIds: [7] }) as never);
     expect(res.status).toBe(400);
   });
 
   it('maps a permission refusal to its own status', async () => {
     mockAssign.mockRejectedValue(Object.assign(new Error('Unauthorized: Missing task:update permission'), { status: 403 }));
     const { POST } = await loadTasksRoute();
-    const res = await POST(makeReq({ action: 'assign', taskIds: [1], contestId: 7 }) as never);
+    const res = await POST(makeReq({ action: 'assign', taskIds: [1], contestIds: [7] }) as never);
     expect(res.status).toBe(403);
   });
 

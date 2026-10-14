@@ -48,8 +48,8 @@ export async function addTaskToContest(contestId: number, taskId: number): Promi
   return result;
 }
 
-export async function removeTaskFromContest(taskId: number): Promise<Awaited<ReturnType<typeof contestService.removeTaskFromContest>>> {
-  const result = await contestService.removeTaskFromContest(taskId);
+export async function removeTaskFromContest(contestId: number, taskId: number): Promise<Awaited<ReturnType<typeof contestService.removeTaskFromContest>>> {
+  const result = await contestService.removeTaskFromContest(contestId, taskId);
   if (result.success) revalidatePath('/[locale]/contests', 'page');
   return result;
 }

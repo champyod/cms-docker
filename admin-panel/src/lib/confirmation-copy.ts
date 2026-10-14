@@ -83,7 +83,7 @@ export function buildConfirmationCopy(copy: ConfirmationDictionary): Confirmatio
     /** Removing a participation destroys the participant's entry in the contest; it is a deletion too. */
     removeParticipantConfirm: () => request('destructive', copy.removeParticipant),
 
-    /** Unassigns the task (contest_id = null); the task itself survives. */
+    /** Removes the task from this contest only; the task itself survives. */
     removeTaskFromContestConfirm: () => request('recoverable', copy.removeTaskFromContest),
 
     /** Writes the hidden and unrestricted flags, both of which stay editable in the participation settings. */

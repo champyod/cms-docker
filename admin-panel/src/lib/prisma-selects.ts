@@ -77,7 +77,7 @@ export const submissionsListInclude = {
 export type SubmissionsListRow = Prisma.submissionsGetPayload<{ include: typeof submissionsListInclude }>;
 
 export const contestDetailInclude = {
-  tasks: { orderBy: { num: 'asc' } },
+  contest_tasks: { orderBy: { num: 'asc' }, include: { tasks: true } },
   participations: {
     include: {
       users: true,
