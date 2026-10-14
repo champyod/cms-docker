@@ -324,3 +324,41 @@ cd - && tar --exclude=./admin-panel --exclude=./.git -cf - . | tar -C /tmp/cms-h
 /tmp/gate.sh tsc    # tsc --noEmit
 /tmp/gate.sh test   # vitest run
 ```
+
+## 12. Merge readiness (checked 2026-10-14)
+
+Verified in a scratch clone, without touching this branch or its history:
+
+```sh
+git clone --shared --no-hardlinks <repo> /tmp/cms-merge-check
+git -C /tmp/cms-merge-check fetch <repo> cms-hub/evaluation-multi-contest:merge-check
+git -C /tmp/cms-merge-check checkout major/admin-panel
+git -C /tmp/cms-merge-check merge --no-edit merge-check
+```
+
+**The merge is clean**: `git merge-tree --write-tree` exits 0, the merge applies with no conflicts,
+and on the merged tree `make test` reports **all suites passed** with `tsc --noEmit` clean.
+
+### 12.1 One line must change after merging
+
+`admin-panel/tests/navigation-contracts.test.ts` pins the route count, and **both sides
+independently bumped the same constant from 57 to 58** — this branch for `infrastructure.services`,
+major for `notifications`. Identical lines merge without a conflict, so the stale number survives
+and the merged suite fails with `expected 59 to have a length of 58`:
+
+```sh
+sed -i 's/expect(ROUTE_REGISTRY).toHaveLength(58)/expect(ROUTE_REGISTRY).toHaveLength(59)/' \
+  admin-panel/tests/navigation-contracts.test.ts
+```
+
+| Ref | registry entries | `infrastructure.services` | `notifications` | constant |
+|---|---|---|---|---|
+| `a093b003` (base) | 29 | — | — | 57 |
+| `major/admin-panel` | 30 | — | yes | 58 |
+| this branch | 30 | yes | — | 58 |
+| merged | **31** | yes | yes | 58 → must become **59** |
+
+This is the only divergence the merged suite reports: **3382 of 3383** tests pass and the one
+failure is that counter. It is a merge artefact rather than a defect in either branch, so it is
+recorded here instead of fixed on this branch — changing it here would break this branch's own
+suite, which legitimately has 58.
