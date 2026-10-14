@@ -181,7 +181,26 @@ if [[ $# -eq 1 && "$1" == "help" ]]; then
   exit 0
 fi
 
+# One source for the shell helpers, resolved before any subcommand is routed.
+# shellcheck source=/dev/null
+source scripts/__lib/common.sh 2>/dev/null || true
+declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
+declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
+declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
+declare -F is_root  >/dev/null || is_root()  { [[ "$(id -u)" == "0" ]]; }
+
+# The actions whose whole job is privileged. The Rust catalog marks the same actions
+# requires_sudo (tools/cms-tui/src/core/catalog/table_fleet.rs), so this list mirrors it
+# and a privileged action is escalated once here instead of being prompted for mid-run.
+ROOT_ACTIONS="worker:cgroup"
+action_needs_root() { [[ ",${ROOT_ACTIONS}," == *",$1:$2,"* ]]; }
+
 if [[ $# -gt 0 ]]; then
+  if action_needs_root "${1:-}" "${2:-}" && ! is_root; then
+    command -v sudo >/dev/null 2>&1 \
+      || log_die "root is required for '$*' and sudo is not installed — run: sudo $0 $*" 1
+    exec sudo -E "$0" "$@"
+  fi
   run_tui "$@"
 fi
 
@@ -219,11 +238,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 is_skipped() { [[ ",$SKIPS," == *",$1,"* ]]; }
-
-source scripts/__lib/common.sh 2>/dev/null || true
-declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
-declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
-declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
 
 RESULTS=()
 record() { RESULTS+=("$1|$2"); printf '  %-14s %s\n' "$1:" "$2"; }
