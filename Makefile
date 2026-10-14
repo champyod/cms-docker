@@ -51,6 +51,11 @@ DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
 WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
 DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
 WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml
+# The composes ./cms config sync derives from the registry: one container per service
+# row and one tailscale container per exposed node. Pulled on their own -f set, never
+# merged with COMPOSE_FILES: a row may name the same container as a declared service,
+# and merging the two definitions would let the generated one override the declared one.
+GENERATED_COMPOSE_FLAGS = $(foreach f,$(wildcard docker-compose.*.generated.yml),-f $(f))
 
 # WHY waf carries --profile core only: grader-waf's BACKEND is
 # http://grader-nginx-proxy:80, the domain stack's proxy, which has no profile.
@@ -377,6 +382,7 @@ pull: expose
 	@echo "Pulling images for all profiles..."
 	@pull_failed=0; \
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile admin --profile contest --profile worker --profile monitor pull || { echo "[WARN] pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; \
+	if [ -n "$(GENERATED_COMPOSE_FLAGS)" ]; then $(COMPOSE_CMD) $(GENERATED_COMPOSE_FLAGS) pull || { echo "[WARN] generated-compose pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; fi; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
 # ---------------------------------------------------------------------------
