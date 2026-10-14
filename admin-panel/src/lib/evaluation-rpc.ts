@@ -1,7 +1,7 @@
 import { createConnection } from 'node:net';
 
-const EVALUATION_RPC_HOST = 'cms-evaluation-service';
-const EVALUATION_RPC_PORT = 25000;
+import { resolveEvaluationEndpoint, type EvaluationEndpoint } from './evaluation-endpoint';
+
 export const EVALUATION_RPC_TIMEOUT_MS = 10_000;
 // Mirrors cms.io.rpc.RPCBase.MAX_MESSAGE_SIZE — larger frames are rejected by the service.
 const MAX_RPC_FRAME_BYTES = 1024 * 1024;
@@ -24,14 +24,26 @@ interface RpcResponse {
  * accepted:false without opening a connection. Bounded by
  * EVALUATION_RPC_TIMEOUT_MS so a dead service fails fast; transport or service
  * errors surface as accepted:false without being swallowed by callers.
+ *
+ * The address comes from the service registry for the contest this submission belongs to,
+ * so a deployment running one evaluation service per contest reaches the right one.
  */
 export async function invalidateViaRpc(
   submissionId: number,
   datasetId: number | null,
   level: string,
+  contestId: number | null = null,
 ): Promise<RpcResult> {
   const secret = process.env.RPC_SECRET;
   if (!secret) {
+    return { accepted: false, timedOut: false };
+  }
+
+  let endpoint: EvaluationEndpoint;
+  try {
+    endpoint = await resolveEvaluationEndpoint(contestId);
+  } catch (error) {
+    console.error('Could not resolve an evaluation service for contest', contestId, error);
     return { accepted: false, timedOut: false };
   }
 
@@ -45,7 +57,7 @@ export async function invalidateViaRpc(
   return await new Promise<RpcResult>((resolve) => {
     let settled = false;
     let buffer = '';
-    const socket = createConnection({ host: EVALUATION_RPC_HOST, port: EVALUATION_RPC_PORT });
+    const socket = createConnection({ host: endpoint.host, port: endpoint.port });
 
     // Declared as a hoisted function so it can close over `timer`, which is
     // created after it but always fires (or is cleared) only after that.
