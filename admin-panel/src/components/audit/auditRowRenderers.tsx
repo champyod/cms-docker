@@ -1,7 +1,7 @@
 'use client';
 
-import { ChevronDown, ChevronUp } from 'lucide-react';
 import type { ResponsiveRowProps } from '@/components/core/ResponsiveTable';
+import { RowExpandAction } from '@/components/list/RowExpandAction';
 import type { AuditLogRow } from '@/app/actions/audit';
 
 export function createAuditRowRenderers(
@@ -19,25 +19,16 @@ export function createAuditRowRenderers(
     'aria-expanded': expandedRowId === entry.id,
   });
 
-  // Why: shared by desktop rows and mobile cards, with 44px targets kept
-  // in this fragment so both layouts stay touch-sized.
-  const renderRowActions = (entry: AuditLogRow): React.JSX.Element => {
-    const isExpanded = expandedRowId === entry.id;
-    return (
-      <button
-        type="button"
-        aria-expanded={isExpanded}
-        aria-label={`Toggle details for ${entry.verb} on ${entry.entity}`}
-        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-        onClick={(e) => {
-          e.stopPropagation();
-          void onRowClick(entry.id);
-        }}
-      >
-        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-      </button>
-    );
-  };
+  // Why: shared by desktop rows and mobile cards, so both layouts stay touch-sized.
+  const renderRowActions = (entry: AuditLogRow): React.JSX.Element => (
+    <RowExpandAction
+      expanded={expandedRowId === entry.id}
+      ariaLabel={`Toggle details for ${entry.verb} on ${entry.entity}`}
+      onToggle={() => {
+        void onRowClick(entry.id);
+      }}
+    />
+  );
 
   return { getRowProps, renderRowActions };
 }

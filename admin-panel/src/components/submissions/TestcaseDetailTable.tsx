@@ -1,12 +1,13 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { ChevronDown, ChevronUp, ClipboardList } from 'lucide-react';
+import { ClipboardList } from 'lucide-react';
 
 import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { RowExpandAction } from '@/components/list/RowExpandAction';
 import { withBasePath } from '@/lib/base-path';
 import type {
   SubmissionEvaluationModel,
@@ -23,8 +24,6 @@ export interface TestcaseDetailTableProps {
 
 const DETAIL_COLUMN_COUNT = 5;
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
-const TOGGLE_BUTTON_CLASS =
-  'inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground';
 
 function text(value: string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '—';
@@ -118,18 +117,11 @@ function TestcaseRow({ row, expanded, onToggle }: {
       <TableCell className="text-right font-mono text-xs tabular-nums">{timeText(row.executionTime)}</TableCell>
       <TableCell className="text-right font-mono text-xs tabular-nums">{memoryText(row.executionMemory)}</TableCell>
       <TableCell className="text-right">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-label={`Toggle details for ${label}`}
-          className={TOGGLE_BUTTON_CLASS}
-          onClick={(event) => {
-            event.stopPropagation();
-            onToggle();
-          }}
-        >
-          {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        </button>
+        <RowExpandAction
+          expanded={expanded}
+          ariaLabel={`Toggle details for ${label}`}
+          onToggle={onToggle}
+        />
       </TableCell>
     </TableRow>
   );

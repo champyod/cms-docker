@@ -19,7 +19,7 @@ export interface RowActionLinkProps {
 // link row action and a button row action stay indistinguishable side by side.
 // Why one anchor: a real <button> nested in an <a> announces as two controls
 // and swallows modified clicks, so the destination lives on the anchor itself.
-const ROW_ACTION_CLASSES = [
+export const ROW_ACTION_CLASSES = [
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-medium',
   'text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
   'dark:hover:bg-accent/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
