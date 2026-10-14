@@ -88,9 +88,25 @@ function proxyPassLine(path: string, upstream: string): string {
   return `        proxy_pass http://${target};`;
 }
 
+// The upstream a generated route forwards to must see the same client identity and scheme
+// the curated vhosts pass, or the panel behind it reads every request as the proxy's own.
+const PROXY_FORWARD_HEADERS = [
+  'proxy_set_header Host $host;',
+  'proxy_set_header X-Real-IP $remote_addr;',
+  'proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;',
+  'proxy_set_header X-Forwarded-Proto $scheme;',
+];
+
+// Matching the curated vhosts: a location that declares any add_header drops every
+// server-level one, so each generated location re-declares the front's HSTS.
+const LOCATION_SECURITY_HEADERS = [
+  'add_header Strict-Transport-Security "max-age=300; includeSubDomains" always;',
+];
+
 function renderServerBlock(hostname: string, routes: Route[], certificate: CertificateSpec): string {
   const name = assertSafeHostname(hostname);
   const lines = ['server {', `    listen ${routes[0].tls ? `${TLS_LISTEN_PORT} ssl` : `${PLAIN_LISTEN_PORT}`};`, `    server_name ${name};`];
+  for (const header of PROXY_FORWARD_HEADERS) lines.push(`    ${header}`);
   if (routes[0].tls) {
     lines.push(`    ssl_certificate ${assertSafeIncludePath(certificate.certificate)};`);
     lines.push(`    ssl_certificate_key ${assertSafeIncludePath(certificate.key)};`);
@@ -106,8 +122,9 @@ function renderServerBlock(hostname: string, routes: Route[], certificate: Certi
 /** The location block for one route: `/` owns the root, a prefix strips and redirects into it. */
 function locationLines(route: Route): string[] {
   const path = assertSafePath(route.path);
+  const security = LOCATION_SECURITY_HEADERS.map((header) => `        ${header}`);
   if (path === '/') {
-    return ['    location / {', proxyPassLine(path, route.upstream), '    }'];
+    return ['    location / {', proxyPassLine(path, route.upstream), ...security, '    }'];
   }
   return [
     `    location = ${path} {`,
@@ -115,6 +132,7 @@ function locationLines(route: Route): string[] {
     '    }',
     `    location ^~ ${path}/ {`,
     proxyPassLine(path, route.upstream),
+    ...security,
     '    }',
   ];
 }

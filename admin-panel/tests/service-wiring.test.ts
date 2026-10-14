@@ -171,6 +171,15 @@ describe('renderNginxServers', () => {
     expect(out.match(/server \{/g)).toHaveLength(2);
   });
 
+  it("carries the front's proxy headers and location security headers", () => {
+    const out = renderNginxServers([route]);
+    expect(out).toContain('proxy_set_header Host $host;');
+    expect(out).toContain('proxy_set_header X-Real-IP $remote_addr;');
+    expect(out).toContain('proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;');
+    expect(out).toContain('proxy_set_header X-Forwarded-Proto $scheme;');
+    expect(out).toContain('add_header Strict-Transport-Security "max-age=300; includeSubDomains" always;');
+  });
+
   it('refuses a hostname that could inject a directive', () => {
     const hostile = { ...route, hostname: 'a.example.com; root /etc;' };
     expect(() => renderNginxServers([hostile])).toThrow(RenderError);
