@@ -5,11 +5,11 @@ import { NextRequest, NextResponse } from 'next/server';
 
 import { IMAGE_EXTENSIONS, validateAssetSize, type ImageExtension } from '@/lib/asset-upload';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { writeFileAtomic } from '@/lib/file-system';
 import { recordAudit } from '@/lib/audit';
 import { logoExtension } from '@/lib/ranking-logo';
+import { rankingAvatarDir } from '@/lib/ranking-paths';
 
-/** The directory on the shared ranking volume the service reads faces from. */
-const AVATAR_DIR = '/var/local/lib/cms/ranking/avatars';
 const AVATAR_FIELD = 'avatar';
 const FACE_FILE_MODE = 0o644;
 
@@ -21,7 +21,7 @@ function isSafeKey(key: string): boolean {
 async function removeOtherFormats(key: string, keep: ImageExtension | null): Promise<void> {
   for (const ext of IMAGE_EXTENSIONS) {
     if (keep !== null && ext === keep) continue;
-    await fs.rm(path.join(AVATAR_DIR, `${key}.${ext}`), { force: true });
+    await fs.rm(path.join(rankingAvatarDir(), `${key}.${ext}`), { force: true });
   }
 }
 
@@ -57,11 +57,7 @@ export async function POST(
     const upload = await readAvatarUpload(await req.formData());
     if (upload instanceof NextResponse) return upload;
 
-    await fs.mkdir(AVATAR_DIR, { recursive: true });
-    await removeOtherFormats(user, null);
-    const target = path.join(AVATAR_DIR, `${user}.${upload.ext}`);
-    await fs.writeFile(target, upload.buffer);
-    await fs.chmod(target, FACE_FILE_MODE);
+    await writeFileAtomic(path.join(rankingAvatarDir(), `${user}.${upload.ext}`), upload.buffer, FACE_FILE_MODE);
     await removeOtherFormats(user, upload.ext);
 
     await recordAudit({

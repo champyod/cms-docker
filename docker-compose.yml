@@ -502,6 +502,12 @@ services:
       NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
 
+      # WHY the panel receives this: it writes every ranking asset into this directory and its
+      # host mirror, and both hang off the [admin] CMS_RANKING_LIB_DIR key. Without this line the
+      # value reaches .env and stops there, and the route keeps a literal that drifts from the
+      # directory the volume and the ranking service are built from.
+      CMS_RANKING_LIB_DIR: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}
+
       REPO_ROOT: /repo-root
       DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
       IS_DOCKER: "true"
@@ -610,8 +616,10 @@ services:
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
       CMS_CREDITS_FILE: /home/cmsuser/cms/credits.json
       # The panel writes the logo into this volume; the service only reads it, and a
-      # path with no extension makes it probe the known image extensions.
-      RANKING_LOGO_PATH: /var/local/lib/cms/ranking/logo
+      # path with no extension makes it probe the known image extensions. It is the
+      # [admin] CMS_RANKING_LIB_DIR key plus the stem, so the reader and the writer
+      # cannot drift onto two spellings of the same directory.
+      RANKING_LOGO_PATH: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}/logo
       # Signs the console cookie. Empty means the console refuses every login, which
       # is why ./cms config sync generates one.
       RANKING_SESSION_SECRET: ${RANKING_SESSION_SECRET:-}

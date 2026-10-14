@@ -1,15 +1,13 @@
 import path from 'path';
 
 import { IMAGE_EXTENSIONS, normalizeImageExtension, type ImageExtension } from '@/lib/asset-upload';
+import { HOST_ASSETS_CONFIG_DIR } from '@/lib/ranking-paths';
 
 /** The config.toml section that owns every ranking key the panel writes. */
 const ADMIN_SECTION = 'admin';
 
 /** The key the service reads the logo stem from. */
 const LOGO_PATH_KEY = 'RANKING_LOGO_PATH';
-
-/** The host mirror the panel keeps beside the volume copy, as config.toml.example documents it. */
-const HOST_LOGO_DIR = './config/assets';
 
 /** Every `logo.<ext>` name the upload surface probes, in the order the service tries them. */
 export function logoFileNames(): readonly string[] {
@@ -18,7 +16,7 @@ export function logoFileNames(): readonly string[] {
 
 /** The host-side path a stored logo is mirrored to, or '' when no logo is stored. */
 export function logoPathValue(extension: ImageExtension | null): string {
-  return extension === null ? '' : `${HOST_LOGO_DIR}/logo.${extension}`;
+  return extension === null ? '' : `${HOST_ASSETS_CONFIG_DIR}/logo.${extension}`;
 }
 
 /** The stored extension an upload's filename selects, or null when it names no accepted format. */

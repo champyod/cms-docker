@@ -10,13 +10,12 @@ import {
   type ImageExtension,
 } from '@/lib/asset-upload';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
-import { fileExists } from '@/lib/file-system';
+import { fileExists, writeFileAtomic } from '@/lib/file-system';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
-import { logoExtension, setLogoPath } from '@/lib/ranking-logo';
+import { logoExtension, logoPathValue, setLogoPath } from '@/lib/ranking-logo';
+import { hostAssetsDir, rankingLibDir } from '@/lib/ranking-paths';
 
-const RANKING_LIB_DIR = '/var/local/lib/cms/ranking';
-const HOST_LOGO_DIR = 'config/assets';
 const LOGO_FILENAME_STEM = 'logo';
 const LOGO_FILE_MODE = 0o644;
 
@@ -40,20 +39,12 @@ async function removeOtherLogos(dir: string, keepExt: ImageExtension | null): Pr
 }
 
 async function writeLogoToDir(dir: string, buffer: Buffer, ext: ImageExtension): Promise<void> {
-  await fs.mkdir(dir, { recursive: true });
-  await removeOtherLogos(dir, null);
-  const target = path.join(dir, `${LOGO_FILENAME_STEM}.${ext}`);
-  await fs.writeFile(target, buffer);
-  await fs.chmod(target, LOGO_FILE_MODE);
+  await writeFileAtomic(path.join(dir, `${LOGO_FILENAME_STEM}.${ext}`), buffer, LOGO_FILE_MODE);
   await removeOtherLogos(dir, ext);
 }
 
 function logoPath(): string {
   return path.join(getRepoRoot(), 'config.toml');
-}
-
-function hostLogoDir(): string {
-  return path.join(getRepoRoot(), HOST_LOGO_DIR);
 }
 
 /** Points config.toml at the stored logo, or at nothing when the logo is removed. */
@@ -97,9 +88,9 @@ async function serveImageFile(filePath: string, ext: ImageExtension): Promise<Ne
 
 /** The stored logo, preferring the volume the service reads over the host mirror. */
 async function findStoredLogo(): Promise<{ filePath: string; ext: ImageExtension } | null> {
-  const volumeLogo = await findFirstLogo(RANKING_LIB_DIR);
+  const volumeLogo = await findFirstLogo(rankingLibDir());
   if (volumeLogo !== null) return volumeLogo;
-  return findFirstLogo(hostLogoDir());
+  return findFirstLogo(hostAssetsDir());
 }
 
 export async function GET(): Promise<NextResponse> {
@@ -145,8 +136,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const upload = await readLogoUpload(await req.formData());
     if (upload instanceof NextResponse) return upload;
 
-    await writeLogoToDir(RANKING_LIB_DIR, upload.buffer, upload.ext);
-    await writeLogoToDir(hostLogoDir(), upload.buffer, upload.ext);
+    await writeLogoToDir(rankingLibDir(), upload.buffer, upload.ext);
+    await writeLogoToDir(hostAssetsDir(), upload.buffer, upload.ext);
     await pointConfigAtLogo(upload.ext);
 
     await recordAudit({
@@ -155,7 +146,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       afterValues: { action: 'logo-upload', ext: upload.ext },
       result: 'success',
     });
-    return apiSuccess({ logoPath: `./${HOST_LOGO_DIR}/logo.${upload.ext}`, ext: upload.ext });
+    return apiSuccess({ logoPath: logoPathValue(upload.ext), ext: upload.ext });
   } catch (error) {
     console.error('[ranking/logo] POST failed', error);
     return apiError(error);
@@ -167,8 +158,8 @@ export async function DELETE(): Promise<NextResponse> {
   if (!authorized) return response;
 
   try {
-    await removeOtherLogos(RANKING_LIB_DIR, null);
-    await removeOtherLogos(hostLogoDir(), null);
+    await removeOtherLogos(rankingLibDir(), null);
+    await removeOtherLogos(hostAssetsDir(), null);
     await pointConfigAtLogo(null);
 
     await recordAudit({

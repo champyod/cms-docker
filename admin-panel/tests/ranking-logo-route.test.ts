@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   mkdir: vi.fn(),
   writeFile: vi.fn(),
   chmod: vi.fn(),
+  rename: vi.fn(),
   rm: vi.fn(),
   readFile: vi.fn(),
   access: vi.fn(),
@@ -26,6 +27,7 @@ import { POST as uploadLogo } from '@/app/api/ranking/logo/route';
 
 const RANKING_DIR = '/var/local/lib/cms/ranking';
 const HOST_DIR = path.join(getRepoRoot(), 'config/assets');
+const TARGET_LOGO = path.join(RANKING_DIR, 'logo.png');
 
 function logoRequest(): NextRequest {
   const formData = new FormData();
@@ -33,11 +35,11 @@ function logoRequest(): NextRequest {
   return new NextRequest('http://localhost/api/ranking/logo', { method: 'POST', body: formData });
 }
 
-function refusal(dir: string): Error & { code: string; syscall: string; path: string } {
-  return Object.assign(new Error(`EACCES: permission denied, mkdir '${dir}'`), {
+function refusal(filePath: string, syscall: string): Error & { code: string; syscall: string; path: string } {
+  return Object.assign(new Error(`EACCES: permission denied, ${syscall} '${filePath}'`), {
     code: 'EACCES',
-    syscall: 'mkdir',
-    path: dir,
+    syscall,
+    path: filePath,
   });
 }
 
@@ -48,6 +50,7 @@ beforeEach(() => {
   mocks.mkdir.mockResolvedValue(undefined);
   mocks.writeFile.mockResolvedValue(undefined);
   mocks.chmod.mockResolvedValue(undefined);
+  mocks.rename.mockResolvedValue(undefined);
   mocks.rm.mockResolvedValue(undefined);
   mocks.access.mockResolvedValue(undefined);
   mocks.stat.mockResolvedValue({ mtime: new Date() });
@@ -66,10 +69,11 @@ describe('POST /api/ranking/logo', () => {
     expect(body.ext).toBe('png');
     expect(mocks.mkdir).toHaveBeenCalledWith(RANKING_DIR, { recursive: true });
     expect(mocks.mkdir).toHaveBeenCalledWith(HOST_DIR, { recursive: true });
+    expect(mocks.rename).toHaveBeenCalledWith(expect.stringContaining('.tmp'), TARGET_LOGO);
   });
 
-  it('names the volume path and errno when the write is refused', async () => {
-    mocks.mkdir.mockRejectedValue(refusal(RANKING_DIR));
+  it('names the volume path and errno when the directory is refused', async () => {
+    mocks.mkdir.mockRejectedValue(refusal(RANKING_DIR, 'mkdir'));
 
     const response = await uploadLogo(logoRequest());
     const body = await response.json();
@@ -81,7 +85,7 @@ describe('POST /api/ranking/logo', () => {
 
   it('names the host bind path when the mirror is refused', async () => {
     mocks.mkdir.mockImplementation(async (dir: string) => {
-      if (dir === HOST_DIR) throw refusal(HOST_DIR);
+      if (dir === HOST_DIR) throw refusal(HOST_DIR, 'mkdir');
     });
 
     const response = await uploadLogo(logoRequest());
@@ -89,5 +93,27 @@ describe('POST /api/ranking/logo', () => {
 
     expect(response.status).toBe(409);
     expect(body.error).toContain(HOST_DIR);
+  });
+
+  it('names the stored logo file, never the temporary it is staged in', async () => {
+    mocks.writeFile.mockRejectedValue(refusal(path.join(RANKING_DIR, 'logo.png.abc.tmp'), 'open'));
+
+    const response = await uploadLogo(logoRequest());
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.error).toContain(TARGET_LOGO);
+    expect(body.error).not.toContain('.tmp');
+  });
+
+  it('removes no stored logo when the new one cannot be written', async () => {
+    mocks.writeFile.mockRejectedValue(refusal(path.join(RANKING_DIR, 'logo.png.abc.tmp'), 'open'));
+
+    await uploadLogo(logoRequest());
+
+    const removedStoredLogos = mocks.rm.mock.calls
+      .map((call) => String(call[0]))
+      .filter((filePath) => /logo\.[a-z]+$/.test(filePath));
+    expect(removedStoredLogos).toEqual([]);
   });
 });
