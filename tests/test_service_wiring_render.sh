@@ -43,6 +43,9 @@ new_sandbox() {
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-cli.ts" "${SB}/admin-panel/src/lib/"
   printf '%s' "${4:-$PAYLOAD}" > "${SB}/payload.json"
+  # The registry rows the compose renderer reads, one row per line. Kept in a file rather
+  # than spliced through sed because a row is pipe-separated and sed's delimiter here is |.
+  printf '%s\n' "${5:-}" > "${SB}/registry_rows.txt"
   # Test 6 passes an empty third argument to make the registry name no contest.
   local registry_primary="5"
   [[ "$#" -ge 3 ]] && registry_primary="$3"
@@ -62,6 +65,7 @@ if [[ "${1:-}" == "exec" ]]; then
     *"COALESCE(contest_id::text, 'ALL')"*) printf '%s\n' "@EVAL_BINDING@" ;;
     *"role = 'ContestWebServer'"*) printf '%s\n' "@REGISTRY_PRIMARY@" ;;
     *"count(*) FROM contest_exposures"*) printf '%s\n' "@EXPOSED@" ;;
+    *"role IN"*) cat "@REGISTRY_ROWS_FILE@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
     *to_regclass*) printf '%s\n' "t" ;;
@@ -74,7 +78,7 @@ exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
     -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" -e "s|@REGISTRY_PRIMARY@|$registry_primary|" -e "s|@SQL_LOG@|${SB}/sql.log|" \
-    -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
+    -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" -e "s|@REGISTRY_ROWS_FILE@|${SB}/registry_rows.txt|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
 
@@ -217,6 +221,20 @@ resolved="$(HOME="${SB}/home" PATH="${SB}/empty" BUN_INSTALL="" "$BASH_BIN" -c '
   && ok "falls back to ~/.bun/bin when PATH has no bun" || no "resolved '${resolved}' instead"
 resolved="$(HOME="${SB}/home" PATH="${SB}/pb" BUN_INSTALL="" "$BASH_BIN" -c 'source "$0"; resolve_bun' "$LIB")"
 [[ "${resolved}" == "${SB}/pb/bun" ]] && ok "prefers the bun on PATH" || no "resolved '${resolved}' instead"
+
+echo ""
+echo "=== Test 10: the generated registry compose binds each row's own port ==="
+new_sandbox 1 t 5 "" 'web-3|ContestWebServer|0|web-3|8894|21000|default|3'
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+compose="${SB}/docker-compose.registry.generated.yml"
+grep -q 'SERVICE_HTTP_PORT: 8894' "$compose" 2>/dev/null \
+  && ok "binds the row's http port" || no "missing SERVICE_HTTP_PORT"
+grep -q 'SERVICE_RPC_PORT: 21000' "$compose" 2>/dev/null \
+  && ok "binds the row's rpc port" || no "missing SERVICE_RPC_PORT"
+grep -q '8894:8894' "$compose" 2>/dev/null \
+  && ok "publishes the same port it binds" || no "the publish map does not match the bind port"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

@@ -39,6 +39,7 @@
 
 from datetime import datetime
 import logging
+import os
 
 from werkzeug.middleware.shared_data import SharedDataMiddleware
 
@@ -73,9 +74,13 @@ class ContestWebServer(WebService):
             "xsrf_cookies": True,
         }
 
+        # WHY the row's own port wins: the generated compose publishes one port per registry
+        # row, and the shared listen_port is a single shard-indexed list, so it cannot
+        # describe a second contest server.
+        override_port = os.environ.get("SERVICE_HTTP_PORT")
         try:
             listen_address = config.contest_web_server.listen_address[shard]
-            listen_port = config.contest_web_server.listen_port[shard]
+            listen_port = int(override_port) if override_port else config.contest_web_server.listen_port[shard]
         except IndexError:
             raise ConfigError("Wrong shard number for %s, or missing "
                               "address/port configuration. Please check "
