@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 
 import { grantLoginExemption, revokeLoginExemption } from '@/app/actions/securityExemptions';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
+import { ReasonDialog } from '@/components/core/ReasonDialog';
+import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { SecurityBlock } from '@/lib/security/block-ledger';
 import { EXEMPTION_SCOPES, type ExemptionScope } from '@/lib/security/exemption-scopes';
 
@@ -22,26 +24,21 @@ const SCOPE_LABELS: Record<ExemptionScope, string> = {
 
 interface ExemptionsPanelProps {
   readonly exemptions: readonly SecurityBlock[];
-  readonly reason: string;
 }
 
-export function ExemptionsPanel({ exemptions, reason }: ExemptionsPanelProps): React.JSX.Element {
+function exemptionIdentityLabel(subject: string, ip: string): string {
+  return `${subject || '*'} @ ${ip || '*'}`;
+}
+
+export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX.Element {
+  const prompt = useReasonPrompt();
   const [scope, setScope] = useState<ExemptionScope>('account_address');
   const [username, setUsername] = useState('');
   const [ip, setIp] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
   const needsUsername = scope !== 'address';
   const needsIp = scope !== 'account';
   const missingInput = (needsUsername && username.trim().length === 0) || (needsIp && ip.trim().length === 0);
-  const canGrant = !pending && reason.trim().length > 0 && !missingInput;
-
-  function run(action: () => Promise<{ success: boolean; error?: string; message?: string }>): void {
-    startTransition(async () => {
-      const result = await action();
-      setFeedback(result.success ? (result.message ?? 'Done') : (result.error ?? 'Failed'));
-    });
-  }
+  const canGrant = !missingInput;
 
   return (
     <Card>
@@ -50,7 +47,7 @@ export function ExemptionsPanel({ exemptions, reason }: ExemptionsPanelProps): R
         A standing lift: the chosen account or address is never locked out or challenged until it is
         revoked. This is a login-layer exemption, separate from the host bans fail2ban applies.
       </p>
-      {feedback !== null && <p className="mb-3 text-sm text-muted-foreground">{feedback}</p>}
+      {prompt.feedback !== null && <p className="mb-3 text-sm text-muted-foreground">{prompt.feedback}</p>}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1.5">
@@ -74,9 +71,15 @@ export function ExemptionsPanel({ exemptions, reason }: ExemptionsPanelProps): R
         <Button
           variant="danger"
           size="sm"
-          loading={pending}
           disabled={!canGrant}
-          onClick={() => run(() => grantLoginExemption(scope, username, ip, reason))}
+          onClick={() =>
+            prompt.ask({
+              title: 'Exempt this identity permanently?',
+              description: `Never lock out or challenge ${exemptionIdentityLabel(username, ip)} again until revoked.`,
+              submitLabel: 'Exempt permanently',
+              run: (reason) => grantLoginExemption(scope, username, ip, reason),
+            })
+          }
         >
           Exempt permanently
         </Button>
@@ -86,24 +89,35 @@ export function ExemptionsPanel({ exemptions, reason }: ExemptionsPanelProps): R
         <p className="mt-4 text-sm text-muted-foreground">No permanent exemption is active.</p>
       ) : (
         <ul className="mt-4 space-y-2">
-          {exemptions.map((exemption) => (
-            <li key={exemption.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
-              <span className="font-mono text-sm">
-                {exemption.subject ?? 'any account'} · {exemption.ip ?? 'any address'}
-              </span>
-              <Button
-                variant="danger"
-                size="sm"
-                loading={pending}
-                disabled={reason.trim().length === 0}
-                onClick={() => run(() => revokeLoginExemption(exemption.subject ?? '', exemption.ip ?? '', reason))}
-              >
-                Revoke
-              </Button>
-            </li>
-          ))}
+          {exemptions.map((exemption) => {
+            const subject = exemption.subject ?? '';
+            const exemptionIp = exemption.ip ?? '';
+            return (
+              <li key={exemption.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
+                <span className="font-mono text-sm">
+                  {exemption.subject ?? 'any account'} · {exemption.ip ?? 'any address'}
+                </span>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() =>
+                    prompt.ask({
+                      title: 'Revoke this exemption?',
+                      description: `Lockouts and challenges apply to ${exemptionIdentityLabel(subject, exemptionIp)} again.`,
+                      submitLabel: 'Revoke',
+                      run: (reason) => revokeLoginExemption(subject, exemptionIp, reason),
+                    })
+                  }
+                >
+                  Revoke
+                </Button>
+              </li>
+            );
+          })}
         </ul>
       )}
+
+      <ReasonDialog request={prompt.request} onClose={prompt.close} onSubmit={prompt.submit} />
     </Card>
   );
 }

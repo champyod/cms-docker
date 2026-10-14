@@ -1,22 +1,28 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 
 import {
+  clearLoginActivity,
   queueUnban,
   unlockLoginLockout,
   type BannedAddressView,
+  type LoginActivityResult,
 } from '@/app/actions/securityBlocks';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
+import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { ExemptionsPanel } from '@/components/security/ExemptionsPanel';
+import { LoginActivityCard } from '@/components/security/LoginActivityCard';
+import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { SecurityBlock } from '@/lib/security/block-ledger';
 
 interface BlocksPanelProps {
   readonly banned: BannedAddressView;
   readonly lockouts: readonly SecurityBlock[];
   readonly exemptions: readonly SecurityBlock[];
+  readonly activity: LoginActivityResult;
 }
 
 // The native select is the one control with no core wrapper, so it carries the
@@ -24,29 +30,21 @@ interface BlocksPanelProps {
 const SELECT_SURFACE =
   'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
 
-export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps): React.JSX.Element {
-  const [reason, setReason] = useState('');
+function unbanDescription(ip: string, jail: string): string {
+  return `Queue an unban for ${ip} in the ${jail} jail. The host agent applies it on its next tick.`;
+}
+
+export function BlocksPanel({ banned, lockouts, exemptions, activity }: BlocksPanelProps): React.JSX.Element {
+  const prompt = useReasonPrompt();
   const [manualJail, setManualJail] = useState('');
   const [manualIp, setManualIp] = useState('');
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
-  const isBlocked = pending || reason.trim().length === 0;
   const activeJail = manualJail === '' ? (banned.jailNames[0] ?? '') : manualJail;
-  const canQueueManual = !isBlocked && activeJail !== '' && manualIp.trim().length > 0;
-
-  function run(action: () => Promise<{ success: boolean; error?: string; message?: string }>): void {
-    startTransition(async () => {
-      const result = await action();
-      setFeedback(result.success ? (result.message ?? 'Done') : (result.error ?? 'Failed'));
-    });
-  }
+  const activeIp = manualIp.trim();
+  const canQueueManual = activeJail !== '' && activeIp.length > 0;
 
   return (
     <div className="space-y-4">
-      <Card>
-        <Input label="Reason (required for every action)" value={reason} onChange={(event) => setReason(event.target.value)} />
-        {feedback !== null && <p className="mt-3 text-sm text-muted-foreground">{feedback}</p>}
-      </Card>
+      {prompt.feedback !== null && <p className="text-sm text-muted-foreground">{prompt.feedback}</p>}
 
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Banned addresses</h2>
@@ -72,9 +70,14 @@ export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps):
                 <Button
                   size="sm"
                   variant="secondary"
-                  loading={pending}
-                  disabled={isBlocked}
-                  onClick={() => run(() => queueUnban(ban.jail, ban.ip, reason))}
+                  onClick={() =>
+                    prompt.ask({
+                      title: `Unban ${ban.ip}?`,
+                      description: unbanDescription(ban.ip, ban.jail),
+                      submitLabel: 'Queue unban',
+                      run: (reason) => queueUnban(ban.jail, ban.ip, reason),
+                    })
+                  }
                 >
                   Unban
                 </Button>
@@ -106,9 +109,15 @@ export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps):
             <Button
               size="sm"
               variant="secondary"
-              loading={pending}
               disabled={!canQueueManual}
-              onClick={() => run(() => queueUnban(activeJail, manualIp.trim(), reason))}
+              onClick={() =>
+                prompt.ask({
+                  title: `Unban ${activeIp}?`,
+                  description: unbanDescription(activeIp, activeJail),
+                  submitLabel: 'Queue unban',
+                  run: (reason) => queueUnban(activeJail, activeIp, reason),
+                })
+              }
             >
               Queue unban
             </Button>
@@ -116,7 +125,19 @@ export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps):
         </div>
       </Card>
 
-      <ExemptionsPanel exemptions={exemptions} reason={reason} />
+      <ExemptionsPanel exemptions={exemptions} />
+
+      <LoginActivityCard
+        activity={activity}
+        onClear={(key) =>
+          prompt.ask({
+            title: `Clear the counter for ${key}?`,
+            description: `Lift the live failure counter for ${key}. This clears it now instead of waiting for its window to lapse.`,
+            submitLabel: 'Clear counter',
+            run: (reason) => clearLoginActivity(key, reason),
+          })
+        }
+      />
 
       <Card>
         <h2 className="mb-1 text-lg font-semibold">Login lockouts</h2>
@@ -129,29 +150,40 @@ export function BlocksPanel({ banned, lockouts, exemptions }: BlocksPanelProps):
           <p className="text-sm text-muted-foreground">No open lockout.</p>
         ) : (
           <ul className="space-y-2">
-            {lockouts.map((lockout) => (
-              <li
-                key={lockout.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
-              >
-                <span className="font-mono text-sm">
-                  {lockout.subject ?? 'unknown'} · {lockout.ip ?? 'local'} · until{' '}
-                  {lockout.expiresAt === null ? 'unknown' : lockout.expiresAt.toISOString()}
-                </span>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  loading={pending}
-                  disabled={isBlocked}
-                  onClick={() => run(() => unlockLoginLockout(lockout.subject ?? '', lockout.ip ?? 'local', reason))}
+            {lockouts.map((lockout) => {
+              const subject = lockout.subject ?? '';
+              const ip = lockout.ip ?? 'local';
+              return (
+                <li
+                  key={lockout.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
                 >
-                  Unlock
-                </Button>
-              </li>
-            ))}
+                  <span className="font-mono text-sm">
+                    {lockout.subject ?? 'unknown'} · {lockout.ip ?? 'local'} · until{' '}
+                    {lockout.expiresAt === null ? 'unknown' : lockout.expiresAt.toISOString()}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() =>
+                      prompt.ask({
+                        title: `Unlock ${subject || 'this account'}?`,
+                        description: `Lift the login lockout for ${subject || 'this account'} from ${ip}. This clears the failed-attempt counter and closes the record.`,
+                        submitLabel: 'Unlock',
+                        run: (reason) => unlockLoginLockout(subject, ip, reason),
+                      })
+                    }
+                  >
+                    Unlock
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
+
+      <ReasonDialog request={prompt.request} onClose={prompt.close} onSubmit={prompt.submit} />
     </div>
   );
 }
