@@ -1358,6 +1358,30 @@ validate_service_db_profiles() {
   return 0
 }
 
+# The launcher argument the evaluation service needs, from its registry row.
+#
+# WHY the database decides: one evaluation service may serve a single contest or every
+# contest, and the registry row is where that choice already lives. The launcher upstream
+# already understands `-c ALL` (cms/util.py contest_id_from_args), so this step only has to
+# publish which of the two applies. WHY an empty default: a deployment with no registry
+# table keeps today's behaviour, where the service asks the database for the active contest.
+derive_evaluation_contest_arg() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local binding
+  binding="$(db_query "SELECT COALESCE(contest_id::text, 'ALL') FROM services WHERE role = 'EvaluationService' AND enabled ORDER BY shard, id LIMIT 1;")" || return 1
+  [[ -n "$binding" ]] || return 0
+
+  __TOML["contest.EVALUATION_CONTEST_ARG"]="-c $binding"
+  if [[ " ${__CONTEST_KEYS[*]} " != *" EVALUATION_CONTEST_ARG "* ]]; then
+    __CONTEST_KEYS+=("EVALUATION_CONTEST_ARG")
+  fi
+  return 0
+}
+
 # --- Service wiring: the database authors the routes, config sync renders them ---
 WIRING_OUT_DIR="config/generated"
 WIRING_RENDERER="admin-panel/src/lib/service-wiring-cli.ts"
@@ -1681,6 +1705,10 @@ main() {
   # WHY after the profile check: a service whose profile does not exist is a broken
   # registry, and rendering it would publish routes for a service that cannot start.
   render_wiring_artifacts
+
+  # WHY before the .env writer: the launcher argument has to reach .env on this run, since
+  # compose reads it to decide whether this evaluation service serves one contest or all.
+  derive_evaluation_contest_arg
 
   # Derived values. WHY these run before the .env is written: a value that is only
   # derived here never existed in config.toml, so it has to reach .env on this run or

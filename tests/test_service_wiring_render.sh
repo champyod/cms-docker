@@ -55,6 +55,7 @@ if [[ "${1:-}" == "exec" ]]; then
     *"count(*) FROM contest_exposures WHERE tls"*) printf '%s\n' "@TLS_EXPOSED@" ;;
     *"DISTINCT hostname FROM contest_exposures"*) printf '%s\n' "@TLS_HOST@" ;;
     *"DISTINCT tailnet FROM contest_exposures"*) printf '%s\n' "@TAILNET_NODE@" ;;
+    *"COALESCE(contest_id::text, 'ALL')"*) printf '%s\n' "@EVAL_BINDING@" ;;
     *"count(*) FROM contest_exposures"*) printf '%s\n' "@EXPOSED@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
@@ -67,7 +68,7 @@ fi
 exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
-    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" \
+    -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
@@ -99,6 +100,8 @@ grep -q 'tailscale/cms-7.json:/config/serve.json' "${SB}/docker-compose.tailscal
   && ok "mounts that node's own serve config" || no "the container does not mount its node config"
 grep -q 'TS_AUTHKEY=${TAILSCALE_AUTHKEY}' "${SB}/docker-compose.tailscale.generated.yml" 2>/dev/null \
   && ok "references the authkey instead of copying it" || no "the authkey is not referenced by name"
+grep -q '^EVALUATION_CONTEST_ARG=.*-c ALL' "${SB}/.env" 2>/dev/null \
+  && ok "publishes the multi-contest launcher argument" || no "missing EVALUATION_CONTEST_ARG"
 if command -v docker >/dev/null 2>&1; then
   TAILSCALE_AUTHKEY=x docker compose -f "${SB}/docker-compose.tailscale.generated.yml" config --quiet 2>/dev/null \
     && ok "the generated compose file validates" || no "the generated compose file is invalid"
