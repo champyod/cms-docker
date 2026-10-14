@@ -154,6 +154,18 @@ describe('renderNginxServers', () => {
     expect(out).toContain('return 301 /beta/;');
   });
 
+  it('groups a root and a path exposure of one hostname into one block, owner first', () => {
+    const out = renderNginxServers([route, { ...route, contest_id: 2, path: '/beta', upstream: 'web-2:8888' }]);
+    expect(out.match(/server \{/g)).toHaveLength(1);
+    expect(out.indexOf('location / {')).toBeLessThan(out.indexOf('location ^~ /beta/ {'));
+    expect(out).toContain('proxy_pass http://web-2:8888/;');
+  });
+
+  it('keeps one block per hostname', () => {
+    const out = renderNginxServers([route, { ...route, hostname: 'b.example.com' }]);
+    expect(out.match(/server \{/g)).toHaveLength(2);
+  });
+
   it('refuses a hostname that could inject a directive', () => {
     const hostile = { ...route, hostname: 'a.example.com; root /etc;' };
     expect(() => renderNginxServers([hostile])).toThrow(RenderError);

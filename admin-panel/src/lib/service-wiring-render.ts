@@ -88,37 +88,59 @@ function proxyPassLine(path: string, upstream: string): string {
   return `        proxy_pass http://${target};`;
 }
 
-function renderNginxServer(route: Route, certificate: CertificateSpec): string {
-  const hostname = assertSafeHostname(route.hostname);
-  const path = assertSafePath(route.path);
-  const listen = route.tls ? `${TLS_LISTEN_PORT} ssl` : `${PLAIN_LISTEN_PORT}`;
-  const lines = ['server {', `    listen ${listen};`, `    server_name ${hostname};`];
-  if (route.tls) {
+function renderServerBlock(hostname: string, routes: Route[], certificate: CertificateSpec): string {
+  const name = assertSafeHostname(hostname);
+  const lines = ['server {', `    listen ${routes[0].tls ? `${TLS_LISTEN_PORT} ssl` : `${PLAIN_LISTEN_PORT}`};`, `    server_name ${name};`];
+  if (routes[0].tls) {
     lines.push(`    ssl_certificate ${assertSafeIncludePath(certificate.certificate)};`);
     lines.push(`    ssl_certificate_key ${assertSafeIncludePath(certificate.key)};`);
     if (certificate.sslInclude !== undefined) {
       lines.push(`    include ${assertSafeIncludePath(certificate.sslInclude)};`);
     }
   }
-  if (path === '/') {
-    lines.push('    location / {', proxyPassLine(path, route.upstream), '    }');
-  } else {
-    lines.push(`    location = ${path} {`, `        return 301 ${path}/;`, '    }');
-    lines.push(`    location ^~ ${path}/ {`, proxyPassLine(path, route.upstream), '    }');
-  }
+  for (const route of routes) lines.push(...locationLines(route));
   lines.push('}');
   return lines.join('\n');
 }
 
+/** The location block for one route: `/` owns the root, a prefix strips and redirects into it. */
+function locationLines(route: Route): string[] {
+  const path = assertSafePath(route.path);
+  if (path === '/') {
+    return ['    location / {', proxyPassLine(path, route.upstream), '    }'];
+  }
+  return [
+    `    location = ${path} {`,
+    `        return 301 ${path}/;`,
+    '    }',
+    `    location ^~ ${path}/ {`,
+    proxyPassLine(path, route.upstream),
+    '    }',
+  ];
+}
+
 /**
- * One server block per route. A non-root path is matched with ^~ so a shorter
- * prefix cannot win over a longer one, and the bare prefix redirects into it.
+ * One server block per hostname, its root owner first and every path exposure a location
+ * inside it. WHY grouped: a path exposure joins its hostname's vhost rather than opening a
+ * second block for the same name, so one vhost per name still gets the front's certificate
+ * and headers, and a shorter prefix cannot win over a longer one.
  */
 export function renderNginxServers(
   routes: Route[],
   certificate: CertificateSpec = CONTEST_PROXY_CERTIFICATE
 ): string {
-  return routes.map((route) => renderNginxServer(route, certificate)).join('\n\n');
+  const byHostname = new Map<string, Route[]>();
+  for (const route of routes) {
+    const hostname = assertSafeHostname(route.hostname);
+    byHostname.set(hostname, [...(byHostname.get(hostname) ?? []), route]);
+  }
+  const blocks: string[] = [];
+  for (const [hostname, group] of byHostname) {
+    const owners = group.filter((route) => assertSafePath(route.path) === '/');
+    const prefixes = group.filter((route) => assertSafePath(route.path) !== '/');
+    blocks.push(renderServerBlock(hostname, [...owners, ...prefixes], certificate));
+  }
+  return blocks.join('\n\n');
 }
 
 /**
