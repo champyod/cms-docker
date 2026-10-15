@@ -678,6 +678,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|CONTEST_ROUTE_PATH|str||/"
   "Admin Panel|[admin]|ADMIN_ROUTE_PATH|str||/admin"
   "Admin Panel|[admin]|ADMIN_CLASSIC_ROUTE_PATH|str||/classic"
+  "Admin Panel|[admin]|PRIMARY_CLASSIC_ROUTE_PATH|str||"
   "Admin Panel|[admin]|RANKING_ROUTE_PATH|str||/ranking"
   "Admin Panel|[admin]|OJ_ROUTE_PATH|str||"
   "Admin Panel|[admin]|OJ_UPSTREAM|str||"
