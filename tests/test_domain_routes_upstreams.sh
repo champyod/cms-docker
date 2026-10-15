@@ -72,11 +72,14 @@ printf '\n== the front vhost map names the fragment each vhost includes ==\n'
 # The map is what the config sync publishes for the registry: a `label|hostname|paths` line per
 # vhost root, so an exposure under that name is rendered into the fragment its own include pulls in
 # — and refused when its path is one that vhost's own block already answers on.
-has "the primary vhost is mapped to its label and the paths it serves" "MAP|primary|grader.example.org|/ /admin /ranking"
+has "the primary vhost is mapped to its label and the paths it serves, its own fixed locations with them" "MAP|primary|grader.example.org|/ /admin /ranking /login /ws"
 has "the admin vhost is mapped to its label and the paths it serves" "MAP|admin|admin.example.org|/ /classic"
 hasnt "a second row on the admin vhost is no vhost of its own" "MAP|admin_classic"
 hasnt "a vhost with no domain is not mapped" "MAP|oj|"
-if printf '%s\n' "$PRIMARY_CLASSIC" | grep -Fq -- 'MAP|primary|grader.example.org|/ /admin /ranking /classic'; then
+# The primary's fixed locations travel with it, so a fragment cannot claim the login or the
+# WebSocket upgrade the vhost's own block serves; they belong to that block alone.
+hasnt "a vhost without them is not handed the primary's fixed locations" "MAP|admin|admin.example.org|/ /classic /login"
+if printf '%s\n' "$PRIMARY_CLASSIC" | grep -Fq -- 'MAP|primary|grader.example.org|/ /admin /ranking /classic /login /ws'; then
   ok "the map follows PRIMARY_CLASSIC_ROUTE_PATH onto the primary vhost"
 else
   no "the map did not follow PRIMARY_CLASSIC_ROUTE_PATH onto the primary vhost"

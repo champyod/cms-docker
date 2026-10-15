@@ -325,6 +325,16 @@ _routes_vhost_locations() {
     fi
     paths+=" ${path}"
   done
+  # The primary vhost's own block declares two locations no table row owns — the login endpoint
+  # and the WebSocket upgrade (config/grader.nginx.conf.template). WHY they are published here:
+  # a fragment registers `^~ <path>/`, which outranks that block's plain prefix for every URI
+  # below it, so an exposure at one of them silently takes the login or the upgrade off the
+  # vhost. They are the template's literals, not route paths an operator keys. WHY the template's
+  # static-asset rule is not among them: it is a regex over the whole vhost with no prefix, so no
+  # single fragment path can name it. WHY only the primary: no other vhost's block declares them.
+  if [[ "$is_primary" == "1" ]]; then
+    paths+=" /login /ws"
+  fi
   printf '%s' "${paths# }"
 }
 
