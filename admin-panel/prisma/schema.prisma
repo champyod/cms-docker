@@ -92,6 +92,10 @@ model contests {
   min_submission_interval_grace_period             Unsupported("interval")?
   min_user_test_interval                           Unsupported("interval")?
   queue_fairness_penalty_seconds                   Int                      @default(0)
+  /// At most one contest may be flagged active. The invariant is a partial unique index
+  /// (contests_single_active_key), which Prisma cannot express, so it lives only in
+  /// 20261015153000_single_active_contest and has no counterpart here — `prisma migrate dev` must
+  /// not read that absence as an index to drop.
   is_active                                        Boolean                  @default(false)
   score_precision                                  Int
   announcements                                    announcements[]

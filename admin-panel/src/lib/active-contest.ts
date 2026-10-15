@@ -29,6 +29,8 @@ export async function readActiveContestId(): Promise<number | null> {
  * (contests_single_active_key) is checked as each updated row reaches the index, so a single
  * statement that clears one row and flags another can meet it with both of them still true — the
  * order rows are visited decides whether it succeeds. Clearing first makes the order irrelevant.
+ * WHY scripts/__contest_set_active.sh repeats the two statements in this order: it is the flag's
+ * other writer, and the pair is safe only as a pair in this order.
  */
 export async function writeActiveContestId(id: number): Promise<void> {
   const [, flagged] = await prisma.$transaction([
