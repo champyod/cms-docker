@@ -3,7 +3,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use sqlx::postgres::{PgPool, PgRow};
 
-use crate::store::{load_overrides, StoreError};
+use crate::overrides::load_hidden_tasks;
+use crate::store::StoreError;
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Contest {
@@ -82,11 +83,11 @@ pub async fn list_body(
             encode(&map_by_key(rows))
         }
         Kind::Task => {
-            let overrides = load_overrides(pool, contest_id).await?;
+            let hidden = load_hidden_tasks(pool, contest_id).await?;
             let rows: Vec<Task> = rows::<Task>(pool, TASKS_LIST)
                 .await?
                 .into_iter()
-                .filter(|task| !overrides.hides_task(&task.key))
+                .filter(|task| !hidden.contains(&task.key))
                 .collect();
             encode(&map_by_key(rows))
         }

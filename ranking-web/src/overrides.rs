@@ -8,7 +8,7 @@ use crate::store::StoreError;
 use serde_json::Value;
 
 /// The wire spelling of a target kind in ranking_overrides.target_kind.
-const TARGET_USER: &str = "user";
+pub(crate) const TARGET_USER: &str = "user";
 const TARGET_TEAM: &str = "team";
 /// The whole-board target: its key is always `*`, and only hide/freeze apply to it.
 const TARGET_RANKING: &str = "ranking";
@@ -20,7 +20,7 @@ const TARGET_TASK: &str = "task";
 /// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
 /// actionFreeze in en.json), and before this it fell through the fold's `_ => false`
 /// arm — a success toast, an audit row, and no change to the board.
-const ACTION_HIDE: &str = "hide";
+pub(crate) const ACTION_HIDE: &str = "hide";
 const ACTION_GUEST: &str = "guest";
 const ACTION_PIN: &str = "pin";
 const ACTION_RENAME: &str = "rename";
@@ -161,6 +161,16 @@ impl Overrides {
     /// drop the column and its scores rather than only one of the two.
     pub fn hides_task(&self, key: &str) -> bool {
         self.hidden_tasks.contains(key)
+    }
+
+    /// How many hidden task keys name no row in `known`. A renamed or deleted task keeps
+    /// its hide row, so the hide stops applying with no other trace; this is the count
+    /// /diagnostics surfaces for it.
+    pub fn unknown_hidden_tasks(&self, known: &HashSet<String>) -> usize {
+        self.hidden_tasks
+            .iter()
+            .filter(|key| !known.contains(*key))
+            .count()
     }
 
     fn fold_row(&mut self, row: &OverrideRow) {
@@ -308,10 +318,30 @@ pub async fn load_overrides(
     Ok(rows)
 }
 
+/// The task keys a `hide` override drops, read on their own. WHY not the full fold: the
+/// entity list polls this on every `/tasks/` request and needs no user, team or score
+/// override, and a `ranking_hidden` tombstone is always a user — it can never hide a task.
+pub async fn load_hidden_tasks(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<HashSet<String>, StoreError> {
+    let keys = sqlx::query_scalar::<_, String>(
+        "SELECT target_key FROM ranking_overrides \
+         WHERE active AND target_kind = $1 AND action = $2 \
+         AND ($3::bigint IS NULL OR contest_id = $3)",
+    )
+    .bind(TARGET_TASK)
+    .bind(ACTION_HIDE)
+    .bind(contest_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(keys.into_iter().collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::BTreeMap;
+    use std::collections::{BTreeMap, HashSet};
 
     fn row(kind: &str, key: &str, action: &str, value: Option<&str>) -> Override {
         Override {
@@ -387,5 +417,22 @@ mod tests {
         assert!(overrides.hides_task("shared"));
         assert!(!overrides.hides(TargetKind::User, "shared"));
         assert!(!overrides.hides(TargetKind::Team, "shared"));
+    }
+
+    /// A hide whose key names no task row is counted, so a renamed or deleted task's hide
+    /// stops being silent on the diagnostics surface.
+    #[test]
+    fn a_hide_on_an_absent_task_is_counted_as_unknown() {
+        let overrides = Overrides::fold(&[
+            override_row("task", "t0", "hide"),
+            override_row("task", "gone", "hide"),
+        ]);
+        let known = HashSet::from(["t0".to_string()]);
+
+        assert_eq!(
+            overrides.unknown_hidden_tasks(&known),
+            1,
+            "only the hide with no task row is counted"
+        );
     }
 }

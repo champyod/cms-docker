@@ -1,10 +1,10 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::Serialize;
 use sqlx::postgres::PgPool;
 
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
-use crate::overrides::{OverrideRow, Overrides};
+use crate::overrides::{OverrideRow, Overrides, ACTION_HIDE, TARGET_USER};
 use crate::scoring::{
     self, parse_extra, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode,
 };
@@ -196,20 +196,16 @@ async fn assemble_ledger(
     users: &BTreeMap<String, UserNames>,
     overrides: &Overrides,
 ) -> Result<Ledger, StoreError> {
-    let tasks = load_tasks(pool, overrides).await?;
+    let (tasks, unknown_task_hides) = load_tasks(pool, overrides).await?;
     let submissions = load_submissions(pool).await?;
     let subchanges = load_subchanges(pool).await?;
     let teams: BTreeMap<String, String> = users
         .iter()
         .filter_map(|(key, user)| user.team.clone().map(|team| (key.clone(), team)))
         .collect();
-    Ok(scoring::assemble_with(
-        &tasks,
-        &submissions,
-        &subchanges,
-        overrides,
-        &teams,
-    )?)
+    let mut ledger = scoring::assemble_with(&tasks, &submissions, &subchanges, overrides, &teams)?;
+    ledger.set_unknown_task_hides(unknown_task_hides);
+    Ok(ledger)
 }
 
 pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreError> {
@@ -227,13 +223,24 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
 /// out later: the mode is what a submission resolves against, so without it the task's
 /// submissions, scores and history never enter the ledger at all, and the hide reaches
 /// the total the board prints rather than only the column the page draws.
-async fn load_tasks(pool: &PgPool, overrides: &Overrides) -> Result<Vec<TaskMode>, StoreError> {
+/// The task modes the ledger replays, and the number of task hides that named no task row.
+/// WHY a hidden task is dropped here and not filtered out later: the mode is what a
+/// submission resolves against, so without it the task's submissions, scores and history
+/// never enter the ledger at all, and the hide reaches the total the board prints rather
+/// than only the column the page draws.
+async fn load_tasks(
+    pool: &PgPool,
+    overrides: &Overrides,
+) -> Result<(Vec<TaskMode>, usize), StoreError> {
     let rows = sqlx::query_as::<_, TaskRow>(
         "SELECT key, score_mode FROM ranking_tasks ORDER BY display_order, key",
     )
     .fetch_all(pool)
     .await?;
-    rows.into_iter()
+    let known: HashSet<String> = rows.iter().map(|row| row.key.clone()).collect();
+    let unknown_task_hides = overrides.unknown_hidden_tasks(&known);
+    let modes = rows
+        .into_iter()
         .filter(|row| !overrides.hides_task(&row.key))
         .map(|row| {
             let mode = ScoreMode::from_wire(&row.score_mode).ok_or_else(|| {
@@ -244,7 +251,8 @@ async fn load_tasks(pool: &PgPool, overrides: &Overrides) -> Result<Vec<TaskMode
             })?;
             Ok(TaskMode { key: row.key, mode })
         })
-        .collect()
+        .collect::<Result<Vec<_>, ScoreError>>()?;
+    Ok((modes, unknown_task_hides))
 }
 
 async fn load_submissions(pool: &PgPool) -> Result<Vec<Submission>, StoreError> {
@@ -384,24 +392,20 @@ async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreE
         .collect())
 }
 
-/// The wire spelling of the synthetic override a hidden participation folds as. WHY the
-/// same words as ranking_overrides: the tombstone enters the one fold that already hides
-/// a user, so the board keeps a single hide rule rather than a second predicate.
-const HIDDEN_TARGET_KIND: &str = "user";
-const HIDDEN_ACTION: &str = "hide";
-
 #[derive(sqlx::FromRow)]
 struct HiddenRow {
     key: String,
 }
 
 /// A hidden participation behaves as the `hide` override it is, so the board's one hide
-/// rule covers it and no filter site needs a second predicate.
+/// rule covers it and no filter site needs a second predicate. WHY it reuses the fold's
+/// own spellings: the tombstone enters the one fold that already hides a user, so a
+/// rename of either spelling cannot silently unhide everyone.
 fn hidden_as_hide_row(key: String) -> OverrideRow {
     OverrideRow {
-        target_kind: HIDDEN_TARGET_KIND.to_string(),
+        target_kind: TARGET_USER.to_string(),
         target_key: key,
-        action: HIDDEN_ACTION.to_string(),
+        action: ACTION_HIDE.to_string(),
         payload: None,
     }
 }

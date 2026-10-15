@@ -74,10 +74,13 @@ async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
 }
 
 /// The regression: a tombstone must reach only the contest it was filed against, so the
-/// board of another contest keeps the user ranked.
+/// board of another contest keeps the user ranked; and with no contest configured every
+/// tombstone applies, the same fallback the overrides themselves take. WHY one case: both
+/// halves `clear()` and seed the same live tables, so running them as two tests in one
+/// binary let their seeds interleave.
 #[tokio::test]
 #[ignore = "requires a live postgres carrying the ranking tables"]
-async fn a_tombstone_hides_only_its_own_contest() {
+async fn a_tombstone_scopes_to_its_contest_and_applies_without_one() {
     let pool = pool();
     seed_two_contests(&pool).await.expect("the seed applies");
 
@@ -101,20 +104,9 @@ async fn a_tombstone_hides_only_its_own_contest() {
         "contest 7's tombstone must not reach contest 8"
     );
 
-    clear(&pool).await.expect("the cleanup applies");
-}
-
-/// Back-compat for a single-contest deployment: with no contest configured, every hidden
-/// participation applies, the same fallback the overrides themselves take.
-#[tokio::test]
-#[ignore = "requires a live postgres carrying the ranking tables"]
-async fn no_configured_contest_applies_every_tombstone() {
-    let pool = pool();
-    seed_two_contests(&pool).await.expect("the seed applies");
-
-    let board = load_board(&pool, None).await.expect("the board assembles");
+    let unscoped = load_board(&pool, None).await.expect("the board assembles");
     assert!(
-        !board.contains_key("ghost0"),
+        !unscoped.contains_key("ghost0"),
         "with no scope the tombstone applies"
     );
 

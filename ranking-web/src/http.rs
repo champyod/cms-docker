@@ -30,6 +30,9 @@ pub struct Diagnostics {
     pub ready: bool,
     pub skipped_overrides: usize,
     pub skipped_subchanges: usize,
+    /// Task hides that named no task row: the hide exists but drops nothing, so a renamed
+    /// task silently stops being hidden. It is here so that silence has a surface.
+    pub unknown_task_hides: usize,
 }
 
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
@@ -220,6 +223,7 @@ async fn diagnostics(State(state): State<AppState>) -> Response {
             ready: true,
             skipped_overrides: standings.ledger.skipped_overrides(),
             skipped_subchanges: standings.ledger.skipped_subchanges(),
+            unknown_task_hides: standings.ledger.unknown_task_hides(),
         }),
         Err(error) => refuse(&error.to_string()),
     }
