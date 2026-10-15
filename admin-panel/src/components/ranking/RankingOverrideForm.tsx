@@ -27,6 +27,7 @@ export interface RankingOverrideFormProps {
   readonly contests: readonly RankingOverrideContest[];
   readonly userKeys: readonly RankingOverrideKey[];
   readonly teamKeys: readonly string[];
+  readonly contestKeys: readonly RankingOverrideKey[];
   readonly taskKeys: readonly RankingOverrideKey[];
   readonly contestId: string;
   readonly targetKind: string;
@@ -50,18 +51,21 @@ const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
   freeze: { type: 'number', inputMode: 'numeric' },
 };
 
-// WHY the key options follow the kind: a team is named by its key, a task by the encoded
-// name the projection carries and the whole board by one wildcard, so an operator never
-// has to type a key the chosen target cannot hold.
+// WHY the key options follow the kind: a team is named by its key, a task by the composite
+// contest/task key the projection carries, a contest by the encoded contest name the board
+// files its tasks under, and the whole board by one wildcard, so an operator never has to
+// type a key the chosen target cannot hold.
 function keyOptions(
   kind: string,
   userKeys: readonly RankingOverrideKey[],
   teamKeys: readonly string[],
+  contestKeys: readonly RankingOverrideKey[],
   taskKeys: readonly RankingOverrideKey[],
 ): readonly RankingOverrideKey[] {
   if (kind === 'team') return teamKeys.map((name) => ({ key: name, label: name }));
   if (kind === 'ranking') return [{ key: '*', label: '*' }];
   if (kind === 'task') return taskKeys;
+  if (kind === 'contest') return contestKeys;
   return userKeys;
 }
 
@@ -72,6 +76,7 @@ export function RankingOverrideForm({
   contests,
   userKeys,
   teamKeys,
+  contestKeys,
   taskKeys,
   contestId,
   targetKind,
@@ -79,9 +84,14 @@ export function RankingOverrideForm({
 }: RankingOverrideFormProps): React.JSX.Element {
   const [kind, setKind] = useState(targetKind === '' ? 'user' : targetKind);
   const [action, setAction] = useState('hide');
-  const keys = keyOptions(kind, userKeys, teamKeys, taskKeys);
+  const keys = keyOptions(kind, userKeys, teamKeys, contestKeys, taskKeys);
   const verbs = KIND_VERBS[kind] ?? OVERRIDE_ACTIONS;
-  const hideLabel = kind === 'task' ? copy.actionHideTask : copy.actionHide;
+  const hideLabel =
+    kind === 'task'
+      ? copy.actionHideTask
+      : kind === 'contest'
+        ? copy.actionHideContest
+        : copy.actionHide;
   const valueControl = VALUE_CONTROLS[action];
   return (
     <form action={saveRankingOverride}>
@@ -115,6 +125,7 @@ export function RankingOverrideForm({
           <option value="team">{copy.targetTeam}</option>
           <option value="ranking">{copy.targetRanking}</option>
           <option value="task">{copy.targetTask}</option>
+          <option value="contest">{copy.targetContest}</option>
         </SelectField>
         <SelectField
           id="ranking-override-key"

@@ -121,6 +121,7 @@ export interface RankingOverrideOptions {
   contests: Array<{ id: number; name: string }>;
   userKeys: Array<{ key: string; label: string }>;
   teamKeys: string[];
+  contestKeys: Array<{ key: string; label: string }>;
   taskKeys: Array<{ key: string; label: string }>;
 }
 
@@ -149,21 +150,44 @@ export async function getRankingOverrideOptions(): Promise<RankingOverrideOption
   const teamKeys = [
     ...new Set(entries.map((entry) => entry.teamName).filter((name): name is string => name !== null)),
   ].sort();
-  const taskKeys = await listOverrideTaskKeys(contests.map((contest) => contest.id));
-  return { contests, userKeys, teamKeys, taskKeys };
+  const contestKeys = listOverrideContestKeys(contests);
+  const taskKeys = await listOverrideTaskKeys(contests);
+  return { contests, userKeys, teamKeys, contestKeys, taskKeys };
 }
 
 /**
- * WHY every contest's tasks, each keyed the way the board keys it: an override is filed
- * against one contest but the board drops a task column by its encoded name alone, so
- * the picker offers every key the board can drop rather than only the ones one
- * contest's task list happens to hold.
+ * WHY one entry per contest, keyed the way the projection files a task under a contest: a
+ * contest hide drops the contest and every task filed under it, so the picker offers the
+ * encoded contest name the board keys the group by rather than the numeric contest id.
+ */
+function listOverrideContestKeys(
+  contests: ReadonlyArray<{ id: number; name: string }>,
+): Array<{ key: string; label: string }> {
+  return [...new Map(contests.map((contest) => [encodeId(contest.name), contest.name])).entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+/**
+ * WHY one entry per (contest, task) membership: a task may sit in many contests, and a
+ * composite key hides it only inside the contest the key names, so the picker offers one
+ * entry per pair — `${contestKey}/${taskKey}`, both encoded — rather than one per task name.
+ * The membership read stays on contest_tasks, which is where the many-to-many lives.
  */
 async function listOverrideTaskKeys(
-  contestIds: readonly number[],
+  contests: ReadonlyArray<{ id: number; name: string }>,
 ): Promise<Array<{ key: string; label: string }>> {
-  const perContest = await Promise.all(contestIds.map((contestId) => listRankingTasks(contestId)));
-  const byKey = new Map(perContest.flat().map((task) => [encodeId(task.name), task.name]));
+  const perContest = await Promise.all(
+    contests.map(async (contest) => {
+      const tasks = await listRankingTasks(contest.id);
+      return tasks.map((task) => ({ contest, task }));
+    }),
+  );
+  const byKey = new Map<string, string>();
+  for (const { contest, task } of perContest.flat()) {
+    const key = `${encodeId(contest.name)}/${encodeId(task.name)}`;
+    byKey.set(key, `${contest.name} / ${task.name}`);
+  }
   return [...byKey.entries()]
     .map(([key, label]) => ({ key, label }))
     .sort((left, right) => left.key.localeCompare(right.key));
