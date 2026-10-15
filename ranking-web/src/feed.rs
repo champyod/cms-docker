@@ -148,6 +148,9 @@ pub fn entity_kind(table: &str) -> &str {
         "ranking_tasks" => "task",
         "ranking_teams" => "team",
         "ranking_users" => "user",
+        // A tombstone is a change to the user it hides, so it names the same kind
+        // as the row it takes off the board.
+        "ranking_hidden" => "user",
         "ranking_submissions" => "submission",
         "ranking_subchanges" => "subchange",
         other => other,

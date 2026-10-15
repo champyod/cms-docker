@@ -83,6 +83,7 @@ fn the_projection_table_names_map_to_the_page_vocabulary() {
     assert_eq!(entity_kind("ranking_tasks"), "task");
     assert_eq!(entity_kind("ranking_teams"), "team");
     assert_eq!(entity_kind("ranking_users"), "user");
+    assert_eq!(entity_kind("ranking_hidden"), "user");
 }
 
 #[test]
