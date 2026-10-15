@@ -4,7 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
-import { readConfigFile } from '@/lib/config-file';
+import { loadConfiguredWorkers } from '@/lib/worker-stats';
 import { recordAudit } from '@/lib/audit';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
@@ -60,65 +60,7 @@ function parseWorkersFromBlock(block: string): Array<{ host: string; port: numbe
   return workers;
 }
 
-function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: number }> {
-  const workers: Array<{ index: number; host: string; port: number }> = [];
-  const lines = content.split('\n');
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#')) continue;
-
-    const match = trimmed.match(/^WORKER_(\d+)=(.+):(\d+)$/);
-    if (!match) continue;
-
-    workers.push({
-      index: parseInt(match[1], 10),
-      host: match[2],
-      port: parseInt(match[3], 10)
-    });
-  }
-
-  return workers
-    .sort((a, b) => a.index - b.index)
-    .map(({ host, port }) => ({ host, port }));
-}
-
 type WorkerEntry = { host: string; port: number };
-
-/** The endpoints one source declares, and the refusal when it exists but could not be read. */
-interface WorkerSource {
-  readonly workers: WorkerEntry[];
-  readonly unreadable: string[];
-}
-
-/** One source's endpoints: cms.toml's Worker block first, then the generated WORKER_n rows. */
-async function parseWorkerSource(filePath: string): Promise<WorkerSource> {
-  const read = await readConfigFile(filePath);
-  if (read.kind === 'unreadable') return { workers: [], unreadable: [read.reason] };
-  if (read.kind === 'absent') return { workers: [], unreadable: [] };
-  const workerBlock = extractWorkerBlock(read.content);
-  if (workerBlock) {
-    const workers = parseWorkersFromBlock(workerBlock);
-    if (workers.length > 0) return { workers, unreadable: [] };
-  }
-  return { workers: parseWorkersFromEnvCore(read.content), unreadable: [] };
-}
-
-/**
- * The worker endpoints, taken from cms.toml when it declares any and from the generated env file
- * otherwise. WHY the refusals travel with the endpoints: a source that exists but cannot be read
- * is not an empty source, and reporting only its absence renders a permission problem as none.
- */
-async function readWorkerEndpoints(configPath: string | null): Promise<WorkerSource> {
-  const unreadable: string[] = [];
-  const candidates = [...(configPath === null ? [] : [configPath]), path.join(getRepoRoot(), '.env')];
-  for (const candidate of candidates) {
-    const source = await parseWorkerSource(candidate);
-    unreadable.push(...source.unreadable);
-    if (source.workers.length > 0) return { workers: source.workers, unreadable };
-  }
-  return { workers: [], unreadable };
-}
 
 /** The configured worker endpoints and the fault that emptied them, if any. */
 export interface WorkerConfigRead {
@@ -130,9 +72,12 @@ export async function getWorkers(): Promise<WorkerConfigRead> {
   await ensurePermission('settings:read');
   await ensurePermission('settings:list');
 
-  const { workers, unreadable } = await readWorkerEndpoints(await getCmsConfigPath());
-  const error = workers.length === 0 && unreadable.length > 0
-    ? `Worker configuration could not be read: ${unreadable.join(', ')}`
+  // Why this reader and not a parse of its own: the fleet has one source, so the endpoints the
+  // operator edits here and the readings the panel joins them to are the same shards.
+  const fleet = await loadConfiguredWorkers(getRepoRoot());
+  const workers: WorkerEntry[] = fleet.workers.map(({ host, port }) => ({ host, port }));
+  const error = workers.length === 0 && fleet.unreadable.length > 0
+    ? `Worker configuration could not be read: ${fleet.unreadable.join(', ')}`
     : null;
 
   // Why count and not the endpoints: these are the deployment's internal hosts and ports, and

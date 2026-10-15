@@ -27,6 +27,10 @@ const TOML_CONTENT = [
   `POSTGRES_PASSWORD = "${TOML_SECRET}"`,
   '[admin]',
   'DEPLOYMENT_TYPE = "img"',
+  // Why the fleet sits in config.toml: the panel reads worker endpoints from there, and not from
+  // cms.toml, so the canary host has to be reachable through the reader the action actually uses.
+  '[worker]',
+  `WORKER_0 = "${WORKER_HOST}:9000"`,
   '',
 ].join('\n');
 
@@ -99,6 +103,9 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
     exec: (_command: string, callback: (error: null, result: { stdout: string; stderr: string }) => void): void => {
       callback(null, { stdout: `LOGSTREAM ${LOG_SECRET}`, stderr: '' });
     },
+    // Why present but unused: the fleet reader promisifies execFile at module load, and a mock
+    // that omits it makes the module throw before any action under test can be loaded.
+    execFile: vi.fn(),
   }));
   vi.doMock('@/lib/container-restart-store', () => ({
     containerRestartConfigPath: vi.fn(() => '/repo/restart-config.json'),

@@ -110,8 +110,11 @@ interface ConfiguredFleet {
  *
  * WHY the read failures are kept: a source that exists but cannot be read is not an empty
  * source, and folding the two together renders a permission problem as a worker-less fleet.
+ *
+ * Why exported: the worker-config action reads the same fleet through here, so the list the
+ * operator edits and the readings the panel shows can never come from two different parsers.
  */
-async function loadConfiguredWorkers(repoRoot: string): Promise<ConfiguredFleet> {
+export async function loadConfiguredWorkers(repoRoot: string): Promise<ConfiguredFleet> {
   const merged = new Map<number, ConfiguredWorker>();
   const unreadable: string[] = [];
   for (const source of WORKER_CONFIG_SOURCES) {
