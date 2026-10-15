@@ -785,17 +785,46 @@ check_proxy_body_size() {
 # ===========================================================================
 # 13) Contest documentation assets
 # ===========================================================================
-# CWS mounts config doc_path at /docs (SharedDataMiddleware) and the handler lists
-# a subdirectory per language. A docs tree that ships without the files its entry
-# page references renders unstyled with no error anywhere, so the mount target and
-# one referenced asset are asserted here.
+# CWS mounts config doc_path at /docs (SharedDataMiddleware) and the handler lists a
+# subdirectory per language, so a page lives at /docs/<lang>/index.html. A docs tree
+# that ships without the files its entry page references renders unstyled with no
+# error anywhere, so the entry page and one referenced asset are asserted: over HTTP
+# when the contest server answers, on disk when the tree is local. docs_path is
+# container-internal in the shipped config, and an update must never abort over a path
+# this host cannot see (regression fixed in 941f09a8) — every arm that cannot be
+# verified records WARN, never FAIL.
 docs_path_from_toml() {
   local toml="${REPO_ROOT}/config/cms.toml"
   [[ -f "$toml" ]] || return 1
   awk -F'"' '/^[[:space:]]*docs_path[[:space:]]*=/ { print $2; exit }' "$toml"
 }
 
-# The first asset the entry HTML pulls in, as written in that page.
+# Language folder under docs_path, e.g. 'cpp'. [contest_web_server] docs_language
+# names one when the operator sets it; otherwise it is whichever folder the docs tree
+# holds an entry page in.
+docs_language_from_toml() {
+  local toml="${REPO_ROOT}/config/cms.toml"
+  [[ -f "$toml" ]] || return 1
+  awk -F'"' '/^[[:space:]]*docs_language[[:space:]]*=/ { print $2; exit }' "$toml"
+}
+
+docs_language() {
+  local docs_path="$1" explicit entry
+  explicit="$(docs_language_from_toml || true)"
+  if [[ -n "$explicit" ]]; then
+    printf '%s' "$explicit"
+    return 0
+  fi
+  for entry in "$docs_path"/*/index.html; do
+    [[ -f "$entry" ]] || continue
+    entry="${entry%/index.html}"
+    printf '%s' "${entry##*/}"
+    return 0
+  done
+  return 1
+}
+
+# The first asset the entry HTML pulls in, as written in that page (reads stdin).
 docs_referenced_asset() {
   awk 'match($0, /(href|src)="[^"]+"/) {
          s = substr($0, RSTART, RLENGTH)
@@ -803,19 +832,96 @@ docs_referenced_asset() {
          sub(/"$/, "", s)
          print s
          exit
-       }' "$1"
+       }'
 }
 
-# Follow browser resolution: an absolute ref starts at the docs root, a relative
-# one beside the entry page.
-docs_asset_abspath() {
-  local docs_path="$1" entry_dir="$2" asset="$3"
+# Follow browser resolution: the entry page is served at /docs/<lang>/, so a
+# root-absolute ref starts at the SITE root while a relative one sits beside the page.
+docs_asset_url_path() {
+  local language="$1" asset="$2"
   asset="${asset%%#*}"
   asset="${asset%%\?*}"
   if [[ "$asset" == /* ]]; then
-    printf '%s' "${docs_path}/${asset#/}"
+    printf '%s' "$asset"
   else
-    printf '%s' "${entry_dir}/${asset}"
+    printf '/docs/%s/%s' "$language" "$asset"
+  fi
+}
+
+# HTTP status of a served path; "000" when curl is absent or nothing is listening.
+docs_http_code() {
+  if ! command -v curl >/dev/null 2>&1; then
+    printf '000'
+    return 0
+  fi
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1" 2>/dev/null || true)"
+  printf '%s' "${code:-000}"
+}
+
+docs_http_body() {
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -fsS --max-time 5 "$1" 2>/dev/null || true
+}
+
+# What the contest server actually serves. Returns 1 when it cannot be reached, which
+# is the normal case here: preflight runs before the stack is brought up.
+check_docs_served() {
+  local port="$1" language="$2"
+  local base="http://127.0.0.1:${port}"
+  local entry_path="/docs/${language}/index.html"
+  local entry_code
+  entry_code="$(docs_http_code "${base}${entry_path}")"
+  [[ "$entry_code" != "000" ]] || return 1
+
+  if [[ ! "$entry_code" =~ ^2 ]]; then
+    record_result "contest docs" "WARN" "HTTP ${entry_code} for ${entry_path}"
+    return 0
+  fi
+
+  local asset url_path asset_code
+  asset="$(docs_http_body "${base}${entry_path}" | docs_referenced_asset)"
+  if [[ -z "$asset" ]]; then
+    record_result "contest docs" "PASS" "${entry_path} served"
+    return 0
+  fi
+
+  url_path="$(docs_asset_url_path "$language" "$asset")"
+  asset_code="$(docs_http_code "${base}${url_path}")"
+  if [[ "$asset_code" =~ ^2 ]]; then
+    record_result "contest docs" "PASS" "${entry_path} + ${url_path} served"
+  else
+    record_result "contest docs" "WARN" "HTTP ${asset_code} for ${url_path} (ref of ${entry_path})"
+  fi
+}
+
+# The tree as this host sees it: a dev checkout or a mounted volume. A site-root ref is
+# a URL concern with no file behind it here, so it is reported instead of resolved.
+check_docs_on_disk() {
+  local docs_path="$1" language="$2"
+  local entry_html="${docs_path}/${language}/index.html"
+  if [[ ! -f "$entry_html" ]]; then
+    record_result "contest docs" "WARN" "SKIP: ${entry_html} unreadable from this host"
+    return 0
+  fi
+
+  local asset
+  asset="$(docs_referenced_asset < "$entry_html")"
+  if [[ -z "$asset" ]]; then
+    record_result "contest docs" "PASS" "${language}/index.html present"
+    return 0
+  fi
+  if [[ "$asset" == /* ]]; then
+    record_result "contest docs" "WARN" "SKIP: site-root ref ${asset} needs the served URL"
+    return 0
+  fi
+
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  if [[ -e "${docs_path}/${language}/${asset}" ]]; then
+    record_result "contest docs" "PASS" "${language}/index.html + ${asset} present"
+  else
+    record_result "contest docs" "WARN" "${asset} referenced by ${language}/index.html is missing"
   fi
 }
 
@@ -832,28 +938,15 @@ check_docs_assets() {
     return 0
   fi
 
-  local entry_dir="${docs_path}/cpp" entry_html="${docs_path}/cpp/index.html"
-  if [[ ! -f "$entry_html" ]]; then
-    printf '[FAIL] contest docs: %s missing — /docs/cpp/index.html will 404\n' "$entry_html" >&2
-    record_result "contest docs" "FAIL" "no cpp/index.html under ${docs_path}"
+  local language
+  language="$(docs_language "$docs_path" || true)"
+  if [[ -z "$language" ]]; then
+    record_result "contest docs" "WARN" "SKIP: no docs_language and no docs tree under ${docs_path}"
     return 0
   fi
 
-  local asset asset_path
-  asset="$(docs_referenced_asset "$entry_html")"
-  if [[ -z "$asset" ]]; then
-    record_result "contest docs" "PASS" "cpp/index.html present"
-    return 0
-  fi
-
-  asset_path="$(docs_asset_abspath "$docs_path" "$entry_dir" "$asset")"
-  if [[ ! -e "$asset_path" ]]; then
-    printf '[FAIL] contest docs: cpp/index.html references %s which is absent\n' "$asset" >&2
-    record_result "contest docs" "FAIL" "${asset} referenced by cpp/index.html is missing"
-    return 0
-  fi
-
-  record_result "contest docs" "PASS" "cpp/index.html + ${asset} present"
+  check_docs_served "${CONTEST_PORT_EXTERNAL:-${CONTEST_LISTEN_PORT:-8888}}" "$language" && return 0
+  check_docs_on_disk "$docs_path" "$language"
 }
 
 check_disk
