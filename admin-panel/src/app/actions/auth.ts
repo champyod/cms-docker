@@ -23,7 +23,7 @@ import {
   recordFailedAttempt,
 } from '@/lib/auth-rate-limit';
 import { buildCaptchaRequiredState, extractCaptchaProvider, extractCaptchaToken, isCaptchaRequiredForIp, shouldRequireCaptcha } from '@/lib/auth-captcha-helpers';
-import { parseForwardedFor, resolveClientIp } from '@/lib/request-identity';
+import { parseClientAddress, resolveClientIp } from '@/lib/request-identity';
 import type { LoginAttemptContext } from '@/lib/login-attempts';
 import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
@@ -65,7 +65,12 @@ async function resolveRequestIdentity(
   username: string,
 ): Promise<{ readonly bucketKeys: readonly string[]; readonly attempt: LoginAttemptContext }> {
   const requestHeaders = await headers();
-  const ip = parseForwardedFor(requestHeaders.get('x-forwarded-for'));
+  // Same source as resolveClientIp: the edge-reported address, not the first
+  // forwarded hop, so the bucket is keyed on the client and not the proxy.
+  const ip = parseClientAddress(
+    requestHeaders.get('x-real-ip'),
+    requestHeaders.get('x-forwarded-for'),
+  );
   const accountKey = buildAccountBucketKey(username, ip);
   const bucketKeys = isLoopbackIp(ip) ? [accountKey] : [accountKey, buildIpBucketKey(ip)];
   return {
