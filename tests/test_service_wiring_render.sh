@@ -100,7 +100,7 @@ rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
 grep -q 'server_name routes.example.com;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "renders the contest server block" || no "missing contest server block"
-grep -q '^primary|a.example.com|/ /admin /ranking$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
+grep -q '^primary|a.example.com|/ /admin /ranking /login /ws$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
   && ok "publishes the front's own vhosts with the label that names the fragment and the paths it serves" || no "missing the front vhost map"
 grep -q 'proxy_pass http://web-1:8888;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "proxies to the registered upstream" || no "wrong or missing upstream"
@@ -298,8 +298,12 @@ rc=$?
 fragment="${SB}/config/generated/locations-primary.conf"
 grep -q 'location ^~ /beta/ {' "$fragment" 2>/dev/null \
   && ok "renders the exposure into the primary vhost's fragment" || no "missing the fragment location"
-grep -q 'proxy_pass http://web-9:8888/;' "$fragment" 2>/dev/null \
-  && ok "dials the registered upstream from the fragment" || no "wrong or missing fragment upstream"
+grep -q 'set \$cms_primary web-9:8888;' "$fragment" 2>/dev/null \
+  && ok "dials the registered upstream through the vhost's own variable" || no "wrong or missing fragment upstream target"
+grep -q 'rewrite ^/beta/(.*)\$ /\$1 break;' "$fragment" 2>/dev/null \
+  && ok "strips the prefix the variable target cannot" || no "missing the fragment rewrite"
+grep -q 'proxy_pass http://\$cms_primary;' "$fragment" 2>/dev/null \
+  && ok "proxies to the variable, so the shared resolver answers it per request" || no "missing the variable proxy_pass"
 grep -qE 'listen |server_name |ssl_certificate ' "$fragment" 2>/dev/null \
   && no "the fragment carries listener lines the vhost already declares" \
   || ok "the fragment carries locations only"
@@ -354,7 +358,7 @@ printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/gr
 run_sync
 rc=$?
 [[ ${rc} -ne 0 ]] && ok "refuses the path the renamed key now claims" || no "the guard did not follow RANKING_ROUTE_PATH"
-grep -q '^primary|a.example.com|/ /admin /board$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
+grep -q '^primary|a.example.com|/ /admin /board /login /ws$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
   && ok "publishes the paths the vhost's own block serves" || no "the map does not carry the vhost's paths"
 
 FREED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/ranking","tls":true,"tailnet":null}]}'

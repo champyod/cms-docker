@@ -2,11 +2,10 @@
  * Renders a resolved route set into the two artifacts a deployment needs: the
  * nginx server blocks and the tailnet serve config for the exposed names.
  *
- * WHY validation lives here: every value interpolated below comes from the
- * database, so this module is the boundary where operator input becomes running
- * configuration. A newline or a brace reaching nginx is a config injection, and a
- * hostname reaching serve.json decides a certificate boundary. Both are rejected
- * rather than escaped: a value that needs escaping was never a hostname.
+ * WHY validation lives here: every value below comes from the database and becomes
+ * running configuration. A newline or brace reaching nginx is a config injection, and
+ * a hostname reaching serve.json decides a certificate boundary; both are rejected
+ * rather than escaped, because a value that needs escaping was never a hostname.
  */
 import type { Route } from './service-wiring';
 
@@ -21,6 +20,9 @@ const HOSTNAME_PATTERN = /^[a-z0-9]([a-z0-9.-]{0,251}[a-z0-9])?$/;
 // A tailscale node name also becomes a config file name, so it stays a single DNS label.
 const TAILNET_NODE_PATTERN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const PATH_PATTERN = /^\/[A-Za-z0-9._~\-/]*$/;
+// A route-table label names a fragment file and the `$cms_<label>` target inside it, so it is an
+// nginx variable name and nothing more.
+const FRAGMENT_LABEL_PATTERN = /^[a-z][a-z0-9_]*$/;
 const TLS_LISTEN_PORT = 443;
 const PLAIN_LISTEN_PORT = 80;
 const TS_CERT_DOMAIN_PLACEHOLDER = '${TS_CERT_DOMAIN}';
@@ -28,10 +30,8 @@ const TS_CERT_DOMAIN_PLACEHOLDER = '${TS_CERT_DOMAIN}';
 /**
  * Where a TLS server block gets its certificate.
  *
- * WHY this is a parameter and not a constant: two fronts terminate here with
- * different layouts. The contest proxy keeps a pair under /etc/nginx/ssl, while the
- * domain proxy reads a certbot lineage under /etc/letsencrypt/live plus a shared ssl
- * parameter file. Hard-coding either one makes the other refuse to start.
+ * WHY a parameter and not a constant: the contest proxy reads /etc/nginx/ssl while the domain proxy
+ * reads a certbot lineage under /etc/letsencrypt/live, so hard-coding either makes the other fail.
  */
 export interface CertificateSpec {
   certificate: string;
@@ -82,10 +82,34 @@ export function certificateLineage(hostname: string): string {
   return labels.length <= 2 ? labels.join('.') : labels.slice(-2).join('.');
 }
 
-/** A non-root prefix proxies with a trailing slash so nginx strips it before the app sees it. */
-function proxyPassLine(path: string, upstream: string): string {
-  const target = path === '/' ? upstream : `${upstream}/`;
-  return `        proxy_pass http://${target};`;
+/**
+ * The location block for one route: `/` owns the root, a prefix strips and redirects into it.
+ *
+ * WHY `target`: a fragment dials the same `$cms_*` variable the route table dials, so the shared
+ * resolver answers it per request. A literal upstream is resolved once at load and would keep dialling
+ * an address the container no longer holds; a variable target passes the URI and needs the rewrite.
+ */
+function locationLines(route: Route, target?: string): string[] {
+  const path = assertSafePath(route.path);
+  const proxy = target === undefined
+    ? [`        proxy_pass http://${path === '/' ? route.upstream : `${route.upstream}/`};`]
+    : [
+        `        set ${target} ${route.upstream};`,
+        ...(path === '/' ? [] : [`        rewrite ^${path}/(.*)$ /$1 break;`]),
+        `        proxy_pass http://${target};`,
+        '        proxy_redirect off;',
+      ];
+  const security = LOCATION_SECURITY_HEADERS.map((header) => `        ${header}`);
+  if (path === '/') return ['    location / {', ...proxy, ...security, '    }'];
+  return [
+    `    location = ${path} {`,
+    `        return 301 ${path}/;`,
+    '    }',
+    `    location ^~ ${path}/ {`,
+    ...proxy,
+    ...security,
+    '    }',
+  ];
 }
 
 // The upstream a generated route forwards to must see the same client identity and scheme
@@ -119,33 +143,13 @@ function renderServerBlock(hostname: string, routes: Route[], certificate: Certi
   return lines.join('\n');
 }
 
-/** The location block for one route: `/` owns the root, a prefix strips and redirects into it. */
-function locationLines(route: Route): string[] {
-  const path = assertSafePath(route.path);
-  const security = LOCATION_SECURITY_HEADERS.map((header) => `        ${header}`);
-  if (path === '/') {
-    return ['    location / {', proxyPassLine(path, route.upstream), ...security, '    }'];
-  }
-  return [
-    `    location = ${path} {`,
-    `        return 301 ${path}/;`,
-    '    }',
-    `    location ^~ ${path}/ {`,
-    proxyPassLine(path, route.upstream),
-    ...security,
-    '    }',
-  ];
-}
-
 /**
- * One server block per hostname, its root owner first and every path exposure a location
- * inside it. WHY grouped: a path exposure joins its hostname's vhost rather than opening a
- * second block for the same name, so one vhost per name still gets the front's certificate
- * and headers, and a shorter prefix cannot win over a longer one.
+ * One server block per hostname, its root owner first and every path exposure a location inside it.
+ * WHY grouped: a path exposure joins its hostname's vhost rather than opening a second block for the
+ * same name, so one vhost per name still gets the front's certificate and headers.
  *
- * WHY a fragment route is skipped: its hostname is one the front already serves, so the listener,
- * the server_name and the certificate are that vhost's — and a second block for the same name is
- * the very thing nginx discards. Its locations go to `renderLocationFragments` instead.
+ * WHY a fragment route is skipped: its hostname is one the front already serves, so the listener, the
+ * server_name and the certificate are that vhost's; its locations go to `renderLocationFragments`.
  */
 export function renderNginxServers(
   routes: Route[],
@@ -169,14 +173,19 @@ export function renderNginxServers(
 /**
  * The locations a registry exposure adds to the front's own vhost, as the lines that vhost includes.
  *
- * WHY locations only, and only for one label: the include sits inside a block that already declares
- * the listener, the server_name, the certificate and the front's headers, so a `server`, a `listen`
- * or a certificate line here would either be rejected or silently change which vhost answers.
+ * WHY locations only: the include sits inside a block that already declares the listener, the
+ * server_name, the certificate and the headers, so a `server` or `listen` line here would be rejected
+ * or silently change which vhost answers. WHY the label is validated: it names both the file this
+ * renders into and the `$cms_<label>` target its locations dial.
  */
 export function renderLocationFragments(routes: Route[], label: string): string {
+  if (!FRAGMENT_LABEL_PATTERN.test(label)) {
+    throw new RenderError(`unsafe front vhost label: ${JSON.stringify(label)}`);
+  }
+  const target = `$cms_${label}`;
   return routes
     .filter((route) => route.fragmentLabel === label)
-    .map((route) => locationLines(route).join('\n'))
+    .map((route) => locationLines(route, target).join('\n'))
     .join('\n');
 }
 

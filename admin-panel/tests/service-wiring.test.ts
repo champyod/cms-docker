@@ -348,7 +348,9 @@ describe('renderLocationFragments', () => {
     const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com|/ /admin']);
     const out = renderLocationFragments(routes, 'primary');
     expect(out).toContain('location ^~ /beta/ {');
-    expect(out).toContain('proxy_pass http://web-3:8888/;');
+    expect(out).toContain('set $cms_primary web-3:8888;');
+    expect(out).toContain('rewrite ^/beta/(.*)$ /$1 break;');
+    expect(out).toContain('proxy_pass http://$cms_primary;');
     expect(out).toContain('add_header Strict-Transport-Security "max-age=300; includeSubDomains" always;');
     expect(out).not.toContain('server {');
     expect(out).not.toContain('listen ');
