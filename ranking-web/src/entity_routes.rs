@@ -66,7 +66,7 @@ async fn list(state: AppState, kind: Kind) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
-    match entities::list_body(db.pool(), kind).await {
+    match entities::list_body(db.pool(), kind, state.config().contest_id).await {
         Ok(body) => stamped(bytes_response(body)),
         Err(error) => refuse(&error.to_string()),
     }

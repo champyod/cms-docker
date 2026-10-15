@@ -12,6 +12,9 @@ const TARGET_USER: &str = "user";
 const TARGET_TEAM: &str = "team";
 /// The whole-board target: its key is always `*`, and only hide/freeze apply to it.
 const TARGET_RANKING: &str = "ranking";
+/// A task column: its key is the encoded task name the projection carries, and only
+/// `hide` applies to it.
+const TARGET_TASK: &str = "task";
 
 /// The six actions the panel may write, taken from dictionaries/en.json.
 /// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
@@ -100,6 +103,11 @@ pub struct Overrides {
     frozen_at: Option<i64>,
     /// A `hide` on the whole-board target. The assembly reads it to blank the board.
     board_hidden: bool,
+    /// The task keys a `hide` on the task target drops. WHY it is not a `Sides`: a task
+    /// is neither a user nor a team, so it has no half of the board to belong to, and the
+    /// entity list and the ledger read the same set to drop the column, its scores and
+    /// its history together.
+    hidden_tasks: HashSet<String>,
 }
 
 impl Overrides {
@@ -148,9 +156,20 @@ impl Overrides {
         self.board_hidden
     }
 
+    /// Whether a `hide` override drops the task, by the key the board files it under.
+    /// Read by the entity list and the ledger assembly, which is what makes one hide
+    /// drop the column and its scores rather than only one of the two.
+    pub fn hides_task(&self, key: &str) -> bool {
+        self.hidden_tasks.contains(key)
+    }
+
     fn fold_row(&mut self, row: &OverrideRow) {
         if row.target_kind == TARGET_RANKING {
             self.fold_board_row(row);
+            return;
+        }
+        if row.target_kind == TARGET_TASK {
+            self.fold_task_row(row);
             return;
         }
         let Some(kind) = TargetKind::from_wire(&row.target_kind) else {
@@ -184,6 +203,21 @@ impl Overrides {
                 true
             }
             ACTION_FREEZE => self.fold_freeze(&row.payload),
+            _ => false,
+        };
+        if !folded {
+            self.skipped += 1;
+        }
+    }
+
+    /// The task target: `hide` drops the column. Every other action names a user, a team
+    /// or the whole board, so on `task` it is refused and counted.
+    fn fold_task_row(&mut self, row: &OverrideRow) {
+        let folded = match row.action.as_str() {
+            ACTION_HIDE => {
+                self.hidden_tasks.insert(row.target_key.clone());
+                true
+            }
             _ => false,
         };
         if !folded {
@@ -308,5 +342,50 @@ mod tests {
     fn unknown_verbs_survive_the_serve() {
         let kept = serde_json::to_string(&row("user", "bob", "frob", None)).unwrap();
         assert!(kept.contains("\"action\":\"frob\""));
+    }
+
+    fn override_row(kind: &str, key: &str, action: &str) -> OverrideRow {
+        OverrideRow {
+            target_kind: kind.to_string(),
+            target_key: key.to_string(),
+            action: action.to_string(),
+            payload: None,
+        }
+    }
+
+    /// A task hide drops the whole board column, so it folds like a hide instead of
+    /// being counted as an unreadable target the way an unknown kind is.
+    #[test]
+    fn a_task_hide_row_hides_the_task() {
+        let overrides = Overrides::fold(&[
+            override_row("task", "t0", "hide"),
+            override_row("task", "t1", "hide"),
+        ]);
+
+        assert!(overrides.hides_task("t0"), "the hide drops the named task");
+        assert!(overrides.hides_task("t1"), "each hide names its own task");
+        assert!(!overrides.hides_task("t2"), "a task with no override stays");
+        assert_eq!(overrides.skipped(), 0, "a task hide is not a malformed row");
+    }
+
+    /// A task is a column and not a row, so every verb but hide names something a task
+    /// cannot have: the row is refused and counted rather than folded into the board.
+    #[test]
+    fn a_non_hide_action_on_a_task_is_refused() {
+        let overrides = Overrides::fold(&[override_row("task", "t0", "rename")]);
+
+        assert!(!overrides.hides_task("t0"), "a refused row hides nothing");
+        assert_eq!(overrides.skipped(), 1, "the refusal is reported");
+    }
+
+    /// The task set is its own, so a task key never reaches a user or a team that
+    /// happens to carry the same key.
+    #[test]
+    fn a_task_hide_is_not_a_user_or_team_hide() {
+        let overrides = Overrides::fold(&[override_row("task", "shared", "hide")]);
+
+        assert!(overrides.hides_task("shared"));
+        assert!(!overrides.hides(TargetKind::User, "shared"));
+        assert!(!overrides.hides(TargetKind::Team, "shared"));
     }
 }

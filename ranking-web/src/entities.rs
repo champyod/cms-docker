@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use sqlx::postgres::{PgPool, PgRow};
 
-use crate::store::StoreError;
+use crate::store::{load_overrides, StoreError};
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Contest {
@@ -68,14 +68,26 @@ const TEAMS_ONE: &str = "SELECT key, name FROM ranking_teams WHERE key = $1";
 const USERS_LIST: &str = "SELECT key, f_name, l_name, team FROM ranking_users ORDER BY key";
 const USERS_ONE: &str = "SELECT key, f_name, l_name, team FROM ranking_users WHERE key = $1";
 
-pub async fn list_body(pool: &PgPool, kind: Kind) -> Result<Vec<u8>, StoreError> {
+/// The entity list the page polls. WHY the task list is filtered here: a hidden task keeps
+/// its row, its dataset and its metadata, and only the board drops it, so the column has
+/// to leave the list the page builds from rather than the row itself.
+pub async fn list_body(
+    pool: &PgPool,
+    kind: Kind,
+    contest_id: Option<i64>,
+) -> Result<Vec<u8>, StoreError> {
     match kind {
         Kind::Contest => {
             let rows = rows::<Contest>(pool, CONTESTS_LIST).await?;
             encode(&map_by_key(rows))
         }
         Kind::Task => {
-            let rows = rows::<Task>(pool, TASKS_LIST).await?;
+            let overrides = load_overrides(pool, contest_id).await?;
+            let rows: Vec<Task> = rows::<Task>(pool, TASKS_LIST)
+                .await?
+                .into_iter()
+                .filter(|task| !overrides.hides_task(&task.key))
+                .collect();
             encode(&map_by_key(rows))
         }
         Kind::Team => {

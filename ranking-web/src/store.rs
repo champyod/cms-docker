@@ -196,7 +196,7 @@ async fn assemble_ledger(
     users: &BTreeMap<String, UserNames>,
     overrides: &Overrides,
 ) -> Result<Ledger, StoreError> {
-    let tasks = load_tasks(pool).await?;
+    let tasks = load_tasks(pool, overrides).await?;
     let submissions = load_submissions(pool).await?;
     let subchanges = load_subchanges(pool).await?;
     let teams: BTreeMap<String, String> = users
@@ -223,13 +223,18 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
     Ok(row)
 }
 
-async fn load_tasks(pool: &PgPool) -> Result<Vec<TaskMode>, StoreError> {
+/// The task modes the ledger replays. WHY a hidden task is dropped here and not filtered
+/// out later: the mode is what a submission resolves against, so without it the task's
+/// submissions, scores and history never enter the ledger at all, and the hide reaches
+/// the total the board prints rather than only the column the page draws.
+async fn load_tasks(pool: &PgPool, overrides: &Overrides) -> Result<Vec<TaskMode>, StoreError> {
     let rows = sqlx::query_as::<_, TaskRow>(
         "SELECT key, score_mode FROM ranking_tasks ORDER BY display_order, key",
     )
     .fetch_all(pool)
     .await?;
     rows.into_iter()
+        .filter(|row| !overrides.hides_task(&row.key))
         .map(|row| {
             let mode = ScoreMode::from_wire(&row.score_mode).ok_or_else(|| {
                 ScoreError::UnknownScoreMode {
@@ -293,7 +298,14 @@ struct OverrideRowRecord {
 /// `hide` override does, so the store folds the tombstones into the one override set
 /// every board path already reads, and `board::is_hidden` governs the ledger and the
 /// team view without a second filter.
-async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overrides, StoreError> {
+///
+/// WHY it is visible to the rest of the crate: the entity list reads the same fold, so a
+/// task hide drops the board column and the ledger's scores from one interpretation of
+/// the override rows rather than two.
+pub(crate) async fn load_overrides(
+    pool: &PgPool,
+    contest_id: Option<i64>,
+) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
         "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
          WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
