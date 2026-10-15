@@ -4,12 +4,14 @@
 # answer while the files it references 404, docs_path is container-internal so the host
 # often cannot read the tree at all, and a root-absolute ref resolves against the SITE
 # root rather than the docs root. Missing docs must never be a hard failure: an update
-# that aborts over them is the regression this locks out.
+# that aborts over them is the regression this locks out. The smoke probe over the same
+# mount is asserted here too — it reports WARN in its matrix and never fails the run.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 PREFLIGHT="${REPO_ROOT}/scripts/__preflight.sh"
+SMOKE="${REPO_ROOT}/scripts/__smoke-test.sh"
 
 pass=0
 fail=0
@@ -175,6 +177,49 @@ if [[ "$(docs_asset_url_path java book.css)" == "/docs/java/book.css" \
   ok "docs_asset_url_path: relative -> docs base, absolute -> site root"
 else
   no "docs_asset_url_path branches"
+fi
+
+# --- the docs smoke probe, which must stay advisory ------------------------
+# probe_contest_docs comes out of __smoke-test.sh; its matrix, log and page fetch are
+# stubbed so the verdict it records is what gets observed.
+declare -a MATRIX=()
+SMOKE_ENTRY=""
+record_matrix() { MATRIX+=("$1|$2|$3|$4"); }
+log_warn() { :; }
+curl() { printf '%s\n' "$SMOKE_ENTRY"; }
+
+missing=0
+for fn in run_curl_warn probe_contest_docs; do
+  body="$(extract_fn "$fn" "$SMOKE")"
+  if [[ -z "$body" ]]; then
+    no "${fn}() extracted from __smoke-test.sh"
+    missing=1
+    continue
+  fi
+  eval "$body"
+done
+[[ $missing -eq 0 ]] || exit 1
+ok "docs smoke probe extracted from __smoke-test.sh"
+
+# 11. docs unreachable -> WARN in the matrix, the run's failure flag untouched
+curl_wait() { return 1; }
+SMOKE_ENTRY='<link rel="stylesheet" href="book.css">'
+MATRIX=(); SMOKE_FAILED=0
+probe_contest_docs 8899
+if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"|WARN|"* && "${MATRIX[*]:-}" != *"|FAIL|"* ]]; then
+  ok "smoke docs probe unreachable -> WARN only, run stays green"
+else
+  no "smoke docs probe unreachable (matrix: ${MATRIX[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
+fi
+
+# 12. docs servable -> PASS records, still no failure flag
+curl_wait() { return 0; }
+MATRIX=(); SMOKE_FAILED=0
+probe_contest_docs 8899
+if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"contest-docs|http|PASS|"* ]]; then
+  ok "smoke docs probe reachable -> PASS, no failure flag"
+else
+  no "smoke docs probe reachable (matrix: ${MATRIX[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

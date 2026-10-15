@@ -294,7 +294,7 @@ Steps:
      a. docker compose -f docker-compose.yml --profile core up -d database -> wait_healthy cms-database 90
      b. remaining core: up log/resource/scoring/checker -> wait_healthy each 120
      c. admin: up admin profile (if in stacks) -> curl_wait 127.0.0.1:\${ADMIN_NEXT_PORT_EXTERNAL:-8891}, :\${ADMIN_PORT_EXTERNAL:-8889}, ranking :\${RANKING_PORT_EXTERNAL:-8890} (120s each)
-     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/cpp/index.html + one asset it references (60s each)
+     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/cpp/index.html + one asset it references (60s each, advisory: WARN only, never fails the run)
      Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)
   5. Result matrix: service | check type | result | duration
   6. Teardown: compose down for requested profiles WITHOUT -v (preserve volumes); on failure dump docker logs --tail 100 to /tmp/cms-smoke-<ts>/; keep up only if SMOKE_KEEP_UP=1
@@ -435,17 +435,40 @@ run_curl_wait() {
   return $rc
 }
 
+# Advisory twin of run_curl_wait: the docs mount is deployment content that may
+# legitimately be absent, so a miss is a WARN in the matrix and never sets
+# SMOKE_FAILED — a docs gap must not turn a previously-green run red.
+# WHY 2>/dev/null around curl_wait: its own timeout line says [FAIL], which would
+# contradict the advisory verdict recorded here.
+run_curl_warn() {
+  local svc="$1"; local url="$2"; local timeout_s="$3"
+  local start dur rc
+  start=$(date +%s)
+  if curl_wait "$url" "$timeout_s" 2>/dev/null; then rc=0; else rc=1; fi
+  dur="$(( $(date +%s) - start ))s"
+  if [[ $rc -eq 0 ]]; then
+    record_matrix "$svc" "http" "PASS" "$dur"
+  else
+    record_matrix "$svc" "http" "WARN" "no 2xx/3xx in ${timeout_s}s"
+    log_warn "${svc}: ${url} did not answer (advisory)"
+  fi
+  return 0
+}
+
 # The /docs mount is separate from the contest root, so the root can answer while
 # every docs asset 404s. Assert the entry page and one referenced asset; the asset
 # name is read from the page so a renamed bundle is followed rather than assumed.
 probe_contest_docs() {
   local port="$1"
   local entry="http://127.0.0.1:${port}/docs/cpp/index.html"
-  run_curl_wait "contest-docs" "$entry" 60 || true
+  run_curl_warn "contest-docs" "$entry" 60
   local asset
   asset="$(curl -fsS "$entry" 2>/dev/null \
     | awk 'match($0, /(href|src)="[^"]+"/) { s = substr($0, RSTART, RLENGTH); sub(/^(href|src)="/, "", s); sub(/"$/, "", s); print s; exit }' || true)"
-  [[ -z "$asset" ]] && return 0
+  if [[ -z "$asset" ]]; then
+    record_matrix "contest-docs-asset" "http" "WARN" "asset ref unreadable"
+    return 0
+  fi
   asset="${asset%%#*}"
   asset="${asset%%\?*}"
   local url
@@ -453,7 +476,7 @@ probe_contest_docs() {
     /*) url="http://127.0.0.1:${port}${asset}" ;;
     *)  url="http://127.0.0.1:${port}/docs/cpp/${asset}" ;;
   esac
-  run_curl_wait "contest-docs-asset" "$url" 60 || true
+  run_curl_warn "contest-docs-asset" "$url" 60
 }
 
 # Failure handler mid-flow
