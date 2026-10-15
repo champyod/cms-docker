@@ -78,6 +78,10 @@ describe('resolveContestBinding', () => {
 });
 
 describe('readContestWebServerShard', () => {
+  function errnoError(code: string): Error {
+    return Object.assign(new Error(code), { code });
+  }
+
   it('reads the shard compose would hand the declared contest web server', async () => {
     mocks.readFile.mockResolvedValue(configWithShard('2'));
     expect(await readContestWebServerShard()).toBe(2);
@@ -91,5 +95,15 @@ describe('readContestWebServerShard', () => {
   it('keeps the default for a value that is not a shard rather than failing the page', async () => {
     mocks.readFile.mockResolvedValue(configWithShard('"first"'));
     expect(await readContestWebServerShard()).toBe(0);
+  });
+
+  it('keeps the default for a deployment that has no config.toml yet', async () => {
+    mocks.readFile.mockRejectedValue(errnoError('ENOENT'));
+    expect(await readContestWebServerShard()).toBe(0);
+  });
+
+  it('reports a config.toml that exists but cannot be read', async () => {
+    mocks.readFile.mockRejectedValue(errnoError('EACCES'));
+    await expect(readContestWebServerShard()).rejects.toThrow(/^EACCES: .*config\.toml$/);
   });
 });

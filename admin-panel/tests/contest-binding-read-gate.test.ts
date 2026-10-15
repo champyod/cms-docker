@@ -74,6 +74,24 @@ describe('the bound contest read carries the config.toml reader parity', () => {
     }));
   });
 
+  it('answers the compose default shard for a deployment with no config.toml yet', async () => {
+    const missing = Object.assign(new Error('config.toml'), { code: 'ENOENT' });
+    const { getBoundContestId } = await loadContestServiceAs('Storage', async () => {
+      throw missing;
+    });
+
+    // Shard 0 names no row of the registry's rows (shard 2), so the row the enabled servers agree
+    // on answers — the read still succeeds, which is the whole point of the default.
+    await expect(getBoundContestId()).resolves.toEqual({
+      success: true,
+      binding: { source: 'registry', contestId: 3, matchedBy: 'consensus' },
+    });
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+      verb: 'config:view',
+      result: 'success',
+    }));
+  });
+
   it('names only the shard key in the config:view row it leaves', async () => {
     const { getBoundContestId } = await loadContestServiceAs('Storage', async () => SHARD_TOML);
     await getBoundContestId();
@@ -101,11 +119,15 @@ describe('the bound contest read carries the config.toml reader parity', () => {
   });
 
   it('records the same failure row the audited reader records', async () => {
+    const refusal = Object.assign(new Error('permission denied'), { code: 'EACCES' });
     const { getBoundContestId } = await loadContestServiceAs('Storage', async () => {
-      throw new Error('EACCES: permission denied');
+      throw refusal;
     });
 
-    await expect(getBoundContestId()).resolves.toEqual({ success: false, error: 'EACCES: permission denied' });
+    const result = await getBoundContestId();
+    expect(result.success).toBe(false);
+    // The refusal names the file and its errno, the way config-file's own fault does.
+    expect(result.error).toMatch(/^EACCES: .*config\.toml$/);
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({
       verb: 'config:view',
       entity: 'config',

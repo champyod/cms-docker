@@ -1,8 +1,8 @@
-import fs from 'fs/promises';
 import path from 'path';
 
 import { prisma } from '@/lib/prisma';
 import { readActiveContestId } from '@/lib/active-contest';
+import { readConfigFile } from '@/lib/config-file';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import { readTomlValue } from '@/lib/discord-webhook';
 import { getRepoRoot } from '@/lib/repo-root';
@@ -44,12 +44,19 @@ export interface ContestBinding {
  * `[contest] CONTEST_WEB_SERVER_SHARD`, so the file is the source and the container's own
  * environment is a copy of it. A server the registry created is not described here — it takes the
  * shard its own row names (scripts/__config_sync.sh renders SERVICE_SHARD per row), which is why
- * resolveContestBinding reads the registry's own rows as well. A missing or unparsable value is
- * the shard compose itself would default to, never an error worth blanking the page for.
+ * resolveContestBinding reads the registry's own rows as well.
+ *
+ * WHY a file that is missing, and a value that is not a shard, both keep the default: a deployment
+ * that never wrote the key runs the shard compose itself defaults to (`${…:-0}`), and neither case
+ * is an error worth blanking the page for. WHY an unreadable file is reported instead of folded into
+ * that default: a file that exists and refuses to be read is a configuration fault, and rendering it
+ * as a shard would present it as the shard this deployment runs (see config-file).
  */
 export async function readContestWebServerShard(): Promise<number> {
-  const content = await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML_FILE), 'utf-8');
-  const raw = readTomlValue(content, 'contest', CONTEST_WEB_SERVER_SHARD_KEY).trim();
+  const read = await readConfigFile(path.join(getRepoRoot(), CONFIG_TOML_FILE));
+  if (read.kind === 'absent') return DEFAULT_CONTEST_WEB_SERVER_SHARD;
+  if (read.kind === 'unreadable') throw new Error(read.reason);
+  const raw = readTomlValue(read.content, 'contest', CONTEST_WEB_SERVER_SHARD_KEY).trim();
   const shard = Number(raw);
   return raw !== '' && Number.isInteger(shard) && shard >= 0 ? shard : DEFAULT_CONTEST_WEB_SERVER_SHARD;
 }
