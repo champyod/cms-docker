@@ -68,6 +68,7 @@ if [[ "${1:-}" == "exec" ]]; then
     *"role IN"*) cat "@REGISTRY_ROWS_FILE@" ;;
     *json_build_object*) cat "@PAYLOAD_FILE@" ;;
     *"DISTINCT db_profile"*) printf '%s\n' "default" ;;
+    *information_schema*) printf '%s\n' "@SCHEMA_CURRENT@" ;;
     *to_regclass*) printf '%s\n' "t" ;;
     *"WHERE is_active"*) printf '%s\n' "7" ;;
     *) printf '\n' ;;
@@ -78,6 +79,7 @@ exit 0
 STUB
   sed -i -e "s|@SERVICES_TABLE@|${2:-t}|" -e "s|@EXPOSED@|${1:-1}|" \
     -e "s|@TLS_EXPOSED@|${1:-1}|" -e "s|@TLS_HOST@|a.example.com|" -e "s|@TAILNET_NODE@|cms-7|" -e "s|@EVAL_BINDING@|ALL|" -e "s|@REGISTRY_PRIMARY@|$registry_primary|" -e "s|@SQL_LOG@|${SB}/sql.log|" \
+    -e "s|@SCHEMA_CURRENT@|${STUB_SCHEMA_CURRENT:-1}|" \
     -e "s|@PAYLOAD_FILE@|${SB}/payload.json|" -e "s|@REGISTRY_ROWS_FILE@|${SB}/registry_rows.txt|" "${SB}/bin/docker"
   chmod +x "${SB}/bin/docker"
 }
@@ -255,6 +257,18 @@ grep -q 'image: ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}' 
   && ok "leaves the IMG_TAG for compose to resolve" || no "did not fall back to IMG_TAG"
 grep -q 'pull_policy: missing' "${SB}/docker-compose.registry.generated.yml" 2>/dev/null \
   && ok "carries the row's pull policy" || no "missing the row's pull policy"
+
+echo ""
+echo "=== Test 13: an unmigrated schema is skipped, not fatal ==="
+STUB_SCHEMA_CURRENT=0
+new_sandbox 1 t
+run_sync
+rc=$?
+STUB_SCHEMA_CURRENT=1
+[[ ${rc} -eq 0 ]] && ok "sync exits 0 before the migration" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+grep -q '20261014140000' "${SB}/sync.log" && ok "names the migration it waits on" || no "the skip does not name the migration"
+[[ -e "${SB}/config/generated" ]] && no "rendered artifacts from a schema it cannot read" || ok "renders no artifact"
+[[ -f "${SB}/.env" ]] && ok "still writes .env, so the update can migrate" || no "did not write .env"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

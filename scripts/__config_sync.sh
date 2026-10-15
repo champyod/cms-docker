@@ -1533,6 +1533,20 @@ render_wiring_artifacts() {
   fi
   [[ -n "$lineage" ]] || lineage="${__TOML[core.CMS_DOMAIN]:-cms.local}"
 
+  # WHY: the artifact query below names contest_exposures.service_id, which migration
+  # 20261014140000 adds. ./cms update-server runs this sync BEFORE it syncs the schema, so a box
+  # that has not migrated yet must not fail here — that would abort the update before the
+  # migration which fixes it. Nothing is rendered until the column is there, and the artifacts
+  # are rendered again after prisma-sync.
+  local schema_current
+  schema_current="$(db_query "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'contest_exposures' AND column_name = 'service_id';")" || return 1
+  if [[ "$schema_current" != "1" ]]; then
+    log_warn "the registry artifacts need migration 20261014140000 (contest_exposures.service_id) — skipping them; './cms update-server' renders them after it syncs the schema"
+    return 0
+  fi
+
   local payload
   payload="$(wiring_payload_json)" || return 1
   [[ -n "$payload" ]] || return 1

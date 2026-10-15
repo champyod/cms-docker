@@ -223,6 +223,12 @@ log "Syncing database schema via Prisma Migrate..."
 make cms-init || log_die "make cms-init failed."
 make prisma-sync || log_die "make prisma-sync failed."
 
+# WHY a second sync: the first one (before the stacks) runs while the schema may still be the
+# previous release's, and skips the registry artifacts when it is — the one migration it waits on
+# is applied just above. Nothing else re-renders them, so they are rendered here.
+log "Rendering the registry artifacts against the migrated schema..."
+bash scripts/__config_sync.sh || log_die "config sync failed after the schema sync."
+
 # WHY after the migration and not with the stacks: the generated registry compose names
 # containers the sync derived from the services table, and they only start correctly once
 # the schema they read is current. WHY a hard failure: the registry renders that topology,
