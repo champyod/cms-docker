@@ -132,6 +132,13 @@ class TestTriggeredService(unittest.TestCase):
         for notifier in self.notifiers:
             self.assertEqual(notifier.get_notifications(), 2)
 
+    def test_the_base_class_refuses_to_sweep_nothing(self):
+        """Test that the base _missing_operations is abstract."""
+        self.get_service_address.return_value = Address('127.0.0.1', '12345')
+        service = FakeTriggeredService(0, None)
+        with self.assertRaises(NotImplementedError):
+            TriggeredService._missing_operations(service)
+
     def test_a_slow_executor_does_not_block_the_others(self):
         """Test that a slow executor does not block the others."""
         self.setUpService()

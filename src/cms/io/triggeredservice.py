@@ -362,13 +362,16 @@ class TriggeredService(Service, typing.Generic[QueueItemT, ExecutorT]):
     def _missing_operations(self) -> int:
         """Enqueue missed operations, and return their number.
 
-        The service is suppose to enqueue all operations that needs to
-        be done, and return the number of operations enqueued.
+        Must be implemented by subclasses. A sweeper that finds nothing
+        cannot be distinguished from one that never looked, so the base
+        class refuses to run instead of reporting a reassuring count.
 
         return: the number of operations enqueued.
 
         """
-        return 0
+        raise NotImplementedError(
+            "%s must implement _missing_operations() to re-enqueue missed "
+            "operations." % type(self).__name__)
 
     @rpc_method
     def search_operations_not_done(self):
