@@ -25,6 +25,17 @@ function participation(username: string, team: { code: string; name: string } | 
   };
 }
 
+function hiddenParticipation(username: string): unknown {
+  return { users: { username } };
+}
+
+/** Answers each projection query with the roster its `where.hidden` asks for. */
+function withParticipants(visible: readonly unknown[], hidden: readonly unknown[]): void {
+  mocks.findMany.mockImplementation((args: { where: { hidden: boolean } }) =>
+    Promise.resolve(args.where.hidden ? hidden : visible),
+  );
+}
+
 /** The SQL text of every statement the projection built, in the order it built them. */
 function statements(): string[] {
   return mocks.executeRaw.mock.calls.map((call) => (call[0] as TemplateStringsArray).join('?'));
@@ -39,11 +50,14 @@ beforeEach(() => {
 
 describe('resyncRankingUsers', () => {
   it('projects every referenced team beside its users', async () => {
-    mocks.findMany.mockResolvedValue([
-      participation('ada', { code: 'alpha', name: 'Alpha' }),
-      participation('bob', { code: 'alpha', name: 'Alpha' }),
-      participation('cara', null),
-    ]);
+    withParticipants(
+      [
+        participation('ada', { code: 'alpha', name: 'Alpha' }),
+        participation('bob', { code: 'alpha', name: 'Alpha' }),
+        participation('cara', null),
+      ],
+      [],
+    );
 
     await resyncRankingUsers(3);
 
@@ -60,6 +74,33 @@ describe('resyncRankingUsers', () => {
     expect(sql.filter((statement) => statement.includes('INSERT INTO ranking_teams'))).toHaveLength(1);
     expect(sql.filter((statement) => statement.includes('INSERT INTO ranking_users'))).toHaveLength(3);
     expect(sql.some((statement) => statement.includes('DELETE FROM ranking_users'))).toBe(true);
+    // A contest with nobody hidden still prunes its own stale tombstones.
+    expect(sql.filter((statement) => statement.includes('INSERT INTO ranking_hidden'))).toHaveLength(0);
+    expect(sql.filter((statement) => statement.includes('DELETE FROM ranking_hidden'))).toHaveLength(1);
+  });
+
+  it('writes one tombstone per hidden participant, scoped to the edited contest', async () => {
+    withParticipants(
+      [participation('ada', { code: 'alpha', name: 'Alpha' })],
+      [hiddenParticipation('bob'), hiddenParticipation('cara')],
+    );
+
+    await resyncRankingUsers(3);
+
+    expect(mocks.findMany).toHaveBeenCalledWith({
+      where: { contest_id: 3, hidden: true },
+      select: { users: { select: { username: true } } },
+    });
+
+    const sql = statements();
+    const inserts = sql.filter((statement) => statement.includes('INSERT INTO ranking_hidden'));
+    expect(inserts).toHaveLength(2);
+    for (const statement of inserts) {
+      expect(statement).toContain('ON CONFLICT (key, contest_id)');
+    }
+    const prune = sql.find((statement) => statement.includes('DELETE FROM ranking_hidden'));
+    expect(prune).toContain('contest_id');
+    expect(prune).toContain('key <> ALL');
   });
 
   it('touches nothing when the edited contest is not the active one', async () => {

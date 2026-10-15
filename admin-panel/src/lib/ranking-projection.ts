@@ -35,6 +35,16 @@ interface ProjectedTeam {
   name: string;
 }
 
+/** A hidden participation as the projection records it: the key to filter, and where. */
+interface ProjectedHidden {
+  key: string;
+  contest_id: number;
+}
+
+interface HiddenParticipationRow {
+  readonly users: { username: string };
+}
+
 type RankingWrite = ReturnType<typeof prisma.$executeRaw>;
 
 function projectUsers(participants: ReadonlyArray<ParticipationRow>): ProjectedUser[] {
@@ -44,6 +54,24 @@ function projectUsers(participants: ReadonlyArray<ParticipationRow>): ProjectedU
     l_name: participation.users.last_name,
     team: participation.teams ? encodeId(participation.teams.code) : null,
   }));
+}
+
+/**
+ * The hidden participants of one contest as tombstones for the board to filter out.
+ *
+ * WHY keyed by the encoded username: the primary key is (key, contest_id), so a username
+ * listed twice would break the batch rather than be idempotent.
+ */
+function projectHidden(
+  participants: ReadonlyArray<HiddenParticipationRow>,
+  contestId: number,
+): ProjectedHidden[] {
+  const hidden = new Map<string, ProjectedHidden>();
+  for (const participation of participants) {
+    const key = encodeId(participation.users.username);
+    hidden.set(key, { key, contest_id: contestId });
+  }
+  return [...hidden.values()];
 }
 
 /**
@@ -90,12 +118,36 @@ function deleteStaleUsersStatement(users: readonly ProjectedUser[]): RankingWrit
   return prisma.$executeRaw`DELETE FROM ranking_users WHERE key <> ALL(${users.map((user) => user.key)}::text[])`;
 }
 
+function upsertHiddenStatement(hidden: ProjectedHidden): RankingWrite {
+  return prisma.$executeRaw`
+    INSERT INTO ranking_hidden (key, contest_id)
+    VALUES (${hidden.key}, ${hidden.contest_id})
+    ON CONFLICT (key, contest_id) DO UPDATE SET
+      updated_at = CURRENT_TIMESTAMP
+  `;
+}
+
+/**
+ * Reclaims the tombstones of this contest, whose roster is the whole truth for it: a
+ * participation unhidden since the last write has to leave the board again.
+ *
+ * WHY scoped by contest: tombstones of another contest are that contest's business, and a
+ * delete over the whole table would unhide its participants here.
+ */
+function deleteStaleHiddenStatement(contestId: number, keys: readonly string[]): RankingWrite {
+  return prisma.$executeRaw`DELETE FROM ranking_hidden WHERE contest_id = ${contestId} AND key <> ALL(${keys}::text[])`;
+}
+
 /**
  * Mirrors ProxyService.initialize() for the ranked contest: re-pushes its non-hidden
  * participants into the ranking projection and drops every other user key, so a
  * participant added, edited or removed through the panel reaches the ranking without a
  * proxy reinitialize. Only the contest the database flags active is touched, so editing
  * another contest's participations cannot empty the projection.
+ *
+ * The hidden participants of the same contest are mirrored as tombstones, because the
+ * board row is driven by the submissions: without one, hiding a participation would leave
+ * its row and scores where they were.
  *
  * Best-effort: a failure is logged rather than thrown, because the ranking service
  * unions the submission users and tolerates a stale projection, and a failed refresh
@@ -113,12 +165,19 @@ export async function resyncRankingUsers(contestId: number): Promise<void> {
         teams: { select: { code: true, name: true } },
       },
     });
+    const hiddenParticipants = await prisma.participations.findMany({
+      where: { contest_id: contestId, hidden: true },
+      select: { users: { select: { username: true } } },
+    });
 
     const users = projectUsers(participants);
+    const hidden = projectHidden(hiddenParticipants, contestId);
     await prisma.$transaction([
       ...projectTeams(participants).map(upsertTeamStatement),
       ...users.map(upsertUserStatement),
       deleteStaleUsersStatement(users),
+      ...hidden.map(upsertHiddenStatement),
+      deleteStaleHiddenStatement(contestId, hidden.map((entry) => entry.key)),
     ]);
   } catch (error) {
     console.error('Failed to resync the ranking users projection:', error);
