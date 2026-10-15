@@ -30,13 +30,17 @@ _NGINX_ROUTES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "${_NGINX_ROUTES_DIR}/__nginx_sse.sh"
 
-# label|domain_var|path_var|upstream_var|listen_port_var
+# label|domain_var|path_var|upstream_var|listen_port_var|primary_path_var
+# WHY the sixth column: a route answers at its own path on its own vhost, and reaches the primary
+# vhost only when it names a path there. One shared key could not express both — the classic admin
+# is an admin-vhost route unless the operator asks for it on the primary too, and a mirror path can
+# differ from the vhost path.
 _ROUTES_TABLE="$(cat <<'EOF'
-primary|DOMAIN_NAME|CONTEST_ROUTE_PATH|CONTEST_UPSTREAM|CONTEST_LISTEN_PORT
-admin|ADMIN_DOMAIN|ADMIN_ROUTE_PATH|ADMIN_UPSTREAM|ADMIN_NEXT_LISTEN_PORT
-oj|OJ_DOMAIN|OJ_ROUTE_PATH|OJ_UPSTREAM|OJ_BACKEND_PORT
-ranking|RANKING_DOMAIN|RANKING_ROUTE_PATH|RANKING_UPSTREAM|RANKING_LISTEN_PORT
-admin_classic|ADMIN_DOMAIN|ADMIN_CLASSIC_ROUTE_PATH|ADMIN_CLASSIC_UPSTREAM|ADMIN_LISTEN_PORT
+primary|DOMAIN_NAME|CONTEST_ROUTE_PATH|CONTEST_UPSTREAM|CONTEST_LISTEN_PORT|
+admin|ADMIN_DOMAIN|ADMIN_ROUTE_PATH|ADMIN_UPSTREAM|ADMIN_NEXT_LISTEN_PORT|ADMIN_ROUTE_PATH
+oj|OJ_DOMAIN|OJ_ROUTE_PATH|OJ_UPSTREAM|OJ_BACKEND_PORT|
+ranking|RANKING_DOMAIN|RANKING_ROUTE_PATH|RANKING_UPSTREAM|RANKING_LISTEN_PORT|RANKING_ROUTE_PATH
+admin_classic|ADMIN_DOMAIN|ADMIN_CLASSIC_ROUTE_PATH|ADMIN_CLASSIC_UPSTREAM|ADMIN_LISTEN_PORT|PRIMARY_CLASSIC_ROUTE_PATH
 EOF
 )"
 
@@ -158,11 +162,11 @@ _routes_assert_unused_path() {
 # discarded and the shadowed or unparseable block emitted anyway. This function runs
 # in the shell that drives the render, so a log_die here stops the build outright.
 _routes_collect() {
-  local label domain_var path_var upstream_var port_var
-  local path upstream port claimed="" seen=""
+  local label domain_var path_var upstream_var port_var primary_path_var
+  local path upstream port mirror claimed="" seen="" mirrors=""
   ROUTE_LABEL=() ROUTE_DOMAIN_VAR=() ROUTE_PATH_VAR=()
-  ROUTE_UPSTREAM_VAR=() ROUTE_PORT_VAR=() ROUTE_OWNER=() ROUTE_PATH=()
-  while IFS='|' read -r label domain_var path_var upstream_var port_var; do
+  ROUTE_UPSTREAM_VAR=() ROUTE_PORT_VAR=() ROUTE_OWNER=() ROUTE_PATH=() ROUTE_PRIMARY_PATH=()
+  while IFS='|' read -r label domain_var path_var upstream_var port_var primary_path_var; do
     [[ -n "$label" ]] || continue
     upstream="${!upstream_var:-}"
     port="${!port_var:-}"
@@ -179,12 +183,25 @@ _routes_collect() {
     _route_normalize_path "$path_var" "${!path_var:-}" path "${ROUTE_LABEL[0]:-primary}"
     _routes_assert_unused_path "${ROUTE_LABEL[0]:-primary}" "$path" "$path_var" "$seen"
     seen="${seen} ${path}"
+    # The route's own path on the primary vhost, and nothing when it names none: the primary
+    # already answers its own root, so a route reaches it only by asking.
+    mirror=""
+    if [[ -n "$primary_path_var" ]]; then
+      _route_normalize_path "$primary_path_var" "${!primary_path_var:-}" mirror "${ROUTE_LABEL[0]:-primary}"
+      if [[ -n "$mirror" ]]; then
+        [[ "$mirror" != "/" ]] \
+          || log_die "${primary_path_var}=/ would claim the primary vhost's root, which the ${ROUTE_LABEL[0]:-primary} route owns" 1
+        _routes_assert_unused_path "${ROUTE_LABEL[0]:-primary}" "$mirror" "$primary_path_var" "$mirrors"
+        mirrors="${mirrors} ${mirror}"
+      fi
+    fi
     ROUTE_LABEL+=("$label")
     ROUTE_DOMAIN_VAR+=("$domain_var")
     ROUTE_PATH_VAR+=("$path_var")
     ROUTE_UPSTREAM_VAR+=("$upstream_var")
     ROUTE_PORT_VAR+=("$port_var")
     ROUTE_PATH+=("$path")
+    ROUTE_PRIMARY_PATH+=("$mirror")
     if [[ " ${claimed} " == *" ${domain_var} "* ]]; then
       ROUTE_OWNER+=(0)
     else
@@ -283,7 +300,7 @@ _routes_render_vhost() {
       elif [[ -z "${ROUTE_PATH[$index]}" ]]; then
         continue
       fi
-    elif [[ "$is_primary" == "1" && -n "${ROUTE_PATH[$index]}" ]]; then
+    elif [[ "$is_primary" == "1" && -n "${ROUTE_PRIMARY_PATH[$index]}" ]]; then
       :
     else
       continue
@@ -296,6 +313,8 @@ _routes_render_vhost() {
       # literal name: the fragment may not exist yet on a deployment whose registry names
       # no path exposure for this vhost, and a missing literal include stops nginx.
       blocks+="    include /etc/nginx/generated/locations-${ROUTE_LABEL[$index]}*.conf;"$'\n'
+    elif [[ "$is_primary" == "1" ]]; then
+      matcher="$(_route_matcher "${ROUTE_PRIMARY_PATH[$index]}")"
     else
       matcher="$(_route_matcher "${ROUTE_PATH[$index]}")"
     fi
@@ -308,7 +327,7 @@ _routes_render_vhost() {
     # for its owner and the route's sub-path for the primary vhost.
     if [[ "${ROUTE_LABEL[$index]}" == "admin" ]]; then
       sse_prefix=""
-      (( owner )) || sse_prefix="${ROUTE_PATH[$index]}"
+      (( owner )) || sse_prefix="${ROUTE_PRIMARY_PATH[$index]}"
       blocks+="$(_routes_sse_location_block "$index" "$sse_prefix")"$'\n'
     fi
   done

@@ -152,7 +152,8 @@ DOMAIN_NGINX_HTTPS_PORT = 443   # port; domain nginx HTTPS publish port
 RANKING_AUTH_DIRECTIVES = ""    # str; extra nginx auth directives for the ranking vhost
 CONTEST_ROUTE_PATH = "/"        # str; sub-path the contest UI answers on the primary vhost; must start with "/" and be unique per vhost
 ADMIN_ROUTE_PATH = "/admin"     # str; sub-path the Next.js panel answers on the primary vhost
-ADMIN_CLASSIC_ROUTE_PATH = "/classic" # str; sub-path the classic admin API answers on the primary AND the admin vhost
+ADMIN_CLASSIC_ROUTE_PATH = "/classic" # str; sub-path the classic admin API answers on the admin vhost
+PRIMARY_CLASSIC_ROUTE_PATH = ""        # str; the same classic admin under the primary vhost; empty=admin-vhost only
 RANKING_ROUTE_PATH = "/ranking" # str; sub-path the ranking board answers on the primary vhost
 OJ_ROUTE_PATH = ""              # str; sub-path the external judge answers on the primary vhost; empty=served on the oj vhost only
 OJ_UPSTREAM = ""                # str; external judge upstream; empty=host.docker.internal with OJ_BACKEND_PORT (the judge runs on the host, the proxy in a container)

@@ -23,6 +23,7 @@ render() {
   ADMIN_LISTEN_PORT="8889" \
   RANKING_LISTEN_PORT="8890" \
   OJ_BACKEND_PORT="8899" \
+  PRIMARY_CLASSIC_ROUTE_PATH="${1:-}" \
   bash -c '
     set -uo pipefail
     log_die() { printf "DIE: %s\n" "$*" >&2; exit 1; }
@@ -46,6 +47,25 @@ has "the primary target is a variable" 'set $cms_primary cms-contest-web-server:
 has "the primary location dials the variable" 'proxy_pass http://$cms_primary;'
 has "a sub-path route rewrites its prefix away" 'rewrite ^/admin/(.*)$ /$1 break;'
 has "the admin route dials its own variable" 'proxy_pass http://$cms_admin;'
+# A route reaches the primary only by naming a path there: one key for both vhosts could not
+# express "admin vhost only", and the classic admin answers on the admin vhost by default.
+primary_blocks() { printf '%s\n' "$1" | sed -n '/^PRIMARY|/,/^ADMIN|/p'; }
+if printf '%s\n' "$(primary_blocks "$OUT")" | grep -Fq -- 'location /classic/'; then
+  no "the classic admin reaches the primary unasked"
+else
+  ok "the classic admin does not reach the primary unasked"
+fi
+PRIMARY_CLASSIC="$(render /classic)"
+if printf '%s\n' "$(primary_blocks "$PRIMARY_CLASSIC")" | grep -Fq -- 'location /classic/'; then
+  ok "the classic admin reaches the primary when the operator asks"
+else
+  no "PRIMARY_CLASSIC_ROUTE_PATH did not mount the classic on the primary"
+fi
+if printf '%s\n' "$OUT" | sed -n '/^ADMIN|/,/^$/p' | grep -Fq -- 'location /classic/'; then
+  ok "the classic admin still answers on the admin vhost"
+else
+  no "the admin vhost lost its classic route"
+fi
 
 printf '\n== the panel streams are kept alive on both panel vhosts ==\n'
 # WHY the admin vhost and the primary sub-path separately: the panel answers at the root of
