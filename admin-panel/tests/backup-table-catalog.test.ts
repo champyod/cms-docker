@@ -15,11 +15,13 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * never restored; a restore is written to the trail by the actions it performs,
  * which is the only honest way for it to appear there.
  *
- * The six ranking_* projection tables are excluded for the same reason as
+ * The seven ranking_* projection tables are excluded for the same reason as
  * `audit_log`: they hold what the proxy pushed to the scoreboard, which is
  * derived from the contests, participations and submissions a restore already
  * carries. Restoring the projection would either duplicate the rebuild or
- * contradict the contest data restored beside it.
+ * contradict the contest data restored beside it. `ranking_hidden` is the one
+ * projection table that carries no push-only entity: it is derived from
+ * participations.hidden, so a restore rebuilds it from the rows it already holds.
  *
  * The two ranking control tables are NOT excluded. The appearance row and the
  * override rows are operator decisions that exist nowhere else, so they belong
@@ -46,6 +48,7 @@ const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'ranking_users',
   'ranking_submissions',
   'ranking_subchanges',
+  'ranking_hidden',
 ]);
 
 /** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */

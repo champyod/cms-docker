@@ -895,6 +895,28 @@ model ranking_subchanges {
   @@map("ranking_subchanges")
 }
 
+/// A participation the panel hid, projected as a tombstone the board filters out.
+///
+/// WHY a table rather than a delete: the board row is driven by ranking_submissions, so
+/// dropping the ranking_users row leaves the row on the board and its scores in the
+/// ledger. Both writers reach this table — the proxy's full push and the panel's mirror —
+/// and the reader folds a row into the same hide rule the override rows already use.
+///
+/// WHY scoped by contest id and not by the encoded contest name ranking_tasks carries:
+/// the reader's only contest handle is RANKING_CONTEST_ID, the same CMS contest id
+/// ranking_overrides.contest_id holds, so this is the one column it can filter on. The
+/// key is (key, contest_id) because a username may be hidden in one contest and ranked
+/// in another.
+model ranking_hidden {
+  key        String   @db.VarChar
+  contest_id Int
+  updated_at DateTime @default(now())
+
+  @@id([key, contest_id])
+  @@index([contest_id], map: "ix_ranking_hidden_contest")
+  @@map("ranking_hidden")
+}
+
 /// One row, id 1: what the panel decides about how the scoreboard looks.
 /// Appearance is operator configuration, so unlike the projection above it
 /// belongs in a backup and in the restore preview.
