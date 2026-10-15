@@ -225,11 +225,7 @@
         {% trans %}N/A{% endtrans %}
     {% endif %}
             </td>
-    {% if t_iter.active_dataset is not none %}
-            <td>{{ get_task_type(dataset=t_iter.active_dataset).name }}</td>
-    {% else %}
-            <td>{% trans %}N/A{% endtrans %}</td>
-    {% endif %}
+            <td>{% set task_type = get_task_type(dataset=t_iter.active_dataset) %}{% if task_type is defined %}{{ task_type.name }}{% else %}{% trans %}N/A{% endtrans %}{% endif %}</td>
             <td>{{ t_iter.submission_format|map("replace", ".%l", extensions)|join(" ") }}</td>
     {% if tokens_contest != TOKEN_MODE_DISABLED and tokens_tasks != TOKEN_MODE_DISABLED %}
             <td>

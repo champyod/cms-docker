@@ -21,9 +21,12 @@
 WHY this suite exists: the contest web refuses a submission to such a task
 (accept_submission raises), but nothing said so before the contestant filled
 the form in -- and the form stayed on the page offering the submit button.
+The contest overview is rendered here too, because a task whose dataset
+carries no task type to construct took the whole page down for every
+contestant of the contest instead of showing one cell as N/A.
 
-The two contestant-facing task pages are rendered here rather than grepped
-for, because what matters is that the served page carries the notice and no
+The contestant-facing pages are rendered here rather than grepped for,
+because what matters is that the served page carries the notice and no
 longer carries the control the server would refuse. The loader, the i18n
 extension and StrictUndefined are the ones the server configures; the context
 is the smallest set of names these pages read.
@@ -41,10 +44,14 @@ import jinja2
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TEMPLATES = os.path.join(REPO_ROOT, "src", "cms", "server", "contest", "templates")
 
-# The page of a task, the page carrying its submit control, and the handlers
-# that render each: a page shows the notice only if its handler hands it over.
+NOW = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+
+# The page of a task, the page carrying its submit control, the contest
+# overview every contestant of the contest is served, and the handlers that
+# render each: a page shows the notice only if its handler hands it over.
 TASK_PAGE = "task_description.html"
 SUBMISSIONS_PAGE = "task_submissions.html"
+OVERVIEW_PAGE = "overview.html"
 HANDLER_SOURCES = (
     "src/cms/server/contest/handlers/task.py",
     "src/cms/server/contest/handlers/tasksubmission.py",
@@ -55,6 +62,8 @@ HANDLER_FACT = "task_has_active_dataset=task.active_dataset is not None"
 NOTICE = "This task cannot be judged yet, so you cannot submit a solution for it."
 # How the submit control is recognised in the served page.
 SUBMIT_CONTROL = "tasks/sum/submit"
+# The task type a dataset that resolves hands back, as the overview lists it.
+TASK_TYPE_NAME = "BatchAndOutput"
 
 
 class Stub:
@@ -125,13 +134,20 @@ def _all(context, values, test=None, *args) -> bool:
 def _get_task_type(environment, dataset=None):
     """What the server's get_task_type answers.
 
-    It dereferences dataset.task_type_object, so a task with no active
-    dataset leaves the pages holding an undefined value -- which is what
-    their existing "is defined" guards are written against.
+    It dereferences dataset.task_type_object, which a dataset with no task
+    type at all -- or one the grader does not implement -- fails to give, so
+    the call answers an undefined value on the same terms as the server's,
+    which is what the pages' "is defined" guards are written against.
     """
-    if dataset is None:
-        return environment.undefined("no dataset")
-    return Stub(name="BatchAndOutput", ALLOW_PARTIAL_SUBMISSION=False,
+    try:
+        return dataset.task_type_object
+    except Exception:
+        return environment.undefined("TaskType not found")
+
+
+def resolvable_task_type() -> Stub:
+    """Return the task type a dataset that resolves hands back."""
+    return Stub(name=TASK_TYPE_NAME, ALLOW_PARTIAL_SUBMISSION=False,
                 get_compilation_commands=lambda submission_format: {})
 
 
@@ -152,15 +168,43 @@ def fake_task(active_dataset):
                 get_allowed_languages=lambda: ["cpp"])
 
 
+class UnresolvableTypeDataset:
+    """A dataset whose task type the pages cannot be given.
+
+    cms.grading.tasktypes.get_task_type does a bare dict lookup, so a task
+    whose task_type names a type this deployment does not implement raises
+    KeyError the moment the dataset's task_type_object is read -- and a task
+    with no active dataset has no dataset to read it off at all. Both leave
+    the pages with no task type to render, which is the state pinned here.
+    """
+
+    time_limit = None
+    memory_limit = None
+
+    @property
+    def task_type_object(self):
+        raise KeyError("task type not implemented by this deployment")
+
+
+def fake_contest(tasks) -> Stub:
+    """Return the contest the overview is served for, holding these tasks."""
+    return Stub(description="A contest", name="contest", languages=[],
+                tasks=tasks, allow_registration=False, per_user_time=None,
+                allow_unofficial_submission_before_analysis_mode=True,
+                start=NOW, stop=NOW, analysis_enabled=False,
+                max_submission_number=None, max_user_test_number=None,
+                token_mode=0, allow_questions=False, allow_user_tests=False)
+
+
 def fake_facts(task) -> dict:
     """Return the render context ContestHandler.render_params fills, narrowed
-    to the names these two pages read, plus the task facts their handlers add.
+    to the names these pages read, plus the task facts their handlers add.
     """
     user = Stub(username="contestant", name="Contestant")
     participation = Stub(user=user, unrestricted=True, preferred_languages=[],
                          starting_time=None, delay_time=None, extra_time=None,
                          contest=Stub())
-    now = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    now = NOW
     return {
         "url": lambda *args, **kwargs: "/static/x",
         # The page's links are the served ones: a task's submit control is
@@ -213,6 +257,23 @@ def render(template_name: str, task) -> str:
     return template_environment().get_template(template_name).render(**fake_facts(task))
 
 
+def render_overview(task) -> str:
+    """Render the contest overview of a contest holding this one task.
+
+    The overview's handler hands over the contest and nothing per task, so
+    the context of a task page is narrowed to it here: no task, no task fact.
+    """
+    facts = fake_facts(task)
+    facts["contest"] = fake_contest([task])
+    del facts["task"]
+    del facts["task_has_active_dataset"]
+    facts["participation"] = Stub(
+        user=facts["user"], unrestricted=True, preferred_languages=[],
+        starting_time=None, delay_time=datetime.timedelta(0),
+        extra_time=datetime.timedelta(0), contest=Stub())
+    return template_environment().get_template(OVERVIEW_PAGE).render(**facts)
+
+
 class UnjudgeableTaskNoticeTest(unittest.TestCase):
     """A task without an active dataset says so; a normal task is untouched."""
 
@@ -226,7 +287,8 @@ class UnjudgeableTaskNoticeTest(unittest.TestCase):
         self.assertNotIn(SUBMIT_CONTROL, page)
 
     def test_a_task_with_a_dataset_is_unchanged(self):
-        dataset = Stub(task_type_object=Stub(), time_limit=None, memory_limit=None,
+        dataset = Stub(task_type_object=resolvable_task_type(),
+                       time_limit=None, memory_limit=None,
                        score_type_object=Stub())
         task = fake_task(dataset)
 
@@ -235,6 +297,21 @@ class UnjudgeableTaskNoticeTest(unittest.TestCase):
                 self.assertNotIn(NOTICE, render(template_name, task))
 
         self.assertIn(SUBMIT_CONTROL, render(SUBMISSIONS_PAGE, task))
+
+    def test_the_overview_shows_a_task_with_no_active_dataset_as_inert(self):
+        self.assertIn("<td>N/A</td>", render_overview(fake_task(None)))
+
+    def test_the_overview_lists_a_task_whose_type_does_not_resolve(self):
+        page = render_overview(fake_task(UnresolvableTypeDataset()))
+
+        self.assertIn("<td>N/A</td>", page)
+
+    def test_the_overview_of_a_resolvable_contest_is_unchanged(self):
+        dataset = Stub(task_type_object=resolvable_task_type(),
+                       time_limit=None, memory_limit=None)
+
+        self.assertIn("<td>%s</td>" % TASK_TYPE_NAME,
+                      render_overview(fake_task(dataset)))
 
     def test_every_page_at_issue_is_handed_the_fact(self):
         # The pages only show the notice if their handler passes it, and
