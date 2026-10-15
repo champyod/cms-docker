@@ -611,6 +611,10 @@ services:
       # URL every other service takes rather than a ranking config file.
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
       RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
+      # The contest this board serves, from the same [contest] CONTEST_ID the other
+      # contest-scoped services take. Without it the reader applies every contest's
+      # overrides and hidden tombstones to this board.
+      RANKING_CONTEST_ID: ${CONTEST_ID:-1}
       # Where the image keeps the vendored page and the licence offer; both are image
       # layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static
