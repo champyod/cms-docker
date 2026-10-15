@@ -4,11 +4,8 @@ import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
 import { writeActiveContestId } from '@/lib/active-contest';
-import {
-  readContestWebServerShard,
-  resolveContestBinding,
-  type ContestBinding,
-} from '@/lib/contest-binding';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
+import { readContestWebServerShard, resolveContestBinding, CONTEST_WEB_SERVER_SHARD_KEY, type ContestBinding } from '@/lib/contest-binding';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
@@ -216,16 +213,20 @@ export async function getAvailableContests(): Promise<AvailableResult> {
 }
 
 /**
- * The contest the deployment's contest web server serves, resolved from the registry the
- * way the server resolves it for itself. Gated on the same key as the contest list beside
- * it: both answer what this deployment is running, and neither is a general read.
+ * The contest the deployment's contest web server serves, resolved from the registry the way the
+ * server resolves it for itself. It opens config.toml itself, so it carries the gate the audited
+ * reader demands for that file (env:read + env:list) and leaves the same config:view row.
  */
 export async function getBoundContestId(): Promise<BoundContestResult> {
   await requirePermission('contest:list');
+  await requirePermission('env:read');
+  await requirePermission('env:list');
   try {
     const binding = await resolveContestBinding(await readContestWebServerShard());
+    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, requestedKeys: [`contest.${CONTEST_WEB_SERVER_SHARD_KEY}`] }, result: 'success' });
     return { success: true, binding };
   } catch (error: unknown) {
+    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' }, result: 'failure' });
     return { success: false, error: (error as Error).message };
   }
 }
