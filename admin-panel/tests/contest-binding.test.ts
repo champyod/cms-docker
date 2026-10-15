@@ -33,29 +33,29 @@ beforeEach(() => {
 describe('resolveContestBinding', () => {
   it('answers with the contest the row of the shard the declared server runs names', async () => {
     mocks.findMany.mockResolvedValue([row(0, 3), row(1, 4)]);
-    expect(await resolveContestBinding(1)).toEqual({ source: 'registry', contestId: 4 });
+    expect(await resolveContestBinding(1)).toEqual({ source: 'registry', contestId: 4, matchedBy: 'declared-shard' });
   });
 
   it('keeps a row that names no contest as serving every one of them', async () => {
     mocks.findMany.mockResolvedValue([row(0, null)]);
-    expect(await resolveContestBinding(0)).toEqual({ source: 'registry', contestId: null });
+    expect(await resolveContestBinding(0)).toEqual({ source: 'registry', contestId: null, matchedBy: 'declared-shard' });
   });
 
   it('falls back to the active contest when the registry names no contest web server at all', async () => {
     mocks.findMany.mockResolvedValue([]);
-    expect(await resolveContestBinding(0)).toEqual({ source: 'deployment', contestId: 7 });
+    expect(await resolveContestBinding(0)).toEqual({ source: 'deployment', contestId: 7, matchedBy: null });
   });
 
   it('reads the rows of a registry-created server when the declared shard names no row', async () => {
     // A container the registry created runs the shard its own row names, so the configured 0
     // naming nothing does not leave the registry without an answer.
     mocks.findMany.mockResolvedValue([row(2, 4)]);
-    expect(await resolveContestBinding(0)).toEqual({ source: 'registry', contestId: 4 });
+    expect(await resolveContestBinding(0)).toEqual({ source: 'registry', contestId: 4, matchedBy: 'consensus' });
   });
 
   it('keeps the deployment default when the enabled servers name different contests', async () => {
     mocks.findMany.mockResolvedValue([row(1, 4), row(2, 5)]);
-    expect(await resolveContestBinding(0)).toEqual({ source: 'deployment', contestId: 7 });
+    expect(await resolveContestBinding(0)).toEqual({ source: 'deployment', contestId: 7, matchedBy: null });
   });
 
   it('reads the active contest only when no row answers for this deployment', async () => {

@@ -8,7 +8,7 @@ import { getAvailableContests, getBoundContestId } from '@/app/actions/contests'
 import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
-import { readFailures, settleRead, type ReadFailure } from '@/lib/settled-read';
+import { readFailures, settleRead, type ReadFailure, type ReadOutcome } from '@/lib/settled-read';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import type { SurfaceStatus } from '@/components/core/SurfaceState';
@@ -28,6 +28,64 @@ const READ_LABELS = {
   operation: 'deploy operation',
 } as const;
 
+/** Which store answered the bound-contest read; null when the read failed. */
+type BoundContestSource = 'registry' | 'deployment' | null;
+
+/** The value the bound-contest read settles to, in the shape the action answers with. */
+type BoundContestRead = Awaited<ReturnType<typeof getBoundContestId>>;
+
+/** Every source this screen reads, each settled to its value or to its named failure. */
+interface DeploymentReads {
+  readonly settle: ReadOutcome<Awaited<ReturnType<typeof settleDeployOperations>>>;
+  readonly active: ReadOutcome<Awaited<ReturnType<typeof readActiveContestId>>>;
+  readonly settings: ReadOutcome<Awaited<ReturnType<typeof readConfigTomlValues>>>;
+  readonly contests: ReadOutcome<Awaited<ReturnType<typeof getAvailableContests>>>;
+  readonly container: ReadOutcome<Awaited<ReturnType<typeof getContainerContestId>>>;
+  readonly bound: ReadOutcome<BoundContestRead>;
+  readonly operation: ReadOutcome<Awaited<ReturnType<typeof getActiveDeployOperation>>>;
+}
+
+/**
+ * Every read the screen makes, all of them at once except the deploy settle, which runs first
+ * because a deploy that finished unwatched still owes its activation.
+ *
+ * Why the operation read is the audited one: this screen exists to answer "what is deployed right
+ * now", and asking whether a deploy is in flight is part of that answer, so the ask is recorded. The
+ * 30s discovery poll stays on the unaudited core — this runs on a visit, on the refresh button, and
+ * once per terminal deploy phase, never on a timer.
+ */
+async function settleDeploymentReads(): Promise<DeploymentReads> {
+  const settle = await settleRead(READ_LABELS.settle, settleDeployOperations);
+  const [active, settings, contests, container, bound, operation] = await Promise.all([
+    settleRead(READ_LABELS.activeContest, readActiveContestId),
+    settleRead(READ_LABELS.settings, () => readConfigTomlValues(CONTEST_SETTINGS_KEYS)),
+    settleRead(READ_LABELS.contests, getAvailableContests),
+    settleRead(READ_LABELS.container, getContainerContestId),
+    // The id the deployment actually serves, resolved the way the running contest web server
+    // resolves it for itself — the registry row for its shard, else contests.is_active.
+    settleRead(READ_LABELS.bound, getBoundContestId),
+    settleRead(READ_LABELS.operation, getActiveDeployOperation),
+  ]);
+  return { settle, active, settings, contests, container, bound, operation };
+}
+
+/**
+ * The contest the deployment is bound to, and which store answered it.
+ *
+ * WHY a null id is kept as null: the registry row may deliberately name no contest, which makes that
+ * server serve every one of them, and comparing "no single contest" against an id would report a
+ * mismatch no operator action could clear.
+ *
+ * WHY the source travels beside the id: a row that names no contest and the absence of a row both
+ * read as "no id", and only the source tells the multicontest server apart from the deployment
+ * default. It is also what labels the value on the page — a default answer is the database's own id
+ * and must not be shown as a second, registry-named source.
+ */
+function boundContestOf(bound: ReadOutcome<BoundContestRead>): { readonly contestId: number | null; readonly source: BoundContestSource } {
+  const binding = bound.value?.success ? bound.value.binding : undefined;
+  return { contestId: binding?.contestId ?? null, source: binding?.source ?? null };
+}
+
 export interface ContestDeploymentSnapshot {
   readonly status: SurfaceStatus;
   readonly failedReads: readonly ReadFailure[];
@@ -37,6 +95,7 @@ export interface ContestDeploymentSnapshot {
   readonly dbActiveContestId: number | null;
   readonly containerContestId: number | null;
   readonly boundContestId: number | null;
+  readonly boundContestSource: BoundContestSource;
   readonly selectedContestId: number | null;
   readonly globalSettings: Record<string, string>;
   readonly isDirty: boolean;
@@ -66,6 +125,7 @@ export function useContestDeploymentSnapshot({
   const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
   const [containerContestId, setContainerContestId] = useState<number | null>(null);
   const [boundContestId, setBoundContestId] = useState<number | null>(null);
+  const [boundContestSource, setBoundContestSource] = useState<BoundContestSource>(null);
   const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
@@ -82,22 +142,7 @@ export function useContestDeploymentSnapshot({
   }, []);
 
   const readSnapshot = useCallback(async (): Promise<void> => {
-    // The settle runs first: a deploy that finished unwatched still owes its activation.
-    const settle = await settleRead(READ_LABELS.settle, settleDeployOperations);
-    const [active, settings, contests, container, bound, operation] = await Promise.all([
-      settleRead(READ_LABELS.activeContest, readActiveContestId),
-      settleRead(READ_LABELS.settings, () => readConfigTomlValues(CONTEST_SETTINGS_KEYS)),
-      settleRead(READ_LABELS.contests, getAvailableContests),
-      settleRead(READ_LABELS.container, getContainerContestId),
-      // The id the deployment actually serves, resolved the way the running contest web server
-      // resolves it for itself — the registry row for its shard, else contests.is_active.
-      settleRead(READ_LABELS.bound, getBoundContestId),
-      // Why the audited read: this screen exists to answer "what is deployed right now", and
-      // asking whether a deploy is in flight is part of that answer, so the ask is recorded.
-      // The 30s discovery poll stays on the unaudited core — this runs on a visit, on the
-      // refresh button, and once per terminal deploy phase, never on a timer.
-      settleRead(READ_LABELS.operation, getActiveDeployOperation),
-    ]);
+    const { settle, active, settings, contests, container, bound, operation } = await settleDeploymentReads();
 
     // Read the freshly parsed value, not the state binding — setState in this same tick leaves the
     // closure stale.
@@ -123,10 +168,9 @@ export function useContestDeploymentSnapshot({
     );
     setDbActiveContestId(dbActive ? dbActive.id : null);
 
-    // Why a null bound id is kept as null: the registry row may deliberately name no contest,
-    // which makes that server serve every one of them, and comparing "no single contest" against
-    // an id would report a mismatch no operator action could clear.
-    setBoundContestId(bound.value?.success ? bound.value.binding?.contestId ?? null : null);
+    const boundContest = boundContestOf(bound);
+    setBoundContestId(boundContest.contestId);
+    setBoundContestSource(boundContest.source);
 
     if (actualActiveId !== null) {
       const match = databaseContests.find(
@@ -197,6 +241,7 @@ export function useContestDeploymentSnapshot({
     dbActiveContestId,
     containerContestId,
     boundContestId,
+    boundContestSource,
     selectedContestId,
     globalSettings,
     isDirty,

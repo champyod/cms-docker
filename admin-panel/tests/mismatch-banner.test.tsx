@@ -11,7 +11,7 @@ import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 describe('MismatchBanner', () => {
   it('names every source it compares, and never config.toml', () => {
     const { container } = render(
-      <MismatchBanner activeContestId={1} activeContestName="Spring" dbActiveContestId={1} containerContestId={2} boundContestId={3} />,
+      <MismatchBanner activeContestId={1} activeContestName="Spring" dbActiveContestId={1} containerContestId={2} boundContestId={3} boundContestSource="registry" />,
     );
     const text = container.textContent ?? '';
     expect(text).toMatch(/database/i);
@@ -23,7 +23,7 @@ describe('MismatchBanner', () => {
 
   it('names only the database when no other source holds an id', () => {
     const { container } = render(
-      <MismatchBanner activeContestId={4} activeContestName={null} dbActiveContestId={4} containerContestId={null} />,
+      <MismatchBanner activeContestId={4} activeContestName={null} dbActiveContestId={4} containerContestId={null} boundContestSource={null} />,
     );
     const text = container.textContent ?? '';
     expect(text).toMatch(/database/i);
@@ -33,8 +33,32 @@ describe('MismatchBanner', () => {
 
   it('reports the registry binding as the disagreeing source when the others agree', () => {
     const { container } = render(
-      <MismatchBanner activeContestId={1} activeContestName="Spring" dbActiveContestId={1} containerContestId={1} boundContestId={5} />,
+      <MismatchBanner activeContestId={1} activeContestName="Spring" dbActiveContestId={1} containerContestId={1} boundContestId={5} boundContestSource="registry" />,
     );
-    expect(container.textContent ?? '').toMatch(/Mismatch: the service registry disagrees with the other sources\./);
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/Mismatch: the service registry disagrees with the other sources\./);
+    // The button cannot clear this one, so the advice names the row to edit instead.
+    expect(text).toMatch(/edit it in the panel's service registry/);
+    expect(text).not.toMatch(/Activate & Restart Stack rewrites/);
+  });
+
+  it('never names the registry when the deployment default answered the bound read', () => {
+    // The default answers with the database's own id, which is already a source of its own.
+    const { container } = render(
+      <MismatchBanner activeContestId={1} activeContestName="Spring" dbActiveContestId={1} containerContestId={2} boundContestId={1} boundContestSource="deployment" />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/service registry/i);
+    expect(text).toMatch(/Mismatch: the database and the configured CONTEST_ID disagree with each other\./);
+  });
+
+  it('keeps the activation advice while the registry holds what the others hold', () => {
+    const { container } = render(
+      <MismatchBanner activeContestId={2} activeContestName="Spring" dbActiveContestId={2} containerContestId={5} boundContestId={2} boundContestSource="registry" />,
+    );
+    const text = container.textContent ?? '';
+    expect(text).toMatch(/Mismatch: the configured CONTEST_ID disagrees with the other sources\./);
+    expect(text).toMatch(/Activate & Restart Stack rewrites the database row/);
+    expect(text).not.toMatch(/edit it in the panel's service registry/);
   });
 });

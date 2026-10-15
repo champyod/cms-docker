@@ -7,6 +7,8 @@ interface MismatchBannerProps {
   dbActiveContestId: number | null;
   containerContestId?: number | null;
   boundContestId?: number | null;
+  /** Which store answered the bound read; the registry is named only when the registry answered. */
+  boundContestSource: 'registry' | 'deployment' | null;
 }
 
 interface ContestSource {
@@ -25,17 +27,22 @@ const REGISTRY_SOURCE = 'the service registry';
  * The three values the page compares. WHY the container's CONTEST_ID is labelled as
  * configuration and not as what is served: it is the bootstrap a stack with no contests
  * table yet is read from, so a running stack may serve a contest this id never named.
+ *
+ * WHY the registry is listed only when the read said the registry answered: the deployment
+ * default answers with the id the database holds, so listing it as a third source would show the
+ * database's own value twice and read as a disagreement with itself.
  */
 function contestSources(
   activeContestId: number | null,
   dbActiveContestId: number | null,
   containerContestId: number | null | undefined,
   boundContestId: number | null | undefined,
+  boundContestSource: 'registry' | 'deployment' | null,
 ): ContestSource[] {
   return [
     { label: DATABASE_SOURCE, id: activeContestId ?? dbActiveContestId },
     { label: CONFIGURED_SOURCE, id: containerContestId ?? null },
-    { label: REGISTRY_SOURCE, id: boundContestId ?? null },
+    ...(boundContestSource === 'registry' ? [{ label: REGISTRY_SOURCE, id: boundContestId ?? null }] : []),
   ];
 }
 
@@ -68,15 +75,22 @@ function joinNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
 
-function describeMismatch(sources: readonly ContestSource[]): string {
-  const disagreeing = disagreeingSources(sources);
+function describeMismatch(disagreeing: readonly string[]): string {
   if (disagreeing.length === 0) return '';
   const verb = disagreeing.length === 1 ? 'disagrees with the other sources' : 'disagree with each other';
   return ` Mismatch: ${joinNames(disagreeing)} ${verb}.`;
 }
 
-export function MismatchBanner({ activeContestId, activeContestName, dbActiveContestId, containerContestId, boundContestId }: MismatchBannerProps) {
-    const sources = contestSources(activeContestId, dbActiveContestId, containerContestId, boundContestId);
+export function MismatchBanner({
+    activeContestId,
+    activeContestName,
+    dbActiveContestId,
+    containerContestId,
+    boundContestId,
+    boundContestSource,
+}: MismatchBannerProps): React.JSX.Element {
+    const sources = contestSources(activeContestId, dbActiveContestId, containerContestId, boundContestId, boundContestSource);
+    const disagreeing = disagreeingSources(sources);
     const databaseId = activeContestId ?? dbActiveContestId;
     return (
         <InlineAlert tone="warning" title="Configuration Mismatch" announce="polite" className="mb-6">
@@ -88,15 +102,16 @@ export function MismatchBanner({ activeContestId, activeContestName, dbActiveCon
                             , while the contest stack was configured with CONTEST_ID <strong className="text-foreground">#{containerContestId}</strong>
                         </>
                 )}
-                {boundContestId != null && (
+                {boundContestSource === 'registry' && boundContestId != null && (
                         <>
                             , and the service registry binds the contest web server to contest <strong className="text-foreground">#{boundContestId}</strong>
                         </>
                 )}
                 .
-                {describeMismatch(sources)}
-                {' '}This can happen after a failed deploy or manual edits. Activate &amp; Restart Stack rewrites the
-                database row, while the registry row decides which contest a server actually serves.
+                {describeMismatch(disagreeing)}
+                {' '}{disagreeing.includes(REGISTRY_SOURCE)
+                    ? 'An enabled registry row that names a contest decides what is served, so edit it in the panel\'s service registry (Infrastructure, Services) — activating another contest cannot clear this.'
+                    : 'This can happen after a failed deploy or manual edits. Activate & Restart Stack rewrites the database row, while the registry row decides which contest a server actually serves.'}
             </Text>
         </InlineAlert>
     );

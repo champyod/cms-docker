@@ -223,7 +223,10 @@ export async function getBoundContestId(): Promise<BoundContestResult> {
   await requirePermission('env:list');
   try {
     const binding = await resolveContestBinding(await readContestWebServerShard());
-    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, requestedKeys: [`contest.${CONTEST_WEB_SERVER_SHARD_KEY}`] }, result: 'success' });
+    // WHY the match travels with the row: a declared shard that names no registry row leaves the
+    // enabled rows' own answer, so the row that answered is how a config.toml and a registry that
+    // disagree about the shard become visible at all.
+    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, requestedKeys: [`contest.${CONTEST_WEB_SERVER_SHARD_KEY}`], bindingMatchedBy: binding.matchedBy }, result: 'success' });
     return { success: true, binding };
   } catch (error: unknown) {
     await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' }, result: 'failure' });

@@ -51,7 +51,7 @@ beforeEach(() => {
   actions.readActiveContestId.mockResolvedValue({ success: true, contestId: 1 });
   actions.readConfigTomlValues.mockResolvedValue({ success: true, values: {} });
   actions.getAvailableContests.mockResolvedValue({ success: true, contests: [] });
-  actions.getBoundContestId.mockResolvedValue({ success: true, binding: { source: 'registry', contestId: 3 } });
+  actions.getBoundContestId.mockResolvedValue({ success: true, binding: { source: 'registry', contestId: 3, matchedBy: 'declared-shard' } });
   actions.getContainerContestId.mockResolvedValue({ success: true, contestId: 1 });
 });
 
@@ -63,6 +63,9 @@ describe('useContestDeploymentSnapshot', () => {
     expect(result.current.failedReads).toEqual([]);
     expect(result.current.containerContestId).toBe(1);
     expect(result.current.boundContestId).toBe(3);
+    // The source travels with the id: a registry answer and the deployment default both read as an
+    // id, and only this tells them apart on the page.
+    expect(result.current.boundContestSource).toBe('registry');
   });
 
   it('reports no bound contest while the registry read is the one that failed', async () => {
@@ -71,6 +74,16 @@ describe('useContestDeploymentSnapshot', () => {
 
     await waitFor(() => expect(result.current.status.kind).toBe('idle'));
     expect(result.current.boundContestId).toBeNull();
+    expect(result.current.boundContestSource).toBeNull();
+  });
+
+  it('keeps the deployment default as the source when the registry answers with one', async () => {
+    actions.getBoundContestId.mockResolvedValue({ success: true, binding: { source: 'deployment', contestId: 1, matchedBy: null } });
+    const { result } = renderSnapshot();
+
+    await waitFor(() => expect(result.current.status.kind).toBe('idle'));
+    expect(result.current.boundContestId).toBe(1);
+    expect(result.current.boundContestSource).toBe('deployment');
   });
 
   it('names the read that failed instead of staying on Loading', async () => {

@@ -59,8 +59,19 @@ describe('the bound contest read carries the config.toml reader parity', () => {
     const { getBoundContestId } = await loadContestServiceAs('Storage', async () => SHARD_TOML);
     await expect(getBoundContestId()).resolves.toEqual({
       success: true,
-      binding: { source: 'registry', contestId: 3 },
+      binding: { source: 'registry', contestId: 3, matchedBy: 'declared-shard' },
     });
+  });
+
+  it('records the row that answered, so a declared shard the registry does not carry shows', async () => {
+    const { getBoundContestId } = await loadContestServiceAs('Storage', async () => '[contest]\nCONTEST_WEB_SERVER_SHARD = 9\n');
+    await getBoundContestId();
+
+    expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({
+      verb: 'config:view',
+      result: 'success',
+      afterValues: expect.objectContaining({ bindingMatchedBy: 'consensus' }),
+    }));
   });
 
   it('names only the shard key in the config:view row it leaves', async () => {
@@ -70,7 +81,11 @@ describe('the bound contest read carries the config.toml reader parity', () => {
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({
       verb: 'config:view',
       entity: 'config',
-      afterValues: { file: 'config.toml', requestedKeys: ['contest.CONTEST_WEB_SERVER_SHARD'] },
+      afterValues: {
+        file: 'config.toml',
+        requestedKeys: ['contest.CONTEST_WEB_SERVER_SHARD'],
+        bindingMatchedBy: 'declared-shard',
+      },
       result: 'success',
     }));
   });

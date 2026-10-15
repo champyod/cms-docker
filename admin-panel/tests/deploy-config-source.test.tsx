@@ -49,7 +49,7 @@ describe('deploy copy names the write the activation performs', () => {
 
 describe('mismatch banner names the sources it actually compares', () => {
   const bannerHtml = renderToStaticMarkup(
-    <MismatchBanner activeContestId={12} activeContestName="Autumn" dbActiveContestId={12} containerContestId={1} boundContestId={3} />,
+    <MismatchBanner activeContestId={12} activeContestName="Autumn" dbActiveContestId={12} containerContestId={1} boundContestId={3} boundContestSource="registry" />,
   );
 
   it('reports the database row against the configured value and the registry binding', () => {

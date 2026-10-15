@@ -113,6 +113,7 @@ export function DeploymentsClient(): React.JSX.Element {
           dbActiveContestId={snapshot.dbActiveContestId}
           containerContestId={snapshot.containerContestId}
           boundContestId={snapshot.boundContestId}
+          boundContestSource={snapshot.boundContestSource}
         />
       )}
 

@@ -14,6 +14,9 @@ export const CONTEST_WEB_SERVER_SHARD_KEY = 'CONTEST_WEB_SERVER_SHARD';
 /** What a deployment that never set the key runs, matching compose's own `${…:-0}`. */
 const DEFAULT_CONTEST_WEB_SERVER_SHARD = 0;
 
+/** How the registry row was reached, when the registry answered at all. */
+export type BindingMatch = 'declared-shard' | 'consensus';
+
 /**
  * What the registry answers about the contest one contest web server serves.
  *
@@ -26,6 +29,12 @@ export interface ContestBinding {
   readonly source: 'registry' | 'deployment';
   /** The bound contest, or null when the registry names this instance as serving all of them. */
   readonly contestId: number | null;
+  /**
+   * Which registry row answered, or null when the deployment default did: `declared-shard` is the
+   * row of the shard config.toml declares, `consensus` the one answer the enabled rows agree on
+   * because that shard names no row of its own.
+   */
+  readonly matchedBy: BindingMatch | null;
 }
 
 /**
@@ -50,9 +59,15 @@ interface ContestWebServerRow {
   readonly contest_id: number | null;
 }
 
+/** The registry row that answered for this deployment, and which of the two answers it was. */
+interface BoundRowSelection {
+  readonly row: ContestWebServerRow;
+  readonly matchedBy: BindingMatch;
+}
+
 /**
  * The registry row the deployment's own contest web server resolves against, or null when the
- * registry names no row for it.
+ * registry names no row for it, with how the row was reached.
  *
  * WHY the declared shard first: the declared server runs the shard config.toml hands it, so that
  * shard — not the registry's lowest id — picks its row, which is also the row cms.db.contest_binding
@@ -60,16 +75,23 @@ interface ContestWebServerRow {
  * registry created takes the shard its own row names, so a declared shard that names no row still
  * leaves one answer whenever the enabled servers all name the same contest. Servers that disagree
  * name no single contest, and the deployment default answers instead of one of them.
+ *
+ * WHY the answer says which of the two it was: a declared shard that names no row means config.toml
+ * and the registry disagree about the shard, which is the mismatch this fallback would otherwise
+ * hide. The binding carries it and the panel's bound-contest read records it, so the case is
+ * observable without a warning of its own.
  */
 function selectBoundRow(
   rows: readonly ContestWebServerRow[],
   declaredShard: number,
-): ContestWebServerRow | null {
+): BoundRowSelection | null {
   const declared = rows.find((row) => row.shard === declaredShard);
-  if (declared !== undefined) return declared;
+  if (declared !== undefined) return { row: declared, matchedBy: 'declared-shard' };
   const [first, ...rest] = rows;
   if (first === undefined) return null;
-  return rest.every((row) => row.contest_id === first.contest_id) ? first : null;
+  return rest.every((row) => row.contest_id === first.contest_id)
+    ? { row: first, matchedBy: 'consensus' }
+    : null;
 }
 
 /**
@@ -88,7 +110,9 @@ export async function resolveContestBinding(declaredShard: number): Promise<Cont
     orderBy: { id: 'asc' },
     select: { shard: true, contest_id: true },
   });
-  const row = selectBoundRow(rows, declaredShard);
-  if (row === null) return { source: 'deployment', contestId: await readActiveContestId() };
-  return { source: 'registry', contestId: row.contest_id };
+  const selection = selectBoundRow(rows, declaredShard);
+  if (selection === null) {
+    return { source: 'deployment', contestId: await readActiveContestId(), matchedBy: null };
+  }
+  return { source: 'registry', contestId: selection.row.contest_id, matchedBy: selection.matchedBy };
 }
