@@ -13,19 +13,6 @@ describe('audited read rows carry names, ids, counts and flags only', () => {
     vi.clearAllMocks();
   });
 
-  it('records the env file read as keys, not values', async () => {
-    const { entries } = await loadAuditedActions();
-    const { readEnvFile } = await import('@/app/actions/env');
-
-    const verb = await verbOfSingleRow(() => readEnvFile('.env'), entries);
-
-    expect(verb).toBe('env:view');
-    expect(entries[0].afterValues).toEqual({
-      filename: '.env',
-      requestedKeys: ['DISCORD_WEBHOOK_URL', 'POSTGRES_PASSWORD'],
-    });
-  });
-
   it('records the config.toml read as the sections asked for', async () => {
     const { entries } = await loadAuditedActions();
     const { readConfigTomlValues } = await import('@/app/actions/configTomlActions');

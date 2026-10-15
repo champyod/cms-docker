@@ -17,7 +17,6 @@ export const WORKER_HOST = 'canary-worker.internal';
 
 const ENV_CONTENT = [
   '# comment line',
-  `DISCORD_WEBHOOK_URL=${WEBHOOK_URL}`,
   `POSTGRES_PASSWORD=${ENV_SECRET}`,
   '',
 ].join('\n');
@@ -27,6 +26,10 @@ const TOML_CONTENT = [
   `POSTGRES_PASSWORD = "${TOML_SECRET}"`,
   '[admin]',
   'DEPLOYMENT_TYPE = "img"',
+  // Why the webhook sits in config.toml: the panel resolves it there and never from the .env
+  // render, so the canary has to be reachable through the file the action actually reads.
+  '[infra]',
+  `DISCORD_WEBHOOK_URL = "${WEBHOOK_URL}"`,
   // Why the fleet sits in config.toml: the panel reads worker endpoints from there, and not from
   // cms.toml, so the canary host has to be reachable through the reader the action actually uses.
   '[worker]',

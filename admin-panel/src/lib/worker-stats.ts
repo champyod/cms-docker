@@ -72,27 +72,11 @@ function tomlWorkers(content: string): Map<number, ConfiguredWorker> {
   return workers;
 }
 
-/** The fleet the generated .env carries — the last resort for a host with no config.toml. */
-function envFileWorkers(content: string): Map<number, ConfiguredWorker> {
-  const workers = new Map<number, ConfiguredWorker>();
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) continue;
-    const key = trimmed.slice(0, trimmed.indexOf('=')).trim().replace(/^export\s+/, '');
-    const shard = workerShardOf(key);
-    if (shard === null) continue;
-    const endpoint = parseWorkerEndpoint(trimmed.slice(trimmed.indexOf('=') + 1));
-    if (endpoint) workers.set(shard, { shard, ...endpoint });
-  }
-  return workers;
-}
-
 /** A file the fleet is read from, and the parser that understands its shape. */
 const WORKER_CONFIG_SOURCES: ReadonlyArray<{
   file: string;
   parse: (content: string) => Map<number, ConfiguredWorker>;
 }> = [
-  { file: '.env', parse: envFileWorkers },
   { file: CONFIG_TOML_FILE, parse: tomlWorkers },
 ];
 
@@ -104,9 +88,10 @@ interface ConfiguredFleet {
 
 /**
  * Every configured worker, each shard taken from the first source that carries it:
- * the .env render, then config.toml (the source), then the process environment.
- * Why that order: the sync renders .env from config.toml, so .env can lag it, and what
- * compose handed the process overrides both.
+ * config.toml (the file the panel writes), then the process environment. What compose handed
+ * the process overrides the config, and the generated .env is deliberately not a source: it is
+ * a render of config.toml, so reading it here could show a fleet the next `./cms config sync`
+ * replaces.
  *
  * WHY the read failures are kept: a source that exists but cannot be read is not an empty
  * source, and folding the two together renders a permission problem as a worker-less fleet.

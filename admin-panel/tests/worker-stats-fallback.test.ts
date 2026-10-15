@@ -19,9 +19,9 @@ import { collectWorkerStats } from '@/lib/worker-stats';
 type ExecResult = { stdout: string; stderr: string };
 type ExecCallback = (error: Error | null, result: ExecResult) => void;
 
-const CONFIGURED_WORKERS_ENV = 'WORKER_0=cms-worker-0:26000\nWORKER_1=cms-worker-1:26001\n';
+const CONFIGURED_WORKERS_TOML = '[worker]\nWORKER_0 = "cms-worker-0:26000"\nWORKER_1 = "cms-worker-1:26001"\n';
 // The config.toml form the fleet TUI writes: a quoted value, and a row ending in a comment.
-const CONFIGURED_WORKERS_TOML = '[worker]\nWORKER_4 = "10.0.0.4:26004" # note\nWORKER_6 = "10.0.0.6:26006"\n';
+const STALE_FLEET_TOML = '[worker]\nWORKER_4 = "10.0.0.4:26004" # note\nWORKER_6 = "10.0.0.6:26006"\n';
 const DOCKER_PS = 'cms-worker-0\tUp 2 hours\ncms-worker-1\tExited (0) 1 hour ago';
 
 /** Why the callback is the second argument: promisify appends it to the single command it is given. */
@@ -39,10 +39,14 @@ function execFileSucceeds(stdout: string): (file: string, args: string[], option
 
 let repoRoot = '';
 
+/** The fleet the panel reads: config.toml, the file the fleet TUI and the settings screen write. */
+function seedConfigToml(content: string): void {
+  fs.writeFileSync(path.join(repoRoot, 'config.toml'), content);
+}
+
 beforeEach(() => {
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
   repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cms-worker-stats-'));
-  fs.writeFileSync(path.join(repoRoot, '.env'), CONFIGURED_WORKERS_ENV);
   mocks.repoRoot = repoRoot;
   mocks.exec.mockReset();
   mocks.execFile.mockReset();
@@ -64,6 +68,8 @@ afterEach(() => {
  */
 describe('collectWorkerStats with a degraded emitter', () => {
   it('reads the fleet from docker when the emitter reports no workers', async () => {
+    seedConfigToml(CONFIGURED_WORKERS_TOML);
+
     const { workers: nodes } = await collectWorkerStats();
 
     expect(mocks.execFile).toHaveBeenCalledTimes(1);
@@ -74,6 +80,7 @@ describe('collectWorkerStats with a degraded emitter', () => {
   });
 
   it('still falls back when the emitter cannot run at all', async () => {
+    seedConfigToml(CONFIGURED_WORKERS_TOML);
     mocks.execFile.mockImplementation((_file: string, _args: string[], _options: unknown, callback: ExecCallback): void => {
       callback(new Error('EACCES: permission denied'), { stdout: '', stderr: '' });
     });
@@ -98,27 +105,22 @@ describe('collectWorkerStats with a degraded emitter', () => {
 });
 
 /**
- * Why the fleet is read from three places: the sync renders .env from config.toml, and the panel
- * container is handed only what compose delivers — so the source outranks its render, and the
- * environment outranks both.
+ * Why the fleet is read from two places: config.toml is the file the panel writes, and the panel
+ * container is handed only what compose delivers — so the environment outranks the config. The
+ * generated .env is a render of config.toml, so a shard living only there is a stale copy.
  */
 describe('collectWorkerStats fleet sources', () => {
-  it('still yields the fleet when the .env file cannot be read', async () => {
-    const envPath = path.join(repoRoot, '.env');
-    fs.rmSync(envPath);
-    fs.mkdirSync(envPath); // a directory where a file is expected: readFileSync throws, the value must come from the environment
-    vi.stubEnv('WORKER_0', '10.0.0.10:26010');
-    vi.stubEnv('WORKER_1', '10.0.0.11:26011');
+  it('reads the fleet from config.toml alone, ignoring a stale .env render', async () => {
+    fs.writeFileSync(path.join(repoRoot, '.env'), 'WORKER_9=stale.example:9999\n');
+    seedConfigToml(STALE_FLEET_TOML);
 
     const { workers: nodes } = await collectWorkerStats();
 
-    expect(nodes.map((node) => node.id)).toEqual(['worker-0', 'worker-1']);
-    expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.10:26010', '10.0.0.11:26011']);
+    expect(nodes.map((node) => node.id)).toEqual(['worker-4', 'worker-6']);
   });
 
-  it('reads config.toml when the environment is silent and .env is absent', async () => {
-    fs.rmSync(path.join(repoRoot, '.env'));
-    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
+  it('reads config.toml when the environment is silent', async () => {
+    seedConfigToml(STALE_FLEET_TOML);
 
     const { workers: nodes } = await collectWorkerStats();
 
@@ -126,18 +128,8 @@ describe('collectWorkerStats fleet sources', () => {
     expect(nodes.map((node) => node.endpoint)).toEqual(['10.0.0.4:26004', '10.0.0.6:26006']);
   });
 
-  it('prefers config.toml over the .env render for the same shard', async () => {
-    fs.writeFileSync(path.join(repoRoot, '.env'), 'WORKER_4=stale.example:9999\n');
-    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
-
-    const { workers: nodes } = await collectWorkerStats();
-
-    expect(nodes.find((node) => node.id === 'worker-4')?.endpoint).toBe('10.0.0.4:26004');
-    expect(nodes.find((node) => node.id === 'worker-6')?.endpoint).toBe('10.0.0.6:26006');
-  });
-
   it('lets the environment win over config.toml', async () => {
-    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIGURED_WORKERS_TOML);
+    seedConfigToml(STALE_FLEET_TOML);
     vi.stubEnv('WORKER_4', '10.9.9.9:26999');
 
     const { workers: nodes } = await collectWorkerStats();
@@ -150,18 +142,16 @@ describe('collectWorkerStats fleet sources', () => {
    * fleet when the configuration itself could not be opened — that is a read fault, and it must be
    * named rather than rendered as "No worker nodes configured".
    */
-  it('names an unreadable configuration instead of rendering an empty fleet', async () => {
-    const envPath = path.join(repoRoot, '.env');
-    fs.rmSync(envPath);
-    fs.mkdirSync(envPath); // a directory where a file is expected: readFile throws EISDIR
-    fs.writeFileSync(path.join(repoRoot, 'config.toml'), '');
+  it('names an unreadable config.toml instead of rendering an empty fleet', async () => {
+    const configPath = path.join(repoRoot, 'config.toml');
+    fs.mkdirSync(configPath); // a directory where a file is expected: readFile throws EISDIR
     mocks.exec.mockImplementation(execSucceeds(''));
 
     const { workers, error } = await collectWorkerStats();
 
     expect(workers).toEqual([]);
     expect(error).toContain('EISDIR');
-    expect(error).toContain(envPath);
+    expect(error).toContain(configPath);
   });
 });
 
@@ -191,9 +181,7 @@ describe('collectWorkerStats named faults', () => {
   });
 
   it('carries the emitter failure into the fault beside the unreadable configuration', async () => {
-    const envPath = path.join(repoRoot, '.env');
-    fs.rmSync(envPath);
-    fs.mkdirSync(envPath); // a directory where a file is expected: readFile throws EISDIR
+    fs.mkdirSync(path.join(repoRoot, 'config.toml')); // a directory where a file is expected: readFile throws EISDIR
     mocks.execFile.mockImplementation((_file: string, _args: string[], _options: unknown, callback: ExecCallback): void => {
       callback(new Error('EACCES: permission denied'), { stdout: '', stderr: '' });
     });

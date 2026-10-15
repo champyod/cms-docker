@@ -45,7 +45,6 @@ interface ActionLabels {
 interface DiscordSettings {
   readonly configTomlPresent: boolean;
   readonly configWebhookUrl: string;
-  readonly effectiveWebhookUrl: string;
 }
 
 // This screen edits config.toml [infra]: the generated .env is rewritten from it by
@@ -68,22 +67,16 @@ const MAINTENANCE_CONFIG_KEYS: readonly ConfigTomlKey[] = [
   ...NOTIFICATION_KEYS,
 ];
 
-// Why: the source of truth (config.toml) and what the monitor actually reads (.env) can
-// drift, and a silent drift means alerts vanish — spell the state out instead of a badge.
+// Why: config.toml is the only file the panel reads the webhook from, so the state names what
+// that file holds rather than comparing it against a generated render that only lags it.
 function describeDiscordState(settings: DiscordSettings): string {
   if (!settings.configTomlPresent) {
     return "config.toml not found — run './cms config sync' so saved values survive the next sync.";
   }
-  if (settings.effectiveWebhookUrl === '' && settings.configWebhookUrl === '') {
+  if (settings.configWebhookUrl === '') {
     return 'No webhook configured — monitor alerts are dropped.';
   }
-  if (settings.effectiveWebhookUrl === '') {
-    return 'Saved in config.toml but not applied to .env yet — save and restart the monitor to apply it.';
-  }
-  if (settings.effectiveWebhookUrl !== settings.configWebhookUrl) {
-    return 'config.toml and .env disagree — save here so the next config sync keeps this value.';
-  }
-  return 'Webhook configured and matching config.toml.';
+  return 'Webhook configured in config.toml.';
 }
 
 export async function loadDiscordSettings(patch: Patch): Promise<void> {

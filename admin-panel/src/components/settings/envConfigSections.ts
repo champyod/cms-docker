@@ -56,6 +56,14 @@ export const CONFIG_SECTIONS: EnvConfigSection[] = [
       { key: 'ADMIN_LISTEN_PORT', tomlSection: 'admin', label: 'Admin Port', description: 'Internal port for Admin Web Server.' },
       { key: 'ADMIN_COOKIE_DURATION', tomlSection: 'admin', label: 'Admin Session', description: 'Admin panel session length.' },
     ]
+  },
+  {
+    title: 'Notifications',
+    filename: CONFIG_TOML_FILE,
+    fields: [
+      { key: 'DISCORD_WEBHOOK_URL', tomlSection: 'infra', label: 'Discord Webhook URL', description: 'Webhook the monitor and the panel post alerts to.' },
+      { key: 'DISCORD_ROLE_ID', tomlSection: 'infra', label: 'Discord Mention Role', description: 'Role mentioned in alert embeds (optional).' },
+    ]
   }
 ];
 

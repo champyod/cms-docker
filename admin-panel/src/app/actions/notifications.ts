@@ -1,26 +1,23 @@
 'use server';
 
-import fs from 'fs/promises';
 import path from 'path';
 
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
 import { readConfigFile, type ConfigFileRead } from '@/lib/config-file';
-import { readEnvFile, readEnvFileCore, updateEnvFile } from '@/app/actions/env';
+import { updateConfigTomlValues } from '@/app/actions/configTomlActions';
 import { getDictionary } from '@/i18n';
 import { interpolate } from '@/lib/interpolate';
 import {
   buildDiscordAlertPayload,
   postDiscordPayload,
   readTomlValue,
-  upsertTomlValue,
   validateDiscordRoleId,
   validateDiscordWebhookUrl,
 } from '@/lib/discord-webhook';
 
 const CONFIG_TOML = 'config.toml';
-const ENV_FILE = '.env';
 const CONFIG_SECTION = 'infra';
 const WEBHOOK_KEY = 'DISCORD_WEBHOOK_URL';
 const ROLE_KEY = 'DISCORD_ROLE_ID';
@@ -40,8 +37,9 @@ async function readConfigToml(): Promise<ConfigFileRead> {
 }
 
 /**
- * Reads the saved webhook settings from config.toml (source of truth) next to the value the
- * running monitor actually consumes from .env, so the operator can see when they diverge.
+ * Reads the saved webhook settings from config.toml, the one file the panel writes them to and
+ * reads them back from. The generated .env is a render of that file, so reading it here would
+ * show a value the next `./cms config sync` is free to replace.
  */
 export async function getDiscordNotificationSettings() {
   await ensurePermission('env:read');
@@ -50,14 +48,6 @@ export async function getDiscordNotificationSettings() {
     if (configToml.kind === 'unreadable') {
       return { success: false as const, error: configToml.reason };
     }
-    // The audited read, unlike the test-alert path below: this is the settings screen showing the
-    // operator the effective webhook URL, so the disclosure is the point of the call.
-    const envResult = await readEnvFile(ENV_FILE);
-    // Why the failure is returned rather than folded into an empty string: the screen renders the
-    // effective URL, and an unread .env shown as "" claims the monitor has no webhook configured.
-    if (!envResult.success) {
-      return { success: false as const, error: envResult.error };
-    }
 
     return {
       success: true as const,
@@ -65,7 +55,6 @@ export async function getDiscordNotificationSettings() {
       configWebhookUrl: configToml.kind === 'absent'
         ? ''
         : readTomlValue(configToml.content, CONFIG_SECTION, WEBHOOK_KEY),
-      effectiveWebhookUrl: envResult.config[WEBHOOK_KEY] ?? '',
     };
   } catch (error) {
     return { success: false as const, error: (error as Error).message };
@@ -73,9 +62,8 @@ export async function getDiscordNotificationSettings() {
 }
 
 /**
- * Persists the webhook settings to config.toml (so `./cms config sync` keeps them) and to
- * .env (so the next container start picks them up immediately). Invalid values are rejected
- * rather than stored: a wrong URL silently disables every alert.
+ * Persists the webhook settings to config.toml, the file `./cms config sync` regenerates .env
+ * from. Invalid values are rejected rather than stored: a wrong URL silently disables every alert.
  *
  * `locale` comes from the calling panel page so the returned message is in the admin's language;
  * an unknown locale falls back to English inside `getDictionary`.
@@ -105,27 +93,14 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
       };
     }
 
-    const updatedToml = upsertTomlValue(
-      upsertTomlValue(configToml.content, CONFIG_SECTION, WEBHOOK_KEY, webhook.value),
-      CONFIG_SECTION,
-      ROLE_KEY,
-      role.value,
-    );
-    await fs.writeFile(path.join(getRepoRoot(), CONFIG_TOML), updatedToml, 'utf-8');
-
-    const envResult = await updateEnvFile(ENV_FILE, {
-      [WEBHOOK_KEY]: webhook.value,
-      [ROLE_KEY]: role.value,
-    });
-    if (!envResult.success) {
-      return {
-        success: false as const,
-        error: interpolate(discordToasts.envWriteFailed, {
-          configToml: CONFIG_TOML,
-          envFile: ENV_FILE,
-          error: envResult.error,
-        }),
-      };
+    // Why the shared writer: this is the same write the settings screen performs, so the panel
+    // has one config.toml writer rather than two that could resolve a section differently.
+    const written = await updateConfigTomlValues([
+      { section: CONFIG_SECTION, key: WEBHOOK_KEY, value: webhook.value },
+      { section: CONFIG_SECTION, key: ROLE_KEY, value: role.value },
+    ]);
+    if (!written.success) {
+      return { success: false as const, error: written.error };
     }
 
     // Why: the webhook URL is a credential — record that it changed, never its value.
@@ -134,7 +109,6 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
       entity: 'discord_notification',
       afterValues: {
         configToml: CONFIG_TOML,
-        envFile: ENV_FILE,
         webhookConfigured: webhook.value !== '',
         roleIdSet: role.value !== '',
       },
@@ -168,15 +142,21 @@ async function resolveTestAlertTarget(
   let usedConfiguredWebhook = false;
 
   if (targetUrl === '') {
-    // Unaudited on purpose: this is the alert action resolving the URL it needs, not a read of
-    // the env file, and the alert it goes on to send is the recorded act.
-    const envResult = await readEnvFileCore(ENV_FILE);
-    // Why the read failure is reported: an unread .env would otherwise resolve to "no webhook
-    // configured" and send the operator after a URL the file may well hold.
-    if (!envResult.success) {
-      return { ok: false, error: envResult.error, usedConfiguredWebhook: true, hasRoleId: false };
+    // Unaudited on purpose: this is the alert action resolving the URL it needs, and the alert it
+    // goes on to send is the recorded act.
+    // Why the same pair the env-file read carried: the fallback still discloses a stored
+    // credential, so it stays behind the read gate rather than riding on monitor:test alone.
+    await ensurePermission('env:read');
+    await ensurePermission('env:list');
+    const configToml = await readConfigToml();
+    // Why the read failure is reported: an unread config.toml would otherwise resolve to "no
+    // webhook configured" and send the operator after a URL the file may well hold.
+    if (configToml.kind === 'unreadable') {
+      return { ok: false, error: configToml.reason, usedConfiguredWebhook: true, hasRoleId: false };
     }
-    targetUrl = envResult.config[WEBHOOK_KEY] ?? '';
+    targetUrl = configToml.kind === 'absent'
+      ? ''
+      : readTomlValue(configToml.content, CONFIG_SECTION, WEBHOOK_KEY);
     usedConfiguredWebhook = true;
   }
 

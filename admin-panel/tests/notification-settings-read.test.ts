@@ -38,11 +38,24 @@ afterEach(() => {
 });
 
 /**
- * Why the fault is asserted apart from the absent case: a settings screen with nothing configured
- * and one whose configuration could not be opened look identical once the read error is folded
- * into an empty value, and only the second is a fault the operator has to fix.
+ * Why the case folds a readable .env against an unreadable one: the panel resolves the webhook
+ * from config.toml alone, so a value that came back from .env — or a fault raised by trying to
+ * open it — is the only way a second source could announce itself here.
  */
-describe('discord notification settings with an unreadable configuration', () => {
+describe('discord notification settings resolve from config.toml alone', () => {
+  it('reads the webhook from config.toml even when the generated .env cannot be read', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIG_TOML_WITH_WEBHOOK);
+    makeUnreadable('.env');
+
+    const result = await getDiscordNotificationSettings();
+
+    expect(result).toMatchObject({
+      success: true,
+      configTomlPresent: true,
+      configWebhookUrl: WEBHOOK_URL,
+    });
+  });
+
   it('reports an unreadable config.toml instead of an empty webhook', async () => {
     makeUnreadable('config.toml');
     fs.writeFileSync(path.join(repoRoot, '.env'), `DISCORD_WEBHOOK_URL=${WEBHOOK_URL}\n`);
@@ -55,19 +68,7 @@ describe('discord notification settings with an unreadable configuration', () =>
     expect(result.error).toContain('config.toml');
   });
 
-  it('reports an unreadable .env instead of an empty effective webhook', async () => {
-    fs.writeFileSync(path.join(repoRoot, 'config.toml'), CONFIG_TOML_WITH_WEBHOOK);
-    makeUnreadable('.env');
-
-    const result = await getDiscordNotificationSettings();
-
-    expect(result.success).toBe(false);
-    if (result.success) throw new Error('expected the .env read fault');
-    expect(result.error).toContain('EISDIR');
-    expect(result.error).toContain('.env');
-  });
-
-  it('keeps an absent config.toml an absent value beside the .env the monitor reads', async () => {
+  it('keeps an absent config.toml an absent value rather than falling back to .env', async () => {
     fs.writeFileSync(path.join(repoRoot, '.env'), `DISCORD_WEBHOOK_URL=${WEBHOOK_URL}\n`);
 
     const result = await getDiscordNotificationSettings();
@@ -76,7 +77,6 @@ describe('discord notification settings with an unreadable configuration', () =>
       success: true,
       configTomlPresent: false,
       configWebhookUrl: '',
-      effectiveWebhookUrl: WEBHOOK_URL,
     });
   });
 });
