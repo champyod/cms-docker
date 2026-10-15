@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
   getSubmissions: vi.fn(),
   getSubmissionSummary: vi.fn(),
+  getPreviousSubmission: vi.fn(),
 }));
 
 vi.mock('@/lib/api-utils', async () => {
@@ -46,7 +47,10 @@ vi.mock('@/lib/server/authorization', async () => {
 
 vi.mock('@/lib/people-read-models', () => ({ getSubmissions: mocks.getSubmissions }));
 
-vi.mock('@/lib/evaluation-read-models', () => ({ getSubmissionSummary: mocks.getSubmissionSummary }));
+vi.mock('@/lib/evaluation-read-models', () => ({
+  getSubmissionSummary: mocks.getSubmissionSummary,
+  getPreviousSubmission: mocks.getPreviousSubmission,
+}));
 
 vi.mock('@/i18n', async () => {
   const en = await vi.importActual<{ default: Dictionary }>('@/dictionaries/en.json');
@@ -120,6 +124,9 @@ beforeEach(() => {
     task: null,
     capabilities: { canUpdate: false, canRecompute: false, canDownload: false, canMoveLane: false },
   });
+  mocks.getPreviousSubmission.mockReset();
+  // Why null: the fixture record has no earlier submission on its task, so the header carries no compare chip.
+  mocks.getPreviousSubmission.mockResolvedValue(null);
   grantReaders();
 });
 
