@@ -84,8 +84,9 @@ if printf '%s\n' "$PRIMARY_CLASSIC" | grep -Fq -- 'MAP|primary|grader.example.or
 else
   no "the map did not follow PRIMARY_CLASSIC_ROUTE_PATH onto the primary vhost"
 fi
-has "the primary vhost includes its fragment" "include /etc/nginx/generated/locations-primary*.conf;"
-has "the admin vhost includes its fragment" "include /etc/nginx/generated/locations-admin*.conf;"
+has "the primary vhost includes its fragment by its exact name" "include /etc/nginx/generated/locations-primary.conf;"
+has "the admin vhost includes its fragment by its exact name" "include /etc/nginx/generated/locations-admin.conf;"
+hasnt "no fragment include keeps a wildcard" "locations-primary*.conf"
 
 printf '\n== the panel streams are kept alive on both panel vhosts ==\n'
 # WHY the admin vhost and the primary sub-path separately: the panel answers at the root of
