@@ -10,12 +10,30 @@ import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { previewRegistryAction, type PreviewResult } from '@/app/actions/serviceWiring';
 import { PANEL_READ_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout';
+import type { Dictionary } from '@/lib/dictionary';
 import type { RegistryArtifact } from '@/lib/service-wiring-cli';
 
 type PreviewState =
   | { kind: 'loading' }
   | { kind: 'ready'; artifacts: RegistryArtifact[] }
   | { kind: 'error'; message: string };
+
+type PreviewCopy = Dictionary['infrastructure']['services']['preview'];
+
+/**
+ * The heading and hot-apply instruction for one artifact.
+ *
+ * WHY three cases and not two: a `location` artifact is a fragment the front's nginx includes, so
+ * it is labelled as nginx config and applied by re-syncing and reloading the front — the serve
+ * instruction ("recreate that node") names a tailnet node the fragment never touches.
+ */
+function artifactCopy(copy: PreviewCopy, artifact: RegistryArtifact): { title: string; hotApply: string } {
+  if (artifact.mode === 'nginx') return { title: copy.nginxTitle, hotApply: copy.nginxHotApply };
+  if (artifact.mode === 'location') {
+    return { title: interpolate(copy.locationTitle, { node: artifact.node ?? '' }), hotApply: copy.locationHotApply };
+  }
+  return { title: interpolate(copy.serveTitle, { node: artifact.node ?? '' }), hotApply: copy.serveHotApply };
+}
 
 /**
  * The generated config the next sync would write, each artifact beside its hot-apply class.
@@ -55,19 +73,18 @@ export function PreviewPanel(): React.JSX.Element {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">{copy.description}</p>
-      {rendered.map((artifact) => (
-        <Card key={artifact.node ?? artifact.mode} className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-medium text-foreground">
-              {artifact.mode === 'nginx' ? copy.nginxTitle : interpolate(copy.serveTitle, { node: artifact.node ?? '' })}
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {artifact.mode === 'nginx' ? copy.nginxHotApply : copy.serveHotApply}
-            </span>
-          </div>
-          <pre className="overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-foreground">{artifact.content}</pre>
-        </Card>
-      ))}
+      {rendered.map((artifact) => {
+        const card = artifactCopy(copy, artifact);
+        return (
+          <Card key={artifact.node ?? artifact.mode} className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-medium text-foreground">{card.title}</h2>
+              <span className="text-xs text-muted-foreground">{card.hotApply}</span>
+            </div>
+            <pre className="overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-foreground">{artifact.content}</pre>
+          </Card>
+        );
+      })}
       <p className="text-xs text-muted-foreground">{copy.mountedNote}</p>
     </div>
   );

@@ -100,6 +100,8 @@
         "description": "What the next config sync renders from this registry.",
         "nginxTitle": "Nginx server blocks",
         "nginxHotApply": "Exposures: re-sync, then reload nginx in the front",
+        "locationTitle": "Nginx location fragment for {node}",
+        "locationHotApply": "Front vhost fragment: re-sync, then reload nginx in the front",
         "serveTitle": "Tailnet serve config for {node}",
         "serveHotApply": "New tailnet name: recreate that node",
         "mountedNote": "Anything mounted is never instant.",
