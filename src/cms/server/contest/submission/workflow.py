@@ -157,6 +157,14 @@ def accept_submission(
                    "after %d seconds from last submission."),
                 task.min_submission_interval.total_seconds())
 
+    # A task with no active dataset cannot be judged (ProxyService skips it),
+    # so accepting the submission would leave it pending forever.
+
+    if task.active_dataset is None:
+        raise UnacceptableSubmission(
+            N_("Submission not allowed!"),
+            N_("This task is not ready to accept submissions yet."))
+
     # Process the data we received and ensure it's valid.
 
     required_codenames = set(task.submission_format)
@@ -340,6 +348,9 @@ def accept_user_test(
 
     # Check whether the task is testable.
 
+    # Without an active dataset there is no task type to test against.
+    if task.active_dataset is None:
+        raise TestingNotAllowed()
     task_type = task.active_dataset.task_type_object
     if not task_type.testable:
         raise TestingNotAllowed()

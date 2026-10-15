@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, PropertyMock, patch, sentinel, ANY
 from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
 
 from cms import config
-from cms.db import Submission, UserTest
+from cms.db import ContestTask, Submission, UserTest
 from cms.server.contest.submission import InvalidArchive, \
     InvalidFilesOrLanguage, StorageFailed, UnacceptableSubmission, \
     accept_submission, TestingNotAllowed, UnacceptableUserTest, accept_user_test
@@ -72,8 +72,10 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.participation = self.add_participation(
             contest=self.contest)
         self.task = self.add_task(
-            submission_format=["foo.%l", "bar.%l", "baz.%l"],
-            contest=self.contest)
+            submission_format=["foo.%l", "bar.%l", "baz.%l"])
+        self.session.add(ContestTask(contest=self.contest, task=self.task,
+                                     num=0))
+        self.session.flush()
         self.dataset = self.add_dataset(
             task=self.task)
         self.task.active_dataset = self.dataset
@@ -341,6 +343,16 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
              "baz.%l": BAZ_CONTENT}, True)
         self.fetch_file_digests_from_previous_submission.assert_not_called()
 
+    def test_it_rejects_a_submission_without_an_active_dataset(self):
+        self.task_type.ALLOW_PARTIAL_SUBMISSION = False
+        # Ensure all codenames of the submission format are provided.
+        self.files["bar.%l"] = BAR_CONTENT
+        self.files["baz.%l"] = BAZ_CONTENT
+        self.task.active_dataset = None
+
+        with self.assertRaises(UnacceptableSubmission):
+            self.call()
+
     def test_it_rejects_files_over_the_maximum_length(self):
         self.files["foo.%l"] = FOO_CONTENT * 100
         max_size = len(FOO_CONTENT) * 100 - 1
@@ -406,8 +418,10 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
         self.participation = self.add_participation(
             contest=self.contest)
         self.task = self.add_task(
-            submission_format=["foo.%l", "bar.%l", "baz.%l"],
-            contest=self.contest)
+            submission_format=["foo.%l", "bar.%l", "baz.%l"])
+        self.session.add(ContestTask(contest=self.contest, task=self.task,
+                                     num=0))
+        self.session.flush()
         self.dataset = self.add_dataset(
             task=self.task)
         self.task.active_dataset = self.dataset
@@ -574,6 +588,12 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
 
     def test_it_rejects_a_user_test_when_testing_is_not_allowed(self):
         self.task_type.testable = False
+
+        with self.assertRaises(TestingNotAllowed):
+            self.call()
+
+    def test_it_rejects_a_user_test_without_an_active_dataset(self):
+        self.task.active_dataset = None
 
         with self.assertRaises(TestingNotAllowed):
             self.call()
