@@ -10,6 +10,7 @@ import {
   type ServiceRow,
   type WiringRow,
 } from '@/lib/service-wiring';
+import { parseFrontVhostList } from '@/lib/service-wiring-front-vhosts';
 import { collectWiringProblems } from '@/lib/service-wiring-problems';
 import {
   parseCertificate,
@@ -25,6 +26,7 @@ import {
   certificateLineage,
   assertSafeTailnetNode,
   CONTEST_PROXY_CERTIFICATE,
+  renderLocationFragments,
   renderNginxServers,
   renderServeConfig,
   renderServeConfigs,
@@ -157,14 +159,83 @@ describe('exposureRoutes', () => {
     expect(routes[1].hostname).toBe('cms.example.com');
   });
 
-  it('refuses an exposure on a hostname the front already declares', () => {
+  it('renders a server block for an exposure whose hostname the front does not declare', () => {
+    expect(
+      exposureRoutes([exposure({ service_id: 1, hostname: 'cms.example.com' })], [web3], ['primary|front.example.com'])
+    ).toEqual([
+      {
+        hostname: 'cms.example.com',
+        path: '/',
+        upstream: 'web-3:8888',
+        tls: true,
+        tailnet: null,
+        fragmentLabel: null,
+      },
+    ]);
+  });
+
+  it("renders an exposure under the front's own vhost as that vhost's fragment", () => {
+    const routes = exposureRoutes(
+      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
+      [web3],
+      ['primary|front.example.com']
+    );
+    expect(routes).toHaveLength(1);
+    expect(routes[0].fragmentLabel).toBe('primary');
+    expect(routes[0].hostname).toBe('front.example.com');
+  });
+
+  it('keeps the label when the same hostname also arrives without one', () => {
+    const routes = exposureRoutes(
+      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
+      [web3],
+      ['front.example.com', 'primary|front.example.com']
+    );
+    expect(routes[0].fragmentLabel).toBe('primary');
+  });
+
+  it('refuses a fragment whose path the front vhost already serves', () => {
     expect(() =>
-      exposureRoutes([exposure({ service_id: 1, hostname: 'cms.example.com' })], [web3], ['cms.example.com'])
+      exposureRoutes(
+        [exposure({ service_id: 1, hostname: 'front.example.com', path: '/admin' })],
+        [web3],
+        ['primary|front.example.com']
+      )
+    ).toThrow(/already serves/);
+  });
+
+  it('refuses an exposure on a hostname the front declares and no route row owns', () => {
+    expect(() =>
+      exposureRoutes([exposure({ service_id: 1, hostname: 'acme.example.com' })], [web3], ['acme.example.com'])
     ).toThrow(/already declares/);
   });
 
   it('refuses a path-only exposure whose service\'s contest owns no vhost', () => {
     expect(() => exposureRoutes([exposure({ service_id: 1, hostname: null })], [web3])).toThrow(/no vhost/);
+  });
+});
+
+describe('parseFrontVhostList', () => {
+  it('reads the label and the hostname of each entry', () => {
+    expect(parseFrontVhostList(['primary|Front.Example.com'])).toEqual([
+      { hostname: 'front.example.com', label: 'primary' },
+    ]);
+  });
+
+  it('keeps a bare hostname without a label', () => {
+    expect(parseFrontVhostList(['acme.example.com'])).toEqual([
+      { hostname: 'acme.example.com', label: null },
+    ]);
+  });
+
+  it('lets the label win over a bare duplicate, whatever the order', () => {
+    expect(parseFrontVhostList(['front.example.com', 'primary|front.example.com'])).toEqual([
+      { hostname: 'front.example.com', label: 'primary' },
+    ]);
+  });
+
+  it('drops an entry that names no hostname', () => {
+    expect(parseFrontVhostList(['', '   ', 'primary|'])).toEqual([]);
   });
 });
 
@@ -175,6 +246,7 @@ describe('renderNginxServers', () => {
     upstream: 'web-1:8888',
     tls: true,
     tailnet: null,
+    fragmentLabel: null,
   };
 
   it('renders a TLS server block for the apex path', () => {
@@ -238,6 +310,33 @@ describe('renderNginxServers', () => {
   });
 });
 
+describe('renderLocationFragments', () => {
+  const own = service({ id: 1, name: 'web-3', host: 'web-3', contest_id: 3 });
+  const exposureOnFront = [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })];
+
+  it('emits the locations of one front vhost and nothing else', () => {
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    const out = renderLocationFragments(routes, 'primary');
+    expect(out).toContain('location ^~ /beta/ {');
+    expect(out).toContain('proxy_pass http://web-3:8888/;');
+    expect(out).toContain('add_header Strict-Transport-Security "max-age=300; includeSubDomains" always;');
+    expect(out).not.toContain('server {');
+    expect(out).not.toContain('listen ');
+    expect(out).not.toContain('server_name');
+    expect(out).not.toContain('ssl_certificate');
+  });
+
+  it('leaves a fragment route out of the server blocks it would silently lose', () => {
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    expect(renderNginxServers(routes)).toBe('');
+  });
+
+  it('emits nothing for a label no exposure renders into', () => {
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    expect(renderLocationFragments(routes, 'admin')).toBe('');
+  });
+});
+
 describe('assertSafeHostname', () => {
   it('lower-cases and keeps a normal FQDN', () => {
     expect(assertSafeHostname('A.Example.COM')).toBe('a.example.com');
@@ -269,6 +368,7 @@ describe('renderServeConfig', () => {
     upstream: 'web-1:8888',
     tls: true,
     tailnet: 'cms-contest-1',
+    fragmentLabel: null,
   };
 
   it('emits nothing when no name is exposed on the tailnet', () => {
@@ -335,7 +435,7 @@ describe('renderFromPayload', () => {
 });
 
 describe('the certificate a TLS block points at', () => {
-  const route = { hostname: 'a.example.com', path: '/', upstream: 'w:8888', tls: true, tailnet: null };
+  const route = { hostname: 'a.example.com', path: '/', upstream: 'w:8888', tls: true, tailnet: null, fragmentLabel: null };
 
   it('defaults to the contest proxy pair', () => {
     expect(renderNginxServers([route])).toContain(`ssl_certificate ${CONTEST_PROXY_CERTIFICATE.certificate};`);
@@ -440,11 +540,33 @@ describe('collectWiringProblems', () => {
     expect(problems[0].message).toContain('9');
   });
 
-  it('reports an exposure on a hostname the front already declares', () => {
+  it('reports an exposure on a hostname the front declares and no route row owns', () => {
     const problems = collectWiringProblems([shared], [], [exposure({ service_id: 1, hostname: 'cms.example.com' })], ['cms.example.com']);
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('exposure');
     expect(problems[0].message).toContain('already declares');
+  });
+
+  it("reports nothing for an exposure that renders into a front vhost's fragment", () => {
+    const problems = collectWiringProblems(
+      [shared],
+      [],
+      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
+      ['primary|front.example.com']
+    );
+    expect(problems).toEqual([]);
+  });
+
+  it('reports a fragment path the front vhost already serves', () => {
+    const problems = collectWiringProblems(
+      [shared],
+      [],
+      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/classic/' })],
+      ['primary|front.example.com']
+    );
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('already serves');
   });
 
   it('reports a ProxyService row that names no contest', () => {
@@ -511,6 +633,18 @@ describe('renderRegistryArtifacts', () => {
     expect(nginx.node).toBeNull();
     expect(nginx.content).toBe(renderFromPayload(payload, 'nginx'));
     expect(nginx.content).toContain('server_name a.example.com;');
+  });
+
+  it('renders one location fragment per front vhost the registry exposes under', () => {
+    const onFront: WiringPayload = {
+      ...payload,
+      exposures: [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
+    };
+    const fragments = renderRegistryArtifacts(onFront, ['primary|front.example.com', 'admin|admin.example.com'])
+      .filter((artifact) => artifact.mode === 'location');
+    expect(fragments.map((artifact) => artifact.node)).toEqual(['primary', 'admin']);
+    expect(fragments[0].content).toContain('location ^~ /beta/ {');
+    expect(fragments[1].content).toBe('');
   });
 
   it('renders one serve config per tailnet node an exposure claims', () => {

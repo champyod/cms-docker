@@ -8,6 +8,13 @@
  * wiring rules are testable without a database or a container.
  */
 
+import {
+  effectiveHostname,
+  frontVhostOf,
+  frontVhostRefusal,
+  parseFrontVhostList,
+} from './service-wiring-front-vhosts';
+
 export interface ServiceRow {
   id: number;
   name: string;
@@ -51,6 +58,13 @@ export interface Route {
   upstream: string;
   tls: boolean;
   tailnet: string | null;
+  /**
+   * The front vhost label this route renders into, or null when it declares a server block of its
+   * own. A route under a hostname the front already serves carries no listener, no server_name and
+   * no certificate of its own — those are the vhost's — so it is only the locations that vhost
+   * includes, and the label is the file it is written to.
+   */
+  fragmentLabel: string | null;
 }
 
 /** A resolved edge, because a bare id pair says nothing about what it links. */
@@ -172,20 +186,15 @@ export function primaryVhost(exposures: ExposureRow[]): string {
   return ((root ?? named[0])?.hostname ?? '').trim();
 }
 
-/** The vhost an exposure answers under; empty means there is none and the caller must refuse. */
-export function effectiveHostname(
-  exposure: ExposureRow,
-  service: ServiceRow,
-  vhosts: Map<number, string>,
-  primary: string,
-): string {
-  const own = (exposure.hostname ?? '').trim();
-  if (own !== '') return own;
-  if (service.contest_id === null) return primary;
-  return vhosts.get(service.contest_id) ?? '';
-}
-
-/** One route per exposure: its service's endpoint, under the vhost the exposure answers on. */
+/**
+ * One route per exposure: its service's endpoint, under the vhost the exposure answers on.
+ *
+ * WHY a hostname the front already serves yields a fragment rather than a refusal: the front
+ * declares that vhost's listener, server_name and certificate, and a fragment file is included
+ * inside that block — so the route is reachable where a second server block for the same name would
+ * have been discarded. A path the vhost's own locations already serve is still refused (see
+ * `frontVhostRefusal`), because the fragment would shadow one of them.
+ */
 export function exposureRoutes(
   exposures: ExposureRow[],
   services: ServiceRow[],
@@ -194,7 +203,7 @@ export function exposureRoutes(
   const byId = indexServices(services);
   const vhosts = contestVhosts(exposures, services);
   const primary = primaryVhost(exposures);
-  const reserved = new Set(frontVhosts.map((name) => name.trim().toLowerCase()));
+  const front = parseFrontVhostList(frontVhosts);
   const routes: Route[] = [];
   for (const exposure of exposures) {
     const service = exposedService(exposure, byId);
@@ -206,12 +215,10 @@ export function exposureRoutes(
     if (hostname === '') {
       throw new WiringError(`service ${service.name} exposes ${path} with no hostname and no vhost of its own to answer under`);
     }
-    // WHY refused rather than rendered: a hostname the front already declares puts a second
-    // server_name on the same listener, which nginx discards — the block would be inert here and
-    // gone on the next re-render, so the route would look configured and serve nothing.
-    if (reserved.has(hostname.toLowerCase())) {
-      throw new WiringError(
-        `${hostname} is a vhost this deployment's front already declares: expose ${path} without a hostname to answer under it, or use a hostname the front does not declare`);
+    const own = frontVhostOf(hostname, front);
+    const refusal = frontVhostRefusal(path, own);
+    if (refusal !== null) {
+      throw new WiringError(`${refusal}: expose ${path} on a hostname the front does not declare`);
     }
     routes.push({
       hostname,
@@ -219,6 +226,7 @@ export function exposureRoutes(
       upstream: toHttpEndpoint(service),
       tls: exposure.tls,
       tailnet: exposure.tailnet,
+      fragmentLabel: own?.label ?? null,
     });
   }
   return routes;

@@ -42,6 +42,7 @@ new_sandbox() {
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-cli.ts" "${SB}/admin-panel/src/lib/"
+  cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-front-vhosts.ts" "${SB}/admin-panel/src/lib/"
   printf '%s' "${4:-$PAYLOAD}" > "${SB}/payload.json"
   # The registry rows the compose renderer reads, one row per line. Kept in a file rather
   # than spliced through sed because a row is pipe-separated and sed's delimiter here is |.

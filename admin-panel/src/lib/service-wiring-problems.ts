@@ -8,7 +8,6 @@
  */
 import {
   contestVhosts,
-  effectiveHostname,
   indexServices,
   normalisePath,
   primaryVhost,
@@ -17,6 +16,12 @@ import {
   type WiringRow,
 } from './service-wiring';
 import { PROXY_SERVICE_ROLE } from './service-wiring-contract';
+import {
+  effectiveHostname,
+  frontVhostOf,
+  frontVhostRefusal,
+  parseFrontVhostList,
+} from './service-wiring-front-vhosts';
 
 export type WiringProblemArea = 'service' | 'wiring' | 'exposure';
 
@@ -71,25 +76,30 @@ function misboundServiceProblems(services: ServiceRow[]): WiringProblem[] {
   return problems;
 }
 
-/** An exposure that claims a hostname the deployment's own front already declares. */
+/**
+ * An exposure under a hostname the deployment's own front declares.
+ *
+ * WHY only the refused ones: a hostname the route table owns takes the exposure into that vhost's
+ * fragment file, which is a working route, so the screen reports only what the sync would refuse —
+ * a name no route row owns, or a path the vhost's own locations already serve.
+ */
 function frontVhostProblems(
   services: ServiceRow[],
   exposures: ExposureRow[],
   frontVhosts: readonly string[],
 ): WiringProblem[] {
   if (frontVhosts.length === 0) return [];
-  const reserved = new Set(frontVhosts.map((name) => name.trim().toLowerCase()));
+  const front = parseFrontVhostList(frontVhosts);
   const byId = indexServices(services);
   const problems: WiringProblem[] = [];
   for (const exposure of exposures) {
-    const claimed = (exposure.hostname ?? '').trim().toLowerCase();
-    if (claimed === '' || !reserved.has(claimed)) continue;
+    const claimed = (exposure.hostname ?? '').trim();
+    if (claimed === '') continue;
+    const refusal = frontVhostRefusal(normalisePath(exposure.path), frontVhostOf(claimed, front));
+    if (refusal === null) continue;
     const service = byId.get(exposure.service_id);
     const forService = service === undefined ? '' : ` for ${service.name}`;
-    problems.push({
-      area: 'exposure',
-      message: `${claimed} is a vhost this deployment's front already declares, so the sync refuses the route${forService} — expose the path without a hostname instead`,
-    });
+    problems.push({ area: 'exposure', message: `${refusal}, so the sync refuses the route${forService}` });
   }
   return problems;
 }

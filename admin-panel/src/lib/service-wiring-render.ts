@@ -142,6 +142,10 @@ function locationLines(route: Route): string[] {
  * inside it. WHY grouped: a path exposure joins its hostname's vhost rather than opening a
  * second block for the same name, so one vhost per name still gets the front's certificate
  * and headers, and a shorter prefix cannot win over a longer one.
+ *
+ * WHY a fragment route is skipped: its hostname is one the front already serves, so the listener,
+ * the server_name and the certificate are that vhost's — and a second block for the same name is
+ * the very thing nginx discards. Its locations go to `renderLocationFragments` instead.
  */
 export function renderNginxServers(
   routes: Route[],
@@ -149,6 +153,7 @@ export function renderNginxServers(
 ): string {
   const byHostname = new Map<string, Route[]>();
   for (const route of routes) {
+    if (route.fragmentLabel !== null) continue;
     const hostname = assertSafeHostname(route.hostname);
     byHostname.set(hostname, [...(byHostname.get(hostname) ?? []), route]);
   }
@@ -159,6 +164,20 @@ export function renderNginxServers(
     blocks.push(renderServerBlock(hostname, [...owners, ...prefixes], certificate));
   }
   return blocks.join('\n\n');
+}
+
+/**
+ * The locations a registry exposure adds to the front's own vhost, as the lines that vhost includes.
+ *
+ * WHY locations only, and only for one label: the include sits inside a block that already declares
+ * the listener, the server_name, the certificate and the front's headers, so a `server`, a `listen`
+ * or a certificate line here would either be rejected or silently change which vhost answers.
+ */
+export function renderLocationFragments(routes: Route[], label: string): string {
+  return routes
+    .filter((route) => route.fragmentLabel === label)
+    .map((route) => locationLines(route).join('\n'))
+    .join('\n');
 }
 
 /**
