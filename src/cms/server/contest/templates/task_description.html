@@ -19,6 +19,12 @@
     <h1>{% trans name=task.title, short_name=task.name %}{{ name }} ({{ short_name }}) <small>description</small>{% endtrans %}</h1>
 </div>
 
+{% if not task_has_active_dataset %}
+<div class="alert alert-block alert-info">
+    {% trans %}This task cannot be judged yet, so you cannot submit a solution for it.{% endtrans %}
+</div>
+{% endif %}
+
 
 <h2>{% trans %}Statement{% endtrans %}</h2>
 

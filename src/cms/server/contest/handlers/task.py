@@ -60,7 +60,9 @@ class TaskDescriptionHandler(ContestHandler):
         if task is None:
             raise tornado.web.HTTPError(404)
 
-        self.render("task_description.html", task=task, **self.r_params)
+        self.render("task_description.html", task=task,
+                    task_has_active_dataset=task.active_dataset is not None,
+                    **self.r_params)
 
 
 class TaskStatementViewHandler(FileHandler):

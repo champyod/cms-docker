@@ -176,8 +176,11 @@ class TaskSubmissionsHandler(ContestHandler):
         tokens_info = tokens_available(participation, task, self.timestamp)
 
         download_allowed = self.contest.submissions_download_allowed
+        # The page has to say so before the contestant fills the form in: a
+        # submission to a task with no active dataset is refused on arrival.
         self.render("task_submissions.html",
                     task=task, submissions=submissions,
+                    task_has_active_dataset=task.active_dataset is not None,
                     public_score=public_score,
                     tokened_score=tokened_score,
                     is_score_partial=is_score_partial,
