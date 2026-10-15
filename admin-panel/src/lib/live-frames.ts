@@ -17,6 +17,11 @@ export type { ServerStats, StatsSource, WorkerNodeView, ContainerInfo, CoreServi
 export interface ResourceFrame {
   server?: ServerStats;
   workers?: WorkerNodeView[];
+  /**
+   * Why the fault rides with the workers section: a fleet read that failed must reach the panel as
+   * a fault, not as an empty list, and the fingerprint has to move when it appears or clears.
+   */
+  error?: string;
   services?: CoreServiceStatus[];
   traffic?: TrafficLog[];
 }
@@ -38,6 +43,7 @@ export function resourceFrameFingerprint(frame: ResourceFrame): string {
   return JSON.stringify([
     frame.server,
     frame.workers,
+    frame.error ?? null,
     frame.services,
     frame.traffic?.map((log) => [log.container, log.rx, log.tx]),
   ]);

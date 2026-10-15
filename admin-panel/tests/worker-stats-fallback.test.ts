@@ -164,3 +164,45 @@ describe('collectWorkerStats fleet sources', () => {
     expect(error).toContain(envPath);
   });
 });
+
+/**
+ * Why the fault counts as much as the rows: a collector that threw and a fleet that is genuinely
+ * worker-less both come back as an empty list, and only the fault tells the panel which it was.
+ */
+describe('collectWorkerStats named faults', () => {
+  it('names a thrown collector read instead of reporting an empty fleet', async () => {
+    mocks.groupBy.mockRejectedValue(new Error('database unreachable'));
+
+    const { workers, error } = await collectWorkerStats();
+
+    expect(workers).toEqual([]);
+    expect(error).toContain('database unreachable');
+  });
+
+  it('names a failed docker read instead of reporting an empty fleet', async () => {
+    mocks.exec.mockImplementation((_command: string, callback: ExecCallback): void => {
+      callback(new Error('Cannot connect to the Docker daemon'), { stdout: '', stderr: '' });
+    });
+
+    const { workers, error } = await collectWorkerStats();
+
+    expect(workers).toEqual([]);
+    expect(error).toContain('Cannot connect to the Docker daemon');
+  });
+
+  it('carries the emitter failure into the fault beside the unreadable configuration', async () => {
+    const envPath = path.join(repoRoot, '.env');
+    fs.rmSync(envPath);
+    fs.mkdirSync(envPath); // a directory where a file is expected: readFile throws EISDIR
+    mocks.execFile.mockImplementation((_file: string, _args: string[], _options: unknown, callback: ExecCallback): void => {
+      callback(new Error('EACCES: permission denied'), { stdout: '', stderr: '' });
+    });
+    mocks.exec.mockImplementation(execSucceeds(''));
+
+    const { error } = await collectWorkerStats();
+
+    expect(error).toContain('the emitter failed');
+    expect(error).toContain('EACCES');
+    expect(error).toContain('EISDIR');
+  });
+});

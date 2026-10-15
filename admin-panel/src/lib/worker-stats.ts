@@ -137,6 +137,18 @@ function unreadableFault(fleet: ConfiguredFleet): string | null {
     : `Worker configuration could not be read: ${fleet.unreadable.join(', ')}`;
 }
 
+/** WHY: a collector that threw is a named fault, never an empty fleet with nothing to explain it. */
+function collectorFault(what: string, error: unknown): string {
+  const reason = error instanceof Error ? error.message : String(error);
+  return `${what}: ${reason}`;
+}
+
+/** Every reason the reading could have come back empty, so the caller shows the cause it has. */
+function fleetFaults(faults: readonly (string | null)[]): string | null {
+  const named = faults.filter((fault): fault is string => fault !== null);
+  return named.length === 0 ? null : named.join('; ');
+}
+
 /** The worker nodes and the fault that emptied them, if any. */
 export interface WorkerFleet {
   readonly workers: WorkerNodeView[];
@@ -153,16 +165,28 @@ async function loadEmitterRows(): Promise<EmitterWorkerRow[]> {
   return Array.isArray(parsed) ? (parsed as EmitterWorkerRow[]) : [];
 }
 
-/** Why empty counts as failed: an emitter that read nothing cannot claim the fleet is empty. */
-async function loadEmitterRowsOrNull(): Promise<EmitterWorkerRow[] | null> {
+/** One emitter pass: the rows it reported, or the fault that stopped it reporting a fleet. */
+interface EmitterRead {
+  readonly rows: EmitterWorkerRow[] | null;
+  readonly fault: string | null;
+}
+
+/**
+ * Why empty counts as failed: an emitter that read nothing cannot claim the fleet is empty.
+ *
+ * Why the empty answer carries no fault while a thrown one does: an emitter that answered `[]` is
+ * the documented trigger for the docker fallback, while an emitter that threw is a fault the fleet
+ * read has to name — folding the two together is how a broken collector read as an empty fleet.
+ */
+async function loadEmitterRowsOrNull(): Promise<EmitterRead> {
   try {
     const rows = await loadEmitterRows();
-    if (rows.length > 0) return rows;
+    if (rows.length > 0) return { rows, fault: null };
     console.error('Emitter reported no workers, falling back to docker ps');
-    return null;
+    return { rows: null, fault: null };
   } catch (emitterError) {
     console.error('Emitter failed, falling back to docker ps:', emitterError);
-    return null;
+    return { rows: null, fault: collectorFault('the emitter failed', emitterError) };
   }
 }
 
@@ -220,10 +244,24 @@ function parseContainerShard(name: string): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-async function collectFromDocker(shardCounts: Record<number, number>): Promise<WorkerFleet> {
-  const fleet = await loadConfiguredWorkers(getRepoRoot());
+/** Why the docker read is bound to its own fault: a daemon the panel cannot reach is not a fleet with no workers. */
+async function dockerWorkerLines(): Promise<string[]> {
   const { stdout } = await execPromise('docker ps -a --filter "name=cms-worker" --format "{{.Names}}\t{{.Status}}"');
-  const lines = stdout.trim() ? stdout.trim().split('\n') : [];
+  return stdout.trim() ? stdout.trim().split('\n') : [];
+}
+
+async function collectFromDocker(shardCounts: Record<number, number>, emitterFault: string | null): Promise<WorkerFleet> {
+  const fleet = await loadConfiguredWorkers(getRepoRoot());
+  const configuredFault = unreadableFault(fleet);
+  let lines: string[];
+  try {
+    lines = await dockerWorkerLines();
+  } catch (error) {
+    return {
+      workers: [],
+      error: fleetFaults([configuredFault, emitterFault, collectorFault('the worker list could not be read from docker', error)]),
+    };
+  }
 
   if (fleet.workers.length > 0) {
     const configured = fleet.workers.map((worker) => localNodeView({
@@ -257,7 +295,7 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
       shardCounts,
     });
   });
-  return { workers: discovered, error: discovered.length === 0 ? unreadableFault(fleet) : null };
+  return { workers: discovered, error: discovered.length === 0 ? fleetFaults([configuredFault, emitterFault]) : null };
 }
 
 /**
@@ -274,11 +312,13 @@ async function collectFromDocker(shardCounts: Record<number, number>): Promise<W
 export async function collectWorkerStats(): Promise<WorkerFleet> {
   try {
     const shardCounts = await loadShardCounts();
-    const emitterRows = await loadEmitterRowsOrNull();
-    if (emitterRows !== null) return { workers: mapEmitterRowsToNodes(emitterRows, shardCounts), error: null };
-    return await collectFromDocker(shardCounts);
+    const emitter = await loadEmitterRowsOrNull();
+    if (emitter.rows !== null) return { workers: mapEmitterRowsToNodes(emitter.rows, shardCounts), error: null };
+    return await collectFromDocker(shardCounts, emitter.fault);
   } catch (error) {
     console.error('Failed to get worker stats:', error);
-    return { workers: [], error: null };
+    // Why the fault is named here: a shard-count or collector read that threw left no reading at
+    // all, and returning an empty list beside a null fault reports that as a fleet with no workers.
+    return { workers: [], error: collectorFault('Worker status could not be collected', error) };
   }
 }

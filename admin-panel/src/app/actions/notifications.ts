@@ -6,6 +6,7 @@ import path from 'path';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { recordAudit } from '@/lib/audit';
+import { readConfigFile, type ConfigFileRead } from '@/lib/config-file';
 import { readEnvFile, readEnvFileCore, updateEnvFile } from '@/app/actions/env';
 import { getDictionary } from '@/i18n';
 import { interpolate } from '@/lib/interpolate';
@@ -29,13 +30,13 @@ interface DiscordNotificationInput {
   roleId: string;
 }
 
-async function readConfigToml(): Promise<string | null> {
-  try {
-    return await fs.readFile(path.join(getRepoRoot(), CONFIG_TOML), 'utf-8');
-  } catch {
-    // Absent config.toml is a normal state on a fresh worktree: callers decide what to do.
-    return null;
-  }
+/**
+ * The config.toml read, with "absent" and "unreadable" kept apart: a settings read that folds a
+ * permission refusal into "absent" shows the operator an empty value where the file existed and
+ * merely could not be opened — the read fault this screen must report instead.
+ */
+async function readConfigToml(): Promise<ConfigFileRead> {
+  return readConfigFile(path.join(getRepoRoot(), CONFIG_TOML));
 }
 
 /**
@@ -46,16 +47,25 @@ export async function getDiscordNotificationSettings() {
   await ensurePermission('env:read');
   try {
     const configToml = await readConfigToml();
+    if (configToml.kind === 'unreadable') {
+      return { success: false as const, error: configToml.reason };
+    }
     // The audited read, unlike the test-alert path below: this is the settings screen showing the
     // operator the effective webhook URL, so the disclosure is the point of the call.
     const envResult = await readEnvFile(ENV_FILE);
-    const envConfig = envResult.success && envResult.config ? envResult.config : {};
+    // Why the failure is returned rather than folded into an empty string: the screen renders the
+    // effective URL, and an unread .env shown as "" claims the monitor has no webhook configured.
+    if (!envResult.success) {
+      return { success: false as const, error: envResult.error };
+    }
 
     return {
       success: true as const,
-      configTomlPresent: configToml !== null,
-      configWebhookUrl: configToml === null ? '' : readTomlValue(configToml, CONFIG_SECTION, WEBHOOK_KEY),
-      effectiveWebhookUrl: envConfig[WEBHOOK_KEY] ?? '',
+      configTomlPresent: configToml.kind === 'ok',
+      configWebhookUrl: configToml.kind === 'absent'
+        ? ''
+        : readTomlValue(configToml.content, CONFIG_SECTION, WEBHOOK_KEY),
+      effectiveWebhookUrl: envResult.config[WEBHOOK_KEY] ?? '',
     };
   } catch (error) {
     return { success: false as const, error: (error as Error).message };
@@ -85,7 +95,10 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
 
   try {
     const configToml = await readConfigToml();
-    if (configToml === null) {
+    if (configToml.kind === 'unreadable') {
+      return { success: false as const, error: configToml.reason };
+    }
+    if (configToml.kind === 'absent') {
       return {
         success: false as const,
         error: interpolate(discordToasts.configTomlMissing, { configToml: CONFIG_TOML }),
@@ -93,7 +106,7 @@ export async function saveDiscordNotificationSettings(input: DiscordNotification
     }
 
     const updatedToml = upsertTomlValue(
-      upsertTomlValue(configToml, CONFIG_SECTION, WEBHOOK_KEY, webhook.value),
+      upsertTomlValue(configToml.content, CONFIG_SECTION, WEBHOOK_KEY, webhook.value),
       CONFIG_SECTION,
       ROLE_KEY,
       role.value,
@@ -158,7 +171,12 @@ async function resolveTestAlertTarget(
     // Unaudited on purpose: this is the alert action resolving the URL it needs, not a read of
     // the env file, and the alert it goes on to send is the recorded act.
     const envResult = await readEnvFileCore(ENV_FILE);
-    targetUrl = (envResult.success && envResult.config ? envResult.config[WEBHOOK_KEY] : '') ?? '';
+    // Why the read failure is reported: an unread .env would otherwise resolve to "no webhook
+    // configured" and send the operator after a URL the file may well hold.
+    if (!envResult.success) {
+      return { ok: false, error: envResult.error, usedConfiguredWebhook: true, hasRoleId: false };
+    }
+    targetUrl = envResult.config[WEBHOOK_KEY] ?? '';
     usedConfiguredWebhook = true;
   }
 

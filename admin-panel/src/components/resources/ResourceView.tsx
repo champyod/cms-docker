@@ -9,6 +9,7 @@ import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
@@ -40,6 +41,9 @@ export function ResourceView(): React.JSX.Element {
   const dict = useDictionary();
   const [serverStats, setServerStats] = useState<ServerStats | null>(null);
   const [workers, setWorkers] = useState<WorkerNodeView[]>([]);
+  // Why the fault is held apart from the rows: an unreadable fleet config arrives as an error beside
+  // an empty list, and rendering that list would report a read fault as "no worker nodes found".
+  const [workersError, setWorkersError] = useState<string | null>(null);
   const [services, setServices] = useState<CoreServiceStatus[] | null>(null);
   const [traffic, setTraffic] = useState<TrafficLog[] | null>(null);
   const [trafficLimit, setTrafficLimit] = useState<number>(TRAFFIC_LOG_LIMIT_DEFAULT);
@@ -49,7 +53,12 @@ export function ResourceView(): React.JSX.Element {
   // blanking out. The same handler covers all four cards because they arrive on one connection.
   const applyFrame = useCallback((frame: ResourceFrame): void => {
     if (frame.server) setServerStats(frame.server);
-    if (frame.workers) setWorkers(frame.workers);
+    if (frame.workers) {
+      setWorkers(frame.workers);
+      // Why the fault is replaced, not merged: it travels with the workers section, so a frame whose
+      // fleet read succeeded carries no error and must clear the one the last frame reported.
+      setWorkersError(frame.error ?? null);
+    }
     if (frame.services) setServices(frame.services);
     if (frame.traffic) setTraffic(frame.traffic);
   }, []);
@@ -128,11 +137,17 @@ export function ResourceView(): React.JSX.Element {
               <Activity className="w-5 h-5 text-primary" />
               <h2 className="text-xl font-bold">{dict.resources.workerNodes}</h2>
           </div>
-          <WorkerNodeList
-            rows={rowsFromNodes(workers)}
-            emptyTitle="No worker nodes found"
-            emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
-          />
+          {workersError !== null ? (
+            <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
+              {workersError}
+            </InlineAlert>
+          ) : (
+            <WorkerNodeList
+              rows={rowsFromNodes(workers)}
+              emptyTitle="No worker nodes found"
+              emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
+            />
+          )}
         </div>
 
         <div className="grid grid-cols-1 gap-6">
