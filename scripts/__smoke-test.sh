@@ -294,7 +294,7 @@ Steps:
      a. docker compose -f docker-compose.yml --profile core up -d database -> wait_healthy cms-database 90
      b. remaining core: up log/resource/scoring/checker -> wait_healthy each 120
      c. admin: up admin profile (if in stacks) -> curl_wait 127.0.0.1:\${ADMIN_NEXT_PORT_EXTERNAL:-8891}, :\${ADMIN_PORT_EXTERNAL:-8889}, ranking :\${RANKING_PORT_EXTERNAL:-8890} (120s each)
-     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s)
+     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/cpp/index.html + one asset it references (60s each)
      Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)
   5. Result matrix: service | check type | result | duration
   6. Teardown: compose down for requested profiles WITHOUT -v (preserve volumes); on failure dump docker logs --tail 100 to /tmp/cms-smoke-<ts>/; keep up only if SMOKE_KEEP_UP=1
@@ -435,6 +435,27 @@ run_curl_wait() {
   return $rc
 }
 
+# The /docs mount is separate from the contest root, so the root can answer while
+# every docs asset 404s. Assert the entry page and one referenced asset; the asset
+# name is read from the page so a renamed bundle is followed rather than assumed.
+probe_contest_docs() {
+  local port="$1"
+  local entry="http://127.0.0.1:${port}/docs/cpp/index.html"
+  run_curl_wait "contest-docs" "$entry" 60 || true
+  local asset
+  asset="$(curl -fsS "$entry" 2>/dev/null \
+    | awk 'match($0, /(href|src)="[^"]+"/) { s = substr($0, RSTART, RLENGTH); sub(/^(href|src)="/, "", s); sub(/"$/, "", s); print s; exit }' || true)"
+  [[ -z "$asset" ]] && return 0
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  local url
+  case "$asset" in
+    /*) url="http://127.0.0.1:${port}${asset}" ;;
+    *)  url="http://127.0.0.1:${port}/docs/cpp/${asset}" ;;
+  esac
+  run_curl_wait "contest-docs-asset" "$url" 60 || true
+}
+
 # Failure handler mid-flow
 fail_mid_flow() {
   local msg="$1"
@@ -497,6 +518,7 @@ if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "contest"; then
   docker compose -f "$COMPOSE_FILE" --profile core --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
   CONTEST_PORT_VAL=$(resolve_contest_port)
   run_curl_wait "contest" "http://127.0.0.1:${CONTEST_PORT_VAL}/" 120 || true
+  probe_contest_docs "$CONTEST_PORT_VAL"
   if [[ "$SMOKE_FAILED" -ne 0 ]]; then
     log_warn "contest checks had failures (see matrix)"
   fi

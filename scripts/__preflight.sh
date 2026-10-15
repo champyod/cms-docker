@@ -782,6 +782,80 @@ check_proxy_body_size() {
   fi
 }
 
+# ===========================================================================
+# 13) Contest documentation assets
+# ===========================================================================
+# CWS mounts config doc_path at /docs (SharedDataMiddleware) and the handler lists
+# a subdirectory per language. A docs tree that ships without the files its entry
+# page references renders unstyled with no error anywhere, so the mount target and
+# one referenced asset are asserted here.
+docs_path_from_toml() {
+  local toml="${REPO_ROOT}/config/cms.toml"
+  [[ -f "$toml" ]] || return 1
+  awk -F'"' '/^[[:space:]]*docs_path[[:space:]]*=/ { print $2; exit }' "$toml"
+}
+
+# The first asset the entry HTML pulls in, as written in that page.
+docs_referenced_asset() {
+  awk 'match($0, /(href|src)="[^"]+"/) {
+         s = substr($0, RSTART, RLENGTH)
+         sub(/^(href|src)="/, "", s)
+         sub(/"$/, "", s)
+         print s
+         exit
+       }' "$1"
+}
+
+# Follow browser resolution: an absolute ref starts at the docs root, a relative
+# one beside the entry page.
+docs_asset_abspath() {
+  local docs_path="$1" entry_dir="$2" asset="$3"
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  if [[ "$asset" == /* ]]; then
+    printf '%s' "${docs_path}/${asset#/}"
+  else
+    printf '%s' "${entry_dir}/${asset}"
+  fi
+}
+
+check_docs_assets() {
+  if ! stack_includes "contest"; then
+    record_result "contest docs" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  local docs_path
+  docs_path="$(docs_path_from_toml || true)"
+  if [[ -z "$docs_path" ]]; then
+    record_result "contest docs" "PASS" "docs_path unset — nothing to serve under /docs"
+    return 0
+  fi
+
+  local entry_dir="${docs_path}/cpp" entry_html="${docs_path}/cpp/index.html"
+  if [[ ! -f "$entry_html" ]]; then
+    printf '[FAIL] contest docs: %s missing — /docs/cpp/index.html will 404\n' "$entry_html" >&2
+    record_result "contest docs" "FAIL" "no cpp/index.html under ${docs_path}"
+    return 0
+  fi
+
+  local asset asset_path
+  asset="$(docs_referenced_asset "$entry_html")"
+  if [[ -z "$asset" ]]; then
+    record_result "contest docs" "PASS" "cpp/index.html present"
+    return 0
+  fi
+
+  asset_path="$(docs_asset_abspath "$docs_path" "$entry_dir" "$asset")"
+  if [[ ! -e "$asset_path" ]]; then
+    printf '[FAIL] contest docs: cpp/index.html references %s which is absent\n' "$asset" >&2
+    record_result "contest docs" "FAIL" "${asset} referenced by cpp/index.html is missing"
+    return 0
+  fi
+
+  record_result "contest docs" "PASS" "cpp/index.html + ${asset} present"
+}
+
 check_disk
 check_docker
 check_env
@@ -795,6 +869,7 @@ check_config_stale
 check_proxy_body_size
 check_certbot_issuance
 check_isolate_sandbox
+check_docs_assets
 
 # ===========================================================================
 # Summary table
