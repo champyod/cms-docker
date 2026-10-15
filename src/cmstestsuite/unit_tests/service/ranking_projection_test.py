@@ -177,6 +177,21 @@ class ProjectionTest(unittest.TestCase):
             "INSERT INTO ranking_hidden (key, contest_id)", statement)
         self.assertIn("ON CONFLICT (key, contest_id) DO UPDATE SET", statement)
 
+    def test_no_upsert_assigns_a_conflict_column_and_all_refresh_updated_at(self):
+        # WHY: a conflict column assigned to itself is a no-op, and for a hidden tombstone
+        # it was the whole SET list, so a participation hidden a second time kept the
+        # timestamp of its first tombstone while the panel mirror refreshed its own.
+        for resource in ranking_projection.COLUMNS:
+            statement = ranking_projection.upsert_statement(resource)
+            conflict_columns = ranking_projection.CONFLICT_COLUMNS.get(
+                resource, (ranking_projection.KEY_COLUMN,))
+            with self.subTest(resource=resource):
+                self.assertIn("updated_at = CURRENT_TIMESTAMP", statement)
+                for column in conflict_columns:
+                    self.assertNotIn(
+                        "%s = EXCLUDED.%s" % (column, column), statement,
+                        "an assignment of a conflict column to itself is a no-op")
+
     def test_a_hidden_push_prunes_only_its_own_contest(self):
         statement = ranking_projection.prune_statement("hidden")
         self.assertIn("DELETE FROM ranking_hidden", statement)

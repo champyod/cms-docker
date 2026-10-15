@@ -99,17 +99,20 @@ def upsert_statement(resource: str) -> str:
     become jsonb on its own.
     """
     columns = columns_for(resource)
+    conflict_columns = CONFLICT_COLUMNS.get(resource, (KEY_COLUMN,))
     binds = ", ".join(_bind(column) for column in columns)
-    assignments = ", ".join(
+    # WHY the conflict columns stay out of the assignment list: assigning a conflict column
+    # to itself is a no-op, and for a hidden tombstone it was the only assignment, so a
+    # participation hidden a second time kept the timestamp of its first tombstone. The
+    # conflict target already matched those columns, so the touch is what the write carries.
+    assignments = [
         "%s = EXCLUDED.%s" % (_identifier(column), _identifier(column))
         for column in columns
-        if column != KEY_COLUMN
-    )
-    update = " DO UPDATE SET %s" % assignments if assignments else " DO NOTHING"
-    conflict = ", ".join(
-        _identifier(column)
-        for column in CONFLICT_COLUMNS.get(resource, (KEY_COLUMN,))
-    )
+        if column != KEY_COLUMN and column not in conflict_columns
+    ]
+    assignments.append("updated_at = CURRENT_TIMESTAMP")
+    update = " DO UPDATE SET %s" % ", ".join(assignments)
+    conflict = ", ".join(_identifier(column) for column in conflict_columns)
     return "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s)%s" % (
         TABLES[resource], ", ".join(_identifier(column) for column in columns),
         binds, conflict, update,
