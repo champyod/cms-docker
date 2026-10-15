@@ -144,7 +144,8 @@ def rows(resource: str, payloads: dict) -> Iterable[dict]:
         yield row(resource, key, payloads[key])
 
 
-def snapshot_prune(resource: str, payloads: dict) -> Optional[dict]:
+def snapshot_prune(resource: str, payloads: dict,
+                   scope: "int | str | None" = None) -> Optional[dict]:
     """The owner scope and key set a snapshot delete needs, or None for an incremental resource.
 
     WHY a full push prunes: it is the whole truth for the resource, so a key it omits was
@@ -152,11 +153,18 @@ def snapshot_prune(resource: str, payloads: dict) -> Optional[dict]:
     the owner field the payloads themselves carry reclaims those keys and leaves every other
     owner's rows untouched. A resource with no scope field is upsert-only, and an empty scope
     list has nothing safe to delete, so both answer None.
+
+    scope: the owner the push is about, for a push whose payloads carry no row to read one
+    from. A push that emptied an owner still has to reclaim the rows it dropped, and with no
+    keys left the delete is what does it, so the caller passes the owner it knows.
+
     """
     field = SNAPSHOT_SCOPE_FIELD.get(resource)
     if field is None:
         return None
     scopes = sorted({payload[field] for payload in payloads.values() if field in payload})
+    if not scopes and scope is not None:
+        scopes = [scope]
     if not scopes:
         return None
     return {"scopes": scopes, "keys": sorted(payloads)}

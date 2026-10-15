@@ -43,9 +43,10 @@ class FakeContest:
 class Item:
     """The queue item shape the executor reads."""
 
-    def __init__(self, type_, data):
+    def __init__(self, type_, data, scope=None):
         self.type_ = type_
         self.data = data
+        self.scope = scope
 
 
 class Entry:
@@ -139,6 +140,22 @@ class ExecutorPushTest(unittest.TestCase):
         executor.execute([])
 
         self.assertEqual(Session.instances, [])
+
+    def test_a_hidden_push_with_no_tombstone_left_still_prunes_its_contest(self):
+        # The user was unhidden, so the push carries no row and the contest it is
+        # scoped to can only come from beside the payloads. The prune it drives is
+        # what reclaims the tombstone the board would otherwise keep hiding.
+        executor = self.build_executor()
+        Session.instances.clear()
+
+        executor.execute([Entry(Item(ProxyExecutor.HIDDEN_TYPE, {}, scope=7))])
+
+        self.assertEqual(len(Session.instances), 1)
+        self.assertEqual(
+            Session.instances[0].executed,
+            [("DELETE FROM ranking_hidden WHERE contest_id = ANY(:scopes) "
+              "AND key <> ALL(:keys)", {"scopes": [7], "keys": []})],
+        )
 
 
 if __name__ == "__main__":

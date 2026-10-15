@@ -188,6 +188,23 @@ class ProjectionTest(unittest.TestCase):
             {"scopes": [7], "keys": ["u0", "u1"]},
         )
 
+    def test_an_empty_push_prunes_the_tombstone_of_the_owner_it_names(self):
+        # The push that unhid the last participation has no row left to read the
+        # contest from, so the owner travels beside the payloads: with no keys, the
+        # delete is what reclaims the tombstone of the participation just unhidden.
+        self.assertEqual(
+            ranking_projection.snapshot_prune("hidden", {}, scope=7),
+            {"scopes": [7], "keys": []},
+        )
+        self.assertEqual(
+            ranking_projection.snapshot_prune("tasks", {}, scope="c0"),
+            {"scopes": ["c0"], "keys": []},
+        )
+
+    def test_an_empty_push_without_an_owner_still_prunes_nothing(self):
+        self.assertIsNone(ranking_projection.snapshot_prune("hidden", {}))
+        self.assertIsNone(ranking_projection.snapshot_prune("submissions", {}, scope=7))
+
 
 if __name__ == "__main__":
     unittest.main()

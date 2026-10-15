@@ -72,7 +72,7 @@ def encode_id(entity_id: str) -> str:
     return encoded_id
 
 
-def write_projection(batches, operation):
+def write_projection(batches, operation, scopes=None):
     """Write every (resource, payloads) batch into the ranking projection at once.
 
     One transaction for the whole push, so a reader never sees a projection that
@@ -89,17 +89,20 @@ def write_projection(batches, operation):
 
     batches: (resource, payloads) pairs; the resource names the projection table.
     operation: a human-readable description for the log.
+    scopes: resource name to the owner a full push is about, for a push whose
+        payloads carry no row to read the owner from.
 
     raise (CannotSendError): if the projection refuses the push.
 
     """
+    scopes = scopes or {}
     try:
         with SessionGen() as session:
             for resource, payloads in batches:
                 statement = text(upsert_statement(resource))
                 for parameters in projection_rows(resource, payloads):
                     session.execute(statement, parameters)
-                snapshot = snapshot_prune(resource, payloads)
+                snapshot = snapshot_prune(resource, payloads, scopes.get(resource))
                 if snapshot is not None:
                     session.execute(text(prune_statement(resource)), snapshot)
             session.commit()
@@ -128,9 +131,14 @@ def safe_url(url: str) -> str:
 
 class ProxyOperation(QueueItem):
 
-    def __init__(self, type_: int, data: dict):
+    def __init__(self, type_: int, data: dict,
+                 scope: "int | str | None" = None):
         self.type_ = type_
         self.data = data
+        # The owner a full push of a snapshot resource is about. It travels with the
+        # operation rather than in the payloads, because those carry no row to read it
+        # from once the push has emptied the owner.
+        self.scope = scope
 
     def __str__(self):
         return "sending data of type %s to ranking" % (
@@ -217,14 +225,23 @@ class ProxyExecutor(Executor[ProxyOperation]):
         # The cumulative data that we will try to send to the ranking,
         # built by combining items in the queue.
         data = list(dict() for i in range(self.TYPE_COUNT))
+        # The owner each resource's full push is about, for a resource whose
+        # payloads no longer name it.
+        scopes = dict()
 
         for entry in entries:
             data[entry.item.type_].update(entry.item.data)
+            if entry.item.scope is not None:
+                scopes[self.RESOURCE_PATHS[entry.item.type_]] = entry.item.scope
 
         # We abuse the resource path as the English (plural) name for the entity
-        # type, so the batch names the tables it is about to write.
+        # type, so the batch names the tables it is about to write. A snapshot
+        # resource travels even with no payload when the push names its owner: an
+        # empty batch is how the prune reclaims the rows the push dropped.
         batches = [(self.RESOURCE_PATHS[index], data[index])
-                   for index in range(self.TYPE_COUNT) if len(data[index]) > 0]
+                   for index in range(self.TYPE_COUNT)
+                   if len(data[index]) > 0
+                   or self.RESOURCE_PATHS[index] in scopes]
         if len(batches) == 0:
             return
 
@@ -233,7 +250,7 @@ class ProxyExecutor(Executor[ProxyOperation]):
 
         try:
             logger.debug(operation.capitalize())
-            write_projection(batches, operation)
+            write_projection(batches, operation, scopes)
             # Cleared only after the commit: nothing was written if it raised, and
             # the retry has to re-send all of it rather than the part that is left.
             for batch in batches:
@@ -458,8 +475,13 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                                     {contest_id: contest_data}))
         self.enqueue(ProxyOperation(ProxyExecutor.TEAM_TYPE, teams))
         self.enqueue(ProxyOperation(ProxyExecutor.USER_TYPE, users))
-        self.enqueue(ProxyOperation(ProxyExecutor.HIDDEN_TYPE, hidden))
-        self.enqueue(ProxyOperation(ProxyExecutor.TASK_TYPE, tasks))
+        # The scope travels with the push: with no hidden participation left, the
+        # empty payload holds no contest to read, and the prune still has to clear
+        # the tombstone of the participation that was just unhidden.
+        self.enqueue(ProxyOperation(ProxyExecutor.HIDDEN_TYPE, hidden,
+                                    scope=contest_scope))
+        self.enqueue(ProxyOperation(ProxyExecutor.TASK_TYPE, tasks,
+                                    scope=contest_id))
 
     def operations_for_score(self, submission: Submission):
         """Send the score for the given submission to all rankings.
