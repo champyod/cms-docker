@@ -294,7 +294,7 @@ Steps:
      a. docker compose -f docker-compose.yml --profile core up -d database -> wait_healthy cms-database 90
      b. remaining core: up log/resource/scoring/checker -> wait_healthy each 120
      c. admin: up admin profile (if in stacks) -> curl_wait 127.0.0.1:\${ADMIN_NEXT_PORT_EXTERNAL:-8891}, :\${ADMIN_PORT_EXTERNAL:-8889}, ranking :\${RANKING_PORT_EXTERNAL:-8890} (120s each)
-     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/cpp/index.html + one asset it references (60s each, advisory: WARN only, never fails the run)
+     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/<lang>/index.html + one asset it references, <lang> from the cms.toml docs tree (60s each, advisory: WARN only, never fails the run)
      Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)
   5. Result matrix: service | check type | result | duration
   6. Teardown: compose down for requested profiles WITHOUT -v (preserve volumes); on failure dump docker logs --tail 100 to /tmp/cms-smoke-<ts>/; keep up only if SMOKE_KEEP_UP=1
@@ -456,11 +456,21 @@ run_curl_warn() {
 }
 
 # The /docs mount is separate from the contest root, so the root can answer while
-# every docs asset 404s. Assert the entry page and one referenced asset; the asset
-# name is read from the page so a renamed bundle is followed rather than assumed.
+# every docs asset 404s. Assert the entry page and one referenced asset. The language
+# folder comes from the same docs_path + tree rule __preflight.sh uses, so a java-only
+# tree is probed where a literal cpp would only ever 404 and disagree with preflight;
+# the asset name is read from the page so a renamed bundle is followed, not assumed.
 probe_contest_docs() {
   local port="$1"
-  local entry="http://127.0.0.1:${port}/docs/cpp/index.html"
+  local docs_path language=""
+  docs_path="$(docs_path_from_toml "$REPO_ROOT" || true)"
+  [[ -n "$docs_path" ]] && language="$(docs_language "$docs_path" || true)"
+  if [[ -z "$language" ]]; then
+    record_matrix "contest-docs" "http" "WARN" "docs language unresolved (docs_path: ${docs_path:-unset})"
+    return 0
+  fi
+
+  local entry="http://127.0.0.1:${port}/docs/${language}/index.html"
   run_curl_warn "contest-docs" "$entry" 60
   local asset
   asset="$(curl -fsS "$entry" 2>/dev/null \
@@ -474,7 +484,7 @@ probe_contest_docs() {
   local url
   case "$asset" in
     /*) url="http://127.0.0.1:${port}${asset}" ;;
-    *)  url="http://127.0.0.1:${port}/docs/cpp/${asset}" ;;
+    *)  url="http://127.0.0.1:${port}/docs/${language}/${asset}" ;;
   esac
   run_curl_warn "contest-docs-asset" "$url" 60
 }

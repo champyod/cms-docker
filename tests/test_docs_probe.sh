@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Exercises the real docs arm of __preflight.sh, extracted rather than re-declared so a
-# dropped arm fails here. /docs is a SharedDataMiddleware mount whose entry page can
+# dropped arm fails here. The language resolution is shared with the smoke probe and lives
+# in __lib/common.sh, so it is extracted from there. /docs is a SharedDataMiddleware mount
+# whose entry page can
 # answer while the files it references 404, docs_path is container-internal so the host
 # often cannot read the tree at all, and a root-absolute ref resolves against the SITE
 # root rather than the docs root. Missing docs must never be a hard failure: an update
@@ -12,6 +14,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 PREFLIGHT="${REPO_ROOT}/scripts/__preflight.sh"
 SMOKE="${REPO_ROOT}/scripts/__smoke-test.sh"
+COMMON="${REPO_ROOT}/scripts/__lib/common.sh"
 
 pass=0
 fail=0
@@ -43,9 +46,22 @@ REPO_ROOT="$SANDBOX"
 STACK="contest"
 CONTEST_PORT_EXTERNAL=1
 
+# docs_path_from_toml and docs_language are shared with the smoke probe, so they live in
+# __lib/common.sh; the preflight-only arms stay in __preflight.sh. Extracting each from its
+# real home is what makes a move fail here instead of silently drifting.
 missing=0
-for fn in docs_path_from_toml docs_language_from_toml docs_language docs_referenced_asset \
-          docs_asset_url_path check_docs_served check_docs_on_disk check_docs_assets; do
+for fn in docs_path_from_toml docs_language; do
+  body="$(extract_fn "$fn" "$COMMON")"
+  if [[ -z "$body" ]]; then
+    no "${fn}() extracted from __lib/common.sh"
+    missing=1
+    continue
+  fi
+  # shellcheck disable=SC1090
+  eval "$body"
+done
+for fn in docs_referenced_asset docs_asset_url_path check_docs_served check_docs_on_disk \
+          check_docs_assets; do
   body="$(extract_fn "$fn" "$PREFLIGHT")"
   if [[ -z "$body" ]]; then
     no "${fn}() extracted from __preflight.sh"
@@ -56,7 +72,7 @@ for fn in docs_path_from_toml docs_language_from_toml docs_language docs_referen
   eval "$body"
 done
 [[ $missing -eq 0 ]] || exit 1
-ok "docs check functions extracted from __preflight.sh"
+ok "docs resolution helpers extracted from __lib/common.sh and __preflight.sh"
 
 # Drive the served arm deterministically: "down" is an unreachable contest server, the
 # normal case for preflight. The probe URLs land in a file because a command
@@ -141,17 +157,19 @@ else
   no "root-absolute ref resolution (status: $(last_status), probed: $(probed_all))"
 fi
 
-# 7. docs_language from config wins over the folder name, and no other language is probed
+# 7. a docs_language key in cms.toml is ignored — the tree is the single source, so a key
+# naming a folder the tree does not hold cannot redirect the probe
+rm -rf "${DOCS_ROOT}/cpp"
 mkdir -p "${DOCS_ROOT}/java"
 write_entry java '<link rel="stylesheet" href="book.css">'
-write_toml java
+write_toml cpp
 SERVED_ENTRY='<link rel="stylesheet" href="book.css">'
 reset serving
 check_docs_assets
 if [[ "$(probed_url 1)" == "http://127.0.0.1:1/docs/java/index.html" && "$(probed_all)" != *"/docs/cpp/"* ]]; then
-  ok "language folder comes from config"
+  ok "language comes from the docs tree; the config key is ignored"
 else
-  no "language folder from config (probed: $(probed_all))"
+  no "language from the docs tree (probed: $(probed_all))"
 fi
 
 # 8. no docs_language in config -> the tree's own folder is followed, not a literal
@@ -201,25 +219,34 @@ done
 [[ $missing -eq 0 ]] || exit 1
 ok "docs smoke probe extracted from __smoke-test.sh"
 
-# 11. docs unreachable -> WARN in the matrix, the run's failure flag untouched
-curl_wait() { return 1; }
+# probe_contest_docs resolves the language from the cms.toml docs_path and the tree, so hand
+# it the same tree and config the docs cases used and record every URL it probes.
+write_toml
+write_entry java '<link rel="stylesheet" href="book.css">'
+declare -a SMOKE_PROBED=()
+
+# 11. docs unreachable -> WARN in the matrix, the run's failure flag untouched, and the
+# probed path is the tree's language rather than a literal cpp
+curl_wait() { SMOKE_PROBED+=("$1"); return 1; }
 SMOKE_ENTRY='<link rel="stylesheet" href="book.css">'
-MATRIX=(); SMOKE_FAILED=0
+MATRIX=(); SMOKE_FAILED=0; SMOKE_PROBED=()
 probe_contest_docs 8899
-if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"|WARN|"* && "${MATRIX[*]:-}" != *"|FAIL|"* ]]; then
-  ok "smoke docs probe unreachable -> WARN only, run stays green"
+if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"|WARN|"* && "${MATRIX[*]:-}" != *"|FAIL|"* \
+      && "${SMOKE_PROBED[0]:-}" == "http://127.0.0.1:8899/docs/java/index.html" ]]; then
+  ok "smoke docs probe unreachable -> WARN only, tree language probed"
 else
-  no "smoke docs probe unreachable (matrix: ${MATRIX[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
+  no "smoke docs probe unreachable (matrix: ${MATRIX[*]:-<none>}, probed: ${SMOKE_PROBED[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
 fi
 
-# 12. docs servable -> PASS records, still no failure flag
-curl_wait() { return 0; }
-MATRIX=(); SMOKE_FAILED=0
+# 12. docs servable -> PASS records at the resolved language path, still no failure flag
+curl_wait() { SMOKE_PROBED+=("$1"); return 0; }
+MATRIX=(); SMOKE_FAILED=0; SMOKE_PROBED=()
 probe_contest_docs 8899
-if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"contest-docs|http|PASS|"* ]]; then
-  ok "smoke docs probe reachable -> PASS, no failure flag"
+if [[ "$SMOKE_FAILED" -eq 0 && "${MATRIX[*]:-}" == *"contest-docs|http|PASS|"* \
+      && "${SMOKE_PROBED[1]:-}" == "http://127.0.0.1:8899/docs/java/book.css" ]]; then
+  ok "smoke docs probe reachable -> PASS at the resolved language path, no failure flag"
 else
-  no "smoke docs probe reachable (matrix: ${MATRIX[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
+  no "smoke docs probe reachable (matrix: ${MATRIX[*]:-<none>}, probed: ${SMOKE_PROBED[*]:-<none>}, SMOKE_FAILED=${SMOKE_FAILED})"
 fi
 
 printf '\n%s passed, %s failed\n' "$pass" "$fail"

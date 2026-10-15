@@ -518,3 +518,37 @@ ensure_docker_resource_volume() {
     log_die "failed to create docker volume '${vol_name}'" 1
   fi
 }
+
+# ---------------------------------------------------------------------------
+# docs_path_from_toml <repo_root>
+# ---------------------------------------------------------------------------
+# The docs_path the cms.toml under <repo_root>/config declares, or return 1 when the
+# file is absent or the key is unset. The value is reported as written; it is
+# container-internal in the shipped config, so a caller that cannot stat it records a
+# skip rather than a failure.
+docs_path_from_toml() {
+  local repo_root="${1:?docs_path_from_toml: <repo_root> required}"
+  local toml="${repo_root}/config/cms.toml"
+  [[ -f "$toml" ]] || return 1
+  awk -F'"' '/^[[:space:]]*docs_path[[:space:]]*=/ { print $2; exit }' "$toml"
+}
+
+# ---------------------------------------------------------------------------
+# docs_language <docs_path>
+# ---------------------------------------------------------------------------
+# The language folder a docs tree exposes: the directory under <docs_path> holding an
+# index.html, so cpp/index.html yields 'cpp'. WHY the tree is the whole rule: a cms.toml
+# docs_language key never had a producer — neither the sample nor the [contest] inject
+# list wrote one — so reading it could only echo what the tree already says, and the tree
+# is the one folder a browser actually lands on. Returns 1 when no folder carries an entry
+# page; callers report that as a skip, never a failure.
+docs_language() {
+  local docs_path="${1:?docs_language: <docs_path> required}" entry
+  for entry in "$docs_path"/*/index.html; do
+    [[ -f "$entry" ]] || continue
+    entry="${entry%/index.html}"
+    printf '%s' "${entry##*/}"
+    return 0
+  done
+  return 1
+}

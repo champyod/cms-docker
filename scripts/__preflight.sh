@@ -785,7 +785,7 @@ check_proxy_body_size() {
 # ===========================================================================
 # 13) Contest documentation assets
 # ===========================================================================
-# CWS mounts config doc_path at /docs (SharedDataMiddleware) and the handler lists a
+# CWS mounts config docs_path at /docs (SharedDataMiddleware) and the handler lists a
 # subdirectory per language, so a page lives at /docs/<lang>/index.html. A docs tree
 # that ships without the files its entry page references renders unstyled with no
 # error anywhere, so the entry page and one referenced asset are asserted: over HTTP
@@ -793,36 +793,9 @@ check_proxy_body_size() {
 # container-internal in the shipped config, and an update must never abort over a path
 # this host cannot see (regression fixed in 941f09a8) — every arm that cannot be
 # verified records WARN, never FAIL.
-docs_path_from_toml() {
-  local toml="${REPO_ROOT}/config/cms.toml"
-  [[ -f "$toml" ]] || return 1
-  awk -F'"' '/^[[:space:]]*docs_path[[:space:]]*=/ { print $2; exit }' "$toml"
-}
-
-# Language folder under docs_path, e.g. 'cpp'. [contest_web_server] docs_language
-# names one when the operator sets it; otherwise it is whichever folder the docs tree
-# holds an entry page in.
-docs_language_from_toml() {
-  local toml="${REPO_ROOT}/config/cms.toml"
-  [[ -f "$toml" ]] || return 1
-  awk -F'"' '/^[[:space:]]*docs_language[[:space:]]*=/ { print $2; exit }' "$toml"
-}
-
-docs_language() {
-  local docs_path="$1" explicit entry
-  explicit="$(docs_language_from_toml || true)"
-  if [[ -n "$explicit" ]]; then
-    printf '%s' "$explicit"
-    return 0
-  fi
-  for entry in "$docs_path"/*/index.html; do
-    [[ -f "$entry" ]] || continue
-    entry="${entry%/index.html}"
-    printf '%s' "${entry##*/}"
-    return 0
-  done
-  return 1
-}
+# docs_path_from_toml and docs_language come from __lib/common.sh: the smoke probe
+# resolves the same language folder over the same docs_path, so the rule has to live
+# where both scripts load it rather than in either one.
 
 # The first asset the entry HTML pulls in, as written in that page (reads stdin).
 docs_referenced_asset() {
@@ -932,7 +905,7 @@ check_docs_assets() {
   fi
 
   local docs_path
-  docs_path="$(docs_path_from_toml || true)"
+  docs_path="$(docs_path_from_toml "$REPO_ROOT" || true)"
   if [[ -z "$docs_path" ]]; then
     record_result "contest docs" "PASS" "docs_path unset — nothing to serve under /docs"
     return 0
@@ -941,7 +914,7 @@ check_docs_assets() {
   local language
   language="$(docs_language "$docs_path" || true)"
   if [[ -z "$language" ]]; then
-    record_result "contest docs" "WARN" "SKIP: no docs_language and no docs tree under ${docs_path}"
+    record_result "contest docs" "WARN" "SKIP: no docs tree with an entry page under ${docs_path}"
     return 0
   fi
 
