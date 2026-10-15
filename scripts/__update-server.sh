@@ -17,6 +17,7 @@ warn() { printf '%s [UPDATE][WARN] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*" >&2
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 RECORD_FILE="/tmp/cms-update-${TIMESTAMP}.txt"
 DB_HEALTH_TIMEOUT=120
+SERVICE_HEALTH_TIMEOUT=180
 
 log "Starting non-interactive server update..."
 
@@ -204,6 +205,34 @@ if [ "$DEPLOY_TYPE" = "img" ]; then
     make pull
 fi
 
+# ---------------------------------------------------------------------------
+# (e2) Schema sync — applied BEFORE any service restarts
+# WHY this ordering is the invariant the update path has to hold: a service reads the
+# schema its own migrations author as it boots, and caches a load that fails instead of
+# retrying it, so a stack started first stays quietly broken for the rest of the run.
+# On 2026-10-15 the stacks were restarted before this sync: cms-ranking-web-server booted
+# against the un-migrated schema, logged `relation "ranking_hidden" does not exist` once
+# and served a board it never loaded, while the run reported green. The migration is
+# applied while the previous release is still running; the run does not reach the restart
+# below with an un-migrated database.
+# WHY the database is required here but never started: cms-database is a persistent
+# container the backup step above already demanded running, and starting the stack to
+# satisfy the migration would start the very services this ordering keeps off it.
+# ---------------------------------------------------------------------------
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+    log_die "cms-database is not running — its schema cannot be synced and no service may start before it is. Start cms-database (or run './cms update-server' on the main box) and re-run."
+fi
+
+log "Syncing database schema via Prisma Migrate (before any service restarts)..."
+make cms-init || log_die "make cms-init failed."
+make prisma-sync || log_die "make prisma-sync failed."
+
+# WHY a second sync: the first one (before the stacks) runs while the schema may still be the
+# previous release's, and skips the registry artifacts when it is — the one migration it waits on
+# is applied just above. Nothing else re-renders them, so they are rendered here.
+log "Rendering the registry artifacts against the migrated schema..."
+bash scripts/__config_sync.sh || log_die "config sync failed after the schema sync."
+
 log "Restarting services..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
     [ "$HAS_CORE" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img core
@@ -218,16 +247,6 @@ else
     [ "$HAS_CONTEST" = true ] && make contest
     [ "$HAS_WORKER" = true ] && update_worker_shards src
 fi
-
-log "Syncing database schema via Prisma Migrate..."
-make cms-init || log_die "make cms-init failed."
-make prisma-sync || log_die "make prisma-sync failed."
-
-# WHY a second sync: the first one (before the stacks) runs while the schema may still be the
-# previous release's, and skips the registry artifacts when it is — the one migration it waits on
-# is applied just above. Nothing else re-renders them, so they are rendered here.
-log "Rendering the registry artifacts against the migrated schema..."
-bash scripts/__config_sync.sh || log_die "config sync failed after the schema sync."
 
 # WHY after the migration and not with the stacks: the generated registry compose names
 # containers the sync derived from the services table, and they only start correctly once
@@ -273,9 +292,52 @@ http_ok() {
     curl -fsS -o /dev/null --max-time 10 "$url"
 }
 
+# A one-shot probe fails a service that is still building its first response, so a route
+# that reads data gets the same bounded wait the database gets.
+wait_http_ok() {
+    local url="$1" waited=0
+    while [ "$waited" -lt "$SERVICE_HEALTH_TIMEOUT" ]; do
+        if http_ok "$url"; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    return 1
+}
+
+# Reads every running service's own healthcheck instead of only "the container exists".
+# WHY: the healthcheck is how a service reports whether it loaded what it needs, and the
+# 2026-10-15 update reported success while cms-ranking-web-server served a board it had
+# failed to load — a container that is up is not a service that is well. A container that
+# carries no healthcheck cannot report, so its absence is not counted as a failure.
+wait_services_healthy() {
+    local waited=0 unhealthy="" name status
+    while [ "$waited" -lt "$SERVICE_HEALTH_TIMEOUT" ]; do
+        unhealthy=""
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || echo missing)"
+            case "$status" in
+                healthy|none) ;;
+                *) unhealthy="${unhealthy} ${name}=${status}" ;;
+            esac
+        done < <(docker ps --format '{{.Names}}' | grep '^cms-' || true)
+        if [ -z "$unhealthy" ]; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    warn "services not healthy after ${SERVICE_HEALTH_TIMEOUT}s:${unhealthy}"
+    return 1
+}
+
 DB_RESULT="SKIP"
 ADMIN_RESULT="SKIP"
 CONTEST_RESULT="SKIP"
+RANKING_RESULT="SKIP"
+SERVICES_RESULT="SKIP"
 
 if docker inspect cms-database >/dev/null 2>&1; then
     log "Waiting for cms-database to become healthy (max ${DB_HEALTH_TIMEOUT}s)..."
@@ -296,14 +358,34 @@ if [ "$HAS_CONTEST" = true ]; then
     if http_ok "http://127.0.0.1:${CONTEST_PORT}/"; then CONTEST_RESULT="PASS"; else CONTEST_RESULT="FAIL"; fi
 fi
 
+if [ "$HAS_ADMIN" = true ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-ranking-web-server"; then
+    RANKING_PORT="$(read_env_port .env RANKING_PORT_EXTERNAL 8890)"
+    # WHY /diagnostics and not /healthz: /healthz only proves the database answers, while
+    # /diagnostics rebuilds and serves the score board — the read whose boot-time failure the
+    # 2026-10-15 update missed. A board that cannot load answers 503 here.
+    log "Checking ranking readiness on http://127.0.0.1:${RANKING_PORT}/diagnostics ..."
+    if wait_http_ok "http://127.0.0.1:${RANKING_PORT}/diagnostics"; then RANKING_RESULT="PASS"; else RANKING_RESULT="FAIL"; fi
+fi
+
+# WHY every running cms-* container and not a fixed list: which stacks this box runs is
+# detected above, and the healthcheck is the one place each service states its own state —
+# a service that restarted or never became ready must not be reported as a success.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-'; then
+    log "Waiting for every restarted service's own healthcheck (max ${SERVICE_HEALTH_TIMEOUT}s)..."
+    if wait_services_healthy; then SERVICES_RESULT="PASS"; else SERVICES_RESULT="FAIL"; fi
+fi
+
 echo ""
 log "===== POST-UPDATE SUMMARY (deployment type: ${DEPLOY_TYPE}) ====="
 log "Database health : ${DB_RESULT}"
 log "Admin panel     : ${ADMIN_RESULT} (port ${ADMIN_PORT:-n/a})"
 log "Contest web     : ${CONTEST_RESULT} (port ${CONTEST_PORT:-n/a})"
+log "Ranking service : ${RANKING_RESULT} (port ${RANKING_PORT:-n/a})"
+log "Service health  : ${SERVICES_RESULT}"
 echo ""
 
-if [ "$DB_RESULT" = "FAIL" ] || [ "$ADMIN_RESULT" = "FAIL" ] || [ "$CONTEST_RESULT" = "FAIL" ]; then
+if [ "$DB_RESULT" = "FAIL" ] || [ "$ADMIN_RESULT" = "FAIL" ] || [ "$CONTEST_RESULT" = "FAIL" ] \
+   || [ "$RANKING_RESULT" = "FAIL" ] || [ "$SERVICES_RESULT" = "FAIL" ]; then
     cat >&2 <<EOF
 ================================================================
  UPDATE VERIFICATION FAILED — manual rollback required
