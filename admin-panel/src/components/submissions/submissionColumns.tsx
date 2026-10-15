@@ -35,6 +35,14 @@ export function submissionStatus(submission: SubmissionListItem): React.JSX.Elem
   );
 }
 
+/** 'failed' once compilation is known-failed, 'scored' once a result carries a score, else still running. */
+export function submissionTerminalState(submission: SubmissionListItem): 'scored' | 'failed' | null {
+  const result = firstResult(submission);
+  if (result?.compilation_outcome === 'fail') return 'failed';
+  if (result?.score !== null && result?.score !== undefined) return 'scored';
+  return null;
+}
+
 function submissionUser(submission: SubmissionListItem): React.JSX.Element {
   return (
     <span className="flex flex-col">

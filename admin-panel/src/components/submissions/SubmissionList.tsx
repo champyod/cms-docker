@@ -7,8 +7,12 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 
 import { recalculateSubmission, toggleSubmissionOfficial } from '@/app/actions/submissions';
+import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { EmptyState } from '@/components/core/EmptyState';
+import { ReasonDialog } from '@/components/core/ReasonDialog';
+import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { RowActions } from '@/components/core/RowActions';
+import { buildSelectionColumn } from '@/components/core/SelectionColumn';
 import { RecordList } from '@/components/list/RecordList';
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
@@ -16,6 +20,8 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
+import { useListSelection } from '@/hooks/useListSelection';
+import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import { useSyncedState } from '@/hooks/useSyncedState';
 import type { Dictionary } from '@/lib/dictionary';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -23,8 +29,9 @@ import type { ListSortInput } from '@/lib/list-sorting';
 import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
-import { BatchRecalcBar } from './BatchRecalcBar';
+import { BatchRecalcBar, SubmissionBulkActions } from './BatchRecalcBar';
 import { SubmissionFiltersCard, type SubmissionFilters } from './SubmissionFiltersCard';
+import { SubmissionRequeueToasts, watchSubmissionsForCompletion } from './SubmissionRequeueToasts';
 
 export type { SubmissionFilters };
 
@@ -78,6 +85,29 @@ function SubmissionListHeader({ locale, currentPage, totalPages }: {
 // cluster, so a per-layout target would drift the two apart.
 const ROW_ACTION_TARGET = 'min-h-11 min-w-11';
 
+/**
+ * The checkbox cell of a selectable column, with the shift-range wiring around it:
+ * the range is applied on pointer-down so the end row's own toggle cannot fight it,
+ * and the click that follows is cancelled only when a range was actually taken.
+ */
+function withShiftSelection(
+  column: ResponsiveColumn<SubmissionListItem>,
+  onSelectorPointerDown: (event: React.PointerEvent<HTMLSpanElement>, submission: SubmissionListItem) => void,
+  onSelectorClickCapture: (event: React.MouseEvent<HTMLSpanElement>) => void,
+): ResponsiveColumn<SubmissionListItem> {
+  return {
+    ...column,
+    render: (submission) => (
+      <span
+        onPointerDown={(event) => onSelectorPointerDown(event, submission)}
+        onClickCapture={onSelectorClickCapture}
+      >
+        {column.render(submission)}
+      </span>
+    ),
+  };
+}
+
 export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
@@ -85,40 +115,98 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
   const router = useAppRouter();
   const confirm = useConfirm();
   const runAction = useActionFeedback();
+  const dict = useDictionary();
+  const toasts = dict.submissions.toasts;
   const { recalculateSubmissionConfirm, toggleOfficialConfirm } = useConfirmationCopy();
+  const reasonPrompt = useReasonPrompt();
   const [pendingRejudge, setPendingRejudge] = useState<number | null>(null);
   // Why the generated record label: the row action opens the submission record,
   // so its accessible name comes from the same bilingual key the record uses.
   const recordLabel = navigation.evaluation['submission-record'].label;
 
+  const submissionIds = submissions.map((submission) => submission.id);
+  const selection = useListSelection('submissions.list', submissionIds);
+  const [shiftRangeApplied, setShiftRangeApplied] = useState(false);
+
   const openRecord = (submission: SubmissionListItem): void => {
     router.push(recordHref(locale, submission));
   };
 
-  // Why the record's own copy: the list and the record run the same action, so an
-  // operator sees one wording for it wherever they invoke it.
-  const rejudge = async (submissionId: number): Promise<void> => {
-    if (!(await confirm(recalculateSubmissionConfirm('score')))) return;
-    setPendingRejudge(submissionId);
-    try {
-      const outcome = await runAction(
-        { pending: 'Recalculating...', success: 'Submission queued for recalculation', failure: 'Recalculation failed' },
-        () => recalculateSubmission(submissionId),
-      );
-      if (outcome?.success) router.refresh();
-    } finally {
-      setPendingRejudge(null);
-    }
+  // Why the reason dialog instead of a bare confirm: the server requires the
+  // justification on every requeue, and the dialog that collects it carries the
+  // same confirmation copy the single-submission control has always shown.
+  const rejudge = (submissionId: number): void => {
+    const base = recalculateSubmissionConfirm('score');
+    reasonPrompt.ask({
+      title: base.title,
+      description: base.description,
+      submitLabel: base.confirmLabel,
+      run: async (reason) => {
+        setPendingRejudge(submissionId);
+        try {
+          const outcome = await runAction(
+            { pending: toasts.recomputePending, success: toasts.recomputeSuccess, failure: toasts.recomputeFailure },
+            () => recalculateSubmission(submissionId, 'score', { reason }),
+          );
+          if (outcome === null) return { success: false };
+          if (outcome.success) {
+            watchSubmissionsForCompletion([submissionId]);
+            router.refresh();
+          }
+          return outcome;
+        } finally {
+          setPendingRejudge(null);
+        }
+      },
+    });
   };
 
   const toggleOfficial = async (submissionId: number): Promise<void> => {
     if (!(await confirm(toggleOfficialConfirm()))) return;
     const outcome = await runAction(
-      { pending: 'Saving official flag...', success: 'Official flag saved', failure: 'Official flag update failed' },
+      { pending: toasts.officialPending, success: toasts.officialSuccess, failure: toasts.officialFailure },
       () => toggleSubmissionOfficial(submissionId),
     );
     if (outcome?.success) router.refresh();
   };
+
+  const handleSelectorPointerDown = (
+    event: React.PointerEvent<HTMLSpanElement>,
+    submission: SubmissionListItem,
+  ): void => {
+    setShiftRangeApplied(false);
+    if (!event.shiftKey || selection.anchorId === null) return;
+    setShiftRangeApplied(selection.toggleRange(selection.anchorId, submission.id));
+  };
+
+  const handleSelectorClickCapture = (event: React.MouseEvent<HTMLSpanElement>): void => {
+    const rangeTaken = shiftRangeApplied && event.shiftKey;
+    setShiftRangeApplied(false);
+    if (rangeTaken) event.preventDefault();
+  };
+
+  const toggleOneRespectingShift = (id: number, checked: boolean): void => {
+    if (shiftRangeApplied) return;
+    selection.toggleOne(id, checked);
+  };
+
+  const columns: ResponsiveColumn<SubmissionListItem>[] = [
+    withShiftSelection(
+      buildSelectionColumn<SubmissionListItem>({
+        getRowId: (submission) => submission.id,
+        selectedIds: selection.selectedIds,
+        allSelected: selection.allSelected,
+        partlyChecked: selection.someSelected,
+        selectAllLabel: 'Select all submissions',
+        selectRowLabel: (submission) => `Select submission ${submission.id}`,
+        onToggleAll: selection.toggleAll,
+        onToggleOne: toggleOneRespectingShift,
+      }),
+      handleSelectorPointerDown,
+      handleSelectorClickCapture,
+    ),
+    ...buildSubmissionColumns(),
+  ];
 
   const handlePageChange = (newPage: number): void => {
     const url = new URL(window.location.href);
@@ -168,7 +256,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
           label: 'Rejudge',
           ariaLabel: `Rejudge submission ${submission.id}`,
           icon: RefreshCw,
-          onClick: () => { void rejudge(submission.id); },
+          onClick: () => rejudge(submission.id),
           showWhen: canRecalculate,
           loading: pendingRejudge === submission.id,
           disabled: pendingRejudge !== null,
@@ -191,13 +279,24 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
     <div className="space-y-6">
       <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
       <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
+      {canRecalculate || canOfficial ? (
+        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+          <SubmissionBulkActions
+            submissionIds={[...selection.selectedIds]}
+            submissions={submissions}
+            canRecalculate={canRecalculate}
+            canOfficial={canOfficial}
+            onSucceeded={() => router.refresh()}
+          />
+        </BulkActionBar>
+      ) : null}
       <BatchRecalcBar
         scope={{ contestId: filters.contestId, taskId: filters.taskId, userId: filters.userId }}
         canRecompute={canRecalculate}
       />
       <RecordList
         rows={submissions}
-        columns={buildSubmissionColumns()}
+        columns={columns}
         getRowKey={(submission) => submission.id}
         getRecordHref={(submission) => recordHref(locale, submission)}
         renderRowActions={renderRowActions}
@@ -208,6 +307,8 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
         onSortChange={applySort}
       />
       <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+      <ReasonDialog request={reasonPrompt.request} onClose={reasonPrompt.close} onSubmit={reasonPrompt.submit} />
+      <SubmissionRequeueToasts submissions={submissions} />
     </div>
   );
 }

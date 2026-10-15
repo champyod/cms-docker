@@ -1,10 +1,20 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { SubmissionList, type SubmissionFilters } from '@/components/submissions/SubmissionList';
 import type { SubmissionListItem } from '@/types';
+
+const mocks = vi.hoisted(() => ({
+  getContests: vi.fn(),
+  getTasks: vi.fn(),
+  usersGet: vi.fn(),
+}));
+
+vi.mock('@/app/actions/contests', () => ({ getContests: mocks.getContests }));
+vi.mock('@/app/actions/tasks', () => ({ getTasks: mocks.getTasks }));
+vi.mock('@/lib/apiClient', () => ({ apiClient: { get: mocks.usersGet } }));
 
 // Why: globals are disabled in vitest.config.ts, so the automatic afterEach cleanup
 // does not run and later queries would bind to the accumulated document.body.
@@ -166,5 +176,84 @@ describe('submission list filters', () => {
     const clear = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Clear');
     expect(clear).toBeUndefined();
+  });
+});
+
+describe('submission list pickers', () => {
+  beforeEach(() => {
+    mocks.getContests.mockReset().mockResolvedValue({
+      contests: [{ id: 2, name: 'Thailand Cup' }],
+      totalPages: 1,
+      total: 1,
+    });
+    mocks.getTasks.mockReset().mockResolvedValue({
+      tasks: [{ id: 5, name: 'sum', title: 'Sum' }],
+      totalPages: 1,
+      total: 1,
+    });
+    mocks.usersGet.mockReset().mockResolvedValue({ success: true, users: [{ id: 9, username: 'ada' }] });
+  });
+
+  async function openPicker(container: HTMLElement, trigger: string): Promise<HTMLElement> {
+    const button = [...container.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent?.includes(trigger));
+    if (!button) throw new Error(`Missing picker trigger: ${trigger}`);
+    fireEvent.click(button);
+    return await screen.findByRole('dialog');
+  }
+
+  it('opens the contest picker and lists options as name (#id)', async () => {
+    const container = renderList();
+    await openPicker(container, 'Contest');
+
+    expect(await screen.findByText('Thailand Cup (#2)')).toBeTruthy();
+  });
+
+  it('writes the chosen option into the named field and pushes it on submit', async () => {
+    mockPush.mockClear();
+    const container = renderList();
+    await openPicker(container, 'Contest');
+    fireEvent.click(await screen.findByText('Thailand Cup (#2)'));
+
+    expect(field(container, 'contest').value).toBe('2');
+    submit(container);
+    expect(new URL(mockPush.mock.calls[0][0]).searchParams.get('contest')).toBe('2');
+  });
+
+  it('re-queries the permission-gated reader as the operator types a name', async () => {
+    const container = renderList();
+    await openPicker(container, 'Contest');
+    await screen.findByText('Thailand Cup (#2)');
+
+    fireEvent.change(screen.getByPlaceholderText('Search contest…'), { target: { value: 'land' } });
+
+    await waitFor(() => expect(mocks.getContests).toHaveBeenCalledWith({ page: 1, search: 'land' }));
+  });
+
+  it('loads user options through the gated reader and selects one', async () => {
+    const container = renderList();
+    await openPicker(container, 'User');
+    fireEvent.click(await screen.findByText('ada (#9)'));
+
+    expect(field(container, 'user').value).toBe('9');
+  });
+
+  it('offers a Clear choice inside an open picker for a prefilled field', async () => {
+    const container = renderList({ contestId: 7 });
+    const dialog = await openPicker(container, 'Contest');
+    fireEvent.click(within(dialog).getByText('Clear'));
+
+    expect(field(container, 'contest').value).toBe('');
+  });
+
+  it('collapses the pickers behind More below the desktop breakpoint', () => {
+    const container = renderList();
+    const more = [...container.querySelectorAll('button')]
+      .find((candidate) => candidate.textContent?.trim() === 'More');
+    if (!more) throw new Error('Missing More control');
+
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
   });
 });
