@@ -78,10 +78,12 @@ function questionPanel(): React.JSX.Element {
         replyingTo={null}
         replySubject=""
         replyText=""
+        replySettled={false}
         permissionKeys={['question:answer', 'question:ignore']}
         onReplyingTo={() => {}}
         onReplySubject={() => {}}
         onReplyText={() => {}}
+        onReplySettled={() => {}}
         onReply={() => {}}
         onIgnore={() => {}}
       />

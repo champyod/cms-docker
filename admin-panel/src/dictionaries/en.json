@@ -157,6 +157,10 @@
       "removePending": "Removing team...",
       "removeSuccess": "Team returned to inherited",
       "removeFailure": "Removing the team failed"
+    },
+    "questions": {
+      "settledByStatement": "Settled by the statement",
+      "clarificationNeeded": "Clarification needed"
     }
   },
   "tasks": {

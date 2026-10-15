@@ -73,7 +73,7 @@ function containerRow(state: string, onToggleSelection: () => void, actionLoadin
 }
 
 function questionPanel(overrides: Partial<QuestionsPanelProps>): React.JSX.Element {
-  return <QuestionsPanel questions={[QUESTION]} replyingTo={null} replySubject="" replyText="" permissionKeys={['question:answer', 'question:ignore']} onReplyingTo={noop} onReplySubject={noop} onReplyText={noop} onReply={noop} onIgnore={noop} {...overrides} />;
+  return <QuestionsPanel questions={[QUESTION]} replyingTo={null} replySubject="" replyText="" replySettled={false} permissionKeys={['question:answer', 'question:ignore']} onReplyingTo={noop} onReplySubject={noop} onReplyText={noop} onReplySettled={noop} onReply={noop} onIgnore={noop} {...overrides} />;
 }
 
 function groupList(permissionKeys: readonly string[]): React.JSX.Element {

@@ -29,6 +29,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
   const [replyingTo, setReplyingTo] = useState<number | null>(null);
   const [replySubject, setReplySubject] = useState('');
   const [replyText, setReplyText] = useState('');
+  const [replySettled, setReplySettled] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     if (activeTab === 'announcements') setAnnouncements(await getAnnouncements(contestId));
@@ -68,15 +69,22 @@ export function useContestCommunications(contestId: number, adminId: number) {
   };
 
   const handleReply = async (questionId: number): Promise<void> => {
-    if (!replySubject.trim() || !replyText.trim()) return;
+    // Why the marker alone is a legal send: an answer that points at the statement has no body to
+    // write, so demanding one dropped the classification the operator had chosen.
+    if (!replySettled && (!replySubject.trim() || !replyText.trim())) return;
     const result = await runAction(
       { pending: 'Sending reply...', success: 'Reply sent', failure: 'Reply failed' },
-      () => replyToQuestion(questionId, adminId, { reply_subject: replySubject, reply_text: replyText }),
+      () => replyToQuestion(questionId, adminId, {
+        reply_subject: replySubject,
+        reply_text: replyText,
+        resolution_kind: replySettled ? 'settled_by_statement' : undefined,
+      }),
     );
     if (!result?.success) return;
     setReplyingTo(null);
     setReplySubject('');
     setReplyText('');
+    setReplySettled(false);
     reload();
   };
 
@@ -92,7 +100,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
     activeTab, selectTab, announcements, questions, status,
     showAnnouncementForm, setShowAnnouncementForm,
     announcementSubject, setAnnouncementSubject, announcementText, setAnnouncementText,
-    replyingTo, setReplyingTo, replySubject, setReplySubject, replyText, setReplyText,
+    replyingTo, setReplyingTo, replySubject, setReplySubject, replyText, setReplyText, replySettled, setReplySettled,
     reload, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore,
   };
 }

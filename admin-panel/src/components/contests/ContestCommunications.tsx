@@ -21,7 +21,7 @@ const TAB_INACTIVE = 'border-b-2 border-transparent text-muted-foreground hover:
 
 export function ContestCommunications({ contestId, adminId, permissionKeys = [] }: ContestCommunicationsProps): React.JSX.Element {
   const dict = useDictionary();
-  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
+  const { activeTab, selectTab, reload, status, announcements, questions, showAnnouncementForm, announcementSubject, announcementText, replyingTo, replySubject, replyText, replySettled, setShowAnnouncementForm, setAnnouncementSubject, setAnnouncementText, setReplyingTo, setReplySubject, setReplyText, setReplySettled, handleCreateAnnouncement, handleDeleteAnnouncement, handleReply, handleIgnore } = useContestCommunications(contestId, adminId);
 
   return (
     <Card className="overflow-hidden">
@@ -44,7 +44,7 @@ export function ContestCommunications({ contestId, adminId, permissionKeys = [] 
         ) : (
           <>
             {activeTab === 'announcements' && <AnnouncementsPanel announcements={announcements as AnnouncementRow[]} showForm={showAnnouncementForm} subject={announcementSubject} text={announcementText} permissionKeys={permissionKeys} onShowForm={setShowAnnouncementForm} onSubject={setAnnouncementSubject} onText={setAnnouncementText} onCreate={handleCreateAnnouncement} onDelete={handleDeleteAnnouncement} />}
-            {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReply={handleReply} onIgnore={handleIgnore} />}
+            {activeTab === 'questions' && <QuestionsPanel questions={questions as QuestionRow[]} replyingTo={replyingTo} replySubject={replySubject} replyText={replyText} replySettled={replySettled} permissionKeys={permissionKeys} onReplyingTo={setReplyingTo} onReplySubject={setReplySubject} onReplyText={setReplyText} onReplySettled={setReplySettled} onReply={handleReply} onIgnore={handleIgnore} />}
           </>
         )}
       </div>

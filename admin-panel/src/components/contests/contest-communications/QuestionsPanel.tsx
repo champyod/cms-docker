@@ -1,11 +1,14 @@
 'use client';
 
 import { Eye, EyeOff, Reply } from 'lucide-react';
+import { Badge } from '@/components/core/Badge';
 import { Button } from '@/components/core/Button';
 import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
+import type { Dictionary } from '@/lib/dictionary';
+import type { QuestionResolutionKind } from '@/app/actions/questions';
 
 export interface QuestionRow {
   id: number;
@@ -15,6 +18,9 @@ export interface QuestionRow {
   reply_timestamp: string | Date | null;
   reply_subject: string | null;
   reply_text: string | null;
+  // Why optional: every row written before the column existed carries no marker, and an
+  // invented classification states something the record never recorded.
+  resolution_kind?: QuestionResolutionKind | null;
   question_timestamp: string | Date;
   participations?: { users?: { username: string } } | null;
 }
@@ -24,10 +30,12 @@ interface Props {
   replyingTo: number | null;
   replySubject: string;
   replyText: string;
+  replySettled: boolean;
   permissionKeys: readonly string[];
   onReplyingTo: (id: number | null) => void;
   onReplySubject: (v: string) => void;
   onReplyText: (v: string) => void;
+  onReplySettled: (v: boolean) => void;
   onReply: (id: number) => void;
   onIgnore: (id: number, ignored: boolean) => void;
 }
@@ -52,7 +60,19 @@ function buildQuestionActions(
   ];
 }
 
-export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, permissionKeys, onReplyingTo, onReplySubject, onReplyText, onReply, onIgnore }: Props): React.JSX.Element {
+/**
+ * The classification the operator chose, shown beside the answer it was chosen for.
+ *
+ * Why an absent marker renders as nothing: a question answered before the column existed carries
+ * none, and a default badge would report a decision nobody made.
+ */
+function ResolutionBadge({ kind, dict }: { kind: QuestionResolutionKind | null | undefined; dict: Dictionary }): React.JSX.Element | null {
+  if (kind === 'settled_by_statement') return <Badge variant="success">{dict.contests.questions.settledByStatement}</Badge>;
+  if (kind === 'clarification_needed') return <Badge variant="info">{dict.contests.questions.clarificationNeeded}</Badge>;
+  return null;
+}
+
+export function QuestionsPanel({ questions, replyingTo, replySubject, replyText, replySettled, permissionKeys, onReplyingTo, onReplySubject, onReplyText, onReplySettled, onReply, onIgnore }: Props): React.JSX.Element {
   const dict = useDictionary();
   // Why the contest zone: a question is asked against one contest's schedule, so its wall clock is
   // the contest's own, whatever zone the staff member reading it happens to sit in.
@@ -73,7 +93,10 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
               <div className="mt-2 text-xs text-muted-foreground">From: {q.participations?.users?.username} at {formatTime(q.question_timestamp)}</div>
               {q.reply_timestamp && (
                 <div className="mt-3 rounded-lg border-l-2 border-primary bg-primary/10 p-2">
-                  <div className="text-sm font-medium text-primary">{q.reply_subject}</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm font-medium text-primary">{q.reply_subject}</div>
+                    <ResolutionBadge kind={q.resolution_kind} dict={dict} />
+                  </div>
                   <div className="text-sm text-muted-foreground">{q.reply_text}</div>
                 </div>
               )}
@@ -89,6 +112,12 @@ export function QuestionsPanel({ questions, replyingTo, replySubject, replyText,
             <div className="mt-3 space-y-2 rounded-lg bg-muted/30 p-3">
               <input type="text" value={replySubject} onChange={(e) => onReplySubject(e.target.value)} placeholder="Reply subject" className={FIELD_CLASSES} />
               <textarea value={replyText} onChange={(e) => onReplyText(e.target.value)} placeholder="Reply message..." rows={2} className={FIELD_CLASSES} />
+              {/* Why a marker control of its own: the statement alone can settle a question, and the
+                  operator has to say so — an empty body is that answer, not a missing one. */}
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input type="checkbox" checked={replySettled} onChange={(e) => onReplySettled(e.target.checked)} className="rounded border-input bg-card accent-primary" />
+                {dict.contests.questions.settledByStatement}
+              </label>
               <Button size="sm" variant="positive" onClick={() => onReply(q.id)}>Send Reply</Button>
             </div>
           )}

@@ -157,6 +157,10 @@
       "removePending": "กำลังนำทีมออก...",
       "removeSuccess": "นำทีมกลับไปใช้ค่าของทีมแล้ว",
       "removeFailure": "นำทีมออกไม่สำเร็จ"
+    },
+    "questions": {
+      "settledByStatement": "โจทย์ชี้แจงไว้แล้ว",
+      "clarificationNeeded": "ต้องชี้แจงเพิ่มเติม"
     }
   },
   "tasks": {
