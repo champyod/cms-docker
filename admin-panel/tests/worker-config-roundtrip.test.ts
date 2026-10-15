@@ -3,10 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ repoRoot: '', audit: vi.fn() }));
+const mocks = vi.hoisted(() => ({ repoRoot: '', audit: vi.fn(), runConfigSync: vi.fn() }));
 
 vi.mock('@/lib/repo-root', () => ({ getRepoRoot: (): string => mocks.repoRoot }));
 vi.mock('@/lib/permissions', () => ({ ensurePermission: vi.fn(async () => undefined) }));
+// Why mocked and not run: the sync is the host's script, and the action's contract is that it
+// delegates the render to it rather than touching the generated .env itself.
+vi.mock('@/lib/deploy-config', () => ({ runConfigSync: mocks.runConfigSync }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.audit }));
 // Why present but unused: the shared reader imports prisma at module load, and a mock that
 // omits it fails the import before either action under test can be called.
@@ -67,6 +70,8 @@ beforeEach(() => {
   repoRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cms-worker-config-'));
   mocks.repoRoot = repoRoot;
   mocks.audit.mockReset();
+  mocks.runConfigSync.mockReset();
+  mocks.runConfigSync.mockResolvedValue(undefined);
   seedRepo();
 });
 
@@ -116,19 +121,37 @@ describe('worker configuration round trip', () => {
   });
 
   /**
-   * Why the render is asserted too: the panel reads the fleet through a source list that has
-   * carried the stale .env render, so a delete that left it alone brought the worker straight
-   * back on the next read, until a `./cms config sync` happened to truncate it.
+   * Why the render is delegated: the .env is generated from config.toml, so a panel that edited
+   * it by hand and the sync that regenerates it fought over the same file, and the fleet row
+   * the panel removed came straight back on the next read.
    */
-  it('clears the stale .env render so the dropped worker cannot resurface from it', async () => {
-    await updateWorkers(SAVED_FLEET);
+  it('regenerates the render through the sync instead of editing it by hand', async () => {
+    // The sync renders .env from config.toml, so the fleet has to be in the file when it runs.
+    let renderedFrom = '';
+    mocks.runConfigSync.mockImplementation((): void => {
+      renderedFrom = readConfigToml();
+    });
 
-    const render = readGeneratedEnv();
-    expect(render).not.toContain('WORKER_5');
-    expect(render).not.toContain('10.0.0.9:26009');
-    // Why kept: WORKER_PORT is a named setting, not a positional fleet row.
-    expect(render).toContain('WORKER_PORT=26000');
+    const saved = await updateWorkers(SAVED_FLEET);
+    expect(saved.success).toBe(true);
 
-    expect((await loadConfiguredWorkers(repoRoot)).workers.map(({ host }) => host)).not.toContain('10.0.0.9');
+    expect(mocks.runConfigSync).toHaveBeenCalledTimes(1);
+    expect(renderedFrom).toContain('WORKER_0 = "10.0.0.1:26001"');
+    expect(renderedFrom).not.toContain('WORKER_5');
+    expect(readGeneratedEnv()).toBe(GENERATED_ENV_WITH_STALE_WORKER);
+  });
+
+  /**
+   * Why the failure is asserted here: a render that did not happen leaves the deployment on the
+   * fleet it had, so reporting success would tell the operator their edit is live when it is not.
+   */
+  it('reports a failed render as a failure and audits no success', async () => {
+    mocks.runConfigSync.mockRejectedValue(new Error('sync blew up'));
+
+    const saved = await updateWorkers(SAVED_FLEET);
+
+    expect(saved.success).toBe(false);
+    expect(saved.error).toContain('config.toml');
+    expect(mocks.audit).not.toHaveBeenCalled();
   });
 });

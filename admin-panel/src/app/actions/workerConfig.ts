@@ -7,7 +7,7 @@ import { getRepoRoot } from '@/lib/repo-root';
 import { loadConfiguredWorkers } from '@/lib/worker-stats';
 import { recordAudit } from '@/lib/audit';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
-import { readConfigFile } from '@/lib/config-file';
+import { runConfigSync } from '@/lib/deploy-config';
 import { upsertTomlValue } from '@/lib/discord-webhook';
 
 const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
@@ -18,9 +18,6 @@ const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
 // erased by the next sync.
 const WORKER_SECTION = 'worker';
 const WORKER_KEY_RE = /^\s*WORKER_\d+\s*=/;
-
-/** The file `./cms config sync` renders config.toml into, which the panel container also reads. */
-const ENV_FILE = '.env';
 
 type WorkerEntry = { host: string; port: number };
 
@@ -54,34 +51,6 @@ function renderWorkerFleet(content: string, workers: WorkerEntry[]): string {
       upsertTomlValue(accumulated, WORKER_SECTION, `WORKER_${shard}`, `${worker.host}:${worker.port}`),
     stripWorkerKeys(content),
   );
-}
-
-/**
- * Drops the fleet keys from the generated `.env` render.
- *
- * Why the render is cleared at all: the emitter joins the fleet to the .env the deployment hands
- * the panel container, so a worker the operator removed would resurface from the stale render
- * until the next `./cms config sync` truncated it. The render carries no sections, so a fleet row
- * is any line whose key is `WORKER_<n>`; the named settings beside it (`WORKER_PORT`, …) stay.
- */
-function stripWorkerEnvKeys(content: string): string {
-  return content.split('\n').filter((line) => !WORKER_KEY_RE.test(line)).join('\n');
-}
-
-/**
- * Clears the fleet keys from the generated `.env`, or reports why it could not.
- *
- * Why an unreadable render is an error rather than a skip: the whole point of the write is that a
- * removed worker stays gone, and a .env this process cannot touch may still carry it.
- */
-async function clearRenderedWorkerKeys(): Promise<void> {
-  const renderPath = path.join(getRepoRoot(), ENV_FILE);
-  const render = await readConfigFile(renderPath);
-  if (render.kind === 'absent') return;
-  if (render.kind === 'unreadable') {
-    throw new Error(`The generated ${ENV_FILE} could not be read: ${render.reason}`);
-  }
-  await fs.writeFile(renderPath, stripWorkerEnvKeys(render.content));
 }
 
 /** The configured worker endpoints and the fault that emptied them, if any. */
@@ -152,7 +121,9 @@ export async function updateWorkers(workers: WorkerEntry[]): Promise<{ success: 
     const previous = await loadConfiguredWorkers(getRepoRoot());
     const content = await fs.readFile(configPath, 'utf-8');
     await fs.writeFile(configPath, renderWorkerFleet(content, workers));
-    await clearRenderedWorkerKeys();
+    // Why the sync and not a write to the render: the .env is generated from config.toml, so
+    // editing it here is erased by the next sync and the operator's edit would not be live.
+    await runConfigSync();
     await recordAudit({
       verb: 'settings:update',
       entity: 'worker_config',
@@ -163,6 +134,6 @@ export async function updateWorkers(workers: WorkerEntry[]): Promise<{ success: 
     return { success: true };
   } catch (error) {
     console.error('Failed to update workers', error);
-    return { success: false, error: `Failed to write ${CONFIG_TOML_FILE} or its ${ENV_FILE} render` };
+    return { success: false, error: `Failed to write ${CONFIG_TOML_FILE} or regenerate its render` };
   }
 }
