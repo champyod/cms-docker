@@ -10,44 +10,57 @@
 import type { ExposureRow, ServiceRow } from './service-wiring';
 
 /**
- * One of the front's own vhosts: the hostname nginx claims, and the route-table label that owns it
- * when a row does.
+ * One of the front's own vhosts: the hostname nginx claims, the route-table label that owns it
+ * when a row does, and the paths its own block already answers on.
  *
  * WHY the label travels with the hostname: the file a registry exposure under that hostname renders
  * into is `locations-<label>.conf`, and the label is decided by the route table rather than here, so
  * a reader that dropped it would need a second list of its own to name the same file.
+ *
+ * WHY the paths travel too: they are the operator's own `*_ROUTE_PATH` keys, rendered by the route
+ * table, so a copy kept here would refuse a path the operator no longer serves and admit a fragment
+ * that shadows one they do.
  */
 export interface FrontVhost {
   hostname: string;
   label: string | null;
+  paths: readonly string[];
+}
+
+const FIELD_SEPARATOR = '|';
+
+/** The space-separated paths one entry carries, deduplicated and in the order it wrote them. */
+function parseFrontVhostPaths(field: string): string[] {
+  const paths = new Set<string>();
+  for (const path of field.split(/\s+/)) {
+    if (path !== '') paths.add(path);
+  }
+  return [...paths];
 }
 
 /**
- * The locations the front's own vhosts already serve. WHY a registry exposure may not claim one: a
- * fragment file is included beside these locations, so a registry path equal to one of them either
- * shadows the curated route or is shadowed by it — silently either way, whichever nginx matched.
- */
-export const CURATED_PRIMARY_PATHS: readonly string[] = ['/', '/admin', '/ranking', '/classic'];
-
-/**
- * The front's own vhosts, each written `label|hostname` when a route row owns it and as a bare
+ * The front's own vhosts, each written `label|hostname|paths` when a route row owns it and as a bare
  * hostname when the front declares it outside the route table.
  *
- * WHY the table's own `label|hostname` shape is the input: the config sync writes it to
- * `config/generated/front-vhosts.txt` and the vhost includes the file that label names, so the
- * renderer and the include agree by construction instead of by a second list of labels. A labelled
- * entry always wins over a bare one, whichever order the two arrive in: the label is what names the
- * fragment, and a bare duplicate states nothing new about it.
+ * WHY the table's own line shape is the input: the config sync writes it to
+ * `config/generated/front-vhosts.txt` and the vhost includes the file that label names beside the
+ * locations it already serves, so the renderer's refusals and the vhost agree by construction
+ * instead of by a second list of paths here. A labelled entry always wins over a bare one, whichever
+ * order the two arrive in: the label is what names the fragment, and a bare duplicate states nothing
+ * new about it.
  */
 export function parseFrontVhostList(entries: readonly string[]): FrontVhost[] {
   const byHostname = new Map<string, FrontVhost>();
   for (const entry of entries) {
-    const separator = entry.indexOf('|');
-    const label = (separator === -1 ? '' : entry.slice(0, separator)).trim();
-    const hostname = (separator === -1 ? entry : entry.slice(separator + 1)).trim().toLowerCase();
+    const labelEnd = entry.indexOf(FIELD_SEPARATOR);
+    const label = (labelEnd === -1 ? '' : entry.slice(0, labelEnd)).trim();
+    const rest = labelEnd === -1 ? entry : entry.slice(labelEnd + 1);
+    const hostnameEnd = rest.indexOf(FIELD_SEPARATOR);
+    const hostname = (hostnameEnd === -1 ? rest : rest.slice(0, hostnameEnd)).trim().toLowerCase();
     if (hostname === '') continue;
     if ((byHostname.get(hostname)?.label ?? null) !== null) continue;
-    byHostname.set(hostname, { hostname, label: label === '' ? null : label });
+    const paths = hostnameEnd === -1 ? [] : parseFrontVhostPaths(rest.slice(hostnameEnd + 1));
+    byHostname.set(hostname, { hostname, label: label === '' ? null : label, paths });
   }
   return [...byHostname.values()];
 }
@@ -59,13 +72,20 @@ export function parseFrontVhostList(entries: readonly string[]): FrontVhost[] {
  * WHY one function for the renderer and the screen: the sync refuses what this explains and the
  * screen lists it, so a rule held twice would drift into a collision the sync accepted or a valid
  * fragment the screen reported.
+ *
+ * WHY a vhost the map names no path for is refused rather than trusted: the paths are the map's own
+ * answer, so a labelled entry without them is a map older than the renderer, and admitting the path
+ * there is the shadowing fragment this refuses.
  */
 export function frontVhostRefusal(path: string, front: FrontVhost | null): string | null {
   if (front === null) return null;
   if (front.label === null) {
     return `${front.hostname} is a vhost this deployment's front already declares and no route row owns`;
   }
-  if (CURATED_PRIMARY_PATHS.includes(path)) {
+  if (front.paths.length === 0) {
+    return `${front.hostname} names no path in the vhost map, so ${path} cannot be checked against the paths it serves`;
+  }
+  if (front.paths.includes(path)) {
     return `${path} on ${front.hostname} is a location the front's own vhost already serves`;
   }
   return null;

@@ -1536,13 +1536,29 @@ wiring_payload_json() {
         FROM contest_exposures ORDER BY id) e), '[]'::json))::text;"
 }
 
-# The front's own vhosts as `label|hostname`, from the same route table the domain proxy renders.
+# The value <file_key> holds in config.toml, or <fallback> when the file does not define it: an
+# empty value the operator wrote means empty, and only a key the file lacks takes the fallback.
+toml_value_or() {
+  local file_key="$1" fallback="$2"
+  if [[ -n "${__TOML[$file_key]+set}" ]]; then
+    printf '%s' "${__TOML[$file_key]}"
+    return 0
+  fi
+  printf '%s' "$fallback"
+}
+
+# The front's own vhosts as `label|hostname|paths`, from the same route table the domain proxy
+# renders: the paths are the ones each vhost's own block already answers on.
 #
 # WHY the domain keys are mirrored from config.toml: this runs before the .env writer, so the
 # deployments' domains are still only in the TOML file, and the table reads them as variables. A
 # value already in the environment wins, because that caller knows the deployment it names. The
 # listen ports are mirrored from the domain renderer's defaults for the same reason: a row whose
 # vhost is on needs a port before the table will describe it.
+#
+# WHY the path keys read the file first instead: the table applies its own defaults when it is
+# sourced, so `${ADMIN_ROUTE_PATH:-...}` can never see the key the operator just edited — and the
+# map would then publish defaults while the vhost renders the edited paths.
 front_vhost_map() {
   local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
   DOMAIN_NAME="${DOMAIN_NAME:-${__TOML[admin.DOMAIN_NAME]:-}}"
@@ -1550,6 +1566,12 @@ front_vhost_map() {
   ADMIN_DOMAIN="${ADMIN_DOMAIN:-${__TOML[admin.ADMIN_DOMAIN]:-}}"
   OJ_DOMAIN="${OJ_DOMAIN:-${__TOML[contest.OJ_DOMAIN]:-}}"
   RANKING_DOMAIN="${RANKING_DOMAIN:-${__TOML[admin.RANKING_DOMAIN]:-}}"
+  CONTEST_ROUTE_PATH="$(toml_value_or admin.CONTEST_ROUTE_PATH "${CONTEST_ROUTE_PATH:-/}")"
+  ADMIN_ROUTE_PATH="$(toml_value_or admin.ADMIN_ROUTE_PATH "${ADMIN_ROUTE_PATH:-/admin}")"
+  ADMIN_CLASSIC_ROUTE_PATH="$(toml_value_or admin.ADMIN_CLASSIC_ROUTE_PATH "${ADMIN_CLASSIC_ROUTE_PATH:-/classic}")"
+  PRIMARY_CLASSIC_ROUTE_PATH="$(toml_value_or admin.PRIMARY_CLASSIC_ROUTE_PATH "${PRIMARY_CLASSIC_ROUTE_PATH:-}")"
+  RANKING_ROUTE_PATH="$(toml_value_or admin.RANKING_ROUTE_PATH "${RANKING_ROUTE_PATH:-/ranking}")"
+  OJ_ROUTE_PATH="$(toml_value_or admin.OJ_ROUTE_PATH "${OJ_ROUTE_PATH:-}")"
   CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
   ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
   RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
@@ -1564,8 +1586,8 @@ front_config_hostnames() {
     config/grader.nginx.conf 2>/dev/null | sort -u
 }
 
-# The renderer's --front-vhosts list: the table's `label|hostname` map, then the names the rendered
-# front declares with no row behind them.
+# The renderer's --front-vhosts list: the table's `label|hostname|paths` map, then the names the
+# rendered front declares with no row behind them.
 #
 # WHY both: the map names the fragment file a vhost includes, and the rendered config names what
 # nginx actually claims. A name only the config knows is one no row owns, so the renderer refuses an
@@ -1664,8 +1686,9 @@ render_wiring_artifacts() {
 
   mkdir -p "$WIRING_OUT_DIR"
   # WHY the table's map and the rendered config together: the map names the fragment file a vhost
-  # includes, and the rendered config names what nginx actually claims. A name only the config knows
-  # is one no route row owns, so an exposure on it is refused rather than written where nothing reads.
+  # includes and the paths its own block already answers on, and the rendered config names what nginx
+  # actually claims. A name only the config knows is one no route row owns, so an exposure on it is
+  # refused rather than written where nothing reads.
   local front_map front_vhosts
   front_map="$(front_vhost_map)" || return 1
   front_vhosts="$(front_vhost_arg "$front_map")" || return 1

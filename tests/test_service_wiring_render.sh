@@ -100,8 +100,8 @@ rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
 grep -q 'server_name routes.example.com;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "renders the contest server block" || no "missing contest server block"
-grep -q '^primary|a.example.com$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
-  && ok "publishes the front's own vhosts with the label that names the fragment" || no "missing the front vhost map"
+grep -q '^primary|a.example.com|/ /admin /ranking$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
+  && ok "publishes the front's own vhosts with the label that names the fragment and the paths it serves" || no "missing the front vhost map"
 grep -q 'proxy_pass http://web-1:8888;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "proxies to the registered upstream" || no "wrong or missing upstream"
 grep -q 'AllowFunnel' "${SB}/config/generated/tailscale/cms-7.json" 2>/dev/null \
@@ -333,6 +333,10 @@ grep -q 'start_period: 60s' "$compose" 2>/dev/null && ok "takes the timings from
 
 echo ""
 echo "=== Test 16: a path the front's own vhost already serves fails the sync ==="
+# WHY the operator's key decides which paths those are: the published paths are the route table's
+# own `*_ROUTE_PATH` keys, so renaming one has to move the refusal with it rather than leave the
+# guard on a list of its own — which would refuse a path nobody curates and admit a fragment that
+# shadows the one the key still names.
 CURATED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/ranking","tls":true,"tailnet":null}]}'
 new_sandbox 1 t 5 "$CURATED_PAYLOAD"
 printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
@@ -342,6 +346,26 @@ rc=$?
 grep -q 'refused the registry' "${SB}/sync.log" && ok "reports why it refused" || no "silent refusal"
 [[ -e "${SB}/config/generated/locations-primary.conf" ]] \
   && no "left a fragment behind" || ok "leaves no fragment behind"
+
+RENAMED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/board","tls":true,"tailnet":null}]}'
+new_sandbox 1 t 5 "$RENAMED_PAYLOAD"
+sed -i 's|^RANKING_ROUTE_PATH = .*|RANKING_ROUTE_PATH = "/board"|' "${SB}/config.toml"
+printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
+run_sync
+rc=$?
+[[ ${rc} -ne 0 ]] && ok "refuses the path the renamed key now claims" || no "the guard did not follow RANKING_ROUTE_PATH"
+grep -q '^primary|a.example.com|/ /admin /board$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
+  && ok "publishes the paths the vhost's own block serves" || no "the map does not carry the vhost's paths"
+
+FREED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/ranking","tls":true,"tailnet":null}]}'
+new_sandbox 1 t 5 "$FREED_PAYLOAD"
+sed -i 's|^RANKING_ROUTE_PATH = .*|RANKING_ROUTE_PATH = "/board"|' "${SB}/config.toml"
+printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "accepts a path no key claims any more" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+grep -q 'location ^~ /ranking/ {' "${SB}/config/generated/locations-primary.conf" 2>/dev/null \
+  && ok "renders the freed path into the vhost's fragment" || no "missing the freed path's fragment location"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

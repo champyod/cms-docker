@@ -69,12 +69,18 @@ else
 fi
 
 printf '\n== the front vhost map names the fragment each vhost includes ==\n'
-# The map is what the config sync publishes for the registry: a `label|hostname` line per vhost
-# root, so an exposure under that name is rendered into the fragment its own include pulls in.
-has "the primary vhost is mapped to its label" "MAP|primary|grader.example.org"
-has "the admin vhost is mapped to its label" "MAP|admin|admin.example.org"
+# The map is what the config sync publishes for the registry: a `label|hostname|paths` line per
+# vhost root, so an exposure under that name is rendered into the fragment its own include pulls in
+# — and refused when its path is one that vhost's own block already answers on.
+has "the primary vhost is mapped to its label and the paths it serves" "MAP|primary|grader.example.org|/ /admin /ranking"
+has "the admin vhost is mapped to its label and the paths it serves" "MAP|admin|admin.example.org|/ /classic"
 hasnt "a second row on the admin vhost is no vhost of its own" "MAP|admin_classic"
 hasnt "a vhost with no domain is not mapped" "MAP|oj|"
+if printf '%s\n' "$PRIMARY_CLASSIC" | grep -Fq -- 'MAP|primary|grader.example.org|/ /admin /ranking /classic'; then
+  ok "the map follows PRIMARY_CLASSIC_ROUTE_PATH onto the primary vhost"
+else
+  no "the map did not follow PRIMARY_CLASSIC_ROUTE_PATH onto the primary vhost"
+fi
 has "the primary vhost includes its fragment" "include /etc/nginx/generated/locations-primary*.conf;"
 has "the admin vhost includes its fragment" "include /etc/nginx/generated/locations-admin*.conf;"
 

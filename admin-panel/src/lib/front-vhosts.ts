@@ -7,10 +7,11 @@ import { getRepoRoot } from '@/lib/repo-root';
  * The hostnames the deployment's own front already declares, and the fragment file each one includes.
  *
  * WHY the sync's map and the rendered config together: the map is the route table's own
- * `label|hostname` view, so it names the `locations-<label>.conf` file a vhost pulls in, and the
- * rendered config answers with the names nginx itself will claim, whatever fallbacks produced them.
- * A name only the config knows is one no route row owns. Either file missing means the front has
- * never been rendered, so nothing collides yet.
+ * `label|hostname|paths` view — the label names the `locations-<label>.conf` file a vhost pulls in
+ * and the paths are the ones its own block already answers on — and the rendered config answers with
+ * the names nginx itself will claim, whatever fallbacks produced them. A name only the config knows
+ * is one no route row owns. Either file missing means the front has never been rendered, so nothing
+ * collides yet.
  */
 export const FRONT_CONFIG_FILE = 'config/grader.nginx.conf';
 
@@ -31,7 +32,7 @@ export function parseFrontVhosts(content: string): string[] {
   return [...names];
 }
 
-/** The `label|hostname` entries the config sync wrote, in the order it wrote them. */
+/** The `label|hostname|paths` entries the config sync wrote, in the order it wrote them. */
 export function parseFrontVhostMap(content: string): string[] {
   return content
     .split('\n')

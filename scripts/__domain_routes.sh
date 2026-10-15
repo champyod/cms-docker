@@ -25,9 +25,9 @@
 # mounted on no sub-path at all, which is how a service is taken off the primary vhost
 # without editing the table.
 #
-# The map. `_routes_front_vhost_map` answers the same table as `label|hostname`, one
-# line per vhost root, so a writer can publish which fragment file each vhost includes
-# without repeating the ownership rule above.
+# The map. `_routes_front_vhost_map` answers the same table as `label|hostname|paths`, one
+# line per vhost root, so a writer can publish which fragment file each vhost includes, and
+# which paths that vhost already serves, without repeating the placement rule above.
 
 # The SSE directives and endpoint pattern are one shared definition, not a copy here.
 _NGINX_ROUTES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -286,6 +286,48 @@ _routes_static_location_block() {
   printf '    }\n'
 }
 
+# True when the row at $1 is mounted on the vhost whose domain variable is $2 — which is the
+# primary vhost only when $3 is 1.
+#
+# A row answers its own domain's vhost at that vhost's root when it owns it, and at its path_var
+# when it does not; on the primary vhost every row answers at the path it names there. An empty
+# path on either side means the row is not served from that vhost at all.
+#
+# WHY one predicate for the renderer and the published path list: both answer this question, and a
+# second copy of the rule is how the paths a vhost is said to serve drift from the blocks it renders.
+_routes_row_serves_vhost() {
+  local index="$1" domain_var="$2" is_primary="$3"
+  if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]]; then
+    (( ROUTE_OWNER[$index] )) && return 0
+    [[ -n "${ROUTE_PATH[$index]}" ]]
+    return
+  fi
+  [[ "$is_primary" == "1" && -n "${ROUTE_PRIMARY_PATH[$index]}" ]]
+}
+
+# The paths the vhost named by $1 answers on, space separated: the vhost root for the row that
+# owns it, then the path every further row is mounted at there.
+#
+# WHY the map publishes them: a registry exposure under this vhost may not claim a path its own
+# block already serves, and which paths those are is the operator's `*_ROUTE_PATH` keys — so a
+# reader that held a list of its own would refuse a path nobody curates and admit a fragment that
+# shadows one that is still served.
+_routes_vhost_locations() {
+  local domain_var="$1" is_primary="$2" index path paths=""
+  for index in "${!ROUTE_LABEL[@]}"; do
+    _routes_row_serves_vhost "$index" "$domain_var" "$is_primary" || continue
+    if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]] && (( ROUTE_OWNER[$index] )); then
+      path="/"
+    elif [[ "$is_primary" == "1" ]]; then
+      path="${ROUTE_PRIMARY_PATH[$index]}"
+    else
+      path="${ROUTE_PATH[$index]}"
+    fi
+    paths+=" ${path}"
+  done
+  printf '%s' "${paths# }"
+}
+
 # Renders every route a vhost serves: its own domain's rows, plus the whole table
 # when this is the primary vhost.
 #
@@ -297,19 +339,10 @@ _routes_render_vhost() {
   local domain_var="$1" is_primary="$2"
   local index owner matcher sse_prefix blocks=""
   for index in "${!ROUTE_LABEL[@]}"; do
+    _routes_row_serves_vhost "$index" "$domain_var" "$is_primary" || continue
     owner=0
-    if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]]; then
-      if (( ROUTE_OWNER[$index] )); then
-        owner=1
-      elif [[ -z "${ROUTE_PATH[$index]}" ]]; then
-        continue
-      fi
-    elif [[ "$is_primary" == "1" && -n "${ROUTE_PRIMARY_PATH[$index]}" ]]; then
-      :
-    else
-      continue
-    fi
-    if (( owner )); then
+    if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]] && (( ROUTE_OWNER[$index] )); then
+      owner=1
       matcher='/'
       # The row owning a vhost's root is the vhost a path exposure of its domain joins:
       # the registry renders those locations into locations-<label>.conf, and this include
@@ -357,18 +390,25 @@ _routes_domain_of() {
   printf '%s' "$ROUTE_PRIMARY_DOMAIN_VAR"
 }
 
-# The front's own vhosts as `label|hostname`, one line per row that owns a vhost root.
+# The front's own vhosts as `label|hostname|paths`, one line per row that owns a vhost root.
 #
 # WHY only owner rows: a vhost has one root, and only that root's row emits the include
 # that reads the fragment back, so only its label names a file the front looks for. WHY a
 # row whose domain is empty is skipped: that vhost is off, and nothing on the front would
-# include a fragment for it.
+# include a fragment for it. WHY the paths travel with them: a registry exposure under that
+# hostname renders into its block, so the reader has to refuse a path the block already
+# answers on — and only the placement rule above knows which paths those are.
 _routes_front_vhost_map() {
-  local index
+  local index is_primary
   for index in "${!ROUTE_LABEL[@]}"; do
     (( ROUTE_OWNER[$index] )) || continue
     [[ -n "${!ROUTE_DOMAIN_VAR[$index]:-}" ]] || continue
-    printf '%s|%s\n' "${ROUTE_LABEL[$index]}" "${!ROUTE_DOMAIN_VAR[$index]}"
+    is_primary=0
+    if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$ROUTE_PRIMARY_DOMAIN_VAR" ]]; then
+      is_primary=1
+    fi
+    printf '%s|%s|%s\n' "${ROUTE_LABEL[$index]}" "${!ROUTE_DOMAIN_VAR[$index]}" \
+      "$(_routes_vhost_locations "${ROUTE_DOMAIN_VAR[$index]}" "$is_primary")"
   done
 }
 

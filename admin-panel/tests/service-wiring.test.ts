@@ -162,7 +162,7 @@ describe('exposureRoutes', () => {
 
   it('renders a server block for an exposure whose hostname the front does not declare', () => {
     expect(
-      exposureRoutes([exposure({ service_id: 1, hostname: 'cms.example.com' })], [web3], ['primary|front.example.com'])
+      exposureRoutes([exposure({ service_id: 1, hostname: 'cms.example.com' })], [web3], ['primary|front.example.com|/ /admin'])
     ).toEqual([
       {
         hostname: 'cms.example.com',
@@ -179,7 +179,7 @@ describe('exposureRoutes', () => {
     const routes = exposureRoutes(
       [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
       [web3],
-      ['primary|front.example.com']
+      ['primary|front.example.com|/ /admin /ranking /classic']
     );
     expect(routes).toHaveLength(1);
     expect(routes[0].fragmentLabel).toBe('primary');
@@ -190,19 +190,38 @@ describe('exposureRoutes', () => {
     const routes = exposureRoutes(
       [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
       [web3],
-      ['front.example.com', 'primary|front.example.com']
+      ['front.example.com', 'primary|front.example.com|/ /admin']
     );
     expect(routes[0].fragmentLabel).toBe('primary');
   });
 
-  it('refuses a fragment whose path the front vhost already serves', () => {
+  it('refuses a fragment whose path the map names as one the vhost already serves', () => {
     expect(() =>
       exposureRoutes(
         [exposure({ service_id: 1, hostname: 'front.example.com', path: '/admin' })],
         [web3],
-        ['primary|front.example.com']
+        ['primary|front.example.com|/ /admin /ranking /classic']
       )
     ).toThrow(/already serves/);
+  });
+
+  it('admits a path the map does not name, whichever paths the deployment used to serve', () => {
+    const routes = exposureRoutes(
+      [exposure({ service_id: 1, hostname: 'rank.example.com', path: '/classic' })],
+      [web3],
+      ['ranking|rank.example.com|/ /ranking']
+    );
+    expect(routes[0].path).toBe('/classic');
+  });
+
+  it('refuses a path when the map names no path for the vhost it lands on', () => {
+    expect(() =>
+      exposureRoutes(
+        [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
+        [web3],
+        ['primary|front.example.com']
+      )
+    ).toThrow(/names no path/);
   });
 
   it('refuses an exposure on a hostname the front declares and no route row owns', () => {
@@ -217,21 +236,31 @@ describe('exposureRoutes', () => {
 });
 
 describe('parseFrontVhostList', () => {
-  it('reads the label and the hostname of each entry', () => {
-    expect(parseFrontVhostList(['primary|Front.Example.com'])).toEqual([
-      { hostname: 'front.example.com', label: 'primary' },
+  it('reads the label, the hostname and the paths of each entry', () => {
+    expect(parseFrontVhostList(['primary|Front.Example.com|/ /admin /ranking'])).toEqual([
+      { hostname: 'front.example.com', label: 'primary', paths: ['/', '/admin', '/ranking'] },
     ]);
   });
 
-  it('keeps a bare hostname without a label', () => {
+  it('keeps a bare hostname without a label or paths', () => {
     expect(parseFrontVhostList(['acme.example.com'])).toEqual([
-      { hostname: 'acme.example.com', label: null },
+      { hostname: 'acme.example.com', label: null, paths: [] },
     ]);
+  });
+
+  it('keeps a labelled entry that carries no paths, so a stale map is refused rather than trusted', () => {
+    expect(parseFrontVhostList(['primary|front.example.com'])).toEqual([
+      { hostname: 'front.example.com', label: 'primary', paths: [] },
+    ]);
+  });
+
+  it('drops a repeated path and keeps the order the map wrote', () => {
+    expect(parseFrontVhostList(['primary|front.example.com|/admin / /admin'])[0].paths).toEqual(['/admin', '/']);
   });
 
   it('lets the label win over a bare duplicate, whatever the order', () => {
-    expect(parseFrontVhostList(['front.example.com', 'primary|front.example.com'])).toEqual([
-      { hostname: 'front.example.com', label: 'primary' },
+    expect(parseFrontVhostList(['front.example.com', 'primary|front.example.com|/ /admin'])).toEqual([
+      { hostname: 'front.example.com', label: 'primary', paths: ['/', '/admin'] },
     ]);
   });
 
@@ -316,7 +345,7 @@ describe('renderLocationFragments', () => {
   const exposureOnFront = [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })];
 
   it('emits the locations of one front vhost and nothing else', () => {
-    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com|/ /admin']);
     const out = renderLocationFragments(routes, 'primary');
     expect(out).toContain('location ^~ /beta/ {');
     expect(out).toContain('proxy_pass http://web-3:8888/;');
@@ -328,12 +357,12 @@ describe('renderLocationFragments', () => {
   });
 
   it('leaves a fragment route out of the server blocks it would silently lose', () => {
-    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com|/ /admin']);
     expect(renderNginxServers(routes)).toBe('');
   });
 
   it('emits nothing for a label no exposure renders into', () => {
-    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com']);
+    const routes = exposureRoutes(exposureOnFront, [own], ['primary|front.example.com|/ /admin']);
     expect(renderLocationFragments(routes, 'admin')).toBe('');
   });
 });
@@ -553,17 +582,17 @@ describe('collectWiringProblems', () => {
       [shared],
       [],
       [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
-      ['primary|front.example.com']
+      ['primary|front.example.com|/ /admin /ranking']
     );
     expect(problems).toEqual([]);
   });
 
-  it('reports a fragment path the front vhost already serves', () => {
+  it('reports a fragment path the map names as one the front vhost already serves', () => {
     const problems = collectWiringProblems(
       [shared],
       [],
-      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/classic/' })],
-      ['primary|front.example.com']
+      [exposure({ service_id: 1, hostname: 'front.example.com', path: '/ranking/' })],
+      ['primary|front.example.com|/ /admin /ranking']
     );
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('exposure');
@@ -641,8 +670,10 @@ describe('renderRegistryArtifacts', () => {
       ...payload,
       exposures: [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
     };
-    const fragments = renderRegistryArtifacts(onFront, ['primary|front.example.com', 'admin|admin.example.com'])
-      .filter((artifact) => artifact.mode === 'location');
+    const fragments = renderRegistryArtifacts(onFront, [
+      'primary|front.example.com|/ /admin',
+      'admin|admin.example.com|/',
+    ]).filter((artifact) => artifact.mode === 'location');
     expect(fragments.map((artifact) => artifact.node)).toEqual(['primary', 'admin']);
     expect(fragments[0].content).toContain('location ^~ /beta/ {');
     expect(fragments[1].content).toBe('');
@@ -677,14 +708,14 @@ describe('renderRegistryArtifacts', () => {
 
 describe('parseFrontVhostMap', () => {
   it('reads the map the sync writes as the entries the vhost parser consumes', () => {
-    expect(parseFrontVhostMap('primary|a.example.com\nadmin|admin.cms.local\n')).toEqual([
-      'primary|a.example.com',
-      'admin|admin.cms.local',
+    expect(parseFrontVhostMap('primary|a.example.com|/ /admin\nadmin|admin.cms.local|/ /classic\n')).toEqual([
+      'primary|a.example.com|/ /admin',
+      'admin|admin.cms.local|/ /classic',
     ]);
   });
 
   it('drops blank lines and trims each entry', () => {
-    expect(parseFrontVhostMap('\n  ranking|ranking.cms.local  \n\n')).toEqual(['ranking|ranking.cms.local']);
+    expect(parseFrontVhostMap('\n  ranking|ranking.cms.local|/  \n\n')).toEqual(['ranking|ranking.cms.local|/']);
   });
 });
 
