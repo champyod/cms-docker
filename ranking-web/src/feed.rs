@@ -21,8 +21,9 @@ const CHANNEL_CAPACITY: usize = 256;
 pub const COMMENT: &[u8] = b":\n";
 
 /// The only reinit the baseline ever sends: a Last-Event-ID the cache cannot cover.
-/// It carries neither an id nor data, unlike every normal event.
-pub const REINIT: &[u8] = b"event:reinit\n\n";
+/// It carries an empty data line, because a block without one is discarded before it
+/// is dispatched, and no id, because a reinit moves the client's cursor nowhere.
+pub const REINIT: &[u8] = b"event:reinit\ndata:\n\n";
 
 /// One server-sent event in the shape the Python server emitted: an id that is
 /// microseconds since the epoch in hexadecimal, the entity kind as the event name,

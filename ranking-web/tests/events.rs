@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 
 use cms_ranking::feed::{entity_kind, Feed, RankingEvent, CACHE_SIZE, REINIT};
-use cms_ranking::score_events::{python_float, score_changes};
+use cms_ranking::score_events::{python_float, score_changes, score_payload};
 
 fn event(name: &str, data: &str) -> RankingEvent {
     RankingEvent {
@@ -38,12 +38,15 @@ fn every_data_line_gets_its_own_prefix() {
     );
 }
 
+/// A block with no data line is discarded before it is dispatched, so the reinit needs
+/// an empty one: it is the only way the page learns it must reload. It still carries no
+/// id, because a reinit moves the client's cursor nowhere.
 #[test]
-fn reinit_carries_neither_an_id_nor_data() {
-    assert_eq!(REINIT, b"event:reinit\n\n");
+fn reinit_carries_an_empty_data_line_and_no_id() {
+    assert_eq!(REINIT, b"event:reinit\ndata:\n\n");
     let text = String::from_utf8(REINIT.to_vec()).expect("reinit is utf-8");
     assert!(!text.contains("id:"));
-    assert!(!text.contains("data:"));
+    assert_eq!(text.matches("data:").count(), 1);
 }
 
 #[test]
@@ -123,4 +126,27 @@ fn a_score_that_leaves_the_board_is_reported_as_zero() {
         score_changes(&previous, &BTreeMap::new()),
         vec![("u0".to_string(), "t0".to_string(), 0.0)]
     );
+}
+
+/// One notification can move every pair on the board. A frame per pair would evict the
+/// replay window a reconnect depends on, so the whole burst travels as the data lines
+/// of a single "score" event, which is what the page's score listener already reads.
+#[test]
+fn a_burst_of_score_changes_travels_as_one_frame() {
+    let changes = vec![
+        ("u0".to_string(), "t0".to_string(), 50.0),
+        ("u1".to_string(), "t1".to_string(), 30.0),
+    ];
+    let payload = score_payload(&changes).expect("two changes are a payload");
+    let frame = event("score", &payload).frame();
+    assert_eq!(
+        frame,
+        "id:65d6788bc1010\nevent:score\ndata:u0 t0 50.0\ndata:u1 t1 30.0\n\n"
+    );
+}
+
+/// A pass that moved nothing stays off the wire, so it costs the replay window nothing.
+#[test]
+fn a_pass_that_moved_nothing_publishes_no_frame() {
+    assert_eq!(score_payload(&[]), None);
 }

@@ -88,19 +88,33 @@ pub async fn initial_snapshot(state: &AppState) -> Snapshot {
     }
 }
 
+/// The changed pairs as one payload: one "user task score" line each, which is what the
+/// page's score listener splits on, and None when nothing moved so an idle pass sends
+/// no frame. A frame per pair would evict the replay window a reconnect reads.
+pub fn score_payload(changes: &[(String, String, f64)]) -> Option<String> {
+    if changes.is_empty() {
+        return None;
+    }
+    Some(
+        changes
+            .iter()
+            .map(|(user, task, score)| format!("{user} {task} {}", python_float(*score)))
+            .collect::<Vec<String>>()
+            .join("\n"),
+    )
+}
+
 /// Rebuilds the shared board (the caller has already dropped the cache) and publishes
-/// one "score" event per changed pair and one "board" event per changed row, so a page
-/// updates in place instead of refetching the whole board.
+/// one "score" event carrying every changed pair and one "board" event carrying every
+/// changed row, so a page updates in place instead of refetching the whole board.
 pub async fn publish_changes(
     state: &AppState,
     previous: &Snapshot,
 ) -> Result<Snapshot, StoreError> {
     let standings = state.standings().await?;
     let scores = board_of(&standings.ledger);
-    for (user, task, score) in score_changes(&previous.scores, &scores) {
-        state
-            .feed()
-            .publish("score", format!("{user} {task} {}", python_float(score)));
+    if let Some(payload) = score_payload(&score_changes(&previous.scores, &scores)) {
+        state.feed().publish("score", payload);
     }
     let rows = summary_of(&standings.ledger);
     let lines: Vec<String> = board_changes(&previous.rows, &rows)
