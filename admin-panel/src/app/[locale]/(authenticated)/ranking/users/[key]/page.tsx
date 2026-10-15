@@ -237,6 +237,7 @@ export default async function RankingUserDetailPage({
             contests={options.contests}
             userKeys={options.userKeys}
             teamKeys={options.teamKeys}
+            taskKeys={options.taskKeys}
             contestId={String(detail.entry.contestId)}
             targetKind="user"
             targetKey={detail.entry.username}

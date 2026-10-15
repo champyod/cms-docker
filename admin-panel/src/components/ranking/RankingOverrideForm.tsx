@@ -26,6 +26,7 @@ export interface RankingOverrideFormProps {
   readonly contests: readonly RankingOverrideContest[];
   readonly userKeys: readonly RankingOverrideKey[];
   readonly teamKeys: readonly string[];
+  readonly taskKeys: readonly RankingOverrideKey[];
   readonly contestId: string;
   readonly targetKind: string;
   readonly targetKey: string;
@@ -48,6 +49,33 @@ const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
   freeze: { type: 'number', inputMode: 'numeric' },
 };
 
+const USER_TEAM_VERBS: readonly string[] = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'];
+
+// WHY a task and a ranking accept fewer verbs than a user or a team: a task drops a
+// board column and a ranking is the whole board, so neither can be renamed, pinned or
+// scored, and the picker offers only what the chosen target can mean.
+const KIND_VERBS: Readonly<Record<string, readonly string[]>> = {
+  user: USER_TEAM_VERBS,
+  team: USER_TEAM_VERBS,
+  ranking: ['hide', 'freeze'],
+  task: ['hide'],
+};
+
+// WHY the key options follow the kind: a team is named by its key, a task by the encoded
+// name the projection carries and the whole board by one wildcard, so an operator never
+// has to type a key the chosen target cannot hold.
+function keyOptions(
+  kind: string,
+  userKeys: readonly RankingOverrideKey[],
+  teamKeys: readonly string[],
+  taskKeys: readonly RankingOverrideKey[],
+): readonly RankingOverrideKey[] {
+  if (kind === 'team') return teamKeys.map((name) => ({ key: name, label: name }));
+  if (kind === 'ranking') return [{ key: '*', label: '*' }];
+  if (kind === 'task') return taskKeys;
+  return userKeys;
+}
+
 // The pickers are fed real rows and the value control follows the chosen verb, so an
 // operator names a contest and a target that exist instead of typing a key by hand.
 export function RankingOverrideForm({
@@ -55,20 +83,16 @@ export function RankingOverrideForm({
   contests,
   userKeys,
   teamKeys,
+  taskKeys,
   contestId,
   targetKind,
   targetKey,
 }: RankingOverrideFormProps): React.JSX.Element {
   const [kind, setKind] = useState(targetKind === '' ? 'user' : targetKind);
   const [action, setAction] = useState('hide');
-  const keys: readonly RankingOverrideKey[] =
-    kind === 'team'
-      ? teamKeys.map((name) => ({ key: name, label: name }))
-      : kind === 'ranking'
-        ? [{ key: '*', label: '*' }]
-        : userKeys;
-  const verbs: readonly string[] =
-    kind === 'ranking' ? ['hide', 'freeze'] : ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'];
+  const keys = keyOptions(kind, userKeys, teamKeys, taskKeys);
+  const verbs = KIND_VERBS[kind] ?? USER_TEAM_VERBS;
+  const hideLabel = kind === 'task' ? copy.actionHideTask : copy.actionHide;
   const valueControl = VALUE_CONTROLS[action];
   return (
     <form action={saveRankingOverride}>
@@ -95,12 +119,13 @@ export function RankingOverrideForm({
           onChange={(event) => {
             const next = event.target.value;
             setKind(next);
-            if (next === 'ranking' && action !== 'hide' && action !== 'freeze') setAction('hide');
+            if (!(KIND_VERBS[next] ?? USER_TEAM_VERBS).includes(action)) setAction('hide');
           }}
         >
           <option value="user">{copy.targetUser}</option>
           <option value="team">{copy.targetTeam}</option>
           <option value="ranking">{copy.targetRanking}</option>
+          <option value="task">{copy.targetTask}</option>
         </SelectField>
         <SelectField
           id="ranking-override-key"
@@ -123,7 +148,7 @@ export function RankingOverrideForm({
           value={action}
           onChange={(event) => setAction(event.target.value)}
         >
-          {verbs.includes('hide') && <option value="hide">{copy.actionHide}</option>}
+          {verbs.includes('hide') && <option value="hide">{hideLabel}</option>}
           {verbs.includes('guest') && <option value="guest">{copy.actionGuest}</option>}
           {verbs.includes('pin') && <option value="pin">{copy.actionPin}</option>}
           {verbs.includes('rename') && <option value="rename">{copy.actionRename}</option>}

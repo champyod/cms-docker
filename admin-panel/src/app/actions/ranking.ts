@@ -3,6 +3,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { encodeId } from '@/lib/ranking-projection';
 
 const rankingParticipationsInclude = {
   users: { select: { id: true, username: true, first_name: true, last_name: true } },
@@ -120,6 +121,7 @@ export interface RankingOverrideOptions {
   contests: Array<{ id: number; name: string }>;
   userKeys: Array<{ key: string; label: string }>;
   teamKeys: string[];
+  taskKeys: Array<{ key: string; label: string }>;
 }
 
 /**
@@ -147,7 +149,24 @@ export async function getRankingOverrideOptions(): Promise<RankingOverrideOption
   const teamKeys = [
     ...new Set(entries.map((entry) => entry.teamName).filter((name): name is string => name !== null)),
   ].sort();
-  return { contests, userKeys, teamKeys };
+  const taskKeys = await listOverrideTaskKeys(contests.map((contest) => contest.id));
+  return { contests, userKeys, teamKeys, taskKeys };
+}
+
+/**
+ * WHY every contest's tasks, each keyed the way the board keys it: an override is filed
+ * against one contest but the board drops a task column by its encoded name alone, so
+ * the picker offers every key the board can drop rather than only the ones one
+ * contest's task list happens to hold.
+ */
+async function listOverrideTaskKeys(
+  contestIds: readonly number[],
+): Promise<Array<{ key: string; label: string }>> {
+  const perContest = await Promise.all(contestIds.map((contestId) => listRankingTasks(contestId)));
+  const byKey = new Map(perContest.flat().map((task) => [encodeId(task.name), task.name]));
+  return [...byKey.entries()]
+    .map(([key, label]) => ({ key, label }))
+    .sort((left, right) => left.key.localeCompare(right.key));
 }
 
 export async function getRankingUserDetail(username: string): Promise<RankingUserDetail | null> {

@@ -2,18 +2,29 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  contestsFindMany: vi.fn(),
+  contestTasksFindMany: vi.fn(),
+  participationsFindMany: vi.fn(),
   ensurePermission: vi.fn(),
   recordAudit: vi.fn(),
   revalidatePath: vi.fn(),
   getSession: vi.fn(),
 }));
 
-vi.mock('@/lib/prisma', () => ({ prisma: { ranking_overrides: { create: mocks.create } } }));
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    ranking_overrides: { create: mocks.create },
+    contests: { findMany: mocks.contestsFindMany },
+    contest_tasks: { findMany: mocks.contestTasksFindMany },
+    participations: { findMany: mocks.participationsFindMany },
+  },
+}));
 vi.mock('@/lib/permissions', () => ({ ensurePermission: mocks.ensurePermission }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 vi.mock('@/lib/auth', () => ({ getSession: mocks.getSession }));
 
+import { getRankingOverrideOptions } from '@/app/actions/ranking';
 import { saveRankingOverride } from '@/app/actions/rankingOverrides';
 
 function form(fields: Readonly<Record<string, string>>): FormData {
@@ -57,5 +68,34 @@ describe('ranking override targets', () => {
       saveRankingOverride(form({ ...TASK_HIDE, action: 'rename', value: 'Renamed' })),
     ).rejects.toThrow('a task target only accepts hide, not rename');
     expect(mocks.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('ranking override target options', () => {
+  it('keys the task picker by the encoded name the board keys its column by', async () => {
+    mocks.contestsFindMany.mockResolvedValue([{ id: 1, name: 'Spring' }]);
+    mocks.participationsFindMany.mockResolvedValue([]);
+    mocks.contestTasksFindMany.mockResolvedValue([
+      { tasks: { id: 5, name: 'A Plus B', title: 'A Plus B', score_precision: 0 } },
+    ]);
+
+    const options = await getRankingOverrideOptions();
+
+    expect(options.taskKeys).toEqual([{ key: 'A_20Plus_20B', label: 'A Plus B' }]);
+  });
+
+  it('lists a task once when two contests carry the same task name', async () => {
+    mocks.contestsFindMany.mockResolvedValue([
+      { id: 1, name: 'Spring' },
+      { id: 2, name: 'Autumn' },
+    ]);
+    mocks.participationsFindMany.mockResolvedValue([]);
+    mocks.contestTasksFindMany.mockResolvedValue([
+      { tasks: { id: 5, name: 'sum', title: 'Sum', score_precision: 0 } },
+    ]);
+
+    const options = await getRankingOverrideOptions();
+
+    expect(options.taskKeys).toEqual([{ key: 'sum', label: 'sum' }]);
   });
 });
