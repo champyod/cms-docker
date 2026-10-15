@@ -246,8 +246,7 @@ async fn load_tasks(
     let modes = rows
         .into_iter()
         .filter(|row| {
-            !overrides.hides_contest(&row.contest)
-                && !overrides.hides_task(&row.contest, &row.key)
+            !overrides.hides_contest(&row.contest) && !overrides.hides_task(&row.contest, &row.key)
         })
         .map(|row| {
             let mode = ScoreMode::from_wire(&row.score_mode).ok_or_else(|| {

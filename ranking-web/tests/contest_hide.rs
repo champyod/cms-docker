@@ -128,7 +128,9 @@ async fn listed_tasks(pool: &PgPool) -> serde_json::Value {
 async fn a_hidden_contest_leaves_the_column_and_the_ledger_together() {
     let pool = pool();
     seed_two_contests(&pool).await.expect("the seed applies");
-    hide_contest(&pool, "c0").await.expect("the override applies");
+    hide_contest(&pool, "c0")
+        .await
+        .expect("the override applies");
 
     let contests = listed_contests(&pool).await;
     assert!(
@@ -208,7 +210,9 @@ async fn a_hidden_contest_leaves_the_column_and_the_ledger_together() {
 async fn a_task_hide_is_scoped_to_the_contest_its_key_names() {
     let pool = pool();
     seed_two_contests(&pool).await.expect("the seed applies");
-    hide_task(&pool, "c0/t0").await.expect("the override applies");
+    hide_task(&pool, "c0/t0")
+        .await
+        .expect("the override applies");
 
     let tasks = listed_tasks(&pool).await;
     assert!(
@@ -244,7 +248,9 @@ async fn a_task_hide_naming_another_contest_hides_nothing() {
     let pool = pool();
     seed_two_contests(&pool).await.expect("the seed applies");
     // t0 is filed under c0; a key naming c1 must leave it alone.
-    hide_task(&pool, "c1/t0").await.expect("the override applies");
+    hide_task(&pool, "c1/t0")
+        .await
+        .expect("the override applies");
 
     let tasks = listed_tasks(&pool).await;
     assert!(

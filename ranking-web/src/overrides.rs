@@ -578,8 +578,14 @@ mod tests {
         let overrides = Overrides::fold(&[override_row("task", "t0", "hide")]);
 
         assert!(overrides.hides_task("c0", "t0"), "the bare key hides in c0");
-        assert!(overrides.hides_task("c1", "t0"), "and in every other contest too");
-        assert!(!overrides.hides_task("c0", "t1"), "it names only the task it spells");
+        assert!(
+            overrides.hides_task("c1", "t0"),
+            "and in every other contest too"
+        );
+        assert!(
+            !overrides.hides_task("c0", "t1"),
+            "it names only the task it spells"
+        );
         assert_eq!(overrides.skipped(), 0, "the legacy spelling is understood");
     }
 
@@ -602,12 +608,19 @@ mod tests {
     fn a_contest_hide_hides_the_contest() {
         let overrides = Overrides::fold(&[override_row("contest", "c0", "hide")]);
 
-        assert!(overrides.hides_contest("c0"), "the hide drops the named contest");
+        assert!(
+            overrides.hides_contest("c0"),
+            "the hide drops the named contest"
+        );
         assert!(
             !overrides.hides_contest("c1"),
             "a contest with no override stays"
         );
-        assert_eq!(overrides.skipped(), 0, "a contest hide is not a malformed row");
+        assert_eq!(
+            overrides.skipped(),
+            0,
+            "a contest hide is not a malformed row"
+        );
     }
 
     /// A contest is a group and not a row, so every verb but hide names something a
