@@ -36,7 +36,7 @@
 | `invalidate_submission` defaults to the same one | `EvaluationService.py:985-987`, `:1032-1033` |
 | `contest_id` bootstraps from env `CONTEST_ID` | `src/cms/db/util.py:200-232` |
 | Otherwise it reads `contests.is_active` | `src/cms/db/util.py:168-172` |
-| `is_active` is unique by `UPDATE contests SET is_active = (id = ?)` | `admin-panel/src/lib/active-contest.ts:27-34`; `scripts/__contest_set_active.sh:82-91` |
+| `is_active` is unique by a partial index (`contests_single_active_key … WHERE is_active`); activation clears then flags in one transaction, because the index is checked per row | `admin-panel/prisma/migrations/20261015153000_single_active_contest/migration.sql`; `admin-panel/src/lib/active-contest.ts:23-45`; `scripts/__contest_set_active.sh` |
 
 ### 2.3 The panel can only reach one evaluation service
 
