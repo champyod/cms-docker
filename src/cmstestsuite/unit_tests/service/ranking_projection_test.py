@@ -164,6 +164,30 @@ class ProjectionTest(unittest.TestCase):
             {"scopes": ["c0"], "keys": ["t0", "t1"]},
         )
 
+    def test_a_hidden_row_names_a_key_and_the_contest_it_is_hidden_in(self):
+        row = ranking_projection.row("hidden", "u0", {"contest_id": 7})
+        self.assertEqual(row, {"key": "u0", "contest_id": 7})
+        with self.assertRaises(ValueError) as raised:
+            ranking_projection.row("hidden", "u0", {})
+        self.assertIn("contest_id", str(raised.exception))
+
+    def test_the_hidden_upsert_conflicts_on_the_key_and_the_contest(self):
+        statement = ranking_projection.upsert_statement("hidden")
+        self.assertIn(
+            "INSERT INTO ranking_hidden (key, contest_id)", statement)
+        self.assertIn("ON CONFLICT (key, contest_id) DO UPDATE SET", statement)
+
+    def test_a_hidden_push_prunes_only_its_own_contest(self):
+        statement = ranking_projection.prune_statement("hidden")
+        self.assertIn("DELETE FROM ranking_hidden", statement)
+        self.assertIn("contest_id = ANY(:scopes)", statement)
+        self.assertIn("key <> ALL(:keys)", statement)
+        self.assertEqual(
+            ranking_projection.snapshot_prune(
+                "hidden", {"u0": {"contest_id": 7}, "u1": {"contest_id": 7}}),
+            {"scopes": [7], "keys": ["u0", "u1"]},
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -21,6 +21,7 @@ TABLES = {
     "users": "ranking_users",
     "submissions": "ranking_submissions",
     "subchanges": "ranking_subchanges",
+    "hidden": "ranking_hidden",
 }
 
 # Column order per table, taken from the Prisma models. `order` is a reserved word in
@@ -35,6 +36,7 @@ COLUMNS = {
     "users": ("key", "f_name", "l_name", "team"),
     "submissions": ("key", "user", "task", "time"),
     "subchanges": ("key", "submission", "time", "score", "token", "extra"),
+    "hidden": ("key", "contest_id"),
 }
 
 # The fields the wire format requires. A payload missing one is refused here rather
@@ -49,6 +51,7 @@ REQUIRED = {
     "users": ("f_name", "l_name"),
     "submissions": ("user", "task", "time"),
     "subchanges": ("submission", "time"),
+    "hidden": ("contest_id",),
 }
 
 JSON_COLUMNS = frozenset({"extra_headers", "extra"})
@@ -66,12 +69,17 @@ PAYLOAD_NAMES = {"display_order": "order"}
 
 KEY_COLUMN = "key"
 
+# The conflict target of an upsert, where a row is identified by more than the key alone.
+# A hidden tombstone is one row per contest for the same user, so the pair identifies it.
+CONFLICT_COLUMNS = {"hidden": ("key", "contest_id")}
+
 # The snapshot resources a full push replaces, and the payload field that scopes the delete to
-# the owner the push is about. Only tasks qualify: a task belongs to exactly one contest, so a
-# delete scoped by that field cannot reach another contest's rows. Teams and users are shared
-# across contests and carry no owner field to scope by, and submissions and subchanges arrive
-# incrementally, so all four stay upsert-only and a key dropped from their payload persists.
-SNAPSHOT_SCOPE_FIELD = {"tasks": "contest"}
+# the owner the push is about. Tasks and hidden tombstones qualify: a task and a tombstone each
+# belong to exactly one contest, so a delete scoped by that field cannot reach another contest's
+# rows. Teams and users are shared across contests and carry no owner field to scope by, and
+# submissions and subchanges arrive incrementally, so all four stay upsert-only and a key
+# dropped from their payload persists.
+SNAPSHOT_SCOPE_FIELD = {"tasks": "contest", "hidden": "contest_id"}
 
 
 def columns_for(resource: str) -> tuple:
@@ -98,9 +106,13 @@ def upsert_statement(resource: str) -> str:
         if column != KEY_COLUMN
     )
     update = " DO UPDATE SET %s" % assignments if assignments else " DO NOTHING"
+    conflict = ", ".join(
+        _identifier(column)
+        for column in CONFLICT_COLUMNS.get(resource, (KEY_COLUMN,))
+    )
     return "INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s)%s" % (
         TABLES[resource], ", ".join(_identifier(column) for column in columns),
-        binds, KEY_COLUMN, update,
+        binds, conflict, update,
     )
 
 

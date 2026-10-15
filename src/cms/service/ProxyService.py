@@ -164,6 +164,7 @@ class ProxyExecutor(Executor[ProxyOperation]):
     USER_TYPE = 3
     SUBMISSION_TYPE = 4
     SUBCHANGE_TYPE = 5
+    HIDDEN_TYPE = 6
 
     # The resource paths for the different entity types, relative to
     # the self.ranking URL.
@@ -173,7 +174,8 @@ class ProxyExecutor(Executor[ProxyOperation]):
         "teams",
         "users",
         "submissions",
-        "subchanges"]
+        "subchanges",
+        "hidden"]
 
     # How many different entity types we know about.
     TYPE_COUNT = len(RESOURCE_PATHS)
@@ -369,6 +371,9 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
             users = dict()
             teams = dict()
+            hidden = dict()
+            # Read once: the property goes back to the service registry on every call.
+            contest_scope = self.contest_id
 
             # WHY: the ranking shows the display username each
             # contestant chose for this contest when the policy
@@ -406,6 +411,12 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                         teams[encode_id(team.code)] = {
                             "name": team.name
                         }
+                # WHY a tombstone rather than a skip: a participation hidden after its rows
+                # reached the projection has to leave the board too, and the board row is
+                # driven by the submissions, so the reader needs the key to filter out.
+                else:
+                    hidden[encode_id(user.username)] = {
+                        "contest_id": contest_scope}
 
             tasks = dict()
 
@@ -447,6 +458,7 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                                     {contest_id: contest_data}))
         self.enqueue(ProxyOperation(ProxyExecutor.TEAM_TYPE, teams))
         self.enqueue(ProxyOperation(ProxyExecutor.USER_TYPE, users))
+        self.enqueue(ProxyOperation(ProxyExecutor.HIDDEN_TYPE, hidden))
         self.enqueue(ProxyOperation(ProxyExecutor.TASK_TYPE, tasks))
 
     def operations_for_score(self, submission: Submission):
