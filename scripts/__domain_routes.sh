@@ -24,6 +24,10 @@
 # it, which is how a second service joins a vhost. A row whose path_var is empty is
 # mounted on no sub-path at all, which is how a service is taken off the primary vhost
 # without editing the table.
+#
+# The map. `_routes_front_vhost_map` answers the same table as `label|hostname`, one
+# line per vhost root, so a writer can publish which fragment file each vhost includes
+# without repeating the ownership rule above.
 
 # The SSE directives and endpoint pattern are one shared definition, not a copy here.
 _NGINX_ROUTES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -351,6 +355,21 @@ _routes_domain_of() {
     fi
   done
   printf '%s' "$ROUTE_PRIMARY_DOMAIN_VAR"
+}
+
+# The front's own vhosts as `label|hostname`, one line per row that owns a vhost root.
+#
+# WHY only owner rows: a vhost has one root, and only that root's row emits the include
+# that reads the fragment back, so only its label names a file the front looks for. WHY a
+# row whose domain is empty is skipped: that vhost is off, and nothing on the front would
+# include a fragment for it.
+_routes_front_vhost_map() {
+  local index
+  for index in "${!ROUTE_LABEL[@]}"; do
+    (( ROUTE_OWNER[$index] )) || continue
+    [[ -n "${!ROUTE_DOMAIN_VAR[$index]:-}" ]] || continue
+    printf '%s|%s\n' "${ROUTE_LABEL[$index]}" "${!ROUTE_DOMAIN_VAR[$index]}"
+  done
 }
 
 # The four vhosts the template declares. Each names the domain variable whose rows it

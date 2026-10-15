@@ -35,6 +35,10 @@ done
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# The route table owns which front vhost a hostname belongs to, and which fragment file that vhost
+# includes, so the sync asks the one place that defines it instead of repeating the rule.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__domain_routes.sh"
 log_error() { printf '[ERROR] %s\n' "$*" >&2; }
 
 # --- Secret generators (mirrors Makefile env: target) ---
@@ -1532,6 +1536,66 @@ wiring_payload_json() {
         FROM contest_exposures ORDER BY id) e), '[]'::json))::text;"
 }
 
+# The front's own vhosts as `label|hostname`, from the same route table the domain proxy renders.
+#
+# WHY the domain keys are mirrored from config.toml: this runs before the .env writer, so the
+# deployments' domains are still only in the TOML file, and the table reads them as variables. A
+# value already in the environment wins, because that caller knows the deployment it names. The
+# listen ports are mirrored from the domain renderer's defaults for the same reason: a row whose
+# vhost is on needs a port before the table will describe it.
+front_vhost_map() {
+  local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
+  DOMAIN_NAME="${DOMAIN_NAME:-${__TOML[admin.DOMAIN_NAME]:-}}"
+  [[ -n "$DOMAIN_NAME" ]] || DOMAIN_NAME="$cms_domain"
+  ADMIN_DOMAIN="${ADMIN_DOMAIN:-${__TOML[admin.ADMIN_DOMAIN]:-}}"
+  OJ_DOMAIN="${OJ_DOMAIN:-${__TOML[contest.OJ_DOMAIN]:-}}"
+  RANKING_DOMAIN="${RANKING_DOMAIN:-${__TOML[admin.RANKING_DOMAIN]:-}}"
+  CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
+  ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
+  RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
+  OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
+  _routes_collect
+  _routes_front_vhost_map
+}
+
+# Every hostname a server block in the rendered front declares, lower-cased and deduplicated.
+front_config_hostnames() {
+  awk '/^[[:space:]]*server_name[[:space:]]/ {gsub(/;.*/, ""); for (i = 2; i <= NF; i++) print tolower($i)}' \
+    config/grader.nginx.conf 2>/dev/null | sort -u
+}
+
+# The renderer's --front-vhosts list: the table's `label|hostname` map, then the names the rendered
+# front declares with no row behind them.
+#
+# WHY both: the map names the fragment file a vhost includes, and the rendered config names what
+# nginx actually claims. A name only the config knows is one no row owns, so the renderer refuses an
+# exposure on it instead of writing a fragment nothing includes.
+front_vhost_arg() {
+  local names=""
+  [[ -f config/grader.nginx.conf ]] && names="$(front_config_hostnames)"
+  printf '%s\n%s\n' "$1" "$names" | grep -v '^[[:space:]]*$' | paste -sd',' - || true
+}
+
+# One fragment per front vhost: the locations that vhost's own include pulls in, and nothing else.
+#
+# WHY the stale ones are removed first: a label the table no longer names would otherwise keep
+# serving the rows of the vhost that used to own it. WHY an empty fragment is removed: the vhost's
+# include matches on the name alone, so a file with no location in it is one nginx reads for nothing.
+render_front_vhost_fragments() {
+  local payload="$1" map="$2" bun_bin="$3" front_vhosts="$4" label
+  rm -f "$WIRING_OUT_DIR"/locations-*.conf
+  while IFS='|' read -r label _; do
+    [[ -n "$label" ]] || continue
+    if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" location "$label" \
+        --front-vhosts "$front_vhosts" > "$WIRING_OUT_DIR/locations-$label.conf"; then
+      rm -f "$WIRING_OUT_DIR/locations-$label.conf"
+      log_error "the wiring renderer refused the registry for the $label vhost; fix the exposure rows."
+      return 1
+    fi
+    [[ -s "$WIRING_OUT_DIR/locations-$label.conf" ]] || rm -f "$WIRING_OUT_DIR/locations-$label.conf"
+  done <<< "$map"
+}
+
 # Renders the generated route artifacts from the registry.
 #
 # WHY a no-op with nothing exposed: a deployment that never used the registry must
@@ -1599,15 +1663,14 @@ render_wiring_artifacts() {
   [[ -n "$payload" ]] || return 1
 
   mkdir -p "$WIRING_OUT_DIR"
-  # WHY the front's own server_names and not the config keys: the rendered config answers with the
-  # names nginx will claim, whatever fallbacks produced them, so one reader serves both sides. An
-  # exposure claiming one of them would add a second server_name on the same listener, which nginx
-  # discards — an inert block that the next re-render drops again.
-  local front_vhosts=""
-  if [[ -f config/grader.nginx.conf ]]; then
-    front_vhosts="$(awk '/^[[:space:]]*server_name[[:space:]]/ {gsub(/;.*/, ""); for (i = 2; i <= NF; i++) print tolower($i)}' \
-      config/grader.nginx.conf 2>/dev/null | sort -u | paste -sd',' - || true)"
-  fi
+  # WHY the table's map and the rendered config together: the map names the fragment file a vhost
+  # includes, and the rendered config names what nginx actually claims. A name only the config knows
+  # is one no route row owns, so an exposure on it is refused rather than written where nothing reads.
+  local front_map front_vhosts
+  front_map="$(front_vhost_map)" || return 1
+  front_vhosts="$(front_vhost_arg "$front_map")" || return 1
+  # The same map on disk, so the panel previews the artifact the sync would write for that vhost.
+  printf '%s' "$front_map" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
   if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
@@ -1618,6 +1681,7 @@ render_wiring_artifacts() {
     log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
     return 1
   fi
+  render_front_vhost_fragments "$payload" "$front_map" "$bun_bin" "$front_vhosts" || return 1
 
   # One serve file per tailnet node, because each exposed contest gets its own tailscale
   # container and a container reads exactly one file. WHY the node list comes from the

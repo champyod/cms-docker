@@ -23,7 +23,7 @@ SANDBOXES=()
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
-PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"service_id":1,"hostname":"a.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
+PAYLOAD='{"services":[{"id":1,"name":"cms-contest-web-server-1","role":"ContestWebServer","shard":0,"host":"web-1","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":7,"enabled":true}],"wirings":[],"exposures":[{"service_id":1,"hostname":"routes.example.com","path":"/","tls":true,"tailnet":"cms-7"}]}'
 
 # $1 exposures, $2 services-table ("t"|"f")
 new_sandbox() {
@@ -38,6 +38,9 @@ new_sandbox() {
   cp "${REPO_ROOT}/config/cms.sample.toml" "${SB}/config/" 2>/dev/null || true
   cp "${SYNC}" "${SB}/scripts/"
   cp -r "${REPO_ROOT}/scripts/__lib/." "${SB}/scripts/__lib/"
+  # The sync sources the route table for the front's own vhosts, so the sandbox needs the
+  # table and the SSE definition that table sources in turn.
+  cp "${REPO_ROOT}/scripts/__domain_routes.sh" "${REPO_ROOT}/scripts/__nginx_sse.sh" "${SB}/scripts/"
   # The renderer is dependency-free, so the real modules run without node_modules.
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"
@@ -95,8 +98,10 @@ new_sandbox 1 t
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
-grep -q 'server_name a.example.com;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
+grep -q 'server_name routes.example.com;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "renders the contest server block" || no "missing contest server block"
+grep -q '^primary|a.example.com$' "${SB}/config/generated/front-vhosts.txt" 2>/dev/null \
+  && ok "publishes the front's own vhosts with the label that names the fragment" || no "missing the front vhost map"
 grep -q 'proxy_pass http://web-1:8888;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
   && ok "proxies to the registered upstream" || no "wrong or missing upstream"
 grep -q 'AllowFunnel' "${SB}/config/generated/tailscale/cms-7.json" 2>/dev/null \
@@ -283,14 +288,24 @@ grep -q '20261014140000' "${SB}/sync.log" && ok "names the migration it waits on
 [[ -f "${SB}/.env" ]] && ok "still writes .env, so the update can migrate" || no "did not write .env"
 
 echo ""
-echo "=== Test 14: an exposure on the front's own hostname fails the sync ==="
-new_sandbox 1 t
+echo "=== Test 14: an exposure on the front's own hostname lands in that vhost's fragment ==="
+FRAGMENT_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/beta","tls":true,"tailnet":null}]}'
+new_sandbox 1 t 5 "$FRAGMENT_PAYLOAD"
 printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
 run_sync
 rc=$?
-[[ ${rc} -ne 0 ]] && ok "sync refuses the collision" || no "sync accepted a hostname the front already declares"
-[[ -e "${SB}/config/generated/contest-routes.conf" ]] \
-  && no "left a partial route file behind" || ok "leaves no partial route file"
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+fragment="${SB}/config/generated/locations-primary.conf"
+grep -q 'location ^~ /beta/ {' "$fragment" 2>/dev/null \
+  && ok "renders the exposure into the primary vhost's fragment" || no "missing the fragment location"
+grep -q 'proxy_pass http://web-9:8888/;' "$fragment" 2>/dev/null \
+  && ok "dials the registered upstream from the fragment" || no "wrong or missing fragment upstream"
+grep -qE 'listen |server_name |ssl_certificate ' "$fragment" 2>/dev/null \
+  && no "the fragment carries listener lines the vhost already declares" \
+  || ok "the fragment carries locations only"
+grep -q 'server_name a.example.com;' "${SB}/config/generated/contest-routes.conf" 2>/dev/null \
+  && no "opened a second server block for a hostname the front already serves" \
+  || ok "leaves the vhost's own block to the front"
 
 echo ""
 echo "=== Test 15: a generated row is probed the way its role's declared service is ==="
@@ -315,6 +330,18 @@ compose="${SB}/docker-compose.registry.generated.yml"
 grep -q 'healthcheck:' "$compose" 2>/dev/null && ok "the row carries a healthcheck" || no "the row has no healthcheck"
 grep -q '21001' "$compose" 2>/dev/null && ok "probes the port the row itself binds" || no "does not probe the row's own port"
 grep -q 'start_period: 60s' "$compose" 2>/dev/null && ok "takes the timings from the declared service" || no "missing the declared timings"
+
+echo ""
+echo "=== Test 16: a path the front's own vhost already serves fails the sync ==="
+CURATED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/ranking","tls":true,"tailnet":null}]}'
+new_sandbox 1 t 5 "$CURATED_PAYLOAD"
+printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
+run_sync
+rc=$?
+[[ ${rc} -ne 0 ]] && ok "sync refuses a path the vhost's own locations already serve" || no "sync accepted a curated path"
+grep -q 'refused the registry' "${SB}/sync.log" && ok "reports why it refused" || no "silent refusal"
+[[ -e "${SB}/config/generated/locations-primary.conf" ]] \
+  && no "left a fragment behind" || ok "leaves no fragment behind"
 
 echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"

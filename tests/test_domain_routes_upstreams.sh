@@ -29,6 +29,7 @@ render() {
     log_die() { printf "DIE: %s\n" "$*" >&2; exit 1; }
     source "$1"
     _domain_routes_build
+    _routes_front_vhost_map | sed "s/^/MAP|/"
     printf "RESOLVER|%s\n" "$ROUTE_RESOLVER"
     printf "SET|%s\n" "$PRIMARY_UPSTREAM_SET"
     printf "PRIMARY|%s\n" "$PRIMARY_ROUTE_BLOCKS"
@@ -66,6 +67,16 @@ if printf '%s\n' "$OUT" | sed -n '/^ADMIN|/,/^$/p' | grep -Fq -- 'location /clas
 else
   no "the admin vhost lost its classic route"
 fi
+
+printf '\n== the front vhost map names the fragment each vhost includes ==\n'
+# The map is what the config sync publishes for the registry: a `label|hostname` line per vhost
+# root, so an exposure under that name is rendered into the fragment its own include pulls in.
+has "the primary vhost is mapped to its label" "MAP|primary|grader.example.org"
+has "the admin vhost is mapped to its label" "MAP|admin|admin.example.org"
+hasnt "a second row on the admin vhost is no vhost of its own" "MAP|admin_classic"
+hasnt "a vhost with no domain is not mapped" "MAP|oj|"
+has "the primary vhost includes its fragment" "include /etc/nginx/generated/locations-primary*.conf;"
+has "the admin vhost includes its fragment" "include /etc/nginx/generated/locations-admin*.conf;"
 
 printf '\n== the panel streams are kept alive on both panel vhosts ==\n'
 # WHY the admin vhost and the primary sub-path separately: the panel answers at the root of

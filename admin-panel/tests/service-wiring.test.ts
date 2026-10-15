@@ -11,6 +11,7 @@ import {
   type WiringRow,
 } from '@/lib/service-wiring';
 import { parseFrontVhostList } from '@/lib/service-wiring-front-vhosts';
+import { parseFrontVhostMap } from '@/lib/front-vhosts';
 import { collectWiringProblems } from '@/lib/service-wiring-problems';
 import {
   parseCertificate,
@@ -671,6 +672,19 @@ describe('renderRegistryArtifacts', () => {
       wirings: [{ from_service_id: 1, to_service_id: 99, relation: 'drains', enabled: true }],
     };
     expect(() => renderRegistryArtifacts(broken)).toThrow(WiringError);
+  });
+});
+
+describe('parseFrontVhostMap', () => {
+  it('reads the map the sync writes as the entries the vhost parser consumes', () => {
+    expect(parseFrontVhostMap('primary|a.example.com\nadmin|admin.cms.local\n')).toEqual([
+      'primary|a.example.com',
+      'admin|admin.cms.local',
+    ]);
+  });
+
+  it('drops blank lines and trims each entry', () => {
+    expect(parseFrontVhostMap('\n  ranking|ranking.cms.local  \n\n')).toEqual(['ranking|ranking.cms.local']);
   });
 });
 
