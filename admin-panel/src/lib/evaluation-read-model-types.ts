@@ -92,3 +92,11 @@ interface SubmissionSourceRef {
 export type SubmissionSourceModel =
   | (SubmissionSourceRef & { sourceReadable: true; filename: string; digest: string })
   | (SubmissionSourceRef & { sourceReadable: false });
+
+// Why the source may be null: a previous submission that stores no file has
+// nothing to compare rather than a guessed reference to compare against.
+export interface SubmissionPreviousModel {
+  readonly submissionId: number;
+  readonly timestamp: string;
+  readonly source: SubmissionSourceModel | null;
+}

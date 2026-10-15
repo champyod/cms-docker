@@ -7,6 +7,7 @@ import { stripDisallowedFields, getFieldAccess, type FieldAccess } from '@/lib/f
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { invalidateViaRpc } from '@/lib/evaluation-rpc';
+import { MAX_SUBMISSION_COMMENT_LENGTH } from '@/lib/submission-comment';
 
 interface ActionResult {
   success: boolean;
@@ -600,6 +601,190 @@ export async function recalculateSubmissionIds(
     });
   } catch (error) {
     return batchFailure(error);
+  }
+}
+
+export interface BatchCommentOutcome {
+  readonly submissionId: number;
+  readonly ok: boolean;
+  readonly changed: boolean;
+  readonly error?: string;
+}
+
+export interface BatchCommentReport {
+  readonly processed: number;
+  readonly updated: number;
+  readonly failed: number;
+  readonly capped: boolean;
+  readonly outcomes: readonly BatchCommentOutcome[];
+  readonly error?: string;
+}
+
+const COMMENT_REQUIRED = 'A comment is required for every bulk comment';
+const COMMENT_TOO_LONG = `A comment may not exceed ${MAX_SUBMISSION_COMMENT_LENGTH} characters`;
+
+function commentRefusal(comment: string): string | null {
+  if (comment.trim() === '') return COMMENT_REQUIRED;
+  return comment.length > MAX_SUBMISSION_COMMENT_LENGTH ? COMMENT_TOO_LONG : null;
+}
+
+type CommentResolution =
+  | { readonly comment: string; readonly error?: undefined }
+  | { readonly comment?: undefined; readonly error: string };
+
+async function resolveComment(comment: string): Promise<CommentResolution> {
+  const refusal = commentRefusal(comment);
+  if (refusal !== null) return { error: refusal };
+  const effectivePermissions = await getPermissions();
+  const allowed = stripDisallowedFields('submissions', { comment }, effectivePermissions);
+  if (!('comment' in allowed)) return { error: 'Permission denied for comment field' };
+  return { comment: allowed.comment as string };
+}
+
+function emptyCommentReport(): BatchCommentReport {
+  return { processed: 0, updated: 0, failed: 0, capped: false, outcomes: [] };
+}
+
+function failedCommentReport(error: string): BatchCommentReport {
+  return { ...emptyCommentReport(), error };
+}
+
+function commentBatchFailure(error: unknown): BatchCommentReport {
+  const digest = (error as { digest?: string }).digest;
+  if (digest?.startsWith('NEXT_REDIRECT')) throw error;
+  return failedCommentReport(error instanceof Error ? error.message : String(error));
+}
+
+/**
+ * What a scope or selection would rewrite, without rewriting it.
+ *
+ * WHY the same cap as a requeue: one bulk comment is a single click, and the
+ * blast-radius line the operator confirms against is only truthful if the
+ * preview counts what the run would actually touch.
+ */
+export async function previewCommentApplication(scope: BatchRecalcScope): Promise<BatchRecalcPreview> {
+  await ensurePermission('submission:update');
+  const matched = await prisma.submissions.count({ where: batchWhere(scope) });
+  return previewOf(matched);
+}
+
+export async function previewCommentApplicationByIds(ids: readonly number[]): Promise<BatchRecalcPreview> {
+  await ensurePermission('submission:update');
+  const matched = await prisma.submissions.count({ where: { id: { in: uniqueIds(ids) } } });
+  return previewOf(matched);
+}
+
+/**
+ * Writes one comment over a resolved id list.
+ *
+ * WHY the per-item audit row: the batch row answers "who asked for this", while
+ * the submission's own history has to answer "what changed this row" without
+ * reconstructing the grouping. WHY the not-equal guard: a row already carrying
+ * the comment is not a change, so it earns neither a write nor an audit row.
+ */
+async function writeCommentOnIds(
+  ids: readonly number[],
+  comment: string,
+  auditEntityId: string,
+  auditValues: Readonly<Record<string, unknown>>,
+  capped: boolean,
+): Promise<BatchCommentReport> {
+  const outcomes: BatchCommentOutcome[] = [];
+  for (const submissionId of ids) {
+    try {
+      const result = await prisma.submissions.updateMany({
+        where: { id: submissionId, comment: { not: comment } },
+        data: { comment },
+      });
+      if (result.count > 0) {
+        await recordAudit({
+          verb: 'submission:update',
+          entity: 'submission',
+          entityId: String(submissionId),
+          afterValues: { comment },
+          result: 'success',
+        });
+      }
+      outcomes.push({ submissionId, ok: true, changed: result.count > 0 });
+    } catch (error) {
+      outcomes.push({
+        submissionId,
+        ok: false,
+        changed: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  const updated = outcomes.filter((outcome) => outcome.changed).length;
+  const failed = outcomes.filter((outcome) => !outcome.ok).length;
+  if (outcomes.length > 0) {
+    await recordAudit({
+      verb: 'submission:update',
+      entity: 'submission',
+      entityId: auditEntityId,
+      afterValues: { ...auditValues, comment, processed: outcomes.length, updated, failed },
+      result: 'success',
+    });
+    revalidateSubmissionSurfaces();
+  }
+  return { processed: outcomes.length, updated, failed, capped, outcomes };
+}
+
+export async function applyCommentToSubmissions(
+  scope: BatchRecalcScope,
+  comment: string,
+): Promise<BatchCommentReport> {
+  try {
+    await ensurePermission('submission:update');
+    const resolved = await resolveComment(comment);
+    if (resolved.error !== undefined) return failedCommentReport(resolved.error);
+
+    const matched = await prisma.submissions.findMany({
+      where: batchWhere(scope),
+      orderBy: { id: 'asc' },
+      take: BATCH_RECALC_LIMIT,
+      select: { id: true },
+    });
+    return await writeCommentOnIds(
+      matched.map((submission) => submission.id),
+      resolved.comment,
+      batchScopeLabel(scope),
+      { scope },
+      matched.length === BATCH_RECALC_LIMIT,
+    );
+  } catch (error) {
+    return commentBatchFailure(error);
+  }
+}
+
+export async function applyCommentToSubmissionIds(
+  ids: readonly number[],
+  comment: string,
+): Promise<BatchCommentReport> {
+  try {
+    await ensurePermission('submission:update');
+    const resolved = await resolveComment(comment);
+    if (resolved.error !== undefined) return failedCommentReport(resolved.error);
+
+    const selection = uniqueIds(ids);
+    if (selection.length === 0) return emptyCommentReport();
+
+    const matched = await prisma.submissions.findMany({
+      where: { id: { in: selection } },
+      orderBy: { id: 'asc' },
+      take: BATCH_RECALC_LIMIT,
+      select: { id: true },
+    });
+    return await writeCommentOnIds(
+      matched.map((submission) => submission.id),
+      resolved.comment,
+      idsBatchLabel(selection),
+      { ids: selection },
+      matched.length === BATCH_RECALC_LIMIT,
+    );
+  } catch (error) {
+    return commentBatchFailure(error);
   }
 }
 

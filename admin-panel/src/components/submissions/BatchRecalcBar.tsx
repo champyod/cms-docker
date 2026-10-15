@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 
 import {
   previewBatchRecalculation,
+  previewCommentApplication,
   previewRecalculationByIds,
   recalculateSubmissionIds,
   recalculateSubmissions,
@@ -27,6 +28,7 @@ import type { Dictionary } from '@/lib/dictionary';
 import { interpolate } from '@/lib/interpolate';
 import type { SubmissionListItem } from '@/types';
 
+import { CommentApplyControl } from './CommentApplyControl';
 import { watchSubmissionsForCompletion } from './SubmissionRequeueToasts';
 
 const RECOMPUTE_KINDS: readonly RecalcType[] = ['score', 'evaluation', 'full'];
@@ -166,6 +168,8 @@ export interface BatchRecalcBarProps {
   readonly scope: BatchRecalcScope;
   /** Whether the reader holds every gate key, resolved server-side. */
   readonly canRecompute: boolean;
+  /** Whether the reader may write the comment field, resolved from `submission:update`. */
+  readonly canComment: boolean;
 }
 
 /**
@@ -180,7 +184,7 @@ export interface BatchRecalcBarProps {
  * page's primary batch actions, so the filter-wide run stays reachable as the fallback
  * behind one line instead of competing with the toolbar for attention.
  */
-export function BatchRecalcBar({ scope, canRecompute }: BatchRecalcBarProps): React.JSX.Element | null {
+export function BatchRecalcBar({ scope, canRecompute, canComment }: BatchRecalcBarProps): React.JSX.Element | null {
   const dict = useDictionary();
   const router = useAppRouter();
   const [expanded, setExpanded] = useState(false);
@@ -188,14 +192,15 @@ export function BatchRecalcBar({ scope, canRecompute }: BatchRecalcBarProps): Re
   const { contestId, taskId, userId } = scope;
 
   useEffect(() => {
-    if (!canRecompute) return;
+    if (!canRecompute && !canComment) return;
     let stale = false;
     const batchScope: BatchRecalcScope = {
       ...(contestId === undefined ? {} : { contestId }),
       ...(taskId === undefined ? {} : { taskId }),
       ...(userId === undefined ? {} : { userId }),
     };
-    previewBatchRecalculation(batchScope)
+    const load = canRecompute ? previewBatchRecalculation(batchScope) : previewCommentApplication(batchScope);
+    load
       .then((preview) => {
         if (!stale) setCount(preview.matched);
       })
@@ -203,7 +208,7 @@ export function BatchRecalcBar({ scope, canRecompute }: BatchRecalcBarProps): Re
     return () => {
       stale = true;
     };
-  }, [canRecompute, contestId, taskId, userId]);
+  }, [canRecompute, canComment, contestId, taskId, userId]);
 
   const flow = useRecalculationFlow({
     preview: () => previewBatchRecalculation(scope),
@@ -212,7 +217,7 @@ export function BatchRecalcBar({ scope, canRecompute }: BatchRecalcBarProps): Re
     onSucceeded: () => router.refresh(),
   });
 
-  if (!canRecompute) return null;
+  if (!canRecompute && !canComment) return null;
 
   const linkLabel = count === null
     ? FILTER_WIDE_FALLBACK_LABEL
@@ -226,14 +231,15 @@ export function BatchRecalcBar({ scope, canRecompute }: BatchRecalcBarProps): Re
         size="sm"
         className="px-1 text-muted-foreground underline-offset-4 hover:underline"
         aria-expanded={expanded}
-        aria-controls={expanded ? 'submission-filter-wide-recalc' : undefined}
+        aria-controls={expanded ? 'submission-filter-wide-batch' : undefined}
         onClick={() => setExpanded((open) => !open)}
       >
         {linkLabel}
       </Button>
       {expanded ? (
-        <div id="submission-filter-wide-recalc" className="flex flex-wrap items-center gap-2">
-          <RecomputeButtons flow={flow} />
+        <div id="submission-filter-wide-batch" className="flex flex-wrap items-center gap-2">
+          {canRecompute ? <RecomputeButtons flow={flow} /> : null}
+          <CommentApplyControl target={{ kind: 'scope', scope }} canComment={canComment} onSucceeded={() => router.refresh()} />
         </div>
       ) : null}
       {flow.error !== null ? <InlineAlert tone="destructive">{flow.error}</InlineAlert> : null}
@@ -248,6 +254,7 @@ export interface SubmissionBulkActionsProps {
   readonly submissions: readonly SubmissionListItem[];
   readonly canRecalculate: boolean;
   readonly canOfficial: boolean;
+  readonly canComment: boolean;
   readonly onSucceeded: () => void;
 }
 
@@ -261,6 +268,7 @@ export function SubmissionBulkActions({
   submissions,
   canRecalculate,
   canOfficial,
+  canComment,
   onSucceeded,
 }: SubmissionBulkActionsProps): React.JSX.Element | null {
   const dict = useDictionary();
@@ -298,7 +306,7 @@ export function SubmissionBulkActions({
     }
   };
 
-  if (!canRecalculate && !canOfficial) return null;
+  if (!canRecalculate && !canOfficial && !canComment) return null;
 
   return (
     <>
@@ -317,6 +325,11 @@ export function SubmissionBulkActions({
           {targetOfficial ? dict.submissions.bulk.official : dict.submissions.actions.clearOfficial}
         </Button>
       ) : null}
+      <CommentApplyControl
+        target={{ kind: 'ids', ids: submissionIds }}
+        canComment={canComment}
+        onSucceeded={onSucceeded}
+      />
       {flow.error !== null ? (
         <div className="w-full">
           <InlineAlert tone="destructive">{flow.error}</InlineAlert>

@@ -57,6 +57,11 @@ export interface SubmissionListProps {
    * key `toggleSubmissionOfficial` re-checks on every call.
    */
   readonly canOfficial?: boolean;
+  /**
+   * Whether the reader may write the comment field in bulk. Resolved from the same
+   * `submission:update` key the bulk comment actions re-check on every call.
+   */
+  readonly canComment?: boolean;
 }
 
 function recordHref(locale: string, submission: SubmissionListItem): string {
@@ -108,7 +113,7 @@ function withShiftSelection(
   };
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false }: SubmissionListProps): React.JSX.Element {
+export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false, canComment = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -279,13 +284,14 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
     <div className="space-y-6">
       <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
       <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
-      {canRecalculate || canOfficial ? (
+      {canRecalculate || canOfficial || canComment ? (
         <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
           <SubmissionBulkActions
             submissionIds={[...selection.selectedIds]}
             submissions={submissions}
             canRecalculate={canRecalculate}
             canOfficial={canOfficial}
+            canComment={canComment}
             onSucceeded={() => router.refresh()}
           />
         </BulkActionBar>
@@ -293,6 +299,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
       <BatchRecalcBar
         scope={{ contestId: filters.contestId, taskId: filters.taskId, userId: filters.userId }}
         canRecompute={canRecalculate}
+        canComment={canComment}
       />
       <RecordList
         rows={submissions}

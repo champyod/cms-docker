@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { SubmissionSummaryTab } from '@/components/submissions/SubmissionSummaryTab';
-import { getSubmissionSource, getSubmissionSummary } from '@/lib/evaluation-read-models';
+import { getPreviousSubmission, getSubmissionSource, getSubmissionSummary } from '@/lib/evaluation-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
@@ -30,14 +30,16 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
   const effective = await authorizeSubmissionTab('evaluation.submission-tabs.summary');
   // Why the source read is not wrapped in readRecordOrNotFound: storing no file is
   // a valid record, so a null source renders as an empty viewer rather than a 404.
-  const [summary, source] = await Promise.all([
+  const [summary, source, previous] = await Promise.all([
     readRecordOrNotFound(() => getSubmissionSummary(id)),
     getSubmissionSource(id),
+    getPreviousSubmission(id),
   ]);
   return (
     <SubmissionSummaryTab
       summary={summary}
       source={source}
+      previous={previous}
       permissionKeys={[...effective]}
       locale={locale as 'en' | 'th'}
     />

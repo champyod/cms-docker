@@ -34,6 +34,10 @@ const mocks = vi.hoisted(() => ({
   recalculateSubmission: vi.fn(),
   toggleSubmissionOfficial: vi.fn(),
   setSubmissionOfficial: vi.fn(),
+  previewCommentApplication: vi.fn(),
+  previewCommentApplicationByIds: vi.fn(),
+  applyCommentToSubmissions: vi.fn(),
+  applyCommentToSubmissionIds: vi.fn(),
 }));
 
 vi.mock('@/app/actions/submissions', () => ({
@@ -44,10 +48,15 @@ vi.mock('@/app/actions/submissions', () => ({
   recalculateSubmission: mocks.recalculateSubmission,
   toggleSubmissionOfficial: mocks.toggleSubmissionOfficial,
   setSubmissionOfficial: mocks.setSubmissionOfficial,
+  previewCommentApplication: mocks.previewCommentApplication,
+  previewCommentApplicationByIds: mocks.previewCommentApplicationByIds,
+  applyCommentToSubmissions: mocks.applyCommentToSubmissions,
+  applyCommentToSubmissionIds: mocks.applyCommentToSubmissionIds,
 }));
 
 const PREVIEW = { matched: 2, willProcess: 2, capped: false, limit: 200 };
 const EMPTY_REPORT = { processed: 0, succeeded: 0, failed: 0, capped: false, outcomes: [] };
+const EMPTY_COMMENT_REPORT = { processed: 0, updated: 0, failed: 0, capped: false, outcomes: [] };
 const SCOPE_PREVIEW = { matched: 4, willProcess: 4, capped: false, limit: 200 };
 
 beforeEach(() => {
@@ -58,6 +67,10 @@ beforeEach(() => {
   mocks.recalculateSubmission.mockResolvedValue({ success: true });
   mocks.toggleSubmissionOfficial.mockResolvedValue({ success: true });
   mocks.setSubmissionOfficial.mockResolvedValue({ success: true, updated: 0 });
+  mocks.previewCommentApplication.mockResolvedValue(SCOPE_PREVIEW);
+  mocks.previewCommentApplicationByIds.mockResolvedValue(PREVIEW);
+  mocks.applyCommentToSubmissions.mockResolvedValue(EMPTY_COMMENT_REPORT);
+  mocks.applyCommentToSubmissionIds.mockResolvedValue(EMPTY_COMMENT_REPORT);
 });
 
 function submissionRow(id: number): SubmissionListItem {
@@ -84,6 +97,7 @@ function renderList(): HTMLElement {
         navigation={en.navigation}
         canRecalculate
         canOfficial
+        canComment
       />
     </DictionaryProvider>,
   );
@@ -214,5 +228,30 @@ describe('submission bulk requeue', () => {
         { reason: 're-run after a checker fix' },
       ),
     );
+  });
+});
+
+describe('submission bulk comment', () => {
+  it('previews the checked ids, then applies one comment across them', async () => {
+    mocks.previewCommentApplicationByIds.mockResolvedValue(PREVIEW);
+    mocks.applyCommentToSubmissionIds.mockResolvedValue({
+      processed: 2,
+      updated: 2,
+      failed: 0,
+      capped: false,
+      outcomes: [],
+    });
+    renderList();
+
+    fireEvent.click(checkbox(11));
+    fireEvent.click(checkbox(12));
+    fireEvent.click(screen.getByRole('button', { name: 'Apply comment' }));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(await screen.findByText('This updates 2 submission(s).')).toBeTruthy();
+    fireEvent.change(within(dialog).getByRole('textbox'), { target: { value: 'reviewed' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Apply comment' }));
+
+    await waitFor(() => expect(mocks.applyCommentToSubmissionIds).toHaveBeenCalledWith([11, 12], 'reviewed'));
   });
 });

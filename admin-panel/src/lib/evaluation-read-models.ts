@@ -4,6 +4,7 @@ import { requirePermission } from '@/lib/server/authorization';
 import type {
   SubmissionEvaluationModel,
   SubmissionLogsModel,
+  SubmissionPreviousModel,
   SubmissionResultsModel,
   SubmissionSourceModel,
   SubmissionSummary,
@@ -74,6 +75,13 @@ const SUBMISSION_TESTCASE_SELECT = {
 } as const;
 
 const SUBMISSION_SOURCE_SELECT = {
+  language: true,
+  files: { select: { filename: true, digest: true }, orderBy: { filename: 'asc' }, take: 1 },
+} as const;
+
+const SUBMISSION_PREVIOUS_SELECT = {
+  id: true,
+  timestamp: true,
   language: true,
   files: { select: { filename: true, digest: true }, orderBy: { filename: 'asc' }, take: 1 },
 } as const;
@@ -199,6 +207,52 @@ export async function getSubmissionSource(submissionId: number): Promise<Submiss
   // Why the field map and not a bare key: it is the one place that binds a
   // submission's file row to `file:read`, so the gate follows that binding
   // instead of duplicating it.
+  if (!getFieldAccess('files', permissions).digest.canRead) {
+    return { ...ref, sourceReadable: false };
+  }
+  return { ...ref, sourceReadable: true, filename: file.filename, digest: file.digest };
+}
+
+// Why two reads and not one nested query: Prisma has no self-join, and the first
+// read is the cheapest way to learn the pair the previous submission must share.
+export async function getPreviousSubmission(submissionId: number): Promise<SubmissionPreviousModel | null> {
+  const permissions = await requirePermission('submission:read');
+  const current = await prisma.submissions.findUnique({
+    where: { id: submissionId },
+    select: { participation_id: true, task_id: true },
+  });
+  if (!current) return null;
+  const previous = await prisma.submissions.findFirst({
+    // Why the id order and not the timestamp: ids are the monotonic insertion
+    // order per participation, so "the one before this" stays unambiguous even
+    // when two submissions share a timestamp.
+    where: {
+      participation_id: current.participation_id,
+      task_id: current.task_id,
+      id: { lt: submissionId },
+    },
+    orderBy: { id: 'desc' },
+    select: SUBMISSION_PREVIOUS_SELECT,
+  });
+  if (!previous) return null;
+  return {
+    submissionId: previous.id,
+    timestamp: toIso(previous.timestamp) ?? '',
+    source: toPreviousSource(previous.id, previous.language, previous.files[0], permissions),
+  };
+}
+
+// Why the field map and not a bare key: it is the one place that binds a
+// submission's file row to `file:read`, so the previous source degrades to
+// not-readable through the same decision the current source uses.
+function toPreviousSource(
+  submissionId: number,
+  language: string | null,
+  file: { readonly filename: string; readonly digest: string } | undefined,
+  permissions: ReadonlySet<string>,
+): SubmissionSourceModel | null {
+  if (file === undefined) return null;
+  const ref = { submissionId, language };
   if (!getFieldAccess('files', permissions).digest.canRead) {
     return { ...ref, sourceReadable: false };
   }
