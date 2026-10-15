@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
+import { rowsFromNodes } from '@/lib/worker-nodes';
 import type { WorkerNodeView } from '@/lib/worker-nodes';
 
 function node(overrides: Partial<WorkerNodeView> = {}): WorkerNodeView {
@@ -73,5 +74,25 @@ describe('WorkerNodeList', () => {
   it('falls back to the empty state when nothing is configured', () => {
     const html = renderToStaticMarkup(<WorkerNodeList rows={[]} emptyTitle="No worker nodes found" />);
     expect(html).toContain('No worker nodes found');
+  });
+});
+
+/**
+ * Why the module owns the de-duplication: the resources surface passes the stream it was handed
+ * straight through, so a duplicated reading has to be dropped before it reaches a list keyed by
+ * endpoint — there is no caller there to do it.
+ */
+describe('rowsFromNodes', () => {
+  it('yields one row for one endpoint the stream named twice', () => {
+    const rows = rowsFromNodes([node(), node({ shard: 0 })]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ host: 'cms-worker-0', port: 26000, configured: false });
+  });
+
+  it('keeps rows for distinct endpoints', () => {
+    const rows = rowsFromNodes([node(), node({ id: 'worker-1', host: 'cms-worker-1', port: 26001, shard: 1 })]);
+
+    expect(rows.map(({ port }) => port)).toEqual([26000, 26001]);
   });
 });

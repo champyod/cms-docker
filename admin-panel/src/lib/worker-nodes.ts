@@ -40,9 +40,12 @@ export interface WorkerNodeView {
  * Why a namespace of its own: the configured rows are addressed by their list index, so
  * a live-only row keyed on anything else cannot be read back as one of them.
  */
-export const LIVE_ROW_KEY_PREFIX = 'live:';
+const LIVE_ROW_KEY_PREFIX = 'live:';
 
-/** A list row: a configured endpoint that may or may not have a live reading yet. */
+/**
+ * A list row: a configured endpoint that may or may not have a live reading yet, or a row only
+ * the live stream names, which `configured: false` marks as one the configuration does not carry.
+ */
 export interface WorkerNodeListRow {
   key: string;
   host: string;
@@ -162,6 +165,21 @@ export function rowFromNode(view: WorkerNodeView): WorkerNodeListRow {
   };
 }
 
+/**
+ * One row per distinct endpoint, however many readings named it.
+ *
+ * Why de-duplicated here rather than at each caller: the stream can report one endpoint twice,
+ * and two rows carrying the same key render as duplicate React keys on every surface that draws
+ * them, which is the join only the deployments panel happened to do for itself.
+ */
 export function rowsFromNodes(views: WorkerNodeView[]): WorkerNodeListRow[] {
-  return views.map(rowFromNode);
+  const seen = new Set<string>();
+  return views
+    .filter((view) => {
+      const endpoint = `${view.host}:${view.port}`;
+      if (seen.has(endpoint)) return false;
+      seen.add(endpoint);
+      return true;
+    })
+    .map(rowFromNode);
 }
