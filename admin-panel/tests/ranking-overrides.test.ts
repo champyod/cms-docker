@@ -66,7 +66,7 @@ describe('ranking override targets', () => {
   it('refuses a verb a task target cannot mean', async () => {
     await expect(
       saveRankingOverride(form({ ...TASK_HIDE, action: 'rename', value: 'Renamed' })),
-    ).rejects.toThrow('a task target only accepts hide, not rename');
+    ).rejects.toThrow('a task target does not accept the rename action');
     expect(mocks.create).not.toHaveBeenCalled();
   });
 });

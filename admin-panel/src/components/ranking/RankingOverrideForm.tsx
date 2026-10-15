@@ -8,6 +8,7 @@ import { SelectField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
 import { Grid } from '@/components/core/Layout';
 import type { Dictionary } from '@/lib/dictionary';
+import { KIND_VERBS, OVERRIDE_ACTIONS } from '@/lib/ranking-override-verbs';
 
 export type RankingOverrideCopy = Dictionary['ranking']['overrides'];
 
@@ -49,18 +50,6 @@ const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
   freeze: { type: 'number', inputMode: 'numeric' },
 };
 
-const USER_TEAM_VERBS: readonly string[] = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'];
-
-// WHY a task and a ranking accept fewer verbs than a user or a team: a task drops a
-// board column and a ranking is the whole board, so neither can be renamed, pinned or
-// scored, and the picker offers only what the chosen target can mean.
-const KIND_VERBS: Readonly<Record<string, readonly string[]>> = {
-  user: USER_TEAM_VERBS,
-  team: USER_TEAM_VERBS,
-  ranking: ['hide', 'freeze'],
-  task: ['hide'],
-};
-
 // WHY the key options follow the kind: a team is named by its key, a task by the encoded
 // name the projection carries and the whole board by one wildcard, so an operator never
 // has to type a key the chosen target cannot hold.
@@ -91,7 +80,7 @@ export function RankingOverrideForm({
   const [kind, setKind] = useState(targetKind === '' ? 'user' : targetKind);
   const [action, setAction] = useState('hide');
   const keys = keyOptions(kind, userKeys, teamKeys, taskKeys);
-  const verbs = KIND_VERBS[kind] ?? USER_TEAM_VERBS;
+  const verbs = KIND_VERBS[kind] ?? OVERRIDE_ACTIONS;
   const hideLabel = kind === 'task' ? copy.actionHideTask : copy.actionHide;
   const valueControl = VALUE_CONTROLS[action];
   return (
@@ -119,7 +108,7 @@ export function RankingOverrideForm({
           onChange={(event) => {
             const next = event.target.value;
             setKind(next);
-            if (!(KIND_VERBS[next] ?? USER_TEAM_VERBS).includes(action)) setAction('hide');
+            if (!(KIND_VERBS[next] ?? OVERRIDE_ACTIONS).includes(action)) setAction('hide');
           }}
         >
           <option value="user">{copy.targetUser}</option>

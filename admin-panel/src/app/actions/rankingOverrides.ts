@@ -6,26 +6,13 @@ import { recordAudit } from '@/lib/audit';
 import { getSession } from '@/lib/auth';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
-
-/**
- * The changes an operator may make to what the scoreboard shows. The list is closed on
- * purpose: an unknown verb from a form is refused rather than stored, so the reader never
- * has to guess what an action means.
- */
-const OVERRIDE_ACTIONS = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'] as const;
-export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
-
-const OVERRIDE_TARGETS = ['user', 'team', 'ranking', 'task'] as const;
-export type OverrideTarget = (typeof OVERRIDE_TARGETS)[number];
-
-const RANKING_ACTIONS: ReadonlyArray<OverrideAction> = ['hide', 'freeze'];
-
-/**
- * WHY a task target is narrower than a user or a team: hiding a task drops the whole
- * board column with its scores, and only `hide` means that. A rename or a pin names a
- * row, and a task is not a row.
- */
-const TASK_ACTIONS: ReadonlyArray<OverrideAction> = ['hide'];
+import {
+  KIND_VERBS,
+  OVERRIDE_ACTIONS,
+  OVERRIDE_TARGETS,
+  type OverrideAction,
+  type OverrideTarget,
+} from '@/lib/ranking-override-verbs';
 
 export interface RankingOverride {
   id: string;
@@ -72,11 +59,8 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
   if (!Number.isInteger(contestId) || targetKey === "" || reason === "") {
     throw new Error("a contest, a target and a reason are required");
   }
-  if (targetKind === 'ranking' && !(RANKING_ACTIONS as readonly string[]).includes(action)) {
-    throw new Error(`action ${action} needs a user or team target`);
-  }
-  if (targetKind === 'task' && !(TASK_ACTIONS as readonly string[]).includes(action)) {
-    throw new Error(`a task target only accepts hide, not ${action}`);
+  if (!KIND_VERBS[targetKind].includes(action)) {
+    throw new Error(`a ${targetKind} target does not accept the ${action} action`);
   }
   const value = action === "hide" ? "" : readText(formData, "value");
   const actorId = await currentActorId();
