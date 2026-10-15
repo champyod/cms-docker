@@ -114,7 +114,7 @@ export function ActiveContestCard({
                         )}
                     </Stack>
                     <Text variant="small" color="text-muted-foreground" className="mb-4">
-                        This will set CONTEST_ID in config.toml [contest], mark the contest as active in the database, and restart the contest stack.
+                        This will mark the contest as active in the database, run the config sync, and restart the contest stack.
                     </Text>
                 </Stack>
             </Stack>

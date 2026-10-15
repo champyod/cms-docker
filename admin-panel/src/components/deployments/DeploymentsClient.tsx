@@ -42,8 +42,8 @@ export function DeploymentsClient(): React.JSX.Element {
   // Why every source is re-read at every terminal phase: the operation settles server side — activating
   // its contest, or rolling the configuration back — and can settle after this panel last read the
   // database. A value held from before that settle reports a mismatch the deploy has already resolved.
-  // loadData is that read, and it takes all three sources in one pass: config.toml [contest] CONTEST_ID,
-  // the database rows, and the id the running container serves.
+  // loadData is that read, and it takes every source in one pass: the database's active row, the
+  // shard's registry binding, and the CONTEST_ID the stack was configured with.
   useEffect(() => {
     const ended = deployState.phase === 'completed' || deployState.phase === 'failed' || deployState.phase === 'timeout';
     if (!ended) return;
@@ -112,6 +112,7 @@ export function DeploymentsClient(): React.JSX.Element {
           activeContestName={snapshot.activeContestName}
           dbActiveContestId={snapshot.dbActiveContestId}
           containerContestId={snapshot.containerContestId}
+          boundContestId={snapshot.boundContestId}
         />
       )}
 

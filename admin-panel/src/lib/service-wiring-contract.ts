@@ -22,6 +22,13 @@ export type ServiceRole = (typeof SERVICE_ROLES)[number];
 /** The one relay that serves a single contest, so a row of it must name that contest. */
 export const PROXY_SERVICE_ROLE = 'ProxyService';
 
+/**
+ * The role the contest web server holds: the row a running instance's contest binding
+ * resolves against (see contest-binding). Typed as a listed role, so a renamed entry in
+ * SERVICE_ROLES fails to compile here instead of reading as a registry with no such row.
+ */
+export const CONTEST_WEB_SERVER_ROLE: ServiceRole = 'ContestWebServer';
+
 /** The pull policies compose accepts for a service row. */
 export const PULL_POLICIES = ['always', 'missing', 'never'] as const;
 

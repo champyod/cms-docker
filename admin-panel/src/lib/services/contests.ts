@@ -4,6 +4,11 @@ import { stripDisallowedFields } from '@/lib/field-permissions';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
 import { writeActiveContestId } from '@/lib/active-contest';
+import {
+  readContestWebServerShard,
+  resolveContestBinding,
+  type ContestBinding,
+} from '@/lib/contest-binding';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
@@ -21,6 +26,7 @@ type ContestListParams = { page?: number; search?: string; sort?: ListSortInput 
 type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };
+type BoundContestResult = { success: boolean; binding?: ContestBinding; error?: string };
 
 export async function listContests(params: ContestListParams = {}): Promise<ContestListResult> {
   await requirePermission('contest:list');
@@ -206,6 +212,21 @@ export async function getAvailableContests(): Promise<AvailableResult> {
     return { success: true, contests };
   } catch (error: unknown) {
     return { success: false, contests: [], error: (error as Error).message };
+  }
+}
+
+/**
+ * The contest the deployment's contest web server serves, resolved from the registry the
+ * way the server resolves it for itself. Gated on the same key as the contest list beside
+ * it: both answer what this deployment is running, and neither is a general read.
+ */
+export async function getBoundContestId(): Promise<BoundContestResult> {
+  await requirePermission('contest:list');
+  try {
+    const binding = await resolveContestBinding(await readContestWebServerShard());
+    return { success: true, binding };
+  } catch (error: unknown) {
+    return { success: false, error: (error as Error).message };
   }
 }
 

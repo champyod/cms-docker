@@ -64,6 +64,10 @@ export async function getAvailableContests(): Promise<Awaited<ReturnType<typeof 
   return contestService.getAvailableContests();
 }
 
+export async function getBoundContestId(): Promise<Awaited<ReturnType<typeof contestService.getBoundContestId>>> {
+  return contestService.getBoundContestId();
+}
+
 export async function activateContest(id: number): Promise<Awaited<ReturnType<typeof contestService.activateContest>>> {
   const result = await contestService.activateContest(id);
   if (result.success) revalidatePath('/[locale]/contests', 'page');

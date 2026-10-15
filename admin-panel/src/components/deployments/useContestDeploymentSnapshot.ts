@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
-import { getAvailableContests } from '@/app/actions/contests';
+import { getAvailableContests, getBoundContestId } from '@/app/actions/contests';
 import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
@@ -24,6 +24,7 @@ const READ_LABELS = {
   settings: 'contest settings',
   contests: 'contest list',
   container: 'running container',
+  bound: 'registry binding',
   operation: 'deploy operation',
 } as const;
 
@@ -35,6 +36,7 @@ export interface ContestDeploymentSnapshot {
   readonly activeContestName: string | null;
   readonly dbActiveContestId: number | null;
   readonly containerContestId: number | null;
+  readonly boundContestId: number | null;
   readonly selectedContestId: number | null;
   readonly globalSettings: Record<string, string>;
   readonly isDirty: boolean;
@@ -63,6 +65,7 @@ export function useContestDeploymentSnapshot({
   const [activeContestName, setActiveContestName] = useState<string | null>(null);
   const [dbActiveContestId, setDbActiveContestId] = useState<number | null>(null);
   const [containerContestId, setContainerContestId] = useState<number | null>(null);
+  const [boundContestId, setBoundContestId] = useState<number | null>(null);
   const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
@@ -81,11 +84,14 @@ export function useContestDeploymentSnapshot({
   const readSnapshot = useCallback(async (): Promise<void> => {
     // The settle runs first: a deploy that finished unwatched still owes its activation.
     const settle = await settleRead(READ_LABELS.settle, settleDeployOperations);
-    const [active, settings, contests, container, operation] = await Promise.all([
+    const [active, settings, contests, container, bound, operation] = await Promise.all([
       settleRead(READ_LABELS.activeContest, readActiveContestId),
       settleRead(READ_LABELS.settings, () => readConfigTomlValues(CONTEST_SETTINGS_KEYS)),
       settleRead(READ_LABELS.contests, getAvailableContests),
       settleRead(READ_LABELS.container, getContainerContestId),
+      // The id the deployment actually serves, resolved the way the running contest web server
+      // resolves it for itself — the registry row for its shard, else contests.is_active.
+      settleRead(READ_LABELS.bound, getBoundContestId),
       // Why the audited read: this screen exists to answer "what is deployed right now", and
       // asking whether a deploy is in flight is part of that answer, so the ask is recorded.
       // The 30s discovery poll stays on the unaudited core — this runs on a visit, on the
@@ -117,6 +123,11 @@ export function useContestDeploymentSnapshot({
     );
     setDbActiveContestId(dbActive ? dbActive.id : null);
 
+    // Why a null bound id is kept as null: the registry row may deliberately name no contest,
+    // which makes that server serve every one of them, and comparing "no single contest" against
+    // an id would report a mismatch no operator action could clear.
+    setBoundContestId(bound.value?.success ? bound.value.binding?.contestId ?? null : null);
+
     if (actualActiveId !== null) {
       const match = databaseContests.find(
         (contest: { id: number; name: string; is_active: boolean }) => contest.id === actualActiveId,
@@ -124,7 +135,7 @@ export function useContestDeploymentSnapshot({
       if (match) setActiveContestName(match.name);
     }
 
-    setFailedReads(readFailures([settle, active, settings, contests, container, operation]));
+    setFailedReads(readFailures([settle, active, settings, contests, container, bound, operation]));
   }, [applyContestSnapshot]);
 
   const { status, reload } = useSurfaceLoad(readSnapshot, surfaceLoadMessages(dict));
@@ -168,11 +179,14 @@ export function useContestDeploymentSnapshot({
   const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
   const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
   // Why a deploy in flight suppresses the banner: a running deploy or poll is about to
-  // rewrite these three ids, so reporting the gap it is closing would alarm the operator.
+  // rewrite these ids, so reporting the gap it is closing would alarm the operator.
+  // The registry binding counts as a source here because it outranks the active row: a server
+  // pointed at another contest serves that one whatever the database says is active.
   const hasMismatch = !deployPhase.startsWith('deploy') && !deployPhase.startsWith('poll')
     && activeContestId !== null && dbActiveContestId !== null
     && (activeContestId !== dbActiveContestId
-      || (containerContestId !== null && (activeContestId !== containerContestId || dbActiveContestId !== containerContestId)));
+      || (containerContestId !== null && (activeContestId !== containerContestId || dbActiveContestId !== containerContestId))
+      || (boundContestId !== null && boundContestId !== dbActiveContestId));
 
   return {
     status,
@@ -182,6 +196,7 @@ export function useContestDeploymentSnapshot({
     activeContestName,
     dbActiveContestId,
     containerContestId,
+    boundContestId,
     selectedContestId,
     globalSettings,
     isDirty,

@@ -10,6 +10,7 @@ const actions = vi.hoisted(() => ({
   readConfigTomlValues: vi.fn(),
   updateConfigTomlValues: vi.fn(),
   getAvailableContests: vi.fn(),
+  getBoundContestId: vi.fn(),
   getContainerContestId: vi.fn(),
 }));
 
@@ -22,7 +23,10 @@ vi.mock('@/app/actions/configTomlActions', () => ({
   readConfigTomlValues: actions.readConfigTomlValues,
   updateConfigTomlValues: actions.updateConfigTomlValues,
 }));
-vi.mock('@/app/actions/contests', () => ({ getAvailableContests: actions.getAvailableContests }));
+vi.mock('@/app/actions/contests', () => ({
+  getAvailableContests: actions.getAvailableContests,
+  getBoundContestId: actions.getBoundContestId,
+}));
 vi.mock('@/app/actions/docker', () => ({ getContainerContestId: actions.getContainerContestId }));
 
 import { DictionaryContext } from '@/hooks/useDictionary';
@@ -47,6 +51,7 @@ beforeEach(() => {
   actions.readActiveContestId.mockResolvedValue({ success: true, contestId: 1 });
   actions.readConfigTomlValues.mockResolvedValue({ success: true, values: {} });
   actions.getAvailableContests.mockResolvedValue({ success: true, contests: [] });
+  actions.getBoundContestId.mockResolvedValue({ success: true, binding: { source: 'registry', contestId: 3 } });
   actions.getContainerContestId.mockResolvedValue({ success: true, contestId: 1 });
 });
 
@@ -57,6 +62,15 @@ describe('useContestDeploymentSnapshot', () => {
     await waitFor(() => expect(result.current.status.kind).toBe('idle'));
     expect(result.current.failedReads).toEqual([]);
     expect(result.current.containerContestId).toBe(1);
+    expect(result.current.boundContestId).toBe(3);
+  });
+
+  it('reports no bound contest while the registry read is the one that failed', async () => {
+    actions.getBoundContestId.mockResolvedValue({ success: false, error: 'connection refused' });
+    const { result } = renderSnapshot();
+
+    await waitFor(() => expect(result.current.status.kind).toBe('idle'));
+    expect(result.current.boundContestId).toBeNull();
   });
 
   it('names the read that failed instead of staying on Loading', async () => {
