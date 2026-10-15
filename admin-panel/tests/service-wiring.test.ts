@@ -434,6 +434,14 @@ describe('collectWiringProblems', () => {
     expect(problems[0].message).toContain('9');
   });
 
+  it('reports a ProxyService row that names no contest', () => {
+    const proxy = service({ id: 7, name: 'cms-proxy-service', role: 'ProxyService', contest_id: null });
+    const problems = collectWiringProblems([shared, proxy], [], []);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('service');
+    expect(problems[0].message).toContain('names no contest');
+  });
+
   it('reports an exposure naming a service the registry lost', () => {
     const problems = collectWiringProblems([shared], [], [exposure({ service_id: 5 })]);
     expect(problems).toHaveLength(1);

@@ -19,6 +19,9 @@ export const SERVICE_ROLES = [
 
 export type ServiceRole = (typeof SERVICE_ROLES)[number];
 
+/** The one relay that serves a single contest, so a row of it must name that contest. */
+export const PROXY_SERVICE_ROLE = 'ProxyService';
+
 /** The pull policies compose accepts for a service row. */
 export const PULL_POLICIES = ['always', 'missing', 'never'] as const;
 

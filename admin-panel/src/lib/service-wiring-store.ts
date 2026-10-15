@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { assertSafeHostname, assertSafePath, assertSafeTailnetNode, RenderError } from './service-wiring-render';
 import { normalisePath, WiringError } from './service-wiring';
 import {
+  PROXY_SERVICE_ROLE,
   PULL_POLICIES,
   SERVICE_ROLES,
   type ExposureInput,
@@ -65,6 +66,13 @@ export function validateService(input: ServiceInput): void {
   }
   if (!(PULL_POLICIES as readonly string[]).includes(input.pull_policy)) {
     throw new WiringError(`unknown pull policy: ${input.pull_policy}`);
+  }
+  // WHY a ProxyService must name one: it relays exactly one contest's submissions to the
+  // rankings, and a row that names none leaves a running container with nothing to relay —
+  // refused here rather than discovered as a crash loop on the next deploy.
+  if (input.role === PROXY_SERVICE_ROLE && input.contest_id === null) {
+    throw new WiringError(
+      `a ${PROXY_SERVICE_ROLE} row must name the contest whose board it feeds`);
   }
 }
 

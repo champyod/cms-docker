@@ -105,11 +105,16 @@ describe('saveService', () => {
     ['an empty name', { name: '  ' }],
     ['an empty db_profile', { db_profile: ' ' }],
     ['a negative shard', { shard: -1 }],
+    ['a ProxyService with no contest', { role: 'ProxyService' as ServiceInput['role'], contest_id: null }],
   ])('refuses %s without touching the database', async (_label, overrides) => {
     const result = await saveService(service(overrides));
     expect(result.success).toBe(false);
     expect(mocks.createService).not.toHaveBeenCalled();
     expect(mocks.updateService).not.toHaveBeenCalled();
+  });
+
+  it('accepts a ProxyService that names the contest it relays', async () => {
+    expect(await saveService(service({ role: 'ProxyService', contest_id: 8 }))).toEqual({ success: true });
   });
 
   it('allows a service with only an rpc port', async () => {

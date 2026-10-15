@@ -16,8 +16,9 @@ import {
   type ServiceRow,
   type WiringRow,
 } from './service-wiring';
+import { PROXY_SERVICE_ROLE } from './service-wiring-contract';
 
-export type WiringProblemArea = 'wiring' | 'exposure';
+export type WiringProblemArea = 'service' | 'wiring' | 'exposure';
 
 export interface WiringProblem {
   area: WiringProblemArea;
@@ -41,9 +42,30 @@ export function collectWiringProblems(
       });
     }
   }
+  problems.push(...misboundServiceProblems(services));
   problems.push(...exposedServiceProblems(services, exposures));
   problems.push(...unhostedPathProblems(services, exposures));
   problems.push(...duplicateLocationProblems(services, exposures));
+  return problems;
+}
+
+/**
+ * A service the registry authors but the running stack cannot honour.
+ *
+ * WHY the proxy alone: it relays exactly one contest's submissions to the rankings, so a row of
+ * it that names no contest leaves a running container with nothing to relay. The write side
+ * refuses that, and this lists it for a row that predates the rule.
+ */
+function misboundServiceProblems(services: ServiceRow[]): WiringProblem[] {
+  const problems: WiringProblem[] = [];
+  for (const service of services) {
+    if (service.role === PROXY_SERVICE_ROLE && service.contest_id === null) {
+      problems.push({
+        area: 'service',
+        message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest — it relays exactly one, so it needs a row per contest`,
+      });
+    }
+  }
   return problems;
 }
 
