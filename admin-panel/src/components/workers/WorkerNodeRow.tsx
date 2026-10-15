@@ -50,6 +50,9 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
   const { index, row, canManage, onRemove } = props;
   const live = row.live;
   const [expanded, setExpanded] = useState(false);
+  // Why: a row the live stream names but the configuration does not carry has no entry for
+  // Remove or Edit to act on, so both would look functional and write nothing.
+  const editable = canManage && row.configured;
 
   return (
     <div data-shortcut-row className="bg-muted/30 p-3 rounded-lg border border-border">
@@ -58,14 +61,14 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
           {index + 1}
         </span>
 
-        <EndpointField {...props} />
+        <EndpointField {...props} canManage={editable} />
 
         <StatusPill status={live?.connection ?? 'unknown'} />
         {live?.shard != null && <Badge variant="info">{`shard ${live.shard}`}</Badge>}
         {live?.contest != null && <Badge variant="neutral">{`contest ${live.contest}`}</Badge>}
         {live?.lagging && <Badge variant="destructive">{`${live.tasks} queued`}</Badge>}
 
-        {canManage && onRemove && (
+        {editable && onRemove && (
           <button
             onClick={() => onRemove(row.key)}
             aria-label={`Remove worker ${row.host}`}

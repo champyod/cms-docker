@@ -29,7 +29,7 @@ function node(overrides: Partial<WorkerNodeView> = {}): WorkerNodeView {
 describe('WorkerNodeList', () => {
   it('shows each connection signal exactly once', () => {
     const html = renderToStaticMarkup(
-      <WorkerNodeList rows={[{ key: 'worker-0', host: 'cms-worker-0', port: 26000, live: node() }]} />
+      <WorkerNodeList rows={[{ key: '0', host: 'cms-worker-0', port: 26000, live: node(), configured: true }]} />
     );
     expect(html).toContain('cms-worker-0:26000');
     expect(html.match(/CONNECTED/g)).toHaveLength(1);
@@ -51,7 +51,7 @@ describe('WorkerNodeList', () => {
       tasks: 0,
     });
     const html = renderToStaticMarkup(
-      <WorkerNodeList rows={[{ key: 'worker-4', host: '198.51.100.23', port: 26004, live: remote }]} />
+      <WorkerNodeList rows={[{ key: '4', host: '198.51.100.23', port: 26004, live: remote, configured: true }]} />
     );
     expect(html).toContain('198.51.100.23:26004');
     expect(html).toContain('DISCONNECTED');
@@ -60,12 +60,12 @@ describe('WorkerNodeList', () => {
 
   it('offers a log toggle only when there is a log to read', () => {
     const withLog = renderToStaticMarkup(
-      <WorkerNodeList rows={[{ key: 'worker-0', host: 'w0', port: 1, live: node({ lastLog: 'busy evaluating' }) }]} />
+      <WorkerNodeList rows={[{ key: '0', host: 'w0', port: 1, live: node({ lastLog: 'busy evaluating' }), configured: true }]} />
     );
     expect(withLog).toContain('Toggle worker log');
 
     const withoutLog = renderToStaticMarkup(
-      <WorkerNodeList rows={[{ key: 'worker-0', host: 'w0', port: 1, live: node() }]} />
+      <WorkerNodeList rows={[{ key: '0', host: 'w0', port: 1, live: node(), configured: true }]} />
     );
     expect(withoutLog).not.toContain('Toggle worker log');
   });

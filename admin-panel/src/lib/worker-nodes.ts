@@ -34,12 +34,25 @@ export interface WorkerNodeView {
   lastLog: string;
 }
 
+/**
+ * The key namespace of a row the live fleet names but the configuration does not carry.
+ *
+ * Why a namespace of its own: the configured rows are addressed by their list index, so
+ * a live-only row keyed on anything else cannot be read back as one of them.
+ */
+export const LIVE_ROW_KEY_PREFIX = 'live:';
+
 /** A list row: a configured endpoint that may or may not have a live reading yet. */
 export interface WorkerNodeListRow {
   key: string;
   host: string;
   port: number;
   live: WorkerNodeView | null;
+  /**
+   * Whether the configuration carries this row. A worker that runs without an entry in the
+   * configuration has nothing for Remove or Edit to write, so those controls stay off it.
+   */
+  configured: boolean;
 }
 
 /** One row of `scripts/__worker_status_json.sh`, loosely typed because it is parsed JSON. */
@@ -138,8 +151,15 @@ export function mapEmitterRowsToNodes(
   });
 }
 
+/** One row per live reading, in the live-only key namespace. */
 export function rowFromNode(view: WorkerNodeView): WorkerNodeListRow {
-  return { key: view.id, host: view.host, port: view.port, live: view };
+  return {
+    key: `${LIVE_ROW_KEY_PREFIX}${view.host}:${view.port}`,
+    host: view.host,
+    port: view.port,
+    live: view,
+    configured: false,
+  };
 }
 
 export function rowsFromNodes(views: WorkerNodeView[]): WorkerNodeListRow[] {

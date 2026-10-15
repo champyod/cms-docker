@@ -29,6 +29,8 @@ interface WorkersPanelProps {
  * stream also names shards the configuration does not carry, and dropping them made the
  * panel read zero while the fleet ran.
  * Why a Map: a row looking its reading up by scanning the list is quadratic in the worker count.
+ * Why the live-only rows are de-duplicated by endpoint: the stream can name one endpoint twice,
+ * and two rows for one worker would count it twice in the badge above them.
  */
 function joinStatus(workers: WorkerConfig[], status: WorkerNodeView[]): WorkerNodeListRow[] {
   const byEndpoint = new Map<string, WorkerNodeView>();
@@ -41,9 +43,15 @@ function joinStatus(workers: WorkerConfig[], status: WorkerNodeView[]): WorkerNo
     host: worker.host,
     port: worker.port,
     live: byEndpoint.get(`${worker.host}:${worker.port}`) ?? null,
+    configured: true,
   }));
-  const configuredEndpoints = new Set(workers.map((worker) => `${worker.host}:${worker.port}`));
-  const liveOnly = status.filter((node) => !configuredEndpoints.has(`${node.host}:${node.port}`));
+  const seen = new Set(workers.map((worker) => `${worker.host}:${worker.port}`));
+  const liveOnly = status.filter((node) => {
+    const endpoint = `${node.host}:${node.port}`;
+    if (seen.has(endpoint)) return false;
+    seen.add(endpoint);
+    return true;
+  });
   return [...configured, ...rowsFromNodes(liveOnly)];
 }
 
