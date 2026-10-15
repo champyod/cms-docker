@@ -15,10 +15,17 @@ import { prisma } from '@/lib/prisma';
 const OVERRIDE_ACTIONS = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'] as const;
 export type OverrideAction = (typeof OVERRIDE_ACTIONS)[number];
 
-const OVERRIDE_TARGETS = ['user', 'team', 'ranking'] as const;
+const OVERRIDE_TARGETS = ['user', 'team', 'ranking', 'task'] as const;
 export type OverrideTarget = (typeof OVERRIDE_TARGETS)[number];
 
 const RANKING_ACTIONS: ReadonlyArray<OverrideAction> = ['hide', 'freeze'];
+
+/**
+ * WHY a task target is narrower than a user or a team: hiding a task drops the whole
+ * board column with its scores, and only `hide` means that. A rename or a pin names a
+ * row, and a task is not a row.
+ */
+const TASK_ACTIONS: ReadonlyArray<OverrideAction> = ['hide'];
 
 export interface RankingOverride {
   id: string;
@@ -67,6 +74,9 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
   }
   if (targetKind === 'ranking' && !(RANKING_ACTIONS as readonly string[]).includes(action)) {
     throw new Error(`action ${action} needs a user or team target`);
+  }
+  if (targetKind === 'task' && !(TASK_ACTIONS as readonly string[]).includes(action)) {
+    throw new Error(`a task target only accepts hide, not ${action}`);
   }
   const value = action === "hide" ? "" : readText(formData, "value");
   const actorId = await currentActorId();
