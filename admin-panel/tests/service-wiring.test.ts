@@ -667,7 +667,7 @@ describe('renderRegistryArtifacts', () => {
     expect(nginx.content).toContain('server_name a.example.com;');
   });
 
-  it('renders one location fragment per front vhost the registry exposes under', () => {
+  it('renders a fragment only for the front vhosts the registry exposes under', () => {
     const onFront: WiringPayload = {
       ...payload,
       exposures: [exposure({ service_id: 1, hostname: 'front.example.com', path: '/beta' })],
@@ -676,9 +676,8 @@ describe('renderRegistryArtifacts', () => {
       'primary|front.example.com|/ /admin',
       'admin|admin.example.com|/',
     ]).filter((artifact) => artifact.mode === 'location');
-    expect(fragments.map((artifact) => artifact.node)).toEqual(['primary', 'admin']);
+    expect(fragments.map((artifact) => artifact.node)).toEqual(['primary']);
     expect(fragments[0].content).toContain('location ^~ /beta/ {');
-    expect(fragments[1].content).toBe('');
   });
 
   it('renders one serve config per tailnet node an exposure claims', () => {

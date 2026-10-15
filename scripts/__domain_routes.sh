@@ -60,6 +60,14 @@ ADMIN_CLASSIC_UPSTREAM="${ADMIN_CLASSIC_UPSTREAM:-cms-admin-web-server}"
 RANKING_UPSTREAM="${RANKING_UPSTREAM:-cms-ranking-web-server}"
 OJ_UPSTREAM="${OJ_UPSTREAM:-host.docker.internal}"
 
+# The container ports the table's rows dial. Each is an operator key, and the default keeps the
+# deployment in use today working; the front vhost map reads the same keys back from config.toml
+# rather than keeping a second copy of these numbers.
+CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
+ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
+RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
+OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
+
 # The Next.js panel answers on a fixed container port that compose maps from the
 # host side; there was no variable for it, so the template carried the number.
 ADMIN_NEXT_LISTEN_PORT="${ADMIN_NEXT_LISTEN_PORT:-3000}"

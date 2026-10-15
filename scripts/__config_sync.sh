@@ -1547,22 +1547,30 @@ toml_value_or() {
   printf '%s' "$fallback"
 }
 
+# The domain a vhost key carries once the [core] CMS_DOMAIN fallback is applied — the one place the
+# rule lives, so the front vhost map and the .env writer cannot publish different vhosts.
+#
+# WHY CMS_DOMAIN and not DOMAIN_NAME: DOMAIN_NAME lives in [admin] beside the other domain keys, not
+# in [infra]; reading infra.DOMAIN_NAME silently found nothing and wrote a second, differently
+# sectioned key the proxy never read.
+resolve_vhost_domain() {
+  printf '%s' "${__TOML[$1]:-${__TOML[core.CMS_DOMAIN]:-cms.local}}"
+}
+
 # The front's own vhosts as `label|hostname|paths`, from the same route table the domain proxy
 # renders: the paths are the ones each vhost's own block already answers on.
 #
 # WHY the domain keys are mirrored from config.toml: this runs before the .env writer, so the
-# deployments' domains are still only in the TOML file, and the table reads them as variables. A
-# value already in the environment wins, because that caller knows the deployment it names. The
-# listen ports are mirrored from the domain renderer's defaults for the same reason: a row whose
-# vhost is on needs a port before the table will describe it.
+# deployment's domains are still only in the TOML file, and the table reads them as variables. A value
+# already in the environment wins, because that caller knows the deployment it names, and the
+# CMS_DOMAIN fallback comes from the same function the .env writer calls.
 #
-# WHY the path keys read the file first instead: the table applies its own defaults when it is
-# sourced, so `${ADMIN_ROUTE_PATH:-...}` can never see the key the operator just edited — and the
-# map would then publish defaults while the vhost renders the edited paths.
+# WHY the path and port keys read the file first instead: the table applies its own defaults when it
+# is sourced, so `${ADMIN_ROUTE_PATH:-...}` can never see the key the operator just edited — and the
+# map would then publish defaults while the vhost renders the edited values.
 front_vhost_map() {
-  local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
   DOMAIN_NAME="${DOMAIN_NAME:-${__TOML[admin.DOMAIN_NAME]:-}}"
-  [[ -n "$DOMAIN_NAME" ]] || DOMAIN_NAME="$cms_domain"
+  [[ -n "$DOMAIN_NAME" ]] || DOMAIN_NAME="$(resolve_vhost_domain admin.DOMAIN_NAME)"
   ADMIN_DOMAIN="${ADMIN_DOMAIN:-${__TOML[admin.ADMIN_DOMAIN]:-}}"
   OJ_DOMAIN="${OJ_DOMAIN:-${__TOML[contest.OJ_DOMAIN]:-}}"
   RANKING_DOMAIN="${RANKING_DOMAIN:-${__TOML[admin.RANKING_DOMAIN]:-}}"
@@ -1572,10 +1580,10 @@ front_vhost_map() {
   PRIMARY_CLASSIC_ROUTE_PATH="$(toml_value_or admin.PRIMARY_CLASSIC_ROUTE_PATH "${PRIMARY_CLASSIC_ROUTE_PATH:-}")"
   RANKING_ROUTE_PATH="$(toml_value_or admin.RANKING_ROUTE_PATH "${RANKING_ROUTE_PATH:-/ranking}")"
   OJ_ROUTE_PATH="$(toml_value_or admin.OJ_ROUTE_PATH "${OJ_ROUTE_PATH:-}")"
-  CONTEST_LISTEN_PORT="${CONTEST_LISTEN_PORT:-8888}"
-  ADMIN_LISTEN_PORT="${ADMIN_LISTEN_PORT:-8889}"
-  RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
-  OJ_BACKEND_PORT="${OJ_BACKEND_PORT:-9000}"
+  CONTEST_LISTEN_PORT="$(toml_value_or contest.CONTEST_LISTEN_PORT "$CONTEST_LISTEN_PORT")"
+  ADMIN_LISTEN_PORT="$(toml_value_or admin.ADMIN_LISTEN_PORT "$ADMIN_LISTEN_PORT")"
+  RANKING_LISTEN_PORT="$(toml_value_or admin.RANKING_LISTEN_PORT "$RANKING_LISTEN_PORT")"
+  OJ_BACKEND_PORT="$(toml_value_or contest.OJ_BACKEND_PORT "$OJ_BACKEND_PORT")"
   _routes_collect
   _routes_front_vhost_map
 }
@@ -1586,16 +1594,20 @@ front_config_hostnames() {
     config/grader.nginx.conf 2>/dev/null | sort -u
 }
 
-# The renderer's --front-vhosts list: the table's `label|hostname|paths` map, then the names the
-# rendered front declares with no row behind them.
+# The front's own vhosts as the lines the renderer and the panel read back: the table's
+# `label|hostname|paths` map, then the names the rendered front declares with no row behind them.
 #
-# WHY both: the map names the fragment file a vhost includes, and the rendered config names what
-# nginx actually claims. A name only the config knows is one no row owns, so the renderer refuses an
-# exposure on it instead of writing a fragment nothing includes.
-front_vhost_arg() {
-  local names=""
-  [[ -f config/grader.nginx.conf ]] && names="$(front_config_hostnames)"
-  printf '%s\n%s\n' "$1" "$names" | grep -v '^[[:space:]]*$' | paste -sd',' - || true
+# WHY both in one list: the map names the fragment file a vhost includes and the paths its own block
+# already answers on, and the rendered config names what nginx actually claims. A name only the config
+# knows is one no row owns, so the renderer refuses an exposure on it instead of writing a fragment
+# nothing includes. WHY one list and not two: the panel reads this same file, so the renderer, the
+# sync and the screen all see the same vhosts in the same order.
+front_vhost_lines() {
+  front_vhost_map || return 1
+  if [[ -f config/grader.nginx.conf ]]; then
+    front_config_hostnames
+  fi
+  return 0
 }
 
 # One fragment per front vhost: the locations that vhost's own include pulls in, and nothing else.
@@ -1604,10 +1616,11 @@ front_vhost_arg() {
 # serving the rows of the vhost that used to own it. WHY an empty fragment is removed: the vhost's
 # include matches on the name alone, so a file with no location in it is one nginx reads for nothing.
 render_front_vhost_fragments() {
-  local payload="$1" map="$2" bun_bin="$3" front_vhosts="$4" label
+  local payload="$1" lines="$2" bun_bin="$3" front_vhosts="$4" label hostname
   rm -f "$WIRING_OUT_DIR"/locations-*.conf
-  while IFS='|' read -r label _; do
-    [[ -n "$label" ]] || continue
+  while IFS='|' read -r label hostname _; do
+    # A bare hostname line names no label, so there is no fragment file for it to render into.
+    [[ -n "$label" && -n "$hostname" ]] || continue
     if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" location "$label" \
         --front-vhosts "$front_vhosts" > "$WIRING_OUT_DIR/locations-$label.conf"; then
       rm -f "$WIRING_OUT_DIR/locations-$label.conf"
@@ -1615,7 +1628,7 @@ render_front_vhost_fragments() {
       return 1
     fi
     [[ -s "$WIRING_OUT_DIR/locations-$label.conf" ]] || rm -f "$WIRING_OUT_DIR/locations-$label.conf"
-  done <<< "$map"
+  done <<< "$lines"
 }
 
 # Renders the generated route artifacts from the registry.
@@ -1685,15 +1698,14 @@ render_wiring_artifacts() {
   [[ -n "$payload" ]] || return 1
 
   mkdir -p "$WIRING_OUT_DIR"
-  # WHY the table's map and the rendered config together: the map names the fragment file a vhost
-  # includes and the paths its own block already answers on, and the rendered config names what nginx
-  # actually claims. A name only the config knows is one no route row owns, so an exposure on it is
-  # refused rather than written where nothing reads.
-  local front_map front_vhosts
-  front_map="$(front_vhost_map)" || return 1
-  front_vhosts="$(front_vhost_arg "$front_map")" || return 1
-  # The same map on disk, so the panel previews the artifact the sync would write for that vhost.
-  printf '%s' "$front_map" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
+  # WHY the whole line list and not a map plus a config read: the renderer and the panel read this one
+  # file, so the label that names a fragment, the hostname it belongs to and the paths that vhost
+  # already answers on cannot drift apart between what the sync renders and what the screen reports.
+  local front_lines front_vhosts
+  front_lines="$(front_vhost_lines)" || return 1
+  front_vhosts="$(printf '%s\n' "$front_lines" | paste -sd',' - || true)"
+  # The same lines on disk, so the panel previews the vhosts the sync would render for.
+  printf '%s\n' "$front_lines" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
   if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
@@ -1704,7 +1716,7 @@ render_wiring_artifacts() {
     log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
     return 1
   fi
-  render_front_vhost_fragments "$payload" "$front_map" "$bun_bin" "$front_vhosts" || return 1
+  render_front_vhost_fragments "$payload" "$front_lines" "$bun_bin" "$front_vhosts" || return 1
 
   # One serve file per tailnet node, because each exposed contest gets its own tailscale
   # container and a container reads exactly one file. WHY the node list comes from the
@@ -1874,22 +1886,12 @@ main() {
   # still wants its containers described, so this runs on its own row query.
   render_registry_compose_from_db
 
-  # Derived values. WHY these run before the .env is written: a value that is only
-  # derived here never existed in config.toml, so it has to reach .env on this run or
-  # the deployment it belongs to comes up with an empty hostname.
-  #
-  # CONTEST_DOMAIN and DOMAIN_NAME both fall back to CMS_DOMAIN so a box with only a
-  # base domain still gets working names. Both keys are read from the section that
-  # defines them — DOMAIN_NAME lives in [admin] alongside the other domain keys, not
-  # in [infra]; reading infra.DOMAIN_NAME silently found nothing and wrote a second,
-  # differently-sectioned key the proxy never read.
-  local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
-  if [[ -z "${__TOML[contest.CONTEST_DOMAIN]:-}" ]]; then
-    __TOML[contest.CONTEST_DOMAIN]="$cms_domain"
-  fi
-  if [[ -z "${__TOML[admin.DOMAIN_NAME]:-}" ]]; then
-    __TOML[admin.DOMAIN_NAME]="$cms_domain"
-  fi
+  # Derived values. WHY these run before the .env is written: a value that is only derived here never
+  # existed in config.toml, so it has to reach .env on this run or the deployment it belongs to comes
+  # up with an empty hostname. WHY the same function the front vhost map calls: the map publishes the
+  # vhosts a registry exposure may not shadow, so the two have to name the same domains.
+  __TOML[contest.CONTEST_DOMAIN]="$(resolve_vhost_domain contest.CONTEST_DOMAIN)"
+  __TOML[admin.DOMAIN_NAME]="$(resolve_vhost_domain admin.DOMAIN_NAME)"
 
   # Write unified .env with section headers for diff readability
   if [[ "$DRY_RUN" -eq 0 ]]; then

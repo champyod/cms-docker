@@ -120,7 +120,8 @@ function tailnetNodes(payload: WiringPayload): string[] {
  *
  * WHY one artifact per front vhost: the sync writes each fragment to its own file, and a vhost
  * includes only its own label's — so a preview that folded them into one would hide which file an
- * exposure under the front's own name lands in.
+ * exposure under the front's own name lands in. WHY a vhost with nothing to render is dropped: the
+ * sync writes no file for it, so listing one would report an artifact the next sync never produces.
  */
 export function renderRegistryArtifacts(
   payload: WiringPayload,
@@ -131,11 +132,9 @@ export function renderRegistryArtifacts(
   ];
   for (const vhost of parseFrontVhostList(frontVhosts)) {
     if (vhost.label === null) continue;
-    artifacts.push({
-      mode: 'location',
-      node: vhost.label,
-      content: renderFromPayload(payload, 'location', CONTEST_PROXY_CERTIFICATE, vhost.label, frontVhosts),
-    });
+    const content = renderFromPayload(payload, 'location', CONTEST_PROXY_CERTIFICATE, vhost.label, frontVhosts);
+    if (content === '') continue;
+    artifacts.push({ mode: 'location', node: vhost.label, content });
   }
   for (const node of tailnetNodes(payload)) {
     artifacts.push({
@@ -164,7 +163,7 @@ export function parseCertificate(argv: readonly string[]): CertificateSpec {
   return spec;
 }
 
-/** Reads the comma-separated --front-vhosts list: the front's own vhosts, `label|hostname` or bare. */
+/** Reads the comma-separated --front-vhosts list: each entry `label|hostname|paths` or a bare hostname. */
 export function parseFrontVhosts(argv: readonly string[]): string[] {
   const index = argv.indexOf('--front-vhosts');
   const value = index === -1 ? undefined : argv[index + 1];
