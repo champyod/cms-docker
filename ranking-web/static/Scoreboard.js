@@ -61,6 +61,14 @@ var Scoreboard = new function () {
         return { first: user["f_name"], last: user["l_name"] };
     };
 
+    /* An unknown team is the data fault the store has already logged. The row still gets
+       built, so the team shows its raw key — the name ranking-web/src/board.rs renders too.
+     */
+    self.team_name = function (team) {
+        var entry = DataStore.teams[team];
+        return (entry === undefined) ? team : entry["name"];
+    };
+
     self.display_global = function (user) {
         var snap = self.frozen[user["key"]];
         if (snap !== undefined) return snap["global"];
@@ -348,7 +356,7 @@ var Scoreboard = new function () {
 
         if (user['team']) {
             result += " \
-    <td class=\"team\"><img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" /></td>";
+    <td class=\"team\"><img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + self.team_name(user["team"]) + "\" /></td>";
         } else {
             result += " \
     <td class=\"team\"></td>";
@@ -531,7 +539,7 @@ var Scoreboard = new function () {
         $row.children("td.l_name").text(name["last"]);
 
         if (user["team"]) {
-            $row.children(".team").html("<img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + DataStore.teams[user["team"]]["name"] + "\" />");
+            $row.children(".team").html("<img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + self.team_name(user["team"]) + "\" />");
         } else {
             $row.children(".team").text("");
         }

@@ -435,6 +435,17 @@ var DataStore = new function () {
     };
 
     self.update_user = function (key, data) {
+        if (data["team"] !== null && self.teams[data["team"]] === undefined)
+        {
+            /* A user whose team is missing is a data fault, not a dropped connection: keep
+               the stream open and skip the one entity, so a single unknown reference cannot
+               blank the whole board.
+             */
+            console.error("Could not find team " + data["team"] + " for user " + key);
+            self.update_network_status(5);
+            return;
+        }
+
         var old_data = self.users[key];
 
         data["key"] = key;
