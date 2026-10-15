@@ -37,7 +37,7 @@ describe('recalculateSubmission contains permission failures', () => {
       getPermissions: vi.fn(async () => new Set(RECOMPUTE_KEYS)),
     }));
     const { recalculateSubmission } = await import('@/app/actions/submissions');
-    const outcome = await recalculateSubmission(1682, 'full');
+    const outcome = await recalculateSubmission(1682, 'full', { reason: 'reported wrong score' });
     expect(outcome.success).toBe(false);
     expect(outcome.error).toMatch(/evaluation:delete/);
   });

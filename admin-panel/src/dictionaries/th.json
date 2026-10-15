@@ -303,7 +303,206 @@
     "tableEmptyTitle": "ไม่พบการส่งคำตอบ",
     "tableEmptyDescription": "การส่งคำตอบจะปรากฏที่นี่เมื่อผู้เข้าแข่งขันเริ่มส่ง",
     "viewSubmission": "ดูการส่งคำตอบ",
-    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล"
+    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล",
+    "filters": {
+      "search": "ค้นหา",
+      "searchPlaceholder": "ค้นหารหัส submission หรือ username",
+      "contest": "การแข่งขัน",
+      "task": "โจทย์",
+      "user": "ผู้ใช้",
+      "any": "ทั้งหมด",
+      "apply": "กรอง",
+      "clear": "ล้าง",
+      "more": "เพิ่มเติม",
+      "searching": "กำลังค้นหา…",
+      "noMatches": "ไม่พบรายการ",
+      "loadFailed": "โหลดตัวเลือกไม่สำเร็จ",
+      "pickerHint": "พิมพ์ชื่อเพื่อกรองรายการ"
+    },
+    "bulk": {
+      "rescore": "คำนวณคะแนนใหม่",
+      "reevaluate": "ประเมินผลใหม่",
+      "full": "รันใหม่ทั้งหมด",
+      "official": "ทำเครื่องหมาย official",
+      "applyToFilter": "ใช้กับทั้งหมด {count} รายการที่ตรงตัวกรอง"
+    },
+    "actions": {
+      "rescore": "คำนวณคะแนนใหม่",
+      "reevaluate": "ประเมินผลใหม่",
+      "fullRerun": "รันใหม่ทั้งหมด",
+      "downloadFiles": "ดาวน์โหลดไฟล์",
+      "editComment": "แก้ไขความคิดเห็น",
+      "markOfficial": "ทำเครื่องหมายว่าทางการ",
+      "clearOfficial": "ยกเลิกเครื่องหมายทางการ",
+      "moveLane": "ย้ายเลน",
+      "moreActions": "การดำเนินการเพิ่มเติม"
+    },
+    "status": {
+      "done": "เสร็จสิ้น",
+      "compiling": "กำลังคอมไพล์",
+      "compilationFailed": "คอมไพล์ไม่สำเร็จ",
+      "evaluating": "กำลังประเมินผล",
+      "scoring": "กำลังให้คะแนน",
+      "judging": "กำลังตัดสิน…",
+      "pending": "รอดำเนินการ"
+    },
+    "toasts": {
+      "commentPending": "กำลังบันทึกความคิดเห็น...",
+      "commentSuccess": "บันทึกความคิดเห็นแล้ว",
+      "commentFailure": "อัปเดตความคิดเห็นไม่สำเร็จ",
+      "officialPending": "กำลังบันทึกธงทางการ...",
+      "officialSuccess": "บันทึกธงทางการแล้ว",
+      "officialFailure": "อัปเดตธงทางการไม่สำเร็จ",
+      "recomputePending": "กำลังคำนวณใหม่...",
+      "recomputeSuccess": "นำรายการส่งเข้าคิวเพื่อคำนวณใหม่แล้ว",
+      "recomputeFailure": "คำนวณใหม่ไม่สำเร็จ",
+      "downloadPending": "กำลังเตรียมไฟล์ดาวน์โหลด...",
+      "downloadSuccess": "เริ่มดาวน์โหลดแล้ว",
+      "downloadFailure": "ดาวน์โหลดไม่สำเร็จ",
+      "batchPending": "กำลังส่งคำสั่งคำนวณใหม่เข้าคิว...",
+      "batchSuccess": "นำรายการส่ง {count} รายการเข้าคิวเพื่อคำนวณใหม่แล้ว",
+      "batchFailure": "คำนวณใหม่แบบชุดไม่สำเร็จ"
+    },
+    "history": {
+      "label": "ประวัติ",
+      "empty": "ยังไม่มีการเปลี่ยนแปลงที่บันทึกไว้สำหรับรายการส่งนี้"
+    },
+    "queued": {
+      "title": "อยู่ในคิวเพื่อคำนวณใหม่",
+      "banner": "รายการส่งนี้อยู่ในคิวเพื่อคำนวณใหม่ — ผลลัพธ์จะปรากฏเมื่อบริการประเมินผลรับคำสั่ง",
+      "bannerAt": "รันใหม่เข้าคิวเมื่อ {time} — กำลังรอ worker"
+    },
+    "notify": {
+      "scored": "Submission #{id} เสร็จสิ้นที่ {score} คะแนน",
+      "compilationFailed": "Submission #{id} เสร็จสิ้น: คอมไพล์ไม่ผ่าน",
+      "batchTitle": "การคำนวณ submission ใหม่เสร็จสิ้นแล้ว",
+      "batchDetail": "{first} (+{count} รายการ)"
+    },
+    "retry": {
+      "title": "คำนวณใหม่ไม่สำเร็จ",
+      "description": "บริการประเมินผลไม่รับคำสั่ง ลองอีกครั้งเพื่อส่งเข้าคิวใหม่",
+      "action": "ลองอีกครั้ง"
+    },
+    "lockHint": "อ่านอย่างเดียว — คุณไม่มีสิทธิ์ {keys}",
+    "record": {
+      "actions": {
+        "rescore": "คำนวณคะแนนใหม่",
+        "reEvaluate": "ประเมินผลใหม่",
+        "fullRerun": "รันใหม่ทั้งหมด",
+        "rerun": "รันใหม่",
+        "downloadFiles": "ดาวน์โหลดไฟล์",
+        "editComment": "แก้ไขความคิดเห็น",
+        "moveLane": "ย้ายเลน"
+      },
+      "official": {
+        "mark": "ทำเครื่องหมายว่าทางการ",
+        "clear": "ยกเลิกเครื่องหมายทางการ",
+        "revert": "ย้อนกลับ",
+        "on": "เปิดสถานะทางการ",
+        "off": "ปิดสถานะทางการ"
+      },
+      "toolbarLabel": "การดำเนินการของรายการส่ง #{id}",
+      "lane": {
+        "description": "การย้ายเลนจะถูกบันทึกพร้อมเหตุผล และย้ายได้อีกในภายหลัง"
+      },
+      "rerunTyped": {
+        "title": "รันใหม่ทั้งหมดสำหรับรายการส่ง #{id}?",
+        "description": "ล้างผลลัพธ์ที่เก็บไว้และตัดสินรายการส่งใหม่ตั้งแต่ต้น",
+        "instruction": "พิมพ์รหัสรายการส่ง {id} เพื่อยืนยัน",
+        "mismatch": "รหัสที่พิมพ์ไม่ตรงกัน",
+        "confirm": "รันอีกครั้ง"
+      },
+      "comment": {
+        "title": "แก้ไขความคิดเห็น — {record} #{id}",
+        "description": "ความคิดเห็นถูกเก็บไว้ในรายการส่ง และผู้ที่มีสิทธิ์อ่านเท่านั้นจึงจะเห็นได้",
+        "label": "ความคิดเห็น",
+        "save": "บันทึกความคิดเห็น",
+        "lastEdited": "แก้ไขล่าสุดโดย {name} · {time}",
+        "toasts": {
+          "pending": "กำลังบันทึกความคิดเห็น...",
+          "saved": "บันทึกความคิดเห็นแล้ว",
+          "failed": "อัปเดตความคิดเห็นไม่สำเร็จ"
+        }
+      },
+      "toasts": {
+        "officialPending": "กำลังบันทึกธงทางการ...",
+        "officialSaved": "บันทึกธงทางการแล้ว",
+        "officialFailed": "อัปเดตธงทางการไม่สำเร็จ",
+        "recomputePending": "กำลังคำนวณใหม่...",
+        "recomputeQueued": "นำรายการส่งเข้าคิวเพื่อคำนวณใหม่แล้ว",
+        "recomputeFailed": "คำนวณใหม่ไม่สำเร็จ",
+        "downloadEmpty": "ไม่มีไฟล์ที่เก็บไว้สำหรับรายการส่งนี้"
+      },
+      "source": {
+        "title": "ซอร์สโค้ด",
+        "showFull": "ดูโค้ดทั้งหมด",
+        "collapse": "ย่อ",
+        "loading": "กำลังโหลดซอร์ส…",
+        "empty": "ไม่มีไฟล์ซอร์สที่เก็บไว้",
+        "hidden": "ถูกซ่อน — ต้องมีสิทธิ์ file:read",
+        "noContents": "ไม่มีเนื้อหาที่เก็บไว้สำหรับไฟล์นี้",
+        "download": "ดาวน์โหลด",
+        "copy": "คัดลอก",
+        "copied": "คัดลอกไปยังคลิปบอร์ดแล้ว",
+        "copyFailed": "คัดลอกไม่สำเร็จ",
+        "wrap": "ตัดบรรทัด"
+      },
+      "status": {
+        "judging": "กำลังตัดสิน…",
+        "compiling": "กำลังคอมไพล์",
+        "compilationFailed": "คอมไพล์ไม่สำเร็จ",
+        "evaluating": "กำลังประเมินผล",
+        "scoring": "กำลังให้คะแนน",
+        "done": "เสร็จสิ้น",
+        "official": "★ ทางการ",
+        "points": "{score} คะแนน"
+      },
+      "links": {
+        "allByUser": "รายการส่งทั้งหมดโดย {name}",
+        "allForTask": "รายการส่งทั้งหมดของภารกิจ {name}",
+        "allForContest": "รายการส่งทั้งหมดในรายการแข่งขัน {name}"
+      },
+      "identity": {
+        "time": "เวลา",
+        "language": "ภาษา"
+      },
+      "outcome": {
+        "compilation": "การคอมไพล์",
+        "evaluation": "การประเมินผล",
+        "open": "เปิด{title}",
+        "unreadable": "{title} อ่านไม่ได้"
+      },
+      "results": {
+        "emptyTitle": "ยังไม่มีผลลัพธ์",
+        "emptyDescription": "ผลลัพธ์จะปรากฏเมื่อระบบตัดสินการส่งงานนี้แล้ว",
+        "dataset": "ชุดข้อมูล #{id}",
+        "pending": "รอดำเนินการ...",
+        "compilationSkipped": "ข้าม (คอมไพล์ไม่สำเร็จ)",
+        "evaluationSkipped": "รอดำเนินการ/ข้าม",
+        "stats": {
+          "time": "เวลา",
+          "memory": "หน่วยความจำ",
+          "public": "สาธารณะ",
+          "scored": "ได้คะแนน"
+        }
+      },
+      "logs": {
+        "emptyTitle": "ไม่มีบันทึกการคอมไพล์",
+        "emptyDescription": "ผลของคอมไพเลอร์จะปรากฏเมื่อคอมไพล์เสร็จแล้ว",
+        "title": "บันทึกการคอมไพล์ — {record} #{id}"
+      },
+      "recompute": {
+        "datasetLabel": "ชุดข้อมูล",
+        "activeDefault": "ชุดข้อมูลหลัก"
+      },
+      "history": {
+        "actor": "กระทำการ",
+        "action": "การดำเนินการ",
+        "reason": "เหตุผล",
+        "result": "ผลลัพธ์",
+        "timestamp": "เวลา"
+      }
+    }
   },
   "admins": {
     "title": "ผู้ดูแลระบบ",
@@ -597,6 +796,7 @@
     "recalculate": {
       "title": "คำนวณผลการส่งคำตอบนี้ใหม่ ({type}) หรือไม่?",
       "description": "ผลลัพธ์ปัจจุบันจะถูกล้างและคำนวณใหม่จากคำตอบที่ยังคงเก็บไว้",
+      "descriptionDataset": "ล้างผลลัพธ์ปัจจุบันแล้วคำนวณการส่งงานนี้ใหม่บน {dataset}.",
       "confirmLabel": "คำนวณใหม่",
       "types": {
         "score": "คะแนน",
@@ -811,7 +1011,8 @@
       "submissionSummary": "กำลังโหลดสรุปการส่งคำตอบ...",
       "submissionResults": "กำลังโหลดผลลัพธ์การส่งคำตอบ...",
       "submissionLogs": "กำลังโหลดบันทึกการส่งคำตอบ...",
-      "submissionEvaluation": "กำลังโหลดการประเมินการส่งคำตอบ..."
+      "submissionEvaluation": "กำลังโหลดการประเมินการส่งคำตอบ...",
+      "submissionHistory": "กำลังโหลดประวัติการส่งงาน..."
     },
     "error": {
       "people": "ไม่สามารถโหลดข้อมูลบุคคลได้",
@@ -868,7 +1069,7 @@
     },
     "tasks": { "list": { "label": "งาน" }, "record": { "label": "งาน" }, "tabs": { "overview": { "label": "ภาพรวม" }, "datasets": { "label": "ชุดข้อมูล" }, "files": { "label": "ไฟล์" }, "settings": { "label": "การตั้งค่า" } } },
     "people": { "users": { "label": "ผู้ใช้" }, "user-record": { "label": "ผู้ใช้" }, "user-tabs": { "profile": { "label": "โปรไฟล์" }, "teams": { "label": "ทีม" }, "history": { "label": "ประวัติ" } }, "teams": { "label": "ทีม" }, "team-record": { "label": "ทีม" }, "team-tabs": { "overview": { "label": "ภาพรวม" }, "members": { "label": "สมาชิก" }, "contests": { "label": "การแข่งขัน" } } },
-    "evaluation": { "submissions": { "label": "การส่งคำตอบ" }, "submission-record": { "label": "การส่งคำตอบ" }, "submission-tabs": { "summary": { "label": "สรุป" }, "results": { "label": "ผลลัพธ์" }, "logs": { "label": "บันทึก" }, "evaluation": { "label": "การประเมิน" } }, "lanes": { "label": "แถวประเมิน" } },
+    "evaluation": { "submissions": { "label": "การส่งคำตอบ" }, "submission-record": { "label": "การส่งคำตอบ" }, "submission-tabs": { "summary": { "label": "สรุป" }, "results": { "label": "ผลลัพธ์" }, "logs": { "label": "บันทึก" }, "evaluation": { "label": "การประเมิน" }, "history": { "label": "ประวัติ" } }, "lanes": { "label": "แถวประเมิน" } },
     "administration": { "admins": { "label": "ผู้ดูแลระบบ" }, "groups": { "label": "กลุ่ม", "description": "กำหนดสิทธิ์ของแต่ละกลุ่ม และตรวจสอบสิทธิ์การเข้าถึงที่กลุ่มนั้นให้" }, "audit": { "label": "บันทึกการตรวจสอบ" } },
     "infrastructure": {
       "deployments": { "label": "การดีพลอย", "description": "เลือก เปิดใช้งาน และจัดการระบบที่ดีพลอยอยู่ในปัจจุบัน" },

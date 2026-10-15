@@ -13,20 +13,45 @@ interface ActionResult {
   error?: string;
 }
 
+interface SubmissionActionBody {
+  action?: string;
+  comment?: string;
+  type?: string;
+  reason?: string;
+  datasetId?: number | string;
+}
+
 async function dispatchSubmissionAction(
   id: number,
-  data: { action?: string; comment?: string; type?: string }
+  data: SubmissionActionBody
 ): Promise<ActionResult> {
   switch (data.action) {
     case 'comment':
       return updateSubmissionComment(id, String(data.comment ?? ''));
     case 'toggle-official':
-      return toggleSubmissionOfficial(id);
+      return toggleSubmissionOfficial(id, trimmed(data.reason));
     case 'recalculate':
-      return recalculateSubmission(id, (data.type as 'score' | 'evaluation' | 'full') ?? 'score');
+      return recalculateSubmission(id, recalcTypeOf(data.type), {
+        reason: String(data.reason ?? ''),
+        datasetId: optionalInt(data.datasetId),
+      });
     default:
       return { success: false, error: 'Invalid action' };
   }
+}
+
+function trimmed(value?: string): string | undefined {
+  const result = value?.trim() ?? '';
+  return result === '' ? undefined : result;
+}
+
+function optionalInt(value?: number | string): number | undefined {
+  const parsed = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function recalcTypeOf(type?: string): 'score' | 'evaluation' | 'full' {
+  return type === 'evaluation' || type === 'full' ? type : 'score';
 }
 
 export async function PUT(

@@ -53,6 +53,24 @@ interface ActionFailure {
 export type AuditLogResult = AuditLogSuccess | ActionFailure;
 export type AuditDetailResult = AuditDetailSuccess | ActionFailure;
 
+export interface SubmissionHistoryEntry {
+  id: string;
+  actor_id: number | null;
+  actor_name: string | null;
+  timestamp: string;
+  verb: string;
+  result: string;
+  reason: string | null;
+  before_values: unknown;
+  after_values: unknown;
+}
+
+export type SubmissionHistoryResult =
+  | { success: true; data: SubmissionHistoryEntry[] }
+  | ActionFailure;
+
+const SUBMISSION_HISTORY_LIMIT = 100;
+
 function serializeRow(
   row: {
     id: bigint;
@@ -88,6 +106,7 @@ export async function getAuditLog({
   pageSize = AUDIT_PAGE_SIZE,
   actorId,
   entity,
+  entityId,
   verb,
   result,
   ip,
@@ -101,6 +120,7 @@ export async function getAuditLog({
   pageSize?: number;
   actorId?: string;
   entity?: string;
+  entityId?: string;
   verb?: string;
   result?: string;
   ip?: string;
@@ -120,6 +140,7 @@ export async function getAuditLog({
       if (Number.isFinite(parsed)) where.actor_id = parsed;
     }
     if (entity) where.entity = entity;
+    if (entityId) where.entity_id = entityId;
     if (verb) where.verb = { contains: verb, mode: 'insensitive' };
     if (result === 'success' || result === 'failure') where.result = result;
     if (ip) where.ip = { contains: ip, mode: 'insensitive' };
@@ -233,6 +254,54 @@ export async function getAuditEntry(id: number): Promise<AuditDetailResult> {  t
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch audit entry';
+    return { success: false, error: message };
+  }
+}
+
+function serializeHistoryRow(
+  row: {
+    id: bigint;
+    actor_id: number | null;
+    timestamp: Date;
+    verb: string;
+    result: string;
+    reason: string | null;
+    before_values: unknown;
+    after_values: unknown;
+  },
+  actorNames: ReadonlyMap<number, string>,
+): SubmissionHistoryEntry {
+  return {
+    id: row.id.toString(),
+    actor_id: row.actor_id,
+    actor_name: row.actor_id === null ? null : (actorNames.get(row.actor_id) ?? null),
+    timestamp: row.timestamp.toISOString(),
+    verb: row.verb,
+    result: row.result,
+    reason: row.reason,
+    before_values: row.before_values ?? null,
+    after_values: row.after_values ?? null,
+  };
+}
+
+/** One submission's audit trail, newest first, for the record page history tab. */
+export async function getSubmissionHistory(submissionId: number): Promise<SubmissionHistoryResult> {
+  try {
+    await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
+
+    const rows = await prisma.audit_log.findMany({
+      where: { entity: 'submission', entity_id: String(submissionId) },
+      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+      take: SUBMISSION_HISTORY_LIMIT,
+    });
+    const actorNames = await loadActorNames(
+      rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
+    );
+
+    return { success: true, data: rows.map((row) => serializeHistoryRow(row, actorNames)) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch submission history';
     return { success: false, error: message };
   }
 }

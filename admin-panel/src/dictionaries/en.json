@@ -303,7 +303,206 @@
     "tableEmptyTitle": "No submissions found",
     "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
     "viewSubmission": "View submission",
-    "lanesDescription": "Drag submissions between lanes or move them with a reason."
+    "lanesDescription": "Drag submissions between lanes or move them with a reason.",
+    "filters": {
+      "search": "Search",
+      "searchPlaceholder": "Submission id or username",
+      "contest": "Contest",
+      "task": "Task",
+      "user": "User",
+      "any": "Any",
+      "apply": "Filter",
+      "clear": "Clear",
+      "more": "More",
+      "searching": "Searching…",
+      "noMatches": "No matches",
+      "loadFailed": "Could not load options.",
+      "pickerHint": "Type a name to filter the list."
+    },
+    "bulk": {
+      "rescore": "Rescore",
+      "reevaluate": "Re-evaluate",
+      "full": "Full re-run",
+      "official": "Mark official",
+      "applyToFilter": "Apply to all {count} matching the filter"
+    },
+    "actions": {
+      "rescore": "Rescore",
+      "reevaluate": "Re-evaluate",
+      "fullRerun": "Full Re-run",
+      "downloadFiles": "Download files",
+      "editComment": "Edit comment",
+      "markOfficial": "Mark official",
+      "clearOfficial": "Clear official",
+      "moveLane": "Move lane",
+      "moreActions": "More actions"
+    },
+    "status": {
+      "done": "Done",
+      "compiling": "Compiling",
+      "compilationFailed": "Compilation Failed",
+      "evaluating": "Evaluating",
+      "scoring": "Scoring",
+      "judging": "Judging…",
+      "pending": "Pending"
+    },
+    "toasts": {
+      "commentPending": "Saving comment...",
+      "commentSuccess": "Comment saved",
+      "commentFailure": "Comment update failed",
+      "officialPending": "Saving official flag...",
+      "officialSuccess": "Official flag saved",
+      "officialFailure": "Official flag update failed",
+      "recomputePending": "Recalculating...",
+      "recomputeSuccess": "Submission queued for recalculation",
+      "recomputeFailure": "Recalculation failed",
+      "downloadPending": "Preparing download...",
+      "downloadSuccess": "Download started",
+      "downloadFailure": "Download failed",
+      "batchPending": "Queueing recalculation...",
+      "batchSuccess": "{count} submissions queued for recalculation",
+      "batchFailure": "Batch recalculation failed"
+    },
+    "history": {
+      "label": "History",
+      "empty": "No recorded changes for this submission yet."
+    },
+    "queued": {
+      "title": "Queued for recalculation",
+      "banner": "This submission is queued for recalculation — results appear once the evaluation service picks it up.",
+      "bannerAt": "Re-run queued at {time} — waiting for worker"
+    },
+    "notify": {
+      "scored": "Submission #{id} finished with {score} points.",
+      "compilationFailed": "Submission #{id} finished: compilation failed.",
+      "batchTitle": "Submission recalculations finished",
+      "batchDetail": "{first} (+{count} more)"
+    },
+    "retry": {
+      "title": "Recalculation failed",
+      "description": "The evaluation service did not take the request. Retry to queue it again.",
+      "action": "Retry"
+    },
+    "lockHint": "Read-only — you lack {keys}",
+    "record": {
+      "actions": {
+        "rescore": "Rescore",
+        "reEvaluate": "Re-evaluate",
+        "fullRerun": "Full Re-run",
+        "rerun": "Re-run",
+        "downloadFiles": "Download files",
+        "editComment": "Edit comment",
+        "moveLane": "Move lane"
+      },
+      "official": {
+        "mark": "Mark official",
+        "clear": "Clear official",
+        "revert": "Revert",
+        "on": "Official on",
+        "off": "Official off"
+      },
+      "toolbarLabel": "Submission #{id} actions",
+      "lane": {
+        "description": "A lane move is recorded with its reason and can be moved again later."
+      },
+      "rerunTyped": {
+        "title": "Full re-run submission #{id}?",
+        "description": "Stored results are cleared and the submission is judged from scratch.",
+        "instruction": "Type the submission id {id} to confirm",
+        "mismatch": "The typed id does not match.",
+        "confirm": "Run again"
+      },
+      "comment": {
+        "title": "Edit comment — {record} #{id}",
+        "description": "The comment is stored on the submission and is visible to every reader who may open it.",
+        "label": "Comment",
+        "save": "Save comment",
+        "lastEdited": "Last edited by {name} · {time}",
+        "toasts": {
+          "pending": "Saving comment...",
+          "saved": "Comment saved",
+          "failed": "Comment update failed"
+        }
+      },
+      "toasts": {
+        "officialPending": "Saving official flag...",
+        "officialSaved": "Official flag saved",
+        "officialFailed": "Official flag update failed",
+        "recomputePending": "Recalculating...",
+        "recomputeQueued": "Submission queued for recalculation",
+        "recomputeFailed": "Recalculation failed",
+        "downloadEmpty": "No stored files for this submission"
+      },
+      "source": {
+        "title": "Source code",
+        "showFull": "Show full code",
+        "collapse": "Collapse",
+        "loading": "Loading source…",
+        "empty": "No stored source file.",
+        "hidden": "Hidden — requires file:read",
+        "noContents": "No stored contents for this file.",
+        "download": "Download",
+        "copy": "Copy",
+        "copied": "Copied to clipboard",
+        "copyFailed": "Could not copy",
+        "wrap": "Wrap lines"
+      },
+      "status": {
+        "judging": "Judging…",
+        "compiling": "Compiling",
+        "compilationFailed": "Compilation Failed",
+        "evaluating": "Evaluating",
+        "scoring": "Scoring",
+        "done": "Done",
+        "official": "★ Official",
+        "points": "{score} pts"
+      },
+      "links": {
+        "allByUser": "All submissions by {name}",
+        "allForTask": "All submissions for task {name}",
+        "allForContest": "All submissions in contest {name}"
+      },
+      "identity": {
+        "time": "Time",
+        "language": "Language"
+      },
+      "outcome": {
+        "compilation": "Compilation",
+        "evaluation": "Evaluation",
+        "open": "Open {title}",
+        "unreadable": "{title} not readable"
+      },
+      "results": {
+        "emptyTitle": "No results yet",
+        "emptyDescription": "Results appear once the submission has been judged.",
+        "dataset": "Dataset #{id}",
+        "pending": "Pending...",
+        "compilationSkipped": "Skipped (Compilation Failed)",
+        "evaluationSkipped": "Pending/Skipped",
+        "stats": {
+          "time": "Time",
+          "memory": "Memory",
+          "public": "Public",
+          "scored": "Scored"
+        }
+      },
+      "logs": {
+        "emptyTitle": "No compilation logs",
+        "emptyDescription": "Compiler output appears once the submission has been compiled.",
+        "title": "Compilation Logs — {record} #{id}"
+      },
+      "recompute": {
+        "datasetLabel": "Dataset",
+        "activeDefault": "Active dataset"
+      },
+      "history": {
+        "actor": "Changed by",
+        "action": "Action",
+        "reason": "Reason",
+        "result": "Result",
+        "timestamp": "Time"
+      }
+    }
   },
   "admins": {
     "title": "Administrators",
@@ -597,6 +796,7 @@
     "recalculate": {
       "title": "Recalculate this submission ({type})?",
       "description": "Current results are cleared and recomputed from the submission, which is kept.",
+      "descriptionDataset": "Current results are cleared and the submission is recomputed on {dataset}.",
       "confirmLabel": "Recalculate",
       "types": {
         "score": "score",
@@ -811,7 +1011,8 @@
       "submissionSummary": "Loading submission summary...",
       "submissionResults": "Loading submission results...",
       "submissionLogs": "Loading submission logs...",
-      "submissionEvaluation": "Loading submission evaluation..."
+      "submissionEvaluation": "Loading submission evaluation...",
+      "submissionHistory": "Loading submission history..."
     },
     "error": {
       "people": "People could not be loaded",
@@ -868,7 +1069,7 @@
     },
     "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
     "people": { "users": { "label": "Users" }, "user-record": { "label": "User" }, "user-tabs": { "profile": { "label": "Profile" }, "teams": { "label": "Teams" }, "history": { "label": "History" } }, "teams": { "label": "Teams" }, "team-record": { "label": "Team" }, "team-tabs": { "overview": { "label": "Overview" }, "members": { "label": "Members" }, "contests": { "label": "Contests" } } },
-    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" } }, "lanes": { "label": "Evaluation Lanes" } },
+    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" }, "history": { "label": "History" } }, "lanes": { "label": "Evaluation Lanes" } },
     "administration": { "admins": { "label": "Admins" }, "groups": { "label": "Groups", "description": "Assign permissions to each group and review the access it grants." }, "audit": { "label": "Audit" } },
     "infrastructure": {
       "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },

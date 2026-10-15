@@ -51,7 +51,10 @@ interface DownloadResult {
   files?: Array<{ filename: string; digest: string }>;
 }
 
-/** Lists a submission's stored files for download; digests resolve via getFileByDigest. */
+/**
+ * Superseded by GET /api/submissions/[id]/files/zip, which builds one archive
+ * server-side; kept so existing callers keep working until they migrate.
+ */
 export async function downloadSubmissionFiles(submissionId: number): Promise<DownloadResult> {
   await ensurePermission('submission:download');
   try {
