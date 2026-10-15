@@ -1906,6 +1906,9 @@ main() {
   if [[ "$DRY_RUN" -eq 0 ]]; then
     mkdir -p backups && touch backups/.gitkeep
     ensure_backup_dir_perms || log_warn "monitor may not be able to write backups"
+    # After the logo sync above: that writes through a root helper, so this also reclaims
+    # the file it just dropped into the volume.
+    ensure_ranking_paths_perms "$CMS_ROOT" || log_warn "the panel may not be able to upload the ranking logo"
   fi
 
   if [[ "$DRY_RUN" -eq 0 ]]; then

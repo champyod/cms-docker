@@ -429,6 +429,55 @@ ensure_backup_dir_perms() {
 }
 
 # ---------------------------------------------------------------------------
+# ensure_ranking_paths_perms [repo_root]
+# ---------------------------------------------------------------------------
+# WHY: POST /api/ranking/logo writes three paths and the panel runs as the image's `node`
+# user (uid 1000). A fresh `cms-ranking-data` volume is seeded node:node from the panel
+# image, but this deploy creates and populates it through a root helper first, so the
+# directory stays root-owned and the build-time chown never reaches it. The host mirror
+# config/assets is created root-owned the same way, and config.toml is writable only by
+# whoever the deploy ran as. Each of the three is handed to the panel uid here, so an
+# upload succeeds and the fix survives `down -v` and a fresh deploy.
+# The volume is repaired from a root helper container — the panel cannot chown a tree it
+# does not own, and the host need not be root. The two host paths are changed in place when
+# the operator can and escalated once otherwise, the shape ensure_backup_dir_perms uses, so
+# a deploy where they are already correct costs no sudo prompt. Modes stay world-readable:
+# the ranking service reads the same volume as a different uid.
+# repo_root: the tree the two host paths live in. The caller passes its own root —
+#     config_sync's CMS_ROOT, which honours CMS_DOCKER_ROOT — so a test that runs the sync
+#     against a throwaway tree repairs that tree, not the checkout.
+ensure_ranking_paths_perms() {
+  local repo_root uid mirror toml
+  repo_root="${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)}"
+  # The panel image runs its `node` user as uid 1000; PANEL_UID overrides it for a rebuild.
+  uid="${PANEL_UID:-1000}"
+  mirror="${repo_root}/config/assets"
+  toml="${repo_root}/config.toml"
+
+  if docker info >/dev/null 2>&1; then
+    docker volume create cms-ranking-data >/dev/null 2>&1 || true
+    docker run --rm -v cms-ranking-data:/data alpine sh -c \
+      "chown -R ${uid}:${uid} /data && chmod -R u+rwX,go+rX /data" >/dev/null 2>&1 \
+      || log_warn "cms-ranking-data may stay unwritable by the panel (uid ${uid})"
+  else
+    log_warn "docker unreachable — cms-ranking-data was not handed to the panel (uid ${uid})"
+  fi
+
+  mkdir -p "$mirror" 2>/dev/null || true
+  chown -R "$uid:$uid" "$mirror" 2>/dev/null \
+    || run_privileged chown -R "$uid:$uid" "$mirror" 2>/dev/null \
+    || log_warn "config/assets may stay unwritable by the panel (uid ${uid})"
+
+  if [[ -f "$toml" ]]; then
+    # WHY group write rather than ownership: the deploy keeps editing config.toml, so the
+    # panel is granted the same file through the group instead of being made its owner.
+    chgrp "$uid" "$toml" 2>/dev/null || run_privileged chgrp "$uid" "$toml" 2>/dev/null || true
+    chmod g+w "$toml" 2>/dev/null || run_privileged chmod g+w "$toml" 2>/dev/null || true
+  fi
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # ensure_docker_resource_network <name>
 # ---------------------------------------------------------------------------
 # Idempotently ensure a Docker network exists. Creates it if missing and logs
