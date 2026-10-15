@@ -16,7 +16,8 @@ function renderForm(): HTMLElement {
       contests={[{ id: 1, name: 'Spring Contest' }]}
       userKeys={[{ key: 'ada', label: 'Ada Lovelace' }]}
       teamKeys={['alpha']}
-      taskKeys={[{ key: 'aplusb', label: 'A Plus B' }]}
+      contestKeys={[{ key: 'Spring_20Contest', label: 'Spring Contest' }]}
+      taskKeys={[{ key: 'Spring_20Contest/aplusb', label: 'Spring Contest / A Plus B' }]}
       contestId="1"
       targetKind="user"
       targetKey=""
@@ -87,12 +88,12 @@ describe('ranking override form task target', () => {
     expect(hide?.textContent).toBe(en.ranking.overrides.actionHideTask);
   });
 
-  it('lists the encoded task keys the board keys its columns by', () => {
+  it('lists the composite task keys the board keys its columns by', () => {
     const container = renderForm();
 
     selectKind(container, 'task');
 
-    expect(optionValues(container, 'targetKey')).toEqual(['', 'aplusb']);
+    expect(optionValues(container, 'targetKey')).toEqual(['', 'Spring_20Contest/aplusb']);
   });
 
   it('resets a verb the new target cannot mean, so a task never carries a score override', () => {
@@ -100,6 +101,46 @@ describe('ranking override form task target', () => {
 
     selectAction(container, 'score');
     selectKind(container, 'task');
+
+    expect(optionValues(container, 'action')).toEqual(['hide']);
+    expect(valueField(container)).toBeNull();
+  });
+});
+
+describe('ranking override form contest target', () => {
+  it('offers the contest option and a contest only the hide verb', () => {
+    const container = renderForm();
+
+    expect(optionValues(container, 'targetKind')).toContain('contest');
+
+    selectKind(container, 'contest');
+
+    expect(optionValues(container, 'action')).toEqual(['hide']);
+    expect(valueField(container)).toBeNull();
+  });
+
+  it('names the contest hide after what it drops, the contest and its tasks', () => {
+    const container = renderForm();
+
+    selectKind(container, 'contest');
+
+    const hide = container.querySelector<HTMLOptionElement>('select[name="action"] option[value="hide"]');
+    expect(hide?.textContent).toBe(en.ranking.overrides.actionHideContest);
+  });
+
+  it('lists the encoded contest keys the board keys the group by', () => {
+    const container = renderForm();
+
+    selectKind(container, 'contest');
+
+    expect(optionValues(container, 'targetKey')).toEqual(['', 'Spring_20Contest']);
+  });
+
+  it('resets a verb the new target cannot mean, so a contest never carries a freeze override', () => {
+    const container = renderForm();
+
+    selectAction(container, 'freeze');
+    selectKind(container, 'contest');
 
     expect(optionValues(container, 'action')).toEqual(['hide']);
     expect(valueField(container)).toBeNull();

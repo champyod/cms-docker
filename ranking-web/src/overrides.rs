@@ -15,6 +15,11 @@ const TARGET_RANKING: &str = "ranking";
 /// A task column: its key is the encoded task name the projection carries, and only
 /// `hide` applies to it.
 const TARGET_TASK: &str = "task";
+/// A whole contest: its key is the encoded contest name the projection files each task
+/// under, and only `hide` applies to it. WHY its own kind rather than a `task` key: hiding
+/// a contest drops the contest and every task filed under it, so the target is the group
+/// the page draws and sums, not one column inside it.
+const TARGET_CONTEST: &str = "contest";
 
 /// The six actions the panel may write, taken from dictionaries/en.json.
 /// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
@@ -103,11 +108,99 @@ pub struct Overrides {
     frozen_at: Option<i64>,
     /// A `hide` on the whole-board target. The assembly reads it to blank the board.
     board_hidden: bool,
-    /// The task keys a `hide` on the task target drops. WHY it is not a `Sides`: a task
-    /// is neither a user nor a team, so it has no half of the board to belong to, and the
-    /// entity list and the ledger read the same set to drop the column, its scores and
-    /// its history together.
-    hidden_tasks: HashSet<String>,
+    /// The task and contest hides, kept together because /tasks/ and /contests/ fold exactly
+    /// these out of one small query while the board folds them out of the whole override set,
+    /// and both must apply the same predicate. WHY not a `Sides`: a task or a contest is
+    /// neither a user nor a team, so neither has a half of the board to belong to.
+    hidden_targets: HiddenTargets,
+}
+
+/// The hides that drop a whole entity from /tasks/ or /contests/ rather than a board row.
+/// WHY its own type: the board fold builds it from every override row, and the entity list
+/// builds it from one small query, so the predicate that reads it lives in exactly one place.
+#[derive(Debug, Default, Clone)]
+pub struct HiddenTargets {
+    /// The `(contest, task)` pairs a composite `hide` drops. WHY the pair and not the bare
+    /// name: a task may sit in many contests, so a per-contest hide needs the contest in the
+    /// key.
+    hidden_task_pairs: HashSet<(String, String)>,
+    /// Task keys a pre-composite bare `hide` names with no contest: the bare spelling hides
+    /// the task in every contest it appears in, so an old row keeps working without a
+    /// migration.
+    hidden_tasks_any_contest: HashSet<String>,
+    /// The contest keys a `hide` on the contest target drops. Read by the entity list to drop
+    /// the contest and every task filed under it, and by the ledger to keep the total honest
+    /// when a whole contest leaves the board.
+    hidden_contests: HashSet<String>,
+}
+
+impl HiddenTargets {
+    /// Whether a `hide` override drops the task, by the contest it is filed under and the key
+    /// the board files it by. A pre-composite bare key matches in every contest, so an old row
+    /// keeps its meaning.
+    pub fn hides_task(&self, contest: &str, task: &str) -> bool {
+        self.hidden_tasks_any_contest.contains(task)
+            || self
+                .hidden_task_pairs
+                .contains(&(contest.to_string(), task.to_string()))
+    }
+
+    /// Whether a `hide` override drops the contest and every task filed under it.
+    pub fn hides_contest(&self, contest: &str) -> bool {
+        self.hidden_contests.contains(contest)
+    }
+
+    /// Whether any `hide` row drops this task, in any contest. WHY the ledger replay needs it:
+    /// a submission carries no contest, so the skip counter can only ask whether the task left
+    /// the board for some hide rather than for a typo.
+    pub fn hides_task_anywhere(&self, task: &str) -> bool {
+        self.hidden_tasks_any_contest.contains(task)
+            || self
+                .hidden_task_pairs
+                .iter()
+                .any(|(_, hidden)| hidden == task)
+    }
+
+    /// How many hidden task keys name no row. A renamed or deleted task keeps its hide row, so
+    /// the hide stops applying with no other trace; this is the count /diagnostics surfaces for
+    /// it. A composite pair is known when that (contest, task) membership exists; a bare key is
+    /// known when the task name exists in any contest.
+    pub fn unknown_hidden_tasks(
+        &self,
+        known_pairs: &HashSet<(String, String)>,
+        known_tasks: &HashSet<String>,
+    ) -> usize {
+        self.hidden_task_pairs
+            .iter()
+            .filter(|pair| !known_pairs.contains(*pair))
+            .count()
+            + self
+                .hidden_tasks_any_contest
+                .iter()
+                .filter(|key| !known_tasks.contains(*key))
+                .count()
+    }
+
+    /// The task target: its key is a composite `"<encodedContestKey>/<encodedTaskName>"`, and
+    /// since the encoder turns every character outside `[A-Za-z0-9]` into `_<hex>` neither half
+    /// can hold a `/`, so `split_once` is an exact parse. A key with no `/` is the pre-composite
+    /// spelling and hides the task in every contest.
+    fn insert_task_hide(&mut self, key: &str) {
+        match key.split_once('/') {
+            Some((contest, task)) => {
+                self.hidden_task_pairs
+                    .insert((contest.to_string(), task.to_string()));
+            }
+            None => {
+                self.hidden_tasks_any_contest.insert(key.to_string());
+            }
+        }
+    }
+
+    /// The contest target: `hide` drops the contest and every task filed under it.
+    fn insert_contest_hide(&mut self, key: &str) {
+        self.hidden_contests.insert(key.to_string());
+    }
 }
 
 impl Overrides {
@@ -156,21 +249,37 @@ impl Overrides {
         self.board_hidden
     }
 
-    /// Whether a `hide` override drops the task, by the key the board files it under.
-    /// Read by the entity list and the ledger assembly, which is what makes one hide
-    /// drop the column and its scores rather than only one of the two.
-    pub fn hides_task(&self, key: &str) -> bool {
-        self.hidden_tasks.contains(key)
+    /// Whether a `hide` override drops the task, by the contest it is filed under and the
+    /// key the board files it by. Read by the entity list and the ledger assembly, which is
+    /// what makes one hide drop the column and its scores rather than only one of the two.
+    pub fn hides_task(&self, contest: &str, task: &str) -> bool {
+        self.hidden_targets.hides_task(contest, task)
     }
 
-    /// How many hidden task keys name no row in `known`. A renamed or deleted task keeps
-    /// its hide row, so the hide stops applying with no other trace; this is the count
-    /// /diagnostics surfaces for it.
-    pub fn unknown_hidden_tasks(&self, known: &HashSet<String>) -> usize {
-        self.hidden_tasks
-            .iter()
-            .filter(|key| !known.contains(*key))
-            .count()
+    /// Whether a `hide` override drops the contest and every task filed under it. Read by
+    /// the entity list to drop the contest and its tasks, and by the ledger to take the
+    /// contest's scores and history with it.
+    pub fn hides_contest(&self, contest: &str) -> bool {
+        self.hidden_targets.hides_contest(contest)
+    }
+
+    /// Whether any `hide` override drops this task, in any contest. Read by the ledger
+    /// replay, where a submission carries no contest and the skip counter only needs to know
+    /// the task left the board for a hide rather than for a typo.
+    pub fn hides_task_anywhere(&self, task: &str) -> bool {
+        self.hidden_targets.hides_task_anywhere(task)
+    }
+
+    /// How many hidden task keys name no row. A renamed or deleted task keeps its hide row,
+    /// so the hide stops applying with no other trace; this is the count /diagnostics
+    /// surfaces for it.
+    pub fn unknown_hidden_tasks(
+        &self,
+        known_pairs: &HashSet<(String, String)>,
+        known_tasks: &HashSet<String>,
+    ) -> usize {
+        self.hidden_targets
+            .unknown_hidden_tasks(known_pairs, known_tasks)
     }
 
     fn fold_row(&mut self, row: &OverrideRow) {
@@ -180,6 +289,10 @@ impl Overrides {
         }
         if row.target_kind == TARGET_TASK {
             self.fold_task_row(row);
+            return;
+        }
+        if row.target_kind == TARGET_CONTEST {
+            self.fold_contest_row(row);
             return;
         }
         let Some(kind) = TargetKind::from_wire(&row.target_kind) else {
@@ -220,12 +333,30 @@ impl Overrides {
         }
     }
 
-    /// The task target: `hide` drops the column. Every other action names a user, a team
-    /// or the whole board, so on `task` it is refused and counted.
+    /// The task target: `hide` drops the column. Its key is the composite the encoder spells,
+    /// a bare key is the pre-composite spelling, and `HiddenTargets` is the one place that
+    /// parses the two apart. Every other action names a user, a team or the whole board, so on
+    /// `task` it is refused and counted.
     fn fold_task_row(&mut self, row: &OverrideRow) {
         let folded = match row.action.as_str() {
             ACTION_HIDE => {
-                self.hidden_tasks.insert(row.target_key.clone());
+                self.hidden_targets.insert_task_hide(&row.target_key);
+                true
+            }
+            _ => false,
+        };
+        if !folded {
+            self.skipped += 1;
+        }
+    }
+
+    /// The contest target: `hide` drops the contest and every task filed under it. Every
+    /// other action names a user, a team, a task or the whole board, so on `contest` it is
+    /// refused and counted.
+    fn fold_contest_row(&mut self, row: &OverrideRow) {
+        let folded = match row.action.as_str() {
+            ACTION_HIDE => {
+                self.hidden_targets.insert_contest_hide(&row.target_key);
                 true
             }
             _ => false,
@@ -318,24 +449,43 @@ pub async fn load_overrides(
     Ok(rows)
 }
 
-/// The task keys a `hide` override drops, read on their own. WHY not the full fold: the
-/// entity list polls this on every `/tasks/` request and needs no user, team or score
-/// override, and a `ranking_hidden` tombstone is always a user — it can never hide a task.
+/// One `(target_kind, target_key)` pair the small hidden-targets query returns.
+#[derive(sqlx::FromRow)]
+struct HiddenKindKey {
+    target_kind: String,
+    target_key: String,
+}
+
+/// The hides that drop a whole entity from an entity list, read on their own. WHY not the full
+/// fold: /tasks/ and /contests/ poll this on every request and need no user, team or score
+/// override, and a `ranking_hidden` tombstone is always a user, so it can never drop a task or
+/// a contest. WHY one query for both kinds: a hidden contest drops the contest and every task
+/// filed under it, and a hidden task drops one column, so both lists must read the same rows or
+/// the two lists could disagree about the same hide.
 pub async fn load_hidden_tasks(
     pool: &PgPool,
     contest_id: Option<i64>,
-) -> Result<HashSet<String>, StoreError> {
-    let keys = sqlx::query_scalar::<_, String>(
-        "SELECT target_key FROM ranking_overrides \
-         WHERE active AND target_kind = $1 AND action = $2 \
-         AND ($3::bigint IS NULL OR contest_id = $3)",
+) -> Result<HiddenTargets, StoreError> {
+    let rows = sqlx::query_as::<_, HiddenKindKey>(
+        "SELECT target_kind, target_key FROM ranking_overrides \
+         WHERE active AND action = $1 AND target_kind IN ($2, $3) \
+         AND ($4::bigint IS NULL OR contest_id = $4)",
     )
-    .bind(TARGET_TASK)
     .bind(ACTION_HIDE)
+    .bind(TARGET_TASK)
+    .bind(TARGET_CONTEST)
     .bind(contest_id)
     .fetch_all(pool)
     .await?;
-    Ok(keys.into_iter().collect())
+    let mut hidden = HiddenTargets::default();
+    for row in rows {
+        if row.target_kind == TARGET_TASK {
+            hidden.insert_task_hide(&row.target_key);
+        } else {
+            hidden.insert_contest_hide(&row.target_key);
+        }
+    }
+    Ok(hidden)
 }
 
 #[cfg(test)]
@@ -384,55 +534,128 @@ mod tests {
     }
 
     /// A task hide drops the whole board column, so it folds like a hide instead of
-    /// being counted as an unreadable target the way an unknown kind is.
+    /// being counted as an unreadable target the way an unknown kind is. The key is the
+    /// composite contest/task spelling the picker writes.
     #[test]
     fn a_task_hide_row_hides_the_task() {
         let overrides = Overrides::fold(&[
-            override_row("task", "t0", "hide"),
-            override_row("task", "t1", "hide"),
+            override_row("task", "c0/t0", "hide"),
+            override_row("task", "c1/t1", "hide"),
         ]);
 
-        assert!(overrides.hides_task("t0"), "the hide drops the named task");
-        assert!(overrides.hides_task("t1"), "each hide names its own task");
-        assert!(!overrides.hides_task("t2"), "a task with no override stays");
+        assert!(
+            overrides.hides_task("c0", "t0"),
+            "the hide drops the named task in its contest"
+        );
+        assert!(
+            overrides.hides_task("c1", "t1"),
+            "each hide names its own task"
+        );
+        assert!(
+            !overrides.hides_task("c0", "t2"),
+            "a task with no override stays"
+        );
         assert_eq!(overrides.skipped(), 0, "a task hide is not a malformed row");
+    }
+
+    /// The composite key buys a per-contest hide: a task of the same name in another
+    /// contest is untouched, which a bare name could not express.
+    #[test]
+    fn a_composite_task_hide_names_only_its_own_contest() {
+        let overrides = Overrides::fold(&[override_row("task", "c0/t0", "hide")]);
+
+        assert!(overrides.hides_task("c0", "t0"));
+        assert!(
+            !overrides.hides_task("c1", "t0"),
+            "the same task name in another contest stays"
+        );
+    }
+
+    /// Backwards compatibility: a pre-composite bare key has no slash, so it hides the
+    /// task wherever it appears rather than being dropped as an unreadable row.
+    #[test]
+    fn a_bare_task_key_hides_in_every_contest() {
+        let overrides = Overrides::fold(&[override_row("task", "t0", "hide")]);
+
+        assert!(overrides.hides_task("c0", "t0"), "the bare key hides in c0");
+        assert!(overrides.hides_task("c1", "t0"), "and in every other contest too");
+        assert!(!overrides.hides_task("c0", "t1"), "it names only the task it spells");
+        assert_eq!(overrides.skipped(), 0, "the legacy spelling is understood");
     }
 
     /// A task is a column and not a row, so every verb but hide names something a task
     /// cannot have: the row is refused and counted rather than folded into the board.
     #[test]
     fn a_non_hide_action_on_a_task_is_refused() {
-        let overrides = Overrides::fold(&[override_row("task", "t0", "rename")]);
+        let overrides = Overrides::fold(&[override_row("task", "c0/t0", "rename")]);
 
-        assert!(!overrides.hides_task("t0"), "a refused row hides nothing");
+        assert!(
+            !overrides.hides_task("c0", "t0"),
+            "a refused row hides nothing"
+        );
         assert_eq!(overrides.skipped(), 1, "the refusal is reported");
     }
 
-    /// The task set is its own, so a task key never reaches a user or a team that
-    /// happens to carry the same key.
+    /// A contest hide is the group: the contest and every task filed under it leave the
+    /// board, while a contest with no row stays.
     #[test]
-    fn a_task_hide_is_not_a_user_or_team_hide() {
-        let overrides = Overrides::fold(&[override_row("task", "shared", "hide")]);
+    fn a_contest_hide_hides_the_contest() {
+        let overrides = Overrides::fold(&[override_row("contest", "c0", "hide")]);
 
-        assert!(overrides.hides_task("shared"));
+        assert!(overrides.hides_contest("c0"), "the hide drops the named contest");
+        assert!(
+            !overrides.hides_contest("c1"),
+            "a contest with no override stays"
+        );
+        assert_eq!(overrides.skipped(), 0, "a contest hide is not a malformed row");
+    }
+
+    /// A contest is a group and not a row, so every verb but hide names something a
+    /// contest cannot have: the row is refused and counted rather than folded.
+    #[test]
+    fn a_non_hide_action_on_a_contest_is_refused() {
+        let overrides = Overrides::fold(&[override_row("contest", "c0", "rename")]);
+
+        assert!(
+            !overrides.hides_contest("c0"),
+            "a refused row hides nothing"
+        );
+        assert_eq!(overrides.skipped(), 1, "the refusal is reported");
+    }
+
+    /// The task and contest sets are their own, so neither key reaches a user or a team
+    /// that happens to carry the same key.
+    #[test]
+    fn a_task_or_contest_hide_is_not_a_user_or_team_hide() {
+        let overrides = Overrides::fold(&[
+            override_row("task", "c0/shared", "hide"),
+            override_row("contest", "shared", "hide"),
+        ]);
+
+        assert!(overrides.hides_task("c0", "shared"));
+        assert!(overrides.hides_contest("shared"));
         assert!(!overrides.hides(TargetKind::User, "shared"));
         assert!(!overrides.hides(TargetKind::Team, "shared"));
     }
 
     /// A hide whose key names no task row is counted, so a renamed or deleted task's hide
-    /// stops being silent on the diagnostics surface.
+    /// stops being silent on the diagnostics surface. Both spellings count: a bare key is
+    /// unknown when no task carries its name, a composite pair when no such membership exists.
     #[test]
     fn a_hide_on_an_absent_task_is_counted_as_unknown() {
         let overrides = Overrides::fold(&[
             override_row("task", "t0", "hide"),
             override_row("task", "gone", "hide"),
+            override_row("task", "c0/t0", "hide"),
+            override_row("task", "c0/absent", "hide"),
         ]);
-        let known = HashSet::from(["t0".to_string()]);
+        let known_pairs = HashSet::from([("c0".to_string(), "t0".to_string())]);
+        let known_tasks = HashSet::from(["t0".to_string()]);
 
         assert_eq!(
-            overrides.unknown_hidden_tasks(&known),
-            1,
-            "only the hide with no task row is counted"
+            overrides.unknown_hidden_tasks(&known_pairs, &known_tasks),
+            2,
+            "the bare name with no task row and the pair with no membership are both counted"
         );
     }
 }

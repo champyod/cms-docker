@@ -70,10 +70,24 @@ async fn seed_scored_task(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// The composite key the picker writes: the encoded contest the task is filed under,
+/// then the encoded task name, joined by a slash neither half can contain.
 async fn hide_task(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO ranking_overrides (contest_id, target_kind, target_key, action, payload, reason) \
-         VALUES (1, 'task', 't0', 'hide', NULL, 'task withdrawn')",
+         VALUES (1, 'task', 'c0/t0', 'hide', NULL, 'task withdrawn')",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// A pre-composite row: the bare task name with no contest, which must keep hiding the
+/// task wherever it appears rather than being dropped as an unreadable key.
+async fn hide_task_bare(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "INSERT INTO ranking_overrides (contest_id, target_kind, target_key, action, payload, reason) \
+         VALUES (1, 'task', 't0', 'hide', NULL, 'legacy task withdrawn')",
     )
     .execute(pool)
     .await?;
@@ -148,6 +162,32 @@ async fn a_hidden_task_leaves_the_column_and_the_ledger_together() {
         kept,
         Some(("A Plus B".to_string(), "c0".to_string(), "max".to_string())),
         "the task keeps its row and its metadata"
+    );
+
+    clear(&pool).await.expect("the cleanup applies");
+}
+
+/// Back-compat: a pre-composite row names the task with no contest, and must keep hiding
+/// it in every contest rather than being refused as an unreadable key.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn a_bare_task_key_still_hides_the_task() {
+    let pool = pool();
+    seed_scored_task(&pool).await.expect("the seed applies");
+    hide_task_bare(&pool).await.expect("the override applies");
+
+    let tasks = listed_tasks(&pool).await;
+    assert!(
+        tasks.get("t0").is_none(),
+        "the legacy bare key still drops the column"
+    );
+
+    let ledger = load_ledger(&pool, Some(1))
+        .await
+        .expect("the ledger assembles");
+    assert!(
+        !ledger.scores().values().any(|row| row.contains_key("t0")),
+        "and still takes its score with it"
     );
 
     clear(&pool).await.expect("the cleanup applies");

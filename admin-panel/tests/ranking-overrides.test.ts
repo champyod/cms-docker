@@ -33,12 +33,21 @@ function form(fields: Readonly<Record<string, string>>): FormData {
   return data;
 }
 
+// The composite key the picker writes: the encoded contest, a slash, the encoded task.
 const TASK_HIDE = {
   contestId: '1',
   targetKind: 'task',
-  targetKey: 'aplusb',
+  targetKey: 'Spring/aplusb',
   action: 'hide',
   reason: 'task withdrawn',
+};
+
+const CONTEST_HIDE = {
+  contestId: '1',
+  targetKind: 'contest',
+  targetKey: 'Spring',
+  action: 'hide',
+  reason: 'contest withdrawn',
 };
 
 beforeEach(() => {
@@ -56,7 +65,7 @@ describe('ranking override targets', () => {
     expect(mocks.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         target_kind: 'task',
-        target_key: 'aplusb',
+        target_key: 'Spring/aplusb',
         action: 'hide',
         payload: undefined,
       }),
@@ -69,10 +78,30 @@ describe('ranking override targets', () => {
     ).rejects.toThrow('a task target does not accept the rename action');
     expect(mocks.create).not.toHaveBeenCalled();
   });
+
+  it('files a contest hide with the key passed through unchanged', async () => {
+    await saveRankingOverride(form(CONTEST_HIDE));
+
+    expect(mocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        target_kind: 'contest',
+        target_key: 'Spring',
+        action: 'hide',
+        payload: undefined,
+      }),
+    });
+  });
+
+  it('refuses a verb a contest target cannot mean', async () => {
+    await expect(
+      saveRankingOverride(form({ ...CONTEST_HIDE, action: 'rename', value: 'Renamed' })),
+    ).rejects.toThrow('a contest target does not accept the rename action');
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('ranking override target options', () => {
-  it('keys the task picker by the encoded name the board keys its column by', async () => {
+  it('keys the contest picker by the encoded contest name and the task picker by the composite key', async () => {
     mocks.contestsFindMany.mockResolvedValue([{ id: 1, name: 'Spring' }]);
     mocks.participationsFindMany.mockResolvedValue([]);
     mocks.contestTasksFindMany.mockResolvedValue([
@@ -81,10 +110,11 @@ describe('ranking override target options', () => {
 
     const options = await getRankingOverrideOptions();
 
-    expect(options.taskKeys).toEqual([{ key: 'A_20Plus_20B', label: 'A Plus B' }]);
+    expect(options.contestKeys).toEqual([{ key: 'Spring', label: 'Spring' }]);
+    expect(options.taskKeys).toEqual([{ key: 'Spring/A_20Plus_20B', label: 'Spring / A Plus B' }]);
   });
 
-  it('lists a task once when two contests carry the same task name', async () => {
+  it('emits one task entry per contest when two contests carry the same task name', async () => {
     mocks.contestsFindMany.mockResolvedValue([
       { id: 1, name: 'Spring' },
       { id: 2, name: 'Autumn' },
@@ -96,6 +126,13 @@ describe('ranking override target options', () => {
 
     const options = await getRankingOverrideOptions();
 
-    expect(options.taskKeys).toEqual([{ key: 'sum', label: 'sum' }]);
+    expect(options.contestKeys).toEqual([
+      { key: 'Autumn', label: 'Autumn' },
+      { key: 'Spring', label: 'Spring' },
+    ]);
+    expect(options.taskKeys).toEqual([
+      { key: 'Autumn/sum', label: 'Autumn / sum' },
+      { key: 'Spring/sum', label: 'Spring / sum' },
+    ]);
   });
 });
