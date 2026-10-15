@@ -30,6 +30,7 @@ export function collectWiringProblems(
   services: ServiceRow[],
   wirings: WiringRow[],
   exposures: ExposureRow[],
+  frontVhosts: readonly string[] = [],
 ): WiringProblem[] {
   const problems: WiringProblem[] = [];
   const endpointIds = new Set(services.map((service) => service.id));
@@ -43,6 +44,7 @@ export function collectWiringProblems(
     }
   }
   problems.push(...misboundServiceProblems(services));
+  problems.push(...frontVhostProblems(services, exposures, frontVhosts));
   problems.push(...exposedServiceProblems(services, exposures));
   problems.push(...unhostedPathProblems(services, exposures));
   problems.push(...duplicateLocationProblems(services, exposures));
@@ -65,6 +67,29 @@ function misboundServiceProblems(services: ServiceRow[]): WiringProblem[] {
         message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest — it relays exactly one, so it needs a row per contest`,
       });
     }
+  }
+  return problems;
+}
+
+/** An exposure that claims a hostname the deployment's own front already declares. */
+function frontVhostProblems(
+  services: ServiceRow[],
+  exposures: ExposureRow[],
+  frontVhosts: readonly string[],
+): WiringProblem[] {
+  if (frontVhosts.length === 0) return [];
+  const reserved = new Set(frontVhosts.map((name) => name.trim().toLowerCase()));
+  const byId = indexServices(services);
+  const problems: WiringProblem[] = [];
+  for (const exposure of exposures) {
+    const claimed = (exposure.hostname ?? '').trim().toLowerCase();
+    if (claimed === '' || !reserved.has(claimed)) continue;
+    const service = byId.get(exposure.service_id);
+    const forService = service === undefined ? '' : ` for ${service.name}`;
+    problems.push({
+      area: 'exposure',
+      message: `${claimed} is a vhost this deployment's front already declares, so the sync refuses the route${forService} — expose the path without a hostname instead`,
+    });
   }
   return problems;
 }

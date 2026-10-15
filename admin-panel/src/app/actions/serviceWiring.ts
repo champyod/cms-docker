@@ -8,6 +8,7 @@ import { recordAudit } from '@/lib/audit';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import { runConfigSync } from '@/lib/deploy-config';
+import { readFrontVhosts } from '@/lib/front-vhosts';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
 import { buildComposeFileFlags, buildRestartCommand } from '@/lib/restart-planner';
@@ -160,7 +161,7 @@ export async function previewRegistryAction(): Promise<PreviewResult> {
     return { success: false, error: denialMessage(error) };
   }
   try {
-    return { success: true, artifacts: renderRegistryArtifacts(await readRegistry()) };
+    return { success: true, artifacts: renderRegistryArtifacts(await readRegistry(), await readFrontVhosts()) };
   } catch (error) {
     return { success: false, error: denialMessage(error) };
   }

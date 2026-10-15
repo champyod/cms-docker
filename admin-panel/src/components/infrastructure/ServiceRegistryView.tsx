@@ -46,6 +46,8 @@ interface ServiceRegistryViewProps {
   title: string;
   description: string;
   permissionKeys: readonly string[];
+  /** The hostnames the deployment's own front declares: an exposure must not claim one. */
+  frontVhosts?: readonly string[];
 }
 
 type TabId = Kind | 'preview';
@@ -55,6 +57,7 @@ const TAB_IDS: readonly TabId[] = ['service', 'wiring', 'exposure', 'preview'];
 export function ServiceRegistryView({
   services,
   wirings,
+  frontVhosts = [],
   exposures,
   contests,
   title,
@@ -69,7 +72,7 @@ export function ServiceRegistryView({
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
   const confirm = useConfirm();
-  const problems = collectWiringProblems(services, wirings, exposures);
+  const problems = collectWiringProblems(services, wirings, exposures, frontVhosts);
   // Why the same key on both: the screen offers only what its server actions already demand.
   const canControl = hasEffectivePermission(new Set(permissionKeys), 'container:control');
 

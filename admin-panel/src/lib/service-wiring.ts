@@ -186,10 +186,15 @@ export function effectiveHostname(
 }
 
 /** One route per exposure: its service's endpoint, under the vhost the exposure answers on. */
-export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[]): Route[] {
+export function exposureRoutes(
+  exposures: ExposureRow[],
+  services: ServiceRow[],
+  frontVhosts: readonly string[] = [],
+): Route[] {
   const byId = indexServices(services);
   const vhosts = contestVhosts(exposures, services);
   const primary = primaryVhost(exposures);
+  const reserved = new Set(frontVhosts.map((name) => name.trim().toLowerCase()));
   const routes: Route[] = [];
   for (const exposure of exposures) {
     const service = exposedService(exposure, byId);
@@ -200,6 +205,13 @@ export function exposureRoutes(exposures: ExposureRow[], services: ServiceRow[])
     const hostname = effectiveHostname(exposure, service, vhosts, primary);
     if (hostname === '') {
       throw new WiringError(`service ${service.name} exposes ${path} with no hostname and no vhost of its own to answer under`);
+    }
+    // WHY refused rather than rendered: a hostname the front already declares puts a second
+    // server_name on the same listener, which nginx discards — the block would be inert here and
+    // gone on the next re-render, so the route would look configured and serve nothing.
+    if (reserved.has(hostname.toLowerCase())) {
+      throw new WiringError(
+        `${hostname} is a vhost this deployment's front already declares: expose ${path} without a hostname to answer under it, or use a hostname the front does not declare`);
     }
     routes.push({
       hostname,

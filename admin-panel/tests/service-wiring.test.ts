@@ -157,7 +157,13 @@ describe('exposureRoutes', () => {
     expect(routes[1].hostname).toBe('cms.example.com');
   });
 
-  it("refuses a path-only exposure whose service's contest owns no vhost", () => {
+  it('refuses an exposure on a hostname the front already declares', () => {
+    expect(() =>
+      exposureRoutes([exposure({ service_id: 1, hostname: 'cms.example.com' })], [web3], ['cms.example.com'])
+    ).toThrow(/already declares/);
+  });
+
+  it('refuses a path-only exposure whose service\'s contest owns no vhost', () => {
     expect(() => exposureRoutes([exposure({ service_id: 1, hostname: null })], [web3])).toThrow(/no vhost/);
   });
 });
@@ -432,6 +438,13 @@ describe('collectWiringProblems', () => {
     expect(problems).toHaveLength(1);
     expect(problems[0].area).toBe('wiring');
     expect(problems[0].message).toContain('9');
+  });
+
+  it('reports an exposure on a hostname the front already declares', () => {
+    const problems = collectWiringProblems([shared], [], [exposure({ service_id: 1, hostname: 'cms.example.com' })], ['cms.example.com']);
+    expect(problems).toHaveLength(1);
+    expect(problems[0].area).toBe('exposure');
+    expect(problems[0].message).toContain('already declares');
   });
 
   it('reports a ProxyService row that names no contest', () => {

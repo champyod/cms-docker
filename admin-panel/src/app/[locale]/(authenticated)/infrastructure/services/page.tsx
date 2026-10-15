@@ -4,6 +4,7 @@ import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { getPermissions } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import { readRegistry } from '@/lib/service-wiring-store';
+import { readFrontVhosts } from '@/lib/front-vhosts';
 
 /**
  * The registry screen. WHY the page reads Prisma itself rather than the read action:
@@ -17,11 +18,12 @@ export default async function InfrastructureServicesPage({
 }): Promise<React.JSX.Element> {
   await authorizeRoutePage('infrastructure.services');
 
-  const [{ locale }, registry, contests, permissions] = await Promise.all([
+  const [{ locale }, registry, contests, permissions, frontVhosts] = await Promise.all([
     params,
     readRegistry(),
     prisma.contests.findMany({ select: { id: true, name: true }, orderBy: { id: 'asc' } }),
     getPermissions(),
+    readFrontVhosts(),
   ]);
   const copy = (await getDictionary(locale)).navigation.infrastructure.services;
 
@@ -34,6 +36,7 @@ export default async function InfrastructureServicesPage({
       title={copy.label}
       description={copy.description}
       permissionKeys={[...permissions]}
+      frontVhosts={frontVhosts}
     />
   );
 }

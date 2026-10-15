@@ -1552,10 +1552,20 @@ render_wiring_artifacts() {
   [[ -n "$payload" ]] || return 1
 
   mkdir -p "$WIRING_OUT_DIR"
+  # WHY the front's own server_names and not the config keys: the rendered config answers with the
+  # names nginx will claim, whatever fallbacks produced them, so one reader serves both sides. An
+  # exposure claiming one of them would add a second server_name on the same listener, which nginx
+  # discards — an inert block that the next re-render drops again.
+  local front_vhosts=""
+  if [[ -f config/grader.nginx.conf ]]; then
+    front_vhosts="$(awk '/^[[:space:]]*server_name[[:space:]]/ {gsub(/;.*/, ""); for (i = 2; i <= NF; i++) print tolower($i)}' \
+      config/grader.nginx.conf 2>/dev/null | sort -u | paste -sd',' - || true)"
+  fi
   if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
       --ssl-include /etc/nginx/conf.d/nginx-ssl.conf \
+      --front-vhosts "$front_vhosts" \
       > "$WIRING_OUT_DIR/contest-routes.conf"; then
     rm -f "$WIRING_OUT_DIR/contest-routes.conf"
     log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."

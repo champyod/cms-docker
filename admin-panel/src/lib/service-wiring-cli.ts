@@ -63,10 +63,11 @@ export function renderFromPayload(
   payload: WiringPayload,
   mode: RenderMode,
   certificate: CertificateSpec = CONTEST_PROXY_CERTIFICATE,
-  node?: string
+  node?: string,
+  frontVhosts: readonly string[] = []
 ): string {
   resolveWirings(payload.services, payload.wirings);
-  const routes = exposureRoutes(payload.exposures, payload.services);
+  const routes = exposureRoutes(payload.exposures, payload.services, frontVhosts);
   if (mode === 'nginx') return renderNginxServers(routes, certificate);
   if (node === undefined) {
     throw new WiringError('serve mode needs a tailnet node, because each node serves its own contests');
@@ -99,15 +100,18 @@ function tailnetNodes(payload: WiringPayload): string[] {
  * shell control plane and the panel share one renderer, and a preview that spawned it
  * would add a process and a stdin round trip for output the panel can compute directly.
  */
-export function renderRegistryArtifacts(payload: WiringPayload): RegistryArtifact[] {
+export function renderRegistryArtifacts(
+  payload: WiringPayload,
+  frontVhosts: readonly string[] = []
+): RegistryArtifact[] {
   const artifacts: RegistryArtifact[] = [
-    { mode: 'nginx', node: null, content: renderFromPayload(payload, 'nginx') },
+    { mode: 'nginx', node: null, content: renderFromPayload(payload, 'nginx', CONTEST_PROXY_CERTIFICATE, undefined, frontVhosts) },
   ];
   for (const node of tailnetNodes(payload)) {
     artifacts.push({
       mode: 'serve',
       node,
-      content: renderFromPayload(payload, 'serve', CONTEST_PROXY_CERTIFICATE, node),
+      content: renderFromPayload(payload, 'serve', CONTEST_PROXY_CERTIFICATE, node, frontVhosts),
     });
   }
   return artifacts;
@@ -128,6 +132,17 @@ export function parseCertificate(argv: readonly string[]): CertificateSpec {
     else if (flag === '--ssl-include' && value !== undefined) spec.sslInclude = value;
   }
   return spec;
+}
+
+/** Reads the comma-separated --front-vhosts list: the hostnames the front already declares. */
+export function parseFrontVhosts(argv: readonly string[]): string[] {
+  const index = argv.indexOf('--front-vhosts');
+  const value = index === -1 ? undefined : argv[index + 1];
+  if (value === undefined) return [];
+  return value
+    .split(',')
+    .map((name) => name.trim().toLowerCase())
+    .filter((name) => name !== '');
 }
 
 async function readStdin(): Promise<string> {
@@ -151,7 +166,8 @@ async function main(): Promise<void> {
   const node = mode === 'serve' ? process.argv[3] : undefined;
   const raw = await readStdin();
   try {
-    process.stdout.write(renderFromPayload(parsePayload(raw), mode, certificate, node));
+    process.stdout.write(
+      renderFromPayload(parsePayload(raw), mode, certificate, node, parseFrontVhosts(process.argv.slice(2))));
   } catch (error) {
     if (error instanceof WiringError || error instanceof RenderError) fail(error.message);
     fail(error instanceof Error ? error.message : String(error));

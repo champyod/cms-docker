@@ -282,5 +282,15 @@ grep -q '20261014140000' "${SB}/sync.log" && ok "names the migration it waits on
 [[ -f "${SB}/.env" ]] && ok "still writes .env, so the update can migrate" || no "did not write .env"
 
 echo ""
+echo "=== Test 14: an exposure on the front's own hostname fails the sync ==="
+new_sandbox 1 t
+printf '%s\n' 'server {' '    server_name a.example.com;' '}' > "${SB}/config/grader.nginx.conf"
+run_sync
+rc=$?
+[[ ${rc} -ne 0 ]] && ok "sync refuses the collision" || no "sync accepted a hostname the front already declares"
+[[ -e "${SB}/config/generated/contest-routes.conf" ]] \
+  && no "left a partial route file behind" || ok "leaves no partial route file"
+
+echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"
 [[ ${fail} -eq 0 ]]
