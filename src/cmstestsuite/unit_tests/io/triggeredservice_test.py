@@ -89,6 +89,24 @@ class FakeTriggeredService(TriggeredService):
         return counter
 
 
+class FakeRefusingSweepService(FakeTriggeredService):
+    """A service whose first sweep hits the base class refusal, then sweeps normally."""
+
+    def __init__(self, shard, timeout):
+        super().__init__(shard, timeout)
+        self._sweeps = 0
+
+    def get_sweeps(self):
+        return self._sweeps
+
+    def _missing_operations(self):
+        self._sweeps += 1
+        if self._sweeps == 1:
+            return TriggeredService._missing_operations(self)
+        self.add_missing_operation(FakeQueueItem('op 0'))
+        return super()._missing_operations()
+
+
 class TestTriggeredService(unittest.TestCase):
 
     def setUp(self):
@@ -132,12 +150,18 @@ class TestTriggeredService(unittest.TestCase):
         for notifier in self.notifiers:
             self.assertEqual(notifier.get_notifications(), 2)
 
-    def test_the_base_class_refuses_to_sweep_nothing(self):
-        """Test that the base _missing_operations is abstract."""
+    def test_a_refusing_sweep_is_logged_and_the_loop_survives(self):
+        """Test that the base refusal reaches the loop, and the loop sweeps on."""
         self.get_service_address.return_value = Address('127.0.0.1', '12345')
-        service = FakeTriggeredService(0, None)
-        with self.assertRaises(NotImplementedError):
-            TriggeredService._missing_operations(service)
+        service = FakeRefusingSweepService(0, 0.05)
+        for notifier in self.notifiers:
+            service.add_executor(FakeExecutor(notifier))
+        with self.assertLogs("cms.io.triggeredservice", level="ERROR"):
+            service.start_sweeper(0.05)
+            gevent.sleep(0.25)
+        self.assertGreaterEqual(service.get_sweeps(), 2)
+        for notifier in self.notifiers:
+            self.assertEqual(notifier.get_notifications(), 1)
 
     def test_a_slow_executor_does_not_block_the_others(self):
         """Test that a slow executor does not block the others."""
