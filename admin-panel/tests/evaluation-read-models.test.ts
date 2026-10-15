@@ -12,6 +12,7 @@ import {
 } from '@/lib/evaluation-read-model-projections';
 import { getFieldAccess, type FieldAccessTable } from '@/lib/field-permissions';
 import {
+  getPreviousSubmission,
   getSubmissionEvaluation,
   getSubmissionLogs,
   getSubmissionSummary,
@@ -24,7 +25,7 @@ import { requirePermission } from '@/lib/server/authorization';
 vi.mock('@/lib/server/authorization', () => ({ requirePermission: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    submissions: { findUnique: vi.fn() },
+    submissions: { findUnique: vi.fn(), findFirst: vi.fn() },
     submission_results: { findMany: vi.fn() },
     evaluations: { findMany: vi.fn() },
     files: { findMany: vi.fn() },
@@ -52,6 +53,7 @@ describe('Evaluation read models', () => {
     ['getSubmissionJudgingState', ['submission:read', 'submissionresult:read']],
     ['getSubmissionLogs', ['submission:read', 'submissionresult:read']],
     ['getSubmissionEvaluation', ['submission:read', 'evaluation:read']],
+    ['getPreviousSubmission', ['submission:read']],
   ] as const)('%s requires its exact reader set', async (functionName, requiredKeys) => {
     const readers = {
       getSubmissionSummary,
@@ -59,6 +61,7 @@ describe('Evaluation read models', () => {
       getSubmissionJudgingState,
       getSubmissionLogs,
       getSubmissionEvaluation,
+      getPreviousSubmission,
     } as const;
     const reader = readers[functionName];
     const required = new Set<string>(requiredKeys);

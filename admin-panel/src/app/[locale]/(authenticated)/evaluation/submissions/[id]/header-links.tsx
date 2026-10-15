@@ -16,13 +16,22 @@ function identityLink(key: string, href: string, label: string): React.JSX.Eleme
 }
 
 // Why both hrefs per entity: the record chip reaches one submission's owner, the list chip every submission of the same entity.
-export function SubmissionRecordLinks({ summary, locale, canListSubmissions }: {
+export function SubmissionRecordLinks({ summary, locale, canListSubmissions, previousId }: {
   readonly summary: SubmissionSummary;
   readonly locale: string;
   readonly canListSubmissions: boolean;
+  readonly previousId?: number;
 }): React.JSX.Element | null {
-  const links = useDictionary().submissions.record.links;
+  const record = useDictionary().submissions.record;
+  const links = record.links;
   const entries: React.JSX.Element[] = [];
+  if (previousId !== undefined) {
+    entries.push(identityLink(
+      'previous-compare',
+      buildRoute(locale, 'evaluation.submission-tabs.summary', { id: summary.id }) + '#submission-compare',
+      interpolate(record.compare.chip, { id: previousId }),
+    ));
+  }
   const listLink = (key: string, query: string, label: string): React.JSX.Element =>
     identityLink(key, buildRoute(locale, 'evaluation.submissions') + '?' + query, label);
   if (summary.user) {

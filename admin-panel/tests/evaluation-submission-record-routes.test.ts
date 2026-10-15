@@ -12,7 +12,7 @@ import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
-import { getSubmissionSummary } from '@/lib/evaluation-read-models';
+import { getPreviousSubmission, getSubmissionSummary } from '@/lib/evaluation-read-models';
 import { getSubmissionJudgingState } from '@/lib/evaluation-read-model-judging-state';
 
 vi.mock('next/navigation', () => ({
@@ -38,6 +38,7 @@ vi.mock('@/lib/evaluation-read-models', () => ({
   getSubmissionResults: vi.fn(),
   getSubmissionLogs: vi.fn(),
   getSubmissionEvaluation: vi.fn(),
+  getPreviousSubmission: vi.fn(),
 }));
 
 vi.mock('@/lib/evaluation-read-model-judging-state', () => ({
@@ -73,6 +74,7 @@ const CANONICAL_RECORD_PATHS = [
   `${RECORD_DIR}/history/error.tsx`,
   `${RECORD_DIR}/history/page.tsx`,
   'src/components/submissions/SubmissionSummaryTab.tsx',
+  'src/components/submissions/SubmissionCompareView.tsx',
   'src/components/submissions/SubmissionResultsTab.tsx',
   'src/components/submissions/SubmissionLogsTab.tsx',
   'src/components/submissions/SubmissionEvaluationTab.tsx',
@@ -210,6 +212,7 @@ beforeAll(async () => {
     },
   });
   vi.mocked(getSubmissionJudgingState).mockResolvedValue({ phase: 'done', totalScore: 100 });
+  vi.mocked(getPreviousSubmission).mockResolvedValue(null);
   const element = await SubmissionRecordLayout({
     children: createElement('div', null, 'Record body'),
     params: Promise.resolve({ locale: 'en', id: '19' }),
@@ -388,6 +391,11 @@ describe('Submission record header composition', () => {
     grant([...COMPLETE_RECORD_READER, 'submission:list']);
     vi.mocked(getSubmissionSummary).mockResolvedValue(RELATIONED);
     vi.mocked(getSubmissionJudgingState).mockResolvedValue({ phase: 'done', totalScore: 100 });
+    vi.mocked(getPreviousSubmission).mockResolvedValue({
+      submissionId: 7,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      source: null,
+    });
     const element = await SubmissionRecordLayout({
       children: createElement('div', null, 'Record body'),
       params: Promise.resolve({ locale: 'en', id: '19' }),
@@ -408,6 +416,13 @@ describe('Submission record header composition', () => {
 
   it('leads the description with the full name ahead of the handle', () => {
     expect(composedHtml).toContain('Ada Lovelace · ada');
+  });
+
+  it('links the previous submission chip to the compare section of the summary', () => {
+    expect(composedHtml).toContain(
+      'href="/en/evaluation/submissions/19/summary#submission-compare"',
+    );
+    expect(composedHtml).toContain('Compare with #7');
   });
 
   it('keeps every entity record link beside its filtered-list affordance', () => {

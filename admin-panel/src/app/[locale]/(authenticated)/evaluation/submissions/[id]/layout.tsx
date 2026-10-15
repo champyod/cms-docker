@@ -7,7 +7,7 @@ import { SubmissionRecordLiveRefresh } from '@/components/submissions/Submission
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { getSubmissionJudgingState } from '@/lib/evaluation-read-model-judging-state';
-import { getSubmissionSummary } from '@/lib/evaluation-read-models';
+import { getPreviousSubmission, getSubmissionSummary } from '@/lib/evaluation-read-models';
 import type { SubmissionJudgingState, SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { judgingPhaseLabelKey, type JudgingPhaseLabelKey } from '@/lib/evaluation-read-model-judging';
 import { interpolate } from '@/lib/interpolate';
@@ -167,14 +167,22 @@ function buildDescription(
   summary: SubmissionSummary,
   locale: string,
   canListSubmissions: boolean,
+  previousId: number | undefined,
 ): React.ReactNode {
   const identity = submissionDescription(summary);
   const hasRelations = summary.user !== null || summary.task !== null || summary.contest !== null;
-  if (identity === null && !hasRelations) return undefined;
+  // Why the previous chip counts: a submission whose relations this reader may not
+  // read still has a comparison worth reaching, so the chip alone keeps the header.
+  if (identity === null && !hasRelations && previousId === undefined) return undefined;
   return (
     <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
       {identity && <span>{identity}</span>}
-      <SubmissionRecordLinks summary={summary} locale={locale} canListSubmissions={canListSubmissions} />
+      <SubmissionRecordLinks
+        summary={summary}
+        locale={locale}
+        canListSubmissions={canListSubmissions}
+        previousId={previousId}
+      />
     </span>
   );
 }
@@ -191,12 +199,15 @@ export default async function SubmissionRecordLayout({
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   const { effective, summary } = await loadSubmissionRecord(id);
-  const judging = await loadJudgingState(id, effective);
+  const [judging, previous] = await Promise.all([
+    loadJudgingState(id, effective),
+    getPreviousSubmission(id),
+  ]);
   return (
     <DetailSurface
       breadcrumbs={recordBreadcrumbs(locale, 'evaluation', 'evaluation.submission-record', 'evaluation.submissions', dictionary)}
       title={submissionHeading(summary)}
-      description={buildDescription(summary, locale, isListPermitted(effective))}
+      description={buildDescription(summary, locale, isListPermitted(effective), previous?.submissionId)}
       status={submissionStatus(judging, summary.official, statusLabelsFor(dictionary))}
       tabs={buildSubmissionTabs(locale, id, effective, dictionary)}
       actions={

@@ -440,6 +440,16 @@
           "failed": "Comment update failed"
         }
       },
+      "compare": {
+        "chip": "Compare with #{id}",
+        "title": "Compare sources",
+        "previous": "Previous #{id}",
+        "current": "Current #{id}",
+        "loading": "Loading comparison…",
+        "equal": "No line changes between the two sources.",
+        "summary": "{added} added, {removed} removed",
+        "fetchFailed": "Could not load the source bytes."
+      },
       "toasts": {
         "officialPending": "Saving official flag...",
         "officialSaved": "Official flag saved",
