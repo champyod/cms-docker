@@ -90,6 +90,7 @@ pub async fn load_standings(
 #[derive(sqlx::FromRow)]
 struct TaskRow {
     key: String,
+    contest: String,
     score_mode: String,
 }
 
@@ -219,29 +220,35 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
     Ok(row)
 }
 
-/// The task modes the ledger replays. WHY a hidden task is dropped here and not filtered
-/// out later: the mode is what a submission resolves against, so without it the task's
-/// submissions, scores and history never enter the ledger at all, and the hide reaches
-/// the total the board prints rather than only the column the page draws.
 /// The task modes the ledger replays, and the number of task hides that named no task row.
-/// WHY a hidden task is dropped here and not filtered out later: the mode is what a
-/// submission resolves against, so without it the task's submissions, scores and history
-/// never enter the ledger at all, and the hide reaches the total the board prints rather
-/// than only the column the page draws.
+/// WHY a hidden task or a task under a hidden contest is dropped here and not filtered out
+/// later: the mode is what a submission resolves against, so without it the task's
+/// submissions, scores and history never enter the ledger at all, and the hide reaches the
+/// total the board prints rather than only the column the page draws.
+///
+/// WHY the contest is selected with the key: a task hide is scoped to the contest it is filed
+/// under, so the predicate needs both halves of the composite key the override carries.
 async fn load_tasks(
     pool: &PgPool,
     overrides: &Overrides,
 ) -> Result<(Vec<TaskMode>, usize), StoreError> {
     let rows = sqlx::query_as::<_, TaskRow>(
-        "SELECT key, score_mode FROM ranking_tasks ORDER BY display_order, key",
+        "SELECT key, contest, score_mode FROM ranking_tasks ORDER BY display_order, key",
     )
     .fetch_all(pool)
     .await?;
-    let known: HashSet<String> = rows.iter().map(|row| row.key.clone()).collect();
-    let unknown_task_hides = overrides.unknown_hidden_tasks(&known);
+    let known_pairs: HashSet<(String, String)> = rows
+        .iter()
+        .map(|row| (row.contest.clone(), row.key.clone()))
+        .collect();
+    let known_tasks: HashSet<String> = rows.iter().map(|row| row.key.clone()).collect();
+    let unknown_task_hides = overrides.unknown_hidden_tasks(&known_pairs, &known_tasks);
     let modes = rows
         .into_iter()
-        .filter(|row| !overrides.hides_task(&row.key))
+        .filter(|row| {
+            !overrides.hides_contest(&row.contest)
+                && !overrides.hides_task(&row.contest, &row.key)
+        })
         .map(|row| {
             let mode = ScoreMode::from_wire(&row.score_mode).ok_or_else(|| {
                 ScoreError::UnknownScoreMode {

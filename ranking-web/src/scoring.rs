@@ -132,8 +132,10 @@ fn project_scores(
             .map(|task| task.mode);
         let Some(mode) = mode else {
             // WHY a hidden task is not a skip: its absence from `tasks` is the hide doing
-            // its job, so counting it would report a healthy hide as malformed rows.
-            if !overrides.hides_task(&submission.task) {
+            // its job, so counting it would report a healthy hide as malformed rows. A
+            // submission carries no contest, so the replay can only ask whether some hide
+            // drops this task anywhere rather than in the contest it was filed under.
+            if !overrides.hides_task_anywhere(&submission.task) {
                 *skipped += 1;
             }
             continue;

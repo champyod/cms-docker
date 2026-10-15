@@ -69,9 +69,15 @@ const TEAMS_ONE: &str = "SELECT key, name FROM ranking_teams WHERE key = $1";
 const USERS_LIST: &str = "SELECT key, f_name, l_name, team FROM ranking_users ORDER BY key";
 const USERS_ONE: &str = "SELECT key, f_name, l_name, team FROM ranking_users WHERE key = $1";
 
-/// The entity list the page polls. WHY the task list is filtered here: a hidden task keeps
-/// its row, its dataset and its metadata, and only the board drops it, so the column has
-/// to leave the list the page builds from rather than the row itself.
+/// The entity list the page polls. WHY it is filtered here: a hidden contest or task keeps
+/// its row, its dataset and its metadata, and only the board drops it, so the target has to
+/// leave the list the page builds from rather than the row itself.
+///
+/// WHY one small load feeds both arms: a contest hide drops the contest and every task filed
+/// under it, and a task hide drops a task only inside its contest, so the contest list and the
+/// task list read one interpretation rather than two. The load is the one-query
+/// `load_hidden_tasks`, not the whole override fold, because /tasks/ is polled constantly and
+/// needs no user, team or score override.
 pub async fn list_body(
     pool: &PgPool,
     kind: Kind,
@@ -79,7 +85,12 @@ pub async fn list_body(
 ) -> Result<Vec<u8>, StoreError> {
     match kind {
         Kind::Contest => {
-            let rows = rows::<Contest>(pool, CONTESTS_LIST).await?;
+            let hidden = load_hidden_tasks(pool, contest_id).await?;
+            let rows: Vec<Contest> = rows::<Contest>(pool, CONTESTS_LIST)
+                .await?
+                .into_iter()
+                .filter(|contest| !hidden.hides_contest(&contest.key))
+                .collect();
             encode(&map_by_key(rows))
         }
         Kind::Task => {
@@ -87,7 +98,10 @@ pub async fn list_body(
             let rows: Vec<Task> = rows::<Task>(pool, TASKS_LIST)
                 .await?
                 .into_iter()
-                .filter(|task| !hidden.contains(&task.key))
+                .filter(|task| {
+                    !hidden.hides_contest(&task.contest)
+                        && !hidden.hides_task(&task.contest, &task.key)
+                })
                 .collect();
             encode(&map_by_key(rows))
         }
