@@ -28,7 +28,11 @@ const ORDER_BY_KEY: Record<ContestSortKey, (direction: 'asc' | 'desc') => Prisma
   participants: (direction) => [{ participations: { _count: direction } }],
 };
 
+// Why the active contest leads the default order: the row is the one the stack is running on,
+// so an unsorted list must open on it rather than on the lowest id.
+const DEFAULT_ORDER_BY: Prisma.contestsOrderByWithRelationInput[] = [{ is_active: 'desc' }, { id: 'asc' }];
+
 export function contestSortOrderBy(sort: ListSortInput): Prisma.contestsOrderByWithRelationInput[] {
-  if (sort == null || !isContestSortKey(sort.key)) return [{ id: 'asc' }];
+  if (sort == null || !isContestSortKey(sort.key)) return DEFAULT_ORDER_BY;
   return ORDER_BY_KEY[sort.key](sort.direction);
 }
