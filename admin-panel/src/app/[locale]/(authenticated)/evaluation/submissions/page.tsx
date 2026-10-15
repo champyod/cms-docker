@@ -114,7 +114,10 @@ export default async function EvaluationSubmissionsPage({
   const canRecalculate = RECALC_GATE_KEYS.every((key) =>
     hasEffectivePermission(result.effectivePermissions, key),
   );
+  // Why the same key: the official flag and the comment field are both governed by
+  // `submission:update`, so one resolved value gates both controls.
   const canOfficial = hasEffectivePermission(result.effectivePermissions, 'submission:update');
+  const canComment = canOfficial;
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
@@ -131,6 +134,7 @@ export default async function EvaluationSubmissionsPage({
         filters={filters}
         canRecalculate={canRecalculate}
         canOfficial={canOfficial}
+        canComment={canComment}
       />
     </PageSurface>
   );

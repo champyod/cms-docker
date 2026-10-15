@@ -324,6 +324,7 @@
       "reevaluate": "Re-evaluate",
       "full": "Full re-run",
       "official": "Mark official",
+      "comment": "Apply comment",
       "applyToFilter": "Apply to all {count} matching the filter"
     },
     "actions": {
@@ -418,6 +419,21 @@
         "label": "Comment",
         "save": "Save comment",
         "lastEdited": "Last edited by {name} · {time}",
+        "snippetsLabel": "Canned comments",
+        "snippets": [
+          "Wrong answer on edge cases.",
+          "Time limit exceeded — optimize the solution.",
+          "Compilation error — check the submitted files.",
+          "Please follow the required output format.",
+          "Rejudged after a checker fix.",
+          "Accepted — nice work."
+        ],
+        "applyTitle": "Apply comment",
+        "applyDescription": "The comment is stored on every submission in scope and is visible to every reader who may open it.",
+        "applyConfirm": "Apply comment",
+        "applyEmpty": "A comment is required",
+        "applyPreviewLoading": "Counting matching submissions…",
+        "applyFailed": "Could not apply the comment",
         "toasts": {
           "pending": "Saving comment...",
           "saved": "Comment saved",

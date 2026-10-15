@@ -13,39 +13,13 @@ import { useDictionary } from '@/hooks/useDictionary';
 import { useUnsavedChangesGuard, type DismissReason } from '@/hooks/useUnsavedChangesGuard';
 import { interpolate } from '@/lib/interpolate';
 
-const MAX_COMMENT_LENGTH = 2000;
-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+import { CommentEditor } from './CommentEditor';
 
 export interface SubmissionCommentDialogProps {
   readonly submissionId: number;
   readonly comment: string;
   /** The newest recorded edit, once the record page has history to show. */
   readonly lastEdited?: { readonly name: string; readonly timestamp: string };
-}
-
-function CommentEditor({ value, saving, label, onChange }: {
-  readonly value: string;
-  readonly saving: boolean;
-  readonly label: string;
-  readonly onChange: (value: string) => void;
-}): React.JSX.Element {
-  return (
-    <>
-      <label htmlFor="submission-comment" className="text-sm font-medium text-foreground ml-1">{label}</label>
-      <textarea
-        id="submission-comment"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={4}
-        maxLength={MAX_COMMENT_LENGTH}
-        disabled={saving}
-        className={FIELD_CLASSES}
-      />
-      <p aria-hidden="true" className="text-right text-xs text-muted-foreground">
-        {value.length + ' / ' + MAX_COMMENT_LENGTH}
-      </p>
-    </>
-  );
 }
 
 function LastEditedLine({ lastEdited }: {
@@ -119,7 +93,7 @@ export function SubmissionCommentDialog({ submissionId, comment, lastEdited }: S
         description={copy.description}
         pending={saving}
       >
-        <CommentEditor value={value} saving={saving} label={copy.label} onChange={setValue} />
+        <CommentEditor value={value} disabled={saving} onChange={setValue} />
         {lastEdited && <LastEditedLine lastEdited={lastEdited} />}
         <DialogFooter>
           <Button variant="secondary" size="sm" onClick={() => guard.requestClose('close')} disabled={saving}>
