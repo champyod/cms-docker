@@ -40,13 +40,23 @@ export function toOutcome(value: unknown): string | null {
 // field permission removed. Identity columns are the exception because each one is
 // bound to a key its reader already required, which the projection cannot drop.
 export function readUser(
-  relation: { id: number; username: string } | null,
+  relation: { id: number; username: string; first_name: string | null; last_name: string | null } | null,
   permissions: ReadonlySet<string>,
 ): SubmissionSummary['user'] {
   if (!relation || !hasEffectivePermission(permissions, 'user:read')) return null;
-  const visible = filterReadableFields('users', { id: relation.id, username: relation.username }, permissions);
+  const visible = filterReadableFields('users', {
+    id: relation.id,
+    username: relation.username,
+    first_name: relation.first_name,
+    last_name: relation.last_name,
+  }, permissions);
   if (visible.id === undefined || visible.username === undefined) return null;
-  return { id: visible.id, username: visible.username };
+  return {
+    id: visible.id,
+    username: visible.username,
+    firstName: visible.first_name ?? null,
+    lastName: visible.last_name ?? null,
+  };
 }
 
 export function readContest(

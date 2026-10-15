@@ -5,14 +5,14 @@ import { AlertCircle, ArrowRight } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
-import type { Dictionary } from '@/lib/dictionary';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { SubmissionSourceModel, SubmissionSummary } from '@/lib/evaluation-read-model-types';
+import { interpolate } from '@/lib/interpolate';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteId } from '@/lib/navigation/types';
 
-import { SubmissionActionBar } from './SubmissionActionBar';
 import { SubmissionSourceViewer } from './SubmissionSourceViewer';
 
 export interface SubmissionSummaryTabProps {
@@ -20,47 +20,22 @@ export interface SubmissionSummaryTabProps {
   /** Null when the submission stores no file. */
   readonly source: SubmissionSourceModel | null;
   readonly permissionKeys: readonly string[];
-  readonly navigation: Dictionary['navigation'];
   readonly locale: 'en' | 'th';
 }
 
-function identityLink(href: string, label: string): React.JSX.Element {
-  return (
-    <Link href={href} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full font-mono">
-      {label}
-    </Link>
-  );
-}
-
-// Why the omission: a relation the reader may not read is null in the summary,
-// and a link to a record that would 404 tells them the row exists.
-function relationLinks(summary: SubmissionSummary, locale: 'en' | 'th'): React.JSX.Element {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {summary.user && identityLink(buildRoute(locale, 'people.user-record', { id: summary.user.id }), summary.user.username)}
-      {summary.task && identityLink(buildRoute(locale, 'tasks.record', { id: summary.task.id }), summary.task.name)}
-      {summary.contest && identityLink(buildRoute(locale, 'contests.record', { id: summary.contest.id }), summary.contest.name)}
-    </div>
-  );
-}
-
-function SummaryIdentity({ summary, locale }: {
-  readonly summary: SubmissionSummary;
-  readonly locale: 'en' | 'th';
-}): React.JSX.Element {
+function SummaryIdentity({ summary }: { readonly summary: SubmissionSummary }): React.JSX.Element {
   // Why: a submission belongs to no contest context on this route, so its instant reads in the
   // reviewer's own zone.
   const formatTimestamp = useFormatTimestamp();
+  const record = useDictionary().submissions.record;
   return (
     <Card className="space-y-4">
       <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
-        <span>Time: {formatTimestamp(summary.timestamp)}</span>
-        <span>Language: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
-        <span>Official: <span className="font-medium text-foreground">{summary.official ? 'Yes' : 'No'}</span></span>
+        <span>{record.identity.time}: {formatTimestamp(summary.timestamp)}</span>
+        <span>{record.identity.language}: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
       </div>
-      {relationLinks(summary, locale)}
       <div className="text-sm">
-        <span className="text-muted-foreground">Comment: </span>
+        <span className="text-muted-foreground">{record.comment.label}: </span>
         <span className="text-foreground">{summary.comment || '—'}</span>
       </div>
     </Card>
@@ -84,47 +59,41 @@ function reachableTabHref(
 // does not grant, so this card offers the tab that owns the state and shows no
 // state of its own. The icon is a navigation affordance, never a spinner.
 function OutcomeCard({ title, href }: { readonly title: string; readonly href: string | null }): React.JSX.Element {
+  const copy = useDictionary().submissions.record.outcome;
   return (
     <div className="bg-muted/40 rounded-xl p-4 border border-border">
       <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">{title}</h3>
       {href ? (
         <Link className="font-medium inline-flex items-center gap-2" href={href}>
-          Open {title.toLowerCase()}
+          {interpolate(copy.open, { title })}
           <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </Link>
       ) : (
         <span className="text-sm text-muted-foreground font-medium inline-flex items-center gap-2">
           <AlertCircle className="w-5 h-5" aria-hidden="true" />
-          {title} not readable
+          {interpolate(copy.unreadable, { title })}
         </span>
       )}
     </div>
   );
 }
 
-export function SubmissionSummaryTab({ summary, source, permissionKeys, navigation, locale }: SubmissionSummaryTabProps): React.JSX.Element {
+export function SubmissionSummaryTab({ summary, source, permissionKeys, locale }: SubmissionSummaryTabProps): React.JSX.Element {
+  const outcome = useDictionary().submissions.record.outcome;
   return (
     <div className="space-y-6">
-      <SummaryIdentity summary={summary} locale={locale} />
+      <SummaryIdentity summary={summary} />
       <SubmissionSourceViewer source={source} />
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OutcomeCard
-          title="Compilation"
+          title={outcome.compilation}
           href={reachableTabHref('evaluation.submission-tabs.results', locale, summary.id, permissionKeys)}
         />
         <OutcomeCard
-          title="Evaluation"
+          title={outcome.evaluation}
           href={reachableTabHref('evaluation.submission-tabs.evaluation', locale, summary.id, permissionKeys)}
         />
       </div>
-      <SubmissionActionBar
-        submissionId={summary.id}
-        capabilities={summary.capabilities}
-        comment={summary.comment}
-        official={summary.official}
-        entries={['recompute', 'download', 'comment', 'official']}
-        navigation={navigation}
-      />
     </div>
   );
 }

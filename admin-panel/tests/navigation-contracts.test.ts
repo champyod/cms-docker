@@ -135,10 +135,10 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(58);
+    expect(ROUTE_REGISTRY).toHaveLength(59);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
-    // the Submission record landing with its four tabs, and the Administration
+    // the Submission record landing with its five tabs, and the Administration
     // and System groups prove Admins, Groups, Audit, Appearance, Maintenance,
     // Settings, and Docs, so those descriptors join the direct three and the
     // Contest, Task, User, and Team routes in registry order.
@@ -175,6 +175,7 @@ describe('target route registry', () => {
       'evaluation.submission-tabs.results',
       'evaluation.submission-tabs.logs',
       'evaluation.submission-tabs.evaluation',
+      'evaluation.submission-tabs.history',
       'evaluation.lanes',
       ...SECURITY_ROUTE_IDS,
       ...ADMINISTRATION_ROUTE_IDS,

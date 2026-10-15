@@ -31,14 +31,14 @@ const SUBMISSION_SUMMARY_SELECT = {
   official: true,
   participations: {
     select: {
-      users: { select: { id: true, username: true } },
+      users: { select: { id: true, username: true, first_name: true, last_name: true } },
       contests: { select: { id: true, name: true } },
     },
   },
   tasks: { select: { id: true, name: true, title: true } },
 } as const;
 
-const SUBMISSION_RESULT_SELECT = {
+export const SUBMISSION_RESULT_SELECT = {
   dataset_id: true,
   compilation_outcome: true,
   evaluation_outcome: true,

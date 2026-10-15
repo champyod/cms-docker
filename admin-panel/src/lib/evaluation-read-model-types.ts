@@ -1,10 +1,19 @@
+export const SUBMISSION_JUDGING_PHASES = ['judging', 'compiling', 'compilation-failed', 'evaluating', 'scoring', 'done'] as const;
+
+export type SubmissionJudgingPhase = (typeof SUBMISSION_JUDGING_PHASES)[number];
+
+export interface SubmissionJudgingState {
+  readonly phase: SubmissionJudgingPhase;
+  readonly totalScore: number | null;
+}
+
 export interface SubmissionSummary {
   id: number;
   timestamp: string;
   language: string | null;
   comment: string;
   official: boolean;
-  user: { id: number; username: string } | null;
+  user: { id: number; username: string; firstName: string | null; lastName: string | null } | null;
   contest: { id: number; name: string } | null;
   task: { id: number; name: string; title: string } | null;
   capabilities: {

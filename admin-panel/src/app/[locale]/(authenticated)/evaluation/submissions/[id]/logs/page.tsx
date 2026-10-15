@@ -1,6 +1,5 @@
 import { notFound } from 'next/navigation';
 import { SubmissionLogsTab } from '@/components/submissions/SubmissionLogsTab';
-import { getDictionary } from '@/i18n';
 import { getSubmissionLogs } from '@/lib/evaluation-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -23,11 +22,10 @@ async function authorizeSubmissionTab(routeId: RouteId): Promise<ReadonlySet<str
 }
 
 export default async function SubmissionLogsPage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
-  const { locale, id: rawId } = await params;
+  const { id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   await authorizeSubmissionTab('evaluation.submission-tabs.logs');
-  const dictionary = await getDictionary(locale);
   const model = await readRecordOrNotFound(() => getSubmissionLogs(id));
-  return <SubmissionLogsTab model={model} navigation={dictionary.navigation} />;
+  return <SubmissionLogsTab model={model} submissionId={id} />;
 }

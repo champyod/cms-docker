@@ -225,14 +225,15 @@ describe('official flag confirmation copy', () => {
     expect(thai.title).not.toBe(english.title);
   });
 
-  it('leaves no hand-built official confirmation in the action bar', () => {
+  it('keeps every official confirmation out of the action bar, whose switch toggles without a prompt', () => {
     const source = readFileSync(
       resolve(__dirname, '..', 'src/components/submissions/SubmissionActionBar.tsx'),
       'utf8',
     );
 
     expect(source).not.toContain('OFFICIAL_CONFIRMATION');
-    expect(source).toContain('toggleOfficialConfirm()');
+    expect(source).not.toContain('toggleOfficialConfirm()');
+    expect(source).toContain("role=\"switch\"");
   });
 });
 

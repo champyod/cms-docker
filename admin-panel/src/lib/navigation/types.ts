@@ -34,6 +34,7 @@ export type RouteId =
   | 'evaluation.submission-tabs.results'
   | 'evaluation.submission-tabs.logs'
   | 'evaluation.submission-tabs.evaluation'
+  | 'evaluation.submission-tabs.history'
   | 'evaluation.lanes'
   | 'administration.admins'
   | 'administration.groups'

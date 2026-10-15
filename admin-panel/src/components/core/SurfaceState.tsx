@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 export type SurfaceStatus =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading'; readonly title?: string }
+  | { readonly kind: 'info'; readonly title: string }
   | {
       readonly kind: 'error' | 'empty' | 'not-found';
       readonly title: string;
@@ -26,6 +27,20 @@ export function SurfaceState({
   if (status.kind === 'idle') return null;
   if (status.kind === 'loading') {
     return <Loading text={status.title ?? 'Loading...'} className={cn('min-h-44', className)} />;
+  }
+  if (status.kind === 'info') {
+    return (
+      <span
+        role="status"
+        aria-live="polite"
+        className={cn(
+          'inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-foreground',
+          className,
+        )}
+      >
+        {status.title}
+      </span>
+    );
   }
 
   return (

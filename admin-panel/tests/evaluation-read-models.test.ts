@@ -1,5 +1,10 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
+  judgedTotalScore,
+  judgingPhaseFor,
+  judgingPhaseOf,
+} from '@/lib/evaluation-read-model-judging';
+import {
   toSubmissionEvaluationRow,
   toSubmissionFileRow,
   toSubmissionLogRow,
@@ -12,6 +17,7 @@ import {
   getSubmissionSummary,
   getSubmissionResults,
 } from '@/lib/evaluation-read-models';
+import { getSubmissionJudgingState } from '@/lib/evaluation-read-model-judging-state';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/server/authorization';
 
@@ -43,12 +49,14 @@ describe('Evaluation read models', () => {
   it.each([
     ['getSubmissionSummary', ['submission:read']],
     ['getSubmissionResults', ['submission:read', 'submissionresult:read', 'file:read']],
+    ['getSubmissionJudgingState', ['submission:read', 'submissionresult:read']],
     ['getSubmissionLogs', ['submission:read', 'submissionresult:read']],
     ['getSubmissionEvaluation', ['submission:read', 'evaluation:read']],
   ] as const)('%s requires its exact reader set', async (functionName, requiredKeys) => {
     const readers = {
       getSubmissionSummary,
       getSubmissionResults,
+      getSubmissionJudgingState,
       getSubmissionLogs,
       getSubmissionEvaluation,
     } as const;
@@ -71,11 +79,13 @@ describe('Evaluation read models', () => {
 
   it.each([
     ['getSubmissionResults', ['submission:read', 'submissionresult:read', 'file:read'], 'submissionresult:read'],
+    ['getSubmissionJudgingState', ['submission:read', 'submissionresult:read'], 'submissionresult:read'],
     ['getSubmissionLogs', ['submission:read', 'submissionresult:read'], 'submissionresult:read'],
     ['getSubmissionEvaluation', ['submission:read', 'evaluation:read'], 'evaluation:read'],
   ] as const)('%s rejects a partial reader set before querying', async (functionName, requiredKeys, missingKey) => {
     const readers = {
       getSubmissionResults,
+      getSubmissionJudgingState,
       getSubmissionLogs,
       getSubmissionEvaluation,
     } as const;
@@ -101,6 +111,16 @@ describe('Evaluation read models', () => {
     expect(mockResultsFindMany).toHaveBeenCalledTimes(1);
     expect(mockEvaluationsFindMany).not.toHaveBeenCalled();
     expect(mockFilesFindMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the Judging reader inside the results table and never touches the file tables', async () => {
+    mockRequirePermission.mockResolvedValue(new Set(['submission:read', 'submissionresult:read']));
+
+    await getSubmissionJudgingState(19);
+
+    expect(mockResultsFindMany).toHaveBeenCalledTimes(1);
+    expect(mockEvaluationsFindMany).not.toHaveBeenCalled();
+    expect(mockFilesFindMany).not.toHaveBeenCalled();
   });
 
   it('keeps the Logs reader inside the results table', async () => {
@@ -247,6 +267,41 @@ describe('Evaluation file, log and evaluation field filtering', () => {
 // accept the results table, so this stops compiling the moment the brand is dropped.
 type IsExactly<Left, Right> = (<Value>() => Value extends Left ? 1 : 2) extends (<Value>() => Value extends Right ? 1 : 2) ? true : false;
 const tablesAreNotInterchangeable: IsExactly<FieldAccessTable<'files'>, FieldAccessTable<'submission_results'>> = false;
+
+describe('Judging phase projection', () => {
+  const done = { compilationOutcome: 'ok', evaluationOutcome: 'ok', score: 100 };
+
+  it.each([
+    [{ ...done, compilationOutcome: null }, 'compiling'],
+    [{ ...done, compilationOutcome: 'fail' }, 'compilation-failed'],
+    [{ ...done, evaluationOutcome: null }, 'evaluating'],
+    [{ ...done, score: null }, 'scoring'],
+    [done, 'done'],
+  ] as const)('derives %s as %s exactly like the Results tab', (row, phase) => {
+    expect(judgingPhaseOf(row)).toBe(phase);
+  });
+
+  it('reads no result rows as judging rather than as an unknown state', () => {
+    expect(judgingPhaseFor([])).toBe('judging');
+  });
+
+  it('reports the first dataset that is not done yet', () => {
+    expect(judgingPhaseFor([done, { ...done, score: null }])).toBe('scoring');
+    expect(judgingPhaseFor([done, done])).toBe('done');
+  });
+
+  it('sums every scored dataset into the record total', () => {
+    expect(judgedTotalScore([{ score: 40 }, { score: 60 }])).toBe(100);
+  });
+
+  it('withholds the total while any dataset is unscored', () => {
+    expect(judgedTotalScore([{ score: 40 }, { score: null }])).toBeNull();
+  });
+
+  it('withholds the total when no dataset exists yet', () => {
+    expect(judgedTotalScore([])).toBeNull();
+  });
+});
 
 describe('Field access table branding', () => {
   it('keeps one entity access table from standing in for another', () => {

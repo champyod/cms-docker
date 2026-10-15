@@ -63,8 +63,24 @@ async function openStream(load: () => Promise<{ GET: (request: Request) => Promi
 
 /** The stream URL a surface hands its LiveRefresh, read from the element tree it returns. */
 function liveStreamUrl(element: ReactElement): string | undefined {
-  const actions = (element.props as { actions?: ReactElement<{ url?: string }> }).actions;
-  return actions?.props.url;
+  const actions = (element.props as { actions?: ReactElement }).actions;
+  return findLiveUrl(actions);
+}
+
+// Why a walk: a record layout groups its LiveRefresh with the action bar in one fragment, so actions is not the leaf.
+function findLiveUrl(node: unknown): string | undefined {
+  if (node === null || typeof node !== 'object') return undefined;
+  const element = node as ReactElement<{ url?: string; children?: unknown }>;
+  if (typeof element.props?.url === 'string') return element.props.url;
+  const children = element.props?.children;
+  if (Array.isArray(children)) {
+    for (const child of children) {
+      const found = findLiveUrl(child);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  }
+  return children === undefined ? undefined : findLiveUrl(children);
 }
 
 const GRANTED_READERS = ['submission:list', 'submission:read'];

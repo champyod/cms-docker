@@ -79,7 +79,7 @@ describe('people and evaluation bilingual navigation parity', () => {
     const cases = [
       ['navigation.people.user-tabs', ['profile', 'teams', 'history']],
       ['navigation.people.team-tabs', ['overview', 'members', 'contests']],
-      ['navigation.evaluation.submission-tabs', ['summary', 'results', 'logs', 'evaluation']],
+      ['navigation.evaluation.submission-tabs', ['summary', 'results', 'logs', 'evaluation', 'history']],
     ] as const;
     for (const [path, expected] of cases) {
       expect(childKeys(en, path)).toEqual([...expected]);

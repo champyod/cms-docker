@@ -27,7 +27,7 @@ export function DetailSurface({
   children,
   className,
 }: DetailSurfaceProps): React.JSX.Element {
-  const hasBlockingStatus = status !== undefined && status.kind !== 'idle';
+  const hasBlockingStatus = status !== undefined && status.kind !== 'idle' && status.kind !== 'info';
   return (
     <section
       data-surface="detail"

@@ -1,16 +1,33 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { expectTypeOf } from 'vitest';
 import en from '@/dictionaries/en.json';
+import { toggleSubmissionOfficial } from '@/app/actions/submissions';
 import type { SubmissionSummary } from '@/lib/evaluation-read-model-types';
-import { SubmissionActionBar, type SubmissionActionEntry } from '@/components/submissions/SubmissionActionBar';
+import {
+  SubmissionActionBar,
+  type SubmissionActionEntry,
+  type SubmissionActionBarProps,
+} from '@/components/submissions/SubmissionActionBar';
 import { SubmissionSummaryTab } from '@/components/submissions/SubmissionSummaryTab';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
+import { buildRoute } from '@/lib/navigation/routes';
 
 afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+}));
+
+vi.mock('@/app/actions/submissions', () => ({
+  recalculateSubmission: vi.fn(async () => ({ success: true })),
+  toggleSubmissionOfficial: vi.fn(async () => ({ success: true })),
+  updateSubmissionComment: vi.fn(async () => ({ success: true })),
+}));
+
+vi.mock('@/app/actions/tasks', () => ({
+  getTaskDatasets: vi.fn(async () => null),
 }));
 
 const ALL_ENTRIES: readonly SubmissionActionEntry[] = ['recompute', 'download', 'comment', 'official', 'lane'];
@@ -31,7 +48,11 @@ const ALL_CAPABILITIES: Capabilities = {
   canMoveLane: true,
 };
 
-function renderBar(capabilities: Capabilities, entries: readonly SubmissionActionEntry[] = ALL_ENTRIES): HTMLElement {
+function renderBar(
+  capabilities: Capabilities,
+  entries: readonly SubmissionActionEntry[] = ALL_ENTRIES,
+  extra: { lockHintKeys?: readonly string[] } = {},
+): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
       <SubmissionActionBar
@@ -40,7 +61,8 @@ function renderBar(capabilities: Capabilities, entries: readonly SubmissionActio
         comment="needs review"
         official={false}
         entries={entries}
-        navigation={en.navigation}
+        taskId={3}
+        {...extra}
       />
     </DictionaryProvider>,
   );
@@ -60,15 +82,16 @@ describe('SubmissionActionBar capability gating', () => {
     expect(container.textContent).not.toContain('Rescore');
     expect(container.textContent).not.toContain('Download files');
     expect(container.textContent).not.toContain('Move lane');
+    expect(container.textContent).not.toContain('Re-run');
   });
 
   it.each([
     ['canRecompute', 'Rescore'],
     ['canRecompute', 'Re-evaluate'],
-    ['canRecompute', 'Full Re-run'],
+    ['canRecompute', 'Re-run'],
     ['canDownload', 'Download files'],
     ['canUpdate', 'Edit comment'],
-    ['canUpdate', 'Mark official'],
+    ['canUpdate', 'Official off'],
     ['canMoveLane', 'Move lane'],
   ] as const)('hides the %s entry %s when only its flag is false', (capability, label) => {
     const container = renderBar({ ...ALL_CAPABILITIES, [capability]: false });
@@ -79,10 +102,12 @@ describe('SubmissionActionBar capability gating', () => {
     const labels = controlLabels(renderBar(ALL_CAPABILITIES));
     expect(labels).toContain('Rescore');
     expect(labels).toContain('Re-evaluate');
-    expect(labels).toContain('Full Re-run');
+    expect(labels).toContain('Re-run');
     expect(labels).toContain('Download files');
     expect(labels).toContain('Edit comment');
+    expect(labels).toContain('Official off');
     expect(labels).toContain('Move lane');
+    expect(labels).not.toContain('Full Re-run');
   });
 
   it('opens the comment editor in a dialog rather than a prompt', () => {
@@ -93,9 +118,89 @@ describe('SubmissionActionBar capability gating', () => {
     expect(document.body.innerHTML).not.toContain('window.prompt');
   });
 
-  it('renders only the entries its owning tab asked for', () => {
+  it('renders only the entries its owning surface asked for', () => {
     const labels = controlLabels(renderBar(ALL_CAPABILITIES, ['download']));
     expect(labels).toEqual(['Download files']);
+  });
+});
+
+describe('SubmissionActionBar toolbar accessibility', () => {
+  it('names the toolbar after the submission it acts on', () => {
+    const toolbar = renderBar(ALL_CAPABILITIES).querySelector('[role="toolbar"]');
+    expect(toolbar?.getAttribute('aria-label')).toBe('Submission #19 actions');
+  });
+
+  it('reserves an aria-hidden spinner slot in every pending-capable control so labels never shift', () => {
+    const container = renderBar(ALL_CAPABILITIES);
+    for (const label of ['Download files']) {
+      const button = [...container.querySelectorAll('button')]
+        .find((candidate) => candidate.textContent?.trim() === label);
+      expect(button?.querySelector('span[aria-hidden="true"]'), label).not.toBeNull();
+    }
+    expect(container.querySelectorAll('.animate-spin')).toHaveLength(0);
+  });
+
+  it('keeps Full Re-run out of the segmented group and behind the Re-run menu', () => {
+    renderBar(ALL_CAPABILITIES);
+    const segmented = document.querySelector('.bg-muted');
+    expect(segmented?.textContent).toContain('Rescore');
+    expect(segmented?.textContent).toContain('Re-evaluate');
+    expect(segmented?.textContent).not.toContain('Full Re-run');
+    const trigger = screen.getByRole('button', { name: 'Re-run' });
+    expect(trigger.getAttribute('aria-haspopup')).toBe('menu');
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('menuitem', { name: 'Full Re-run' })).not.toBeNull();
+  });
+});
+
+describe('SubmissionActionBar official switch', () => {
+  it('renders the stored state as an inline switch and calls the atomic action on toggle', async () => {
+    renderBar(ALL_CAPABILITIES);
+
+    const control = screen.getByRole('switch');
+    expect(control.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(control);
+
+    await waitFor(() => expect(toggleSubmissionOfficial).toHaveBeenCalledWith(19));
+  });
+
+  it('announces the state through the switch label itself', () => {
+    renderBar(ALL_CAPABILITIES);
+    expect(screen.getByRole('switch').textContent).toBe('Official off');
+  });
+});
+
+describe('SubmissionActionBar lock hint', () => {
+  it('names the missing keys of a partially granted capability group outside the toolbar', () => {
+    const container = renderBar(ALL_CAPABILITIES, ALL_ENTRIES, {
+      lockHintKeys: ['evaluation:delete', 'submissionresult:delete'],
+    });
+
+    expect(container.textContent).toContain('Read-only — you lack evaluation:delete, submissionresult:delete');
+    expect(container.querySelector('[role="toolbar"]')?.textContent).not.toContain('Read-only');
+  });
+
+  it('stays silent without a partial grant', () => {
+    const container = renderBar(ALL_CAPABILITIES, ALL_ENTRIES, { lockHintKeys: [] });
+    expect(container.textContent).not.toContain('Read-only');
+  });
+});
+
+describe('SubmissionActionBar entry/data coupling', () => {
+  it('requires the comment and official data props once their entries appear', () => {
+    expectTypeOf<SubmissionActionBarProps<readonly ['download', 'comment']>>().toMatchTypeOf<{ comment: string }>();
+    expectTypeOf<SubmissionActionBarProps<readonly ['download', 'official']>>().toMatchTypeOf<{ official: boolean }>();
+    expectTypeOf<SubmissionActionBarProps<readonly ['recompute', 'download', 'comment', 'official', 'lane']>>()
+      .toMatchTypeOf<{ comment: string; official: boolean }>();
+  });
+
+  it('forbids the data props while the matching entry is absent', () => {
+    expectTypeOf<SubmissionActionBarProps<readonly ['download']>>()
+      .toMatchTypeOf<{ comment?: undefined; official?: undefined }>();
+    expectTypeOf<SubmissionActionBarProps<readonly ['recompute', 'lane']>>()
+      .toMatchTypeOf<{ comment?: undefined }>();
   });
 });
 
@@ -105,7 +210,7 @@ const SUMMARY: SubmissionSummary = {
   language: 'cpp',
   comment: 'needs review',
   official: true,
-  user: { id: 4, username: 'ada' },
+  user: { id: 4, username: 'ada', firstName: 'Ada', lastName: 'Lovelace' },
   contest: { id: 2, name: 'Thailand Cup' },
   task: { id: 3, name: 'sum', title: 'Sum' },
   capabilities: NO_CAPABILITIES,
@@ -118,7 +223,6 @@ function renderSummary(permissionKeys: readonly string[]): HTMLElement {
         summary={SUMMARY}
         source={null}
         permissionKeys={permissionKeys}
-        navigation={en.navigation}
         locale="en"
       />
     </DictionaryProvider>,
@@ -146,6 +250,13 @@ describe('SubmissionSummaryTab tab links', () => {
   ])('omits the outcome link the reader set %s cannot open', (permissionKeys, forbiddenHref) => {
     expect(anchorHrefs(renderSummary(permissionKeys))).not.toContain(forbiddenHref);
   });
+
+  it('leaves the entity record links to the record header', () => {
+    const hrefs = anchorHrefs(renderSummary(COMPLETE_KEYS));
+    expect(hrefs).not.toContain(buildRoute('en', 'people.user-record', { id: 4 }));
+    expect(hrefs).not.toContain(buildRoute('en', 'tasks.record', { id: 3 }));
+    expect(hrefs).not.toContain(buildRoute('en', 'contests.record', { id: 2 }));
+  });
 });
 
 describe('SubmissionSummaryTab status presentation', () => {
@@ -157,7 +268,7 @@ describe('SubmissionSummaryTab status presentation', () => {
     expect(renderSummary(COMPLETE_KEYS).querySelectorAll('.animate-spin')).toHaveLength(0);
   });
 
-  it('leaves the status derivation to the Results tab', () => {
+  it('leaves the status derivation to the record header and the Results tab', () => {
     const container = renderSummary(COMPLETE_KEYS);
     for (const status of ['Compiling', 'Compilation Failed', 'Evaluating', 'Scoring', 'Done']) {
       expect(container.textContent, status).not.toContain(status);
