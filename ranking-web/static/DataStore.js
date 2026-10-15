@@ -653,6 +653,15 @@ var DataStore = new function () {
         return hit !== null && hit["action"] === "hide";
     };
 
+    /* A task hide is an override like any other, so it is read from the one map every
+       override is read from: the panel writes it while the page is open, and the control
+       event that refetches the overrides is what has to drop the column.
+     */
+    self.is_task_hidden = function (key) {
+        var hit = self.override_for("task", key);
+        return hit !== null && hit["action"] === "hide";
+    };
+
     self.rename_for = function (key) {
         var hit = self.override_for("user", key);
         if (hit !== null && hit["action"] === "rename" && hit["value"]) return hit["value"];

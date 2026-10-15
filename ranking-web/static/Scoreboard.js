@@ -131,13 +131,44 @@ var Scoreboard = new function () {
             }
         }
         self.frozen = next;
+        self.render();
+    };
+
+    /* Draws the whole table from the store: the column set, the head and the body. The
+       override event carries a task hide, which moves a column, so the columns are redrawn
+       with the rows; redrawing the rows alone would keep the hidden task's column standing
+       until a reload.
+     */
+    self.render = function () {
+        self.tcols_el.html(self.make_cols());
+        self.thead_el.html(self.make_head());
         self.rebuild();
+        self.mark_sort_key();
+    };
+
+    /* The board is sorted on a drawn column, so the marker belongs to the column the key
+       names, in the head and in every row.
+     */
+    self.mark_sort_key = function () {
+        $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).addClass("sort_key");
+        $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).addClass("sort_key");
+        $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).addClass("sort_key");
     };
 
     self.rebuild = function () {
         self.tbody_el.empty();
         self.user_list = new Array();
         self.make_body();
+    };
+
+    /* The tasks the board draws a column for: a hidden task keeps its row, its dataset and
+       its metadata, so the list the page loads already leaves it out and the board's own
+       list has to leave it out too.
+     */
+    self.board_tasks = function (contest) {
+        return contest["tasks"].filter(function (task) {
+            return !DataStore.is_task_hidden(task["key"]);
+        });
     };
 
     self.visible_users = function () {
@@ -158,9 +189,6 @@ var Scoreboard = new function () {
 
 
     self.generate = function () {
-        self.tcols_el.html(self.make_cols());
-        self.thead_el.html(self.make_head());
-
         // Create callbacks for sorting
         self.thead_el.on("click", "th.score", function () {
             $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).removeClass("sort_key");
@@ -179,18 +207,11 @@ var Scoreboard = new function () {
 
             self.sort();
 
-            $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).addClass("sort_key");
-            $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).addClass("sort_key");
-            $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).addClass("sort_key");
+            self.mark_sort_key();
         });
 
         self.sort_key = "global";
-        self.make_body();
-
-        // Set initial style
-        $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).addClass("sort_key");
-        $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).addClass("sort_key");
-        $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).addClass("sort_key");
+        self.render();
 
         // Create callbacks for selection
         self.tbody_el.on("click", "td.sel", function () {
@@ -269,7 +290,7 @@ var Scoreboard = new function () {
             var contest = contests[i];
             var c_id = contest["key"];
 
-            var tasks = contest["tasks"];
+            var tasks = self.board_tasks(contest);
             for (var j in tasks) {
                 var task = tasks[j];
                 var t_id = task["key"];
@@ -309,7 +330,7 @@ var Scoreboard = new function () {
             var contest = contests[i];
             var c_id = contest["key"];
 
-            var tasks = contest["tasks"];
+            var tasks = self.board_tasks(contest);
             for (var j in tasks) {
                 var task = tasks[j];
                 var t_id = task["key"];
@@ -367,7 +388,7 @@ var Scoreboard = new function () {
             var contest = contests[i];
             var c_id = contest["key"];
 
-            var tasks = contest["tasks"];
+            var tasks = self.board_tasks(contest);
             for (var j in tasks) {
                 var task = tasks[j];
                 var t_id = task["key"];
