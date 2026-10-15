@@ -21,15 +21,20 @@ export async function getQuestions(contestId: number) {
   });
 }
 
+/** How a reply answered the question: the statement settled it, or an answer had to clarify it. */
+export type QuestionResolutionKind = 'clarification_needed' | 'settled_by_statement';
+
 export async function replyToQuestion(questionId: number, adminId: number, data: {
   reply_subject: string;
   reply_text: string;
+  resolution_kind?: QuestionResolutionKind;
 }) {
   await ensurePermission(ACTION_PERMISSIONS.replyToQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', {
     reply_subject: data.reply_subject,
     reply_text: data.reply_text,
+    resolution_kind: data.resolution_kind,
   }, permissions);
   if (allowed.reply_subject === undefined || allowed.reply_text === undefined) {
     return { success: false, error: 'Insufficient field permissions' };
@@ -42,6 +47,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
         admin_id: adminId,
         reply_subject: allowed.reply_subject,
         reply_text: allowed.reply_text,
+        resolution_kind: allowed.resolution_kind,
         reply_timestamp: new Date(),
         ignored: false,
       }

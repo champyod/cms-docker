@@ -34,7 +34,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
     UniqueConstraint
 from sqlalchemy.types import Boolean, Integer, String, Unicode, DateTime, \
-    Interval
+    Enum, Interval
 
 from cmscommon.crypto import generate_random_password, build_password
 from . import CastingArray, Codename, Base, Admin, Contest
@@ -406,6 +406,13 @@ class Question(Base):
         nullable=True)
     reply_text: str | None = Column(
         Unicode,
+        nullable=True)
+
+    # Whether the statement itself answered the question or an answer had to. Null
+    # until an admin answers, and on rows written before the column existed.
+    resolution_kind: str | None = Column(
+        Enum("clarification_needed", "settled_by_statement",
+             name="question_resolution_kind"),
         nullable=True)
 
     # Participation (id and object) owning the question.

@@ -249,6 +249,8 @@ model questions {
   ignored            Boolean
   reply_subject      String?        @db.VarChar
   reply_text         String?        @db.VarChar
+  /// Null until an admin answers, and on every row written before the column existed.
+  resolution_kind    question_resolution_kind?
   participation_id   Int
   admin_id           Int?
   admins             admins?        @relation(fields: [admin_id], references: [id])
@@ -602,6 +604,11 @@ enum token_mode {
   disabled
   finite
   infinite
+}
+
+enum question_resolution_kind {
+  clarification_needed
+  settled_by_statement
 }
 
 model permissions {

@@ -153,6 +153,7 @@ const FIELD_PERMISSION_TABLE = {
     ignored: { read: 'question:read', update: 'question:ignore' },
     reply_subject: { read: 'question:read', update: 'question:answer' },
     reply_text: { read: 'question:read', update: 'question:answer' },
+    resolution_kind: { read: 'question:read', update: 'question:answer' },
     participation_id: { read: 'question:read' },
     admin_id: { read: 'question:read', update: 'question:answer' },
   },
