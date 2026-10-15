@@ -8,7 +8,7 @@ import { readTomlValue } from '@/lib/discord-webhook';
 import { getRepoRoot } from '@/lib/repo-root';
 import { CONTEST_WEB_SERVER_ROLE } from '@/lib/service-wiring-contract';
 
-/** The [contest] key compose hands the contest web server process as its shard. */
+/** The [contest] key the declared contest web server takes its shard from. */
 export const CONTEST_WEB_SERVER_SHARD_KEY = 'CONTEST_WEB_SERVER_SHARD';
 
 /** What a deployment that never set the key runs, matching compose's own `${…:-0}`. */
@@ -29,11 +29,13 @@ export interface ContestBinding {
 }
 
 /**
- * The shard the running contest web server holds.
+ * The shard the declared contest web server holds.
  *
- * WHY config.toml and not the container: `[contest] CONTEST_WEB_SERVER_SHARD` is the value
- * compose projects into the server's own environment when it creates the container, so the
- * file is the source and the container is a copy of it. A missing or unparsable value is
+ * WHY config.toml and not the container: docker-compose.yml starts the declared server with
+ * `[contest] CONTEST_WEB_SERVER_SHARD`, so the file is the source and the container's own
+ * environment is a copy of it. A server the registry created is not described here — it takes the
+ * shard its own row names (scripts/__config_sync.sh renders SERVICE_SHARD per row), which is why
+ * resolveContestBinding reads the registry's own rows as well. A missing or unparsable value is
  * the shard compose itself would default to, never an error worth blanking the page for.
  */
 export async function readContestWebServerShard(): Promise<number> {
@@ -43,21 +45,50 @@ export async function readContestWebServerShard(): Promise<number> {
   return raw !== '' && Number.isInteger(shard) && shard >= 0 ? shard : DEFAULT_CONTEST_WEB_SERVER_SHARD;
 }
 
+interface ContestWebServerRow {
+  readonly shard: number;
+  readonly contest_id: number | null;
+}
+
 /**
- * The contest a contest web server on `shard` serves, resolved the way the server resolves
- * it for itself (cms.db.contest_binding: the registry row, else the deployment default).
+ * The registry row the deployment's own contest web server resolves against, or null when the
+ * registry names no row for it.
  *
- * WHY the (role, shard) row and not the first contest web server row: the table authors one
- * row per instance, and each instance serves the contest its own row names — so reading the
- * lowest id of the role handed every deployment's page the first shard's answer.
+ * WHY the declared shard first: the declared server runs the shard config.toml hands it, so that
+ * shard — not the registry's lowest id — picks its row, which is also the row cms.db.contest_binding
+ * reads for it (role, shard, enabled; lowest id). WHY the rows themselves second: a server the
+ * registry created takes the shard its own row names, so a declared shard that names no row still
+ * leaves one answer whenever the enabled servers all name the same contest. Servers that disagree
+ * name no single contest, and the deployment default answers instead of one of them.
  */
-export async function resolveContestBinding(shard: number): Promise<ContestBinding> {
+function selectBoundRow(
+  rows: readonly ContestWebServerRow[],
+  declaredShard: number,
+): ContestWebServerRow | null {
+  const declared = rows.find((row) => row.shard === declaredShard);
+  if (declared !== undefined) return declared;
+  const [first, ...rest] = rows;
+  if (first === undefined) return null;
+  return rest.every((row) => row.contest_id === first.contest_id) ? first : null;
+}
+
+/**
+ * The contest a contest web server of this deployment serves, resolved the way the server
+ * resolves it for itself (cms.db.contest_binding: the registry row that names this instance,
+ * else the deployment default).
+ *
+ * WHY every enabled row and not just the declared shard's: the registry authors one row per
+ * instance and each server reads the row of the shard its own container runs, so a lookup that
+ * only knew the configured shard could miss the row of a registry-created server, or read the
+ * wrong one. See selectBoundRow for the order the answers are read in.
+ */
+export async function resolveContestBinding(declaredShard: number): Promise<ContestBinding> {
   const rows = await prisma.services.findMany({
-    where: { role: CONTEST_WEB_SERVER_ROLE, shard, enabled: true },
+    where: { role: CONTEST_WEB_SERVER_ROLE, enabled: true },
     orderBy: { id: 'asc' },
-    select: { contest_id: true },
+    select: { shard: true, contest_id: true },
   });
-  const row = rows[0];
-  if (row === undefined) return { source: 'deployment', contestId: await readActiveContestId() };
+  const row = selectBoundRow(rows, declaredShard);
+  if (row === null) return { source: 'deployment', contestId: await readActiveContestId() };
   return { source: 'registry', contestId: row.contest_id };
 }
