@@ -130,13 +130,18 @@ if command -v docker >/dev/null 2>&1; then
 fi
 
 echo ""
-echo "=== Test 2: nothing exposed leaves the N=1 path untouched ==="
+echo "=== Test 2: nothing exposed still publishes the fragment each vhost includes ==="
 new_sandbox 0 t
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0 with no exposures" || no "sync exit ${rc}"
-[[ -e "${SB}/config/generated" ]] && no "wrote artifacts with nothing exposed" \
-  || ok "wrote no artifacts with nothing exposed"
+placeholder="${SB}/config/generated/locations-primary.conf"
+[[ -f "$placeholder" ]] && ok "publishes the fragment the primary vhost includes by exact name" \
+  || no "missing the fragment the primary vhost includes by exact name"
+grep -q '^# No registry exposure answers on this vhost' "$placeholder" 2>/dev/null \
+  && ok "the fragment is comment-only with nothing exposed" || no "the fragment is not the placeholder comment"
+grep -qE '^[[:space:]]*location ' "$placeholder" 2>/dev/null \
+  && no "rendered a location with nothing exposed" || ok "renders no location with nothing exposed"
 [[ -e "${SB}/docker-compose.tailscale.generated.yml" ]] && no "left a generated tailscale compose behind" \
   || ok "removes the generated tailscale compose"
 
@@ -146,8 +151,8 @@ new_sandbox 1 f
 run_sync
 rc=$?
 [[ ${rc} -eq 0 ]] && ok "sync exits 0 without the table" || no "sync exit ${rc}"
-[[ -e "${SB}/config/generated" ]] && no "wrote artifacts without the table" \
-  || ok "wrote no artifacts without the table"
+[[ -e "${SB}/config/generated/contest-routes.conf" ]] && no "rendered route artifacts without the table" \
+  || ok "renders no route artifact without the table"
 
 echo ""
 echo "=== Test 4: a refusing renderer fails the sync and leaves no partial file ==="
@@ -284,7 +289,7 @@ rc=$?
 STUB_SCHEMA_CURRENT=1
 [[ ${rc} -eq 0 ]] && ok "sync exits 0 before the migration" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
 grep -q '20261014140000' "${SB}/sync.log" && ok "names the migration it waits on" || no "the skip does not name the migration"
-[[ -e "${SB}/config/generated" ]] && no "rendered artifacts from a schema it cannot read" || ok "renders no artifact"
+[[ -e "${SB}/config/generated/contest-routes.conf" ]] && no "rendered route artifacts from a schema it cannot read" || ok "renders no route artifact"
 [[ -f "${SB}/.env" ]] && ok "still writes .env, so the update can migrate" || no "did not write .env"
 
 echo ""
@@ -348,8 +353,9 @@ run_sync
 rc=$?
 [[ ${rc} -ne 0 ]] && ok "sync refuses a path the vhost's own locations already serve" || no "sync accepted a curated path"
 grep -q 'refused the registry' "${SB}/sync.log" && ok "reports why it refused" || no "silent refusal"
-[[ -e "${SB}/config/generated/locations-primary.conf" ]] \
-  && no "left a fragment behind" || ok "leaves no fragment behind"
+grep -qE '^[[:space:]]*location ' "${SB}/config/generated/locations-primary.conf" 2>/dev/null \
+  && no "left a rendered location in the fragment after a refusal" \
+  || ok "leaves only the placeholder in the fragment after a refusal"
 
 RENAMED_PAYLOAD='{"services":[{"id":4,"name":"web-9","role":"ContestWebServer","shard":0,"host":"web-9","http_port":8888,"rpc_port":21000,"db_profile":"default","contest_id":9,"enabled":true}],"wirings":[],"exposures":[{"service_id":4,"hostname":"a.example.com","path":"/board","tls":true,"tailnet":null}]}'
 new_sandbox 1 t 5 "$RENAMED_PAYLOAD"

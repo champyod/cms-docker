@@ -1349,6 +1349,12 @@ WIRING_RENDERER="admin-panel/src/lib/service-wiring-cli.ts"
 WIRING_COMPOSE="docker-compose.tailscale.generated.yml"
 WIRING_REGISTRY_COMPOSE="docker-compose.registry.generated.yml"
 
+# The comment every front-vhost fragment carries until the registry renders a location into it.
+# WHY it exists: the vhost includes locations-<label>.conf by exact name, so the file has to be
+# on disk even on a deployment whose registry names no exposure for that vhost — nginx stops on a
+# missing literal include. A comment is enough: an empty fragment is what nginx would read anyway.
+FRONT_VHOST_PLACEHOLDER='# No registry exposure answers on this vhost. This file exists because the vhost includes it by exact name.'
+
 # One tailscale container per exposed node.
 #
 # WHY this file is generated rather than declared: how many tunnels exist is a row in the
@@ -1610,35 +1616,64 @@ front_vhost_lines() {
   return 0
 }
 
-# One fragment per front vhost: the locations that vhost's own include pulls in, and nothing else.
+# Publishes one fragment file per front vhost the route table maps, each starting as the
+# placeholder comment, so the file a vhost's include names by exact name is always on disk.
 #
-# WHY the stale ones are removed first: a label the table no longer names would otherwise keep
-# serving the rows of the vhost that used to own it. WHY an empty fragment is removed: the vhost's
-# include matches on the name alone, so a file with no location in it is one nginx reads for nothing.
-render_front_vhost_fragments() {
-  local payload="$1" lines="$2" bun_bin="$3" front_vhosts="$4" label hostname
+# WHY the shell owns this and not the renderer: the placeholder has no behavioural content, and
+# the sync must publish it even on a deployment whose registry has never been used, where bun and
+# the exposures table cannot be relied on. WHY the stale ones are removed first: a label the table
+# no longer names would otherwise keep the fragment — or the rows — of the vhost that used to own it.
+publish_front_vhost_placeholders() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "Would publish a front-vhost fragment placeholder for every mapped vhost in $WIRING_OUT_DIR/"
+    return 0
+  fi
+  local lines label hostname
+  lines="$(front_vhost_lines)" || return 1
+  mkdir -p "$WIRING_OUT_DIR" || return 1
+  # WHY the whole line list on disk: the panel previews the vhosts the sync renders for from this
+  # one file, so the label that names a fragment and the paths that vhost answers on cannot drift.
+  printf '%s\n' "$lines" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
   rm -f "$WIRING_OUT_DIR"/locations-*.conf
+  while IFS='|' read -r label hostname _; do
+    [[ -n "$label" && -n "$hostname" ]] || continue
+    printf '%s\n' "$FRONT_VHOST_PLACEHOLDER" > "$WIRING_OUT_DIR/locations-$label.conf" || return 1
+  done <<< "$lines"
+}
+
+# One fragment per front vhost the registry names an exposure on: the locations that vhost's own
+# include pulls in, and nothing else.
+#
+# WHY the render lands in a variable: a vhost whose registry names no exposure renders empty, and
+# writing that would replace the placeholder the publisher wrote — but the include names the file,
+# so it has to stay on disk. An empty render therefore leaves the placeholder untouched.
+render_front_vhost_fragments() {
+  local payload="$1" lines="$2" bun_bin="$3" front_vhosts="$4" label hostname rendered
   while IFS='|' read -r label hostname _; do
     # A bare hostname line names no label, so there is no fragment file for it to render into.
     [[ -n "$label" && -n "$hostname" ]] || continue
-    if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" location "$label" \
-        --front-vhosts "$front_vhosts" > "$WIRING_OUT_DIR/locations-$label.conf"; then
-      rm -f "$WIRING_OUT_DIR/locations-$label.conf"
+    if ! rendered="$(printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" location "$label" \
+        --front-vhosts "$front_vhosts")"; then
       log_error "the wiring renderer refused the registry for the $label vhost; fix the exposure rows."
       return 1
     fi
-    [[ -s "$WIRING_OUT_DIR/locations-$label.conf" ]] || rm -f "$WIRING_OUT_DIR/locations-$label.conf"
+    [[ -n "$rendered" ]] || continue
+    printf '%s\n' "$rendered" > "$WIRING_OUT_DIR/locations-$label.conf" || return 1
   done <<< "$lines"
 }
 
 # Renders the generated route artifacts from the registry.
 #
-# WHY a no-op with nothing exposed: a deployment that never used the registry must
-# stay exactly as it was, so the N=1 path renders as it always has.
+# WHY the placeholders are published first, before every guard below: every front vhost includes
+# its fragment by exact name, so the file has to exist even on a deployment whose registry has
+# never been used — the missing literal include would stop nginx.
+# WHY the route render itself is still a no-op with nothing exposed: a deployment that never used
+# the registry must stay exactly as it was, so the N=1 path renders as it always has.
 # WHY fatal when rows exist but bun does not: the operator asked for wiring that
 # cannot be rendered, and leaving a stale artifact would serve routes the database
 # no longer describes.
 render_wiring_artifacts() {
+  publish_front_vhost_placeholders || return 1
   docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
   local table_present
   table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
@@ -1701,11 +1736,10 @@ render_wiring_artifacts() {
   # WHY the whole line list and not a map plus a config read: the renderer and the panel read this one
   # file, so the label that names a fragment, the hostname it belongs to and the paths that vhost
   # already answers on cannot drift apart between what the sync renders and what the screen reports.
+  # The publisher already wrote those same lines to front-vhosts.txt; the renderer gets them inline.
   local front_lines front_vhosts
   front_lines="$(front_vhost_lines)" || return 1
   front_vhosts="$(printf '%s\n' "$front_lines" | paste -sd',' - || true)"
-  # The same lines on disk, so the panel previews the vhosts the sync would render for.
-  printf '%s\n' "$front_lines" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
   if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
