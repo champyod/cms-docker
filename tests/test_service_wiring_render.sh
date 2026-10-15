@@ -259,6 +259,17 @@ grep -q 'pull_policy: missing' "${SB}/docker-compose.registry.generated.yml" 2>/
   && ok "carries the row's pull policy" || no "missing the row's pull policy"
 
 echo ""
+echo "=== Test 12: a row the base compose already owns is left to it ==="
+new_sandbox 1 t 5 "" 'cms-contest-web-server|ContestWebServer|0|web-1|8888|21000|default||missing'
+printf '%s\n' 'services:' '  contest-web-server:' '    container_name: cms-contest-web-server' > "${SB}/docker-compose.yml"
+run_sync
+rc=$?
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+[[ -e "${SB}/docker-compose.registry.generated.yml" ]] \
+  && no "generated a service the base compose owns" \
+  || ok "leaves the declared container to the base compose"
+
+echo ""
 echo "=== Test 13: an unmigrated schema is skipped, not fatal ==="
 STUB_SCHEMA_CURRENT=0
 new_sandbox 1 t

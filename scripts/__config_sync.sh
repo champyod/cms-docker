@@ -1605,6 +1605,21 @@ render_registry_compose_from_db() {
 
   local rows
   rows="$(db_query "SELECT name, role, shard, host, COALESCE(http_port::text, ''), COALESCE(rpc_port::text, ''), db_profile, COALESCE(image, ''), pull_policy FROM services WHERE enabled AND role IN ('ContestWebServer', 'EvaluationService', 'ProxyService') ORDER BY role, shard, id;")" || return 1
+
+  # WHY the names come from the base compose rather than a list here: the base compose already
+  # owns those containers, so a generated file claiming one fails `make registry-up` on a name
+  # conflict instead of leaving the declared container in place. That container reads its row at
+  # runtime (cms.db.contest_binding), so the row still decides its contest and ports.
+  local base_files=() file declared
+  for file in docker-compose.yml docker-compose.override.yml docker-compose.expose.yml; do
+    [[ -f "$file" ]] && base_files+=("$file")
+  done
+  declared="$(grep -hoE '^[[:space:]]*container_name:[[:space:]]*[^[:space:]]+' "${base_files[@]+"${base_files[@]}"}" 2>/dev/null \
+    | awk '{print $2}' | sort -u | paste -sd'|' - || true)"
+  if [[ -n "$declared" ]]; then
+    rows="$(printf '%s\n' "$rows" | grep -vE "^(${declared})\|" || true)"
+  fi
+
   if [[ "$DRY_RUN" -eq 1 ]]; then
     [[ -z "$rows" ]] || log_info "Would generate $WIRING_REGISTRY_COMPOSE from the service registry."
     return 0
