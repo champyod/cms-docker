@@ -60,6 +60,7 @@ describe('the contest:switch gate accepts a deploy-holding role', () => {
           })),
         },
         $executeRaw: vi.fn(async () => 1),
+        $transaction: vi.fn(async (operations: Array<Promise<number>>) => Promise.all(operations)),
       },
     }));
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));

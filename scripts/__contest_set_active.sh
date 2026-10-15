@@ -94,7 +94,12 @@ require_unshadowed_default() {
     || log_die "these registry rows decide what is served, so contests.is_active would change nothing: ${bound}. Edit them in the panel's service registry (Infrastructure, Services) or clear their binding." 1
 }
 
-# Move is_active onto <id> in one statement, so exactly one row stays active.
+# Move is_active onto <id>: clear the other rows, then flag <id>, in one psql call so both run in
+# one implicit transaction and exactly one row stays active. WHY not the single statement
+# `SET is_active = (id = <id>)`: the partial unique index on is_active (contests_single_active_key)
+# is checked as each updated row reaches the index, so one statement that flips two rows can meet
+# it with both of them still true, depending on the order rows are visited. Clearing first makes
+# the order irrelevant.
 set_active_contest() {
   local id="$1" before
   before="$(db_exec "SELECT id FROM contests WHERE is_active ORDER BY id LIMIT 1;")"
@@ -102,7 +107,8 @@ set_active_contest() {
     log_info "contest ${id} is already active in the database — no change needed"
     return 0
   fi
-  db_exec "UPDATE contests SET is_active = (id = ${id});" >/dev/null
+  db_exec "UPDATE contests SET is_active = false WHERE is_active AND id <> ${id};
+    UPDATE contests SET is_active = true WHERE id = ${id};" >/dev/null
   log_info "active contest set to ${id} in '$POSTGRES_DB_VAL' (contests.is_active); a service the registry does not bind picks it up within a few seconds"
 }
 

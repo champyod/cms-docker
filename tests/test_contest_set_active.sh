@@ -89,11 +89,12 @@ run_script() { # <args...>
 
 sql_has() { grep -q "$1" "${SB}/sql.log" 2>/dev/null; }
 
-# --- 1. activating a different contest issues the one UPDATE, and nothing else ------------
+# --- 1. activating a different contest clears the others, then flags it, and nothing else -----
 new_sandbox
 code="$(run_script 3)"
 [[ "$code" == "0" ]] && ok "activates an existing contest (exit 0)" || no "activates an existing contest (exit ${code})"
-sql_has "UPDATE contests SET is_active = (id = 3)" && ok "issues the one UPDATE" || no "did not issue the UPDATE"
+sql_has "UPDATE contests SET is_active = false WHERE is_active AND id <> 3" && ok "clears the rows that are not the target" || no "did not clear the other rows"
+sql_has "UPDATE contests SET is_active = true WHERE id = 3" && ok "flags the target row" || no "did not flag the target row"
 [[ -s "${SB}/make.log" ]] && no "restarted something" || ok "restarts nothing"
 [[ -s "${SB}/sync.log" ]] && no "regenerated config" || ok "regenerates nothing"
 
