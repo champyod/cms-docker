@@ -18,6 +18,10 @@ pub struct Ledger {
     board: Vec<BoardRow>,
     skipped_subchanges: usize,
     skipped_overrides: usize,
+    /// Hidden task keys that name no task row: the hide exists but drops nothing, so a
+    /// renamed task stops being hidden silently. Filled by the store, which is the only
+    /// place that can compare the hides against the task table.
+    unknown_task_hides: usize,
 }
 
 impl Ledger {
@@ -41,6 +45,19 @@ impl Ledger {
 
     pub fn skipped_overrides(&self) -> usize {
         self.skipped_overrides
+    }
+
+    /// How many task hides named no task row, so /diagnostics can surface a hide that
+    /// silently stopped applying.
+    pub fn unknown_task_hides(&self) -> usize {
+        self.unknown_task_hides
+    }
+
+    /// Records the count the store derived by comparing the hides against the task table.
+    /// WHY not a constructor argument: a ledger assembled for another read makes no such
+    /// comparison, and zero is then the honest answer.
+    pub(crate) fn set_unknown_task_hides(&mut self, unknown_task_hides: usize) {
+        self.unknown_task_hides = unknown_task_hides;
     }
 
     /// One user's submissions, ordered by (task, time) the way the Python
@@ -89,7 +106,7 @@ pub fn assemble_with(
     teams: &BTreeMap<String, String>,
 ) -> Result<Ledger, ScoreError> {
     let mut skipped = 0;
-    let mut scores = project_scores(tasks, submissions, &mut skipped);
+    let mut scores = project_scores(tasks, submissions, overrides, &mut skipped);
     replay_subchanges(
         &mut scores,
         submissions,
@@ -104,6 +121,7 @@ pub fn assemble_with(
 fn project_scores(
     tasks: &[TaskMode],
     submissions: &[Submission],
+    overrides: &Overrides,
     skipped: &mut usize,
 ) -> BTreeMap<(String, String), Score> {
     let mut scores: BTreeMap<(String, String), Score> = BTreeMap::new();
@@ -113,7 +131,11 @@ fn project_scores(
             .find(|task| task.key == submission.task)
             .map(|task| task.mode);
         let Some(mode) = mode else {
-            *skipped += 1;
+            // WHY a hidden task is not a skip: its absence from `tasks` is the hide doing
+            // its job, so counting it would report a healthy hide as malformed rows.
+            if !overrides.hides_task(&submission.task) {
+                *skipped += 1;
+            }
             continue;
         };
         scores
@@ -180,16 +202,20 @@ fn finish(
     let mut rows: BTreeMap<String, BoardRow> = BTreeMap::new();
     for ((user, task), score) in &scores {
         let team = teams.get(user).map(String::as_str);
-        if !board_hidden && !board::is_hidden(overrides, user, team) {
-            if score.value() > 0.0 {
-                ledger
-                    .scores
-                    .entry(user.clone())
-                    .or_default()
-                    .insert(task.clone(), score.value());
-            }
-            board::record_row(&mut rows, overrides, user, team, score.value());
+        // WHY the hidden test gates every output and not only the board row: a hidden
+        // participation must not survive as a score, a history row or a sublist entry
+        // either, or /history and /sublist would serve what /board withholds.
+        if board_hidden || board::is_hidden(overrides, user, team) {
+            continue;
         }
+        if score.value() > 0.0 {
+            ledger
+                .scores
+                .entry(user.clone())
+                .or_default()
+                .insert(task.clone(), score.value());
+        }
+        board::record_row(&mut rows, overrides, user, team, score.value());
         for (time, change) in score.history() {
             merged.push((user.clone(), task.clone(), *time, *change));
         }

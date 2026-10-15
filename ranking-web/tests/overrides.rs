@@ -113,6 +113,64 @@ fn a_hidden_row_leaves_and_a_guest_row_joins() {
     assert!(has_row(&ledger, "visitor"));
 }
 
+/// A hidden user's history and per-submission list leave with their board row, so
+/// /history and /sublist cannot serve what /board withholds.
+#[test]
+fn a_hidden_user_leaves_the_history_and_the_sublist() {
+    let overrides = Overrides::fold(&[override_row("user", "u0", "hide", None)]);
+    let ledger = assemble(&overrides);
+
+    assert!(
+        ledger.history().iter().all(|entry| entry.0 != "u0"),
+        "the hidden user leaves the history"
+    );
+    assert!(
+        ledger.sublist("u0").is_empty(),
+        "the hidden user leaves the sublist"
+    );
+    assert!(
+        !ledger.sublist("u1").is_empty(),
+        "a visible user keeps their own submissions"
+    );
+}
+
+/// A hide on a task already absent from the replayed task set is the hide doing its job,
+/// not a malformed submission, so it is not counted as a skipped subchange.
+#[test]
+fn a_hidden_task_is_not_counted_as_a_skipped_submission() {
+    let overrides = Overrides::fold(&[override_row("task", "t0", "hide", None)]);
+    let tasks: Vec<TaskMode> = Vec::new();
+    let submissions = vec![Submission {
+        key: "s0".to_string(),
+        user: "u0".to_string(),
+        task: "t0".to_string(),
+        time: 1,
+    }];
+    let subchanges = vec![Subchange {
+        key: "c0".to_string(),
+        submission: "s0".to_string(),
+        time: 2,
+        score: Some(50.0),
+        token: None,
+        extra: None,
+    }];
+
+    let ledger = assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        &overrides,
+        &BTreeMap::new(),
+    )
+    .expect("an empty task set is replayable");
+
+    assert_eq!(
+        ledger.skipped_subchanges(),
+        0,
+        "the hide, not a malformed row, removed the submission"
+    );
+}
+
 #[test]
 fn rename_replaces_the_display_name() {
     let overrides = Overrides::fold(&[override_row("user", "u0", "rename", Some("Ada Lovelace"))]);
