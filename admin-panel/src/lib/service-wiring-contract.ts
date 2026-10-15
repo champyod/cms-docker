@@ -100,6 +100,23 @@ export interface WiringRecord {
   enabled: boolean;
 }
 
+/**
+ * One registry row that binds a service to the contest its shard serves.
+ *
+ * WHY the panel shows these rows instead of contests.is_active: that flag is a single value, so it
+ * cannot say that one shard serves contest 9 while another serves 7, whereas a services row names
+ * the contest its own instance serves and cms.db.contest_binding reads that row per call. The shard
+ * and the role ride beside the contest because the operator reads the binding per shard, not as
+ * one id.
+ */
+export interface ShardContestBinding {
+  id: number;
+  name: string;
+  role: string;
+  shard: number;
+  contestId: number;
+}
+
 export interface ExposureRecord {
   id: number;
   service_id: number;

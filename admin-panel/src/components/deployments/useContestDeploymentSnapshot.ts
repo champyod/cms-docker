@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 
 import { readActiveContestId, readConfigTomlValues, updateConfigTomlValues } from '@/app/actions/configTomlActions';
-import { getAvailableContests, getBoundContestId } from '@/app/actions/contests';
+import { getAvailableContests, getBoundContestId, getShardContestBindings } from '@/app/actions/contests';
 import { settleDeployOperations, getActiveDeployOperation } from '@/app/actions/deployActions';
 import { getContainerContestId } from '@/app/actions/docker';
 import { buildConfigTomlUpdates } from '@/lib/config-toml';
@@ -15,6 +15,7 @@ import type { SurfaceStatus } from '@/components/core/SurfaceState';
 import type { DeployPhase } from '@/hooks/useDeployContest';
 import { CONTEST_SETTINGS_KEYS } from '@/components/deployments/deploymentConfig';
 import type { ContestOption } from '@/components/deployments/ActiveContestCard';
+import type { ShardContestBinding } from '@/lib/service-wiring-contract';
 import type { Dispatch, SetStateAction } from 'react';
 
 /** The name each read carries into the "parts that failed" notice. */
@@ -25,6 +26,7 @@ const READ_LABELS = {
   contests: 'contest list',
   container: 'running container',
   bound: 'registry binding',
+  shardBindings: 'shard bindings',
   operation: 'deploy operation',
 } as const;
 
@@ -42,6 +44,7 @@ interface DeploymentReads {
   readonly contests: ReadOutcome<Awaited<ReturnType<typeof getAvailableContests>>>;
   readonly container: ReadOutcome<Awaited<ReturnType<typeof getContainerContestId>>>;
   readonly bound: ReadOutcome<BoundContestRead>;
+  readonly shardBindings: ReadOutcome<Awaited<ReturnType<typeof getShardContestBindings>>>;
   readonly operation: ReadOutcome<Awaited<ReturnType<typeof getActiveDeployOperation>>>;
 }
 
@@ -56,7 +59,7 @@ interface DeploymentReads {
  */
 async function settleDeploymentReads(): Promise<DeploymentReads> {
   const settle = await settleRead(READ_LABELS.settle, settleDeployOperations);
-  const [active, settings, contests, container, bound, operation] = await Promise.all([
+  const [active, settings, contests, container, bound, shardBindings, operation] = await Promise.all([
     settleRead(READ_LABELS.activeContest, readActiveContestId),
     settleRead(READ_LABELS.settings, () => readConfigTomlValues(CONTEST_SETTINGS_KEYS)),
     settleRead(READ_LABELS.contests, getAvailableContests),
@@ -64,9 +67,12 @@ async function settleDeploymentReads(): Promise<DeploymentReads> {
     // The id the deployment actually serves, resolved the way the running contest web server
     // resolves it for itself — the registry row for its shard, else contests.is_active.
     settleRead(READ_LABELS.bound, getBoundContestId),
+    // Every registry row that binds a shard to a contest, so the screen shows the per-shard truth
+    // rather than one active id the flag cannot express across several shards.
+    settleRead(READ_LABELS.shardBindings, getShardContestBindings),
     settleRead(READ_LABELS.operation, getActiveDeployOperation),
   ]);
-  return { settle, active, settings, contests, container, bound, operation };
+  return { settle, active, settings, contests, container, bound, shardBindings, operation };
 }
 
 /**
@@ -96,6 +102,7 @@ export interface ContestDeploymentSnapshot {
   readonly containerContestId: number | null;
   readonly boundContestId: number | null;
   readonly boundContestSource: BoundContestSource;
+  readonly shardBindings: readonly ShardContestBinding[];
   readonly selectedContestId: number | null;
   readonly globalSettings: Record<string, string>;
   readonly isDirty: boolean;
@@ -126,6 +133,7 @@ export function useContestDeploymentSnapshot({
   const [containerContestId, setContainerContestId] = useState<number | null>(null);
   const [boundContestId, setBoundContestId] = useState<number | null>(null);
   const [boundContestSource, setBoundContestSource] = useState<BoundContestSource>(null);
+  const [shardBindings, setShardBindings] = useState<readonly ShardContestBinding[]>([]);
   const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
@@ -142,7 +150,7 @@ export function useContestDeploymentSnapshot({
   }, []);
 
   const readSnapshot = useCallback(async (): Promise<void> => {
-    const { settle, active, settings, contests, container, bound, operation } = await settleDeploymentReads();
+    const { settle, active, settings, contests, container, bound, shardBindings, operation } = await settleDeploymentReads();
 
     // Read the freshly parsed value, not the state binding — setState in this same tick leaves the
     // closure stale.
@@ -172,6 +180,10 @@ export function useContestDeploymentSnapshot({
     setBoundContestId(boundContest.contestId);
     setBoundContestSource(boundContest.source);
 
+    // Why the bindings fall back to empty and not to the flag: a failed read leaves the table with
+    // nothing to claim, and the default line beside it still names what an unbound instance serves.
+    setShardBindings(shardBindings.value?.success ? shardBindings.value.bindings : []);
+
     if (actualActiveId !== null) {
       const match = databaseContests.find(
         (contest: { id: number; name: string; is_active: boolean }) => contest.id === actualActiveId,
@@ -179,7 +191,7 @@ export function useContestDeploymentSnapshot({
       if (match) setActiveContestName(match.name);
     }
 
-    setFailedReads(readFailures([settle, active, settings, contests, container, bound, operation]));
+    setFailedReads(readFailures([settle, active, settings, contests, container, bound, shardBindings, operation]));
   }, [applyContestSnapshot]);
 
   const { status, reload } = useSurfaceLoad(readSnapshot, surfaceLoadMessages(dict));
@@ -242,6 +254,7 @@ export function useContestDeploymentSnapshot({
     containerContestId,
     boundContestId,
     boundContestSource,
+    shardBindings,
     selectedContestId,
     globalSettings,
     isDirty,

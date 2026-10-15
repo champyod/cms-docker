@@ -6,7 +6,7 @@ import { readConfigFile } from '@/lib/config-file';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import { readTomlValue } from '@/lib/discord-webhook';
 import { getRepoRoot } from '@/lib/repo-root';
-import { CONTEST_WEB_SERVER_ROLE } from '@/lib/service-wiring-contract';
+import { CONTEST_WEB_SERVER_ROLE, type ShardContestBinding } from '@/lib/service-wiring-contract';
 
 /** The [contest] key the declared contest web server takes its shard from. */
 export const CONTEST_WEB_SERVER_SHARD_KEY = 'CONTEST_WEB_SERVER_SHARD';
@@ -122,4 +122,30 @@ export async function resolveContestBinding(declaredShard: number): Promise<Cont
     return { source: 'deployment', contestId: await readActiveContestId(), matchedBy: null };
   }
   return { source: 'registry', contestId: selection.row.contest_id, matchedBy: selection.matchedBy };
+}
+
+/**
+ * Every enabled registry row that names a contest, lowest shard first — the per-shard truth the
+ * panel shows in place of one active-contest id.
+ *
+ * WHY the rows and not contests.is_active: the flag is a single value, so it cannot say that shard 0
+ * serves contest 9 while shard 1 serves contest 7; a services row names the contest its own instance
+ * serves, and cms.db.contest_binding reads that row per call, so the registry — not the flag —
+ * decides what is served. WHY a row that names no contest is left out: it binds no per-shard contest
+ * (it serves every one), so it states nothing to show against a shard. WHY a disabled row is left
+ * out: its container is not running, so listing it would claim a binding nothing serves.
+ */
+export async function readShardContestBindings(): Promise<ShardContestBinding[]> {
+  const rows = await prisma.services.findMany({
+    where: { enabled: true, contest_id: { not: null } },
+    orderBy: [{ shard: 'asc' }, { role: 'asc' }, { id: 'asc' }],
+    select: { id: true, name: true, role: true, shard: true, contest_id: true },
+  });
+  return rows.flatMap((row) => (row.contest_id === null ? [] : [{
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    shard: row.shard,
+    contestId: row.contest_id,
+  }]));
 }

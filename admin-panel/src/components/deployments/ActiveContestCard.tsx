@@ -6,6 +6,8 @@ import { Stack } from '@/components/core/Layout';
 import { Button } from '@/components/core/Button';
 import { Rocket, RefreshCw, AlertTriangle } from 'lucide-react';
 import type { DeployPhase } from '@/hooks/useDeployContest';
+import type { ShardContestBinding } from '@/lib/service-wiring-contract';
+import { ShardContestBindings } from '@/components/deployments/ShardContestBindings';
 
 export interface ContestOption {
   id: number;
@@ -14,6 +16,8 @@ export interface ContestOption {
 }
 
 interface ActiveContestCardProps {
+  /** The registry rows that bind a shard to a contest: the card's primary content, per shard. */
+  shardBindings: readonly ShardContestBinding[];
   activeContestId: number | null;
   activeContestName: string | null;
   availableContests: ContestOption[];
@@ -26,6 +30,7 @@ interface ActiveContestCardProps {
 }
 
 export function ActiveContestCard({
+  shardBindings,
   activeContestId,
   activeContestName,
   availableContests,
@@ -42,32 +47,30 @@ export function ActiveContestCard({
             <Stack gap={5}>
                 <Stack direction="row" align="center" gap={3}>
                     <Rocket className="w-6 h-6 text-primary" />
-                    <Text variant="h2">Current Active Contest</Text>
+                    <Text variant="h2">Contests Served per Shard</Text>
                 </Stack>
 
-                {activeContestId && (
-                    <div className="flex items-center gap-4 p-4 bg-primary/10 border border-primary/20 rounded-xl">
-                        <div className="w-12 h-12 rounded-xl bg-primary/15 flex items-center justify-center text-primary font-bold text-lg">
-                            #{activeContestId}
-                        </div>
-                        <div>
-                            <Text variant="h3" color="text-foreground">{activeContestName || `Contest #${activeContestId}`}</Text>
-                            <Text variant="small" color="text-muted-foreground">Currently deployed contest stack</Text>
-                        </div>
-                    </div>
-                )}
+                <Text variant="small" color="text-muted-foreground">
+                    From the service registry: the contest each bound shard serves. A registry row decides
+                    what a running instance serves, so these rows — not one active id — are what is live.
+                </Text>
 
-                {!activeContestId && (
-                    <div className="p-4 bg-warning/10 border border-warning/20 rounded-xl">
-                        <Stack direction="row" align="center" gap={3}>
-                            <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
-                            <div>
-                                <Text variant="h3" color="text-warning">No Active Contest</Text>
-                                <Text variant="small" color="text-muted-foreground">Select a contest below and activate it.</Text>
-                            </div>
-                        </Stack>
-                    </div>
-                )}
+                <ShardContestBindings
+                    bindings={shardBindings}
+                    contests={availableContests}
+                    emptyText="No enabled registry row binds a shard to a contest."
+                />
+
+                <div className="p-4 bg-muted/20 border border-border rounded-xl">
+                    <Stack direction="row" align="center" gap={3}>
+                        <AlertTriangle className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <Text variant="small" color="text-muted-foreground">
+                            {activeContestId
+                                ? `Deployment default (contests.is_active): #${activeContestId}${activeContestName ? ` — ${activeContestName}` : ''}. Applies only to an instance no registry row names.`
+                                : 'No deployment default (contests.is_active) is set; an instance no registry row names serves no contest.'}
+                        </Text>
+                    </Stack>
+                </div>
                 <Stack gap={2} className="mt-6">
                     <Text variant="label" className="flex items-center gap-2">
                         <Rocket className="w-3 h-3" />

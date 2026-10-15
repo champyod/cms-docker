@@ -20,9 +20,15 @@ const CONTESTS = [
   { id: 12, name: 'Autumn', is_active: true },
 ];
 
+const BINDINGS = [
+  { id: 1, name: 'web-0', role: 'ContestWebServer', shard: 0, contestId: 12 },
+  { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contestId: 10 },
+];
+
 describe('deploy copy names the write the activation performs', () => {
   const cardHtml = renderToStaticMarkup(
     <ActiveContestCard
+      shardBindings={BINDINGS}
       activeContestId={12}
       activeContestName="Autumn"
       availableContests={CONTESTS}
@@ -66,5 +72,56 @@ describe('mismatch banner names the sources it actually compares', () => {
   it('does not name the generated .env as a source', () => {
     expect(bannerHtml).not.toContain('.env');
     expect(bannerHtml).not.toContain('env file');
+  });
+});
+
+describe('the active-contest view shows the per-shard registry truth', () => {
+  const cardHtml = renderToStaticMarkup(
+    <ActiveContestCard
+      shardBindings={BINDINGS}
+      activeContestId={12}
+      activeContestName="Autumn"
+      availableContests={CONTESTS}
+      selectedContestId={12}
+      deployPhase="idle"
+      hasChangedContest={false}
+      onSelectContest={() => undefined}
+      onActivate={() => undefined}
+      onCancel={() => undefined}
+    />,
+  );
+
+  it('renders one row per bound shard with its role and the contest it serves', () => {
+    expect(cardHtml).toContain('shard 0');
+    expect(cardHtml).toContain('ContestWebServer');
+    expect(cardHtml).toContain('#12 — Autumn');
+    expect(cardHtml).toContain('shard 1');
+    expect(cardHtml).toContain('ProxyService');
+    expect(cardHtml).toContain('#10 — Spring');
+  });
+
+  it('stops presenting a single active contest id as the truth', () => {
+    expect(cardHtml).not.toContain('Current Active Contest');
+    expect(cardHtml).not.toContain('Currently deployed contest stack');
+    // The flag survives only as the labelled default for an instance no registry row names.
+    expect(cardHtml).toContain('Deployment default (contests.is_active)');
+  });
+
+  it('shows the empty table and the fallback note when no shard is bound', () => {
+    const emptyHtml = renderToStaticMarkup(
+      <ActiveContestCard
+        shardBindings={[]}
+        activeContestId={12}
+        activeContestName="Autumn"
+        availableContests={CONTESTS}
+        selectedContestId={null}
+        deployPhase="idle"
+        hasChangedContest={false}
+        onSelectContest={() => undefined}
+        onActivate={() => undefined}
+        onCancel={() => undefined}
+      />,
+    );
+    expect(emptyHtml).toContain('No enabled registry row binds a shard to a contest.');
   });
 });

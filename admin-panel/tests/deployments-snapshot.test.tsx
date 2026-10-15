@@ -11,6 +11,7 @@ const actions = vi.hoisted(() => ({
   updateConfigTomlValues: vi.fn(),
   getAvailableContests: vi.fn(),
   getBoundContestId: vi.fn(),
+  getShardContestBindings: vi.fn(),
   getContainerContestId: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock('@/app/actions/configTomlActions', () => ({
 vi.mock('@/app/actions/contests', () => ({
   getAvailableContests: actions.getAvailableContests,
   getBoundContestId: actions.getBoundContestId,
+  getShardContestBindings: actions.getShardContestBindings,
 }));
 vi.mock('@/app/actions/docker', () => ({ getContainerContestId: actions.getContainerContestId }));
 
@@ -52,6 +54,7 @@ beforeEach(() => {
   actions.readConfigTomlValues.mockResolvedValue({ success: true, values: {} });
   actions.getAvailableContests.mockResolvedValue({ success: true, contests: [] });
   actions.getBoundContestId.mockResolvedValue({ success: true, binding: { source: 'registry', contestId: 3, matchedBy: 'declared-shard' } });
+  actions.getShardContestBindings.mockResolvedValue({ success: true, bindings: [] });
   actions.getContainerContestId.mockResolvedValue({ success: true, contestId: 1 });
 });
 
@@ -66,6 +69,44 @@ describe('useContestDeploymentSnapshot', () => {
     // The source travels with the id: a registry answer and the deployment default both read as an
     // id, and only this tells them apart on the page.
     expect(result.current.boundContestSource).toBe('registry');
+  });
+
+  it('exposes the per-shard registry bindings the card shows instead of one active id', async () => {
+    // Two shards on two contests at once: the case the single contests.is_active flag cannot express.
+    actions.getShardContestBindings.mockResolvedValue({
+      success: true,
+      bindings: [
+        { id: 1, name: 'web-0', role: 'ContestWebServer', shard: 0, contestId: 9 },
+        { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contestId: 7 },
+      ],
+    });
+    const { result } = renderSnapshot();
+
+    await waitFor(() => expect(result.current.status.kind).toBe('idle'));
+    expect(result.current.shardBindings).toEqual([
+      { id: 1, name: 'web-0', role: 'ContestWebServer', shard: 0, contestId: 9 },
+      { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contestId: 7 },
+    ]);
+    expect(result.current.failedReads).toEqual([]);
+  });
+
+  it('shows no binding and names the read when the shard-bindings read fails', async () => {
+    actions.getShardContestBindings.mockRejectedValue(new Error('relation "services" does not exist'));
+    const { result } = renderSnapshot();
+
+    await waitFor(() => expect(result.current.status.kind).toBe('idle'));
+    expect(result.current.shardBindings).toEqual([]);
+    // The failure is named, not hidden — the default line beside the empty table still says what runs.
+    expect(result.current.failedReads.map((failure) => failure.label)).toContain('shard bindings');
+  });
+
+  it('shows no binding when the read answers with a soft failure', async () => {
+    actions.getShardContestBindings.mockResolvedValue({ success: false, bindings: [], error: 'permission denied' });
+    const { result } = renderSnapshot();
+
+    await waitFor(() => expect(result.current.status.kind).toBe('idle'));
+    expect(result.current.shardBindings).toEqual([]);
+    expect(result.current.failedReads).toEqual([]);
   });
 
   it('reports no bound contest while the registry read is the one that failed', async () => {

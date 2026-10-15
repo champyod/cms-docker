@@ -120,6 +120,7 @@ export function DeploymentsClient(): React.JSX.Element {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <Stack gap={6} className="xl:col-span-2">
           <ActiveContestCard
+            shardBindings={snapshot.shardBindings}
             activeContestId={snapshot.activeContestId}
             activeContestName={snapshot.activeContestName}
             availableContests={snapshot.availableContests}

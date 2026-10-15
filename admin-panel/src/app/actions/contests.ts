@@ -68,6 +68,10 @@ export async function getBoundContestId(): Promise<Awaited<ReturnType<typeof con
   return contestService.getBoundContestId();
 }
 
+export async function getShardContestBindings(): Promise<Awaited<ReturnType<typeof contestService.getShardContestBindings>>> {
+  return contestService.getShardContestBindings();
+}
+
 export async function activateContest(id: number): Promise<Awaited<ReturnType<typeof contestService.activateContest>>> {
   const result = await contestService.activateContest(id);
   if (result.success) revalidatePath('/[locale]/contests', 'page');

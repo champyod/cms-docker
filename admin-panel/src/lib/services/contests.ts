@@ -5,7 +5,8 @@ import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@
 import { recordAudit } from '@/lib/audit';
 import { writeActiveContestId } from '@/lib/active-contest';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
-import { readContestWebServerShard, resolveContestBinding, CONTEST_WEB_SERVER_SHARD_KEY, type ContestBinding } from '@/lib/contest-binding';
+import { readContestWebServerShard, resolveContestBinding, readShardContestBindings, CONTEST_WEB_SERVER_SHARD_KEY, type ContestBinding } from '@/lib/contest-binding';
+import type { ShardContestBinding } from '@/lib/service-wiring-contract';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
 import {
   fetchContestsPage,
@@ -24,6 +25,7 @@ type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };
 type BoundContestResult = { success: boolean; binding?: ContestBinding; error?: string };
+type ShardBindingsResult = { success: boolean; bindings: ShardContestBinding[]; error?: string };
 
 export async function listContests(params: ContestListParams = {}): Promise<ContestListResult> {
   await requirePermission('contest:list');
@@ -231,6 +233,22 @@ export async function getBoundContestId(): Promise<BoundContestResult> {
   } catch (error: unknown) {
     await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' }, result: 'failure' });
     return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * The per-shard contest bindings from the service registry: one entry per enabled row that names a
+ * contest. The deployments screen shows these in place of one active-contest id, because the
+ * registry row — not contests.is_active — is the source a running instance resolves its contest
+ * from. It reads the registry table alone, so it carries the contest:list gate every contest read
+ * on that screen carries and leaves no config:view row.
+ */
+export async function getShardContestBindings(): Promise<ShardBindingsResult> {
+  await requirePermission('contest:list');
+  try {
+    return { success: true, bindings: await readShardContestBindings() };
+  } catch (error: unknown) {
+    return { success: false, bindings: [], error: (error as Error).message };
   }
 }
 

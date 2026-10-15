@@ -13,7 +13,7 @@ vi.mock('@/lib/active-contest', () => ({ readActiveContestId: mocks.readActiveCo
 vi.mock('@/lib/repo-root', () => ({ getRepoRoot: () => '/repo' }));
 vi.mock('fs/promises', () => ({ default: { readFile: mocks.readFile } }));
 
-import { readContestWebServerShard, resolveContestBinding } from '@/lib/contest-binding';
+import { readContestWebServerShard, readShardContestBindings, resolveContestBinding } from '@/lib/contest-binding';
 import { CONTEST_WEB_SERVER_ROLE, SERVICE_ROLES } from '@/lib/service-wiring-contract';
 
 function row(shard: number, contest_id: number | null) {
@@ -105,5 +105,36 @@ describe('readContestWebServerShard', () => {
   it('reports a config.toml that exists but cannot be read', async () => {
     mocks.readFile.mockRejectedValue(errnoError('EACCES'));
     await expect(readContestWebServerShard()).rejects.toThrow(/^EACCES: .*config\.toml$/);
+  });
+});
+
+describe('readShardContestBindings', () => {
+  it('answers one entry per enabled row that names a contest, shard and role beside the id', async () => {
+    mocks.findMany.mockResolvedValue([
+      { id: 1, name: 'web-0', role: 'ContestWebServer', shard: 0, contest_id: 9 },
+      { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contest_id: 7 },
+    ]);
+    expect(await readShardContestBindings()).toEqual([
+      { id: 1, name: 'web-0', role: 'ContestWebServer', shard: 0, contestId: 9 },
+      { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contestId: 7 },
+    ]);
+  });
+
+  it('asks the registry for the enabled rows that name a contest, shard then role', async () => {
+    mocks.findMany.mockResolvedValue([]);
+    await readShardContestBindings();
+    expect(mocks.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { enabled: true, contest_id: { not: null } },
+        orderBy: [{ shard: 'asc' }, { role: 'asc' }, { id: 'asc' }],
+      }),
+    );
+  });
+
+  it('leaves out a row that names no contest, so no shard shows a contest it does not serve', async () => {
+    mocks.findMany.mockResolvedValue([
+      { id: 3, name: 'eval-0', role: 'EvaluationService', shard: 0, contest_id: null },
+    ]);
+    expect(await readShardContestBindings()).toEqual([]);
   });
 });
