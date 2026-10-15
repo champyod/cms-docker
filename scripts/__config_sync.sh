@@ -1406,6 +1406,52 @@ _registry_role_command() {
   esac
 }
 
+# The compose files the base stack declares its services in, so a generated file can tell which
+# containers already exist, and how the declared one of a role is probed.
+_registry_base_files() {
+  local file
+  for file in docker-compose.yml docker-compose.override.yml docker-compose.expose.yml; do
+    [[ -f "$file" ]] && printf '%s\n' "$file"
+  done
+}
+
+# The healthcheck timings the declared service of a role carries. WHY only the timings: the
+# declared test hardcodes the declared container's ports, and a registry row binds the ports it
+# names, so the test itself is built from the row (see _registry_healthcheck).
+_registry_health_timings() { # <role>
+  local role="$1" file
+  while IFS= read -r file; do
+    awk -v role="$role" '
+      /^  [a-z0-9_-]+:$/ { in_service = 0; in_hc = 0 }
+      $0 ~ ("SERVICE_TYPE: " role "$") { in_service = 1 }
+      in_service && /^    healthcheck:$/ { in_hc = 1; next }
+      in_hc && /^      (interval|timeout|retries|start_period):/ { print; next }
+      in_hc && /^    [^ ]/ { in_hc = 0 }
+    ' "$file"
+  done < <(_registry_base_files)
+}
+
+# The healthcheck one registry row carries: the role's own probe against the ports the row binds,
+# with the timings the declared service of that role uses. Rows with no port to probe carry none,
+# because a container nothing can dial has no health to report.
+_registry_healthcheck() { # <role> <http_port> <rpc_port>
+  local role="$1" http_port="$2" rpc_port="$3" timings
+  timings="$(_registry_health_timings "$role")"
+  case "$role" in
+    ContestWebServer)
+      [[ "$http_port" =~ ^[0-9]+$ ]] || return 0
+      printf '    healthcheck:\n      test: ["CMD", "curl", "-f", "http://localhost:%s/"]\n' "$http_port"
+      ;;
+    EvaluationService | ProxyService)
+      [[ "$rpc_port" =~ ^[0-9]+$ ]] || return 0
+      printf '    healthcheck:\n      test: ["CMD-SHELL", "pgrep -f cms%s && python3 -c \\"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), %s))\\" || exit 1"]\n' \
+        "$role" "$rpc_port"
+      ;;
+    *) return 0 ;;
+  esac
+  [[ -z "$timings" ]] || printf '%s\n' "$timings"
+}
+
 # One container per service row the registry authors.
 #
 # WHY generated rather than declared: how many contest, evaluation or proxy services exist is a
@@ -1453,6 +1499,7 @@ render_registry_compose() {
         "    networks:" \
         "      - cms-network" \
         "    command: [\"sh\", \"-c\", \"$command\"]"
+      _registry_healthcheck "$role" "$http_port" "$rpc_port"
       ports=""
       [[ "$http_port" =~ ^[0-9]+$ ]] && ports+="      - \"\${INNER_IP:-127.0.0.1}:$http_port:$http_port\""$'\n'
       [[ "$rpc_port" =~ ^[0-9]+$ ]] && ports+="      - \"\${INNER_IP:-127.0.0.1}:$rpc_port:$rpc_port\""$'\n'
@@ -1620,12 +1667,10 @@ render_registry_compose_from_db() {
   # owns those containers, so a generated file claiming one fails `make registry-up` on a name
   # conflict instead of leaving the declared container in place. That container reads its row at
   # runtime (cms.db.contest_binding), so the row still decides its contest and ports.
-  local base_files=() file declared
-  for file in docker-compose.yml docker-compose.override.yml docker-compose.expose.yml; do
-    [[ -f "$file" ]] && base_files+=("$file")
-  done
-  declared="$(grep -hoE '^[[:space:]]*container_name:[[:space:]]*[^[:space:]]+' "${base_files[@]+"${base_files[@]}"}" 2>/dev/null \
-    | awk '{print $2}' | sort -u | paste -sd'|' - || true)"
+  local declared
+  declared="$(while IFS= read -r file; do
+    grep -hoE '^[[:space:]]*container_name:[[:space:]]*[^[:space:]]+' "$file" 2>/dev/null
+  done < <(_registry_base_files) | awk '{print $2}' | sort -u | paste -sd'|' - || true)"
   if [[ -n "$declared" ]]; then
     rows="$(printf '%s\n' "$rows" | grep -vE "^(${declared})\|" || true)"
   fi

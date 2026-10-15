@@ -292,5 +292,29 @@ rc=$?
   && no "left a partial route file behind" || ok "leaves no partial route file"
 
 echo ""
+echo "=== Test 15: a generated row is probed the way its role's declared service is ==="
+new_sandbox 1 t 5 "" 'eval-b|EvaluationService|1|eval-b|25001|21001|default||missing'
+cat > "${SB}/docker-compose.yml" <<'YAML'
+services:
+  evaluation-service:
+    container_name: cms-evaluation-service
+    environment:
+      SERVICE_TYPE: EvaluationService
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f cmsEvaluationService || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+YAML
+run_sync
+rc=$?
+compose="${SB}/docker-compose.registry.generated.yml"
+[[ ${rc} -eq 0 ]] && ok "sync exits 0" || no "sync exit ${rc}: $(tail -2 "${SB}/sync.log" | tr '\n' ' ')"
+grep -q 'healthcheck:' "$compose" 2>/dev/null && ok "the row carries a healthcheck" || no "the row has no healthcheck"
+grep -q '21001' "$compose" 2>/dev/null && ok "probes the port the row itself binds" || no "does not probe the row's own port"
+grep -q 'start_period: 60s' "$compose" 2>/dev/null && ok "takes the timings from the declared service" || no "missing the declared timings"
+
+echo ""
 printf 'service-wiring-render: %d passed, %d failed\n' "${pass}" "${fail}"
 [[ ${fail} -eq 0 ]]
