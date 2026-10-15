@@ -288,6 +288,11 @@ struct OverrideRowRecord {
 
 /// The active overrides in one query, folded for the board assembly. Only active rows
 /// apply: an ended override keeps its history in the table but not on the board.
+///
+/// WHY the hidden tombstones join here: a hidden participation must hide the same way a
+/// `hide` override does, so the store folds the tombstones into the one override set
+/// every board path already reads, and `board::is_hidden` governs the ledger and the
+/// team view without a second filter.
 async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
         "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
@@ -296,7 +301,7 @@ async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overri
     .bind(contest_id)
     .fetch_all(pool)
     .await?;
-    let rows: Vec<OverrideRow> = rows
+    let mut rows: Vec<OverrideRow> = rows
         .into_iter()
         .map(|row| OverrideRow {
             target_kind: row.target_kind,
@@ -305,6 +310,12 @@ async fn load_overrides(pool: &PgPool, contest_id: Option<i64>) -> Result<Overri
             payload: row.payload,
         })
         .collect();
+    rows.extend(
+        load_hidden(pool, contest_id)
+            .await?
+            .into_iter()
+            .map(hidden_as_hide_row),
+    );
     Ok(Overrides::fold(&rows))
 }
 
@@ -361,6 +372,41 @@ async fn load_users(pool: &PgPool) -> Result<BTreeMap<String, UserNames>, StoreE
         .collect())
 }
 
+/// The wire spelling of the synthetic override a hidden participation folds as. WHY the
+/// same words as ranking_overrides: the tombstone enters the one fold that already hides
+/// a user, so the board keeps a single hide rule rather than a second predicate.
+const HIDDEN_TARGET_KIND: &str = "user";
+const HIDDEN_ACTION: &str = "hide";
+
+#[derive(sqlx::FromRow)]
+struct HiddenRow {
+    key: String,
+}
+
+/// A hidden participation behaves as the `hide` override it is, so the board's one hide
+/// rule covers it and no filter site needs a second predicate.
+fn hidden_as_hide_row(key: String) -> OverrideRow {
+    OverrideRow {
+        target_kind: HIDDEN_TARGET_KIND.to_string(),
+        target_key: key,
+        action: HIDDEN_ACTION.to_string(),
+        payload: None,
+    }
+}
+
+/// The keys the panel hid, read whole when no contest is configured, the same fallback the
+/// overrides themselves take.
+async fn load_hidden(pool: &PgPool, contest_id: Option<i64>) -> Result<Vec<String>, StoreError> {
+    let rows = sqlx::query_as::<_, HiddenRow>(
+        "SELECT key FROM ranking_hidden WHERE ($1::bigint IS NULL OR contest_id = $1) \
+         ORDER BY key",
+    )
+    .bind(contest_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|row| row.key).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,6 +453,21 @@ mod tests {
             builds.load(Ordering::SeqCst),
             2,
             "an invalidation costs one rebuild"
+        );
+    }
+
+    /// A hidden participation must hide through the one hide rule the board already
+    /// applies, so no board path needs a second filter for it.
+    #[test]
+    fn a_hidden_row_folds_into_the_hide_rule() {
+        let overrides = Overrides::fold(&[hidden_as_hide_row("u0".to_string())]);
+        assert!(
+            board::is_hidden(&overrides, "u0", None),
+            "the tombstoned key is hidden"
+        );
+        assert!(
+            !board::is_hidden(&overrides, "u1", None),
+            "a key with no tombstone stays"
         );
     }
 }
