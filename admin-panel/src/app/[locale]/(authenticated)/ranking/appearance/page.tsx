@@ -1,5 +1,5 @@
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
-import { Card } from '@/components/core/Card';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { Stack } from '@/components/core/Layout';
 import { AppearanceForm } from '@/components/ranking/appearance/AppearanceForm';
 import { buildAppearanceSections } from '@/components/ranking/appearance/appearanceSchema';
@@ -21,14 +21,18 @@ export default async function RankingAppearancePage({
   return (
     <Stack gap={6}>
       {canEdit ? (
-        <Card className="space-y-4">
-          <AppearanceForm
-            copy={copy.appearance}
-            appearance={appearance}
-            sections={buildAppearanceSections(copy.appearance)}
-          />
-        </Card>
-      ) : null}
+        <AppearanceForm
+          copy={copy.appearance}
+          appearance={appearance}
+          sections={buildAppearanceSections(copy.appearance)}
+        />
+      ) : (
+        // WHY a strip rather than nothing: the route only needs ranking:read, so a reader
+        // without the write key reaches this page, and an empty page reads as a broken one.
+        <InlineAlert tone="info" announce="polite">
+          {copy.appearance.readOnly}
+        </InlineAlert>
+      )}
     </Stack>
   );
 }

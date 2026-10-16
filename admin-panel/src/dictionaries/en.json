@@ -626,7 +626,13 @@
       "scoreFormatHint": "Optional JSON describing how scores are formatted.",
       "perspectivesField": "Perspective tabs (JSON)",
       "perspectivesHint": "Which tabs the board shows and how the bar copes when they do not fit. Tabs: board, teams, tasks, scores, progress, time, group, metrics, analysis. Overflow: wrap, scroll or menu.",
-      "save": "Save appearance"
+      "save": "Save appearance",
+      "saveSaving": "Saving...",
+      "saveDone": "Saved",
+      "savePending": "Saving the appearance...",
+      "saveSuccess": "Appearance saved",
+      "saveFailed": "The appearance could not be saved",
+      "readOnly": "Showing the scoreboard settings. Changing them needs the ranking:appearance permission."
     },
     "overrides": {
       "title": "Manual ranking overrides",

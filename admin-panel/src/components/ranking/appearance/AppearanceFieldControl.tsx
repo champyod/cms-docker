@@ -1,3 +1,5 @@
+'use client';
+
 import { Input } from '@/components/core/Input';
 import { SelectField, TextareaField } from '@/components/core/FormField';
 
@@ -8,6 +10,8 @@ export type AppearanceValue = string | boolean;
 interface AppearanceFieldControlProps {
   readonly field: AppearanceField;
   readonly value: AppearanceValue;
+  readonly disabled: boolean;
+  readonly onChange: (name: AppearanceField['name'], value: AppearanceValue) => void;
 }
 
 function asText(value: AppearanceValue): string {
@@ -17,20 +21,30 @@ function asText(value: AppearanceValue): string {
 const JSON_ROWS = 8;
 
 /**
- * One control chosen by the descriptor's kind. Every branch posts the field's own name,
- * so the action reads the same keys the page rendered.
+ * One control chosen by the descriptor's kind, bound to the form's own state.
+ *
+ * WHY every control is controlled here and not seeded with `defaultValue`: the value the
+ * server last held is not an input's value while the operator is editing it, so a
+ * re-render that re-applies it would overwrite what they typed. The form owns the text
+ * and the server re-seeds it only after a write.
  */
 export function AppearanceFieldControl({
   field,
   value,
+  disabled,
+  onChange,
 }: AppearanceFieldControlProps): React.JSX.Element {
+  const id = `appearance-${field.name}`;
   if (field.kind === 'checkbox') {
     return (
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <input
+          id={id}
           type="checkbox"
           name={field.name}
-          defaultChecked={value === true}
+          checked={value === true}
+          disabled={disabled}
+          onChange={(event) => onChange(field.name, event.target.checked)}
           className="size-4 accent-primary"
         />
         {field.label}
@@ -40,11 +54,13 @@ export function AppearanceFieldControl({
   if (field.kind === 'select') {
     return (
       <SelectField
-        id={`appearance-${field.name}`}
+        id={id}
         label={field.label}
         hint={field.hint}
         name={field.name}
-        defaultValue={asText(value)}
+        value={asText(value)}
+        disabled={disabled}
+        onChange={(event) => onChange(field.name, event.target.value)}
       >
         {(field.options ?? []).map((option) => (
           <option key={option.value} value={option.value}>
@@ -57,22 +73,28 @@ export function AppearanceFieldControl({
   if (field.kind === 'json') {
     return (
       <TextareaField
-        id={`appearance-${field.name}`}
+        id={id}
         label={field.label}
         hint={field.hint}
         name={field.name}
         rows={JSON_ROWS}
-        defaultValue={asText(value)}
+        value={asText(value)}
+        disabled={disabled}
+        onChange={(event) => onChange(field.name, event.target.value)}
         className="font-mono"
       />
     );
   }
+  // Input renders its own label and wraps the adapter input, so the field's own
+  // id, name and hint association come from it rather than from a second wrapper.
   return (
-    <div className="space-y-1.5">
-      <Input label={field.label} name={field.name} defaultValue={asText(value)} />
-      {field.hint !== undefined && (
-        <p className="ml-1 text-xs text-muted-foreground">{field.hint}</p>
-      )}
-    </div>
+    <Input
+      id={id}
+      label={field.label}
+      name={field.name}
+      value={asText(value)}
+      disabled={disabled}
+      onChange={(event) => onChange(field.name, event.target.value)}
+    />
   );
 }

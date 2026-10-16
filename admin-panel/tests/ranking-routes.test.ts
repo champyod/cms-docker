@@ -78,7 +78,7 @@ describe('Ranking ownership and wiring', () => {
     const page = readSource('src/app/[locale]/(authenticated)/ranking/appearance/page.tsx');
     expect(page).toContain('buildAppearanceSections');
     const form = readSource('src/components/ranking/appearance/AppearanceForm.tsx');
-    expect(form).toContain('submitRankingAppearance');
+    expect(form).toContain('updateRankingAppearance');
   });
 
   it('keeps the old address a redirect stub rather than a second page', () => {

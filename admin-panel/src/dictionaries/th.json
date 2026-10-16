@@ -626,7 +626,13 @@
       "scoreFormatHint": "JSON ที่ไม่บังคับ ซึ่งอธิบายวิธีจัดรูปแบบคะแนน",
       "perspectivesField": "แท็บมุมมอง (JSON)",
       "perspectivesHint": "เลือกแท็บที่กระดานแสดง และวิธีที่แถบแท็บจัดการเมื่อพื้นที่ไม่พอ แท็บ: board, teams, tasks, scores, progress, time, group, metrics, analysis โหมดล้น: wrap, scroll หรือ menu",
-      "save": "บันทึกรูปลักษณ์"
+      "save": "บันทึกรูปลักษณ์",
+      "saveSaving": "กำลังบันทึก...",
+      "saveDone": "บันทึกแล้ว",
+      "savePending": "กำลังบันทึกรูปลักษณ์...",
+      "saveSuccess": "บันทึกรูปลักษณ์แล้ว",
+      "saveFailed": "ไม่สามารถบันทึกรูปลักษณ์ได้",
+      "readOnly": "กำลังแสดงการตั้งค่ากระดานคะแนน การแก้ไขต้องมีสิทธิ์ ranking:appearance"
     },
     "overrides": {
       "title": "การปรับอันดับด้วยมือ",

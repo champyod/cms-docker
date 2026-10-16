@@ -10,12 +10,23 @@ export interface AppearanceOption {
   readonly label: string;
 }
 
+/**
+ * How much of the section's grid a field takes.
+ *
+ * WHY the descriptor carries it: the sections are rendered by one loop, so the one
+ * field that needs the whole row (a JSON box) has to say so in the data rather than
+ * in a second render path written for it.
+ */
+export type AppearanceFieldSpan = 'half' | 'full';
+
 export interface AppearanceField {
   readonly name: keyof AppearanceFields;
   readonly label: string;
   readonly kind: AppearanceFieldKind;
   readonly hint?: string;
   readonly options?: readonly AppearanceOption[];
+  /** `full` takes both columns; every other field shares the row. */
+  readonly span?: AppearanceFieldSpan;
 }
 
 export interface AppearanceSection {
@@ -26,6 +37,9 @@ export interface AppearanceSection {
 
 export const ACCESS_MODE_PUBLIC = 'public';
 export const ACCESS_MODE_PROTECTED = 'protected';
+
+/** The JSON boxes are the long fields, so they take the row rather than half of it. */
+const JSON_SPAN: AppearanceFieldSpan = 'full';
 
 /**
  * The one declaration of what the appearance form edits. The page renders whatever these
@@ -72,18 +86,26 @@ export function buildAppearanceSections(copy: AppearanceCopy): readonly Appearan
       id: 'advanced',
       title: copy.advancedSection,
       fields: [
-        { name: 'theme', label: copy.themeField, hint: copy.themeHint, kind: 'json' },
+        {
+          name: 'theme',
+          label: copy.themeField,
+          hint: copy.themeHint,
+          kind: 'json',
+          span: JSON_SPAN,
+        },
         {
           name: 'scoreFormat',
           label: copy.scoreFormatField,
           hint: copy.scoreFormatHint,
           kind: 'json',
+          span: JSON_SPAN,
         },
         {
           name: 'perspectives',
           label: copy.perspectivesField,
           hint: copy.perspectivesHint,
           kind: 'json',
+          span: JSON_SPAN,
         },
       ],
     },

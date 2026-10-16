@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { Prisma } from '@prisma/client';
+import { Prisma, type ranking_settings } from '@prisma/client';
 
 import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
@@ -61,6 +61,11 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
   await ensurePermission('ranking:read');
   const row = await prisma.ranking_settings.findUnique({ where: { id: SETTINGS_ID } });
   if (row === null) return DEFAULTS;
+  return toAppearance(row);
+}
+
+/** The stored row as the form reads it, so a write can answer with what it actually kept. */
+function toAppearance(row: RankingSettingsRow): RankingAppearance {
   return {
     title: row.title ?? '',
     subtitle: row.subtitle ?? '',
@@ -76,6 +81,46 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
     scoreFormat: formatJson(row.score_format),
     perspectives: formatJson(row.perspectives),
   };
+}
+
+type RankingSettingsRow = ranking_settings;
+
+/** A write that either stored the row or has a reason it did not. */
+export type RankingAppearanceSave =
+  | { readonly success: true; readonly appearance: RankingAppearance }
+  | { readonly success: false; readonly error: string };
+
+/**
+ * The appearance page's entry point. The page holds its fields as form state, so it hands
+ * the object it already has rather than a FormData, and the row the write kept comes back
+ * with it: that is what the page re-seeds from, and only after the write succeeded.
+ */
+export async function updateRankingAppearance(
+  fields: AppearanceFields,
+): Promise<RankingAppearanceSave> {
+  await ensurePermission('ranking:appearance');
+  try {
+    const row = toRow(fields);
+    const stored = await prisma.ranking_settings.upsert({
+      where: { id: SETTINGS_ID },
+      create: { id: SETTINGS_ID, ...row },
+      update: row,
+    });
+    await recordAudit({
+      verb: 'ranking:appearance:update',
+      entity: 'ranking',
+      entityId: String(SETTINGS_ID),
+      afterValues: { ...fields },
+      result: 'success',
+    });
+    revalidatePath('/[locale]/ranking/appearance');
+    return { success: true, appearance: toAppearance(stored) };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'the appearance could not be saved',
+    };
+  }
 }
 
 export async function saveRankingAppearance(formData: FormData): Promise<{ success: boolean; error?: string }> {
@@ -99,18 +144,6 @@ export async function saveRankingAppearance(formData: FormData): Promise<{ succe
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
-  }
-}
-
-/**
- * The form-shaped entry point. A progressive form has nowhere to render a returned
- * value, so a failure is re-thrown for the route's error boundary: the alternative is
- * a form that silently keeps the old appearance and tells the operator nothing.
- */
-export async function submitRankingAppearance(formData: FormData): Promise<void> {
-  const result = await saveRankingAppearance(formData);
-  if (!result.success) {
-    throw new Error(result.error ?? 'the appearance could not be saved');
   }
 }
 
