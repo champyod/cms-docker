@@ -19,7 +19,11 @@ const TARGET_TASK: &str = "task";
 /// under, and only `hide` applies to it. WHY its own kind rather than a `task` key: hiding
 /// a contest drops the contest and every task filed under it, so the target is the group
 /// the page draws and sums, not one column inside it.
-const TARGET_CONTEST: &str = "contest";
+///
+/// WHY visible to the crate: `ranking_config` spells the target that *shows* a contest's content
+/// with this same wire name, so the one string must be the one place the spelling lives or a
+/// rename of it would silently stop matching between the two surfaces.
+pub(crate) const TARGET_CONTEST: &str = "contest";
 
 /// The six actions the panel may write, taken from dictionaries/en.json.
 /// WHY freeze is here: the panel has always offered it (OVERRIDE_ACTIONS, and
@@ -435,15 +439,22 @@ pub struct Override {
     pub value: Option<String>,
 }
 
+/// The active override rows that can reach the board the config shows, as the raw log.
+///
+/// WHY the scope is the shown set: an override only applies to a contest the board draws, so the
+/// read is bounded by exactly those contests. There is no "no scope means everything" arm any
+/// more — that arm let an instance with no contest apply rows filed under contests it did not
+/// serve, which is how six hides filed under contests 3 and 7 kept applying when the reader
+/// moved to 9.
 pub async fn load_overrides(
     pool: &PgPool,
-    contest_id: Option<i64>,
+    contest_ids: &[i32],
 ) -> Result<Vec<Override>, StoreError> {
     let rows = sqlx::query_as::<_, Override>(
         "SELECT target_kind, target_key, action, payload->>'value' AS value \
-         FROM ranking_overrides WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
+         FROM ranking_overrides WHERE active AND contest_id = ANY($1) ORDER BY id",
     )
-    .bind(contest_id)
+    .bind(contest_ids)
     .fetch_all(pool)
     .await?;
     Ok(rows)
@@ -464,17 +475,17 @@ struct HiddenKindKey {
 /// the two lists could disagree about the same hide.
 pub async fn load_hidden_tasks(
     pool: &PgPool,
-    contest_id: Option<i64>,
+    contest_ids: &[i32],
 ) -> Result<HiddenTargets, StoreError> {
     let rows = sqlx::query_as::<_, HiddenKindKey>(
         "SELECT target_kind, target_key FROM ranking_overrides \
          WHERE active AND action = $1 AND target_kind IN ($2, $3) \
-         AND ($4::bigint IS NULL OR contest_id = $4)",
+         AND contest_id = ANY($4)",
     )
     .bind(ACTION_HIDE)
     .bind(TARGET_TASK)
     .bind(TARGET_CONTEST)
-    .bind(contest_id)
+    .bind(contest_ids)
     .fetch_all(pool)
     .await?;
     let mut hidden = HiddenTargets::default();

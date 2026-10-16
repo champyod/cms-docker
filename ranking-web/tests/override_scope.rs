@@ -1,8 +1,8 @@
-//! Contest scoping of the board's overrides: a configured contest must fold only its own
-//! rows, and no configured contest must keep applying every active override.
+//! Contest scoping of the board's overrides: the board folds only the rows filed against a
+//! contest the config shows, and a config that shows nothing folds none of them.
 //!
-//! WHY a live database: the scope is a SQL predicate, so the behaviour under test is what
-//! PostgreSQL returns, not a property a pure unit test can assert.
+//! WHY a live database: the scope is a SQL predicate over the shown set, so the behaviour under
+//! test is what PostgreSQL returns, not a property a pure unit test can assert.
 
 use cms_ranking::db::Db;
 use cms_ranking::store::load_board;
@@ -22,7 +22,8 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 8] = [
+    const STATEMENTS: [&str; 9] = [
+        "DELETE FROM ranking_config",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
         "DELETE FROM ranking_tasks",
@@ -38,7 +39,8 @@ async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// Two users on one task, and one hide override per contest, each naming a different user.
+/// Two users on one task filed under contest 1, and one hide override per contest, each naming
+/// a different user.
 async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
     clear(pool).await?;
     sqlx::query(
@@ -48,9 +50,9 @@ async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'Task', 'T0', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max')",
+         VALUES ('t0', 'Task', 'T0', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max')",
     )
     .execute(pool)
     .await?;
@@ -76,42 +78,63 @@ async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// The regression: the service read every active override regardless of the contest the
-/// panel filed it against. Contest 1 must apply its own hide and only its own.
-#[tokio::test]
-#[ignore = "requires a live postgres carrying the ranking tables"]
-async fn an_override_applies_only_to_its_own_contest() {
-    let pool = pool();
-    seed_two_contests(&pool).await.expect("the seed applies");
-
-    let contest_one = load_board(&pool, Some(1))
-        .await
-        .expect("the board assembles");
-    assert!(
-        contest_one.contains_key("u0"),
-        "contest 2's hide must not reach contest 1"
-    );
-    assert!(
-        !contest_one.contains_key("u1"),
-        "contest 1 hides its own row"
-    );
+/// Writes the shown set, which is the only thing that decides what the board draws.
+async fn show_only(pool: &PgPool, contest_ids: &[i32]) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM ranking_config")
+        .execute(pool)
+        .await?;
+    for contest_id in contest_ids {
+        sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', $1)")
+            .bind(contest_id.to_string())
+            .execute(pool)
+            .await?;
+    }
+    Ok(())
 }
 
-/// Back-compat for a single-contest deployment: with no contest configured, every active
-/// override still applies, which is the behaviour before the column was read.
+/// The regression: the service read every active override regardless of the contest the panel
+/// filed it against, so a row hidden for another day took a contestant off this board.
 #[tokio::test]
 #[ignore = "requires a live postgres carrying the ranking tables"]
-async fn no_configured_contest_applies_every_override() {
+async fn an_override_applies_only_to_the_contest_the_config_shows() {
     let pool = pool();
     seed_two_contests(&pool).await.expect("the seed applies");
 
-    let board = load_board(&pool, None).await.expect("the board assembles");
+    show_only(&pool, &[1]).await.expect("the config applies");
+    let contest_one = load_board(&pool).await.expect("the board assembles");
     assert!(
-        !board.contains_key("u0"),
-        "with no scope every hide applies"
+        !contest_one.contains_key("u1"),
+        "contest 1 folds its own hide"
     );
     assert!(
-        !board.contains_key("u1"),
-        "with no scope every hide applies"
+        contest_one.contains_key("u0"),
+        "contest 2's hide must not reach the board showing contest 1"
     );
+
+    show_only(&pool, &[2]).await.expect("the config applies");
+    let contest_two = load_board(&pool).await.expect("the board assembles");
+    assert!(
+        contest_two.is_empty(),
+        "a shown contest the projection holds no rows for draws nothing, not another contest"
+    );
+
+    clear(&pool).await.expect("the cleanup applies");
+}
+
+/// The classic default is gone: a config showing nothing folds no override and draws no row,
+/// rather than falling back to applying every active override.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables"]
+async fn a_config_showing_nothing_folds_no_override() {
+    let pool = pool();
+    seed_two_contests(&pool).await.expect("the seed applies");
+    show_only(&pool, &[]).await.expect("the config applies");
+
+    let board = load_board(&pool).await.expect("the board assembles");
+    assert!(
+        board.is_empty(),
+        "with nothing shown the board draws nothing"
+    );
+
+    clear(&pool).await.expect("the cleanup applies");
 }

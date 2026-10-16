@@ -91,10 +91,9 @@ impl AppState {
         let Some(db) = self.db() else {
             return Err(StoreError::NoDatabase);
         };
-        let contest_id = self.config().contest_id;
         self.inner
             .standings
-            .get_or_build(|| store::load_standings(db.pool(), contest_id))
+            .get_or_build(|| store::load_standings(db.pool()))
             .await
     }
 

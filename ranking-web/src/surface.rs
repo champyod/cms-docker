@@ -4,7 +4,7 @@ use askama::Template;
 
 use serde::Serialize;
 
-use crate::store::{Appearance, BoardHeader, RankingContest};
+use crate::store::{Appearance, BoardHeader, RankingContest, ShownSet};
 
 /// The licence offer, in the shape the vendored credits.html reads: project and
 /// license are objects (name, url, spdx_id), not strings, and surface is the asset
@@ -101,9 +101,10 @@ const DEFAULT_TITLE: &str = "Ranking";
 /// the contest the row names, with the operator's per-contest override when they wrote one.
 pub fn render_page(
     appearance: Option<&Appearance>,
+    shown: &ShownSet,
     contest: Option<&RankingContest>,
 ) -> Result<String, SurfaceError> {
-    let header = BoardHeader::resolve(appearance, contest);
+    let header = BoardHeader::resolve(appearance, shown, contest);
     let heading = header.as_ref().map_or("", |words| words.title.as_str());
     let subtitle = header.as_ref().map_or("", |words| words.subtitle.as_str());
     let title = if heading.is_empty() {

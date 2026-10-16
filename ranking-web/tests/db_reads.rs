@@ -20,7 +20,8 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 8] = [
+    const STATEMENTS: [&str; 9] = [
+        "DELETE FROM ranking_config",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
         "DELETE FROM ranking_tasks",
@@ -38,12 +39,18 @@ async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
 
 /// One task, two submissions for one user, two changes: the second change raises
 /// the score, so the history must carry two entries and the board one value.
+///
+/// The config row is what makes the task drawable: the board shows contest 1 because the
+/// config says so, and the task is filed under it by the contest id the projection pushes.
 async fn seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     clear(pool).await?;
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(pool)
+        .await?;
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'Task', 'T0', 'c0', 100.0, 2, '[]'::jsonb, 0, 'max')",
+         VALUES ('t0', 'Task', 'T0', 'c0', 1, 100.0, 2, '[]'::jsonb, 0, 'max')",
     )
     .execute(pool)
     .await?;
@@ -78,7 +85,7 @@ async fn seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 async fn the_ledger_is_assembled_from_the_tables() {
     let pool = pool();
     seed(&pool).await.expect("the seed applies");
-    let ledger = load_ledger(&pool, None)
+    let ledger = load_ledger(&pool)
         .await
         .expect("the seeded projection assembles");
     assert_eq!(ledger.skipped_subchanges(), 0);
@@ -104,15 +111,20 @@ async fn the_ledger_is_assembled_from_the_tables() {
 async fn an_unknown_score_mode_refuses_instead_of_guessing() {
     let pool = pool();
     clear(&pool).await.expect("the tables are reachable");
+    // The task has to be inside the board's shown set for the read to reach it at all.
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(&pool)
+        .await
+        .expect("the config row inserts");
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'Task', 'T0', 'c0', 100.0, 2, '[]'::jsonb, 0, 'not_a_mode')",
+         VALUES ('t0', 'Task', 'T0', 'c0', 1, 100.0, 2, '[]'::jsonb, 0, 'not_a_mode')",
     )
     .execute(&pool)
     .await
     .expect("the row inserts");
-    match load_ledger(&pool, None).await {
+    match load_ledger(&pool).await {
         Err(StoreError::Score(error)) => {
             assert!(error.to_string().contains("not_a_mode"));
         }
@@ -151,6 +163,12 @@ async fn appearance_is_absent_until_the_panel_writes_it() {
 async fn the_board_applies_overrides_and_names_the_rows() {
     let pool = pool();
     clear(&pool).await.expect("the tables are reachable");
+    // The config row and the task's contest id are what put the task inside the board's shown
+    // set: the read is scoped by the config now, so a fixture without them draws nothing.
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(&pool)
+        .await
+        .expect("the config row inserts");
     sqlx::query(
         "INSERT INTO ranking_users (key, f_name, l_name, team) VALUES \
          ('u0', 'Grace', 'Hopper', NULL), ('u1', 'Alan', 'Turing', NULL)",
@@ -159,9 +177,9 @@ async fn the_board_applies_overrides_and_names_the_rows() {
     .await
     .expect("the users insert");
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'Task', 'T0', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max')",
+         VALUES ('t0', 'Task', 'T0', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max')",
     )
     .execute(&pool)
     .await
@@ -188,7 +206,7 @@ async fn the_board_applies_overrides_and_names_the_rows() {
     .execute(&pool)
     .await
     .expect("the overrides insert");
-    let board = load_board(&pool, None).await.expect("the board assembles");
+    let board = load_board(&pool).await.expect("the board assembles");
     assert_eq!(board["u0"].f_name, "Ada");
     assert_eq!(board["u0"].l_name, "Lovelace");
     assert_eq!(board["u0"].score, 10.0);

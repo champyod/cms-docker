@@ -9,7 +9,9 @@ use tower_http::services::ServeDir;
 use crate::board;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::public_config;
-use crate::store::{load_appearance, load_contest, Appearance, RankingContest};
+use crate::store::{
+    load_appearance, load_contest, load_shown_set, Appearance, RankingContest, ShownSet,
+};
 use crate::surface::{credits_from_file, logo_path, render_page};
 use crate::AppState;
 
@@ -102,11 +104,15 @@ async fn root(State(state): State<AppState>) -> Response {
         Ok(appearance) => appearance,
         Err(refusal) => return refusal.response(),
     };
-    let contest = match contest_of(&state, appearance.as_ref()).await {
+    let shown = match shown_of(&state).await {
+        Ok(shown) => shown,
+        Err(refusal) => return refusal.response(),
+    };
+    let contest = match contest_of(&state, &shown).await {
         Ok(contest) => contest,
         Err(refusal) => return refusal.response(),
     };
-    match render_page(appearance.as_ref(), contest.as_ref()) {
+    match render_page(appearance.as_ref(), &shown, contest.as_ref()) {
         Ok(html) => html_response(&html),
         Err(error) => refuse(&error.to_string()),
     }
@@ -159,7 +165,11 @@ async fn overrides(State(state): State<AppState>) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
-    match crate::overrides::load_overrides(db.pool(), state.config().contest_id).await {
+    let shown = match shown_of(&state).await {
+        Ok(shown) => shown,
+        Err(refusal) => return refusal.response(),
+    };
+    match crate::overrides::load_overrides(db.pool(), shown.contest_ids()).await {
         Ok(rows) => json_response(&rows),
         Err(error) => refuse(&error.to_string()),
     }
@@ -219,17 +229,27 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
         .map_err(|error| Refusal(error.to_string()))
 }
 
-/// The contest the settings name, or None when they name none or the projection holds no record
-/// for it yet.
+/// What the board is told to show, or the refusal the caller must return.
+///
+/// WHY the database is required: the shown set is the board's whole answer for its contents, so a
+/// read that could not reach it would have to guess what to draw.
+async fn shown_of(state: &AppState) -> Result<ShownSet, Refusal> {
+    let Some(db) = state.db() else {
+        return Err(Refusal("no database is configured".to_string()));
+    };
+    load_shown_set(db.pool())
+        .await
+        .map_err(|error| Refusal(error.to_string()))
+}
+
+/// The contest the board shows, or None when the config shows none or several, or the projection
+/// holds no record for it yet.
 ///
 /// WHY a missing record is not a refusal: the push may not have carried the contest's id yet, and
 /// the page can still serve the board. It renders the default title rather than a heading that
 /// might describe another day.
-async fn contest_of(
-    state: &AppState,
-    appearance: Option<&Appearance>,
-) -> Result<Option<RankingContest>, Refusal> {
-    let Some(contest_id) = appearance.and_then(|row| row.contest_id) else {
+async fn contest_of(state: &AppState, shown: &ShownSet) -> Result<Option<RankingContest>, Refusal> {
+    let Some(contest_id) = shown.sole_contest() else {
         return Ok(None);
     };
     let Some(db) = state.db() else {

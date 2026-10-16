@@ -9,7 +9,7 @@
 
 use cms_ranking::db::Db;
 use cms_ranking::entities::{list_body, Kind};
-use cms_ranking::store::load_ledger;
+use cms_ranking::store::{load_ledger, ShownSet};
 use sqlx::PgPool;
 
 fn database_url() -> String {
@@ -26,7 +26,8 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 9] = [
+    const STATEMENTS: [&str; 10] = [
+        "DELETE FROM ranking_config",
         "DELETE FROM ranking_hidden",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
@@ -47,9 +48,15 @@ async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
 /// tasks are filed under distinct contests so a hide that names one leaves the other.
 async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
     clear(pool).await?;
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(pool)
+        .await?;
+    // The contest list is scoped by the shown set against `ranking_contests.contest_id`, the
+    // CMS contest id the projection pushes beside the encoded name, so a seeded contest without
+    // one is not in any board's shown set — the reader refuses to invent a scope for it.
     sqlx::query(
-        "INSERT INTO ranking_contests (key, name, begin, \"end\", score_precision) VALUES \
-         ('c0', 'Spring', 1, 2, 0), ('c1', 'Autumn', 1, 2, 0)",
+        "INSERT INTO ranking_contests (key, name, begin, \"end\", score_precision, contest_id) VALUES \
+         ('c0', 'Spring', 1, 2, 0, 1), ('c1', 'Autumn', 1, 2, 0, 1)",
     )
     .execute(pool)
     .await?;
@@ -60,10 +67,10 @@ async fn seed_two_contests(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) VALUES \
-         ('t0', 'A Plus B', 'aplusb', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max'), \
-         ('t1', 'Two Sum', 'twosum', 'c1', 100.0, 0, '[]'::jsonb, 1, 'max')",
+         ('t0', 'A Plus B', 'aplusb', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max'), \
+         ('t1', 'Two Sum', 'twosum', 'c1', 1, 100.0, 0, '[]'::jsonb, 1, 'max')",
     )
     .execute(pool)
     .await?;
@@ -106,8 +113,14 @@ async fn hide_task(pool: &PgPool, key: &str) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// The shown set the seed puts both contests inside; the reader's own scope comes from the
+/// config, and the route reads the same one.
+fn shown() -> ShownSet {
+    ShownSet::new(vec![1])
+}
+
 async fn listed(pool: &PgPool, kind: Kind) -> serde_json::Value {
-    let body = list_body(pool, kind, Some(1))
+    let body = list_body(pool, kind, &shown())
         .await
         .expect("the entity list renders");
     serde_json::from_slice(&body).expect("the entity list is json")
@@ -152,9 +165,7 @@ async fn a_hidden_contest_leaves_the_column_and_the_ledger_together() {
         "another contest's task stays, and this is what the group hide must not drop"
     );
 
-    let ledger = load_ledger(&pool, Some(1))
-        .await
-        .expect("the ledger assembles");
+    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden contest's task leaves the score grid"
@@ -224,9 +235,7 @@ async fn a_task_hide_is_scoped_to_the_contest_its_key_names() {
         "the other contest keeps its task"
     );
 
-    let ledger = load_ledger(&pool, Some(1))
-        .await
-        .expect("the ledger assembles");
+    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden task leaves the score grid"

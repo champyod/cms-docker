@@ -24,7 +24,8 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 7] = [
+    const STATEMENTS: [&str; 8] = [
+        "DELETE FROM ranking_config",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
         "DELETE FROM ranking_tasks",
@@ -60,17 +61,22 @@ async fn get(app: axum::Router, uri: &str) -> axum::response::Response {
         .expect("the router is infallible")
 }
 
+/// The config row is what makes the seeded contest drawable: the entity list is the page's
+/// column set, and it is scoped by the same shown set the ledger is.
 async fn seed_entities(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(pool)
+        .await?;
     sqlx::query(
-        r#"INSERT INTO ranking_contests (key, name, begin, "end", score_precision)
-        VALUES ('c0', 'Parity', 1, 2, 0)"#,
+        r#"INSERT INTO ranking_contests (key, name, begin, "end", score_precision, contest_id)
+        VALUES ('c0', 'Parity', 1, 2, 0, 1)"#,
     )
     .execute(pool)
     .await?;
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'A Plus B', 'aplusb', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max')",
+         VALUES ('t0', 'A Plus B', 'aplusb', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max')",
     )
     .execute(pool)
     .await?;

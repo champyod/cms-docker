@@ -4,7 +4,7 @@ use serde::Serialize;
 use sqlx::postgres::PgPool;
 
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
-use crate::overrides::{OverrideRow, Overrides, ACTION_HIDE, TARGET_USER};
+use crate::overrides::{OverrideRow, Overrides, ACTION_HIDE, TARGET_CONTEST, TARGET_USER};
 use crate::scoring::{
     self, parse_extra, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode,
 };
@@ -26,6 +26,96 @@ pub enum StoreError {
     Json(#[from] serde_json::Error),
     #[error("no database is configured")]
     NoDatabase,
+    /// A config row names a target this reader cannot draw.
+    ///
+    /// WHY a refusal and not a skip: the config is the board's whole answer for what it shows, so
+    /// a declaration it cannot honour must fail where an operator can see it rather than let the
+    /// board quietly draw something the operator did not name.
+    #[error("ranking_config shows a {kind} target, which this reader cannot draw")]
+    UnshowableConfigTarget { kind: String },
+    /// A contest target whose key is not a contest id.
+    #[error("ranking_config shows the contest \"{key}\", which is not an id")]
+    BadContestKey { key: String },
+}
+
+/// The contests the board is told to show, read from `ranking_config`.
+///
+/// WHY it is not an `Option` with a classic default: the default this replaces was "the active
+/// contest" whenever nothing else named one, and that silent pick is exactly how a board came to
+/// draw another day's columns. An empty shown set is a real configuration — the board draws
+/// nothing — and it is never replaced by a contest nobody chose.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ShownSet {
+    contest_ids: Vec<i32>,
+}
+
+impl ShownSet {
+    /// A shown set the caller already knows.
+    ///
+    /// WHY it exists beside `load_shown_set`: the reader reads one from the database and a test
+    /// builds one by hand, and both must be the same type or the scope would be spelled twice and
+    /// could drift.
+    pub fn new(contest_ids: Vec<i32>) -> Self {
+        Self { contest_ids }
+    }
+
+    /// The contests to draw, deduplicated and in the order the config declared them.
+    pub fn contest_ids(&self) -> &[i32] {
+        &self.contest_ids
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.contest_ids.is_empty()
+    }
+
+    /// The one contest the board shows, or None when it shows none or several.
+    ///
+    /// WHY None for several: the header announces a board's contest, and naming one of several
+    /// would announce a contest the operator did not choose — the same silent pick, in the header.
+    pub fn sole_contest(&self) -> Option<i32> {
+        match self.contest_ids.as_slice() {
+            [only] => Some(*only),
+            _ => None,
+        }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct ConfigRow {
+    target_kind: String,
+    target_key: String,
+}
+
+/// What the board is told to show, from the one table that decides it.
+///
+/// WHY a malformed row is a refusal: a contest key that is not an id cannot be matched against
+/// anything, and skipping it would draw a board smaller than the one the operator configured with
+/// no sign that a declaration was dropped.
+pub async fn load_shown_set(pool: &PgPool) -> Result<ShownSet, StoreError> {
+    let rows = sqlx::query_as::<_, ConfigRow>(
+        "SELECT target_kind, target_key FROM ranking_config WHERE active ORDER BY id",
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut contest_ids: Vec<i32> = Vec::new();
+    for row in rows {
+        if row.target_kind != TARGET_CONTEST {
+            return Err(StoreError::UnshowableConfigTarget {
+                kind: row.target_kind,
+            });
+        }
+        let contest_id =
+            row.target_key
+                .trim()
+                .parse::<i32>()
+                .map_err(|_| StoreError::BadContestKey {
+                    key: row.target_key.clone(),
+                })?;
+        if !contest_ids.contains(&contest_id) {
+            contest_ids.push(contest_id);
+        }
+    }
+    Ok(ShownSet { contest_ids })
 }
 
 /// Everything the board endpoints derive from one projection read: the ledger, the
@@ -71,14 +161,12 @@ impl StandingsCache {
     }
 }
 
-pub async fn load_standings(
-    pool: &PgPool,
-    contest_id: Option<i64>,
-) -> Result<Standings, StoreError> {
+pub async fn load_standings(pool: &PgPool) -> Result<Standings, StoreError> {
+    let shown = load_shown_set(pool).await?;
     let users = load_users(pool).await?;
     let team_names = load_team_names(pool).await?;
-    let overrides = load_overrides(pool, contest_id).await?;
-    let ledger = assemble_ledger(pool, &users, &overrides).await?;
+    let overrides = load_overrides(pool, &shown).await?;
+    let ledger = assemble_ledger(pool, &shown, &users, &overrides).await?;
     Ok(Standings {
         ledger,
         users,
@@ -132,9 +220,6 @@ pub struct Appearance {
     /// The perspective tabs the panel enabled, in order. Normalised before it
     /// reaches the page; see crate::perspectives.
     pub perspectives: Option<serde_json::Value>,
-    /// The contest the board names. Its record supplies the header's name and dates, so
-    /// the words cannot describe a day the board does not serve.
-    pub contest_id: Option<i64>,
     /// The explicit wording override per contest, keyed by the contest id it is for. An
     /// absent entry means the contest's own name and dates are the words.
     pub wording_overrides: Option<serde_json::Value>,
@@ -169,12 +254,12 @@ impl Appearance {
             .unwrap_or(false)
     }
 
-    /// The wording the operator wrote for the named contest, or empty.
+    /// The wording the operator wrote for the shown contest, or empty.
     ///
-    /// WHY the override is keyed by contest id rather than held flat: the settings row names
-    /// one contest, and a flat copy would keep describing the contest the board used to serve
-    /// after the name moved — which is the bug this keying exists to rule out.
-    pub fn wording_for(&self, contest_id: i64) -> Wording {
+    /// WHY the override is keyed by contest id rather than held flat: the shown set names which
+    /// contest's content the board draws, and a flat copy would keep describing the contest the
+    /// board used to serve after the shown set moved — the bug this keying exists to rule out.
+    pub fn wording_for(&self, contest_id: i32) -> Wording {
         let entry = self
             .wording_overrides
             .as_ref()
@@ -192,7 +277,7 @@ impl Appearance {
     }
 }
 
-/// The contest the board names, as the projection holds it. `name` is the contest's
+/// The contest the board shows, as the projection holds it. `name` is the contest's
 /// description, which is the human line the push files; `begin` and `end` are its
 /// start and stop as unix seconds.
 #[derive(Debug, Clone, sqlx::FromRow)]
@@ -202,7 +287,7 @@ pub struct RankingContest {
     pub end: i32,
 }
 
-/// The header of the board the settings name, with the operator's own words where they wrote any.
+/// The header of the board, with the operator's own words where they wrote any.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BoardHeader {
     pub title: String,
@@ -210,18 +295,24 @@ pub struct BoardHeader {
 }
 
 impl BoardHeader {
-    /// Resolves the words from the named contest: the explicit override first, the contest's
-    /// own record otherwise.
+    /// Resolves the words from the single contest the config shows: the explicit override first,
+    /// the contest's own record otherwise.
     ///
-    /// WHY the contest row may be missing without an error: a deployment whose push has not
-    /// carried the id yet has no record to read, and inventing a heading there would be the
-    /// same lie in a new place. The caller renders the default title instead.
+    /// WHY the shown set decides and not a settings column: the board draws one contest only when
+    /// the config names exactly one, so naming it anywhere else would be a second place the same
+    /// fact could live and disagree. A board that shows none or several has no header to name —
+    /// the page renders its own title there rather than announcing a contest nobody chose.
+    ///
+    /// WHY a missing contest row is not an error: a deployment whose push has not carried the id
+    /// yet has no record to read, and inventing a heading there would be the same lie in a new
+    /// place. The caller renders the default title instead.
     pub fn resolve(
         appearance: Option<&Appearance>,
+        shown: &ShownSet,
         contest: Option<&RankingContest>,
     ) -> Option<Self> {
-        let contest_id = appearance?.contest_id?;
-        let wording = appearance?.wording_for(contest_id);
+        let contest_id = shown.sole_contest()?;
+        let wording = appearance.map_or_else(Wording::default, |row| row.wording_for(contest_id));
         let title = wording
             .title
             .as_deref()
@@ -284,11 +375,10 @@ fn utc_date(seconds: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// The contest the settings name, or None when the row names none or the projection has no
-/// record for it yet.
+/// The contest the board shows, or None when the projection has no record for it yet.
 pub async fn load_contest(
     pool: &PgPool,
-    contest_id: i64,
+    contest_id: i32,
 ) -> Result<Option<RankingContest>, StoreError> {
     let row = sqlx::query_as::<_, RankingContest>(
         "SELECT name, begin, \"end\" FROM ranking_contests WHERE contest_id = $1",
@@ -299,20 +389,18 @@ pub async fn load_contest(
     Ok(row)
 }
 
-pub async fn load_ledger(pool: &PgPool, contest_id: Option<i64>) -> Result<Ledger, StoreError> {
+pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
+    let shown = load_shown_set(pool).await?;
     let users = load_users(pool).await?;
-    let overrides = load_overrides(pool, contest_id).await?;
-    assemble_ledger(pool, &users, &overrides).await
+    let overrides = load_overrides(pool, &shown).await?;
+    assemble_ledger(pool, &shown, &users, &overrides).await
 }
 
 /// The board the page draws: the ledger's override-shaped rows joined with the names
 /// and team the projection holds, so a reader gets a name already renamed and a rank
 /// already assigned instead of recomputing either.
-pub async fn load_board(
-    pool: &PgPool,
-    contest_id: Option<i64>,
-) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
-    let standings = load_standings(pool, contest_id).await?;
+pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
+    let standings = load_standings(pool).await?;
     Ok(board::board_view(
         standings.ledger.board(),
         &standings.users,
@@ -321,11 +409,8 @@ pub async fn load_board(
 
 /// The team board: the same rows grouped by team, with a team-level override applied to
 /// the aggregate rather than to each member.
-pub async fn load_team_board(
-    pool: &PgPool,
-    contest_id: Option<i64>,
-) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
-    let standings = load_standings(pool, contest_id).await?;
+pub async fn load_team_board(pool: &PgPool) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
+    let standings = load_standings(pool).await?;
     Ok(board::team_board_view(
         standings.ledger.board(),
         &standings.users,
@@ -336,10 +421,11 @@ pub async fn load_team_board(
 
 async fn assemble_ledger(
     pool: &PgPool,
+    shown: &ShownSet,
     users: &BTreeMap<String, UserNames>,
     overrides: &Overrides,
 ) -> Result<Ledger, StoreError> {
-    let (tasks, unknown_task_hides) = load_tasks(pool, overrides).await?;
+    let (tasks, unknown_task_hides) = load_tasks(pool, shown, overrides).await?;
     let submissions = load_submissions(pool).await?;
     let subchanges = load_subchanges(pool).await?;
     let teams: BTreeMap<String, String> = users
@@ -355,7 +441,7 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
     let row = sqlx::query_as::<_, Appearance>(
         "SELECT title, subtitle, organisation, logo_asset, favicon_asset, theme, \
          columns, score_format, footer_text, credits_text, credits, perspectives, \
-         contest_id, wording_overrides, access_mode FROM ranking_settings WHERE id = 1",
+         wording_overrides, access_mode FROM ranking_settings WHERE id = 1",
     )
     .fetch_optional(pool)
     .await?;
@@ -368,15 +454,23 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
 /// submissions, scores and history never enter the ledger at all, and the hide reaches the
 /// total the board prints rather than only the column the page draws.
 ///
+/// WHY the read is scoped to the shown contests: a database holding more than one contest's
+/// projected rows used to give the board *every* contest's columns, so a day-2 board drew day 1
+/// and the only thing that removed the extra columns was a hide filed by hand. The board now
+/// draws exactly the contests the config shows.
+///
 /// WHY the contest is selected with the key: a task hide is scoped to the contest it is filed
 /// under, so the predicate needs both halves of the composite key the override carries.
 async fn load_tasks(
     pool: &PgPool,
+    shown: &ShownSet,
     overrides: &Overrides,
 ) -> Result<(Vec<TaskMode>, usize), StoreError> {
     let rows = sqlx::query_as::<_, TaskRow>(
-        "SELECT key, contest, score_mode FROM ranking_tasks ORDER BY display_order, key",
+        "SELECT key, contest, score_mode FROM ranking_tasks \
+         WHERE contest_id = ANY($1) ORDER BY display_order, key",
     )
+    .bind(shown.contest_ids())
     .fetch_all(pool)
     .await?;
     let known_pairs: HashSet<(String, String)> = rows
@@ -447,8 +541,13 @@ struct OverrideRowRecord {
     payload: Option<serde_json::Value>,
 }
 
-/// The active overrides in one query, folded for the board assembly. Only active rows
-/// apply: an ended override keeps its history in the table but not on the board.
+/// The active overrides that reach the shown board, in one query, folded for the board assembly.
+/// Only active rows apply — an ended override keeps its history in the table but not on the board.
+///
+/// WHY the scope is the shown set and no longer `IS NULL OR contest_id = $1`: the NULL arm made
+/// "no scope configured" mean *every* override, so an instance with no contest applied rows filed
+/// under contests it did not serve. The shown set bounds the override exactly, and an empty shown
+/// set applies none.
 ///
 /// WHY the hidden tombstones join here: a hidden participation must hide the same way a
 /// `hide` override does, so the store folds the tombstones into the one override set
@@ -460,13 +559,13 @@ struct OverrideRowRecord {
 /// the override rows rather than two.
 pub(crate) async fn load_overrides(
     pool: &PgPool,
-    contest_id: Option<i64>,
+    shown: &ShownSet,
 ) -> Result<Overrides, StoreError> {
     let rows = sqlx::query_as::<_, OverrideRowRecord>(
         "SELECT target_kind, target_key, action, payload FROM ranking_overrides \
-         WHERE active AND ($1::bigint IS NULL OR contest_id = $1) ORDER BY id",
+         WHERE active AND contest_id = ANY($1) ORDER BY id",
     )
-    .bind(contest_id)
+    .bind(shown.contest_ids())
     .fetch_all(pool)
     .await?;
     let mut rows: Vec<OverrideRow> = rows
@@ -479,7 +578,7 @@ pub(crate) async fn load_overrides(
         })
         .collect();
     rows.extend(
-        load_hidden(pool, contest_id)
+        load_hidden(pool, shown)
             .await?
             .into_iter()
             .map(hidden_as_hide_row),
@@ -558,14 +657,14 @@ fn hidden_as_hide_row(key: String) -> OverrideRow {
     }
 }
 
-/// The keys the panel hid, read whole when no contest is configured, the same fallback the
-/// overrides themselves take.
-async fn load_hidden(pool: &PgPool, contest_id: Option<i64>) -> Result<Vec<String>, StoreError> {
+/// The keys the panel hid in a shown contest. WHY the shown set bounds it: a tombstone is scoped
+/// to the contest it was filed in, so one filed under a contest the board does not draw changes
+/// nothing here, and an empty shown set hides nobody.
+async fn load_hidden(pool: &PgPool, shown: &ShownSet) -> Result<Vec<String>, StoreError> {
     let rows = sqlx::query_as::<_, HiddenRow>(
-        "SELECT key FROM ranking_hidden WHERE ($1::bigint IS NULL OR contest_id = $1) \
-         ORDER BY key",
+        "SELECT key FROM ranking_hidden WHERE contest_id = ANY($1) ORDER BY key",
     )
-    .bind(contest_id)
+    .bind(shown.contest_ids())
     .fetch_all(pool)
     .await?;
     Ok(rows.into_iter().map(|row| row.key).collect())
@@ -583,6 +682,12 @@ mod tests {
             users: BTreeMap::new(),
             team_names: BTreeMap::new(),
             overrides: Overrides::default(),
+        }
+    }
+
+    fn shown(contest_ids: &[i32]) -> ShownSet {
+        ShownSet {
+            contest_ids: contest_ids.to_vec(),
         }
     }
 
@@ -635,8 +740,33 @@ mod tests {
         );
     }
 
-    /// The header names the day it serves, so the rendering of an instant must be the
-    /// calendar day a reader would name, including across a leap day and before the epoch.
+    /// The header names the board's day only when the config names exactly one contest.
+    #[test]
+    fn the_header_needs_a_single_shown_contest() {
+        let contest = RankingContest {
+            name: "POSN Day 2".to_string(),
+            begin: 1_792_108_800,
+            end: 1_792_195_200,
+        };
+        assert!(
+            BoardHeader::resolve(None, &shown(&[]), Some(&contest)).is_none(),
+            "a board showing nothing has no header to name"
+        );
+        assert!(
+            BoardHeader::resolve(None, &shown(&[9, 3]), Some(&contest)).is_none(),
+            "a board showing several names none of them"
+        );
+        assert_eq!(
+            BoardHeader::resolve(None, &shown(&[9]), Some(&contest))
+                .expect("it resolves")
+                .title,
+            "POSN Day 2",
+            "the one shown contest names the board"
+        );
+    }
+
+    /// The rendering of an instant must be the calendar day a reader would name, including across
+    /// a leap day and before the epoch.
     #[test]
     fn a_timestamp_renders_as_its_utc_calendar_day() {
         assert_eq!(utc_date(0), "1970-01-01");
@@ -662,35 +792,29 @@ mod tests {
         assert_eq!(contest_dates(&two_days), "2000-02-29 – 2000-03-01");
     }
 
-    /// The header reads the named contest, and the override is honoured only for that
-    /// contest — the words written for another day must not describe this one.
+    /// The header reads the one shown contest, and the wording override is honoured only for that
+    /// contest — words written for another day must not describe this one.
     #[test]
-    fn the_header_words_come_from_the_named_contest() {
+    fn the_header_words_come_from_the_shown_contest() {
         let contest = RankingContest {
             name: "POSN Day 2".to_string(),
             begin: 1_792_108_800,
             end: 1_792_195_200,
         };
         let row = Appearance {
-            contest_id: Some(9),
             wording_overrides: Some(serde_json::json!({
                 "9": { "title": "Day Two" },
                 "3": { "subtitle": "ครั้งที่ 1" }
             })),
             ..appearance_for_header()
         };
-        let header = BoardHeader::resolve(Some(&row), Some(&contest)).expect("it resolves");
+        let header =
+            BoardHeader::resolve(Some(&row), &shown(&[9]), Some(&contest)).expect("it resolves");
         assert_eq!(header.title, "Day Two", "the override words the title");
         assert_eq!(
             header.subtitle, "2026-10-16 – 2026-10-17",
             "the unoverridden line falls back to the contest's own dates"
         );
-    }
-
-    #[test]
-    fn a_row_that_names_no_contest_has_no_header() {
-        assert!(BoardHeader::resolve(Some(&appearance_for_header()), None).is_none());
-        assert!(BoardHeader::resolve(None, None).is_none());
     }
 
     /// The row the header tests start from: nothing set but the fields a read always fills.
@@ -708,7 +832,6 @@ mod tests {
             credits_text: None,
             credits: None,
             perspectives: None,
-            contest_id: None,
             wording_overrides: None,
             access_mode: "public".to_string(),
         }

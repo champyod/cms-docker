@@ -7,7 +7,7 @@
 
 use cms_ranking::db::Db;
 use cms_ranking::entities::{list_body, Kind};
-use cms_ranking::store::load_ledger;
+use cms_ranking::store::{load_ledger, ShownSet};
 use sqlx::PgPool;
 
 fn database_url() -> String {
@@ -24,7 +24,8 @@ fn pool() -> PgPool {
 }
 
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
-    const STATEMENTS: [&str; 9] = [
+    const STATEMENTS: [&str; 10] = [
+        "DELETE FROM ranking_config",
         "DELETE FROM ranking_hidden",
         "DELETE FROM ranking_subchanges",
         "DELETE FROM ranking_submissions",
@@ -41,9 +42,13 @@ async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
-/// One scored submission on one task, with no override yet.
+/// One scored submission on one task, with no override yet. The config row is what makes the
+/// task drawable at all: the board shows contest 1 because the config says so.
 async fn seed_scored_task(pool: &PgPool) -> Result<(), sqlx::Error> {
     clear(pool).await?;
+    sqlx::query("INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '1')")
+        .execute(pool)
+        .await?;
     sqlx::query(
         "INSERT INTO ranking_users (key, f_name, l_name, team) \
          VALUES ('u0', 'Ada', 'Lovelace', NULL)",
@@ -51,9 +56,9 @@ async fn seed_scored_task(pool: &PgPool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await?;
     sqlx::query(
-        "INSERT INTO ranking_tasks (key, name, short_name, contest, max_score, \
+        "INSERT INTO ranking_tasks (key, name, short_name, contest, contest_id, max_score, \
          score_precision, extra_headers, display_order, score_mode) \
-         VALUES ('t0', 'A Plus B', 'aplusb', 'c0', 100.0, 0, '[]'::jsonb, 0, 'max')",
+         VALUES ('t0', 'A Plus B', 'aplusb', 'c0', 1, 100.0, 0, '[]'::jsonb, 0, 'max')",
     )
     .execute(pool)
     .await?;
@@ -94,8 +99,13 @@ async fn hide_task_bare(pool: &PgPool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// The shown set the seeds put the task inside; the reader's own scope comes from the config.
+fn shown() -> ShownSet {
+    ShownSet::new(vec![1])
+}
+
 async fn listed_tasks(pool: &PgPool) -> serde_json::Value {
-    let body = list_body(pool, Kind::Task, Some(1))
+    let body = list_body(pool, Kind::Task, &shown())
         .await
         .expect("the task list renders");
     serde_json::from_slice(&body).expect("the task list is json")
@@ -111,9 +121,7 @@ async fn an_unhidden_task_is_a_column_and_a_score() {
     let tasks = listed_tasks(&pool).await;
     assert!(tasks.get("t0").is_some(), "an unhidden task is a column");
 
-    let ledger = load_ledger(&pool, Some(1))
-        .await
-        .expect("the ledger assembles");
+    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
     assert_eq!(
         ledger.scores().get("u0").and_then(|row| row.get("t0")),
         Some(&30.0),
@@ -137,9 +145,7 @@ async fn a_hidden_task_leaves_the_column_and_the_ledger_together() {
         "the hidden task leaves the column list"
     );
 
-    let ledger = load_ledger(&pool, Some(1))
-        .await
-        .expect("the ledger assembles");
+    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden task leaves the score grid"
@@ -182,9 +188,7 @@ async fn a_bare_task_key_still_hides_the_task() {
         "the legacy bare key still drops the column"
     );
 
-    let ledger = load_ledger(&pool, Some(1))
-        .await
-        .expect("the ledger assembles");
+    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "and still takes its score with it"

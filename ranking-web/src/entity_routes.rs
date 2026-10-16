@@ -66,7 +66,13 @@ async fn list(state: AppState, kind: Kind) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
-    match entities::list_body(db.pool(), kind, state.config().contest_id).await {
+    // The list is scoped by the same shown set the ledger is, so the page's column metadata and
+    // its scores come from one answer rather than two.
+    let shown = match crate::store::load_shown_set(db.pool()).await {
+        Ok(shown) => shown,
+        Err(error) => return refuse(&error.to_string()),
+    };
+    match entities::list_body(db.pool(), kind, &shown).await {
         Ok(body) => stamped(bytes_response(body)),
         Err(error) => refuse(&error.to_string()),
     }

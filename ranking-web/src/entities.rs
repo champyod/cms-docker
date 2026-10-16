@@ -4,7 +4,7 @@ use serde::Serialize;
 use sqlx::postgres::{PgPool, PgRow};
 
 use crate::overrides::load_hidden_tasks;
-use crate::store::StoreError;
+use crate::store::{ShownSet, StoreError};
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
 pub struct Contest {
@@ -57,11 +57,13 @@ pub enum Kind {
 }
 
 const CONTESTS_LIST: &str =
-    "SELECT key, name, begin, \"end\", score_precision FROM ranking_contests ORDER BY key";
+    "SELECT key, name, begin, \"end\", score_precision FROM ranking_contests \
+     WHERE contest_id = ANY($1) ORDER BY key";
 const CONTESTS_ONE: &str =
     "SELECT key, name, begin, \"end\", score_precision FROM ranking_contests WHERE key = $1";
 const TASKS_LIST: &str = "SELECT key, name, short_name, contest, max_score, extra_headers, \
-    display_order, score_mode, score_precision FROM ranking_tasks ORDER BY display_order, key";
+    display_order, score_mode, score_precision FROM ranking_tasks \
+    WHERE contest_id = ANY($1) ORDER BY display_order, key";
 const TASKS_ONE: &str = "SELECT key, name, short_name, contest, max_score, extra_headers, \
     display_order, score_mode, score_precision FROM ranking_tasks WHERE key = $1";
 const TEAMS_LIST: &str = "SELECT key, name FROM ranking_teams ORDER BY key";
@@ -69,24 +71,25 @@ const TEAMS_ONE: &str = "SELECT key, name FROM ranking_teams WHERE key = $1";
 const USERS_LIST: &str = "SELECT key, f_name, l_name, team FROM ranking_users ORDER BY key";
 const USERS_ONE: &str = "SELECT key, f_name, l_name, team FROM ranking_users WHERE key = $1";
 
-/// The entity list the page polls. WHY it is filtered here: a hidden contest or task keeps
-/// its row, its dataset and its metadata, and only the board drops it, so the target has to
-/// leave the list the page builds from rather than the row itself.
+/// The entity list the page polls, scoped to the contests the config shows. WHY the scope is here
+/// and not only in the ledger: the page builds its columns from the task metadata this list
+/// returns, so a list that carried another contest's tasks would let the page draw a column the
+/// ledger has no scores for. One scope, both lists.
+///
+/// WHY it is filtered here: a hidden contest or task keeps its row, its dataset and its metadata,
+/// and only the board drops it, so the target has to leave the list the page builds from rather
+/// than the row itself.
 ///
 /// WHY one small load feeds both arms: a contest hide drops the contest and every task filed
 /// under it, and a task hide drops a task only inside its contest, so the contest list and the
 /// task list read one interpretation rather than two. The load is the one-query
 /// `load_hidden_tasks`, not the whole override fold, because /tasks/ is polled constantly and
 /// needs no user, team or score override.
-pub async fn list_body(
-    pool: &PgPool,
-    kind: Kind,
-    contest_id: Option<i64>,
-) -> Result<Vec<u8>, StoreError> {
+pub async fn list_body(pool: &PgPool, kind: Kind, shown: &ShownSet) -> Result<Vec<u8>, StoreError> {
     match kind {
         Kind::Contest => {
-            let hidden = load_hidden_tasks(pool, contest_id).await?;
-            let rows: Vec<Contest> = rows::<Contest>(pool, CONTESTS_LIST)
+            let hidden = load_hidden_tasks(pool, shown.contest_ids()).await?;
+            let rows: Vec<Contest> = rows_scoped::<Contest>(pool, CONTESTS_LIST, shown)
                 .await?
                 .into_iter()
                 .filter(|contest| !hidden.hides_contest(&contest.key))
@@ -94,8 +97,8 @@ pub async fn list_body(
             encode(&map_by_key(rows))
         }
         Kind::Task => {
-            let hidden = load_hidden_tasks(pool, contest_id).await?;
-            let rows: Vec<Task> = rows::<Task>(pool, TASKS_LIST)
+            let hidden = load_hidden_tasks(pool, shown.contest_ids()).await?;
+            let rows: Vec<Task> = rows_scoped::<Task>(pool, TASKS_LIST, shown)
                 .await?
                 .into_iter()
                 .filter(|task| {
@@ -148,6 +151,22 @@ where
     T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
 {
     Ok(sqlx::query_as::<_, T>(sql).fetch_all(pool).await?)
+}
+
+/// The scoped twin of [`rows`]: one bind, the shown contests, for the two lists that carry a
+/// contest id.
+async fn rows_scoped<T>(
+    pool: &PgPool,
+    sql: &'static str,
+    shown: &ShownSet,
+) -> Result<Vec<T>, StoreError>
+where
+    T: for<'r> sqlx::FromRow<'r, PgRow> + Send + Unpin,
+{
+    Ok(sqlx::query_as::<_, T>(sql)
+        .bind(shown.contest_ids())
+        .fetch_all(pool)
+        .await?)
 }
 
 async fn one<T>(pool: &PgPool, sql: &'static str, key: &str) -> Result<Option<Vec<u8>>, StoreError>

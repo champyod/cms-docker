@@ -42,7 +42,6 @@ mod tests {
             credits_text: Some("credits".to_string()),
             credits: None,
             perspectives: None,
-            contest_id: None,
             wording_overrides: None,
             access_mode: "protected".to_string(),
         }
