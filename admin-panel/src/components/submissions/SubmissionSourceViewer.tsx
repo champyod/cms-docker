@@ -70,6 +70,9 @@ export interface SubmissionSourceViewerProps {
  * Here the previous submission is the gutter — a removed line carries its own number and text
  * where the current source would sit — so one scroll answers "what does this store" and "what did
  * it change" together, and a submission with no predecessor is the same view with a plain gutter.
+ * A predecessor that stored no file, or whose file this reader may not open, leaves nothing to
+ * diff: the comparison is then a note naming which of the two it is, never a summary of a
+ * comparison the panel did not run.
  */
 export function SubmissionSourceViewer({ source, previous = null }: SubmissionSourceViewerProps): React.JSX.Element {
   const copy = useDictionary().submissions.record.source;
@@ -231,6 +234,14 @@ function SourceDiff({ bytes, summary, previous }: {
   const [wrap, setWrap] = useState(true);
 
   const showCompare = bytes.previous !== null;
+  // Why a state per cause and not a bare "previous or nothing": a predecessor that stored no file
+  // and one whose file this reader may not open both leave nothing to diff, and each says so in its
+  // own words — the in-place states the two-card view kept. Reporting the comparison summary in
+  // either case would assert a result for a comparison the panel never made, which reads to the
+  // reviewer as "the sources are equal" and is the one thing this view must not do.
+  const previousNote = previous === null || showCompare
+    ? null
+    : previous.source === null ? 'empty' : 'hidden';
   const rows = buildRows(bytes, summary.language);
   const added = rows.filter((row) => row.kind === 'added').length;
   const removed = rows.filter((row) => row.kind === 'removed').length;
@@ -252,8 +263,13 @@ function SourceDiff({ bytes, summary, previous }: {
           )}
         </div>
       </div>
-      {previous !== null && (
+      {showCompare && previous !== null && (
         <DiffSummary previous={previous.submissionId} current={summary.submissionId} added={added} removed={removed} />
+      )}
+      {previousNote !== null && (
+        <InlineAlert tone="info" density="compact">
+          {previousNote === 'empty' ? compare.previousEmpty : compare.previousHidden}
+        </InlineAlert>
       )}
       <div className="relative">
         <div role="region" aria-label={compare.title} className={SCROLL_CLASS}>

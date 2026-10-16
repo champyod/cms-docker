@@ -17,7 +17,9 @@ afterEach(() => {
   cleanup();
 });
 
-const DIGEST_FILES: Record<string, string> = {
+// Why readonly: the bytes are a fixture, not state a test may rewrite. A test that reassigned
+// digest-current here would hand every later test the wrong source.
+const DIGEST_FILES: Readonly<Record<string, string>> = {
   'digest-prev': 'int main() {\n  return 1;\n}\n',
   'digest-current': 'int main() {\n  return 0;\n}\n',
 };
@@ -98,17 +100,20 @@ describe('Submission source and diff', () => {
     expect(box.querySelector('.hljs-keyword')).not.toBeNull();
   });
 
-  it('drops the previous-submission column when no earlier submission stores a file', async () => {
+  it('shows an in-place note instead of a comparison when no earlier submission stores a file', async () => {
     const container = renderViewer(readableSource(19, 'digest-current'), previousSource(null));
 
     await waitFor(() => expect(container.textContent).toContain('return 0;'));
     expect(mockGetFileByDigest).toHaveBeenCalledTimes(1);
+    // No predecessor bytes means no comparison: the row says which fact is missing rather than keeping
+    // the previous column or claiming a result of its own.
+    expect(container.textContent).toContain(en.submissions.record.compare.previousEmpty);
     expect(container.textContent).not.toContain('Previous #7');
     expect(rowsOf(container, 'same')).toHaveLength(3);
     expect(rowsOf(container, 'added')).toHaveLength(0);
   });
 
-  it('falls back to the plain source when the previous submission is unreadable', async () => {
+  it('shows an in-place note when the previous submission is unreadable', async () => {
     const container = renderViewer(
       readableSource(19, 'digest-current'),
       previousSource({ submissionId: 7, language: 'cpp', sourceReadable: false }),
@@ -117,12 +122,16 @@ describe('Submission source and diff', () => {
     await waitFor(() => expect(container.textContent).toContain('return 0;'));
     expect(mockGetFileByDigest).toHaveBeenCalledTimes(1);
     expect(rowsOf(container, 'removed')).toHaveLength(0);
+    // A hidden predecessor is named as hidden, not reported as an unbroken pair of sources.
+    expect(container.textContent).toContain(en.submissions.record.compare.previousHidden);
     expect(container.textContent).not.toContain('Previous #7');
   });
 
   it('reports no changes when the two sources are line-identical', async () => {
-    DIGEST_FILES['digest-current'] = DIGEST_FILES['digest-prev'];
-    const container = renderViewer(readableSource(19, 'digest-current'), previousSource(readableSource(7, 'digest-prev')));
+    // Why one digest for both sides: two references to a content-addressed file are identical by
+    // definition, which is exactly what this case needs — and it leaves the fixture alone, where
+    // reassigning digest-current would have leaked a different source into every later test.
+    const container = renderViewer(readableSource(19, 'digest-current'), previousSource(readableSource(7, 'digest-current')));
 
     await waitFor(() => expect(container.textContent).toContain('No line changes between the two sources.'));
     expect(rowsOf(container, 'added')).toHaveLength(0);

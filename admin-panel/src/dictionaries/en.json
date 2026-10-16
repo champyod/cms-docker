@@ -452,7 +452,9 @@
         "loading": "Loading comparison…",
         "equal": "No line changes between the two sources.",
         "summary": "{added} added, {removed} removed",
-        "fetchFailed": "Could not load the source bytes."
+        "fetchFailed": "Could not load the source bytes.",
+        "previousEmpty": "The previous submission stored no source file to compare.",
+        "previousHidden": "The previous submission's source is hidden — requires file:read."
       },
       "toasts": {
         "officialPending": "Saving official flag...",

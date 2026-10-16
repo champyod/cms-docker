@@ -2,8 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import { highlightSource, splitHighlightedLines } from '@/components/submissions/source-highlight';
 
+// Why decode as well as strip: highlight.js escapes the code for HTML output and the browser turns
+// those entities back into characters, so the text the reader sees — the projection these cut lines
+// are compared against — is the source itself. Stripping only the markup would compare the library's
+// serialization with the source and report a raw `"` as a mismatch. The five entries are exactly the
+// escapes highlight.js emits, so this projection equals the rendered code and nothing stays encoded.
+const ESCAPES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#x27': "'" };
+
 function stripTags(html: string): string {
-  return html.replace(/<[^>]*>/g, '');
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(amp|lt|gt|quot|#x27);/g, (_, name: string) => ESCAPES[name]);
 }
 
 function balance(line: string): number {
