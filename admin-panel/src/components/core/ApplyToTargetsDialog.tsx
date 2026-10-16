@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
@@ -60,8 +60,20 @@ function failedIdsOf(payload: unknown): number[] {
  * chosen kinds — and the limit patch they typed in the form (or made up for a bulk edit) is posted
  * to each kind's batch `update-limits` action. Every write travels through the same whitelisted
  * route and service as a single-record edit, so this dialog holds no write logic of its own.
+ *
+ * Why the open transition is a mount: every value in here starts from a prop (the seeded patch, the
+ * preselected ids, whether the fields count as touched) and must start over each time the dialog
+ * opens. Resetting that from an effect is what the react-hooks rules refuse — a synchronous setState
+ * in an effect cascades a render — and writing a ref during render to remember the transition is
+ * refused too. Keying the body on the open flag makes React's own answer to "start clean" do the
+ * work: the body remounts on closed → open and its state initialisers re-read the props, while a
+ * parent re-render *inside* one open keeps the same key and so keeps the operator's edits.
  */
-export function ApplyToTargetsDialog({
+export function ApplyToTargetsDialog(props: ApplyToTargetsDialogProps): React.JSX.Element {
+  return <ApplyTargetsBody key={props.isOpen ? 'open' : 'closed'} {...props} />;
+}
+
+function ApplyTargetsBody({
   isOpen,
   onClose,
   kinds,
@@ -73,38 +85,31 @@ export function ApplyToTargetsDialog({
 }: ApplyToTargetsDialogProps): React.JSX.Element {
   const dict = useDictionary();
   const copy = dict.limits.apply;
-  const fields = useMemo(() => (Object.keys(patch) as LimitFieldName[]).filter((name) => LIMIT_FIELDS.includes(name)), [patch]);
+  // Why no useMemo: the field list is a six-name filter over the patch's keys, so memoising it buys
+  // nothing and would pin a stale list if the caller ever rebuilt the same patch object.
+  const fields = (Object.keys(patch) as LimitFieldName[]).filter((name) => LIMIT_FIELDS.includes(name));
 
   const [options, setOptions] = useState<Partial<Record<TargetKind, TargetOption[]>>>({});
-  const [selected, setSelected] = useState<Partial<Record<TargetKind, number[]>>>({});
-  const [values, setValues] = useState<Partial<Record<LimitFieldName, number | null>>>({});
-  const [touched, setTouched] = useState<ReadonlySet<LimitFieldName>>(new Set());
+  const [selected, setSelected] = useState<Partial<Record<TargetKind, number[]>>>(() =>
+    Object.fromEntries(kinds.map((kind) => [kind, [...(preselected?.[kind] ?? [])]])) as Partial<Record<TargetKind, number[]>>);
+  const [values, setValues] = useState<Partial<Record<LimitFieldName, number | null>>>(() => ({ ...patch }));
+  const [touched, setTouched] = useState<ReadonlySet<LimitFieldName>>(() => (initiallyTouched ? new Set(fields) : new Set()));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  // Why the ref: the reset must run on the open transition only. Keying the effect on the patch /
-  // kinds / preselected objects would re-run it — and wipe the operator's edits — on every parent
-  // render, because those props are rebuilt each time.
-  const initRef = useRef({ kinds, patch, preselected, loadTargets, initiallyTouched, fields });
-  initRef.current = { kinds, patch, preselected, loadTargets, initiallyTouched, fields };
-
+  // Why the deps are the kinds' *content* and the loader: a parent re-render (the bulk bars call
+  // router.refresh() after a successful apply) hands over a freshly built array, and keying on that
+  // identity would re-fetch every target list mid-edit. The loader is memoised by the caller, so the
+  // effect runs once per open unless the dialog's own kind set actually changes.
+  const kindsKey = kinds.join('|');
   useEffect(() => {
-    if (!isOpen) return;
-    const { kinds: kindsNow, patch: patchNow, preselected: preselectNow, loadTargets: load, initiallyTouched: seeded, fields: fieldsNow } = initRef.current;
-    setError('');
-    setNotice('');
-    setLoading(false);
-    setValues({ ...patchNow });
-    setTouched(seeded ? new Set(fieldsNow) : new Set());
-    setSelected(Object.fromEntries(kindsNow.map((kind) => [kind, [...(preselectNow?.[kind] ?? [])]])) as Partial<Record<TargetKind, number[]>>);
-
     let active = true;
     void (async () => {
       const loaded: Partial<Record<TargetKind, TargetOption[]>> = {};
-      for (const kind of kindsNow) {
+      for (const kind of kinds) {
         try {
-          loaded[kind] = [...(await load(kind))];
+          loaded[kind] = [...(await loadTargets(kind))];
         } catch {
           loaded[kind] = [];
         }
@@ -114,7 +119,8 @@ export function ApplyToTargetsDialog({
     return () => {
       active = false;
     };
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- kindsKey stands in for kinds: same content, stable identity.
+  }, [kindsKey, loadTargets]);
 
   const toggle = (kind: TargetKind, id: number, checked: boolean): void => {
     setSelected((current) => {

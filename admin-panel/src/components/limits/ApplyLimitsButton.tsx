@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { ApplyToTargetsDialog, type TargetKind } from '@/components/core/ApplyToTargetsDialog';
 import { Button } from '@/components/core/Button';
@@ -41,6 +41,9 @@ export function ApplyLimitsButton({
   className,
 }: ApplyLimitsButtonProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  // Why memoised: the dialog fetches its target lists in an effect keyed on this loader, so a fresh
+  // identity on every render of this button would re-fetch them mid-edit.
+  const loadTargets = useCallback((kind: TargetKind): Promise<TargetOption[]> => listLimitTargets(kind), []);
   return (
     <>
       <Button variant="secondary" className={className} onClick={() => setOpen(true)}>
@@ -53,7 +56,7 @@ export function ApplyLimitsButton({
         patch={patch}
         preselected={preselected}
         initiallyTouched={initiallyTouched}
-        loadTargets={(kind: TargetKind): Promise<TargetOption[]> => listLimitTargets(kind)}
+        loadTargets={loadTargets}
         onSuccess={onSuccess}
       />
     </>
