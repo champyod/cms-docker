@@ -132,12 +132,13 @@ def safe_url(url: str) -> str:
 class ProxyOperation(QueueItem):
 
     def __init__(self, type_: int, data: dict,
-                 scope: "int | str | None" = None):
+                 scope: "int | str | set | None" = None):
         self.type_ = type_
         self.data = data
-        # The owner a full push of a snapshot resource is about. It travels with the
-        # operation rather than in the payloads, because those carry no row to read it
-        # from once the push has emptied the owner.
+        # The owner, or owners, a full push of a snapshot resource is about. It travels
+        # with the operation rather than in the payloads, because those carry no row to
+        # read it from once the push has emptied the owner, and a rename leaves more than
+        # one owner's rows to reclaim.
         self.scope = scope
 
     def __str__(self):
@@ -305,6 +306,12 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         self.scores_sent_to_rankings: set[int] = set()
         self.tokens_sent_to_rankings: set[int] = set()
 
+        # The task payload the rankings were last told about, and the contest key it was
+        # filed under. The sweeper re-announces a payload that no longer matches the
+        # database's, so an edit that reached neither this service nor the admin handlers
+        # (an import, the panel, a script) cannot leave the ranking holding a stale set.
+        self.pushed_tasks: "tuple[str, dict] | None" = None
+
         # Create one executor for each ranking.
         self.rankings = list()
         for ranking in config.proxy_service.rankings:
@@ -334,6 +341,8 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         """
         counter = 0
         with SessionGen() as session:
+            counter += self._reannounce_changed_tasks(session)
+
             submissions = get_submissions(session, contest_id=self.contest_id) \
                 .filter(not_(Participation.hidden)) \
                 .filter(Submission.official).all()
@@ -359,6 +368,35 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
 
         return counter
 
+    def _reannounce_changed_tasks(self, session):
+        """Re-announce the contest's tasks when the database holds a different set.
+
+        WHY the sweep looks here: an admin edit announces the full task set, but an edit is
+        not the only way the set changes. An import, the panel or a script can add a task to
+        the contest, drop one, renumber one or rename one, and nothing announces it, so the
+        ranking keeps the previous set — silently, and the board draws a column that is gone
+        or misses one that exists. The payload is derived from the database, so deriving it
+        again here is what turns a missed announcement into one the sweeper finds.
+
+        session: the session the sweep is already reading the database through.
+
+        return: 1 when the announcement was queued again, 0 when nothing changed.
+
+        """
+        contest = Contest.get_from_id(self.contest_id, session)
+        if contest is None:
+            return 0
+        contest_key, tasks, unused_problems = self._task_snapshot(contest)
+        if self.pushed_tasks == (contest_key, tasks):
+            return 0
+        # A warning rather than a debug line: the ranking held a set the database does not
+        # agree with, which is exactly the failure that is otherwise invisible.
+        logger.warning("The tasks of contest %s differ from the ones the rankings "
+                       "were last told about: announcing them again.",
+                       self.contest_id)
+        self.initialize()
+        return 1
+
     def initialize(self):
         """Send basic data to all the rankings.
 
@@ -367,6 +405,10 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         submissions: contest, users, tasks.
 
         No support for teams, flags and faces.
+
+        The sweeper announces this again whenever the database's task set no longer matches
+        the announced one, so this stays the one path a contest edit reaches the rankings
+        through, whether an admin handler ran or not.
 
         """
         logger.info("Initializing rankings.")
@@ -379,7 +421,7 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                              "id %s.", self.contest_id)
                 raise KeyError("Contest not found.")
 
-            contest_id = encode_id(contest.name)
+            contest_key = encode_id(contest.name)
             contest_data = {
                 "name": contest.description,
                 "begin": int(make_timestamp(contest.start)),
@@ -435,44 +477,19 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                     hidden[encode_id(user.username)] = {
                         "contest_id": contest_scope}
 
-            tasks = dict()
-
-            for contest_task in contest.task_contests:
-                task = contest_task.task
-                # A task with no active dataset has no score type, and so
-                # no max score or extra headers, to announce.
-                if task.active_dataset is None:
+            contest_key, tasks, problems = self._task_snapshot(contest)
+            for name, error in problems:
+                if error is None:
                     logger.warning("Skipping task %s of contest %s: it has "
-                                   "no active dataset.", task.name,
-                                   contest.name)
-                    continue
-
-                # Building the score type can raise, if the type is unknown
-                # or its parameters are malformed: such a task has no max
-                # score or extra headers to announce, so skip it instead of
-                # failing the whole initialization.
-                try:
-                    score_type = task.active_dataset.score_type_object
-                except Exception as error:
+                                   "no active dataset.", name, contest.name)
+                else:
                     logger.warning("Skipping task %s of contest %s: its score "
                                    "type could not be built: %s: %s.",
-                                   task.name, contest.name,
+                                   name, contest.name,
                                    type(error).__name__, error)
-                    continue
-
-                tasks[encode_id(task.name)] = {
-                    "short_name": task.name,
-                    "name": task.title,
-                    "contest": encode_id(contest.name),
-                    "order": contest_task.num,
-                    "max_score": score_type.max_score,
-                    "extra_headers": score_type.ranking_headers,
-                    "score_precision": task.score_precision,
-                    "score_mode": task.score_mode,
-                }
 
         self.enqueue(ProxyOperation(ProxyExecutor.CONTEST_TYPE,
-                                    {contest_id: contest_data}))
+                                    {contest_key: contest_data}))
         self.enqueue(ProxyOperation(ProxyExecutor.TEAM_TYPE, teams))
         self.enqueue(ProxyOperation(ProxyExecutor.USER_TYPE, users))
         # The scope travels with the push: with no hidden participation left, the
@@ -480,8 +497,64 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
         # the tombstone of the participation that was just unhidden.
         self.enqueue(ProxyOperation(ProxyExecutor.HIDDEN_TYPE, hidden,
                                     scope=contest_scope))
+        # A contest's task rows are filed under its encoded name, so a rename files
+        # every row under a new one and this push cannot reclaim the rows left under
+        # the old. Carrying the key the last push used beside this one is what does.
+        scopes = {contest_key}
+        if self.pushed_tasks is not None:
+            scopes.add(self.pushed_tasks[0])
+        self.pushed_tasks = (contest_key, tasks)
         self.enqueue(ProxyOperation(ProxyExecutor.TASK_TYPE, tasks,
-                                    scope=contest_id))
+                                    scope=scopes))
+
+    def _task_snapshot(self, contest):
+        """The task payload a contest is announced with, and the tasks left out of it.
+
+        WHY one builder for the announcement and the sweep: what a ranking holds is this
+        payload, so the two have to agree exactly or the sweep would re-announce a contest
+        that never changed. A task with no active dataset has no score type, and one whose
+        score type cannot be built has no max score or headers, so both are left out and
+        reported to the caller instead of being announced.
+
+        contest: the contest whose membership is read.
+
+        return: the contest's encoded key, its task payloads by encoded task key, and the
+            (task name, exception) pairs of the tasks left out, the exception None for a
+            task with no active dataset.
+
+        """
+        contest_key = encode_id(contest.name)
+        tasks = dict()
+        problems = list()
+        for contest_task in contest.task_contests:
+            task = contest_task.task
+            # A task with no active dataset has no score type, and so
+            # no max score or extra headers, to announce.
+            if task.active_dataset is None:
+                problems.append((task.name, None))
+                continue
+
+            # Building the score type can raise, if the type is unknown
+            # or its parameters are malformed: such a task has no max
+            # score or extra headers to announce, so skip it instead of
+            # failing the whole initialization.
+            try:
+                score_type = task.active_dataset.score_type_object
+            except Exception as error:
+                problems.append((task.name, error))
+                continue
+
+            tasks[encode_id(task.name)] = {
+                "short_name": task.name,
+                "name": task.title,
+                "contest": contest_key,
+                "order": contest_task.num,
+                "max_score": score_type.max_score,
+                "extra_headers": score_type.ranking_headers,
+                "score_precision": task.score_precision,
+                "score_mode": task.score_mode,
+            }
+        return contest_key, tasks, problems
 
     def operations_for_score(self, submission: Submission):
         """Send the score for the given submission to all rankings.

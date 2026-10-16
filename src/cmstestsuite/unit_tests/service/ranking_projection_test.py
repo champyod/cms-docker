@@ -216,6 +216,16 @@ class ProjectionTest(unittest.TestCase):
             {"scopes": ["c0"], "keys": []},
         )
 
+    def test_a_push_naming_several_owners_prunes_every_one(self):
+        # A task is filed under its contest's name, so a contest renamed since the last
+        # push holds its rows under a name the payloads no longer carry: the push names
+        # the old owner beside the new one and the delete reclaims both.
+        self.assertEqual(
+            ranking_projection.snapshot_prune(
+                "tasks", {"t0": {"contest": "c1"}}, scope={"c0", "c1"}),
+            {"scopes": ["c0", "c1"], "keys": ["t0"]},
+        )
+
     def test_an_empty_push_without_an_owner_still_prunes_nothing(self):
         self.assertIsNone(ranking_projection.snapshot_prune("hidden", {}))
         self.assertIsNone(ranking_projection.snapshot_prune("submissions", {}, scope=7))
