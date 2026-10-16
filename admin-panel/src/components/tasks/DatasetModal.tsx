@@ -7,6 +7,7 @@ import { Dialog } from '@/components/core/Dialog';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { apiClient } from '@/lib/apiClient';
+import { bytesToMebibytes } from '@/lib/dataset-limits';
 import { DatasetGeneralForm } from './DatasetGeneralForm';
 import { DatasetManagersTab } from './DatasetManagersTab';
 import { DatasetModalTabs } from './DatasetModalTabs';
@@ -40,14 +41,16 @@ interface DatasetModalProps {
 
 interface DatasetFormData {
   description: string;
-  time_limit: number;
-  memory_limit: number;
+  time_limit: number | null;
+  memory_limit: number | null;
   task_type: string;
   score_type: string;
   score_type_parameters: unknown;
   task_type_parameters_text: string;
 }
 
+/** A new dataset starts on the classic's own positive defaults, not on "no limit": the operator
+ *  clears a box for that, and a blank create is then stored as NULL all the way down. */
 const DEFAULT_FORM: DatasetFormData = {
   description: '',
   time_limit: 1,
@@ -98,8 +101,10 @@ export function DatasetModal({ isOpen, onClose, taskId, dataset, onSuccess, perm
     if (dataset) {
       setFormData({
         description: dataset.description,
-        time_limit: dataset.time_limit ?? 1,
-        memory_limit: dataset.memory_limit ? Number(dataset.memory_limit) / (1024 * 1024) : 256,
+        // Why no substitution: the classic stores "no limit" as SQL NULL and shows it as a blank
+        // box, so a NULL record opens blank and stays NULL unless the operator types a number.
+        time_limit: dataset.time_limit ?? null,
+        memory_limit: bytesToMebibytes(dataset.memory_limit),
         task_type: dataset.task_type,
         score_type: dataset.score_type,
         score_type_parameters: dataset.score_type_parameters ?? [],

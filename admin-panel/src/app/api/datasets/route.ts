@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+import { mebibytesToBytes, parseMemoryLimitMb, parseTimeLimit } from '@/lib/dataset-limits';
 
 type ResolvedTaskType =
   | { isValid: true; taskType: string; params: unknown[] }
@@ -31,14 +32,12 @@ export async function POST(req: NextRequest): Promise<Response> {
     const descriptionTrimmed = typeof datasetData.description === 'string' ? datasetData.description.trim() : '';
     if (!descriptionTrimmed) return apiError({ message: 'Dataset description is required', status: 400 });
     if (descriptionTrimmed.length > 500) return apiError({ message: 'Description must be at most 500 characters', status: 400 });
-    if (datasetData.time_limit !== undefined && datasetData.time_limit !== null) {
-      const timeLimit = Number(datasetData.time_limit);
-      if (!Number.isFinite(timeLimit) || timeLimit <= 0 || timeLimit > 60) return apiError({ message: 'Time limit must be between 1 and 60 seconds', status: 400 });
-    }
-    if (datasetData.memory_limit !== undefined && datasetData.memory_limit !== null) {
-      const memoryLimit = Number(datasetData.memory_limit);
-      if (!Number.isFinite(memoryLimit) || memoryLimit <= 0 || memoryLimit > 4096) return apiError({ message: 'Memory limit must be between 1 and 4096 megabytes', status: 400 });
-    }
+    // Why parse before storing: a blank box, a 0 and a null all mean "no limit" and must land as
+    // SQL NULL, while a fractional MiB has to be answered rather than silently dropped.
+    const timeLimit = parseTimeLimit(datasetData.time_limit);
+    if (!timeLimit.ok) return apiError({ message: timeLimit.message, status: 400 });
+    const memoryLimit = parseMemoryLimitMb(datasetData.memory_limit);
+    if (!memoryLimit.ok) return apiError({ message: memoryLimit.message, status: 400 });
     const taskType = resolveTaskType(datasetData);
     if (!taskType.isValid) return taskType.response;
 
@@ -46,8 +45,8 @@ export async function POST(req: NextRequest): Promise<Response> {
       data: {
         task_id: taskId,
         description: descriptionTrimmed,
-        time_limit: datasetData.time_limit || null,
-        memory_limit: datasetData.memory_limit ? BigInt(datasetData.memory_limit * 1024 * 1024) : null,
+        time_limit: timeLimit.value,
+        memory_limit: mebibytesToBytes(memoryLimit.value),
         task_type: taskType.taskType,
         task_type_parameters: taskType.params as Prisma.InputJsonValue,
         score_type: datasetData.score_type || 'Sum',

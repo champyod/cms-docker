@@ -6,6 +6,7 @@ import { recordAudit } from '@/lib/audit';
 import { getFieldAccess } from '@/lib/field-permissions';
 import { getPermissions } from '@/lib/permissions';
 import { isEmptyTaskTypeParams, validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+import { mebibytesToBytes, parseMemoryLimitMb, parseTimeLimit } from '@/lib/dataset-limits';
 
 type FieldGate = (field: string) => boolean;
 
@@ -22,11 +23,18 @@ function buildDirectFields(data: Record<string, unknown>, canUpdate: FieldGate):
   const updateData: Record<string, unknown> = {};
   if (data.time_limit !== undefined) {
     if (!canUpdate('time_limit')) return deniedField('time_limit');
-    updateData.time_limit = data.time_limit as number | null;
+    // Why the parser rather than the raw value: null clears to SQL NULL and must not be dropped or
+    // coerced on the way in, and a blank or a 0 from an older client clears too instead of failing
+    // the column's `time_limit > 0` CHECK.
+    const parsed = parseTimeLimit(data.time_limit);
+    if (!parsed.ok) return { isValid: false, response: apiError({ message: parsed.message, status: 400 }) };
+    updateData.time_limit = parsed.value;
   }
   if (data.memory_limit !== undefined) {
     if (!canUpdate('memory_limit')) return deniedField('memory_limit');
-    updateData.memory_limit = data.memory_limit ? BigInt((data.memory_limit as number) * 1024 * 1024) : null;
+    const parsed = parseMemoryLimitMb(data.memory_limit);
+    if (!parsed.ok) return { isValid: false, response: apiError({ message: parsed.message, status: 400 }) };
+    updateData.memory_limit = mebibytesToBytes(parsed.value);
   }
   if (data.task_type) {
     if (!canUpdate('task_type')) return deniedField('task_type');

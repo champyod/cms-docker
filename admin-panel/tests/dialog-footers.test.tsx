@@ -135,7 +135,9 @@ describe('form-driven dialogs submit through the shared footer', () => {
 
 describe('the dataset footer offers confirm only on the tab that owns the form', () => {
   it('submits the general-tab form from confirm and keeps the save icon', () => {
-    render(<DatasetModal isOpen onClose={() => undefined} taskId={4} onSuccess={() => undefined} />);
+    // Why the dictionary: the general form now renders its two limit fields through the shared
+    // LimitField, whose labels and hints are translated, so the dialog needs a provider to mount.
+    render(withDictionary(<DatasetModal isOpen onClose={() => undefined} taskId={4} onSuccess={() => undefined} />));
     const confirm = buttonNamed('Create Dataset');
     expect(confirm.querySelector('svg')).not.toBeNull();
     expect(confirm.getAttribute('type')).toBe('button');

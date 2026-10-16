@@ -7,6 +7,7 @@ import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
 import { isEmptyTaskTypeParams, validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+import { mebibytesToBytes, parseMemoryLimitMb, parseTimeLimit } from '@/lib/dataset-limits';
 import type { Prisma } from '@prisma/client';
 
 export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<{ include: { testcases: { orderBy: { codename: 'asc' } }; managers: true; tasks_datasets_task_idTotasks: true } }> | null> {
@@ -45,13 +46,19 @@ export async function createDataset(
     );
     if (!taskParams.isValid) return { success: false, error: taskParams.message };
 
+    // Why after the permission strip: the value that is parsed is the one that survived, so an
+    // operator without the field permission still stores NULL rather than the value they sent.
+    const timeLimit = 'time_limit' in allowed ? parseTimeLimit(allowed.time_limit) : { ok: true as const, value: null };
+    if (!timeLimit.ok) return { success: false, error: timeLimit.message };
+    const memoryLimit = 'memory_limit' in allowed ? parseMemoryLimitMb(allowed.memory_limit) : { ok: true as const, value: null };
+    if (!memoryLimit.ok) return { success: false, error: memoryLimit.message };
+
     const dataset = await prisma.datasets.create({
       data: {
         task_id: taskId,
         description: (allowed.description as string) ?? data.description,
-        time_limit: allowed.time_limit !== undefined ? (allowed.time_limit as number | null) : null,
-        memory_limit: allowed.memory_limit !== undefined && allowed.memory_limit
-          ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null,
+        time_limit: timeLimit.value,
+        memory_limit: mebibytesToBytes(memoryLimit.value),
         task_type: storedTaskType,
         task_type_parameters: taskParams.params as Prisma.InputJsonValue,
         score_type: (allowed.score_type as string) ?? 'Sum',
@@ -235,9 +242,15 @@ export async function updateDataset(
     const allowed = stripDisallowedFields('datasets', data as Record<string, unknown>, effectivePermissions);
 
     const updateData: Record<string, unknown> = {};
-    if ('time_limit' in allowed) updateData.time_limit = allowed.time_limit;
+    if ('time_limit' in allowed) {
+      const parsed = parseTimeLimit(allowed.time_limit);
+      if (!parsed.ok) return { success: false, error: parsed.message };
+      updateData.time_limit = parsed.value;
+    }
     if ('memory_limit' in allowed) {
-      updateData.memory_limit = allowed.memory_limit ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null;
+      const parsed = parseMemoryLimitMb(allowed.memory_limit);
+      if (!parsed.ok) return { success: false, error: parsed.message };
+      updateData.memory_limit = mebibytesToBytes(parsed.value);
     }
     if ('score_type' in allowed) updateData.score_type = allowed.score_type;
     if ('score_type_parameters' in allowed) {

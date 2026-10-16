@@ -141,7 +141,7 @@ const FAILURE_CASES = [
   stripping('group delete', 'Group is still referenced',
     <GroupDeleteDialog open setOpen={NOOP} dict={en.groups} error="Group is still referenced" deleteReason="" setDeleteReason={NOOP} loading={false} onDelete={NOOP} />, REGULAR_SCALE),
   stripping('dataset form', 'Dataset description is required',
-    <DatasetGeneralForm formData={DATASET_FORM} onChange={NOOP} onSubmit={NOOP} error="Dataset description is required" scoreParamsError="" taskParamsError="" onScoreParamsChange={NOOP} onScoreParamsError={NOOP} onTaskParamsTextChange={NOOP} />, PAGE_SCALE),
+    <DictionaryProvider dict={en}><DatasetGeneralForm formData={DATASET_FORM} onChange={NOOP} onSubmit={NOOP} error="Dataset description is required" scoreParamsError="" taskParamsError="" onScoreParamsChange={NOOP} onScoreParamsError={NOOP} onTaskParamsTextChange={NOOP} /></DictionaryProvider>, PAGE_SCALE),
   stripping('admin create', 'Name and Username are required',
     <AdminModal isOpen onClose={NOOP} onSuccess={NOOP} initialData={null} callerPermissions={['admin:create']} canRevealPassword={false} />, REGULAR_SCALE, submitForm),
   stripping('user create', 'Save failed',

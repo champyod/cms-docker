@@ -4,13 +4,15 @@ import { useRef } from 'react';
 import { DatasetScoreParamsEditor } from './DatasetScoreParamsEditor';
 import { DatasetTaskTypeParamsEditor } from './DatasetTaskTypeParamsEditor';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { LimitField } from '@/components/core/LimitField';
+import { useDictionary } from '@/hooks/useDictionary';
 import { convertScoreParams } from './dataset-score-params';
 import { defaultTaskTypeParams, lintTaskTypeFields, taskTypeParamsToFields } from './dataset-tasktype-params';
 
 interface DatasetFormData {
   description: string;
-  time_limit: number;
-  memory_limit: number;
+  time_limit: number | null;
+  memory_limit: number | null;
   task_type: string;
   score_type: string;
   score_type_parameters: unknown;
@@ -70,6 +72,7 @@ export function DatasetGeneralForm({
   onScoreParamsError,
   onTaskParamsTextChange,
 }: DatasetGeneralFormProps): React.JSX.Element {
+  const limits = useDictionary().limits;
   const { params: taskParams, error: taskParamsTextError } = readTaskParamsText(formData.task_type_parameters_text);
   const taskParamsFieldError = lintTaskTypeFields(taskTypeParamsToFields(taskParams, formData.task_type), formData.task_type);
   const shownTaskParamsError = taskParamsError || taskParamsTextError || taskParamsFieldError;
@@ -121,27 +124,26 @@ export function DatasetGeneralForm({
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Time Limit (s)</label>
-            <input
-              type="number"
-              step="0.1"
-              min="0.1"
-              value={formData.time_limit}
-              onChange={(e) => onChange({ ...formData, time_limit: parseFloat(e.target.value) })}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-muted-foreground uppercase mb-1.5">Memory Limit (MiB)</label>
-            <input
-              type="number"
-              min="16"
-              value={formData.memory_limit}
-              onChange={(e) => onChange({ ...formData, memory_limit: parseFloat(e.target.value) })}
-              className="w-full px-4 py-2.5 bg-muted/40 border border-border rounded-lg text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-            />
-          </div>
+          <LimitField
+            id="time_limit"
+            label={limits.fields.time_limit}
+            unit="sec"
+            hint={limits.hints.time_limit}
+            value={formData.time_limit}
+            onChangeValue={(next) => onChange({ ...formData, time_limit: next })}
+            unlimitedLabel={limits.unlimited}
+            fractional
+            step={0.1}
+          />
+          <LimitField
+            id="memory_limit"
+            label={limits.fields.memory_limit}
+            unit="MiB"
+            hint={limits.hints.memory_limit}
+            value={formData.memory_limit}
+            onChangeValue={(next) => onChange({ ...formData, memory_limit: next })}
+            unlimitedLabel={limits.unlimited}
+          />
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
