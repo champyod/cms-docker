@@ -30,6 +30,7 @@ class FakeContest:
     """A contest holding no tasks and no participations."""
 
     def __init__(self):
+        self.id = 1
         self.name = "contest"
         self.description = "the contest"
         self.start = datetime(2026, 1, 1)
@@ -39,6 +40,42 @@ class FakeContest:
         self.tasks = []
         # initialize() walks the contest's ContestTask rows; this contest holds none.
         self.task_contests = []
+
+
+class FakeDataset:
+    """A dataset whose score type the task snapshot can read."""
+
+    class score_type_object:
+        max_score = 100.0
+        ranking_headers = ["School"]
+
+
+class FakeTask:
+    """A task with an active dataset, so the snapshot announces it."""
+
+    def __init__(self, name):
+        self.name = name
+        self.title = name.title()
+        self.score_precision = 2
+        self.score_mode = "max"
+        self.active_dataset = FakeDataset()
+
+
+class FakeContestTask:
+    """One contest↔task membership, carrying its order in the contest."""
+
+    def __init__(self, task, num):
+        self.task = task
+        self.num = num
+
+
+class FakeContestWithTasks(FakeContest):
+    """The contest a snapshot test announces."""
+
+    def __init__(self, contest_id, tasks):
+        super().__init__()
+        self.id = contest_id
+        self.task_contests = [FakeContestTask(task, num) for num, task in enumerate(tasks)]
 
 
 class Item:
@@ -157,6 +194,36 @@ class ExecutorPushTest(unittest.TestCase):
             [("DELETE FROM ranking_hidden WHERE contest_id = ANY(:scopes) "
               "AND key <> ALL(:keys)", {"scopes": [7], "keys": []})],
         )
+
+
+class TaskSnapshotTest(unittest.TestCase):
+    """The task payload carries the contest's own id beside its encoded name.
+
+    WHY the id and not just the name: the reader scopes the columns it draws to the contests
+    the config shows, and it matches them by the contest id. A payload that named only the
+    encoded contest name would leave the reader unable to file a renamed contest's task rows.
+    """
+
+    def snapshot(self, contest_id):
+        Contest.current = FakeContestWithTasks(contest_id, [FakeTask("blackbox")])
+        service = ProbeProxyService(shard=0, contest_id=contest_id)
+        return service._task_snapshot(Contest.current)
+
+    def test_the_snapshot_files_each_task_under_its_contest_id(self):
+        contest_key, tasks, problems = self.snapshot(9)
+
+        self.assertEqual(problems, [])
+        payload = tasks["blackbox"]
+        self.assertEqual(payload["contest"], contest_key)
+        self.assertEqual(payload["contest_id"], 9)
+
+    def test_the_projected_task_row_carries_the_contest_id(self):
+        # The end of the path: what the push writes is what the reader scopes on, so the id
+        # has to survive the payload→row mapping and not only the payload.
+        _contest_key, tasks, _problems = self.snapshot(9)
+        row = next(iter(proxy_service.projection_rows("tasks", tasks)))
+
+        self.assertEqual(row["contest_id"], 9)
 
 
 if __name__ == "__main__":

@@ -58,6 +58,7 @@ class ProjectionTest(unittest.TestCase):
             "name": "Task",
             "short_name": "T0",
             "contest": "c0",
+            "contest_id": 7,
             "max_score": 100.0,
             "score_precision": 2,
             "extra_headers": ["School"],
@@ -69,11 +70,32 @@ class ProjectionTest(unittest.TestCase):
         self.assertNotIn("order", row)
         self.assertEqual(row["key"], "t0")
 
+    def test_the_task_row_carries_the_contest_id_beside_the_contest_name(self):
+        # WHY the id travels at all: the projected `contest` is the encoded contest name, so a
+        # reader scoping columns by the stable id the config names could not match a renamed
+        # contest's rows at all. Both columns are carried; the id is the one that survives.
+        row = ranking_projection.row("tasks", "t0", {
+            "name": "Task", "short_name": "T0", "contest": "c0", "contest_id": 7,
+            "max_score": 1.0, "score_precision": 0, "extra_headers": [], "order": 0,
+            "score_mode": "max",
+        })
+        self.assertEqual(row["contest"], "c0")
+        self.assertEqual(row["contest_id"], 7)
+
+    def test_a_task_payload_without_the_contest_id_is_refused(self):
+        with self.assertRaises(ValueError) as raised:
+            ranking_projection.row("tasks", "t0", {
+                "name": "Task", "short_name": "T0", "contest": "c0",
+                "max_score": 1.0, "score_precision": 0, "extra_headers": [],
+                "order": 0, "score_mode": "max",
+            })
+        self.assertIn("contest_id", str(raised.exception))
+
     def test_json_columns_are_serialised_for_the_cast(self):
         row = ranking_projection.row("tasks", "t0", {
-            "name": "Task", "short_name": "T0", "contest": "c0", "max_score": 1.0,
-            "score_precision": 0, "extra_headers": ["A", "B"], "order": 0,
-            "score_mode": "max",
+            "name": "Task", "short_name": "T0", "contest": "c0", "contest_id": 7,
+            "max_score": 1.0, "score_precision": 0, "extra_headers": ["A", "B"],
+            "order": 0, "score_mode": "max",
         })
         self.assertEqual(json.loads(row["extra_headers"]), ["A", "B"])
 

@@ -553,6 +553,10 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                 "short_name": task.name,
                 "name": task.title,
                 "contest": contest_key,
+                # The contest's own id travels beside its encoded name: the reader scopes the
+                # columns it draws by the stable handle the config names, and a rename moves
+                # the encoded name while this stays put.
+                "contest_id": contest.id,
                 "order": contest_task.num,
                 "max_score": score_type.max_score,
                 "extra_headers": score_type.ranking_headers,

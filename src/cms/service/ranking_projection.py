@@ -29,7 +29,7 @@ TABLES = {
 COLUMNS = {
     "contests": ("key", "name", "begin", "end", "score_precision", "contest_id"),
     "tasks": (
-        "key", "name", "short_name", "contest", "max_score",
+        "key", "name", "short_name", "contest", "contest_id", "max_score",
         "score_precision", "extra_headers", "display_order", "score_mode",
     ),
     "teams": ("key", "name"),
@@ -44,7 +44,7 @@ COLUMNS = {
 REQUIRED = {
     "contests": ("name", "begin", "end", "score_precision", "contest_id"),
     "tasks": (
-        "name", "short_name", "contest", "max_score", "score_precision",
+        "name", "short_name", "contest", "contest_id", "max_score", "score_precision",
         "extra_headers", "order", "score_mode",
     ),
     "teams": ("name",),
