@@ -4,7 +4,6 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { UserBulkEditDialog } from './UserBulkEditDialog';
 import { UserListPagination } from './UserListPagination';
 import { UserListTable } from './UserListTable';
@@ -37,9 +36,6 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         unavailableCount={selection.missingCount}
         onBulkEdit={dialogs.openBulkEdit}
       />
-      <div className="flex justify-end">
-        <LiveIndicator status={rows.liveStatus} />
-      </div>
       <UserListTable
         rows={rows}
         selection={selection}

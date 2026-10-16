@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
-import type { LiveStatus } from '@/hooks/useLiveStream';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { listSortQuery, type ListSortInput } from '@/lib/list-sorting';
 import { writeListQuery, type ListQueryState } from '@/lib/list-state';
@@ -28,7 +27,6 @@ export interface UserListRows {
   readonly users: UsersPageRow[];
   readonly totalPages: number;
   readonly loading: boolean;
-  readonly liveStatus: LiveStatus;
   readonly searchDraft: string;
   readonly setSearchDraft: (value: string) => void;
   readonly sort: ListSortInput;
@@ -150,7 +148,7 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
 
   // Why a live cursor and not the minute-long poll: that poll re-read the page whether or not
   // anything had changed, while this one moves only when a user write is recorded.
-  const liveStatus = useLiveCursor('/api/users/stream', () => { void fetchUsersRef.current(); });
+  useLiveCursor('/api/users/stream', () => { void fetchUsersRef.current(); });
 
   const searchUsers = useDebouncedSearch({
     value: searchDraft,
@@ -164,7 +162,7 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
   }, [fetchUsers]);
 
   return {
-    users, totalPages: totalPagesState, loading, liveStatus, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
+    users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
     table, userCache, fetchUsers, searchUsers,
   };
 }

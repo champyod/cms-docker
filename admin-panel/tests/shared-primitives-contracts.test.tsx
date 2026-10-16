@@ -5,8 +5,8 @@ import { Pencil, Trash2, Upload } from 'lucide-react';
 
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
+import { ConfirmDialog } from '@/components/core/ConfirmDialog';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { RowActions, ROW_ACTION_GROUP_TYPES, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
 
@@ -221,6 +221,6 @@ describe('dictionary provider contract', () => {
   // way to call a hook under test, so the contract is pinned on whichever core component still
   // reads the dictionary rather than on a fixture that could drift from real usage.
   it('fails closed without a dictionary instead of falling back to English', () => {
-    expect(() => render(<LiveIndicator status="live" />)).toThrow(/DictionaryProvider/);
+    expect(() => render(<ConfirmDialog confirmation={null} onResolve={() => undefined} />)).toThrow(/DictionaryProvider/);
   });
 });

@@ -8,7 +8,6 @@ import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SkeletonTable } from '@/components/core/Skeleton';
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { BulkDialogs } from '@/components/containers/BulkDialogs';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
 import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
@@ -40,13 +39,12 @@ export function ContainersClient(): React.JSX.Element {
     .filter((container) => controller.selectedIds.has(container.id))
     .map((container) => container.name);
 
-  // Why one controller serves both places: these controls read the compose action, the stream
-  // status, and the refresh the controller just ran, so they are published from the panel that
-  // owns it rather than rebuilt from a second instance in the header.
+  // Why one controller serves both places: these controls read the compose action and the refresh
+  // the controller just ran, so they are published from the panel that owns it rather than rebuilt
+  // from a second instance in the header.
   usePublishModuleActions(
     'infrastructure.containers',
     <div className="flex items-center gap-3">
-      <LiveIndicator status={controller.status} />
       <Button onClick={() => void controller.handleCompose('up')} disabled={controller.actionLoading === 'compose'}>
         <Layers className="w-4 h-4 mr-2" /> {pageCopy.upAll}
       </Button>

@@ -10,7 +10,7 @@ import { useDictionary } from '@/hooks/useDictionary';
 import { useContainerActions } from '@/components/containers/useContainerActions';
 import type { ContainerRestartConfig } from '@/app/actions/containerConfig';
 import type { ContainerInfo } from '@/app/actions/docker';
-import type { LiveStatus, LiveStream } from '@/hooks/useLiveStream';
+import type { LiveStream } from '@/hooks/useLiveStream';
 import type { ContainersFrame } from '@/lib/live-frames';
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -29,7 +29,6 @@ export interface ContainersController {
   readonly showBulkLogsDialog: boolean;
   readonly selectedContainer: { readonly id: string; readonly name: string } | null;
   readonly settingsContainer: { readonly id: string; readonly name: string } | null;
-  readonly status: LiveStatus;
   readonly refresh: LiveStream['refresh'];
   readonly setSelectedContainer: Dispatch<SetStateAction<{ id: string; name: string } | null>>;
   readonly setSettingsContainer: Dispatch<SetStateAction<{ id: string; name: string } | null>>;
@@ -83,7 +82,9 @@ export function useContainersController(): ContainersController {
     setLoading(false);
   }, []);
 
-  const { status, refresh } = useLiveStream<ContainersFrame>({ url: '/api/containers/stream', onFrame });
+  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
+  // fleet, and a frame that never arrives simply leaves the skeleton in place.
+  const { refresh } = useLiveStream<ContainersFrame>({ url: '/api/containers/stream', onFrame });
 
   // Why this is a one-shot per container and not part of a poll: the page used to fire this write on
   // every tick for any cms container without a config entry. The snapshot shows which containers
@@ -165,7 +166,6 @@ export function useContainersController(): ContainersController {
     showBulkLogsDialog,
     selectedContainer,
     settingsContainer,
-    status,
     refresh,
     setSelectedContainer,
     setSettingsContainer,

@@ -7,10 +7,8 @@ import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -83,20 +81,15 @@ export function ResourceView(): React.JSX.Element {
     pendingFirstFrame.current = null;
   }, []);
 
-  const { status: liveStatus, refresh } = useLiveStream<ResourceFrame>({
+  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
+  // data, and a channel that never delivers a first frame already fails the load below.
+  const { refresh } = useLiveStream<ResourceFrame>({
     url: `/api/resources/stream?trafficLimit=${trafficLimit}`,
     onFrame,
     onError: onStreamError,
   });
 
   const source = sourceLabel(serverStats, dict);
-
-  // Why the indicator is published from here and withdrawn unless loaded: the stream status is this
-  // hook's own, and the loading surface below replaces the panel body entirely.
-  usePublishModuleActions(
-    'infrastructure.resources',
-    status.kind === 'idle' ? <LiveIndicator status={liveStatus} /> : null,
-  );
 
   if (status.kind !== 'idle') {
     return (

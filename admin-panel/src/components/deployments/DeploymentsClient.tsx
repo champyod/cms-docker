@@ -6,7 +6,6 @@ import { RefreshCw } from 'lucide-react';
 import { useDeployContest } from '@/hooks/useDeployContest';
 import { Stack } from '@/components/core/Layout';
 import { Button } from '@/components/core/Button';
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { DeployStatusPanel } from '@/components/deployments/DeployStatusPanel';
@@ -68,7 +67,6 @@ export function DeploymentsClient(): React.JSX.Element {
     'infrastructure.deployments',
     snapshot.status.kind === 'idle' ? (
       <div className="flex items-center gap-3">
-        <LiveIndicator status={workers.liveStatus} />
         <Button
           variant="secondary"
           size="sm"

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useLiveStream } from '@/hooks/useLiveStream';
-import { LiveIndicator } from '@/components/core/LiveIndicator';
 import type { AuditCursorFrame } from '@/lib/live/frames';
 import type { ListSortInput } from '@/lib/list-sorting';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
@@ -73,7 +72,9 @@ export function AuditTable({
     [router],
   );
 
-  const { status: liveStatus } = useLiveStream<AuditCursorFrame>({
+  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
+  // rows, and the rows this page reads are what say whether the read succeeded.
+  useLiveStream<AuditCursorFrame>({
     url: '/api/audit/stream',
     onFrame: onAuditFrame,
     enabled: autoRefresh,
@@ -241,12 +242,6 @@ export function AuditTable({
           toDate: toDateFilter,
         }}
       />
-
-      {autoRefresh && (
-        <div className="flex justify-end">
-          <LiveIndicator status={liveStatus} />
-        </div>
-      )}
 
       <ResponsiveTable
         columns={columns}

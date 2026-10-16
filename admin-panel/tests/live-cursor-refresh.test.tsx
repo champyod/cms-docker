@@ -79,9 +79,13 @@ describe('page-level live refresh', () => {
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the connection state beside the surface it refreshes', () => {
-    render(surface('/api/ranking/stream'));
+  it('renders no connection state beside the surface it refreshes', () => {
+    const { container } = render(surface('/api/ranking/stream'));
     act(() => FakeEventSource.instances[0].onopen?.());
-    expect(screen.getByText(en.live.connected)).toBeTruthy();
+    // Why this is pinned: the live badge was the only place the channel's own state reached the
+    // screen, and the operator retired it — the surface staying current is the signal, so a status
+    // blob reappearing here is a regression rather than a nicety.
+    expect(container.textContent).toBe('');
+    expect(screen.queryByText(en.live.connected)).toBeNull();
   });
 });

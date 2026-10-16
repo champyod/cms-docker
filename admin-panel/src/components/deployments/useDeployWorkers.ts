@@ -46,11 +46,10 @@ export function useDeployWorkers(setSaving: SetSaving) {
         if (frame.error !== undefined) setWorkersError(frame.error);
     }, []);
 
-    const { status: liveStatus } = useLiveStream<WorkersFrame>({
+    useLiveStream<WorkersFrame>({
         url: '/api/workers/stream',
         onFrame: onWorkersFrame,
     });
-
     const handleSaveWorkers = useCallback(async () => {
         setSaving(true);
         try {
@@ -87,7 +86,6 @@ export function useDeployWorkers(setSaving: SetSaving) {
         workers,
         workersDirty,
         liveWorkers,
-        liveStatus,
         workersForbidden,
         workersError,
         canManageWorkers,
