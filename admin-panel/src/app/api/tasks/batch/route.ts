@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { apiError, apiSuccess, parseIdList } from '@/lib/api-utils';
+import { pickLimitPatch } from '@/lib/limit-patch';
 import * as taskService from '@/lib/services/tasks';
 
-const BATCH_ACTIONS = ['assign'] as const;
+const BATCH_ACTIONS = ['assign', 'update-limits'] as const;
 
 export async function POST(req: NextRequest): Promise<Response> {
   try {
@@ -11,12 +12,31 @@ export async function POST(req: NextRequest): Promise<Response> {
     const action = BATCH_ACTIONS.find((candidate) => candidate === body?.action);
     const taskIds = parseIdList(body.taskIds);
 
-    if (action !== 'assign') {
+    if (action === undefined) {
       return apiError({ message: 'Invalid action', status: 400 });
     }
     if (taskIds.length === 0) {
       return apiError({ message: 'taskIds is required', status: 400 });
     }
+
+    if (action === 'update-limits') {
+      // Why the shared picker: it owns the six-name whitelist and the 0→NULL rule, so the route
+      // cannot carry an unknown column or a literal 0 the CHECK refuses.
+      const patch = pickLimitPatch(body.patch);
+      if (patch === null) {
+        return apiError({ message: 'No limit fields in patch', status: 400 });
+      }
+      const failed: Array<{ id: number; reason?: string }> = [];
+      let updatedCount = 0;
+      for (const taskId of taskIds) {
+        const result = await taskService.updateTaskLimits(taskId, patch);
+        if (result.success) updatedCount += 1;
+        else failed.push({ id: taskId, reason: result.error });
+      }
+      revalidatePath('/[locale]/tasks', 'page');
+      return apiSuccess({ updatedCount, failed });
+    }
+
     if (body.contestIds !== undefined && !Array.isArray(body.contestIds)) {
       return apiError({ message: 'contestIds must be an array', status: 400 });
     }
