@@ -1,4 +1,5 @@
 import { verifyApiPermission } from '@/lib/api-utils';
+import { encodeLiveEnvelope } from '@/lib/live/frames';
 import { LIVE_HEARTBEAT_MS, LIVE_STREAM_HEADERS } from '@/lib/constants/live-stream';
 import type { SessionPayload } from '@/lib/auth';
 import type { PermissionKey } from '@/lib/permissions';
@@ -37,12 +38,13 @@ export interface LiveStreamRouteOptions<TFrame> {
 }
 
 /**
- * The frame the client's `onmessage` receives and drops.
+ * The payload an empty heartbeat carries.
  *
- * Why a real frame and not an SSE comment: a comment never dispatches `onmessage`, so it could not
- * hold the client's watchdog open.
+ * Why an empty object and not the last frame: repeating an alert frame would alert twice, so a channel
+ * that only ever has news sends a frame the client drops. Why it is still a real frame: an SSE comment
+ * never dispatches `onmessage`, so it could not hold the client's watchdog open.
  */
-const EMPTY_FRAME = 'data: {}\n\n';
+const EMPTY_PAYLOAD = {};
 
 type GateResult = { readonly refusal: Response } | { readonly session: SessionPayload };
 
@@ -78,6 +80,9 @@ export function createLiveStreamRoute<TFrame>(
     let teardown: LiveSourceTeardown | null = null;
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let lastFrame: string | null = null;
+    // The instant of the newest payload this connection has stated; the connection's own opening,
+    // before that. Nothing has been read yet, and the instant says so rather than guessing one.
+    let statedAt = new Date().toISOString();
     let closed = false;
 
     const enqueue = (chunk: string): void => {
@@ -110,9 +115,15 @@ export function createLiveStreamRoute<TFrame>(
         // interval must not leave the client's watchdog counting down on its own.
         heartbeat = setInterval(() => {
           if (options.heartbeat === 'empty') {
-            enqueue(EMPTY_FRAME);
+            // Why the empty payload restates the newest stated instant rather than a fresh one: the
+            // channel has nothing new to state, so claiming a read would date data the server did not
+            // re-read. The instant it does carry is what the cue compares a row against.
+            enqueue(`data: ${encodeLiveEnvelope(EMPTY_PAYLOAD, statedAt)}\n\n`);
             return;
           }
+          // Why the restated frame is re-sent verbatim, instant included: it names the read that
+          // produced this payload, and re-stamping it would claim a fresh read for data the server has
+          // not re-read.
           if (lastFrame !== null) enqueue(lastFrame);
         }, LIVE_HEARTBEAT_MS);
         try {
@@ -120,7 +131,8 @@ export function createLiveStreamRoute<TFrame>(
             request,
             session: gate.session,
             emit: (frame) => {
-              lastFrame = `data: ${JSON.stringify(frame)}\n\n`;
+              statedAt = new Date().toISOString();
+              lastFrame = `data: ${encodeLiveEnvelope(frame, statedAt)}\n\n`;
               enqueue(lastFrame);
             },
             isClosed: () => closed,

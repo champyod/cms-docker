@@ -86,7 +86,11 @@ describe('audit stream', () => {
     const reader = await openStream(abort.signal);
 
     const opening = await reader.read();
-    expect(new TextDecoder().decode(opening.value)).toBe('data: {"latestId":"7"}\n\n');
+    const openingPayload = JSON.parse(new TextDecoder().decode(opening.value).replace(/^data: /, '').trim()) as { readAt: string; frame: AuditCursorFrame };
+    // Why the read instant is asserted instead of ignored: the freshness cue dates every row from it,
+    // so a frame the server sent without one would leave rows the panel could not compare.
+    expect(openingPayload.frame).toEqual({ latestId: '7' });
+    expect(Number.isNaN(Date.parse(openingPayload.readAt))).toBe(false);
 
     abort.abort();
     expect(await reader.read()).toEqual({ done: true, value: undefined });

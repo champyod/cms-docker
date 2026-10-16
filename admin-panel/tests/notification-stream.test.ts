@@ -44,11 +44,13 @@ describe('notification stream', () => {
       expect(response.headers.get('X-Accel-Buffering')).toBe('no');
       const reader = (response.body as ReadableStream<Uint8Array>).getReader();
 
-      vi.advanceTimersByTime(LIVE_HEARTBEAT_MS);
+      vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
       const beat = await reader.read();
-      const text = new TextDecoder().decode(beat.value);
-      // A comment would never dispatch the client's onmessage, so it could not hold the watchdog.
-      expect(text).toBe('data: {}\n\n');
+      const envelope = JSON.parse(new TextDecoder().decode(beat.value).replace(/^data: /, '').trim()) as { readAt: string; frame: Record<string, unknown> };
+      // A comment would never dispatch the client's onmessage, so it could not hold the watchdog. The
+      // payload stays empty — a repeat would alert twice — while the frame itself is real.
+      expect(envelope.frame).toEqual({});
+      expect(Number.isNaN(Date.parse(envelope.readAt))).toBe(false);
       await reader.cancel();
     } finally {
       vi.useRealTimers();

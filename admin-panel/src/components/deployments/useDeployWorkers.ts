@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { getWorkers, updateWorkers } from '@/app/actions/workerConfig';
 import { getWorkersLiveStatus } from '@/app/actions/workers';
 import { useLiveStream } from '@/hooks/useLiveStream';
+import { useLiveReadInstants } from '@/lib/live/use-live-reads';
 import type { WorkersFrame } from '@/lib/live/frames';
 import type { WorkerConfig, WorkerNodeView } from '@/lib/worker-nodes';
 import { toast } from 'sonner';
@@ -40,13 +41,18 @@ export function useDeployWorkers(setSaving: SetSaving) {
     }, []);
 
     // Why the readings travel whole on the frame and not as a cursor: they are the data this panel
-    // shows, so the panel keeps its last reading until the next one arrives.
-    const onWorkersFrame = useCallback((frame: WorkersFrame): void => {
+    // shows, so the panel keeps its last reading until the next one arrives. The read that produced
+    // the fleet is recorded with it, so a row can be told apart from one the server has since re-read.
+    const reads = useLiveReadInstants<'workers'>();
+    const onWorkersFrame = useCallback((frame: WorkersFrame, readAt: string): void => {
         setLiveWorkers(frame.workers);
+        reads.record('workers', readAt);
         if (frame.error !== undefined) setWorkersError(frame.error);
-    }, []);
+    }, [reads]);
 
-    useLiveStream<WorkersFrame>({
+    // Why the stream's own state travels to the rows instead of to a badge: the panel's status blob was
+    // removed on purpose, and a row the panel can no longer confirm is where that has to be visible.
+    const { status: streamStatus, readAt: surfaceReadAt } = useLiveStream<WorkersFrame>({
         url: '/api/workers/stream',
         onFrame: onWorkersFrame,
     });
@@ -86,6 +92,8 @@ export function useDeployWorkers(setSaving: SetSaving) {
         workers,
         workersDirty,
         liveWorkers,
+        // The cue's input, ready-made from the read that produced the list and the stream's own state.
+        freshness: { readAt: reads.reads.workers ?? null, surfaceReadAt, streamStatus },
         workersForbidden,
         workersError,
         canManageWorkers,

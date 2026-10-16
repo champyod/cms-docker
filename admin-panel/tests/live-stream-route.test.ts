@@ -53,6 +53,17 @@ afterEach(() => {
 });
 
 describe('shared live stream route', () => {
+  /**
+   * Why the payload is read through the envelope instead of compared as text: every frame now carries
+   * the instant the server's read produced it, and the freshness cue dates rows from it — a frame sent
+   * without one would leave the panel unable to say how old its rows are.
+   */
+  function readEnvelope(frame: string): { readAt: string; frame: unknown } {
+    const envelope = JSON.parse(frame.replace(/^data: /, '').trim()) as { readAt: string; frame: unknown };
+    expect(Number.isNaN(Date.parse(envelope.readAt))).toBe(false);
+    return envelope;
+  }
+
   it('answers with the event-stream headers and the frame shape the client parses', async () => {
     const opened = openRoute();
     const response = await opened.opened;
@@ -62,7 +73,7 @@ describe('shared live stream route', () => {
 
     const reader = (response.body as ReadableStream<Uint8Array>).getReader();
     opened.connection().emit('a frame');
-    expect(await nextFrame(reader)).toBe('data: "a frame"\n\n');
+    expect(readEnvelope((await nextFrame(reader)) as string).frame).toBe('a frame');
     await reader.cancel();
   });
 
@@ -72,9 +83,13 @@ describe('shared live stream route', () => {
     const reader = (response.body as ReadableStream<Uint8Array>).getReader();
 
     opened.connection().emit('only frame');
-    expect(await nextFrame(reader)).toBe('data: "only frame"\n\n');
+    const sent = (await nextFrame(reader)) as string;
     await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
-    expect(await nextFrame(reader)).toBe('data: "only frame"\n\n');
+    const restated = (await nextFrame(reader)) as string;
+    expect(readEnvelope(restated).frame).toBe('only frame');
+    // Why the instant is not refreshed by a heartbeat: re-stamping it would claim a fresh read for
+    // data the server has not re-read, and the cue would report stale rows as current.
+    expect(readEnvelope(restated).readAt).toBe(readEnvelope(sent).readAt);
     await reader.cancel();
   });
 
@@ -85,7 +100,7 @@ describe('shared live stream route', () => {
 
     // A comment would never reach the client's onmessage, so the empty frame is a real one it drops.
     await vi.advanceTimersByTimeAsync(LIVE_HEARTBEAT_MS);
-    expect(await nextFrame(reader)).toBe('data: {}\n\n');
+    expect(readEnvelope((await nextFrame(reader)) as string).frame).toEqual({});
     await reader.cancel();
   });
 

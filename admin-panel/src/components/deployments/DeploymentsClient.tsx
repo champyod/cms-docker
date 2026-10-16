@@ -140,6 +140,7 @@ export function DeploymentsClient(): React.JSX.Element {
         <WorkersPanel
           workers={workers.workers}
           status={workers.liveWorkers}
+          freshness={workers.freshness}
           forbidden={workers.workersForbidden}
           error={workers.workersError}
           canManage={workers.canManageWorkers}

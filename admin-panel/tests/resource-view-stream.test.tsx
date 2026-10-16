@@ -6,6 +6,7 @@ import { ResourceView } from '@/components/resources/ResourceView';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ResourceFrame, ServerStats, StatsSource, WorkerNodeView } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
+import { encodedFrame } from './stream-frames';
 
 /**
  * Why this drives frames in rather than rendering a prop: the source label and the pending cards are
@@ -60,7 +61,7 @@ function surface(): React.JSX.Element {
 async function deliver(frame: ResourceFrame): Promise<void> {
   await act(async () => {
     FakeEventSource.instances.at(-1)?.onmessage?.(
-      new MessageEvent('message', { data: JSON.stringify(frame) }),
+      new MessageEvent('message', { data: encodedFrame(frame) }),
     );
   });
 }

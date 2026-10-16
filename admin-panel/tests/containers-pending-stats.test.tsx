@@ -28,6 +28,7 @@ import { ContainersClient } from '@/components/containers/ContainersClient';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ContainerInfo, ContainersFrame } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
+import { encodedFrame } from './stream-frames';
 
 /**
  * Why the surface and not a prop: the zeros were never a formatting bug — the grid was rendered from
@@ -66,7 +67,7 @@ function surface(): React.JSX.Element {
 function deliver(frame: ContainersFrame): void {
   act(() => {
     FakeEventSource.instances.at(-1)?.onmessage?.(
-      new MessageEvent('message', { data: JSON.stringify(frame) }),
+      new MessageEvent('message', { data: encodedFrame(frame) }),
     );
   });
 }
@@ -126,5 +127,59 @@ describe('containers stat grid', () => {
     expect(html).toContain('data-slot="skeleton"');
     expect(html).not.toContain(`>0<`);
     expect(html).not.toContain('Monitoring 0 containers');
+  });
+});
+
+/**
+ * The per-row freshness cue on the surface it was built for.
+ *
+ * Why this rides on the containers panel: it is a row surface fed by one stream, so the behaviour that
+ * matters — a live stream with unchanged data marks nothing, a dropped one marks the rows where they
+ * sit — is observable here without inventing a fixture that could drift from a real surface.
+ */
+describe('containers row freshness', () => {
+  function rowStates(): string[] {
+    return Array.from(document.querySelectorAll('[data-freshness]')).map((row) => row.getAttribute('data-freshness') ?? '');
+  }
+
+  /** A row's own data, with the cue's hidden sentence taken back out of it. */
+  function rowDataText(row: Element): string {
+    const announcement = row.querySelector('.sr-only')?.textContent ?? '';
+    return (row.textContent ?? '').replace(announcement, '');
+  }
+
+  function rowData(): string[] {
+    return Array.from(document.querySelectorAll('[data-freshness]')).map(rowDataText);
+  }
+
+  function dropStream(): void {
+    act(() => {
+      FakeEventSource.instances.at(-1)?.onerror?.();
+    });
+  }
+
+  it('marks no row while the stream is up, however little the data changes', () => {
+    render(surface());
+    deliver(FRAME);
+
+    // Two rows, and both are current: the frame that carried them is the newest read the surface has.
+    expect(rowStates()).toEqual(['fresh', 'fresh']);
+    expect(document.querySelector('[data-freshness="fresh"]')?.className).not.toContain('border-l-2');
+  });
+
+  it('marks every row of the surface once the stream drops, and adds nothing beside the data', () => {
+    render(surface());
+    deliver(FRAME);
+    const stated = rowData();
+
+    dropStream();
+
+    expect(rowStates()).toEqual(['stale', 'stale']);
+    for (const row of Array.from(document.querySelectorAll('[data-freshness="stale"]'))) {
+      expect(row.className).toContain('border-l-2');
+      expect(row.getAttribute('title')).toContain('reconnecting');
+    }
+    // The rows still state exactly what they stated: the cue is a mark, not a substitute value.
+    expect(rowData()).toEqual(stated);
   });
 });

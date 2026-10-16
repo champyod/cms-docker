@@ -39,7 +39,23 @@ export async function nextFrame(reader: ReadableStreamDefaultReader<Uint8Array>,
   return frames[0] ?? null;
 }
 
-/** The payload of one `data: …` frame. */
+/** The payload of one `data: …` frame, unwrapped from the envelope the shared route builder sends. */
 export function toFrame<TFrame>(frame: string): TFrame {
-  return JSON.parse(frame.replace(/^data: /, '').trim()) as TFrame;
+  return (JSON.parse(frame.replace(/^data: /, '').trim()) as { frame: TFrame }).frame;
+}
+
+/**
+ * The instant the fixtures' reads are stamped with.
+ *
+ * Why a fixed instant instead of a real clock: these tests are about what a frame delivers, and the
+ * freshness cue compares instants — a fixed one lets a test say which read produced which row.
+ */
+export const FRAME_READ_AT = '2026-10-16T12:00:00.000Z';
+
+/**
+ * One frame as the stream delivers it: the payload inside the envelope, with the read instant the
+ * server stamped it with.
+ */
+export function encodedFrame<TFrame>(frame: TFrame, readAt: string = FRAME_READ_AT): string {
+  return JSON.stringify({ readAt, frame });
 }

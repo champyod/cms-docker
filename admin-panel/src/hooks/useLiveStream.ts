@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { withBasePath } from '@/lib/base-path';
+import { decodeLiveEnvelope } from '@/lib/live/frames';
 import {
   LIVE_IDLE_TIMEOUT_MS,
   LIVE_RECONNECT_MAX_MS,
@@ -15,7 +16,11 @@ export type LiveStatus = 'connecting' | 'live' | 'reconnecting' | 'paused';
 interface UseLiveStreamOptions<TFrame> {
   /** The stream to watch. Changing it reopens the connection, which is how a query parameter is re-read. */
   url: string;
-  onFrame: (frame: TFrame) => void;
+  /**
+   * Called with each frame's payload and the instant the server's read produced it. The instant is
+   * what says how old the value is; a surface that shows rows stamps them with it.
+   */
+  onFrame: (frame: TFrame, readAt: string) => void;
   /**
    * Called when a connection fails; the reconnect still runs. A surface whose first frame is its
    * load uses this to tell "not yet" apart from "never" — the status alone only says reconnecting.
@@ -30,6 +35,12 @@ interface UseLiveStreamOptions<TFrame> {
 
 export interface LiveStream {
   status: LiveStatus;
+  /**
+   * The instant of the newest payload the server has stated on this connection, or null while it has
+   * stated none. Why it survives a drop: the data on screen is still from that read, so clearing it
+   * would report the surface as dating from nowhere rather than from that instant.
+   */
+  readAt: string | null;
   /** Reopens the stream so the server sends a fresh snapshot now — used after the user changes something. */
   refresh: () => void;
 }
@@ -51,6 +62,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
   const [status, setStatus] = useState<LiveStatus>(() =>
     typeof document !== 'undefined' && document.hidden ? 'paused' : 'connecting'
   );
+  const [readAt, setReadAt] = useState<string | null>(null);
   const onFrameRef = useRef(onFrame);
   const onErrorRef = useRef(onError);
   const sourceRef = useRef<EventSource | null>(null);
@@ -120,7 +132,12 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
         lastFrameAtRef.current = Date.now();
         setStatus('live');
         try {
-          onFrameRef.current(JSON.parse(event.data) as TFrame);
+          const envelope = decodeLiveEnvelope<TFrame>(event.data as string);
+          // A frame that is not an envelope is dropped as malformed rather than handed on as a
+          // payload; the watchdog below still bounds the connection's lifetime.
+          if (envelope === null) return;
+          setReadAt(envelope.readAt);
+          onFrameRef.current(envelope.frame, envelope.readAt);
         } catch {
           // A malformed frame is dropped; the watchdog below still bounds the connection's lifetime.
         }
@@ -181,6 +198,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
   const refresh = useCallback((): void => refreshRef.current(), []);
 
   // Why the status is derived here: a disabled channel has no connection state of its own, and the
-  // pause is the surface's own choice, not something the stream discovered.
-  return { status: enabled ? status : 'paused', refresh };
+  // pause is the surface's own choice, not something the stream discovered. The read instant is
+  // dropped with it: a channel the surface turned off has stated nothing about the data on screen.
+  return { status: enabled ? status : 'paused', readAt: enabled ? readAt : null, refresh };
 }

@@ -8,6 +8,7 @@ import { Badge } from '@/components/core/Badge';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
 import { rowsFromNodes } from '@/lib/worker-nodes';
+import type { RowFreshnessInput } from '@/lib/live/row-freshness';
 import type { WorkerConfig, WorkerNodeListRow, WorkerNodeView } from '@/lib/worker-nodes';
 
 interface WorkersPanelProps {
@@ -22,6 +23,11 @@ interface WorkersPanelProps {
   onAddWorker: () => void;
   onRemoveWorker: (index: number) => void;
   onUpdateWorker: (index: number, field: 'host' | 'port', value: string) => void;
+  /**
+   * How current the live fleet on this panel is, from the stream that feeds it. Omitted where the
+   * rows come from something that dates no reads — the rows are then rendered exactly as before.
+   */
+  freshness?: RowFreshnessInput;
 }
 
 /**
@@ -75,6 +81,7 @@ export function WorkersPanel(props: WorkersPanelProps): ReactElement {
         ) : (
           <WorkerNodeList
             rows={rows}
+            freshness={props.freshness}
             canManage={props.canManage}
             saving={props.saving}
             dirty={props.workersDirty}

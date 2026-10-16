@@ -7,6 +7,7 @@ import { motion } from 'motion/react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
+import { RowFreshness } from '@/components/core/RowFreshness';
 import { SkeletonTable } from '@/components/core/Skeleton';
 import { BulkDialogs } from '@/components/containers/BulkDialogs';
 import { LogViewerModal } from '@/components/containers/LogViewerModal';
@@ -139,23 +140,29 @@ export function ContainersClient(): React.JSX.Element {
           </div>
           <div className="divide-y divide-border">
             {controller.containers.map((container) => (
-              <ContainerRow
+              <RowFreshness
                 key={container.id}
-                container={container}
-                config={controller.containerConfig[container.id] ?? DEFAULT_ROW_CONFIG}
-                restartCount={controller.restartCounts[container.id] ?? 0}
-                actionLoading={controller.actionLoading}
-                onViewLogs={controller.setSelectedContainer}
-                onOpenSettings={controller.setSettingsContainer}
-                onControl={controller.handleControl}
-                onToggleAutoRestart={controller.handleToggleAutoRestart}
-                onResetRestartCount={controller.handleResetRestartCount}
-                onToggleDiscordNotifications={controller.handleToggleDiscordNotifications}
-                isSelected={controller.selectedIds.has(container.id)}
-                // Why protected rows cannot be selected: bulk stop/restart is aimed at the selection,
-                // and the security boundary must not be reachable through a bulk action at all.
-                onToggleSelection={container.protected ? undefined : controller.handleToggleSelection}
-              />
+                readAt={controller.containerReadAt}
+                surfaceReadAt={controller.surfaceReadAt}
+                streamStatus={controller.streamStatus}
+              >
+                <ContainerRow
+                  container={container}
+                  config={controller.containerConfig[container.id] ?? DEFAULT_ROW_CONFIG}
+                  restartCount={controller.restartCounts[container.id] ?? 0}
+                  actionLoading={controller.actionLoading}
+                  onViewLogs={controller.setSelectedContainer}
+                  onOpenSettings={controller.setSettingsContainer}
+                  onControl={controller.handleControl}
+                  onToggleAutoRestart={controller.handleToggleAutoRestart}
+                  onResetRestartCount={controller.handleResetRestartCount}
+                  onToggleDiscordNotifications={controller.handleToggleDiscordNotifications}
+                  isSelected={controller.selectedIds.has(container.id)}
+                  // Why protected rows cannot be selected: bulk stop/restart is aimed at the selection,
+                  // and the security boundary must not be reachable through a bulk action at all.
+                  onToggleSelection={container.protected ? undefined : controller.handleToggleSelection}
+                />
+              </RowFreshness>
             ))}
 
             {controller.containers.length === 0 && controller.loading && (

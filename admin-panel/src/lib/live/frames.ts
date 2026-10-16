@@ -60,3 +60,40 @@ export function cursorFrameFingerprint(frame: CursorFrame): string {
 export function workersFrameFingerprint(frame: WorkersFrame): string {
   return JSON.stringify([frame.workers, frame.error ?? null]);
 }
+
+/**
+ * What every live frame travels in: its payload, and the instant the server's read produced it.
+ *
+ * Why the read instant rides on the wire instead of being stamped when the browser receives the frame:
+ * a surface has to say how old the value it is showing is, and only the server saw that read. An
+ * arrival stamp dates the delivery — it would report a frame the server had been holding as fresh —
+ * and it reads the browser's clock for a fact that belongs to the server's.
+ *
+ * Why the envelope is one contract in one place: every stream and every consumer shares this shape, so
+ * a second copy of it is a second thing to keep in step, and the row-freshness cue reads it for every
+ * surface at once.
+ */
+export interface LiveEnvelope<TFrame> {
+  readonly readAt: string;
+  readonly frame: TFrame;
+}
+
+export function encodeLiveEnvelope<TFrame>(frame: TFrame, readAt: string): string {
+  const envelope: LiveEnvelope<TFrame> = { readAt, frame };
+  return JSON.stringify(envelope);
+}
+
+/**
+ * Why a frame that is not an envelope decodes to null rather than to a substituted payload: a consumer
+ * handed a guessed frame would report invented data as read, and the cue built on it would mark rows
+ * against an instant nobody observed. The caller drops the frame; the stream's watchdog still bounds
+ * the connection's lifetime.
+ */
+export function decodeLiveEnvelope<TFrame>(raw: string): LiveEnvelope<TFrame> | null {
+  const parsed: unknown = JSON.parse(raw);
+  if (typeof parsed !== 'object' || parsed === null) return null;
+  const { readAt, frame } = parsed as Partial<LiveEnvelope<TFrame>>;
+  if (typeof readAt !== 'string' || Number.isNaN(Date.parse(readAt))) return null;
+  if (!('frame' in parsed)) return null;
+  return { readAt, frame: frame as TFrame };
+}

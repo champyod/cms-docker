@@ -226,7 +226,9 @@ describe('submissions list stream', () => {
     const reader = (response.body as ReadableStream<Uint8Array>).getReader();
 
     const opening = await reader.read();
-    expect(new TextDecoder().decode(opening.value)).toBe('data: {"cursor":"42:900:11"}\n\n');
+    // Why through the envelope and not as wire text: every frame travels in the envelope that carries
+    // the read instant, and the freshness cue dates rows from it.
+    expect(toFrame<CursorFrame>(new TextDecoder().decode(opening.value))).toEqual({ cursor: '42:900:11' });
 
     abort.abort();
     expect(await reader.read()).toEqual({ done: true, value: undefined });

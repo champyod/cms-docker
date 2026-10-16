@@ -1045,7 +1045,9 @@
     "connecting": "Connecting…",
     "connected": "Live",
     "reconnecting": "Reconnecting…",
-    "paused": "Paused"
+    "paused": "Paused",
+    "rowBehind": "Read {readAt}; the newest read this page has is {surfaceReadAt}.",
+    "rowUnconfirmed": "Read {readAt}, and the live stream is reconnecting, so the panel cannot confirm it."
   },
   "notifications": {
     "title": "Alerts",

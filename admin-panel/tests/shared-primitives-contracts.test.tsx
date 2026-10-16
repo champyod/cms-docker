@@ -9,6 +9,9 @@ import { ConfirmDialog } from '@/components/core/ConfirmDialog';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { RowActions, ROW_ACTION_GROUP_TYPES, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
+import { RowFreshness } from '@/components/core/RowFreshness';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
+import { rowFreshness } from '@/lib/live/row-freshness';
 
 afterEach(() => cleanup());
 
@@ -222,5 +225,112 @@ describe('dictionary provider contract', () => {
   // reads the dictionary rather than on a fixture that could drift from real usage.
   it('fails closed without a dictionary instead of falling back to English', () => {
     expect(() => render(<ConfirmDialog confirmation={null} onResolve={() => undefined} />)).toThrow(/DictionaryProvider/);
+  });
+});
+
+/**
+ * The one per-row freshness cue, pinned on its rule and on what it renders.
+ *
+ * Why this rides on the shared primitives: every row surface (containers, workers, resources, and any
+ * later one) marks its rows through this component and this predicate, so the contract here is what
+ * keeps five surfaces from drifting into five different ideas of "stale".
+ */
+const EARLIER = '2026-10-16T11:58:00.000Z';
+const LATER = '2026-10-16T12:00:00.000Z';
+
+describe('row freshness rule contracts', () => {
+  it('keeps a row from the same read as its surface fresh, which is what an unchanged surface looks like', () => {
+    expect(rowFreshness({ readAt: LATER, surfaceReadAt: LATER, streamStatus: 'live' })).toBe('fresh');
+  });
+
+  // Why strictly older: a row can never be newer than the read its surface was told about, and reading
+  // that as stale would mark rows the moment a surface moved on to a newer read.
+  it('does not mark a row from a later read than the surface states', () => {
+    expect(rowFreshness({ readAt: LATER, surfaceReadAt: EARLIER, streamStatus: 'live' })).toBe('fresh');
+  });
+
+  it('marks a row whose own read predates the newest read its surface holds', () => {
+    expect(rowFreshness({ readAt: EARLIER, surfaceReadAt: LATER, streamStatus: 'live' })).toBe('stale');
+  });
+
+  // Why the stream's own state is in the rule: a dropped stream and an unchanged one deliver exactly
+  // the same thing — nothing — so without it the two states could not be told apart at all.
+  it('marks a dated row while the stream is reconnecting, whatever the surface last stated', () => {
+    expect(rowFreshness({ readAt: EARLIER, surfaceReadAt: LATER, streamStatus: 'reconnecting' })).toBe('stale');
+    expect(rowFreshness({ readAt: EARLIER, surfaceReadAt: EARLIER, streamStatus: 'reconnecting' })).toBe('stale');
+  });
+
+  // Why a paused channel does not mark: the panel stopped it on purpose while nobody was looking, and
+  // the reconnect restores a fresh snapshot. `connecting` has no rows of its own to date.
+  it('leaves the rows alone while the tab is hidden or the channel has not opened', () => {
+    expect(rowFreshness({ readAt: LATER, surfaceReadAt: LATER, streamStatus: 'paused' })).toBe('fresh');
+    expect(rowFreshness({ readAt: LATER, surfaceReadAt: LATER, streamStatus: 'connecting' })).toBe('fresh');
+  });
+
+  it('reports unknown rather than fresh when nothing can date the row', () => {
+    expect(rowFreshness({ readAt: null, surfaceReadAt: LATER, streamStatus: 'live' })).toBe('unknown');
+    expect(rowFreshness({ readAt: EARLIER, surfaceReadAt: null, streamStatus: 'live' })).toBe('unknown');
+    expect(rowFreshness({ readAt: 'not a date', surfaceReadAt: LATER, streamStatus: 'live' })).toBe('unknown');
+    expect(rowFreshness({ readAt: EARLIER, surfaceReadAt: 'not a date', streamStatus: 'live' })).toBe('unknown');
+  });
+});
+
+describe('RowFreshness render contracts', () => {
+  function renderCue(props: { readAt: string | null; surfaceReadAt: string | null; streamStatus: 'live' | 'reconnecting' }): HTMLElement {
+    const { container } = render(
+      <DictionaryProvider dict={en}>
+        <RowFreshness {...props}><span>cms-database</span></RowFreshness>
+      </DictionaryProvider>,
+    );
+    const marked = container.querySelector('[data-freshness]');
+    if (marked === null) throw new Error('the cue rendered no row wrapper');
+    return marked as HTMLElement;
+  }
+
+  it('renders a current row with no mark, no tooltip and nothing to announce', () => {
+    const row = renderCue({ readAt: LATER, surfaceReadAt: LATER, streamStatus: 'live' });
+    expect(row.getAttribute('data-freshness')).toBe('fresh');
+    expect(row.className).not.toContain('border-l-2');
+    expect(row.getAttribute('title')).toBeNull();
+    expect(row.querySelector('.sr-only')).toBeNull();
+    // The row's own content is untouched: the cue adds nothing beside the data.
+    expect(textOf(row)).toBe('cms-database');
+  });
+
+  it('marks a behind row in place, with the instants named for whoever asks', () => {
+    const row = renderCue({ readAt: EARLIER, surfaceReadAt: LATER, streamStatus: 'live' });
+    expect(row.getAttribute('data-freshness')).toBe('stale');
+    expect(row.className).toContain('border-l-2');
+    // Why the high-contrast class is pinned: the rule is the whole mark, and a low-contrast theme would
+    // otherwise leave it invisible.
+    expect(row.className).toContain('high-contrast:border-warning');
+    // Why no motion: the mark appears and clears as frames arrive, and a transition would put motion on
+    // a data table for no information.
+    expect(row.className).not.toMatch(/animate-|transition/);
+    expect(row.getAttribute('title')?.startsWith('Read ')).toBe(true);
+    expect(textOf(row.querySelector('.sr-only'))).toContain('newest read this page has');
+  });
+
+  it('names the dropped stream when that is why the row is marked', () => {
+    const row = renderCue({ readAt: EARLIER, surfaceReadAt: LATER, streamStatus: 'reconnecting' });
+    expect(row.getAttribute('data-freshness')).toBe('stale');
+    expect(textOf(row.querySelector('.sr-only'))).toContain('reconnecting');
+  });
+
+  it('stays silent when nothing can date the row', () => {
+    const row = renderCue({ readAt: null, surfaceReadAt: LATER, streamStatus: 'live' });
+    expect(row.getAttribute('data-freshness')).toBe('unknown');
+    expect(row.className).not.toContain('border-l-2');
+    expect(row.getAttribute('title')).toBeNull();
+  });
+
+  // Why this rides here: the cue's sentence is prose the same way an action label is, so it has to
+  // exist in both locales rather than only in the one the tests happen to read.
+  it('carries both sentences in both locales', () => {
+    for (const dictionary of [en, th] as const) {
+      expect(dictionary.live.rowBehind.trim()).not.toBe('');
+      expect(dictionary.live.rowUnconfirmed.trim()).not.toBe('');
+    }
+    expect(th.live.rowBehind).not.toBe(en.live.rowBehind);
   });
 });

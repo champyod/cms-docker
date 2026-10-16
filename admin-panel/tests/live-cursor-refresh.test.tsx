@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import en from '@/dictionaries/en.json';
+import { encodedFrame } from './stream-frames';
 
 const mockRefresh = vi.fn();
 
@@ -33,7 +34,7 @@ function surface(url: string): React.JSX.Element {
 function deliver(cursor: string | null): Promise<void> {
   return act(async () => {
     FakeEventSource.instances.at(-1)?.onmessage?.(
-      new MessageEvent('message', { data: JSON.stringify({ cursor }) }),
+      new MessageEvent('message', { data: encodedFrame({ cursor }) }),
     );
   });
 }

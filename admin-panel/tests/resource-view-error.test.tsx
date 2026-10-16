@@ -6,6 +6,7 @@ import { ResourceView } from '@/components/resources/ResourceView';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import type { ResourceFrame } from '@/lib/live-frames';
 import en from '@/dictionaries/en.json';
+import { encodedFrame } from './stream-frames';
 
 /** Why frames are driven in: the fault reaches the workers card on the stream, never as a prop. */
 class FakeEventSource {
@@ -30,7 +31,7 @@ function surface(): React.JSX.Element {
 async function deliver(frame: ResourceFrame): Promise<void> {
   await act(async () => {
     FakeEventSource.instances.at(-1)?.onmessage?.(
-      new MessageEvent('message', { data: JSON.stringify(frame) }),
+      new MessageEvent('message', { data: encodedFrame(frame) }),
     );
   });
 }
