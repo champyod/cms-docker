@@ -29,8 +29,10 @@ export interface ContestData {
   token_gen_max?: number | null;
   max_submission_number?: number | null;
   max_user_test_number?: number | null;
-  min_submission_interval?: number;
-  min_user_test_interval?: number;
+  // Why nullable: a 0 and a blank both mean "no minimum", which the write path stores as NULL, so
+  // the type admits the NULL a normalised payload can carry.
+  min_submission_interval?: number | null;
+  min_user_test_interval?: number | null;
   queue_fairness_penalty_seconds?: number;
   score_precision?: number;
   analysis_enabled?: boolean;
@@ -114,12 +116,9 @@ const NUMERIC_BEFORE: NumericFieldCheck[] = [
 ];
 
 const NUMERIC_AFTER: NumericFieldCheck[] = [
-  { field: 'token_max_number', code: 'contests_token_max_number_check', operator: 'gtZero', appliesWhen: (d) => d.token_mode !== 'disabled' },
-  { field: 'token_gen_max', code: 'contests_token_gen_max_check', operator: 'gtZero' },
-  { field: 'max_submission_number', code: 'contests_max_submission_number_check', operator: 'gtZero' },
-  { field: 'max_user_test_number', code: 'contests_max_user_test_number_check', operator: 'gtZero' },
-  { field: 'min_submission_interval', code: 'contests_min_submission_interval_check', operator: 'gtZero' },
-  { field: 'min_user_test_interval', code: 'contests_min_user_test_interval_check', operator: 'gtZero' },
+  // Why no gtZero entries for the six limit fields any more: the operator's rule is that 0 and a
+  // blank both mean "no limit", so the write path normalises them to NULL instead of refusing them.
+  // per_user_time and the grace period keep their >= 0 check: a stored 0 there is a real value.
   { field: 'per_user_time', code: 'contests_per_user_time_check', operator: 'gteZero' },
   { field: 'min_submission_interval_grace_period', code: 'contests_min_submission_interval_grace_period_check', operator: 'gteZero' },
 ];
