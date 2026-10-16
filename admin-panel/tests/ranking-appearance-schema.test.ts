@@ -15,22 +15,15 @@ function appearanceCopy(): AppearanceCopy {
   return parsed.ranking.appearance;
 }
 
-/** The contests the page reads, as it hands them to the schema. */
-const CONTESTS = [
-  { value: '9', label: 'POSN Oct 2026 - d2' },
-  { value: '3', label: 'POSN Oct 2026 - d1' },
-];
-
 function sections(): ReturnType<typeof buildAppearanceSections> {
-  return buildAppearanceSections(appearanceCopy(), CONTESTS);
+  return buildAppearanceSections(appearanceCopy());
 }
 
 describe('ranking appearance schema', () => {
   const fields = sections().flatMap((section) => section.fields);
 
-  it('declares every editable appearance field, the contest and the two JSON columns included', () => {
+  it('declares every editable appearance field, both JSON columns included', () => {
     expect(fields.map((field) => field.name)).toEqual([
-      'contestId',
       'title',
       'subtitle',
       'organisation',
@@ -46,18 +39,17 @@ describe('ranking appearance schema', () => {
     ]);
   });
 
+  it('names no contest: the config decides which one the board draws', () => {
+    // The field this form used to carry wrote a column the reader ignored, so a select here would
+    // be a second place a contest could be named and the wrong one would win.
+    expect(fields.map((field) => field.name)).not.toContain('contestId');
+  });
+
   it('gives every field a label and every select its options', () => {
     for (const field of fields) {
       expect(field.label.length).toBeGreaterThan(0);
       if (field.kind === 'select') expect(field.options?.length ?? 0).toBeGreaterThan(0);
     }
-  });
-
-  it('offers the deployment contests to choose from, plus the unnamed one', () => {
-    const contest = fields.find((field) => field.name === 'contestId');
-
-    expect(contest?.kind).toBe('select');
-    expect(contest?.options).toEqual([{ value: '', label: appearanceCopy().contestNone }, ...CONTESTS]);
   });
 
   it('renders the free-form JSON columns as json controls', () => {

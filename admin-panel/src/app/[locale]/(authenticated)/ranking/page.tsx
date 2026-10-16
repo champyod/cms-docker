@@ -12,6 +12,7 @@ import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
+import { readShownContestId } from '@/lib/ranking-shown';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 const EMPTY_VALUE = '—';
@@ -55,12 +56,15 @@ export default async function RankingBoardPage({
   const { contest } = await searchParams;
   const requested = Number.parseInt(contest ?? '', 10);
   const selected = contests.find((entry) => entry.id === requested) ?? contests[0] ?? null;
-  const [appearance, board, diagnostics] = await Promise.all([
+  const [appearance, board, diagnostics, shownContestId] = await Promise.all([
     getRankingAppearance(),
     selected === null ? Promise.resolve(null) : getRanking(selected.id),
     getRankingDiagnostics(),
+    readShownContestId(),
   ]);
-  const named = contests.find((entry) => String(entry.id) === appearance.contestId) ?? null;
+  // The contest the board serves comes from the config, the one thing that decides it: reading it
+  // off the appearance row is how this card came to name a contest the reader ignored.
+  const named = contests.find((entry) => entry.id === shownContestId) ?? null;
   const accessValue =
     appearance.accessMode === 'protected'
       ? copy.appearance.accessProtected
@@ -83,8 +87,8 @@ export default async function RankingBoardPage({
             value={appearance.displayName || EMPTY_VALUE}
           />
           <BoardEntry
-            term={copy.appearance.contestField}
-            value={named?.name ?? copy.appearance.contestNone}
+            term={copy.shown.contestField}
+            value={named?.name ?? copy.shown.contestNone}
           />
           <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
           <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
@@ -124,13 +128,15 @@ export default async function RankingBoardPage({
             {/*
               A plain GET form, so the choice works before hydration and the URL stays
               shareable — an operator can send a colleague the board they are looking at.
-              The label reuses the override form's wording: it is the same question.
+              WHY its own wording rather than the override form's: this picks which board to
+              preview, so it neither shows a target nor overrides one, and borrowing either
+              surface's label would read as one of them.
             */}
             <form method="get" className="space-y-2">
               <div className="flex items-end gap-2">
                 <SelectField
                   id="ranking-board-contest"
-                  label={copy.overrides.contestId}
+                  label={copy.board.previewContestField}
                   name="contest"
                   defaultValue={String(selected?.id ?? '')}
                 >
@@ -141,12 +147,10 @@ export default async function RankingBoardPage({
                   ))}
                 </SelectField>
                 <Button type="submit" size="sm" variant="secondary">
-                  {copy.overrides.chooseContest}
+                  {copy.board.previewContestSubmit}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Preview only — selecting a contest does not change the live public scoreboard.
-              </p>
+              <p className="text-xs text-muted-foreground">{copy.board.previewContestHint}</p>
             </form>
             <RankingBoardSurface
               ranking={board}

@@ -1,4 +1,3 @@
-import { getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Stack } from '@/components/core/Layout';
@@ -17,10 +16,7 @@ export default async function RankingAppearancePage({
     authorizeRoutePage('ranking.appearance'),
   ]);
   const copy = (await getDictionary(locale)).ranking;
-  const [appearance, contests] = await Promise.all([
-    getRankingAppearance(),
-    getRankingBoardContests(),
-  ]);
+  const appearance = await getRankingAppearance();
   const canEdit = effective.has('ranking:appearance');
   return (
     <Stack gap={6}>
@@ -28,10 +24,7 @@ export default async function RankingAppearancePage({
         <AppearanceForm
           copy={copy.appearance}
           appearance={appearance}
-          sections={buildAppearanceSections(
-            copy.appearance,
-            contests.map((contest) => ({ value: String(contest.id), label: contest.name })),
-          )}
+          sections={buildAppearanceSections(copy.appearance)}
         />
       ) : (
         // WHY a strip rather than nothing: the route only needs ranking:read, so a reader
