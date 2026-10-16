@@ -15,8 +15,11 @@ import { ContestBulkEditDialog } from './contest-list/ContestBulkEditDialog';
 import { useContestListActions } from './contest-list/useContestListActions';
 import { Button } from '@/components/core/Button';
 import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { buildSelectionColumn } from '@/components/core/SelectionColumn';
 import { useListSelection } from '@/hooks/useListSelection';
+import { useDictionary } from '@/hooks/useDictionary';
+import { unsetLimitPatch } from '@/lib/limit-patch';
 import type { ExistingContest } from './contest-modal/types';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -58,6 +61,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
   const locale = pathname.split('/')[1] || 'en';
   const actions = useContestListActions();
   const permissions = useMemo(() => resolveContestPermissions(permissionKeys), [permissionKeys]);
+  const dict = useDictionary();
 
   const contestIds = useMemo(() => contests.map((contest) => contest.id), [contests]);
   const selection = useListSelection('contests.list', contestIds);
@@ -122,6 +126,17 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
       {permissions.canUpdate && (
         <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
           <Button variant="secondary" onClick={() => setIsEditWindowOpen(true)}>Edit window</Button>
+          {/* Why both kinds, and why nothing starts applied: the checked rows seed this list's own
+              kind and Q4 lets the operator add the other kind in the same picker, so this is the
+              "edit limits" entry — the operator sets what to change before anything is written. */}
+          <ApplyLimitsButton
+            kinds={['contest', 'task']}
+            preselected={{ contest: [...selection.selectedIds] }}
+            initiallyTouched={false}
+            patch={unsetLimitPatch()}
+            label={dict.limits.apply.editButton}
+            onSuccess={() => router.refresh()}
+          />
         </BulkActionBar>
       )}
       <ResponsiveTable

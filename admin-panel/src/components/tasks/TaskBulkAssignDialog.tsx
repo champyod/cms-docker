@@ -6,8 +6,9 @@ import { getAvailableContests } from '@/app/actions/contests';
 import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { TargetMultiSelect } from '@/components/core/TargetMultiSelect';
+import { useDictionary } from '@/hooks/useDictionary';
 import { apiClient } from '@/lib/apiClient';
-import { cn } from '@/lib/utils';
 
 interface ContestOption {
   id: number;
@@ -26,8 +27,12 @@ interface TaskBulkAssignDialogProps {
  * Add the checked tasks to one or more contests through the batch endpoint,
  * which hands each task the next free number in each contest so a bulk add
  * cannot collide on the (contest_id, num) index.
+ *
+ * The contest list itself is the shared TargetMultiSelect — the same rows, search and select-all
+ * the apply-limits dialog uses — so the two screens cannot drift apart.
  */
 export function TaskBulkAssignDialog({ isOpen, onClose, taskIds, onSuccess }: TaskBulkAssignDialogProps): React.JSX.Element {
+  const copy = useDictionary().limits.apply;
   const [contests, setContests] = useState<ContestOption[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,8 +60,8 @@ export function TaskBulkAssignDialog({ isOpen, onClose, taskIds, onSuccess }: Ta
     };
   }, [isOpen]);
 
-  const toggle = (id: number): void => {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  const toggle = (id: number, checked: boolean): void => {
+    setSelectedIds((current) => (checked ? [...new Set([...current, id])] : current.filter((value) => value !== id)));
   };
 
   const handleAssign = async (): Promise<void> => {
@@ -89,32 +94,16 @@ export function TaskBulkAssignDialog({ isOpen, onClose, taskIds, onSuccess }: Ta
       {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       <div className="space-y-4">
         <div>
-          <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-muted-foreground">Contests</label>
-          <div className="max-h-64 space-y-1 overflow-y-auto">
-            {contests.length === 0 ? (
-              <p className="py-3 text-center text-sm text-muted-foreground">No contests available</p>
-            ) : (
-              contests.map((contest) => {
-                const active = selectedIds.includes(contest.id);
-                return (
-                  <button
-                    key={contest.id}
-                    type="button"
-                    onClick={() => toggle(contest.id)}
-                    className={cn(
-                      'flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors',
-                      active ? 'border-ring/50 bg-primary/10 text-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50'
-                    )}
-                  >
-                    <div className={cn('flex h-4 w-4 items-center justify-center rounded border', active ? 'border-primary bg-primary' : 'border-muted-foreground/40')}>
-                      {active && <div className="h-2 w-2 rounded-sm bg-card" />}
-                    </div>
-                    <span className="text-sm">{contest.name}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+          <label className="mb-2 block text-xs font-bold uppercase tracking-widest text-muted-foreground">{copy.contests}</label>
+          <TargetMultiSelect
+            options={contests.map((contest) => ({ id: contest.id, label: contest.name }))}
+            selectedIds={new Set(selectedIds)}
+            onToggle={toggle}
+            onSelectAll={(checked) => setSelectedIds(checked ? contests.map((contest) => contest.id) : [])}
+            onClear={() => setSelectedIds([])}
+            copy={copy}
+            label={copy.searchContests}
+          />
         </div>
 
         <div className="flex justify-end gap-3 pt-2">

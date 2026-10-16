@@ -2,6 +2,7 @@
 
 import { Info } from 'lucide-react';
 
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { LimitFieldName } from '@/lib/limits';
@@ -157,6 +158,20 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             unlimitedLabel={limits.unlimited}
           />
         ))}
+      </div>
+      {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
+          other kind (contests), so the button reads as a second way out of the same fields. */}
+      <div className="flex justify-end">
+        <ApplyLimitsButton
+          kinds={['contest']}
+          label={limits.apply.openButton}
+          patch={{
+            max_submission_number: formData.max_submission_number ?? null,
+            max_user_test_number: formData.max_user_test_number ?? null,
+            min_submission_interval: formData.min_submission_interval ?? null,
+            min_user_test_interval: formData.min_user_test_interval ?? null,
+          }}
+        />
       </div>
     </div>
   );

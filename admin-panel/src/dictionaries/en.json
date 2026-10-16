@@ -1184,6 +1184,27 @@
   "limits": {
     "unlimited": "Unlimited",
     "toggle": "Toggle no limit",
+    "apply": {
+      "openButton": "Apply to…",
+      "editButton": "Edit limits",
+      "title": "Apply limits",
+      "contests": "Contests",
+      "tasks": "Tasks",
+      "searchPlaceholder": "Search",
+      "searchContests": "Search contests",
+      "searchTasks": "Search tasks",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "empty": "No targets available",
+      "noMatches": "No matches",
+      "selectedCount": "{count} selected",
+      "applyTo": "Apply to {count} selected",
+      "cancel": "Cancel",
+      "needTarget": "Choose at least one target.",
+      "needField": "Set or clear at least one limit.",
+      "failed": "Applied to {count}; these failed: {ids}",
+      "failure": "The limits could not be applied."
+    },
     "fields": {
       "max_submission_number": "Max Submissions",
       "max_user_test_number": "Max User Tests",

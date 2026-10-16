@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
+import { LIMIT_FIELDS, normalizeLimitValue } from '@/lib/limits';
+import type { LimitPatch } from '@/lib/limit-patch';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
 import { writeActiveContestId } from '@/lib/active-contest';
@@ -32,9 +34,21 @@ export async function listContests(params: ContestListParams = {}): Promise<Cont
   return fetchContestsPage(params);
 }
 
+/**
+ * Put every limit field the payload names through the shared rule before validation and the write,
+ * so a 0 or a blank arrives as NULL ("no limit") rather than as something the CHECK would refuse.
+ */
+function normalizeLimitFields<T extends Partial<ContestData>>(data: T): T {
+  const next: Record<string, unknown> = { ...data };
+  for (const field of LIMIT_FIELDS) {
+    if (field in next) next[field] = normalizeLimitValue(next[field]);
+  }
+  return next as T;
+}
+
 export async function createContest(data: ContestData): Promise<MutationResult> {
   const perms = await requirePermission(ACTION_PERMISSIONS.createContest);
-  const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData;
+  const allowed = normalizeLimitFields(stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData);
   const rawName = (data as unknown as Record<string, unknown>).name;
   if (typeof rawName !== 'string' || !CONTEST_NAME_REGEX.test(rawName)) {
     return {
@@ -64,7 +78,7 @@ export async function createContest(data: ContestData): Promise<MutationResult> 
 
 export async function updateContest(id: number, data: Partial<ContestData>): Promise<MutationResult> {
   const perms = await requirePermission(ACTION_PERMISSIONS.updateContest);
-  const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>;
+  const allowed = normalizeLimitFields(stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>);
   const validation = validateContestData(allowed as ContestData);
   if (!validation.valid) {
     return { success: false, errors: validation.errors, error: 'Validation failed' };
@@ -188,17 +202,43 @@ export async function updateContestSettings(id: number, data: Partial<ContestDat
   return updateContest(id, data);
 }
 
-// Why read-then-write: executeContestUpdate writes the four token and limit
-// columns unconditionally, so a window-only patch would null them on every
-// selected contest; the current values ride along so a window edit keeps them.
+// Why no read-then-write any more: executeContestUpdate now keeps every limit column a patch does
+// not name, so a window-only patch no longer needs the current limits carried along. The remaining
+// read is only the not-found answer the window route reports per contest.
 export async function updateContestWindow(id: number, patch: Partial<ContestData>): Promise<MutationResult> {
   await requirePermission(ACTION_PERMISSIONS.updateContest);
-  const current = await prisma.contests.findUnique({
-    where: { id },
-    select: { token_max_number: true, token_gen_max: true, max_submission_number: true, max_user_test_number: true },
-  });
-  if (current === null) return { success: false, error: 'Contest not found' };
-  return updateContest(id, { ...current, ...patch });
+  const exists = await prisma.contests.findUnique({ where: { id }, select: { id: true } });
+  if (exists === null) return { success: false, error: 'Contest not found' };
+  return updateContest(id, patch);
+}
+
+/**
+ * The bulk limit write: apply one already-whitelisted limit patch to a single contest. It reuses
+ * the same permission gate and the same repository write as a full contest update, so the batch
+ * route never touches SQL itself and the whitelist stays in `pickLimitPatch`.
+ */
+export async function updateContestLimits(id: number, patch: LimitPatch): Promise<MutationResult> {
+  const perms = await requirePermission(ACTION_PERMISSIONS.updateContest);
+  const allowed = stripDisallowedFields('contests', patch as unknown as Record<string, unknown>, perms) as unknown as LimitPatch;
+  const exists = await prisma.contests.findUnique({ where: { id }, select: { id: true } });
+  if (exists === null) return { success: false, error: 'Contest not found' };
+  const data: Partial<ContestData> = {};
+  for (const field of LIMIT_FIELDS) {
+    if (field in allowed) data[field] = allowed[field];
+  }
+  try {
+    await executeContestUpdate(id, data);
+    await recordAudit({
+      verb: 'contest:update',
+      entity: 'contest',
+      entityId: String(id),
+      afterValues: data,
+      result: 'success',
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    return mapContestDbError(error);
+  }
 }
 
 export async function getAvailableContests(): Promise<AvailableResult> {

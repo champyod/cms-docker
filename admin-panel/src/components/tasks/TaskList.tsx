@@ -18,8 +18,10 @@ import { TaskBulkAssignDialog } from './TaskBulkAssignDialog';
 import { buildTaskColumns, type TaskRow } from './taskColumns';
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { useListSelection } from '@/hooks/useListSelection';
 import { apiClient } from '@/lib/apiClient';
+import { unsetLimitPatch } from '@/lib/limit-patch';
 import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildRoute } from '@/lib/navigation/routes';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -143,10 +145,27 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
         )}
       </div>
 
-      {canAssignToContest && (
+      {/* Why one bar with two gates: assignment additionally needs task:switch_dataset while
+          editing limits needs task:update alone, so each group renders behind its own gate and an
+          operator who may not move tasks still reaches the limits entry. */}
+      {canUpdateTasks && (
         <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
-          <Button variant="secondary" onClick={() => setIsAssignOpen(true)}>Assign to contest</Button>
-          <Button variant="secondary" onClick={() => { void handleUnassign(); }}>Unassign</Button>
+          {canAssignToContest && (
+            <>
+              <Button variant="secondary" onClick={() => setIsAssignOpen(true)}>Assign to contest</Button>
+              <Button variant="secondary" onClick={() => { void handleUnassign(); }}>Unassign</Button>
+            </>
+          )}
+          {/* Why both kinds: the row selection seeds this list's own kind, and Q4 lets the operator
+              add the other kind in the same picker instead of opening a second dialog. */}
+          <ApplyLimitsButton
+            kinds={['contest', 'task']}
+            preselected={{ task: [...selection.selectedIds] }}
+            initiallyTouched={false}
+            patch={unsetLimitPatch()}
+            label={dict.limits.apply.editButton}
+            onSuccess={() => router.refresh()}
+          />
         </BulkActionBar>
       )}
 

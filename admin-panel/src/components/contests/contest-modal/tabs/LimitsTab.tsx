@@ -1,5 +1,6 @@
 'use client';
 
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
 import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
@@ -98,6 +99,20 @@ export function LimitsTab({ formData, setFormData, validationErrors }: LimitsTab
         ))}
         <QueueFairnessField formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
         <ScorePrecisionField formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
+      </div>
+      {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
+          other kind (tasks), so the button reads as a second way out of the same fields. */}
+      <div className="flex justify-end">
+        <ApplyLimitsButton
+          kinds={['task']}
+          label={limits.apply.openButton}
+          patch={{
+            max_submission_number: formData.max_submission_number,
+            max_user_test_number: formData.max_user_test_number,
+            min_submission_interval: formData.min_submission_interval,
+            min_user_test_interval: formData.min_user_test_interval,
+          }}
+        />
       </div>
     </div>
   );

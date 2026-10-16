@@ -144,27 +144,30 @@ describe('validateContestData', () => {
     expect(infinite.valid).toBe(true);
   });
 
-  it('rejects non-positive token_max_number unless mode is disabled', () => {
+  it('accepts a 0 for the six limit fields, which the write path turns into no limit', () => {
+    // Why no longer an error: the operator's rule is that 0 and a blank both mean "no limit", so the
+    // server normalises 0 to NULL instead of refusing it. The DB CHECK is still > 0, so a literal 0
+    // must never reach the column — that guard now lives in the write path, not here.
+    const cases: Array<Record<string, number>> = [
+      { max_submission_number: 0 },
+      { max_user_test_number: 0 },
+      { min_submission_interval: 0 },
+      { min_user_test_interval: 0 },
+      { token_gen_max: 0 },
+    ];
+    for (const fields of cases) {
+      const result = validateRawContest({ ...baseFuture, ...fields });
+      expect(result.valid).toBe(true);
+      expect(result.errors).toEqual([]);
+    }
+  });
+
+  it('accepts a 0 token_max_number whoever the token mode', () => {
     const enabled = validateRawContest({ ...baseFuture, token_mode: 'finite', token_max_number: 0 });
-    expect(enabled.valid).toBe(false);
+    expect(enabled.valid).toBe(true);
 
     const disabled = validateRawContest({ ...baseFuture, token_mode: 'disabled', token_max_number: 0 });
     expect(disabled.valid).toBe(true);
-  });
-
-  it('rejects non-positive limits when set', () => {
-    const cases: Array<[Record<string, number>, string]> = [
-      [{ max_submission_number: 0 }, 'contests_max_submission_number_check'],
-      [{ max_user_test_number: 0 }, 'contests_max_user_test_number_check'],
-      [{ min_submission_interval: 0 }, 'contests_min_submission_interval_check'],
-      [{ min_user_test_interval: 0 }, 'contests_min_user_test_interval_check'],
-      [{ token_gen_max: 0 }, 'contests_token_gen_max_check'],
-    ];
-    for (const [fields, code] of cases) {
-      const result = validateRawContest({ ...baseFuture, ...fields });
-      expect(result.valid).toBe(false);
-      expect(result.errors[0].code).toBe(code);
-    }
   });
 
   it('rejects negative per_user_time and grace period', () => {
