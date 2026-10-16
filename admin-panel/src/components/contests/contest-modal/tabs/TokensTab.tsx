@@ -1,8 +1,8 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { LimitField } from '@/components/core/LimitField';
+import { useDictionary } from '@/hooks/useDictionary';
 import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
-import { UnlimitedNumberInput } from '../shared/UnlimitedNumberInput';
 import type { ContestFormData, SetContestForm } from '../types';
 
 interface TokensTabProps {
@@ -35,19 +35,17 @@ function TokenModeField({ formData, setFormData }: Pick<TokensTabProps, 'formDat
 
 function MaxTotalTokensField(props: TokensTabProps) {
   const { formData, setFormData, validationErrors } = props;
+  const limits = useDictionary().limits;
   return (
-    <div className="space-y-2">
-      <label className={cn(LABEL_CLASSES, 'flex items-center justify-between')}>
-          Max Total Tokens
-          <span className="text-xs font-normal normal-case text-muted-foreground">Total allowed across contest</span>
-      </label>
-      <UnlimitedNumberInput
-        value={formData.token_max_number}
-        onChangeValue={(v) => setFormData({ ...formData, token_max_number: v })}
-        hasError={validationErrors.has('token_max_number')}
-      />
-      <ErrorText errors={validationErrors} field="token_max_number" />
-    </div>
+    <LimitField
+      id="token_max_number"
+      label={limits.fields.token_max_number}
+      hint={limits.hints.token_max_number}
+      value={formData.token_max_number}
+      onChangeValue={(v) => setFormData({ ...formData, token_max_number: v })}
+      error={validationErrors.get('token_max_number')}
+      unlimitedLabel={limits.unlimited}
+    />
   );
 }
 
@@ -118,16 +116,17 @@ function GenIntervalField({ formData, setFormData, validationErrors }: TokensTab
 }
 
 function GenMaxCapField({ formData, setFormData, validationErrors }: TokensTabProps) {
+  const limits = useDictionary().limits;
   return (
-    <div className="space-y-2">
-        <label className={LABEL_CLASSES}>Gen Max Cap</label>
-        <UnlimitedNumberInput
-          value={formData.token_gen_max}
-          onChangeValue={(v) => setFormData({ ...formData, token_gen_max: v })}
-          hasError={validationErrors.has('token_gen_max')}
-        />
-        <ErrorText errors={validationErrors} field="token_gen_max" />
-    </div>
+    <LimitField
+      id="token_gen_max"
+      label={limits.fields.token_gen_max}
+      hint={limits.hints.token_gen_max}
+      value={formData.token_gen_max}
+      onChangeValue={(v) => setFormData({ ...formData, token_gen_max: v })}
+      error={validationErrors.get('token_gen_max')}
+      unlimitedLabel={limits.unlimited}
+    />
   );
 }
 

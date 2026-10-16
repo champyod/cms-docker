@@ -1,5 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 
+import type { LimitFieldName } from '@/lib/limits';
+
 export interface ContestModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,6 +45,8 @@ export interface ExistingContest {
   max_user_test_number: number | null;
   min_submission_interval?: number | string | ContestIntervalValue | null;
   min_user_test_interval?: number | string | ContestIntervalValue | null;
+  per_user_time?: number | string | ContestIntervalValue | null;
+  min_submission_interval_grace_period?: number | string | ContestIntervalValue | null;
   queue_fairness_penalty_seconds?: number;
   score_precision: number;
   analysis_enabled: boolean;
@@ -76,8 +80,12 @@ export interface ContestFormData {
   token_gen_max: number | null;
   max_submission_number: number | null;
   max_user_test_number: number | null;
-  min_submission_interval: number; // seconds
-  min_user_test_interval: number; // seconds
+  // Why these two are nullable like the other four: an empty box and a 0 both mean "no minimum
+  // interval", and the panel must never hand the API the 0 its validator refuses.
+  min_submission_interval: number | null; // seconds
+  min_user_test_interval: number | null; // seconds
+  per_user_time: number | null; // seconds
+  min_submission_interval_grace_period: number | null; // seconds
   queue_fairness_penalty_seconds: number;
   score_precision: number;
   analysis_enabled: boolean;
@@ -86,6 +94,12 @@ export interface ContestFormData {
 }
 
 export type SetContestForm = Dispatch<SetStateAction<ContestFormData>>;
+
+/** Every field the shared LimitField owns, whichever tab renders it. */
+export type ContestLimitField = Extract<
+  keyof ContestFormData,
+  LimitFieldName | 'per_user_time' | 'min_submission_interval_grace_period'
+>;
 
 export type ContestModalTab = 'general' | 'access' | 'tokens' | 'limits' | 'analysis';
 

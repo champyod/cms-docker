@@ -1,6 +1,7 @@
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { parseInterval } from '@/lib/contest-validation';
 import type { ContestData } from '@/lib/contest-validation';
+import { normalizeLimitValue } from '@/lib/limits';
 import {
   AmbiguousZoneTimeError,
   NonexistentZoneTimeError,
@@ -136,6 +137,8 @@ const COMMON_DEFAULTS: CommonFormFields = {
   token_gen_interval: 30, // minutes
   token_gen_max: null,
   max_user_test_number: null,
+  per_user_time: null,
+  min_submission_interval_grace_period: null,
   queue_fairness_penalty_seconds: 0,
   analysis_enabled: false,
 };
@@ -149,8 +152,8 @@ export function emptyContestForm(): ContestFormData {
     stop: '',
     languages: [],
     max_submission_number: null,
-    min_submission_interval: 0,
-    min_user_test_interval: 0,
+    min_submission_interval: null,
+    min_user_test_interval: null,
     score_precision: 0,
     analysis_start: '',
     analysis_stop: '',
@@ -243,6 +246,15 @@ function contestTokenFields(
   };
 }
 
+/**
+ * A stored interval reads as "no limit" when it is absent or zero — the same rule as typed input,
+ * so a row that holds `0 seconds` shows an empty box rather than a 0 the API would refuse.
+ */
+function storedLimitSeconds(value: ExistingContest['min_submission_interval']): number | null {
+  if (value === null || value === undefined) return null;
+  return normalizeLimitValue(parseInterval(value));
+}
+
 function contestLimitFields(
   contest: ExistingContest,
   zone: string
@@ -252,6 +264,8 @@ function contestLimitFields(
   | 'max_user_test_number'
   | 'min_submission_interval'
   | 'min_user_test_interval'
+  | 'per_user_time'
+  | 'min_submission_interval_grace_period'
   | 'queue_fairness_penalty_seconds'
   | 'score_precision'
   | 'analysis_enabled'
@@ -261,8 +275,10 @@ function contestLimitFields(
   return {
     max_submission_number: contest.max_submission_number,
     max_user_test_number: contest.max_user_test_number,
-    min_submission_interval: contest.min_submission_interval == null ? 0 : parseInterval(contest.min_submission_interval),
-    min_user_test_interval: contest.min_user_test_interval == null ? 0 : parseInterval(contest.min_user_test_interval),
+    min_submission_interval: storedLimitSeconds(contest.min_submission_interval),
+    min_user_test_interval: storedLimitSeconds(contest.min_user_test_interval),
+    per_user_time: storedLimitSeconds(contest.per_user_time),
+    min_submission_interval_grace_period: storedLimitSeconds(contest.min_submission_interval_grace_period),
     queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
     score_precision: contest.score_precision,
     analysis_enabled: contest.analysis_enabled,
@@ -283,7 +299,22 @@ export function formFromContest(contest: ExistingContest): ContestFormData {
 }
 
 export function buildPayload(formData: ContestFormData): ContestData {
-  const payload: ContestData = { ...formData };
+  const payload: ContestData = {
+    ...formData,
+    // Why the limits are normalised on the way out as well as at the control: a form can be seeded
+    // from a row an older panel wrote, and the API must never receive the 0 the schema's CHECK
+    // refuses. The two interval columns are plain numbers in the API's ContestData, so a cleared
+    // interval leaves its key absent instead of null — the validator reads an absent key as "no
+    // minimum", which is the same statement.
+    max_submission_number: normalizeLimitValue(formData.max_submission_number),
+    max_user_test_number: normalizeLimitValue(formData.max_user_test_number),
+    token_max_number: normalizeLimitValue(formData.token_max_number),
+    token_gen_max: normalizeLimitValue(formData.token_gen_max),
+    min_submission_interval: normalizeLimitValue(formData.min_submission_interval) ?? undefined,
+    min_user_test_interval: normalizeLimitValue(formData.min_user_test_interval) ?? undefined,
+    per_user_time: normalizeLimitValue(formData.per_user_time),
+    min_submission_interval_grace_period: normalizeLimitValue(formData.min_submission_interval_grace_period),
+  };
 
   if (typeof payload.allowed_localizations === 'string') {
     payload.allowed_localizations = payload.allowed_localizations
