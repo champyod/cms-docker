@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   findMany: vi.fn(),
   executeRaw: vi.fn((_strings: TemplateStringsArray, ..._values: unknown[]) => ({ statement: 'raw' })),
   transaction: vi.fn(),
-  readActiveContestId: vi.fn(),
+  loadShownContestIds: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -14,7 +14,9 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: mocks.transaction,
   },
 }));
-vi.mock('@/lib/active-contest', () => ({ readActiveContestId: mocks.readActiveContestId }));
+vi.mock('@/lib/ranking-config-store', () => ({
+  loadShownContestIds: mocks.loadShownContestIds,
+}));
 
 import { encodeId, resyncRankingUsers } from '@/lib/ranking-projection';
 
@@ -43,7 +45,7 @@ function statements(): string[] {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.readActiveContestId.mockResolvedValue(3);
+  mocks.loadShownContestIds.mockResolvedValue(new Set([3]));
   mocks.transaction.mockResolvedValue([]);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
@@ -103,8 +105,8 @@ describe('resyncRankingUsers', () => {
     expect(prune).toContain('key <> ALL');
   });
 
-  it('touches nothing when the edited contest is not the active one', async () => {
-    mocks.readActiveContestId.mockResolvedValue(9);
+  it('touches nothing when the edited contest is not one the board shows', async () => {
+    mocks.loadShownContestIds.mockResolvedValue(new Set([9]));
 
     await resyncRankingUsers(3);
 

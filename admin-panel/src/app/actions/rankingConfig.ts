@@ -11,6 +11,7 @@ import {
   type ShownTarget,
   type ShownTargetChoice,
 } from '@/lib/ranking-config';
+import { readActiveConfigRows } from '@/lib/ranking-config-store';
 import { projectContestStatements } from '@/lib/ranking-projection';
 
 /**
@@ -18,14 +19,14 @@ import { projectContestStatements } from '@/lib/ranking-projection';
  *
  * WHY only the active rows: ending a target keeps its row so "who showed this and why" survives
  * the correction, so the surface that answers "what is on the board now" reads the live set.
+ *
+ * WHY the read is shared with `resyncRankingUsers`: the shown set is one fact, so the list this
+ * page renders and the scope the projection write honours come from the same read
+ * (`ranking-config-store`) rather than two queries that could drift.
  */
 export async function getShownTargets(): Promise<ShownTarget[]> {
   await ensurePermission('ranking:read');
-  const rows = await prisma.ranking_config.findMany({
-    where: { active: true },
-    orderBy: { id: 'desc' },
-    take: 200,
-  });
+  const rows = await readActiveConfigRows();
   return rows.map(toShownTarget);
 }
 

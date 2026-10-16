@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { readActiveContestId } from '@/lib/active-contest';
+import { loadShownContestIds } from '@/lib/ranking-config-store';
 
 /**
  * Encodes an entity id the way ProxyService.encode_id does before it reaches the
@@ -139,11 +139,12 @@ function deleteStaleHiddenStatement(contestId: number, keys: readonly string[]):
 }
 
 /**
- * Mirrors ProxyService.initialize() for the ranked contest: re-pushes its non-hidden
+ * Mirrors ProxyService.initialize() for a shown contest: re-pushes its non-hidden
  * participants into the ranking projection and drops every other user key, so a
  * participant added, edited or removed through the panel reaches the ranking without a
- * proxy reinitialize. Only the contest the database flags active is touched, so editing
- * another contest's participations cannot empty the projection.
+ * proxy reinitialize. Only a contest the config shows is touched, because the config —
+ * not `contests.is_active` — is what the reader draws, so editing an unshown contest's
+ * participations cannot empty a board the operator is showing.
  *
  * The hidden participants of the same contest are mirrored as tombstones, because the
  * board row is driven by the submissions: without one, hiding a participation would leave
@@ -155,8 +156,8 @@ function deleteStaleHiddenStatement(contestId: number, keys: readonly string[]):
  */
 export async function resyncRankingUsers(contestId: number): Promise<void> {
   try {
-    const activeContestId = await readActiveContestId();
-    if (activeContestId === null || activeContestId !== contestId) return;
+    const shown = await loadShownContestIds();
+    if (!shown.has(contestId)) return;
 
     const participants = await prisma.participations.findMany({
       where: { contest_id: contestId, hidden: false },
@@ -185,19 +186,24 @@ export async function resyncRankingUsers(contestId: number): Promise<void> {
 }
 
 /**
- * Resyncs whichever contest the database flags active; for callers with no contest id. Best-effort
- * like `resyncRankingUsers`: a database read that fails must not fail the change that triggered it.
+ * Resyncs every contest the board shows; for callers with no single contest id. Best-effort like
+ * `resyncRankingUsers`: a database read that fails must not fail the change that triggered it.
+ *
+ * WHY the shown set and not the active contest: `contests.is_active` is the deployment default
+ * the reader no longer draws from, so resyncing it would refresh a board nobody is showing while
+ * leaving the shown one stale — the divergence this scoping exists to end.
  */
-export async function resyncActiveRankingUsers(): Promise<void> {
-  let activeContestId: number | null;
+export async function resyncShownRankingUsers(): Promise<void> {
+  let shown: Set<number>;
   try {
-    activeContestId = await readActiveContestId();
+    shown = await loadShownContestIds();
   } catch (error) {
-    console.error('Failed to read the active contest for the ranking users projection:', error);
+    console.error('Failed to read the shown set for the ranking users projection:', error);
     return;
   }
-  if (activeContestId === null) return;
-  await resyncRankingUsers(activeContestId);
+  for (const contestId of shown) {
+    await resyncRankingUsers(contestId);
+  }
 }
 
 /**

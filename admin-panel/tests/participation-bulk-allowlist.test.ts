@@ -25,7 +25,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 vi.mock('@/lib/ranking-projection', () => ({
   resyncRankingUsers: mocks.resyncRankingUsers,
-  resyncActiveRankingUsers: vi.fn(),
+  resyncShownRankingUsers: vi.fn(),
 }));
 vi.mock('@/lib/permissions', () => ({
   ensurePermission: mocks.ensurePermission,

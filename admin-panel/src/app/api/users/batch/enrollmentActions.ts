@@ -8,7 +8,7 @@ import { resolveAllowlistInput } from '@/app/actions/participation-settings';
 import { resolveTeamIdByCode } from '@/lib/teams';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
-import { resyncActiveRankingUsers, resyncRankingUsers } from '@/lib/ranking-projection';
+import { resyncRankingUsers, resyncShownRankingUsers } from '@/lib/ranking-projection';
 
 const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
@@ -182,7 +182,7 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
 
   if (mode === 'remove-any') {
     const updatedCount = await removeUsersFromAnyTeam(userIds);
-    await resyncActiveRankingUsers();
+    await resyncShownRankingUsers();
     await recordAudit({
       verb: 'participation:update',
       entity: 'team',
