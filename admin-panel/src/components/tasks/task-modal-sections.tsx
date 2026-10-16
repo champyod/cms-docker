@@ -1,6 +1,10 @@
 'use client';
 
 import { Info } from 'lucide-react';
+
+import { LimitField } from '@/components/core/LimitField';
+import { useDictionary } from '@/hooks/useDictionary';
+import type { LimitFieldName } from '@/lib/limits';
 import type { TaskData } from '@/app/actions/tasks';
 
 export function InfoButton({ text }: { text: string }): React.JSX.Element {
@@ -18,6 +22,36 @@ export function InfoButton({ text }: { text: string }): React.JSX.Element {
 interface TabProps {
   formData: TaskData;
   onChange: (data: TaskData) => void;
+}
+
+/** The limit family the task modal shares with the contest modal, by its own names. */
+type TaskLimitField = Extract<keyof TaskData, LimitFieldName>;
+
+interface LimitRow {
+  readonly name: TaskLimitField;
+  readonly unit?: string;
+}
+
+/** The limits this tab owns, in reading order: the token caps belong to the tokens tab. */
+const LIMIT_ROWS: readonly LimitRow[] = [
+  { name: 'max_submission_number' },
+  { name: 'max_user_test_number' },
+  { name: 'min_submission_interval', unit: 'sec' },
+  { name: 'min_user_test_interval', unit: 'sec' },
+];
+
+/**
+ * Why the patch is typed out: a computed key over a union of field names would widen the object and
+ * the strict task type would refuse it, while this partial is exactly the write it performs.
+ */
+function writeLimit(
+  name: TaskLimitField,
+  next: number | null,
+  formData: TaskData,
+  onChange: (data: TaskData) => void
+): void {
+  const patch: Partial<Record<TaskLimitField, number | null>> = { [name]: next };
+  onChange({ ...formData, ...patch });
 }
 
 export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element {
@@ -103,55 +137,26 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
 }
 
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
+  const limits = useDictionary().limits;
+  // Why the cast to a partial: the label map covers the whole family, the hint map only the
+  // fields that need explaining.
+  const hints: Partial<Record<TaskLimitField, string>> = limits.hints;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
-            Max Submissions
-            <InfoButton text="Maximum submissions per user. Enter 0 or leave empty for unlimited." />
-          </label>
-          <input
-            type="number"
-            value={formData.max_submission_number ?? ''}
-            onChange={(e) => onChange({ ...formData, max_submission_number: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
+        {LIMIT_ROWS.map((row) => (
+          <LimitField
+            key={row.name}
+            id={row.name}
+            label={limits.fields[row.name]}
+            unit={row.unit}
+            hint={hints[row.name]}
+            value={formData[row.name] ?? null}
+            onChangeValue={(next) => writeLimit(row.name, next, formData, onChange)}
+            unlimitedLabel={limits.unlimited}
           />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
-            Max User Tests
-            <InfoButton text="Maximum user tests per user. Enter 0 or leave empty for unlimited." />
-          </label>
-          <input
-            type="number"
-            value={formData.max_user_test_number ?? ''}
-            onChange={(e) => onChange({ ...formData, max_user_test_number: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min Submission Interval (s)</label>
-          <input
-            type="number"
-            value={formData.min_submission_interval ?? ''}
-            onChange={(e) => onChange({ ...formData, min_submission_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min User Test Interval (s)</label>
-          <input
-            type="number"
-            value={formData.min_user_test_interval ?? ''}
-            onChange={(e) => onChange({ ...formData, min_user_test_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
-          />
-        </div>
+        ))}
       </div>
     </div>
   );
