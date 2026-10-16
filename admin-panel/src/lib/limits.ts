@@ -50,3 +50,24 @@ export function normalizePositiveValue(value: unknown): number | null {
   if (parsed <= 0) return null;
   return parsed;
 }
+
+/**
+ * The reading for a stored number whose 0 is a real value and whose blank is a state of its own.
+ *
+ * Why a third entry point and not a looser member of the family above: the contest throttle delay's
+ * 0 means "no throttle delay of my own" and is kept as a 0, so it must not go through
+ * normalizeLimitValue (which would turn it into the NULL its NOT NULL column cannot hold). The task
+ * override's own blank means "inherit the contest's", which is also NULL, but its 0 means "no delay
+ * for this task" — a state normalizeLimitValue would collapse into the inherit. Neither of the two
+ * rules above can tell those apart, so this returns a whole non-negative number (0 kept) for a real
+ * entry and null only for a blank, a negative or a fraction, leaving the caller to read its null:
+ * "inherit" for the task override, "write the column's own 0" for the contest delay.
+ */
+export function normalizeNonNegativeInt(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (!Number.isInteger(parsed)) return null;
+  if (parsed < 0) return null;
+  return parsed;
+}

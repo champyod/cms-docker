@@ -1,7 +1,7 @@
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { parseInterval } from '@/lib/contest-validation';
 import type { ContestData } from '@/lib/contest-validation';
-import { normalizeLimitValue } from '@/lib/limits';
+import { normalizeLimitValue, normalizeNonNegativeInt } from '@/lib/limits';
 import {
   AmbiguousZoneTimeError,
   NonexistentZoneTimeError,
@@ -14,6 +14,13 @@ import type { ContestFormData, ExistingContest } from './types';
 export const CONTEST_TIME_FIELDS = ['start', 'stop', 'analysis_start', 'analysis_stop'] as const;
 
 export type ContestTimeField = (typeof CONTEST_TIME_FIELDS)[number];
+
+/**
+ * The throttle columns nothing consumes yet, plus the timestamp: the modal renders them disabled, so
+ * they are read for display and dropped from every payload rather than written by a control the
+ * operator cannot use.
+ */
+export const RESERVED_THROTTLE_FIELDS = ['evaluation_throttle_window_s', 'evaluation_throttle_max', 'evaluation_final_open', 'evaluation_final_open_at'] as const;
 
 /** The shape every zone-aware contest form shares, whichever tab or modal owns it. */
 export interface ContestTimeFields {
@@ -140,6 +147,13 @@ const COMMON_DEFAULTS: CommonFormFields = {
   per_user_time: null,
   min_submission_interval_grace_period: null,
   queue_fairness_penalty_seconds: 0,
+  // Why 0 and false, not null: every one of these columns is NOT NULL DEFAULT 0/false, so the form's
+  // empty state is the column's own zero. The delay is editable; the other four render disabled.
+  evaluation_throttle_delay_s: 0,
+  evaluation_throttle_window_s: 0,
+  evaluation_throttle_max: 0,
+  evaluation_final_open: false,
+  evaluation_final_open_at: '',
   analysis_enabled: false,
 };
 
@@ -267,6 +281,11 @@ function contestLimitFields(
   | 'per_user_time'
   | 'min_submission_interval_grace_period'
   | 'queue_fairness_penalty_seconds'
+  | 'evaluation_throttle_delay_s'
+  | 'evaluation_throttle_window_s'
+  | 'evaluation_throttle_max'
+  | 'evaluation_final_open'
+  | 'evaluation_final_open_at'
   | 'score_precision'
   | 'analysis_enabled'
   | 'analysis_start'
@@ -280,6 +299,13 @@ function contestLimitFields(
     per_user_time: storedLimitSeconds(contest.per_user_time),
     min_submission_interval_grace_period: storedLimitSeconds(contest.min_submission_interval_grace_period),
     queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
+    // Why ?? 0: these columns are NOT NULL, so a record the client has not loaded (or an old row)
+    // shows the column's own zero rather than a blank the write cannot express.
+    evaluation_throttle_delay_s: contest.evaluation_throttle_delay_s ?? 0,
+    evaluation_throttle_window_s: contest.evaluation_throttle_window_s ?? 0,
+    evaluation_throttle_max: contest.evaluation_throttle_max ?? 0,
+    evaluation_final_open: contest.evaluation_final_open ?? false,
+    evaluation_final_open_at: contest.evaluation_final_open_at ?? '',
     score_precision: contest.score_precision,
     analysis_enabled: contest.analysis_enabled,
     analysis_start: formatDateForInput(contest.analysis_start, zone),
@@ -314,7 +340,16 @@ export function buildPayload(formData: ContestFormData): ContestData {
     min_user_test_interval: normalizeLimitValue(formData.min_user_test_interval) ?? undefined,
     per_user_time: normalizeLimitValue(formData.per_user_time),
     min_submission_interval_grace_period: normalizeLimitValue(formData.min_submission_interval_grace_period),
+    // Why ?? 0 and not the limit rule: the delay column is NOT NULL and its 0 is a real value, so a
+    // cleared box commits the column's own 0 rather than a NULL it cannot hold.
+    evaluation_throttle_delay_s: normalizeNonNegativeInt(formData.evaluation_throttle_delay_s) ?? 0,
   };
+
+  // Why dropped after the spread: the modal renders the four reserved columns disabled — nothing
+  // reads them yet — so a payload that carried them would let a control the operator cannot use
+  // write the column. The delay stays: it is the one editable member of the family.
+  for (const key of RESERVED_THROTTLE_FIELDS) delete (payload as unknown as Record<string, unknown>)[key];
+
 
   if (typeof payload.allowed_localizations === 'string') {
     payload.allowed_localizations = payload.allowed_localizations

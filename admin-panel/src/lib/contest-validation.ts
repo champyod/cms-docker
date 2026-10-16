@@ -40,6 +40,9 @@ export interface ContestData {
   analysis_stop?: string | Date;
   per_user_time?: number | null;
   min_submission_interval_grace_period?: number | null;
+  // Why the delay only: it is the one editable member of the throttle family the panel writes. The
+  // other four are read for display and deliberately kept out of the payload.
+  evaluation_throttle_delay_s?: number;
 }
 
 export function parseInterval(val: unknown): number {

@@ -3,10 +3,10 @@ import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorizatio
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 import { sanitize } from '@/lib/api-utils';
-import { LIMIT_FIELDS, normalizeLimitValue } from '@/lib/limits';
+import { LIMIT_FIELDS, normalizeLimitValue, normalizeNonNegativeInt } from '@/lib/limits';
 import type { LimitPatch } from '@/lib/limit-patch';
 import { buildDiagnosticsForLoadedTask, computeTaskDiagnostics } from '@/lib/task-diagnostics';
-import { addIntervalClause } from '@/lib/task-intervals';
+import { addIntervalClause, addNullableIntClause } from '@/lib/task-intervals';
 import { taskSortOrderBy } from '@/lib/task-sorting';
 import type { ListSortInput } from '@/lib/list-sorting';
 import type { Prisma } from '@prisma/client';
@@ -18,13 +18,20 @@ export interface TaskData {
   token_min_interval?: number | null; token_gen_initial?: number | null; token_gen_number?: number | null;
   token_gen_interval?: number | null; token_gen_max?: number | null; max_submission_number?: number | null;
   max_user_test_number?: number | null; min_submission_interval?: number | null; min_user_test_interval?: number | null;
+  // Why its own field: the throttle override is a nullable tri-state (null inherits, 0 is no delay,
+  // N is N seconds), so it cannot share the LIMIT_FIELDS "0 means no limit" rule.
+  evaluation_throttle_delay_s?: number | null;
 }
 const TASKS_PER_PAGE = 20;
 const REQUIRED_INTERVAL_KEYS = new Set(['token_min_interval', 'token_gen_interval']);
 const OPTIONAL_INTERVAL_KEYS = new Set(['min_submission_interval', 'min_user_test_interval']);
 const INTERVAL_KEYS = new Set([...REQUIRED_INTERVAL_KEYS, ...OPTIONAL_INTERVAL_KEYS]);
+/** The one task column that is neither a limit nor an interval: NULL inherits, 0 is "no delay". */
+const THROTTLE_OVERRIDE_KEY = 'evaluation_throttle_delay_s';
+/** Every key the hand-written UPDATE owns — the intervals and the throttle override. */
+const RAW_COLUMN_KEYS = new Set([...INTERVAL_KEYS, THROTTLE_OVERRIDE_KEY]);
 const ARRAY_KEYS = new Set(['submission_format', 'primary_statements', 'allowed_languages']);
-const API_INTERVAL_KEYS = new Set([...INTERVAL_KEYS, ...ARRAY_KEYS]);
+const API_INTERVAL_KEYS = new Set([...INTERVAL_KEYS, THROTTLE_OVERRIDE_KEY, ...ARRAY_KEYS]);
 const NULLABLE_TASK_KEYS = new Set(['token_max_number', 'token_gen_max', 'max_submission_number', 'max_user_test_number', ...OPTIONAL_INTERVAL_KEYS]);
 const NULLABLE_API_KEYS = new Set([...NULLABLE_TASK_KEYS, 'score_precision']);
 const ZERO_DEFAULT_KEYS = new Set(['score_precision', 'token_gen_initial', 'token_gen_number']);
@@ -70,7 +77,7 @@ export async function createTask(data: TaskData): Promise<CreateTaskResult> {
     // absent, not zero — the same rule the shared limit normaliser applies everywhere else.
     const minSub = nullableIntervalString(s.min_submission_interval, 'seconds');
     const minUser = nullableIntervalString(s.min_user_test_interval, 'seconds');
-    const created = await prisma.$queryRaw<Array<{ id: number }>>`INSERT INTO tasks (name, title, submission_format, primary_statements, allowed_languages, token_mode, token_max_number, token_min_interval, token_gen_initial, token_gen_number, token_gen_interval, token_gen_max, max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval, feedback_level, score_precision, score_mode) VALUES (${s.name}, ${s.title}, ${s.submission_format ?? []}, ARRAY[]::varchar[], ${s.allowed_languages ?? []}, ${s.token_mode ?? 'disabled'}::token_mode, ${normalizeLimitValue(s.token_max_number)}, ${tokenMin}::interval, ${s.token_gen_initial ?? 0}, ${s.token_gen_number ?? 0}, ${tokenGen}::interval, ${normalizeLimitValue(s.token_gen_max)}, ${normalizeLimitValue(s.max_submission_number)}, ${normalizeLimitValue(s.max_user_test_number)}, ${minSub}::interval, ${minUser}::interval, ${s.feedback_level ?? 'restricted'}::feedback_level, ${s.score_precision ?? 0}, ${s.score_mode ?? 'max'}::score_mode) RETURNING id`;
+    const created = await prisma.$queryRaw<Array<{ id: number }>>`INSERT INTO tasks (name, title, submission_format, primary_statements, allowed_languages, token_mode, token_max_number, token_min_interval, token_gen_initial, token_gen_number, token_gen_interval, token_gen_max, max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval, evaluation_throttle_delay_s, feedback_level, score_precision, score_mode) VALUES (${s.name}, ${s.title}, ${s.submission_format ?? []}, ARRAY[]::varchar[], ${s.allowed_languages ?? []}, ${s.token_mode ?? 'disabled'}::token_mode, ${normalizeLimitValue(s.token_max_number)}, ${tokenMin}::interval, ${s.token_gen_initial ?? 0}, ${s.token_gen_number ?? 0}, ${tokenGen}::interval, ${normalizeLimitValue(s.token_gen_max)}, ${normalizeLimitValue(s.max_submission_number)}, ${normalizeLimitValue(s.max_user_test_number)}, ${minSub}::interval, ${minUser}::interval, ${normalizeNonNegativeInt(s.evaluation_throttle_delay_s)}, ${s.feedback_level ?? 'restricted'}::feedback_level, ${s.score_precision ?? 0}, ${s.score_mode ?? 'max'}::score_mode) RETURNING id`;
     await recordAudit({ verb: 'task:create', entity: 'task', afterValues: s, result: 'success' });
     return { success: true, id: created[0]?.id };
   } catch (e) { const msg = e instanceof Error ? e.message : 'Unknown error'; if (msg.includes('unique constraint')) return { success: false, error: 'Task name already exists' }; return { success: false, error: msg }; }
@@ -81,7 +88,7 @@ function buildIntervals(d: Record<string, unknown>): { tokenMin: string; tokenGe
 }
 async function insertTaskForApi(data: Record<string, unknown>): Promise<number> {
   const { tokenMin, tokenGen, minSub, minUser } = buildIntervals(data);
-  const rows = await prisma.$queryRaw<Array<{ id: number }>>`INSERT INTO tasks (name, title, submission_format, primary_statements, allowed_languages, token_mode, token_max_number, token_min_interval, token_gen_initial, token_gen_number, token_gen_interval, token_gen_max, max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval, feedback_level, score_precision, score_mode) VALUES (${data.name as string}, ${data.title as string}, ${cleanArray(data.submission_format).map((f: string) => f.replace(/%s/g, data.name as string))}::varchar[], ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[], ${(data.token_mode as string) ?? 'disabled'}::token_mode, ${normalizeLimitValue(data.token_max_number)}, ${tokenMin}::interval, ${(data.token_gen_initial as number) ?? 0}, ${(data.token_gen_number as number) ?? 0}, ${tokenGen}::interval, ${normalizeLimitValue(data.token_gen_max)}, ${normalizeLimitValue(data.max_submission_number)}, ${normalizeLimitValue(data.max_user_test_number)}, ${minSub}::interval, ${minUser}::interval, ${(data.feedback_level as string) ?? 'restricted'}::feedback_level, ${(data.score_precision as number) ?? 0}, ${(data.score_mode as string) ?? 'max'}::score_mode) RETURNING id`;
+  const rows = await prisma.$queryRaw<Array<{ id: number }>>`INSERT INTO tasks (name, title, submission_format, primary_statements, allowed_languages, token_mode, token_max_number, token_min_interval, token_gen_initial, token_gen_number, token_gen_interval, token_gen_max, max_submission_number, max_user_test_number, min_submission_interval, min_user_test_interval, evaluation_throttle_delay_s, feedback_level, score_precision, score_mode) VALUES (${data.name as string}, ${data.title as string}, ${cleanArray(data.submission_format).map((f: string) => f.replace(/%s/g, data.name as string))}::varchar[], ${cleanArray(data.primary_statements)}::varchar[], ${cleanArray(data.allowed_languages)}::varchar[], ${(data.token_mode as string) ?? 'disabled'}::token_mode, ${normalizeLimitValue(data.token_max_number)}, ${tokenMin}::interval, ${(data.token_gen_initial as number) ?? 0}, ${(data.token_gen_number as number) ?? 0}, ${tokenGen}::interval, ${normalizeLimitValue(data.token_gen_max)}, ${normalizeLimitValue(data.max_submission_number)}, ${normalizeLimitValue(data.max_user_test_number)}, ${minSub}::interval, ${minUser}::interval, ${normalizeNonNegativeInt(data.evaluation_throttle_delay_s)}, ${(data.feedback_level as string) ?? 'restricted'}::feedback_level, ${(data.score_precision as number) ?? 0}, ${(data.score_mode as string) ?? 'max'}::score_mode) RETURNING id`;
   return rows[0]?.id ?? 0;
 }
 export async function createTaskViaApi(data: Record<string, unknown>): Promise<CreateTaskResult> {
@@ -92,20 +99,26 @@ export async function createTaskViaApi(data: Record<string, unknown>): Promise<C
   if (!title) { const e = new Error('Task title is required') as Error & { status: number }; e.status = 400; throw e; }
   try { const id = await insertTaskForApi(data); await recordAudit({ verb: 'task:create', entity: 'task', afterValues: { name, title }, result: 'success' }); return { success: true, id }; } catch (e) { const msg = (e as Error).message; if (msg?.includes('unique constraint')) { const er = new Error('Task name already exists') as Error & { status: number }; er.status = 400; throw er; } throw e; }
 }
-function splitTaskData(data: Partial<TaskData>): { standardFields: Record<string, unknown>; intervalFields: Record<string, unknown> } {
+function splitTaskData(data: Partial<TaskData>): { standardFields: Record<string, unknown>; rawFields: Record<string, unknown> } {
   const sanitized: Record<string, unknown> = {}; for (const k in data) sanitized[k] = sanitize((data as Record<string, unknown>)[k] as never);
   // Why here: every limit column passes through the one rule, so a 0 or a blank becomes NULL before
-  // it can reach a CHECK. The two min intervals then land in intervalFields as null, which
+  // it can reach a CHECK. The two min intervals then land in rawFields as null, which
   // addIntervalClause writes as a real NULL clause — the explicit clear.
   for (const field of LIMIT_FIELDS) if (field in sanitized) sanitized[field] = normalizeLimitValue(sanitized[field]);
-  const std: Record<string, unknown> = {}; const iv: Record<string, unknown> = {};
-  for (const k in sanitized) { if (INTERVAL_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && sanitized[k] === null) continue; iv[k] = sanitized[k]; } else if (sanitized[k] !== null || NULLABLE_TASK_KEYS.has(k)) std[k] = sanitized[k]; }
-  return { standardFields: std, intervalFields: iv };
+  // Why its own rule: the throttle override is not a limit — a 0 stays a 0 ("no delay for this
+  // task") and only a blank or a negative becomes null ("inherit the contest's").
+  if (THROTTLE_OVERRIDE_KEY in sanitized) sanitized[THROTTLE_OVERRIDE_KEY] = normalizeNonNegativeInt(sanitized[THROTTLE_OVERRIDE_KEY]);
+  const std: Record<string, unknown> = {}; const raw: Record<string, unknown> = {};
+  for (const k in sanitized) { if (RAW_COLUMN_KEYS.has(k)) { if (REQUIRED_INTERVAL_KEYS.has(k) && sanitized[k] === null) continue; raw[k] = sanitized[k]; } else if (sanitized[k] !== null || NULLABLE_TASK_KEYS.has(k)) std[k] = sanitized[k]; }
+  return { standardFields: std, rawFields: raw };
 }
-async function applyTaskIntervals(id: number, iv: Record<string, unknown>): Promise<void> {
+async function applyTaskRawColumns(id: number, raw: Record<string, unknown>): Promise<void> {
   const clauses: string[] = []; const p: unknown[] = [];
-  addIntervalClause(clauses, p, iv, 'token_min_interval', 'seconds'); addIntervalClause(clauses, p, iv, 'token_gen_interval', 'minutes');
-  addIntervalClause(clauses, p, iv, 'min_submission_interval', 'seconds'); addIntervalClause(clauses, p, iv, 'min_user_test_interval', 'seconds');
+  addIntervalClause(clauses, p, raw, 'token_min_interval', 'seconds'); addIntervalClause(clauses, p, raw, 'token_gen_interval', 'minutes');
+  addIntervalClause(clauses, p, raw, 'min_submission_interval', 'seconds'); addIntervalClause(clauses, p, raw, 'min_user_test_interval', 'seconds');
+  // The throttle override is written here, not through prisma.tasks.update: the generated client
+  // predates the column (scripts/__fix_db_schema.sql adds it), so a typed update would reject it.
+  addNullableIntClause(clauses, p, raw, THROTTLE_OVERRIDE_KEY);
   if (clauses.length === 0) return; p.push(id); await prisma.$executeRawUnsafe(`UPDATE tasks SET ${clauses.join(', ')} WHERE id = $${p.length}`, ...p);
 }
 export async function updateTask(id: number, data: Partial<TaskData>): Promise<MutationResult> {
@@ -113,14 +126,14 @@ export async function updateTask(id: number, data: Partial<TaskData>): Promise<M
   const allowed = stripDisallowedFields('tasks', data as unknown as Record<string, unknown>, perms) as unknown as Partial<TaskData>;
   const s = allowed as unknown as Partial<TaskData>;
   try {
-    const { standardFields, intervalFields } = splitTaskData(s);
+    const { standardFields, rawFields } = splitTaskData(s);
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
-    if (Object.keys(intervalFields).length > 0) await applyTaskIntervals(id, intervalFields);
+    if (Object.keys(rawFields).length > 0) await applyTaskRawColumns(id, rawFields);
     await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(id), afterValues: s, result: 'success' });
     return { success: true };
   } catch (e) { const code = (e as { code?: string }).code; if (code === 'P2002') return { success: false, error: 'Task name already exists' }; return { success: false, error: e instanceof Error ? e.message : 'An unexpected error occurred' }; }
 }
-function sanitizeTaskDataForApi(raw: Record<string, unknown>): Record<string, unknown> { const s: Record<string, unknown> = {}; for (const k in raw) s[k] = sanitize(raw[k] as never); for (const field of LIMIT_FIELDS) if (field in s) s[field] = normalizeLimitValue(s[field]); return s; }
+function sanitizeTaskDataForApi(raw: Record<string, unknown>): Record<string, unknown> { const s: Record<string, unknown> = {}; for (const k in raw) s[k] = sanitize(raw[k] as never); for (const field of LIMIT_FIELDS) if (field in s) s[field] = normalizeLimitValue(s[field]); if (THROTTLE_OVERRIDE_KEY in s) s[THROTTLE_OVERRIDE_KEY] = normalizeNonNegativeInt(s[THROTTLE_OVERRIDE_KEY]); return s; }
 /**
  * The bulk limit write: apply one already-whitelisted limit patch to a single task through the same
  * permission gate and the same split/interval writers a full task update uses, so the batch route
@@ -135,9 +148,9 @@ export async function updateTaskLimits(id: number, patch: LimitPatch): Promise<M
   const s: Partial<TaskData> = {};
   for (const field of LIMIT_FIELDS) if (field in allowed) s[field] = allowed[field];
   try {
-    const { standardFields, intervalFields } = splitTaskData(s);
+    const { standardFields, rawFields } = splitTaskData(s);
     if (Object.keys(standardFields).length > 0) await prisma.tasks.update({ where: { id }, data: standardFields });
-    if (Object.keys(intervalFields).length > 0) await applyTaskIntervals(id, intervalFields);
+    if (Object.keys(rawFields).length > 0) await applyTaskRawColumns(id, rawFields);
     await recordAudit({ verb: 'task:update', entity: 'task', entityId: String(id), afterValues: s, result: 'success' });
     return { success: true };
   } catch (e) { const code = (e as { code?: string }).code; if (code === 'P2002') return { success: false, error: 'Task name already exists' }; return { success: false, error: e instanceof Error ? e.message : 'An unexpected error occurred' }; }
@@ -163,6 +176,7 @@ async function applyTaskUpdatesForApi(id: number, std: Record<string, unknown>, 
   const clauses: string[] = []; const q: unknown[] = [];
   addIntervalClause(clauses, q, iv, 'token_min_interval', 'seconds'); addIntervalClause(clauses, q, iv, 'token_gen_interval', 'minutes');
   addIntervalClause(clauses, q, iv, 'min_submission_interval', 'seconds'); addIntervalClause(clauses, q, iv, 'min_user_test_interval', 'seconds');
+  addNullableIntClause(clauses, q, iv, THROTTLE_OVERRIDE_KEY);
   if (iv.submission_format !== undefined) { q.push(iv.submission_format); clauses.push(`submission_format = $${q.length}::varchar[]`); }
   if (iv.primary_statements !== undefined) { q.push(iv.primary_statements); clauses.push(`primary_statements = $${q.length}::varchar[]`); }
   if (iv.allowed_languages !== undefined) { if (iv.allowed_languages === null) clauses.push(`allowed_languages = NULL`); else { q.push(iv.allowed_languages); clauses.push(`allowed_languages = $${q.length}::varchar[]`); } }

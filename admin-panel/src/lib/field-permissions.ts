@@ -106,6 +106,9 @@ const FIELD_PERMISSION_TABLE = {
     max_user_test_number: { read: 'task:read', update: 'task:update' },
     min_submission_interval: { read: 'task:read', update: 'task:update' },
     min_user_test_interval: { read: 'task:read', update: 'task:update' },
+    // Why registered: the throttle override must gate like the limit fields around it; an unregistered
+    // key is dropped by stripDisallowedFields, so the override would never reach the write.
+    evaluation_throttle_delay_s: { read: 'task:read', update: 'task:update' },
     feedback_level: { read: 'task:read', update: 'task:update' },
     score_precision: { read: 'task:read', update: 'task:update' },
     score_mode: { read: 'task:read', update: 'task:update' },
