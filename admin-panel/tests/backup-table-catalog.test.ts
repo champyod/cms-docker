@@ -23,9 +23,9 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * projection table that carries no push-only entity: it is derived from
  * participations.hidden, so a restore rebuilds it from the rows it already holds.
  *
- * The two ranking control tables are NOT excluded. The appearance row and the
- * override rows are operator decisions that exist nowhere else, so they belong
- * in the catalog.
+ * The three ranking control tables are NOT excluded. The appearance row, the
+ * override rows and the shown set are operator decisions that exist nowhere
+ * else, so they belong in the catalog.
  *
  * `contest_usernames_history` is excluded for the same reason as
  * `audit_log`: it is the append-only trail of display username changes,

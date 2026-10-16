@@ -104,8 +104,9 @@ const CATALOG = [
   { name: 'backup_runs', label: 'Backup Runs', pk: ['id'] },
   // Ranking control tables. Nothing references them and they reference nothing,
   // so their place among the roots is free; they are selected because the
-  // appearance and override rows exist only in the panel.
+  // appearance, override and shown-set rows exist only in the panel.
   { name: 'ranking_settings', label: 'Ranking Settings', pk: ['id'] },
+  { name: 'ranking_config', label: 'Ranking Shown Targets', pk: ['id'] },
   { name: 'ranking_overrides', label: 'Ranking Overrides', pk: ['id'] },
   // Service wiring. WHY services sits before wirings: wirings is its edge table,
   // and the catalog order is the parent-before-child order a restore needs.

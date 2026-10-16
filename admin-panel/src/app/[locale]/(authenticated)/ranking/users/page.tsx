@@ -1,8 +1,10 @@
 import { getRankingOverrideOptions } from '@/app/actions/ranking';
+import { getShownTargetChoices, getShownTargets } from '@/app/actions/rankingConfig';
 import { getRankingOverrides, type RankingOverride } from '@/app/actions/rankingOverrides';
 import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { RankingConfigSurface } from '@/components/ranking/RankingConfigSurface';
 import { RankingOverrideList } from '@/components/ranking/RankingOverrideList';
 import { RankingOverrideSurface } from '@/components/ranking/RankingOverrideSurface';
 import { RankingShardTabs } from '@/components/ranking/RankingShardTabs';
@@ -32,6 +34,27 @@ function rowsForShard(
 ): RankingOverride[] {
   return overrides.filter(
     (override) => override.contestId === shard.contestId || orphans.has(override.contestId),
+  );
+}
+
+/**
+ * The board's config, mounted ahead of the override surface it precedes.
+ *
+ * WHY on this page and not a route of its own: the two surfaces answer one question in two
+ * halves — what the board shows, then what wins over it — and an operator who can only find one
+ * of them reads the other as the same control. The config half is gated on the same write
+ * permission, because choosing what the board shows is the same act of control.
+ */
+async function ShownConfig({
+  copy,
+  canShow,
+}: {
+  readonly copy: RankingCopy;
+  readonly canShow: boolean;
+}): Promise<React.JSX.Element> {
+  const [rows, choices] = await Promise.all([getShownTargets(), getShownTargetChoices()]);
+  return (
+    <RankingConfigSurface copy={copy.shown} rows={rows} choices={choices} canShow={canShow} />
   );
 }
 
@@ -102,6 +125,7 @@ export default async function RankingOverridesPage({
   }
   return (
     <Stack gap={6}>
+      <ShownConfig copy={copy} canShow={effective.has('ranking:override')} />
       <ShardOverrides
         copy={copy}
         shards={shards}

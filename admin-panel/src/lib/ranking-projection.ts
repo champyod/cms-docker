@@ -199,3 +199,56 @@ export async function resyncActiveRankingUsers(): Promise<void> {
   if (activeContestId === null) return;
   await resyncRankingUsers(activeContestId);
 }
+
+/**
+ * The projected contest row for one contest, derived from the CMS row it mirrors.
+ *
+ * WHY the panel writes this one and not the tasks: the fields are a straight rename of the
+ * `contests` row — the encoded name is the key, the description is the board's name for it, and
+ * the two dates become the epoch seconds the projection carries. A task row is different: it
+ * carries a max score and extra headers derived from the dataset's score type, which is the
+ * proxy's derivation, so re-deriving it here would be a second implementation of the projection
+ * and would drift from the first. The row written here is what lets a board draw a contest the
+ * moment the config shows it, with the name and dates the operator expects, without waiting for
+ * a push.
+ *
+ * WHY the caller supplies the transaction: the config row and this one have to commit together,
+ * or a board briefly draws a contest whose own record does not exist yet.
+ *
+ * returns: the statements, unrun, for the caller to put in its own transaction.
+ */
+export async function projectContestStatements(contestId: number): Promise<RankingWrite[]> {
+  const contest = await prisma.contests.findUnique({
+    where: { id: contestId },
+    select: {
+      name: true,
+      description: true,
+      start: true,
+      stop: true,
+      score_precision: true,
+    },
+  });
+  if (contest === null) {
+    throw new Error(`No contest with id ${contestId} to project`);
+  }
+  return [
+    prisma.$executeRaw`
+      INSERT INTO ranking_contests (key, name, begin, "end", score_precision, contest_id)
+      VALUES (
+        ${encodeId(contest.name)},
+        ${contest.description},
+        ${Math.floor(contest.start.getTime() / 1000)},
+        ${Math.floor(contest.stop.getTime() / 1000)},
+        ${contest.score_precision},
+        ${contestId}
+      )
+      ON CONFLICT (key) DO UPDATE SET
+        name = EXCLUDED.name,
+        begin = EXCLUDED.begin,
+        "end" = EXCLUDED."end",
+        score_precision = EXCLUDED.score_precision,
+        contest_id = EXCLUDED.contest_id,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+  ];
+}

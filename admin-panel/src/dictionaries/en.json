@@ -237,11 +237,26 @@
       "taskLabel": "Task #{id}",
       "teamLabel": "Team #{id}",
       "sections": {
-        "contests": { "title": "Contests", "empty": "No contest activity." },
-        "participations": { "title": "Participations", "empty": "No participations." },
-        "teams": { "title": "Teams", "empty": "No teams." },
-        "submissions": { "title": "Submissions", "empty": "No submissions." },
-        "recentActivity": { "title": "Recent Activity", "empty": "No recent activity." }
+        "contests": {
+          "title": "Contests",
+          "empty": "No contest activity."
+        },
+        "participations": {
+          "title": "Participations",
+          "empty": "No participations."
+        },
+        "teams": {
+          "title": "Teams",
+          "empty": "No teams."
+        },
+        "submissions": {
+          "title": "Submissions",
+          "empty": "No submissions."
+        },
+        "recentActivity": {
+          "title": "Recent Activity",
+          "empty": "No recent activity."
+        }
       }
     }
   },
@@ -640,6 +655,22 @@
       "saveSuccess": "Appearance saved",
       "saveFailed": "The appearance could not be saved",
       "readOnly": "Showing the scoreboard settings. Changing them needs the ranking:appearance permission."
+    },
+    "shown": {
+      "title": "Shown contests",
+      "hint": "The contests the board draws. With none here the board shows nothing — it never falls back to the active contest.",
+      "contestField": "Contest",
+      "contestHint": "The contest the board draws, with every task and score inside it.",
+      "contestPlaceholder": "Choose a contest",
+      "reasonField": "Reason",
+      "show": "Show",
+      "showFailed": "The contest could not be shown",
+      "empty": "No contest is shown",
+      "emptyHint": "The board draws nothing until a contest is added here.",
+      "endTitle": "Take this contest off the board",
+      "end": "Take off the board",
+      "ended": "The contest is off the board",
+      "endFailed": "The contest could not be taken off the board"
     },
     "overrides": {
       "title": "Manual ranking overrides",
@@ -1130,58 +1161,249 @@
     }
   },
   "navigation": {
-    "groups": { "direct": "Direct", "people": "People", "evaluation": "Evaluation", "administration": "Administration", "security": "Security", "infrastructure": "Infrastructure", "ranking": "Ranking", "system": "System" },
-    "home": { "label": "Dashboard" },
-    "security": {
-      "overview": { "label": "Security overview", "description": "Posture of the WAF, blocked addresses, lockouts and certificates." },
-      "waf": { "label": "WAF", "description": "ModSecurity engine mode, paranoia level and anomaly thresholds." },
-      "blocks": { "label": "Blocks", "description": "Banned addresses and locked-out admin accounts." },
-      "tls": { "label": "TLS", "description": "Certificate lineages and ingress container state." }
+    "groups": {
+      "direct": "Direct",
+      "people": "People",
+      "evaluation": "Evaluation",
+      "administration": "Administration",
+      "security": "Security",
+      "infrastructure": "Infrastructure",
+      "ranking": "Ranking",
+      "system": "System"
     },
-    "contests": {
-      "list": { "label": "Contests" },
-      "record": { "label": "Contest" },
-      "tabs": {
-        "overview": { "label": "Overview" },
-        "tasks": { "label": "Tasks" },
-        "participants": { "label": "Participants" },
-        "communications": { "label": "Communications" },
-        "ranking": { "label": "Ranking" },
-        "settings": { "label": "Settings" },
-        "countdown": { "label": "Countdown" }
+    "home": {
+      "label": "Dashboard"
+    },
+    "security": {
+      "overview": {
+        "label": "Security overview",
+        "description": "Posture of the WAF, blocked addresses, lockouts and certificates."
+      },
+      "waf": {
+        "label": "WAF",
+        "description": "ModSecurity engine mode, paranoia level and anomaly thresholds."
+      },
+      "blocks": {
+        "label": "Blocks",
+        "description": "Banned addresses and locked-out admin accounts."
+      },
+      "tls": {
+        "label": "TLS",
+        "description": "Certificate lineages and ingress container state."
       }
     },
-    "tasks": { "list": { "label": "Tasks" }, "record": { "label": "Task" }, "tabs": { "overview": { "label": "Overview" }, "datasets": { "label": "Datasets" }, "files": { "label": "Files" }, "settings": { "label": "Settings" } } },
-    "people": { "users": { "label": "Users" }, "user-record": { "label": "User" }, "user-tabs": { "profile": { "label": "Profile" }, "teams": { "label": "Teams" }, "history": { "label": "History" } }, "teams": { "label": "Teams" }, "team-record": { "label": "Team" }, "team-tabs": { "overview": { "label": "Overview" }, "members": { "label": "Members" }, "contests": { "label": "Contests" } } },
-    "evaluation": { "submissions": { "label": "Submissions" }, "submission-record": { "label": "Submission" }, "submission-tabs": { "summary": { "label": "Summary" }, "results": { "label": "Results" }, "logs": { "label": "Logs" }, "evaluation": { "label": "Evaluation" }, "history": { "label": "History" } }, "lanes": { "label": "Evaluation Lanes" } },
-    "administration": { "admins": { "label": "Admins" }, "groups": { "label": "Groups", "description": "Assign permissions to each group and review the access it grants." }, "audit": { "label": "Audit" } },
+    "contests": {
+      "list": {
+        "label": "Contests"
+      },
+      "record": {
+        "label": "Contest"
+      },
+      "tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "tasks": {
+          "label": "Tasks"
+        },
+        "participants": {
+          "label": "Participants"
+        },
+        "communications": {
+          "label": "Communications"
+        },
+        "ranking": {
+          "label": "Ranking"
+        },
+        "settings": {
+          "label": "Settings"
+        },
+        "countdown": {
+          "label": "Countdown"
+        }
+      }
+    },
+    "tasks": {
+      "list": {
+        "label": "Tasks"
+      },
+      "record": {
+        "label": "Task"
+      },
+      "tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "datasets": {
+          "label": "Datasets"
+        },
+        "files": {
+          "label": "Files"
+        },
+        "settings": {
+          "label": "Settings"
+        }
+      }
+    },
+    "people": {
+      "users": {
+        "label": "Users"
+      },
+      "user-record": {
+        "label": "User"
+      },
+      "user-tabs": {
+        "profile": {
+          "label": "Profile"
+        },
+        "teams": {
+          "label": "Teams"
+        },
+        "history": {
+          "label": "History"
+        }
+      },
+      "teams": {
+        "label": "Teams"
+      },
+      "team-record": {
+        "label": "Team"
+      },
+      "team-tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "members": {
+          "label": "Members"
+        },
+        "contests": {
+          "label": "Contests"
+        }
+      }
+    },
+    "evaluation": {
+      "submissions": {
+        "label": "Submissions"
+      },
+      "submission-record": {
+        "label": "Submission"
+      },
+      "submission-tabs": {
+        "summary": {
+          "label": "Summary"
+        },
+        "results": {
+          "label": "Results"
+        },
+        "logs": {
+          "label": "Logs"
+        },
+        "evaluation": {
+          "label": "Evaluation"
+        },
+        "history": {
+          "label": "History"
+        }
+      },
+      "lanes": {
+        "label": "Evaluation Lanes"
+      }
+    },
+    "administration": {
+      "admins": {
+        "label": "Admins"
+      },
+      "groups": {
+        "label": "Groups",
+        "description": "Assign permissions to each group and review the access it grants."
+      },
+      "audit": {
+        "label": "Audit"
+      }
+    },
     "infrastructure": {
-      "deployments": { "label": "Deployments", "description": "Select, activate, and manage the currently deployed contest stack." },
-      "containers": { "label": "Containers", "description": "Manage and monitor Docker services in real time." },
-      "resources": { "label": "Resources", "description": "Monitor server resources, workers, services, and network traffic." },
-      "services": { "label": "Services & wiring", "description": "Declare the services this deployment runs and wire them to each contest." }
+      "deployments": {
+        "label": "Deployments",
+        "description": "Select, activate, and manage the currently deployed contest stack."
+      },
+      "containers": {
+        "label": "Containers",
+        "description": "Manage and monitor Docker services in real time."
+      },
+      "resources": {
+        "label": "Resources",
+        "description": "Monitor server resources, workers, services, and network traffic."
+      },
+      "services": {
+        "label": "Services & wiring",
+        "description": "Declare the services this deployment runs and wire them to each contest."
+      }
     },
     "ranking": {
-      "board": { "label": "Board", "description": "Review what the public scoreboard opens with and set the logo it carries." },
-      "users": { "label": "Overrides", "description": "List the manual overrides this shard applies, with the board impact and any orphan scopes." },
-      "settings": { "label": "Settings", "description": "Apply manual ranking overrides without touching the contest data." },
-      "appearance": { "label": "Appearance", "description": "Set the scoreboard title, subtitle, access mode and footer text." },
-      "credits": { "label": "Credits", "description": "Edit the credit list the scoreboard attributes its licences to." }
+      "board": {
+        "label": "Board",
+        "description": "Review what the public scoreboard opens with and set the logo it carries."
+      },
+      "users": {
+        "label": "Overrides",
+        "description": "List the manual overrides this shard applies, with the board impact and any orphan scopes."
+      },
+      "settings": {
+        "label": "Settings",
+        "description": "Apply manual ranking overrides without touching the contest data."
+      },
+      "appearance": {
+        "label": "Appearance",
+        "description": "Set the scoreboard title, subtitle, access mode and footer text."
+      },
+      "credits": {
+        "label": "Credits",
+        "description": "Edit the credit list the scoreboard attributes its licences to."
+      }
     },
     "system": {
-      "appearance": { "label": "Appearance", "description": "Configure branding, service previews, and display density." },
-      "maintenance": { "label": "Maintenance", "description": "Configure automated backups and system notifications." },
-      "backup-restore": { "label": "Backup & Restore", "description": "Transfer database tables to and from files and backup locations." },
-      "settings": { "label": "Settings", "description": "Configure environment files and service restarts." },
-      "docs": { "label": "Docs", "description": "Read CMS administration and contest-system documentation." },
-      "about": { "label": "About", "description": "Review the licence, attribution, and third-party software this panel ships." },
-      "search": { "label": "Search" }
+      "appearance": {
+        "label": "Appearance",
+        "description": "Configure branding, service previews, and display density."
+      },
+      "maintenance": {
+        "label": "Maintenance",
+        "description": "Configure automated backups and system notifications."
+      },
+      "backup-restore": {
+        "label": "Backup & Restore",
+        "description": "Transfer database tables to and from files and backup locations."
+      },
+      "settings": {
+        "label": "Settings",
+        "description": "Configure environment files and service restarts."
+      },
+      "docs": {
+        "label": "Docs",
+        "description": "Read CMS administration and contest-system documentation."
+      },
+      "about": {
+        "label": "About",
+        "description": "Review the licence, attribution, and third-party software this panel ships."
+      },
+      "search": {
+        "label": "Search"
+      }
     },
-    "notifications": { "label": "Alerts" },
+    "notifications": {
+      "label": "Alerts"
+    },
     "auth": {
-      "signout": { "label": "Sign out" }
+      "signout": {
+        "label": "Sign out"
+      }
     },
-    "states": { "loading": "Loading", "error": "could not be loaded", "notFound": "Not found", "retry": "Try again" }
+    "states": {
+      "loading": "Loading",
+      "error": "could not be loaded",
+      "notFound": "Not found",
+      "retry": "Try again"
+    }
   },
   "limits": {
     "unlimited": "Unlimited",
