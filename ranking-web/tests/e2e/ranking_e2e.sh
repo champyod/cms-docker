@@ -85,10 +85,16 @@ import json, sys
 
 seed = json.load(open(sys.argv[1], encoding="utf-8"))
 entities = seed["entities"]
+# The board draws what the config names and nothing else (item R1), so each seeded contest
+# carries the CMS id its rows are filed under, and a config row shows it. Without that row the
+# rehearsal would drive a board that deliberately draws no columns at all.
+contest_ids = {key: index + 1 for index, key in enumerate(entities["contests"])}
 for key, body in entities["contests"].items():
-    print(f"INSERT INTO ranking_contests (key,name,begin,\"end\",score_precision) VALUES ('{key}','{body['name']}',{body['begin']},{body['end']},{body['score_precision']}) ON CONFLICT (key) DO NOTHING;")
+    print(f"INSERT INTO ranking_contests (key,name,begin,\"end\",score_precision,contest_id) VALUES ('{key}','{body['name']}',{body['begin']},{body['end']},{body['score_precision']},{contest_ids[key]}) ON CONFLICT (key) DO NOTHING;")
 for key, body in entities["tasks"].items():
-    print(f"INSERT INTO ranking_tasks (key,name,short_name,contest,max_score,score_precision,extra_headers,display_order,score_mode) VALUES ('{key}','{body['name']}','{body['short_name']}','{body['contest']}',{body['max_score']},{body['score_precision']},'[]'::jsonb,{body['order']},'{body['score_mode']}') ON CONFLICT (key) DO NOTHING;")
+    print(f"INSERT INTO ranking_tasks (key,name,short_name,contest,contest_id,max_score,score_precision,extra_headers,display_order,score_mode) VALUES ('{key}','{body['name']}','{body['short_name']}','{body['contest']}',{contest_ids[body['contest']]},{body['max_score']},{body['score_precision']},'[]'::jsonb,{body['order']},'{body['score_mode']}') ON CONFLICT (key) DO NOTHING;")
+for key in entities["contests"]:
+    print(f"INSERT INTO ranking_config (target_kind,target_key,reason,active) VALUES ('contest','{contest_ids[key]}','the acceptance rehearsal shows exactly the contest it seeded',true);")
 for key, body in entities["teams"].items():
     print(f"INSERT INTO ranking_teams (key,name) VALUES ('{key}','{body['name']}') ON CONFLICT (key) DO NOTHING;")
 for key, body in entities["users"].items():
