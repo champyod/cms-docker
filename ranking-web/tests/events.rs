@@ -77,6 +77,25 @@ fn a_recent_id_replays_only_what_it_missed() {
     assert!(replayed.iter().any(|event| event.name == "score"));
 }
 
+/// The id is a cursor: `since()` orders on it, so a replay drops every event it
+/// cannot prove came after the client's boundary. One id must therefore name one
+/// event even when two publishes share the wall-clock microsecond, or the later of
+/// them disappears from a reconnecting client's replay.
+#[test]
+fn an_id_names_exactly_one_event() {
+    let feed = Feed::new();
+    let payload = "u0 t0 50.0".to_string();
+    let ids: Vec<u64> = (0..5000)
+        .map(|_| feed.publish("score", payload.clone()).id)
+        .map(|id| u64::from_str_radix(&id, 16).expect("an id is a hex cursor"))
+        .collect();
+    let first_violation = ids.windows(2).position(|pair| pair[0] >= pair[1]);
+    assert_eq!(
+        first_violation, None,
+        "event ids must strictly increase, otherwise since() drops the later event"
+    );
+}
+
 #[test]
 fn the_projection_table_names_map_to_the_page_vocabulary() {
     assert_eq!(entity_kind("ranking_contests"), "contest");

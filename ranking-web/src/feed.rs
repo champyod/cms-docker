@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -25,9 +26,10 @@ pub const COMMENT: &[u8] = b":\n";
 /// is dispatched, and no id, because a reinit moves the client's cursor nowhere.
 pub const REINIT: &[u8] = b"event:reinit\ndata:\n\n";
 
-/// One server-sent event in the shape the Python server emitted: an id that is
-/// microseconds since the epoch in hexadecimal, the entity kind as the event name,
-/// and "<operation> <key>" as the data.
+/// One server-sent event in the shape the Python server emitted: an id that reads
+/// as microseconds since the epoch in hexadecimal — bumped one microsecond when the
+/// clock repeats itself, so it still names exactly one event (see `next_id`) — the
+/// entity kind as the event name, and "<operation> <key>" as the data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RankingEvent {
     pub id: String,
@@ -133,11 +135,24 @@ impl Feed {
     }
 }
 
+/// The id is a cursor, not a clock reading: `since()` orders events by it, and a
+/// replay silently drops every event it cannot prove came after the client's
+/// boundary. Wall-clock microseconds repeat when two publishes land in the same
+/// tick — the clock is therefore only a floor, and a repeated tick is bumped one
+/// microsecond past it, which is what keeps an id naming exactly one event while it
+/// still reads as a hexadecimal microsecond count.
 fn next_id() -> String {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(elapsed) => format!("{:x}", elapsed.as_micros()),
-        Err(_) => "0".to_string(),
-    }
+    static LAST_ISSUED: AtomicU64 = AtomicU64::new(0);
+    let now = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(elapsed) => elapsed.as_micros() as u64,
+        Err(_) => 0,
+    };
+    let id = LAST_ISSUED
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
+            Some(previous.max(now) + 1)
+        })
+        .map_or(now, |previous| previous.max(now) + 1);
+    format!("{id:x}")
 }
 
 /// The entity kind a projection table feeds, so the event name stays what the page
