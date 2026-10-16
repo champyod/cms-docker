@@ -117,15 +117,20 @@ that three ways.
 | Session secret, CAPTCHA keys, `RANKING_*` | `config.toml` `[admin]` | `./cms config sync` → `.env` → compose |
 | Upload caps: `MAX_LOGO_UPLOAD_BYTES`, `MAX_AVATAR_UPLOAD_BYTES`, `MAX_STATEMENT_UPLOAD_BYTES`, `MAX_ATTACHMENT_UPLOAD_BYTES`, `MAX_TESTCASE_FILE_BYTES`, `MAX_TESTCASE_UPLOAD_BYTES` | `config.toml` `[admin]` | compose passes each one into the panel container |
 | Ranking logo host path | `config.toml` `RANKING_LOGO_PATH` | `./cms config sync` copies it into `cms-ranking-data` (hot swap) |
-| Appearance, credits list, overrides, console lockouts | **Ranking → appearance / credits / settings / lockouts** | written to `ranking_settings` and the override tables; the service re-reads them on the next request |
+| What the board shows (its config) | **Ranking → overrides**, the config surface above the list | written to `ranking_config`; the service re-reads it on the next request |
+| Appearance, credits list, the overrides, console lockouts | **Ranking → appearance / credits / settings / lockouts** | written to `ranking_settings` and the override tables; the service re-reads them on the next request |
 | Branding, per-service settings, display density | **System → appearance** | writes `config.toml` |
 | Database and Redis the service reads | `docker-compose.yml` service env | — |
 
-The panel's own `ranking/*` group is the only place the surface is edited:
+The panel's own `ranking/*` group is the only place the surface is edited. Two words, two meanings:
+the **config** is what the board shows, and an **override** is the exception that wins over it.
 
-- **board** — what the public scoreboard opens with, and the logo it carries;
-- **settings** — manual overrides (hide, guest, pin, rename, score);
-- **appearance** — title, subtitle, organisation, access mode, footer and credits text;
+- **board** — what the public scoreboard opens with, and the logo it carries; the contest it names
+  is the one the config shows, not a setting of its own;
+- **overrides** — the board's config first (which contests it draws), then the overrides that win
+  over it (hide, guest, pin, rename, score, freeze); `ranking/settings` redirects here;
+- **appearance** — title, subtitle, organisation, access mode, footer and credits text; the header
+  words are the override for the shown contest's own name and dates;
 - **lockouts** — console lockouts and their release;
 - **credits** — the credit list the scoreboard attributes its licences to.
 

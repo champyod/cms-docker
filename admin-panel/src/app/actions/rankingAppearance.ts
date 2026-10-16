@@ -9,11 +9,11 @@ import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import {
   assertWordingHasContest,
-  parseContestId,
   readWording,
   wordingOverrides,
   type WordingFields,
 } from '@/lib/ranking-appearance';
+import { readShownContestId } from '@/lib/ranking-shown';
 
 // The appearance lives in one row, keyed so a second can never be written by accident.
 const SETTINGS_ID = 1;
@@ -46,7 +46,6 @@ export interface RankingAppearance extends AppearanceFields {
 }
 
 const DEFAULTS: RankingAppearance = {
-  contestId: '',
   title: '',
   subtitle: '',
   organisation: '',
@@ -65,17 +64,20 @@ const DEFAULTS: RankingAppearance = {
 /** Reads what the scoreboard shows. A row that does not exist yet is the defaults, not an error. */
 export async function getRankingAppearance(): Promise<RankingAppearance> {
   await ensurePermission('ranking:read');
-  const row = await prisma.ranking_settings.findUnique({ where: { id: SETTINGS_ID } });
+  const [row, contestId] = await Promise.all([
+    prisma.ranking_settings.findUnique({ where: { id: SETTINGS_ID } }),
+    readShownContestId(),
+  ]);
   if (row === null) return DEFAULTS;
-  return toAppearance(row);
+  return toAppearance(row, contestId);
 }
 
 /** The stored row as the form reads it, so a write can answer with what it actually kept. */
-function toAppearance(row: RankingSettingsRow): RankingAppearance {
-  const contestId = row.contest_id === null ? '' : String(row.contest_id);
+function toAppearance(row: RankingSettingsRow, contestId: number | null): RankingAppearance {
+  // The header words belong to the contest the config shows: the row keys its override by that
+  // contest, so a contest named anywhere else would be a second representation of the shown set.
   const wording = readWording(row.wording_overrides, contestId);
   return {
-    contestId,
     title: wording.title,
     subtitle: wording.subtitle,
     organisation: row.organisation ?? '',
@@ -109,7 +111,8 @@ export async function updateRankingAppearance(
 ): Promise<RankingAppearanceSave> {
   await ensurePermission('ranking:appearance');
   try {
-    const row = toRow(fields);
+    const contestId = await readShownContestId();
+    const row = toRow(fields, contestId);
     const stored = await prisma.ranking_settings.upsert({
       where: { id: SETTINGS_ID },
       create: { id: SETTINGS_ID, ...row },
@@ -123,7 +126,7 @@ export async function updateRankingAppearance(
       result: 'success',
     });
     revalidatePath('/[locale]/ranking/appearance');
-    return { success: true, appearance: toAppearance(stored) };
+    return { success: true, appearance: toAppearance(stored, contestId) };
   } catch (error) {
     return {
       success: false,
@@ -136,7 +139,7 @@ export async function saveRankingAppearance(formData: FormData): Promise<{ succe
   await ensurePermission('ranking:appearance');
   try {
     const appearance = readForm(formData);
-    const row = toRow(appearance);
+    const row = toRow(appearance, await readShownContestId());
     await prisma.ranking_settings.upsert({
       where: { id: SETTINGS_ID },
       create: { id: SETTINGS_ID, ...row },
@@ -325,7 +328,6 @@ function readAnonymous(columns: unknown): boolean {
 function readForm(formData: FormData): AppearanceFields {
   const text = (name: string) => String(formData.get(name) ?? '').trim();
   return {
-    contestId: text("contestId"),
     title: text("title"),
     subtitle: text("subtitle"),
     organisation: text("organisation"),
@@ -341,15 +343,13 @@ function readForm(formData: FormData): AppearanceFields {
   };
 }
 
-function toRow(appearance: AppearanceFields) {
-  const contestId = parseContestId(appearance.contestId);
+function toRow(appearance: AppearanceFields, contestId: number | null) {
   assertWordingHasContest(appearance, contestId);
   return {
-    // The contest is named, not copied: the board reads its name and dates from the projected
-    // record, and the legacy title/subtitle columns are left as they are rather than written
-    // again as a second source of the same words.
-    contest_id: contestId,
-    wording_overrides: toJsonColumn(wordingOverrides(appearance)),
+    // The contest is named by the config, not copied here, and the board reads its name and dates
+    // from the projected record of the contest the config shows. The words below override that
+    // record's own ones; no column of this row names a contest.
+    wording_overrides: toJsonColumn(wordingOverrides(appearance, contestId)),
     organisation: appearance.organisation || null,
     display_name: appearance.displayName || null,
     access_mode: appearance.accessMode,

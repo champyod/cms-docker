@@ -30,7 +30,6 @@ MotionGlobalConfig.skipAnimations = true;
 type AppearanceCopy = typeof en.ranking.appearance;
 
 const STORED: RankingAppearance = {
-  contestId: '9',
   title: 'POSN Oct 2026',
   subtitle: 'Day 2',
   organisation: 'POSN',
@@ -51,18 +50,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-/** The contests the page offers, as the appearance page reads them. */
-const CONTESTS = [
-  { value: '9', label: 'POSN Oct 2026 - d2' },
-  { value: '3', label: 'POSN Oct 2026 - d1' },
-];
-
 function renderForm(appearance: RankingAppearance = STORED): HTMLElement {
   const { container } = render(
     <AppearanceForm
       copy={en.ranking.appearance as AppearanceCopy}
       appearance={appearance}
-      sections={buildAppearanceSections(en.ranking.appearance as AppearanceCopy, CONTESTS)}
+      sections={buildAppearanceSections(en.ranking.appearance as AppearanceCopy)}
     />,
   );
   return container;
@@ -74,16 +67,17 @@ function field(container: HTMLElement, name: string): HTMLInputElement {
   return input;
 }
 
-function selectField(container: HTMLElement, name: string): HTMLSelectElement {
-  const select = container.querySelector<HTMLSelectElement>(`select[name="${name}"]`);
-  if (select === null) throw new Error(`the ${name} select is missing`);
-  return select;
-}
-
 function saveButton(container: HTMLElement): HTMLButtonElement {
   const button = container.querySelector<HTMLButtonElement>('button');
   if (button === null) throw new Error('the save control is missing');
   return button;
+}
+
+/** The JSON columns render as textareas, so they are reached by their own tag. */
+function jsonField(container: HTMLElement, name: string): HTMLTextAreaElement {
+  const area = container.querySelector<HTMLTextAreaElement>(`textarea[name="${name}"]`);
+  if (area === null) throw new Error(`the ${name} control is missing`);
+  return area;
 }
 
 describe('ranking appearance form', () => {
@@ -94,6 +88,13 @@ describe('ranking appearance form', () => {
     fireEvent.change(field(container, 'title'), { target: { value: 'Day 2 board' } });
 
     expect(field(container, 'title').value).toBe('Day 2 board');
+  });
+
+  it('offers no contest control: the config decides which contest the board draws', () => {
+    const container = renderForm();
+
+    expect(container.querySelector('select[name="contestId"]')).toBeNull();
+    expect(container.querySelector('[data-field="contestId"]')).toBeNull();
   });
 
   it('posts the text the operator typed, not the value the page rendered', async () => {
@@ -108,6 +109,24 @@ describe('ranking appearance form', () => {
 
     await waitFor(() => expect(mocks.updateRankingAppearance).toHaveBeenCalledOnce());
     expect(mocks.updateRankingAppearance.mock.calls[0][0]).toMatchObject({ title: 'Day 2 board' });
+  });
+
+  it('saves the remaining fields the page still edits, not only the header words', async () => {
+    // The form the contest select left behind has to keep saving everything else: retiring the
+    // inert field must not take the display, footer or JSON columns with it.
+    mocks.updateRankingAppearance.mockResolvedValue({ success: true, appearance: STORED });
+    const container = renderForm();
+
+    fireEvent.change(field(container, 'organisation'), { target: { value: 'POSN Thailand' } });
+    fireEvent.change(jsonField(container, 'theme'), { target: { value: '{"accent":"#00A3DA"}' } });
+    fireEvent.click(saveButton(container));
+
+    await waitFor(() => expect(mocks.updateRankingAppearance).toHaveBeenCalledOnce());
+    expect(mocks.updateRankingAppearance.mock.calls[0][0]).toMatchObject({
+      title: 'POSN Oct 2026',
+      organisation: 'POSN Thailand',
+      theme: '{"accent":"#00A3DA"}',
+    });
   });
 
   it('keeps what the operator typed when the write fails and says so on the page', async () => {
@@ -149,23 +168,5 @@ describe('ranking appearance form', () => {
     const theme = container.querySelector('[data-field="theme"]');
     expect(theme?.getAttribute('data-span')).toBe('full');
     expect(theme?.className).toContain('md:col-span-2');
-  });
-
-  it('picks the contest the board names from the page list, not a free-typed id', async () => {
-    const container = renderForm();
-    const select = selectField(container, 'contestId');
-
-    expect(Array.from(select.options).map((option) => option.value)).toEqual(['', '9', '3']);
-    expect(select.value).toBe('9');
-
-    fireEvent.change(select, { target: { value: '3' } });
-    mocks.updateRankingAppearance.mockResolvedValue({
-      success: true,
-      appearance: { ...STORED, contestId: '3' },
-    });
-    fireEvent.click(saveButton(container));
-
-    await waitFor(() => expect(mocks.updateRankingAppearance).toHaveBeenCalledOnce());
-    expect(mocks.updateRankingAppearance.mock.calls[0][0]).toMatchObject({ contestId: '3' });
   });
 });

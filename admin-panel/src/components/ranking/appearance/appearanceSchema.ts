@@ -38,9 +38,6 @@ export interface AppearanceSection {
 export const ACCESS_MODE_PUBLIC = 'public';
 export const ACCESS_MODE_PROTECTED = 'protected';
 
-/** The value of the contest select when the board names no contest. */
-export const NO_CONTEST = '';
-
 /** The JSON boxes are the long fields, so they take the row rather than half of it. */
 const JSON_SPAN: AppearanceFieldSpan = 'full';
 
@@ -49,26 +46,19 @@ const JSON_SPAN: AppearanceFieldSpan = 'full';
  * sections describe, so a new setting is a data edit here rather than another control
  * written into the page.
  *
- * WHY the contest list is an argument: the choices are the deployment's own contests, so the
- * page reads them and the schema stays a pure description of the form.
+ * WHY the contest is not among these fields: the config decides which contest the board draws, so
+ * a select here would be a second, reader-ignored place to name one — which is what this form used
+ * to carry.
  */
 export function buildAppearanceSections(
   copy: AppearanceCopy,
-  contests: readonly AppearanceOption[],
 ): readonly AppearanceSection[] {
   return [
     {
       id: 'identity',
       title: copy.identitySection,
       fields: [
-        {
-          name: 'contestId',
-          label: copy.contestField,
-          hint: copy.contestHint,
-          kind: 'select',
-          options: [{ value: NO_CONTEST, label: copy.contestNone }, ...contests],
-        },
-        // The words below override the named contest's own name and dates; blank uses them.
+        // The words below override the shown contest's own name and dates; blank uses them.
         { name: 'title', label: copy.titleField, hint: copy.titleHint, kind: 'text' },
         { name: 'subtitle', label: copy.subtitleField, hint: copy.subtitleHint, kind: 'text' },
         { name: 'organisation', label: copy.organisationField, kind: 'text' },

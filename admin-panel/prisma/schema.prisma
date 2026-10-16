@@ -960,10 +960,7 @@ model ranking_settings {
   title         String?  @db.VarChar
   subtitle      String?  @db.VarChar
   organisation  String?  @db.VarChar
-  /// The contest the board names. The header renders that record's name and dates, so the
-  /// copy cannot describe another day than the one this row points at.
-  contest_id    Int?
-  /// The explicit per-contest wording override, keyed by the contest it is for:
+  /// The explicit per-contest wording override, keyed by the contest the config shows:
   /// `{ "<contestId>": { "title": "...", "subtitle": "..." } }`. Only the entries an operator
   /// wrote exist; an absent entry means the contest's own name and dates are the words.
   wording_overrides Json?

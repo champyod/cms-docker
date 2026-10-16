@@ -618,7 +618,10 @@
     "board": {
       "title": "Scoreboard",
       "hint": "What a visitor sees first on the ranking page, and the logo it is served with.",
-      "hintProtected": "Sign-in required before a visitor sees this board. What they see first once signed in is the identity and logo below."
+      "hintProtected": "Sign-in required before a visitor sees this board. What they see first once signed in is the identity and logo below.",
+      "previewContestField": "Preview contest",
+      "previewContestSubmit": "Preview",
+      "previewContestHint": "Preview only — selecting a contest does not change the live public scoreboard."
     },
     "appearance": {
       "title": "Scoreboard appearance",
@@ -627,9 +630,6 @@
       "advancedSection": "Advanced (JSON)",
       "displayNameField": "Display name",
       "displayNameHint": "Shown below the logo on the public scoreboard. Leave blank to use the contest's name instead.",
-      "contestField": "Contest",
-      "contestHint": "The contest the board serves. Its own name and dates word the header, so the board cannot announce a day it is not serving.",
-      "contestNone": "No contest named",
       "titleField": "Title override",
       "titleHint": "Replaces the contest's own name on the header. Leave blank to use the contest's name.",
       "subtitleField": "Subtitle override",
@@ -662,6 +662,7 @@
       "contestField": "Contest",
       "contestHint": "The contest the board draws, with every task and score inside it.",
       "contestPlaceholder": "Choose a contest",
+      "contestNone": "No contest shown",
       "reasonField": "Reason",
       "show": "Show",
       "showFailed": "The contest could not be shown",
