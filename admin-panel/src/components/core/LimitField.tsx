@@ -3,7 +3,7 @@
 import { useId, useRef } from 'react';
 
 import { fieldClasses, LABEL_CLASSES } from '@/components/core/fieldStyles';
-import { normalizeLimitValue } from '@/lib/limits';
+import { normalizeLimitValue, normalizePositiveValue } from '@/lib/limits';
 import { cn } from '@/lib/utils';
 
 export interface LimitFieldProps {
@@ -21,6 +21,16 @@ export interface LimitFieldProps {
   readonly id?: string;
   /** Accessible name of the infinity toggle, and the empty box's placeholder. */
   readonly unlimitedLabel?: string;
+  /**
+   * Whether this column stores a float, so a positive fraction is a real limit.
+   *
+   * Why opt-in: the six contest/task columns and the dataset memory limit are whole numbers, and a
+   * fraction that reached them would bounce off the database's `> 0`/`MOD(..., 1048576)` CHECK. Only
+   * the dataset time limit is a Float, so only it keeps a fraction instead of refusing one.
+   */
+  readonly fractional?: boolean;
+  /** The input's step; 1 unless the column stores fractions. */
+  readonly step?: number;
 }
 
 /**
@@ -31,8 +41,9 @@ export interface LimitFieldProps {
  * contest validator then refused as "must be greater than 0".
  *
  * Why the value is normalised on every keystroke: this control is the only writer of a limit, so
- * routing every commit through normalizeLimitValue is what keeps a typed 0 (or a negative, or a
- * fraction, or a paste) from ever reaching the form as a value the database rejects.
+ * routing every commit through the shared rule is what keeps a typed 0 (or a negative, or a
+ * fraction, or a paste) from ever reaching the form as a value the database rejects. The rule is the
+ * integer one by default; a caller whose column really stores a float opts into keeping fractions.
  */
 export function LimitField({
   label,
@@ -43,12 +54,15 @@ export function LimitField({
   error,
   id,
   unlimitedLabel = 'Unlimited',
+  fractional = false,
+  step = 1,
 }: LimitFieldProps): React.JSX.Element {
   const generatedId = useId();
   const fieldId = id ?? generatedId;
   const inputRef = useRef<HTMLInputElement>(null);
   const labelText = unit === undefined ? label : `${label} (${unit})`;
   const isUnlimited = value === null;
+  const normalize = fractional ? normalizePositiveValue : normalizeLimitValue;
   const hintId = `${fieldId}-hint`;
   const errorId = `${fieldId}-error`;
   const describedBy = [
@@ -59,7 +73,7 @@ export function LimitField({
     .join(' ');
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
-    onChangeValue(normalizeLimitValue(event.target.value));
+    onChangeValue(normalize(event.target.value));
   };
 
   /**
@@ -87,7 +101,7 @@ export function LimitField({
           id={fieldId}
           type="number"
           inputMode="numeric"
-          step={1}
+          step={step}
           value={value ?? ''}
           onChange={handleChange}
           placeholder={unlimitedLabel}

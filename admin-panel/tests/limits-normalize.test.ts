@@ -46,4 +46,15 @@ describe('the nullable limit rule', () => {
     expect(en.limits.unlimited.trim()).not.toBe('');
     expect(th.limits.unlimited.trim()).not.toBe('');
   });
+
+  it('carries a label and an explanation for the dataset pair in both locales', () => {
+    // Why here: the dataset time and memory limits render through the same shared field, so their
+    // copy has to survive the same Thai-may-not-lag-behind guard as the family above.
+    for (const name of ['time_limit', 'memory_limit'] as const) {
+      expect(en.limits.fields[name].trim(), `en ${name}`).not.toBe('');
+      expect(th.limits.fields[name].trim(), `th ${name}`).not.toBe('');
+      expect(en.limits.hints[name].trim(), `en hint ${name}`).not.toBe('');
+      expect(th.limits.hints[name].trim(), `th hint ${name}`).not.toBe('');
+    }
+  });
 });

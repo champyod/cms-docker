@@ -1191,6 +1191,8 @@
       "token_gen_max": "Max Gen Count",
       "min_submission_interval": "Min Submission Interval",
       "min_user_test_interval": "Min User Test Interval",
+      "time_limit": "Time Limit",
+      "memory_limit": "Memory Limit",
       "per_user_time": "Per-user Time",
       "min_submission_interval_grace_period": "Min Submission Interval Grace Period"
     },
@@ -1201,6 +1203,8 @@
       "token_gen_max": "Highest number of generated tokens; blank means no limit.",
       "min_submission_interval": "Seconds a user must wait between two submissions; blank means no wait.",
       "min_user_test_interval": "Seconds a user must wait between two user tests; blank means no wait.",
+      "time_limit": "Seconds allowed for each evaluation; blank means no limit.",
+      "memory_limit": "MiB allowed for each evaluation; blank means no limit.",
       "per_user_time": "Seconds one user may spend on the contest in total; blank means no limit.",
       "min_submission_interval_grace_period": "Seconds of grace on top of the minimum submission interval; blank means none."
     }

@@ -33,3 +33,20 @@ export function normalizeLimitValue(value: unknown): number | null {
   if (parsed <= 0) return null;
   return parsed;
 }
+
+/**
+ * The same rule for a limit the classic stores as a float rather than an integer.
+ *
+ * Why a second entry point and not a looser normalizeLimitValue: the six columns above are
+ * integer-only and a `> 0` CHECK would refuse a fraction that got through, so loosening the family
+ * rule would move the rejection from the box to the database. The dataset time limit is a Float and
+ * a sub-second limit is a real one, so here a positive fraction is kept, while blank, 0, a negative
+ * and a non-number still mean "no limit" — the same reading of a blank box an operator types into.
+ */
+export function normalizePositiveValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed <= 0) return null;
+  return parsed;
+}
