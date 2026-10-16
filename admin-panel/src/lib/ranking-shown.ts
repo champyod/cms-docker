@@ -1,29 +1,20 @@
-import { SHOWN_KIND } from '@/lib/ranking-config';
-import { prisma } from '@/lib/prisma';
+import { loadShownContestIds } from '@/lib/ranking-config-store';
 
 /**
  * The one contest the board shows, resolved from the config that decides it.
  *
- * WHY the config and not a settings column: `ranking_config` is the board's whole answer for what
- * it draws, so any other place naming a contest is a second thing to keep in step — and that
- * second place is exactly what made the appearance form look like it picked the board while the
- * reader ignored it. The reader words a header only for the one contest the config shows, and this
- * answers the same question the same way: none for no target, none for several, so a caller never
- * words a heading for a contest the operator did not choose.
+ * WHY through the shared read rather than its own query: `ranking_config` is the board's whole
+ * answer for what it draws, and `resyncRankingUsers` scopes what it writes to the same set, so a
+ * second `findMany` here would be a second spelling of one fact — the defect this surface exists to
+ * remove. `loadShownContestIds` also owns the refusal of a declaration the board cannot draw, so a
+ * page that renders and a job that writes cannot disagree about what the config says.
  *
- * WHY a key the reader could not draw answers as none rather than throwing: this is a read a page
- * renders, and the board itself is where an undrawable declaration is refused, where an operator
- * can see it.
+ * WHY none for several targets: the reader words a header only for the one contest the config
+ * shows, so a caller that must name one is answered only when exactly one is shown — never with the
+ * first of several, which would word a heading for a contest the operator did not choose.
  */
 export async function readShownContestId(): Promise<number | null> {
-  const rows = await prisma.ranking_config.findMany({
-    where: { active: true },
-    select: { target_kind: true, target_key: true },
-    orderBy: { id: 'asc' },
-    take: 2,
-  });
-  const [only] = rows;
-  if (rows.length !== 1 || only.target_kind !== SHOWN_KIND) return null;
-  const parsed = Number.parseInt(only.target_key, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  const shown = await loadShownContestIds();
+  const [only] = shown;
+  return shown.size === 1 ? only : null;
 }

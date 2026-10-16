@@ -88,12 +88,15 @@ describe('the shown contest the appearance words follow', () => {
     expect(await readShownContestId()).toBeNull();
   });
 
-  it('answers none for a declaration the reader could not draw', async () => {
+  it('refuses a declaration the reader could not draw rather than answering none', async () => {
+    // The board refuses an unknown target kind and a key that is not an id at every route, so the
+    // panel refuses them too: answering "no contest" here would let the two halves of one config
+    // disagree, and would hide a typo behind a board that looks deliberately empty.
     mocks.configFindMany.mockResolvedValue([{ target_kind: 'task', target_key: '9' }]);
-    expect(await readShownContestId()).toBeNull();
+    await expect(readShownContestId()).rejects.toThrow(/cannot draw/);
 
     mocks.configFindMany.mockResolvedValue([{ target_kind: 'contest', target_key: 'day-two' }]);
-    expect(await readShownContestId()).toBeNull();
+    await expect(readShownContestId()).rejects.toThrow(/not a contest id/);
   });
 });
 
