@@ -3,7 +3,7 @@ import { hasEffectivePermission } from '@/lib/permission-engine';
 import { collectServerStats } from '@/lib/server-stats';
 import { collectWorkerStats } from '@/lib/worker-stats';
 import { collectCoreServicesStatus, collectNetworkTrafficLogs } from '@/lib/container-probes';
-import { resourceFrameFingerprint, type ResourceFrame } from '@/lib/live-frames';
+import { resourceFrameFingerprint, type ResourceFrame, type ResourceSection } from '@/lib/live-frames';
 import { createLiveStreamRoute } from '@/lib/live/stream-route';
 import { polledSource } from '@/lib/live/polled-source';
 import {
@@ -65,6 +65,16 @@ async function readSummary(frame: ResourceFrame, scope: ResourceScope, trafficLi
 }
 
 /**
+ * Which sections each track reads.
+ *
+ * Why the tracks are told: when one runs, the other's sections travel forward in the accumulated
+ * frame, and the frame has to state their own read — the counters pass must not date the docker-backed
+ * summary by the counters' instant, nor the reverse.
+ */
+const SERVER_SECTIONS: readonly ResourceSection[] = ['server', 'workers'];
+const SUMMARY_SECTIONS: readonly ResourceSection[] = ['services', 'traffic'];
+
+/**
  * The resource page's one push channel: host counters, worker nodes, core services and container traffic.
  *
  * Why the counters are a track of their own: the page must not wait on the docker-backed summary to
@@ -80,8 +90,8 @@ export const GET = createLiveStreamRoute<ResourceFrame>({
       initial: {},
       fingerprint: resourceFrameFingerprint,
       tracks: [
-        { intervalMs: RESOURCE_SERVER_POLL_MS, read: (frame) => readStats(frame, scope) },
-        { intervalMs: RESOURCE_SUMMARY_POLL_MS, read: (frame) => readSummary(frame, scope, trafficLimit) },
+        { intervalMs: RESOURCE_SERVER_POLL_MS, sections: SERVER_SECTIONS, read: (frame) => readStats(frame, scope) },
+        { intervalMs: RESOURCE_SUMMARY_POLL_MS, sections: SUMMARY_SECTIONS, read: (frame) => readSummary(frame, scope, trafficLimit) },
       ],
     })(connection);
   },

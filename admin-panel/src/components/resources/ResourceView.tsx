@@ -10,12 +10,33 @@ import { Card } from '@/components/core/Card';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { useLiveStream } from '@/hooks/useLiveStream';
+import { useLiveReadInstants } from '@/lib/live/use-live-reads';
+import { sectionReadAt } from '@/lib/live/frames';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { useDictionary } from '@/hooks/useDictionary';
 import { TRAFFIC_LOG_LIMIT_DEFAULT } from '@/lib/constants/live-stream';
-import type { ResourceFrame, ServerStats, TrafficLog, WorkerNodeView, CoreServiceStatus } from '@/lib/live-frames';
+import type { LiveSectionReads } from '@/lib/live/frames';
+import type { RowFreshnessInput } from '@/lib/live/row-freshness';
+import type {
+  ResourceFrame,
+  ResourceSection,
+  ServerStats,
+  TrafficLog,
+  WorkerNodeView,
+  CoreServiceStatus,
+} from '@/lib/live-frames';
 import type { Dictionary } from '@/lib/dictionary';
 import { rowsFromNodes } from '@/lib/worker-nodes';
+
+/**
+ * The sections whose rows carry the cue.
+ *
+ * Why the counters are not among them: `server` is one read behind the gauges and the metrics card,
+ * and those are single figures rather than rows — the cue marks a row where it sits, and marking a
+ * figure would mean inventing a row that is not there. The frame still dates the section on the wire,
+ * so a surface that renders it as rows can cue it without another contract change.
+ */
+const CUED_SECTIONS: readonly ResourceSection[] = ['workers', 'services', 'traffic'];
 
 interface PendingFirstFrame {
   readonly resolve: () => void;
@@ -70,26 +91,49 @@ export function ResourceView(): React.JSX.Element {
   }), []);
   const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
-  const onFrame = useCallback((frame: ResourceFrame): void => {
+  // Which read produced each section's value, and the newest read that has covered it: the two facts
+  // the cue compares. One record for the whole page, because a section is one read — every row of the
+  // workers, the services and the traffic shares its section's instant.
+  const reads = useLiveReadInstants<ResourceSection>();
+
+  const onFrame = useCallback((frame: ResourceFrame, readAt: string, sectionReads?: LiveSectionReads): void => {
+    // The read a frame states for a section: its own where the frame carried it forward, the frame's
+    // where the pass that produced the frame read it. The value and the coverage take that one instant,
+    // so a section the frame did not re-read is never dated by a read that never touched it — while a
+    // section whose own pass ran without refilling it does move forward, because then the frame states
+    // the frame's read and the older value still behind it is exactly what the cue has to mark.
+    for (const section of CUED_SECTIONS) reads.cover(section, sectionReadAt(readAt, sectionReads, section));
+    if (frame.workers) reads.record('workers', sectionReadAt(readAt, sectionReads, 'workers'));
+    if (frame.services) reads.record('services', sectionReadAt(readAt, sectionReads, 'services'));
+    if (frame.traffic) reads.record('traffic', sectionReadAt(readAt, sectionReads, 'traffic'));
     applyFrame(frame);
     pendingFirstFrame.current?.resolve();
     pendingFirstFrame.current = null;
-  }, [applyFrame]);
+  }, [applyFrame, reads]);
 
   const onStreamError = useCallback((): void => {
     pendingFirstFrame.current?.reject(new Error('The resource stream did not open'));
     pendingFirstFrame.current = null;
   }, []);
 
-  // Why the stream's own status is not projected anywhere: it reports the push channel, not the
-  // data, and a channel that never delivers a first frame already fails the load below.
-  const { refresh } = useLiveStream<ResourceFrame>({
+  // Why the stream's own status travels to the sections instead of to a badge: the panel's live
+  // indicator was removed on purpose, and a section the panel can no longer confirm is where that has
+  // to be visible. A channel that never delivers a first frame still fails the load below.
+  const { status: streamStatus, refresh } = useLiveStream<ResourceFrame>({
     url: `/api/resources/stream?trafficLimit=${trafficLimit}`,
     onFrame,
     onError: onStreamError,
   });
 
   const source = sourceLabel(serverStats, dict);
+
+  // The cue's input per section, ready-made from the read that produced its value and the newest read
+  // that covered it. Nothing here guesses: a section no read has dated reports `unknown`, never fresh.
+  const freshness = (section: ResourceSection): RowFreshnessInput => ({
+    readAt: reads.reads[section],
+    surfaceReadAt: reads.surfaces[section],
+    streamStatus,
+  });
 
   if (status.kind !== 'idle') {
     return (
@@ -106,7 +150,7 @@ export function ResourceView(): React.JSX.Element {
     <div className="space-y-4 density:space-y-4">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Why "not here yet" is not "nothing to read": the summary section arrives later. */}
-          <CoreServicesStatus services={services ?? []} loading={services === null} />
+          <CoreServicesStatus services={services ?? []} loading={services === null} freshness={freshness('services')} />
 
           <GaugeCard
             icon={<Cpu className="w-4 h-4 text-primary" />}
@@ -137,6 +181,7 @@ export function ResourceView(): React.JSX.Element {
           ) : (
             <WorkerNodeList
               rows={rowsFromNodes(workers)}
+              freshness={freshness('workers')}
               emptyTitle="No worker nodes found"
               emptyDescription="Workers are globally shared and configured in Infrastructure → Deployments"
             />
@@ -151,7 +196,7 @@ export function ResourceView(): React.JSX.Element {
             </div>
             <MetricsCard serverStats={serverStats} />
           </div>
-            <NetworkTrafficLogs logs={traffic ?? []} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={traffic === null} />
+            <NetworkTrafficLogs logs={traffic ?? []} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={traffic === null} freshness={freshness('traffic')} />
         </div>
     </div>
   );

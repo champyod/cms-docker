@@ -26,6 +26,18 @@ export interface ResourceFrame {
   traffic?: TrafficLog[];
 }
 
+/**
+ * The sections the resources page reads on its one connection, by the name both the frame and the
+ * page use.
+ *
+ * Why the type lives with the frame contract and not on the route: the route declares which poll
+ * track reads each section, and the page names the ones it renders, so a section spelled one way in
+ * one place and another way in the other fails the type check instead of silently going unstated.
+ * `error` is deliberately not a section: it is a fault that rides with the worker list, not a reading
+ * of its own whose age the reader reads.
+ */
+export type ResourceSection = 'server' | 'workers' | 'services' | 'traffic';
+
 export interface ContainersFrame {
   containers?: ContainerInfo[];
   restartCounts?: Record<string, number>;
