@@ -147,11 +147,22 @@ fn next_id() -> String {
         Ok(elapsed) => elapsed.as_micros() as u64,
         Err(_) => 0,
     };
-    let id = LAST_ISSUED
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |previous| {
-            Some(previous.max(now) + 1)
-        })
-        .map_or(now, |previous| previous.max(now) + 1);
+    // CAS loop rather than `fetch_update`: CI builds on the newest stable while this
+    // tree also has to compile on older toolchains, and `fetch_update` was renamed to
+    // `try_update` in between — a deprecation that `-D warnings` turns into a failure.
+    let mut previous = LAST_ISSUED.load(Ordering::Relaxed);
+    let id = loop {
+        let candidate = previous.max(now) + 1;
+        match LAST_ISSUED.compare_exchange_weak(
+            previous,
+            candidate,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break candidate,
+            Err(observed) => previous = observed,
+        }
+    };
     format!("{id:x}")
 }
 
