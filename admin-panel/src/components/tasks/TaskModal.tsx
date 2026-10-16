@@ -44,6 +44,7 @@ interface TaskRecord {
   max_user_test_number: number | null;
   min_submission_interval: unknown;
   min_user_test_interval: unknown;
+  evaluation_throttle_delay_s: number | null;
 }
 
 interface TaskModalProps {
@@ -84,6 +85,8 @@ const EMPTY_FORM: TaskData = {
   max_user_test_number: null,
   min_submission_interval: null,
   min_user_test_interval: null,
+  // null is the tri-state's "inherit the contest's delay"; the create then writes a NULL.
+  evaluation_throttle_delay_s: null,
 };
 
 function mapTaskToForm(task: TaskRecord): TaskData {
@@ -113,6 +116,7 @@ function mapTaskToForm(task: TaskRecord): TaskData {
         : null,
     min_submission_interval: parseIntervalToSeconds(task.min_submission_interval) ?? null,
     min_user_test_interval: parseIntervalToSeconds(task.min_user_test_interval) ?? null,
+    evaluation_throttle_delay_s: task.evaluation_throttle_delay_s,
   };
 }
 

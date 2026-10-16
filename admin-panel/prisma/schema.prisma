@@ -92,6 +92,17 @@ model contests {
   min_submission_interval_grace_period             Unsupported("interval")?
   min_user_test_interval                           Unsupported("interval")?
   queue_fairness_penalty_seconds                   Int                      @default(0)
+  /// The evaluation throttle family: declared by the classic ORM (src/cms/db/contest.py) and created
+  /// by the DDL in scripts/__fix_db_schema.sql, NOT by a Prisma migration. The columns already exist
+  /// in every live database, so a migration here would fail against one that has them and against a
+  /// fresh one whose schema the same fix script builds. Do not generate a migration for these (or the
+  /// task override below): mirror them so the panel's reads and writes can name them, the way
+  /// contests_single_active_key documents its own out-of-band index.
+  evaluation_throttle_delay_s                      Int                      @default(0)
+  evaluation_throttle_window_s                     Int                      @default(0)
+  evaluation_throttle_max                          Int                      @default(0)
+  evaluation_final_open                            Boolean                  @default(false)
+  evaluation_final_open_at                         DateTime?                @db.Timestamp(6)
   /// At most one contest may be flagged active. The invariant is a partial unique index
   /// (contests_single_active_key), which Prisma cannot express, so it lives only in
   /// 20261015153000_single_active_contest and has no counterpart here — `prisma migrate dev` must
@@ -342,6 +353,9 @@ model tasks {
   max_user_test_number                          Int?
   min_submission_interval                       Unsupported("interval")?
   min_user_test_interval                        Unsupported("interval")?
+  /// The per-task throttle override: NULL inherits the contest's delay, 0 is "no delay for this
+  /// task". Created by scripts/__fix_db_schema.sql — no migration (see the contests model's note).
+  evaluation_throttle_delay_s                   Int?
   feedback_level                                feedback_level
   score_precision                               Int
   score_mode                                    score_mode

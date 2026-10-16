@@ -5,7 +5,8 @@ import { Info } from 'lucide-react';
 import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
-import type { LimitFieldName } from '@/lib/limits';
+import { interpolate } from '@/lib/interpolate';
+import { normalizeNonNegativeInt, type LimitFieldName } from '@/lib/limits';
 import type { TaskData } from '@/app/actions/tasks';
 
 export function InfoButton({ text }: { text: string }): React.JSX.Element {
@@ -137,6 +138,40 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
   );
 }
 
+/**
+ * The task's half of the throttle family: a tri-state override of the contest's delay.
+ *
+ * Why a box whose blank is a state: blank writes NULL — "inherit the contest's delay" — 0 writes a
+ * real 0, "no delay for this task", and N writes N seconds for this task only. The line under it
+ * names which of the three the current value is, so the operator can tell an inherit from a 0.
+ */
+function ThrottleOverrideField({ formData, onChange }: TabProps): React.JSX.Element {
+  const throttle = useDictionary().limits.throttle;
+  const value = formData.evaluation_throttle_delay_s ?? null;
+  const stateHint = value === null
+    ? throttle.overrideInherit
+    : value === 0
+      ? throttle.overrideNone
+      : interpolate(throttle.overrideSeconds, { seconds: value });
+  return (
+    <div className="space-y-1 md:col-span-2" data-field="evaluation_throttle_delay_s">
+      <label htmlFor="evaluation_throttle_delay_s" className="block text-xs font-bold text-muted-foreground uppercase mb-2">{throttle.overrideLabel} (sec)</label>
+      <input
+        id="evaluation_throttle_delay_s"
+        type="number"
+        min={0}
+        step={1}
+        placeholder={throttle.overridePlaceholder}
+        value={value ?? ''}
+        onChange={(e) => onChange({ ...formData, evaluation_throttle_delay_s: normalizeNonNegativeInt(e.target.value) })}
+        className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
+      />
+      <p className="text-xs text-muted-foreground">{throttle.overrideHint}</p>
+      <p className="text-xs font-medium text-primary">{stateHint}</p>
+    </div>
+  );
+}
+
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
   const limits = useDictionary().limits;
   // Why the cast to a partial: the label map covers the whole family, the hint map only the
@@ -158,6 +193,7 @@ export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
             unlimitedLabel={limits.unlimited}
           />
         ))}
+        <ThrottleOverrideField formData={formData} onChange={onChange} />
       </div>
       {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
           other kind (contests), so the button reads as a second way out of the same fields. */}

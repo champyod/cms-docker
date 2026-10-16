@@ -95,6 +95,14 @@ export const EXTRA_FIELD_PERMISSION_MAP = {
     min_submission_interval_grace_period: { read: 'contest:read', update: 'contest:update' },
     min_user_test_interval: { read: 'contest:read', update: 'contest:update' },
     queue_fairness_penalty_seconds: { read: 'contest:read', update: 'contest:update' },
+    // Why registered here: the throttle family's read/update must gate like its limit neighbours.
+    // Without an entry the update path's stripDisallowedFields drops the delay silently, so the
+    // field would render editable and never save.
+    evaluation_throttle_delay_s: { read: 'contest:read', update: 'contest:update' },
+    evaluation_throttle_window_s: { read: 'contest:read', update: 'contest:update' },
+    evaluation_throttle_max: { read: 'contest:read', update: 'contest:update' },
+    evaluation_final_open: { read: 'contest:read', update: 'contest:update' },
+    evaluation_final_open_at: { read: 'contest:read', update: 'contest:update' },
     is_active: { read: 'contest:read', update: 'contest:switch' },
     score_precision: { read: 'contest:read', update: 'contest:update' },
     start: { read: 'contest:read', update: 'contest:update' },

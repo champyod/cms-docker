@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
-import { normalizeLimitValue, type LimitFieldName } from '@/lib/limits';
+import { normalizeLimitValue, normalizeNonNegativeInt, type LimitFieldName } from '@/lib/limits';
 import { contestSortOrderBy } from '@/lib/contest-sorting';
 import type { ListSortInput } from '@/lib/list-sorting';
 
@@ -45,6 +45,7 @@ export interface ContestData {
   evaluation_throttle_window_s?: number;
   evaluation_throttle_max?: number;
   evaluation_final_open?: boolean;
+  evaluation_final_open_at?: string | Date | null;
 }
 
 const CONTESTS_PER_PAGE = 20;
@@ -124,9 +125,12 @@ export function buildContestInsertDefaults(data: ContestData) {
     per_user_time: nullableIntervalSeconds(data.per_user_time, 'seconds'),
     min_submission_interval_grace_period: nullableIntervalSeconds(data.min_submission_interval_grace_period, 'seconds'),
     queue_fairness_penalty_seconds: Math.max(0, Number(data.queue_fairness_penalty_seconds ?? 0) || 0),
-    evaluation_throttle_delay_s: Math.max(0, Number(data.evaluation_throttle_delay_s ?? 0) || 0),
-    evaluation_throttle_window_s: Math.max(0, Number(data.evaluation_throttle_window_s ?? 0) || 0),
-    evaluation_throttle_max: Math.max(0, Number(data.evaluation_throttle_max ?? 0) || 0),
+    // Why the shared non-negative rule rather than the limit rule: these are NOT NULL columns whose 0
+    // is a real value, so the create must write a number (0 when the form gives none), never the NULL
+    // the column cannot hold.
+    evaluation_throttle_delay_s: normalizeNonNegativeInt(data.evaluation_throttle_delay_s) ?? 0,
+    evaluation_throttle_window_s: normalizeNonNegativeInt(data.evaluation_throttle_window_s) ?? 0,
+    evaluation_throttle_max: normalizeNonNegativeInt(data.evaluation_throttle_max) ?? 0,
     evaluation_final_open: data.evaluation_final_open ?? false,
   };
 }
@@ -228,6 +232,37 @@ function buildLimitUpdateParams(data: Partial<ContestData>) {
   };
 }
 
+/**
+ * One throttle column's write decision, in the same {touched, value} shape the limit columns use.
+ *
+ * Why not the shared limit rule for the delay: evaluation_throttle_delay_s is NOT NULL and its 0 is
+ * a real value ("no throttle delay of my own"), so the rule keeps a 0 instead of turning it into the
+ * NULL the column cannot hold; ?? 0 covers a blank or a refused entry, which the column stores as its
+ * own 0. The three reserved columns ride the same terms so a caller that ever names them writes one
+ * and a form that does not (they render disabled) leaves the column alone — never an unconditional
+ * write.
+ */
+function throttleIntParam(
+  data: Partial<ContestData>,
+  key: 'evaluation_throttle_delay_s' | 'evaluation_throttle_window_s' | 'evaluation_throttle_max',
+): LimitUpdateParam<number> {
+  const touched = data[key] !== undefined;
+  return { touched, value: touched ? (normalizeNonNegativeInt(data[key]) ?? 0) : null };
+}
+
+function buildThrottleUpdateParams(data: Partial<ContestData>) {
+  const finalOpenTouched = data.evaluation_final_open !== undefined;
+  const finalOpenAtTouched = data.evaluation_final_open_at !== undefined;
+  return {
+    evaluation_throttle_delay_s: throttleIntParam(data, 'evaluation_throttle_delay_s'),
+    evaluation_throttle_window_s: throttleIntParam(data, 'evaluation_throttle_window_s'),
+    evaluation_throttle_max: throttleIntParam(data, 'evaluation_throttle_max'),
+    evaluation_final_open: { touched: finalOpenTouched, value: finalOpenTouched ? Boolean(data.evaluation_final_open) : null } as LimitUpdateParam<boolean>,
+    // Why null is written here: the column is nullable, so an explicit clear is a real NULL.
+    evaluation_final_open_at: { touched: finalOpenAtTouched, value: finalOpenAtTouched && data.evaluation_final_open_at != null ? new Date(data.evaluation_final_open_at) : null } as LimitUpdateParam<Date>,
+  };
+}
+
 function resolveUpdateDateParams(data: Partial<ContestData>) {
   const toDate = (d: string | Date | undefined) => (d ? new Date(d) : undefined);
   return {
@@ -243,6 +278,7 @@ function resolveUpdateDateParams(data: Partial<ContestData>) {
 
 export async function executeContestUpdate(id: number, data: Partial<ContestData>): Promise<void> {
   const lim = buildLimitUpdateParams(data);
+  const thr = buildThrottleUpdateParams(data);
   const { startDate, stopDate, analysisStart, analysisStop, queueFairnessSeconds } = resolveUpdateDateParams(data);
   await prisma.$executeRaw`
     UPDATE contests SET
@@ -274,7 +310,14 @@ export async function executeContestUpdate(id: number, data: Partial<ContestData
       min_submission_interval = CASE WHEN ${lim.min_submission_interval.touched} THEN ${lim.min_submission_interval.value}::interval ELSE min_submission_interval END,
       min_user_test_interval = CASE WHEN ${lim.min_user_test_interval.touched} THEN ${lim.min_user_test_interval.value}::interval ELSE min_user_test_interval END,
       per_user_time = CASE WHEN ${lim.per_user_time.touched} THEN ${lim.per_user_time.value}::interval ELSE per_user_time END,
-      min_submission_interval_grace_period = CASE WHEN ${lim.min_submission_interval_grace_period.touched} THEN ${lim.min_submission_interval_grace_period.value}::interval ELSE min_submission_interval_grace_period END
+      min_submission_interval_grace_period = CASE WHEN ${lim.min_submission_interval_grace_period.touched} THEN ${lim.min_submission_interval_grace_period.value}::interval ELSE min_submission_interval_grace_period END,
+      -- Throttle family: the same absent-vs-named rule. The delay's 0 is written as a 0 (never NULL),
+      -- and the three reserved columns are only touched if a caller names them.
+      evaluation_throttle_delay_s = CASE WHEN ${thr.evaluation_throttle_delay_s.touched} THEN ${thr.evaluation_throttle_delay_s.value} ELSE evaluation_throttle_delay_s END,
+      evaluation_throttle_window_s = CASE WHEN ${thr.evaluation_throttle_window_s.touched} THEN ${thr.evaluation_throttle_window_s.value} ELSE evaluation_throttle_window_s END,
+      evaluation_throttle_max = CASE WHEN ${thr.evaluation_throttle_max.touched} THEN ${thr.evaluation_throttle_max.value} ELSE evaluation_throttle_max END,
+      evaluation_final_open = CASE WHEN ${thr.evaluation_final_open.touched} THEN ${thr.evaluation_final_open.value} ELSE evaluation_final_open END,
+      evaluation_final_open_at = CASE WHEN ${thr.evaluation_final_open_at.touched} THEN ${thr.evaluation_final_open_at.value} ELSE evaluation_final_open_at END
     WHERE id = ${id}
   `;
 }

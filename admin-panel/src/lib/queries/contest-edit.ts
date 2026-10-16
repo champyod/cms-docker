@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { filterReadableFields } from '@/lib/field-permissions';
 import { prisma } from '@/lib/prisma';
-import { NO_INTERVALS, toIsoDate, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
+import { NO_CONTEST_THROTTLE, NO_INTERVALS, toIsoDate, toIntervalString, type ContestThrottleColumns, type IntervalColumns } from '@/lib/queries/read-model-format';
 
 export type ContestEditFields = {
   id: number; name: string; description: string; start: string; stop: string;
@@ -14,11 +14,18 @@ export type ContestEditFields = {
   token_gen_initial: number; token_gen_number: number; token_gen_interval: string | null;
   token_gen_max: number | null; max_submission_number: number | null; max_user_test_number: number | null;
   min_submission_interval: string | null; min_user_test_interval: string | null; queue_fairness_penalty_seconds: number | null;
+  // Why carried: the delay is the one consumed throttle column; the other four render disabled with
+  // their "reserved" wording, so the modal needs their stored values to show the schema as it is.
+  evaluation_throttle_delay_s: number; evaluation_throttle_window_s: number; evaluation_throttle_max: number;
+  evaluation_final_open: boolean; evaluation_final_open_at: string | null;
   score_precision: number; analysis_enabled: boolean; analysis_start: string | null; analysis_stop: string | null;
 };
 
 export type ContestEditData = { contest: ContestEditFields; permissionKeys: readonly string[] };
 
+// The throttle columns stay out of this select on purpose: the generated client predates them (the
+// DDL in scripts/__fix_db_schema.sql adds them), so naming them here would fail the type check and,
+// with a stale client, the query itself. They ride the raw read below beside the interval columns.
 const contestEditSelect = {
   id: true, name: true, description: true, start: true, stop: true, timezone: true,
   allowed_localizations: true, languages: true, submissions_download_allowed: true,
@@ -31,32 +38,35 @@ const contestEditSelect = {
   analysis_enabled: true, analysis_start: true, analysis_stop: true,
 } satisfies Prisma.contestsSelect;
 
-async function fetchContestIntervals(contestId: number): Promise<IntervalColumns> {
+async function fetchContestRawColumns(contestId: number): Promise<IntervalColumns & ContestThrottleColumns> {
   try {
     // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
     // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
     // interval" and left every interval input on its default. EPOCH reads it as total seconds,
     // which is exactly what the dialog's parser takes.
-    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM contests WHERE id = ${contestId}`;
-    return rows[0] ?? NO_INTERVALS;
+    // Why the throttle columns share this read: they are added by scripts/__fix_db_schema.sql and
+    // the generated client predates them, so they cannot be named in the typed select either — the
+    // same "not in the client" reason the interval columns are read raw.
+    const rows = await prisma.$queryRaw<Array<IntervalColumns & ContestThrottleColumns>>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval, evaluation_throttle_delay_s, evaluation_throttle_window_s, evaluation_throttle_max, evaluation_final_open, evaluation_final_open_at FROM contests WHERE id = ${contestId}`;
+    return rows[0] ?? { ...NO_INTERVALS, ...NO_CONTEST_THROTTLE };
   } catch {
     // Why degrade, not throw: the interval columns live on a CMS-created table that
     // no admin-panel migration owns, so a schema drift or a connection fault there
     // must leave four cosmetic inputs unset rather than fail the whole edit read —
     // the same reasoning the Task settings read applies to the identical query.
-    return NO_INTERVALS;
+    return { ...NO_INTERVALS, ...NO_CONTEST_THROTTLE };
   }
 }
 
-type ContestEditRow = Prisma.contestsGetPayload<{ select: typeof contestEditSelect }> & IntervalColumns;
+type ContestEditRow = Prisma.contestsGetPayload<{ select: typeof contestEditSelect }> & IntervalColumns & ContestThrottleColumns;
 
 export async function readContestEditData(contestId: number, permissions: ReadonlySet<string>): Promise<ContestEditData | null> {
-  const [row, intervals] = await Promise.all([
+  const [row, raw] = await Promise.all([
     prisma.contests.findUnique({ where: { id: contestId }, select: contestEditSelect }),
-    fetchContestIntervals(contestId),
+    fetchContestRawColumns(contestId),
   ]);
   if (!row) return null;
-  return { contest: toContestEdit({ ...row, ...intervals }, permissions), permissionKeys: [...permissions] };
+  return { contest: toContestEdit({ ...row, ...raw }, permissions), permissionKeys: [...permissions] };
 }
 
 // Why: on-demand dialog data — the record layout carries only id, name, description, is_active, keys.
@@ -80,6 +90,11 @@ function toContestEdit(row: ContestEditRow, permissions: ReadonlySet<string>): C
     min_submission_interval: toIntervalString(pick('min_submission_interval')),
     min_user_test_interval: toIntervalString(pick('min_user_test_interval')),
     queue_fairness_penalty_seconds: pick('queue_fairness_penalty_seconds'),
+    evaluation_throttle_delay_s: pick('evaluation_throttle_delay_s'),
+    evaluation_throttle_window_s: pick('evaluation_throttle_window_s'),
+    evaluation_throttle_max: pick('evaluation_throttle_max'),
+    evaluation_final_open: pick('evaluation_final_open'),
+    evaluation_final_open_at: toIsoDate(pick('evaluation_final_open_at')),
     score_precision: pick('score_precision'), analysis_enabled: pick('analysis_enabled'),
     analysis_start: toIsoDate(row.analysis_start), analysis_stop: toIsoDate(row.analysis_stop),
   };

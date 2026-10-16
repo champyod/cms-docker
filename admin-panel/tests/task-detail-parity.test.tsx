@@ -140,6 +140,7 @@ describe('task detail parity', () => {
             max_user_test_number: null,
             min_submission_interval: null,
             min_user_test_interval: null,
+            evaluation_throttle_delay_s: null,
           },
           permissionKeys: ['task:read', 'task:update'],
         }}

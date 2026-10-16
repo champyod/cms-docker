@@ -48,6 +48,11 @@ export interface ExistingContest {
   per_user_time?: number | string | ContestIntervalValue | null;
   min_submission_interval_grace_period?: number | string | ContestIntervalValue | null;
   queue_fairness_penalty_seconds?: number;
+  evaluation_throttle_delay_s?: number;
+  evaluation_throttle_window_s?: number;
+  evaluation_throttle_max?: number;
+  evaluation_final_open?: boolean;
+  evaluation_final_open_at?: string | null;
   score_precision: number;
   analysis_enabled: boolean;
   analysis_start?: Date | string | null;
@@ -87,6 +92,15 @@ export interface ContestFormData {
   per_user_time: number | null; // seconds
   min_submission_interval_grace_period: number | null; // seconds
   queue_fairness_penalty_seconds: number;
+  // Why the delay is a plain number and not `number | null`: its column is NOT NULL and its 0 is a
+  // real value ("no throttle delay of my own"), so there is no "unset" state to represent. The other
+  // four are display-only here; the form carries them so the modal can show the schema, and the
+  // payload builder drops them so a disabled control can never write.
+  evaluation_throttle_delay_s: number;
+  evaluation_throttle_window_s: number;
+  evaluation_throttle_max: number;
+  evaluation_final_open: boolean;
+  evaluation_final_open_at: string;
   score_precision: number;
   analysis_enabled: boolean;
   analysis_start: string;
@@ -130,6 +144,11 @@ export const FIELD_TO_TAB_MAP: Record<string, ContestModalTab> = {
   min_submission_interval: 'limits',
   min_user_test_interval: 'limits',
   queue_fairness_penalty_seconds: 'limits',
+  evaluation_throttle_delay_s: 'limits',
+  evaluation_throttle_window_s: 'limits',
+  evaluation_throttle_max: 'limits',
+  evaluation_final_open: 'limits',
+  evaluation_final_open_at: 'limits',
   score_precision: 'limits',
   per_user_time: 'limits',
   min_submission_interval_grace_period: 'limits',

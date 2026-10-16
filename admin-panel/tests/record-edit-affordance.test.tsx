@@ -49,6 +49,7 @@ const TASK_SETTINGS = {
     token_max_number: null, token_min_interval: null, token_gen_initial: null, token_gen_number: null,
     token_gen_interval: null, token_gen_max: null, max_submission_number: null, max_user_test_number: null,
     min_submission_interval: null, min_user_test_interval: null,
+    evaluation_throttle_delay_s: null,
   },
   permissionKeys: ['task:read', 'task:update'],
 };

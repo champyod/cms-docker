@@ -3,7 +3,7 @@ import { filterReadableFields } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/server/authorization';
-import { NO_INTERVALS, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
+import { NO_INTERVALS, NO_TASK_THROTTLE, toIntervalString, type IntervalColumns, type TaskThrottleColumns } from '@/lib/queries/read-model-format';
 import { enrichStatements, type TaskStatementSummary } from '@/lib/queries/task-statements';
 
 export type { TaskStatementSummary } from '@/lib/queries/task-statements';
@@ -28,6 +28,8 @@ export type TaskSettingsRecord = {
   token_mode: string; token_max_number: number | null; token_min_interval: string | null;
   token_gen_initial: number | null; token_gen_number: number | null; token_gen_interval: string | null; token_gen_max: number | null;
   max_submission_number: number | null; max_user_test_number: number | null; min_submission_interval: string | null; min_user_test_interval: string | null;
+  // Why nullable: the override's NULL is the "inherit the contest's delay" state, not "no limit".
+  evaluation_throttle_delay_s: number | null;
 };
 
 export type TaskOverviewData = {
@@ -151,33 +153,36 @@ const taskSettingsSelect = {
   max_submission_number: true, max_user_test_number: true,
 } satisfies Prisma.tasksSelect;
 
-async function fetchTaskIntervals(taskId: number): Promise<IntervalColumns> {
+async function fetchTaskRawColumns(taskId: number): Promise<IntervalColumns & TaskThrottleColumns> {
   try {
     // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
     // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
     // interval" and left every interval input on its default. EPOCH reads it as total seconds,
     // which is exactly what the dialog's parser takes.
-    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM tasks WHERE id = ${taskId}`;
-    return rows[0] ?? NO_INTERVALS;
+    // Why the throttle override shares this read: it is added by scripts/__fix_db_schema.sql and the
+    // generated client predates it, so it cannot be named in the typed select either — the same
+    // "not in the client" reason the interval columns are read raw.
+    const rows = await prisma.$queryRaw<Array<IntervalColumns & TaskThrottleColumns>>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval, evaluation_throttle_delay_s FROM tasks WHERE id = ${taskId}`;
+    return rows[0] ?? { ...NO_INTERVALS, ...NO_TASK_THROTTLE };
   } catch {
     // Why degrade, not throw: the interval columns live on a CMS-created table that
     // no admin-panel migration owns, so a schema drift or a connection fault there
     // must leave four cosmetic inputs unset rather than fail the whole settings
     // read — the same reasoning the statement-size and upload-date reads follow.
-    return NO_INTERVALS;
+    return { ...NO_INTERVALS, ...NO_TASK_THROTTLE };
   }
 }
 
-type TaskSettingsRow = Prisma.tasksGetPayload<{ select: typeof taskSettingsSelect }> & IntervalColumns;
+type TaskSettingsRow = Prisma.tasksGetPayload<{ select: typeof taskSettingsSelect }> & IntervalColumns & TaskThrottleColumns;
 
 export async function getTaskSettings(taskId: number): Promise<TaskSettingsData | null> {
   const permissions = await requirePermission('task:read');
-  const [row, intervals] = await Promise.all([
+  const [row, raw] = await Promise.all([
     prisma.tasks.findUnique({ where: { id: taskId }, select: taskSettingsSelect }),
-    fetchTaskIntervals(taskId),
+    fetchTaskRawColumns(taskId),
   ]);
   if (!row) return null;
-  const full: TaskSettingsRow = { ...row, ...intervals };
+  const full: TaskSettingsRow = { ...row, ...raw };
   const visible = filterReadableFields('tasks', full, permissions);
   const pick = <K extends keyof TaskSettingsRow>(key: K): TaskSettingsRow[K] => (visible[key] ?? full[key]) as TaskSettingsRow[K];
   return {
@@ -191,6 +196,7 @@ export async function getTaskSettings(taskId: number): Promise<TaskSettingsData 
       token_gen_interval: toIntervalString(pick('token_gen_interval')), token_gen_max: pick('token_gen_max'),
       max_submission_number: pick('max_submission_number'), max_user_test_number: pick('max_user_test_number'),
       min_submission_interval: toIntervalString(pick('min_submission_interval')), min_user_test_interval: toIntervalString(pick('min_user_test_interval')),
+      evaluation_throttle_delay_s: pick('evaluation_throttle_delay_s'),
     },
     permissionKeys: [...permissions],
   };
