@@ -67,6 +67,9 @@ class FakeContest:
     """
 
     def __init__(self, name="contest"):
+        # Same id the service is built with: every projected task is filed under its contest's
+        # own id, so a fake contest without one cannot stand in for a real one.
+        self.id = 1
         self.name = name
         self.description = "the contest"
         self.start = datetime(2026, 1, 1)

@@ -81,6 +81,10 @@ class FakeContest:
     """A contest holding the given tasks and no participations."""
 
     def __init__(self, tasks):
+        # The projection files every task under the contest's own id, which is the handle the
+        # board scopes its columns by. The service here is built with contest_id=1, so the fake
+        # contest carries the same id rather than none at all.
+        self.id = 1
         self.name = "contest"
         self.description = "the contest"
         self.start = datetime(2026, 1, 1)
@@ -167,6 +171,9 @@ class TestProxyScoreGuard(unittest.TestCase):
             "short_name": name,
             "name": "The %s task" % name,
             "contest": "contest",
+            # The contest's own id travels beside its encoded name: it is the stable handle the
+            # reader scopes the columns it draws by, and a rename moves the name, not this.
+            "contest_id": 1,
             "order": num,
             "max_score": 100.0,
             "extra_headers": ["task_%s" % name],
