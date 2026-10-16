@@ -13,7 +13,6 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteId } from '@/lib/navigation/types';
 
-import { SubmissionCompareView } from './SubmissionCompareView';
 import { SubmissionSourceViewer } from './SubmissionSourceViewer';
 
 export interface SubmissionSummaryTabProps {
@@ -86,12 +85,11 @@ export function SubmissionSummaryTab({ summary, source, previous, permissionKeys
   return (
     <div className="space-y-6">
       <SummaryIdentity summary={summary} />
-      <SubmissionSourceViewer source={source} />
-      {previous ? (
-        <section id="submission-compare" className="scroll-mt-24">
-          <SubmissionCompareView current={source} previous={previous} />
-        </section>
-      ) : null}
+      {/* Why one mount for the source and its diff: the merged viewer answers both questions in one
+          scroll, so the section stays only as the anchor the previous-submission chip links to. */}
+      <section id="submission-compare" className="scroll-mt-24">
+        <SubmissionSourceViewer source={source} previous={previous ?? null} />
+      </section>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <OutcomeCard
           title={outcome.compilation}

@@ -74,7 +74,7 @@ const CANONICAL_RECORD_PATHS = [
   `${RECORD_DIR}/history/error.tsx`,
   `${RECORD_DIR}/history/page.tsx`,
   'src/components/submissions/SubmissionSummaryTab.tsx',
-  'src/components/submissions/SubmissionCompareView.tsx',
+  'src/components/submissions/SubmissionSourceViewer.tsx',
   'src/components/submissions/SubmissionResultsTab.tsx',
   'src/components/submissions/SubmissionLogsTab.tsx',
   'src/components/submissions/SubmissionEvaluationTab.tsx',

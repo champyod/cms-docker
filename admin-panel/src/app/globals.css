@@ -778,3 +778,65 @@
   z-index: 50;
   width: 20rem;
 }
+
+/*
+ * Syntax colours for the submission code surface.
+ * ────────────────────────────────────────────────────────────────────────────
+ * The panel used to import highlight.js's own github-dark theme, which paints the block
+ * #0d1117 — a colour of its own rather than the card's, and one that also carried a fixed
+ * light-on-dark palette the light theme could not survive. Mapping the token classes onto
+ * the same semantic tokens the rest of the panel reads keeps the block on whatever surface
+ * it sits in, in both themes and in high contrast.
+ *
+ * Only the classes the registered grammars actually emit are listed; an unmapped class
+ * inherits the base colour above rather than rendering unreadable.
+ */
+.source-code {
+  color: var(--card-foreground);
+}
+
+.source-code .hljs-comment,
+.source-code .hljs-quote {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.source-code .hljs-keyword,
+.source-code .hljs-selector-tag,
+.source-code .hljs-literal,
+.source-code .hljs-doctag,
+.source-code .hljs-meta {
+  color: var(--primary);
+}
+
+.source-code .hljs-string,
+.source-code .hljs-regexp,
+.source-code .hljs-addition,
+.source-code .hljs-attribute {
+  color: var(--success);
+}
+
+.source-code .hljs-number,
+.source-code .hljs-symbol,
+.source-code .hljs-bullet,
+.source-code .hljs-link {
+  color: var(--info);
+}
+
+.source-code .hljs-title,
+.source-code .hljs-built_in,
+.source-code .hljs-type {
+  color: var(--warning);
+}
+
+.source-code .hljs-deletion {
+  color: var(--destructive);
+}
+
+.source-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.source-code .hljs-strong {
+  font-weight: 700;
+}
