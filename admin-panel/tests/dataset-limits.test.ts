@@ -97,9 +97,15 @@ describe('the dataset limit parsers', () => {
     expect(parsed.message).toBe('Memory limit must be a whole number of megabytes');
   });
 
-  it('refuses a value past the panel cap with its own message', () => {
-    expect(parseTimeLimit(61).ok).toBe(false);
-    expect(parseMemoryLimitMb(4097).ok).toBe(false);
+  // Why no upper bound is asserted as accepted rather than refused: the classic's own guard is only
+  // `time_limit > 0` (`src/cms/grading/steps/evaluation.py:176`), so a panel-only cap would refuse to
+  // save a dataset whose stored limit already sits above it — a worse failure than a typo. A big value
+  // is a real limit.
+  it('accepts a large limit instead of inventing an upper bound', () => {
+    expect(parseTimeLimit(61)).toEqual({ ok: true, value: 61 });
+    expect(parseTimeLimit(600)).toEqual({ ok: true, value: 600 });
+    expect(parseMemoryLimitMb(4097)).toEqual({ ok: true, value: 4097 });
+    expect(parseMemoryLimitMb(65536)).toEqual({ ok: true, value: 65536 });
   });
 });
 
