@@ -1,5 +1,6 @@
 'use client';
 
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
 import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
@@ -157,6 +158,7 @@ function TokenConfigFields(props: TokensTabProps) {
 }
 
 export function TokensTab({ formData, setFormData, validationErrors }: TokensTabProps) {
+  const limits = useDictionary().limits;
   return (
     <div className="animate-in fade-in slide-in-from-right-4 space-y-6 duration-300">
       <TokenModeField formData={formData} setFormData={setFormData} />
@@ -164,6 +166,19 @@ export function TokensTab({ formData, setFormData, validationErrors }: TokensTab
       {formData.token_mode !== 'disabled' && (
         <TokenConfigFields formData={formData} setFormData={setFormData} validationErrors={validationErrors} />
       )}
+
+      {/* Why here: the two token caps are the limit fields this tab owns, so this is the button that
+          pushes them to the other kind (tasks). */}
+      <div className="flex justify-end">
+        <ApplyLimitsButton
+          kinds={['task']}
+          label={limits.apply.openButton}
+          patch={{
+            token_max_number: formData.token_max_number,
+            token_gen_max: formData.token_gen_max,
+          }}
+        />
+      </div>
     </div>
   );
 }

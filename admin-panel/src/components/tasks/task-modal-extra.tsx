@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
 import { LimitField } from '@/components/core/LimitField';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { TaskData } from '@/app/actions/tasks';
@@ -34,6 +35,18 @@ export function TokensTab({ formData, onChange }: TabProps): React.JSX.Element {
           <LimitField id="token_gen_max" label={limits.fields.token_gen_max} hint={limits.hints.token_gen_max} value={formData.token_gen_max ?? null} onChangeValue={(next) => onChange({ ...formData, token_gen_max: next })} unlimitedLabel={limits.unlimited} />
         </div>
       )}
+      {/* Why here: the two token caps are the limit fields this tab owns, so this is the button that
+          pushes them to the other kind (contests). */}
+      <div className="flex justify-end">
+        <ApplyLimitsButton
+          kinds={['contest']}
+          label={limits.apply.openButton}
+          patch={{
+            token_max_number: formData.token_max_number ?? null,
+            token_gen_max: formData.token_gen_max ?? null,
+          }}
+        />
+      </div>
     </div>
   );
 }
