@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { intervalToString, CONSTRAINT_TO_FIELD_MAP, getConstraintErrorMessage } from '@/lib/contest-validation';
-import { LIMIT_FIELDS, normalizeLimitValue, type LimitFieldName } from '@/lib/limits';
+import { normalizeLimitValue, type LimitFieldName } from '@/lib/limits';
 import { contestSortOrderBy } from '@/lib/contest-sorting';
 import type { ListSortInput } from '@/lib/list-sorting';
 
