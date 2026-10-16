@@ -867,6 +867,11 @@ model ranking_tasks {
   name            String   @db.VarChar
   short_name      String   @db.VarChar
   contest         String   @db.VarChar
+  /// The contest's own id, pushed with the projection. WHY beside the encoded contest *name*:
+  /// the reader scopes the columns it draws by the stable handle the config names, and a renamed
+  /// contest moves the encoded name while the id stays put, so scoping on the name alone orphans
+  /// every column of a renamed contest.
+  contest_id      Int?
   max_score       Float
   score_precision Int
   extra_headers   Json
@@ -875,6 +880,7 @@ model ranking_tasks {
   updated_at      DateTime @default(now())
 
   @@index([contest], map: "ix_ranking_tasks_contest")
+  @@index([contest_id], map: "ix_ranking_tasks_contest_id")
   @@index([display_order], map: "ix_ranking_tasks_order")
   @@map("ranking_tasks")
 }
@@ -1004,6 +1010,41 @@ model ranking_overrides {
   @@index([contest_id, active, target_kind], map: "ix_ranking_overrides_contest")
   @@index([target_kind, target_key], map: "ix_ranking_overrides_target")
   @@map("ranking_overrides")
+}
+
+/// What the board is told to show: one row per thing the operator has added to the shown set.
+/// The database is the single source of truth for the board's contents, so the ranking renders
+/// exactly these and never the CMS-classic "active contest" default.
+///
+/// WHY its own table rather than a `show` verb on ranking_overrides: **config** is what the board
+/// shows and **override** is the exception that wins over it, so they are two surfaces — folding
+/// the shown set into the override table would make one word do both jobs again, which is the
+/// defect this table removes.
+///
+/// WHY a (kind, key) pair rather than one column: a target is a pair, so a second kind of shown
+/// thing can be added without a migration, and a reader that does not know a kind refuses it
+/// visibly instead of guessing which namespace the key belongs to.
+model ranking_config {
+  id          BigInt    @id @default(autoincrement())
+  /// The namespace the key lives in. Only `contest` is read today: the board's unit of "what to
+  /// show" is the contest, and everything inside a shown contest is its projected content.
+  target_kind String    @db.VarChar
+  /// The target's handle. For `contest` it is the CMS contest id, spelled as text: the id
+  /// survives a contest rename, which the encoded contest *name* the projection files rows under
+  /// does not. Stored as text so a future kind's key needs no schema change.
+  target_key  String    @db.VarChar
+  reason      String?   @db.VarChar
+  /// Ending is not deleting: a row keeps its author and its reason, the audit shape
+  /// ranking_overrides already carries, so "who showed this and why" outlives the correction.
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  created_by  Int?
+  ended_at    DateTime?
+  ended_by    Int?
+
+  @@index([target_kind, target_key], map: "ix_ranking_config_target")
+  @@index([active], map: "ix_ranking_config_active")
+  @@map("ranking_config")
 }
 
 /// One service instance this deployment runs: what role it holds, which shard it
