@@ -5,38 +5,41 @@ const REAL_IP_HEADER = 'x-real-ip';
 const LOCAL_ADDRESS = 'local';
 
 /**
- * The client address the trusted edge reports: X-Real-IP when the edge sets it,
- * otherwise the last X-Forwarded-For entry, otherwise the local sentinel.
+ * The address the nearest proxy asserted for the caller, resolved in one place so
+ * the login buckets and the audit log can never disagree.
  *
- * WHY X-Real-IP first: every vhost sets it to the connection's own remote
- * address and overwrites whatever arrived, so it is the one value a caller
- * cannot choose. The login buckets and the audit log both derive from here, so
- * they cannot disagree about which address an action came from.
- *
- * WHY the last forwarded hop and not the first: the edge appends the address
- * it observed, so the rightmost entry is the one it added. The first entry is
- * whatever the caller sent, which would let a caller pick its own rate-limit
- * bucket — and on a path where no header arrives at all, the first entry used
- * to be the proxy's own address, which merged unrelated clients into one bucket.
+ * WHY the leftmost hop is never read: the vhosts that append (the primary and every
+ * generated route) keep whatever the caller sent in front of the address our own
+ * proxy appended, so the first entry is caller-supplied and would let a caller pick
+ * its own rate-limit bucket. The rightmost hop is the one the nearest proxy wrote,
+ * and X-Real-IP is the address every vhost in this stack asserts from $remote_addr
+ * for the same request — it survives a path that carries no forwarded chain. Only a
+ * request that reaches the panel with neither header has no caller to name, and that
+ * one is the local sentinel rather than a shared address.
  */
-export function parseForwardedFor(forwardedFor: string | null): string {
-  const hops = forwardedFor
-    ?.split(',')
-    .map((hop) => hop.trim())
-    .filter((hop) => hop.length > 0);
-  return hops?.[hops.length - 1] ?? LOCAL_ADDRESS;
+export function parseForwardedFor(
+  forwardedFor: string | null,
+  realIp: string | null = null,
+): string {
+  const asserted = rightmostHop(forwardedFor) ?? rightmostHop(realIp);
+  return asserted ?? LOCAL_ADDRESS;
 }
 
-/** The address as a trusted edge reports it, preferring the unspoofable header. */
-export function parseClientAddress(realIp: string | null, forwardedFor: string | null): string {
-  const direct = realIp?.trim();
-  return direct !== undefined && direct.length > 0 ? direct : parseForwardedFor(forwardedFor);
+/** The last non-empty entry of a comma-joined chain: the hop the nearest proxy appended. */
+function rightmostHop(value: string | null): string | null {
+  if (value === null) return null;
+  const hops = value.split(',');
+  for (let index = hops.length - 1; index >= 0; index -= 1) {
+    const hop = hops[index].trim();
+    if (hop !== '') return hop;
+  }
+  return null;
 }
 
 export async function resolveClientIp(): Promise<string> {
   const requestHeaders = await headers();
-  return parseClientAddress(
-    requestHeaders.get(REAL_IP_HEADER),
+  return parseForwardedFor(
     requestHeaders.get(FORWARDED_FOR_HEADER),
+    requestHeaders.get(REAL_IP_HEADER),
   );
 }

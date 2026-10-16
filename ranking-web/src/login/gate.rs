@@ -47,15 +47,66 @@ pub async fn gate(State(state): State<AppState>, request: Request, next: Next) -
 }
 
 /// The client address the counters are scoped to. Behind the domain proxy the socket
-/// is the proxy, so the forwarded header is the only address that means anything.
+/// is the proxy, so a forwarded header is the only address that means anything.
+///
+/// WHY the last hop and never the first: a vhost that appends to X-Forwarded-For
+/// keeps whatever the caller sent in front of the address our own proxy wrote, so
+/// the leftmost entry is caller-supplied and would let a caller choose its own
+/// lockout bucket. The rightmost entry is the hop the nearest proxy appended, and
+/// X-Real-IP is the address every vhost asserts from $remote_addr for the same
+/// request, which covers a path that carries no chain. Only a request with neither
+/// header has no caller to name.
 pub fn client_address(headers: &HeaderMap) -> String {
-    for name in ["x-forwarded-for", "x-real-ip"] {
-        if let Some(value) = headers.get(name).and_then(|value| value.to_str().ok()) {
-            let first = value.split(',').next().unwrap_or_default().trim();
-            if !first.is_empty() {
-                return first.to_string();
-            }
+    for value in [headers.get("x-forwarded-for"), headers.get("x-real-ip")]
+        .into_iter()
+        .flatten()
+        .filter_map(|value| value.to_str().ok())
+    {
+        if let Some(hop) = value.split(',').rev().find_map(|hop| {
+            let hop = hop.trim();
+            (!hop.is_empty()).then_some(hop)
+        }) {
+            return hop.to_string();
         }
     }
     "unknown".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn headers_of(entries: &[(&str, &str)]) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        for (name, value) in entries {
+            let name = name
+                .parse::<axum::http::HeaderName>()
+                .expect("a header name");
+            headers.insert(name, value.parse().expect("a header value"));
+        }
+        headers
+    }
+
+    #[test]
+    fn the_last_hop_is_the_address_and_the_first_is_never_trusted() {
+        let headers = headers_of(&[("x-forwarded-for", "1.2.3.4, 198.51.100.9")]);
+        assert_eq!(client_address(&headers), "198.51.100.9");
+    }
+
+    #[test]
+    fn an_empty_trailing_hop_skips_back_to_the_asserted_one() {
+        let headers = headers_of(&[("x-forwarded-for", "203.0.113.7, ")]);
+        assert_eq!(client_address(&headers), "203.0.113.7");
+    }
+
+    #[test]
+    fn a_path_with_no_chain_falls_back_to_the_real_address() {
+        let headers = headers_of(&[("x-real-ip", "203.0.113.7")]);
+        assert_eq!(client_address(&headers), "203.0.113.7");
+    }
+
+    #[test]
+    fn a_request_no_proxy_spoke_for_has_no_address_to_share() {
+        assert_eq!(client_address(&HeaderMap::new()), "unknown");
+    }
 }

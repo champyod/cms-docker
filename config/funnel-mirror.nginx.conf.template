@@ -103,10 +103,10 @@ server {
     proxy_read_timeout 90;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    # WHY: this vhost fronts the admin panel, which derives its login rate-limit
-    # key from the first entry of this header. Appending to a client-supplied
-    # value would let the client choose its own bucket, so assert the address
-    # the connection actually came from.
+    # WHY: this vhost fronts the admin panel, which keys its login rate limit on
+    # the address the nearest proxy asserted — the rightmost X-Forwarded-For hop,
+    # then X-Real-IP. Asserting $remote_addr hands it exactly one entry the caller
+    # never influenced, even with another proxy in front of this one.
     proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
 

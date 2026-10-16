@@ -24,11 +24,10 @@ PROXY_COMMON='
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
 
-# WHY: the admin panel reads the first entry of X-Forwarded-For and uses it as a
-# login rate-limit key. The append form above keeps whatever a client sent in
-# front of the real address, so a client could pick its own bucket and walk past
-# the lockout; a same-level second proxy_set_header does not replace the first,
-# so the panel's gateway needs its own block that asserts $remote_addr.
+# WHY: the admin panel keys its login rate limit on the address the nearest
+# proxy asserted — the rightmost X-Forwarded-For hop, then X-Real-IP. This
+# gateway asserts $remote_addr itself, so the panel sees exactly one entry the
+# caller never influenced, even when another proxy sits in front of it.
 PROXY_ADMIN_PANEL='
     client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
