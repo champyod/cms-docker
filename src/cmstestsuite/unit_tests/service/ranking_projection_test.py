@@ -94,6 +94,23 @@ class ProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ranking_projection.row("flags", "f0", {})
 
+    def test_the_contest_row_carries_the_contest_id(self):
+        # WHY the id travels at all: the projected key is the encoded contest name, so a
+        # renamed contest changes the key and a reader bound to the contest's id could no
+        # longer tell which projected row is its own.
+        row = ranking_projection.row("contests", "c1", {
+            "name": "the contest", "begin": 0, "end": 1, "score_precision": 0,
+            "contest_id": 7,
+        })
+        self.assertEqual(row["contest_id"], 7)
+        self.assertEqual(row["key"], "c1")
+
+    def test_a_contest_payload_without_the_id_is_refused(self):
+        with self.assertRaises(ValueError):
+            ranking_projection.row("contests", "c1", {
+                "name": "the contest", "begin": 0, "end": 1, "score_precision": 0,
+            })
+
     def test_the_upsert_casts_json_and_updates_on_conflict(self):
         statement = ranking_projection.upsert_statement("tasks")
         self.assertIn("CAST(:extra_headers AS jsonb)", statement)
@@ -103,7 +120,8 @@ class ProjectionTest(unittest.TestCase):
 
     def test_the_contest_statement_quotes_the_reserved_identifiers(self):
         statement = ranking_projection.upsert_statement("contests")
-        self.assertIn('(key, name, "begin", "end", score_precision)', statement)
+        # contest_id is carried like every other contest column, so the list names it too.
+        self.assertIn('(key, name, "begin", "end", score_precision, contest_id)', statement)
         self.assertIn('"begin" = EXCLUDED."begin"', statement)
         self.assertIn('"end" = EXCLUDED."end"', statement)
         self.assertIn(":begin", statement)

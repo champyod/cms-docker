@@ -15,11 +15,22 @@ function appearanceCopy(): AppearanceCopy {
   return parsed.ranking.appearance;
 }
 
-describe('ranking appearance schema', () => {
-  const fields = buildAppearanceSections(appearanceCopy()).flatMap((section) => section.fields);
+/** The contests the page reads, as it hands them to the schema. */
+const CONTESTS = [
+  { value: '9', label: 'POSN Oct 2026 - d2' },
+  { value: '3', label: 'POSN Oct 2026 - d1' },
+];
 
-  it('declares every editable appearance field, the two JSON columns included', () => {
+function sections(): ReturnType<typeof buildAppearanceSections> {
+  return buildAppearanceSections(appearanceCopy(), CONTESTS);
+}
+
+describe('ranking appearance schema', () => {
+  const fields = sections().flatMap((section) => section.fields);
+
+  it('declares every editable appearance field, the contest and the two JSON columns included', () => {
     expect(fields.map((field) => field.name)).toEqual([
+      'contestId',
       'title',
       'subtitle',
       'organisation',
@@ -42,6 +53,13 @@ describe('ranking appearance schema', () => {
     }
   });
 
+  it('offers the deployment contests to choose from, plus the unnamed one', () => {
+    const contest = fields.find((field) => field.name === 'contestId');
+
+    expect(contest?.kind).toBe('select');
+    expect(contest?.options).toEqual([{ value: '', label: appearanceCopy().contestNone }, ...CONTESTS]);
+  });
+
   it('renders the free-form JSON columns as json controls', () => {
     expect(fields.filter((field) => field.kind === 'json').map((field) => field.name)).toEqual([
       'theme',
@@ -51,8 +69,8 @@ describe('ranking appearance schema', () => {
   });
 
   it('groups the fields into titled sections', () => {
-    const sections = buildAppearanceSections(appearanceCopy());
-    expect(sections.map((section) => section.id)).toEqual(['identity', 'display', 'advanced']);
-    for (const section of sections) expect(section.title.length).toBeGreaterThan(0);
+    const built = sections();
+    expect(built.map((section) => section.id)).toEqual(['identity', 'display', 'advanced']);
+    for (const section of built) expect(section.title.length).toBeGreaterThan(0);
   });
 });

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use cms_ranking::store::Appearance;
+use cms_ranking::store::{Appearance, RankingContest};
 use cms_ranking::surface::{credits_from_file, logo_path, render_page};
 
 fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearance {
@@ -17,28 +17,107 @@ fn appearance(title: Option<&str>, theme: Option<serde_json::Value>) -> Appearan
         credits_text: None,
         credits: None,
         perspectives: None,
+        contest_id: None,
+        wording_overrides: None,
         access_mode: "public".to_string(),
     }
 }
 
+/// The record the header reads its name and dates from.
+fn contest(name: &str, begin: i32, end: i32) -> RankingContest {
+    RankingContest {
+        name: name.to_string(),
+        begin,
+        end,
+    }
+}
+
+/// A settings row that names a contest, with the operator's wording when they wrote any.
+fn named(contest_id: i64, wording: Option<serde_json::Value>) -> Appearance {
+    Appearance {
+        contest_id: Some(contest_id),
+        wording_overrides: wording,
+        ..appearance(None, None)
+    }
+}
+
+/// 2026-10-16 00:00 UTC and the following midnight.
+const DAY_ONE: i32 = 1_792_108_800;
+const DAY_TWO: i32 = 1_792_195_200;
+
 #[test]
-fn the_panel_title_replaces_the_default_one() {
-    let rendered =
-        render_page(Some(&appearance(Some("IOI 2026"), None))).expect("the page renders");
-    assert!(rendered.contains("<title>IOI 2026</title>"));
+fn the_board_header_names_the_contest_the_settings_name() {
+    let row = named(9, None);
+    let rendered = render_page(
+        Some(&row),
+        Some(&contest("POSN Oct 2026 Day 2", DAY_ONE, DAY_TWO)),
+    )
+    .expect("the page renders");
+    assert!(rendered.contains("<title>POSN Oct 2026 Day 2</title>"));
     assert!(!rendered.contains("<title>Ranking</title>"));
+    assert!(rendered.contains("<h1 class=\"board-title\">POSN Oct 2026 Day 2</h1>"));
+    assert!(rendered.contains("<p class=\"board-subtitle\">2026-10-16 – 2026-10-17</p>"));
+}
+
+#[test]
+fn an_explicit_override_words_the_header_instead() {
+    let wording = serde_json::json!({ "9": { "title": "Day Two", "subtitle": "Round two" } });
+    let row = named(9, Some(wording));
+    let rendered = render_page(
+        Some(&row),
+        Some(&contest("POSN Oct 2026 Day 2", DAY_ONE, DAY_TWO)),
+    )
+    .expect("the page renders");
+    assert!(rendered.contains("<title>Day Two</title>"));
+    assert!(rendered.contains("<p class=\"board-subtitle\">Round two</p>"));
+}
+
+/// The regression the keying exists for: the words of a contest the board no longer serves
+/// must not reach the header of the one it names.
+#[test]
+fn the_override_of_another_contest_does_not_word_this_header() {
+    let wording = serde_json::json!({ "3": { "title": "ครั้งที่ 1", "subtitle": "วันที่ 1" } });
+    let row = named(9, Some(wording));
+    let rendered = render_page(
+        Some(&row),
+        Some(&contest("POSN Oct 2026 Day 2", DAY_ONE, DAY_TWO)),
+    )
+    .expect("the page renders");
+    assert!(!rendered.contains("ครั้งที่ 1"));
+    assert!(rendered.contains("<title>POSN Oct 2026 Day 2</title>"));
 }
 
 #[test]
 fn the_default_title_is_kept_when_the_panel_names_none() {
-    let rendered = render_page(None).expect("the page renders");
+    let rendered = render_page(None, None).expect("the page renders");
+    assert!(rendered.contains("<title>Ranking</title>"));
+}
+
+/// The row's own free text is not the header any more: a deployment that has not named a
+/// contest yet shows the default rather than copy that may describe another day.
+#[test]
+fn a_row_that_names_no_contest_words_nothing() {
+    let rendered =
+        render_page(Some(&appearance(Some("IOI 2026"), None)), None).expect("the page renders");
+    assert!(rendered.contains("<title>Ranking</title>"));
+    assert!(!rendered.contains("id=\"BoardHeading\""));
+}
+
+/// A named contest the projection has no record for yet leaves the default rather than a
+/// heading invented from the id.
+#[test]
+fn a_contest_with_no_projected_record_leaves_the_default_title() {
+    let rendered = render_page(Some(&named(9, None)), None).expect("the page renders");
     assert!(rendered.contains("<title>Ranking</title>"));
 }
 
 #[test]
 fn a_title_is_escaped_rather_than_injected() {
-    let rendered =
-        render_page(Some(&appearance(Some("<script>x</script>"), None))).expect("the page renders");
+    let rendered = render_page(
+        Some(&named(9, None)),
+        Some(&contest("<script>x</script>", DAY_ONE, DAY_TWO)),
+    )
+    .expect("the page renders");
     assert!(!rendered.contains("<script>x"));
     // Askama's HTML escaper spells the brackets as numeric entities; what matters
     // is that the tag never reaches the document as markup.
@@ -48,7 +127,8 @@ fn a_title_is_escaped_rather_than_injected() {
 #[test]
 fn a_theme_becomes_custom_properties_before_the_head_closes() {
     let theme = serde_json::json!({ "accent": "#00A3DA", "background": "#101010" });
-    let rendered = render_page(Some(&appearance(None, Some(theme)))).expect("the page renders");
+    let rendered =
+        render_page(Some(&appearance(None, Some(theme))), None).expect("the page renders");
     assert!(rendered.contains("--ranking-accent: #00A3DA;"));
     assert!(rendered.contains("--ranking-background: #101010;"));
     assert!(rendered.contains("</style></head>"));
@@ -57,7 +137,8 @@ fn a_theme_becomes_custom_properties_before_the_head_closes() {
 #[test]
 fn a_theme_value_that_could_break_out_of_the_declaration_is_dropped() {
     let theme = serde_json::json!({ "accent": "#fff} body { display: none", "safe": "#123456" });
-    let rendered = render_page(Some(&appearance(None, Some(theme)))).expect("the page renders");
+    let rendered =
+        render_page(Some(&appearance(None, Some(theme))), None).expect("the page renders");
     assert!(!rendered.contains("display: none"));
     assert!(rendered.contains("--ranking-safe: #123456;"));
 }
@@ -66,7 +147,7 @@ fn a_theme_value_that_could_break_out_of_the_declaration_is_dropped() {
 /// answer is always a whole document rather than whatever was on disk.
 #[test]
 fn the_page_is_a_complete_document() {
-    let rendered = render_page(None).expect("the page renders");
+    let rendered = render_page(None, None).expect("the page renders");
     assert!(rendered.starts_with("<!DOCTYPE html>"));
     assert!(rendered.trim_end().ends_with("</html>"));
 }
@@ -83,8 +164,11 @@ fn notice(footer: Option<&str>, credits: Option<&str>) -> Appearance {
 /// the page in the rendered HTML. They land inside the byline block it already has.
 #[test]
 fn the_panel_footer_lands_inside_the_license_notice() {
-    let rendered = render_page(Some(&notice(Some("Hosted by ACME"), Some("Icons by Foo"))))
-        .expect("the page renders");
+    let rendered = render_page(
+        Some(&notice(Some("Hosted by ACME"), Some("Icons by Foo"))),
+        None,
+    )
+    .expect("the page renders");
     assert!(rendered.contains("<div id=\"ranking-footer\">Hosted by ACME</div>"));
     assert!(rendered.contains("<div id=\"ranking-credits\">Icons by Foo</div>"));
     let notice_at = rendered.find("LicenseNotice").expect("the notice is there");
@@ -97,15 +181,15 @@ fn the_panel_footer_lands_inside_the_license_notice() {
 
 #[test]
 fn a_footer_line_is_escaped_rather_than_injected() {
-    let rendered =
-        render_page(Some(&notice(Some("<script>x</script>"), None))).expect("the page renders");
+    let rendered = render_page(Some(&notice(Some("<script>x</script>"), None)), None)
+        .expect("the page renders");
     assert!(!rendered.contains("<script>x"));
     assert!(rendered.contains("&lt;script&gt;"));
 }
 
 #[test]
 fn an_empty_footer_adds_no_block() {
-    let rendered = render_page(Some(&notice(Some("  "), None))).expect("the page renders");
+    let rendered = render_page(Some(&notice(Some("  "), None)), None).expect("the page renders");
     assert!(!rendered.contains("id=\"ranking-footer\""));
     assert!(!rendered.contains("id=\"ranking-credits\""));
 }
@@ -208,35 +292,31 @@ fn the_panels_credit_list_wins_over_the_vendored_one() {
     );
 }
 
-fn heading(title: Option<&str>, subtitle: Option<&str>, organisation: Option<&str>) -> Appearance {
+fn with_organisation(organisation: Option<&str>) -> Appearance {
     Appearance {
-        title: title.map(str::to_string),
-        subtitle: subtitle.map(str::to_string),
         organisation: organisation.map(str::to_string),
-        ..appearance(None, None)
+        ..named(9, None)
     }
 }
 
-/// /config carries only two keys, so the panel's title, subtitle and organisation reach
+/// /config carries only two keys, so the contest the settings name and the organisation reach
 /// the reader through the rendered body, not through a wider object.
 #[test]
-fn the_panel_heading_reaches_the_body() {
-    let rendered = render_page(Some(&heading(
-        Some("IOI 2026"),
-        Some("Day 2"),
-        Some("ACME"),
-    )))
+fn the_named_contest_and_the_organisation_reach_the_body() {
+    let rendered = render_page(
+        Some(&with_organisation(Some("ACME"))),
+        Some(&contest("IOI 2026", DAY_ONE, DAY_TWO)),
+    )
     .expect("the page renders");
     assert!(rendered.contains("<div id=\"BoardHeading\">"));
     assert!(rendered.contains("<h1 class=\"board-title\">IOI 2026</h1>"));
-    assert!(rendered.contains("<p class=\"board-subtitle\">Day 2</p>"));
     assert!(rendered.contains("<div class=\"board-organisation\">ACME</div>"));
 }
 
-/// The heading block is opt-in: a panel that names none renders no empty box.
+/// The heading block is opt-in: a row that names no contest renders no empty box.
 #[test]
 fn an_unset_heading_adds_no_block() {
-    let rendered = render_page(Some(&appearance(None, None))).expect("the page renders");
+    let rendered = render_page(Some(&appearance(None, None)), None).expect("the page renders");
     assert!(!rendered.contains("id=\"BoardHeading\""));
 }
 
@@ -244,8 +324,11 @@ fn an_unset_heading_adds_no_block() {
 /// "Ranking", so the served title has to be there for it to read.
 #[test]
 fn the_body_carries_the_configured_title() {
-    let rendered =
-        render_page(Some(&appearance(Some("IOI 2026"), None))).expect("the page renders");
+    let rendered = render_page(
+        Some(&named(9, None)),
+        Some(&contest("IOI 2026", DAY_ONE, DAY_TWO)),
+    )
+    .expect("the page renders");
     assert!(rendered.contains("data-board-title=\"IOI 2026\""));
 }
 
@@ -257,9 +340,9 @@ fn the_body_carries_the_anonymous_flag() {
         columns: Some(serde_json::json!({ "anonymous": true })),
         ..appearance(None, None)
     };
-    let rendered = render_page(Some(&on)).expect("the page renders");
+    let rendered = render_page(Some(&on), None).expect("the page renders");
     assert!(rendered.contains("data-board-anonymous=\"true\""));
-    let off = render_page(Some(&appearance(None, None))).expect("the page renders");
+    let off = render_page(Some(&appearance(None, None)), None).expect("the page renders");
     assert!(off.contains("data-board-anonymous=\"false\""));
 }
 
@@ -274,7 +357,7 @@ fn with_perspectives(value: serde_json::Value) -> Appearance {
 /// bar draws the built-in defaults rather than nothing.
 #[test]
 fn the_page_always_carries_a_perspective_config() {
-    let rendered = render_page(None).expect("the page renders");
+    let rendered = render_page(None, None).expect("the page renders");
     assert!(rendered.contains("window.RankingPerspectives = {"));
     assert!(rendered.contains("\"default\":\"board\""));
     assert!(rendered.contains("\"overflow\":\"wrap\""));
@@ -287,7 +370,7 @@ fn an_unknown_perspective_id_never_reaches_the_page() {
     let row = with_perspectives(serde_json::json!({
         "tabs": [ { "id": "board" }, { "id": "evil" } ]
     }));
-    let rendered = render_page(Some(&row)).expect("the page renders");
+    let rendered = render_page(Some(&row), None).expect("the page renders");
     assert!(rendered.contains("\"id\":\"board\""));
     assert!(!rendered.contains("evil"));
 }
@@ -299,6 +382,6 @@ fn a_perspective_value_cannot_close_the_script_tag() {
     let row = with_perspectives(serde_json::json!({
         "tabs": [ { "id": "board", "options": { "x": "</script><img src=x>" } } ]
     }));
-    let rendered = render_page(Some(&row)).expect("the page renders");
+    let rendered = render_page(Some(&row), None).expect("the page renders");
     assert!(!rendered.contains("</script><img"), "{rendered}");
 }

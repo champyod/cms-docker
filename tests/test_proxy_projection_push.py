@@ -20,7 +20,8 @@ from cms.service.ProxyService import CannotSendError, ProxyExecutor, \
     ProxyService  # noqa: E402
 
 CONTEST_PAYLOADS = {
-    "c1": {"name": "contest", "begin": 0, "end": 1, "score_precision": 0}}
+    "c1": {"name": "contest", "begin": 0, "end": 1, "score_precision": 0,
+           "contest_id": 1}}
 TEAM_PAYLOADS = {"t1": {"name": "Team"}}
 UNKNOWN_RESOURCE = "nonesuch"
 

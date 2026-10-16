@@ -4,7 +4,7 @@ use askama::Template;
 
 use serde::Serialize;
 
-use crate::store::Appearance;
+use crate::store::{Appearance, BoardHeader, RankingContest};
 
 /// The licence offer, in the shape the vendored credits.html reads: project and
 /// license are objects (name, url, spdx_id), not strings, and surface is the asset
@@ -92,14 +92,25 @@ struct RankingPage<'a> {
 /// The title the page ships with, used when the panel names none.
 const DEFAULT_TITLE: &str = "Ranking";
 
-/// Applies what the panel owns: the title, the theme and the footer lines.
+/// Applies what the panel owns: the header the settings name, the theme and the footer lines.
 /// /config carries only the two keys the capture records, so the rest reaches the
 /// reader through the rendered HTML rather than through a wider object.
-pub fn render_page(appearance: Option<&Appearance>) -> Result<String, SurfaceError> {
-    let panel_title = present(appearance.and_then(|row| row.title.as_deref()));
-    let title = panel_title.unwrap_or(DEFAULT_TITLE);
-    let heading = panel_title.unwrap_or("");
-    let subtitle = present(appearance.and_then(|row| row.subtitle.as_deref())).unwrap_or("");
+///
+/// WHY the header is not read from the settings row's own copy: that copy is free text the row
+/// kept across a contest switch, which is how a day-2 board announced day 1. The words come from
+/// the contest the row names, with the operator's per-contest override when they wrote one.
+pub fn render_page(
+    appearance: Option<&Appearance>,
+    contest: Option<&RankingContest>,
+) -> Result<String, SurfaceError> {
+    let header = BoardHeader::resolve(appearance, contest);
+    let heading = header.as_ref().map_or("", |words| words.title.as_str());
+    let subtitle = header.as_ref().map_or("", |words| words.subtitle.as_str());
+    let title = if heading.is_empty() {
+        DEFAULT_TITLE
+    } else {
+        heading
+    };
     let organisation =
         present(appearance.and_then(|row| row.organisation.as_deref())).unwrap_or("");
     let anonymous = appearance.is_some_and(Appearance::anonymous);

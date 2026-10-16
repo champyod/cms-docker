@@ -839,8 +839,12 @@ model ranking_contests {
   begin           Int
   end             Int
   score_precision Int
+  /// The contest's own id, pushed with the projection. The projected key is the encoded
+  /// contest *name*, so this is the only handle that survives a rename.
+  contest_id      Int?
   updated_at      DateTime @default(now())
 
+  @@index([contest_id], map: "ix_ranking_contests_contest_id")
   @@map("ranking_contests")
 }
 
@@ -936,6 +940,13 @@ model ranking_settings {
   title         String?  @db.VarChar
   subtitle      String?  @db.VarChar
   organisation  String?  @db.VarChar
+  /// The contest the board names. The header renders that record's name and dates, so the
+  /// copy cannot describe another day than the one this row points at.
+  contest_id    Int?
+  /// The explicit per-contest wording override, keyed by the contest it is for:
+  /// `{ "<contestId>": { "title": "...", "subtitle": "..." } }`. Only the entries an operator
+  /// wrote exist; an absent entry means the contest's own name and dates are the words.
+  wording_overrides Json?
   /// The short display name shown below the logo on the public scoreboard.
   /// When absent, the scoreboard falls back to the title field.
   display_name  String?  @db.VarChar

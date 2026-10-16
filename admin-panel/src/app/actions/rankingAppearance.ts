@@ -7,6 +7,13 @@ import { Prisma, type ranking_settings } from '@prisma/client';
 import { recordAudit } from '@/lib/audit';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import {
+  assertWordingHasContest,
+  parseContestId,
+  readWording,
+  wordingOverrides,
+  type WordingFields,
+} from '@/lib/ranking-appearance';
 
 // The appearance lives in one row, keyed so a second can never be written by accident.
 const SETTINGS_ID = 1;
@@ -18,9 +25,7 @@ const PERSPECTIVE_IDS: readonly string[] = ["board", "teams", "tasks", "scores",
 const OVERFLOW_MODES: readonly string[] = ["wrap", "scroll", "menu"];
 
 /** The appearance columns the board reads. The credit list is edited on its own. */
-export interface AppearanceFields {
-  title: string;
-  subtitle: string;
+export interface AppearanceFields extends WordingFields {
   organisation: string;
   /** Short display name shown below the logo on ranking board. Falls back to title if empty. */
   displayName: string;
@@ -41,6 +46,7 @@ export interface RankingAppearance extends AppearanceFields {
 }
 
 const DEFAULTS: RankingAppearance = {
+  contestId: '',
   title: '',
   subtitle: '',
   organisation: '',
@@ -66,9 +72,12 @@ export async function getRankingAppearance(): Promise<RankingAppearance> {
 
 /** The stored row as the form reads it, so a write can answer with what it actually kept. */
 function toAppearance(row: RankingSettingsRow): RankingAppearance {
+  const contestId = row.contest_id === null ? '' : String(row.contest_id);
+  const wording = readWording(row.wording_overrides, contestId);
   return {
-    title: row.title ?? '',
-    subtitle: row.subtitle ?? '',
+    contestId,
+    title: wording.title,
+    subtitle: wording.subtitle,
     organisation: row.organisation ?? '',
     displayName: row.display_name ?? '',
     accessMode: row.access_mode === 'protected' ? 'protected' : 'public',
@@ -216,6 +225,16 @@ function formatJson(value: unknown): string {
   return value === null || value === undefined ? '' : JSON.stringify(value, null, 2);
 }
 
+/**
+ * Prisma tells a JSON null from SQL NULL, and an absent override is the JSON one: an emptied
+ * override must not read back as a stored map.
+ */
+function toJsonColumn(
+  value: Prisma.InputJsonValue | null,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  return value === null ? Prisma.JsonNull : value;
+}
+
 /** Shape-checks the stored config so a bad tab is an error, not a silently ignored one. */
 function parsePerspectives(raw: string): Prisma.InputJsonValue | typeof Prisma.JsonNull {
   const trimmed = raw.trim();
@@ -306,6 +325,7 @@ function readAnonymous(columns: unknown): boolean {
 function readForm(formData: FormData): AppearanceFields {
   const text = (name: string) => String(formData.get(name) ?? '').trim();
   return {
+    contestId: text("contestId"),
     title: text("title"),
     subtitle: text("subtitle"),
     organisation: text("organisation"),
@@ -322,9 +342,14 @@ function readForm(formData: FormData): AppearanceFields {
 }
 
 function toRow(appearance: AppearanceFields) {
+  const contestId = parseContestId(appearance.contestId);
+  assertWordingHasContest(appearance, contestId);
   return {
-    title: appearance.title || null,
-    subtitle: appearance.subtitle || null,
+    // The contest is named, not copied: the board reads its name and dates from the projected
+    // record, and the legacy title/subtitle columns are left as they are rather than written
+    // again as a second source of the same words.
+    contest_id: contestId,
+    wording_overrides: toJsonColumn(wordingOverrides(appearance)),
     organisation: appearance.organisation || null,
     display_name: appearance.displayName || null,
     access_mode: appearance.accessMode,

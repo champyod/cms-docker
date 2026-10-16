@@ -426,7 +426,12 @@ class ProxyService(TriggeredService[ProxyOperation, ProxyExecutor]):
                 "name": contest.description,
                 "begin": int(make_timestamp(contest.start)),
                 "end": int(make_timestamp(contest.stop)),
-                "score_precision": contest.score_precision}
+                "score_precision": contest.score_precision,
+                # The projected key is the encoded contest name, so the row also carries the
+                # contest's own id: a rename changes the key, and without the id a ranking that
+                # was configured with the contest's id could no longer tell which projected row
+                # is its own — both to word its header and to filter the columns it draws.
+                "contest_id": self.contest_id}
 
             users = dict()
             teams = dict()

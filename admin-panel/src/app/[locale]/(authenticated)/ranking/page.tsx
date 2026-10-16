@@ -6,9 +6,8 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { SelectField } from '@/components/core/FormField';
 import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
-import { RankingTable } from '@/components/contests/contest-detail/RankingTable';
+import { RankingBoardSurface } from '@/components/ranking/RankingBoardSurface';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
-import { RankingBoardGraph } from '@/components/ranking/RankingBoardGraph';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
 import { LiveRefresh } from '@/lib/live/live-refresh';
@@ -61,6 +60,7 @@ export default async function RankingBoardPage({
     selected === null ? Promise.resolve(null) : getRanking(selected.id),
     getRankingDiagnostics(),
   ]);
+  const named = contests.find((entry) => String(entry.id) === appearance.contestId) ?? null;
   const accessValue =
     appearance.accessMode === 'protected'
       ? copy.appearance.accessProtected
@@ -81,6 +81,10 @@ export default async function RankingBoardPage({
           <BoardEntry
             term={copy.appearance.displayNameField}
             value={appearance.displayName || EMPTY_VALUE}
+          />
+          <BoardEntry
+            term={copy.appearance.contestField}
+            value={named?.name ?? copy.appearance.contestNone}
           />
           <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
           <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
@@ -144,26 +148,16 @@ export default async function RankingBoardPage({
                 Preview only — selecting a contest does not change the live public scoreboard.
               </p>
             </form>
-            <RankingTable ranking={board} />
-            {board && board.ranking.length > 0 ? (
-              <div className="border-t border-border/80 pt-6">
-                <RankingBoardGraph
-                  entries={board.ranking.slice(0, 20).map((entry) => ({
-                    rank: entry.rank,
-                    username: entry.user.username,
-                    displayName: entry.user.username,
-                    totalScore: entry.totalScore,
-                  }))}
-                  title="Score Progress Overview (First Board Page)"
-                />
-              </div>
-            ) : null}
+            <RankingBoardSurface
+              ranking={board}
+              graphTitle="Score Progress Overview (First Board Page)"
+            />
           </>
         )}
       </Card>
       <RankingLogoCard
         canManage={effective.has('ranking:update')}
-        displayName={appearance.displayName || appearance.title}
+        displayName={appearance.displayName || appearance.title || named?.name || ''}
       />
     </Stack>
   );

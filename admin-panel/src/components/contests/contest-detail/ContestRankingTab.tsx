@@ -7,17 +7,13 @@ import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import {
-  RankingTable,
-  type RankingEntry,
-  type TaskCol,
-} from '@/components/contests/contest-detail/RankingTable';
-import { RankingBoardGraph } from '@/components/ranking/RankingBoardGraph';
+  RankingBoardSurface,
+  type RankingBoardPayload,
+} from '@/components/ranking/RankingBoardSurface';
 
 export type ContestRankingTabProps = {
   contestId: number;
 };
-
-type RankingPayload = { ranking: RankingEntry[]; tasks: TaskCol[] };
 
 /**
  * The contest's own scoreboard.
@@ -29,10 +25,10 @@ type RankingPayload = { ranking: RankingEntry[]; tasks: TaskCol[] };
  */
 export function ContestRankingTab({ contestId }: ContestRankingTabProps): React.JSX.Element {
   const dict = useDictionary();
-  const [ranking, setRanking] = useState<RankingPayload | null>(null);
+  const [ranking, setRanking] = useState<RankingBoardPayload | null>(null);
 
   const load = async (): Promise<void> => {
-    setRanking((await getRanking(contestId)) as RankingPayload);
+    setRanking((await getRanking(contestId)) as RankingBoardPayload);
   };
 
   const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
@@ -54,24 +50,9 @@ export function ContestRankingTab({ contestId }: ContestRankingTabProps): React.
     );
   }
 
-  const firstPageSlice = ranking?.ranking.slice(0, 20).map((entry) => ({
-    rank: entry.rank,
-    username: entry.user.username,
-    displayName: entry.user.username,
-    totalScore: entry.totalScore,
-  })) ?? [];
-
   return (
-    <div className="w-full space-y-6">
-      <RankingTable ranking={ranking} />
-      {firstPageSlice.length > 0 ? (
-        <div className="w-full rounded-xl border border-border bg-card p-6 shadow-xs">
-          <RankingBoardGraph
-            entries={firstPageSlice}
-            title="Score Progress Overview"
-          />
-        </div>
-      ) : null}
+    <div className="w-full">
+      <RankingBoardSurface ranking={ranking} graphTitle="Score Progress Overview" />
     </div>
   );
 }

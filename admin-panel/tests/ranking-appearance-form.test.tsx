@@ -30,6 +30,7 @@ MotionGlobalConfig.skipAnimations = true;
 type AppearanceCopy = typeof en.ranking.appearance;
 
 const STORED: RankingAppearance = {
+  contestId: '9',
   title: 'POSN Oct 2026',
   subtitle: 'Day 2',
   organisation: 'POSN',
@@ -50,12 +51,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+/** The contests the page offers, as the appearance page reads them. */
+const CONTESTS = [
+  { value: '9', label: 'POSN Oct 2026 - d2' },
+  { value: '3', label: 'POSN Oct 2026 - d1' },
+];
+
 function renderForm(appearance: RankingAppearance = STORED): HTMLElement {
   const { container } = render(
     <AppearanceForm
       copy={en.ranking.appearance as AppearanceCopy}
       appearance={appearance}
-      sections={buildAppearanceSections(en.ranking.appearance as AppearanceCopy)}
+      sections={buildAppearanceSections(en.ranking.appearance as AppearanceCopy, CONTESTS)}
     />,
   );
   return container;
@@ -65,6 +72,12 @@ function field(container: HTMLElement, name: string): HTMLInputElement {
   const input = container.querySelector<HTMLInputElement>(`input[name="${name}"]`);
   if (input === null) throw new Error(`the ${name} control is missing`);
   return input;
+}
+
+function selectField(container: HTMLElement, name: string): HTMLSelectElement {
+  const select = container.querySelector<HTMLSelectElement>(`select[name="${name}"]`);
+  if (select === null) throw new Error(`the ${name} select is missing`);
+  return select;
 }
 
 function saveButton(container: HTMLElement): HTMLButtonElement {
@@ -136,5 +149,23 @@ describe('ranking appearance form', () => {
     const theme = container.querySelector('[data-field="theme"]');
     expect(theme?.getAttribute('data-span')).toBe('full');
     expect(theme?.className).toContain('md:col-span-2');
+  });
+
+  it('picks the contest the board names from the page list, not a free-typed id', async () => {
+    const container = renderForm();
+    const select = selectField(container, 'contestId');
+
+    expect(Array.from(select.options).map((option) => option.value)).toEqual(['', '9', '3']);
+    expect(select.value).toBe('9');
+
+    fireEvent.change(select, { target: { value: '3' } });
+    mocks.updateRankingAppearance.mockResolvedValue({
+      success: true,
+      appearance: { ...STORED, contestId: '3' },
+    });
+    fireEvent.click(saveButton(container));
+
+    await waitFor(() => expect(mocks.updateRankingAppearance).toHaveBeenCalledOnce());
+    expect(mocks.updateRankingAppearance.mock.calls[0][0]).toMatchObject({ contestId: '3' });
   });
 });

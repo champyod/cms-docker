@@ -132,7 +132,20 @@ pub struct Appearance {
     /// The perspective tabs the panel enabled, in order. Normalised before it
     /// reaches the page; see crate::perspectives.
     pub perspectives: Option<serde_json::Value>,
+    /// The contest the board names. Its record supplies the header's name and dates, so
+    /// the words cannot describe a day the board does not serve.
+    pub contest_id: Option<i64>,
+    /// The explicit wording override per contest, keyed by the contest id it is for. An
+    /// absent entry means the contest's own name and dates are the words.
+    pub wording_overrides: Option<serde_json::Value>,
     pub access_mode: String,
+}
+
+/// The operator's words for one contest, when they wrote any.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Wording {
+    pub title: Option<String>,
+    pub subtitle: Option<String>,
 }
 
 impl Appearance {
@@ -155,6 +168,135 @@ impl Appearance {
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(false)
     }
+
+    /// The wording the operator wrote for the named contest, or empty.
+    ///
+    /// WHY the override is keyed by contest id rather than held flat: the settings row names
+    /// one contest, and a flat copy would keep describing the contest the board used to serve
+    /// after the name moved — which is the bug this keying exists to rule out.
+    pub fn wording_for(&self, contest_id: i64) -> Wording {
+        let entry = self
+            .wording_overrides
+            .as_ref()
+            .and_then(|overrides| overrides.get(contest_id.to_string()));
+        let read = |field: &str| {
+            entry
+                .and_then(|value| value.get(field))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        };
+        Wording {
+            title: read("title"),
+            subtitle: read("subtitle"),
+        }
+    }
+}
+
+/// The contest the board names, as the projection holds it. `name` is the contest's
+/// description, which is the human line the push files; `begin` and `end` are its
+/// start and stop as unix seconds.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct RankingContest {
+    pub name: String,
+    pub begin: i32,
+    pub end: i32,
+}
+
+/// The header of the board the settings name, with the operator's own words where they wrote any.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoardHeader {
+    pub title: String,
+    pub subtitle: String,
+}
+
+impl BoardHeader {
+    /// Resolves the words from the named contest: the explicit override first, the contest's
+    /// own record otherwise.
+    ///
+    /// WHY the contest row may be missing without an error: a deployment whose push has not
+    /// carried the id yet has no record to read, and inventing a heading there would be the
+    /// same lie in a new place. The caller renders the default title instead.
+    pub fn resolve(
+        appearance: Option<&Appearance>,
+        contest: Option<&RankingContest>,
+    ) -> Option<Self> {
+        let contest_id = appearance?.contest_id?;
+        let wording = appearance?.wording_for(contest_id);
+        let title = wording
+            .title
+            .as_deref()
+            .and_then(non_blank)
+            .or_else(|| contest.and_then(|row| non_blank(&row.name)))
+            .unwrap_or_default();
+        // The dates are built rather than borrowed, so the fallback resolves to a String
+        // before the two branches meet.
+        let subtitle = match wording.subtitle.as_deref().and_then(non_blank) {
+            Some(written) => written.to_string(),
+            None => contest.map(contest_dates).unwrap_or_default(),
+        };
+        Some(BoardHeader {
+            title: title.to_string(),
+            subtitle,
+        })
+    }
+}
+
+fn non_blank(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+/// The contest's own dates, so the header says which day it serves without anyone typing it.
+fn contest_dates(contest: &RankingContest) -> String {
+    let begin = utc_date(i64::from(contest.begin));
+    let end = utc_date(i64::from(contest.end));
+    if begin == end {
+        begin
+    } else {
+        format!("{begin} – {end}")
+    }
+}
+
+/// The UTC calendar date of a unix timestamp, as `YYYY-MM-DD`.
+///
+/// WHY this is written out rather than pulled from a date crate: the header needs one
+/// stable, unambiguous rendering of an instant the projection already stores as seconds,
+/// and a formatting dependency for that would be a whole calendar to keep current.
+fn utc_date(seconds: i64) -> String {
+    let days = seconds.div_euclid(86_400);
+    // Days from 1970-01-01 to a civil date, by the shift-to-March form of the proleptic
+    // Gregorian calendar: March is the year's first month, which puts the leap day at the
+    // end of the year and makes the era's 400-year cycle exactly 146097 days long.
+    let shifted = days + 719_468;
+    let era = shifted.div_euclid(146_097);
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    format!("{year:04}-{month:02}-{day:02}")
+}
+
+/// The contest the settings name, or None when the row names none or the projection has no
+/// record for it yet.
+pub async fn load_contest(
+    pool: &PgPool,
+    contest_id: i64,
+) -> Result<Option<RankingContest>, StoreError> {
+    let row = sqlx::query_as::<_, RankingContest>(
+        "SELECT name, begin, \"end\" FROM ranking_contests WHERE contest_id = $1",
+    )
+    .bind(contest_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
 }
 
 pub async fn load_ledger(pool: &PgPool, contest_id: Option<i64>) -> Result<Ledger, StoreError> {
@@ -213,7 +355,7 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
     let row = sqlx::query_as::<_, Appearance>(
         "SELECT title, subtitle, organisation, logo_asset, favicon_asset, theme, \
          columns, score_format, footer_text, credits_text, credits, perspectives, \
-         access_mode FROM ranking_settings WHERE id = 1",
+         contest_id, wording_overrides, access_mode FROM ranking_settings WHERE id = 1",
     )
     .fetch_optional(pool)
     .await?;
@@ -491,5 +633,84 @@ mod tests {
             !board::is_hidden(&overrides, "u1", None),
             "a key with no tombstone stays"
         );
+    }
+
+    /// The header names the day it serves, so the rendering of an instant must be the
+    /// calendar day a reader would name, including across a leap day and before the epoch.
+    #[test]
+    fn a_timestamp_renders_as_its_utc_calendar_day() {
+        assert_eq!(utc_date(0), "1970-01-01");
+        assert_eq!(utc_date(1_700_000_000), "2023-11-14");
+        assert_eq!(utc_date(951_782_400), "2000-02-29", "a leap day");
+        assert_eq!(utc_date(-1), "1969-12-31", "the day before the epoch");
+    }
+
+    /// A contest whose start and stop fall on one day names that day once.
+    #[test]
+    fn the_contest_dates_are_a_span_only_when_the_days_differ() {
+        let one_day = RankingContest {
+            name: "c".to_string(),
+            begin: 951_782_400,
+            end: 951_782_400,
+        };
+        assert_eq!(contest_dates(&one_day), "2000-02-29");
+        let two_days = RankingContest {
+            begin: 951_782_400,
+            end: 951_868_800,
+            ..one_day
+        };
+        assert_eq!(contest_dates(&two_days), "2000-02-29 – 2000-03-01");
+    }
+
+    /// The header reads the named contest, and the override is honoured only for that
+    /// contest — the words written for another day must not describe this one.
+    #[test]
+    fn the_header_words_come_from_the_named_contest() {
+        let contest = RankingContest {
+            name: "POSN Day 2".to_string(),
+            begin: 1_792_108_800,
+            end: 1_792_195_200,
+        };
+        let row = Appearance {
+            contest_id: Some(9),
+            wording_overrides: Some(serde_json::json!({
+                "9": { "title": "Day Two" },
+                "3": { "subtitle": "ครั้งที่ 1" }
+            })),
+            ..appearance_for_header()
+        };
+        let header = BoardHeader::resolve(Some(&row), Some(&contest)).expect("it resolves");
+        assert_eq!(header.title, "Day Two", "the override words the title");
+        assert_eq!(
+            header.subtitle, "2026-10-16 – 2026-10-17",
+            "the unoverridden line falls back to the contest's own dates"
+        );
+    }
+
+    #[test]
+    fn a_row_that_names_no_contest_has_no_header() {
+        assert!(BoardHeader::resolve(Some(&appearance_for_header()), None).is_none());
+        assert!(BoardHeader::resolve(None, None).is_none());
+    }
+
+    /// The row the header tests start from: nothing set but the fields a read always fills.
+    fn appearance_for_header() -> Appearance {
+        Appearance {
+            title: None,
+            subtitle: None,
+            organisation: None,
+            logo_asset: None,
+            favicon_asset: None,
+            theme: None,
+            columns: None,
+            score_format: None,
+            footer_text: None,
+            credits_text: None,
+            credits: None,
+            perspectives: None,
+            contest_id: None,
+            wording_overrides: None,
+            access_mode: "public".to_string(),
+        }
     }
 }

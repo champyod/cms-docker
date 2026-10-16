@@ -9,7 +9,7 @@ use tower_http::services::ServeDir;
 use crate::board;
 use crate::json::{json_response, stamped_json};
 use crate::public_config::public_config;
-use crate::store::{load_appearance, Appearance};
+use crate::store::{load_appearance, load_contest, Appearance, RankingContest};
 use crate::surface::{credits_from_file, logo_path, render_page};
 use crate::AppState;
 
@@ -102,7 +102,11 @@ async fn root(State(state): State<AppState>) -> Response {
         Ok(appearance) => appearance,
         Err(refusal) => return refusal.response(),
     };
-    match render_page(appearance.as_ref()) {
+    let contest = match contest_of(&state, appearance.as_ref()).await {
+        Ok(contest) => contest,
+        Err(refusal) => return refusal.response(),
+    };
+    match render_page(appearance.as_ref(), contest.as_ref()) {
         Ok(html) => html_response(&html),
         Err(error) => refuse(&error.to_string()),
     }
@@ -211,6 +215,27 @@ async fn appearance_of(state: &AppState) -> Result<Option<Appearance>, Refusal> 
         return Err(Refusal("no database is configured".to_string()));
     };
     load_appearance(db.pool())
+        .await
+        .map_err(|error| Refusal(error.to_string()))
+}
+
+/// The contest the settings name, or None when they name none or the projection holds no record
+/// for it yet.
+///
+/// WHY a missing record is not a refusal: the push may not have carried the contest's id yet, and
+/// the page can still serve the board. It renders the default title rather than a heading that
+/// might describe another day.
+async fn contest_of(
+    state: &AppState,
+    appearance: Option<&Appearance>,
+) -> Result<Option<RankingContest>, Refusal> {
+    let Some(contest_id) = appearance.and_then(|row| row.contest_id) else {
+        return Ok(None);
+    };
+    let Some(db) = state.db() else {
+        return Err(Refusal("no database is configured".to_string()));
+    };
+    load_contest(db.pool(), contest_id)
         .await
         .map_err(|error| Refusal(error.to_string()))
 }

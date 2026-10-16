@@ -32,6 +32,7 @@ interface AppearanceFormProps {
 /** The editable subset: the credit list is edited and saved on its own page. */
 function toAppearanceFields(appearance: RankingAppearance): AppearanceFields {
   return {
+    contestId: appearance.contestId,
     title: appearance.title,
     subtitle: appearance.subtitle,
     organisation: appearance.organisation,

@@ -27,7 +27,7 @@ TABLES = {
 # Column order per table, taken from the Prisma models. `order` is a reserved word in
 # SQL, so the column is display_order and the payload name is kept for the wire.
 COLUMNS = {
-    "contests": ("key", "name", "begin", "end", "score_precision"),
+    "contests": ("key", "name", "begin", "end", "score_precision", "contest_id"),
     "tasks": (
         "key", "name", "short_name", "contest", "max_score",
         "score_precision", "extra_headers", "display_order", "score_mode",
@@ -42,7 +42,7 @@ COLUMNS = {
 # The fields the wire format requires. A payload missing one is refused here rather
 # than written as NULL and discovered later by a reader.
 REQUIRED = {
-    "contests": ("name", "begin", "end", "score_precision"),
+    "contests": ("name", "begin", "end", "score_precision", "contest_id"),
     "tasks": (
         "name", "short_name", "contest", "max_score", "score_precision",
         "extra_headers", "order", "score_mode",
