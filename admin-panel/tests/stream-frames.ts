@@ -5,6 +5,8 @@
  * swallow the next frame, and "no frame was sent" is exactly what several of these tests assert.
  */
 
+import type { LiveEnvelope, LiveSectionReads } from '@/lib/live/frames';
+
 const pendingReads = new WeakMap<
   ReadableStreamDefaultReader<Uint8Array>,
   Promise<ReadableStreamReadResult<Uint8Array>>
@@ -54,8 +56,16 @@ export const FRAME_READ_AT = '2026-10-16T12:00:00.000Z';
 
 /**
  * One frame as the stream delivers it: the payload inside the envelope, with the read instant the
- * server stamped it with.
+ * server stamped it with and, where the frame carried a section forward, the read that section states.
  */
-export function encodedFrame<TFrame>(frame: TFrame, readAt: string = FRAME_READ_AT): string {
-  return JSON.stringify({ readAt, frame });
+export function encodedFrame<TFrame>(frame: TFrame, readAt: string = FRAME_READ_AT, reads?: LiveSectionReads): string {
+  return JSON.stringify(reads === undefined ? { readAt, frame } : { readAt, frame, reads });
+}
+
+/**
+ * One frame's whole envelope, for the tests that are about what the server states rather than about
+ * what the payload carries.
+ */
+export function toEnvelope<TFrame>(frame: string): LiveEnvelope<TFrame> {
+  return JSON.parse(frame.replace(/^data: /, '').trim()) as LiveEnvelope<TFrame>;
 }

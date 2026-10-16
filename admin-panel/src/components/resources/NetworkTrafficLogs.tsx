@@ -3,12 +3,14 @@
 import { Card } from '@/components/core/Card';
 import { SkeletonText } from '@/components/core/Skeleton';
 import { EmptyState } from '@/components/core/EmptyState';
+import { RowFreshness } from '@/components/core/RowFreshness';
 import {
   ResponsiveTable,
   type ResponsiveColumn,
 } from '@/components/core/ResponsiveTable';
 import { Network, Filter, Activity } from 'lucide-react';
 import { TRAFFIC_LOG_LIMIT_OPTIONS } from '@/lib/constants/live-stream';
+import type { RowFreshnessInput } from '@/lib/live/row-freshness';
 import type { TrafficLog } from '@/lib/live-frames';
 
 // Why: one column definition drives desktop rows and mobile cards, so
@@ -79,10 +81,16 @@ function TrafficHeader({ limit, onLimitChange }: { limit: number; onLimitChange:
   );
 }
 
-function TrafficBody({ logs, loading }: { logs: TrafficLog[]; loading: boolean }): React.JSX.Element {
+/**
+ * Why the cue wraps the table and not each row: the rows of one read share one instant, and a table
+ * row is a `<tr>`, which the cue's wrapper element cannot sit inside without breaking the table.
+ * Marking the region says what a per-row mark would say, in the one place the wrapper is valid.
+ */
+function TrafficBody({ logs, loading, freshness }: { logs: TrafficLog[]; loading: boolean; freshness?: RowFreshnessInput }): React.JSX.Element {
   if (loading) return <SkeletonText lines={2} />;
   if (logs.length === 0) return <EmptyState icon={Activity} title="No traffic data available" />;
-  return <TrafficTable logs={logs} />;
+  const table = <TrafficTable logs={logs} />;
+  return freshness === undefined ? table : <RowFreshness {...freshness}>{table}</RowFreshness>;
 }
 
 interface NetworkTrafficLogsProps {
@@ -90,17 +98,23 @@ interface NetworkTrafficLogsProps {
   limit: number;
   onLimitChange: (value: number) => void;
   loading: boolean;
+  /**
+   * How current the table is, when the surface that owns it is fed by a stream that dates its reads.
+   * One entry for the whole table: the rows arrive from a single read, so every row's read instant is
+   * the table's. A surface with no such stream passes nothing, and the table renders exactly as before.
+   */
+  freshness?: RowFreshnessInput;
 }
 
 /**
  * Why the page size is a prop: it is part of the stream's address, so changing it reopens the
  * connection with the new size instead of starting a request of its own.
  */
-export function NetworkTrafficLogs({ logs, limit, onLimitChange, loading }: NetworkTrafficLogsProps): React.JSX.Element {
+export function NetworkTrafficLogs({ logs, limit, onLimitChange, loading, freshness }: NetworkTrafficLogsProps): React.JSX.Element {
   return (
     <Card className="p-6">
       <TrafficHeader limit={limit} onLimitChange={onLimitChange} />
-      <TrafficBody logs={logs} loading={loading} />
+      <TrafficBody logs={logs} loading={loading} freshness={freshness} />
     </Card>
   );
 }

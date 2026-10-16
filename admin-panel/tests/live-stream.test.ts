@@ -8,7 +8,7 @@ import {
 } from '@/lib/constants/live-stream';
 import { GET as resourcesStream } from '@/app/api/resources/stream/route';
 import { GET as containersStream } from '@/app/api/containers/stream/route';
-import { framesWithin, toFrame } from './stream-frames';
+import { framesWithin, toEnvelope, toFrame } from './stream-frames';
 import type { ContainersFrame, ResourceFrame, ServerStats, WorkerNodeView } from '@/lib/live-frames';
 
 /**
@@ -157,6 +157,36 @@ describe('resources stream', () => {
     expect(second.traffic).toHaveLength(1);
     // The page size travels with the connection, so the table's selector has no request of its own.
     expect(mocks.collectNetworkTrafficLogs).toHaveBeenCalledWith(20);
+  });
+
+  it('dates each section it carries forward by that section\'s own read, never by the pass that ran', async () => {
+    // The counters track samples first and emits; the docker-backed summary then samples on top of it
+    // and emits again. A third pass — the counters again — carries the summary's sections forward, and
+    // those were read when the summary ran, so the frame has to say so rather than borrow this pass's
+    // instant. That misdating is what a single frame-level read cannot avoid, and why this item exists.
+    const reader = await openResources();
+    await vi.advanceTimersByTimeAsync(0);
+    const opening = (await framesWithin(reader)).map((frame) => toEnvelope<ResourceFrame>(frame));
+    expect(opening).toHaveLength(2);
+    const summary = opening[1];
+
+    // Both tracks were sampled in the same millisecond, so the sections the summary frame carried
+    // forward were read at the frame's own instant — and the frame states no number for them rather
+    // than repeating `readAt`.
+    expect(summary.reads).toBeUndefined();
+
+    mocks.collectServerStats.mockResolvedValue(stats(88));
+    await vi.advanceTimersByTimeAsync(RESOURCE_SERVER_POLL_MS);
+    const moved = toEnvelope<ResourceFrame>((await framesWithin(reader)).at(-1) as string);
+
+    expect(moved.readAt).not.toBe(summary.readAt);
+    expect(moved.reads).toEqual({ services: summary.readAt, traffic: summary.readAt });
+    // Why asserted absent: this pass read them, so `readAt` is already their read, and a second copy of
+    // one instant is exactly the duplicate the envelope does not carry.
+    expect(moved.reads).not.toHaveProperty('server');
+    expect(moved.reads).not.toHaveProperty('workers');
+
+    await reader.cancel();
   });
 
   it('sends nothing while the data stands still, then a heartbeat frame the client can act on', async () => {

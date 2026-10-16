@@ -62,6 +62,20 @@ export function workersFrameFingerprint(frame: WorkersFrame): string {
 }
 
 /**
+ * The read instant the frame states for each section it carried forward, by the section's name.
+ *
+ * Why a frame states these at all: one frame accumulates what several poll tracks read on different
+ * cadences, so a section can travel forward in a frame its own track did not run for. Stating the
+ * section's own read is what keeps the cue from dating that section by a read that did not produce
+ * it — the misdating a single frame-level instant cannot avoid.
+ *
+ * Why the sections the frame's own pass read are absent: they share `readAt`, which is already the
+ * read that produced them, and a second copy of one instant is one more thing to keep in step. A
+ * consumer resolves a section as `reads?.[section] ?? readAt`.
+ */
+export type LiveSectionReads = Readonly<Record<string, string>>;
+
+/**
  * What every live frame travels in: its payload, and the instant the server's read produced it.
  *
  * Why the read instant rides on the wire instead of being stamped when the browser receives the frame:
@@ -76,11 +90,26 @@ export function workersFrameFingerprint(frame: WorkersFrame): string {
 export interface LiveEnvelope<TFrame> {
   readonly readAt: string;
   readonly frame: TFrame;
+  /** Omitted when the pass that produced the frame read every section the frame carries. */
+  readonly reads?: LiveSectionReads;
 }
 
-export function encodeLiveEnvelope<TFrame>(frame: TFrame, readAt: string): string {
-  const envelope: LiveEnvelope<TFrame> = { readAt, frame };
+export function encodeLiveEnvelope<TFrame>(frame: TFrame, readAt: string, reads?: LiveSectionReads): string {
+  const envelope: LiveEnvelope<TFrame> = reads === undefined || Object.keys(reads).length === 0
+    ? { readAt, frame }
+    : { readAt, frame, reads };
   return JSON.stringify(envelope);
+}
+
+/**
+ * The read a frame states for one of the sections it carries: the section's own where the frame
+ * carried it forward, the frame's own where the pass that produced the frame read the section.
+ *
+ * Why one resolver instead of reading the map at every call site: which of the two instants a section
+ * gets is the whole rule, and written per consumer the surfaces drift into two different answers.
+ */
+export function sectionReadAt(readAt: string, reads: LiveSectionReads | undefined, section: string): string {
+  return reads?.[section] ?? readAt;
 }
 
 /**
@@ -92,8 +121,21 @@ export function encodeLiveEnvelope<TFrame>(frame: TFrame, readAt: string): strin
 export function decodeLiveEnvelope<TFrame>(raw: string): LiveEnvelope<TFrame> | null {
   const parsed: unknown = JSON.parse(raw);
   if (typeof parsed !== 'object' || parsed === null) return null;
-  const { readAt, frame } = parsed as Partial<LiveEnvelope<TFrame>>;
+  const { readAt, frame, reads } = parsed as Partial<LiveEnvelope<TFrame>>;
   if (typeof readAt !== 'string' || Number.isNaN(Date.parse(readAt))) return null;
   if (!('frame' in parsed)) return null;
-  return { readAt, frame: frame as TFrame };
+  // Why a malformed section read drops the whole frame and not just the entry: a consumer would
+  // otherwise fall back to the frame's read for that section and date a carried-forward section by a
+  // read that never produced it — the exact lie this contract exists to prevent.
+  if (reads !== undefined && !isSectionReads(reads)) return null;
+  return reads === undefined
+    ? { readAt, frame: frame as TFrame }
+    : { readAt, frame: frame as TFrame, reads };
+}
+
+function isSectionReads(value: unknown): value is LiveSectionReads {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (instant) => typeof instant === 'string' && !Number.isNaN(Date.parse(instant)),
+  );
 }

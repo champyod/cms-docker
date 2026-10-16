@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { withBasePath } from '@/lib/base-path';
-import { decodeLiveEnvelope } from '@/lib/live/frames';
+import { decodeLiveEnvelope, type LiveSectionReads } from '@/lib/live/frames';
 import {
   LIVE_IDLE_TIMEOUT_MS,
   LIVE_RECONNECT_MAX_MS,
@@ -19,8 +19,13 @@ interface UseLiveStreamOptions<TFrame> {
   /**
    * Called with each frame's payload and the instant the server's read produced it. The instant is
    * what says how old the value is; a surface that shows rows stamps them with it.
+   *
+   * `sectionReads`, when the frame states any, dates the sections the frame carried forward from a
+   * read other than the one that produced the frame. A surface whose frame accumulates several poll
+   * tracks resolves each section as `sectionReads?.[section] ?? readAt`; a single-section surface
+   * has none and stamps every row with `readAt`, exactly as before.
    */
-  onFrame: (frame: TFrame, readAt: string) => void;
+  onFrame: (frame: TFrame, readAt: string, sectionReads?: LiveSectionReads) => void;
   /**
    * Called when a connection fails; the reconnect still runs. A surface whose first frame is its
    * load uses this to tell "not yet" apart from "never" — the status alone only says reconnecting.
@@ -137,7 +142,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
           // payload; the watchdog below still bounds the connection's lifetime.
           if (envelope === null) return;
           setReadAt(envelope.readAt);
-          onFrameRef.current(envelope.frame, envelope.readAt);
+          onFrameRef.current(envelope.frame, envelope.readAt, envelope.reads);
         } catch {
           // A malformed frame is dropped; the watchdog below still bounds the connection's lifetime.
         }

@@ -1,10 +1,26 @@
 import { verifyApiPermission } from '@/lib/api-utils';
-import { encodeLiveEnvelope } from '@/lib/live/frames';
+import { encodeLiveEnvelope, type LiveSectionReads } from '@/lib/live/frames';
 import { LIVE_HEARTBEAT_MS, LIVE_STREAM_HEADERS } from '@/lib/constants/live-stream';
 import type { SessionPayload } from '@/lib/auth';
 import type { PermissionKey } from '@/lib/permissions';
 
-export type LiveFrameSink<TFrame> = (frame: TFrame) => void;
+/**
+ * What a source says about the frame it just produced.
+ *
+ * Why the source states the read and the route does not stamp it: a frame accumulates what several
+ * poll tracks read, so only the source knows which pass produced this payload and when — the route
+ * only knows when it happened to send it, and dating a carried-forward section by that would be the
+ * misdating the per-section reads exist to avoid. A source with no reads of its own (an alert channel)
+ * states nothing and the route stamps the instant it sends.
+ */
+export interface LiveFrameRead {
+  /** The instant of the read that produced this frame's payload, by the server's clock. */
+  readonly readAt: string;
+  /** The sections the frame carried forward, each with the read that produced it. Omitted when none. */
+  readonly reads?: LiveSectionReads;
+}
+
+export type LiveFrameSink<TFrame> = (frame: TFrame, read?: LiveFrameRead) => void;
 
 /** One connection's wiring: what a source may push, and what it must stop on. */
 export interface LiveConnection<TFrame> {
@@ -81,7 +97,9 @@ export function createLiveStreamRoute<TFrame>(
     let heartbeat: ReturnType<typeof setInterval> | null = null;
     let lastFrame: string | null = null;
     // The instant of the newest payload this connection has stated; the connection's own opening,
-    // before that. Nothing has been read yet, and the instant says so rather than guessing one.
+    // before that. Nothing has been read yet, and the instant says so rather than guessing one. A
+    // source that states its own read sets this; the rest — an alert channel with nothing to date —
+    // leaves the instant the route stamps, because the route did the sending and nothing else did.
     let statedAt = new Date().toISOString();
     let closed = false;
 
@@ -130,9 +148,10 @@ export function createLiveStreamRoute<TFrame>(
           teardown = await options.source({
             request,
             session: gate.session,
-            emit: (frame) => {
-              statedAt = new Date().toISOString();
-              lastFrame = `data: ${encodeLiveEnvelope(frame, statedAt)}\n\n`;
+            emit: (frame, read) => {
+              // The source's own read where it states one: it saw the pass that produced the payload.
+              statedAt = read?.readAt ?? new Date().toISOString();
+              lastFrame = `data: ${encodeLiveEnvelope(frame, statedAt, read?.reads)}\n\n`;
               enqueue(lastFrame);
             },
             isClosed: () => closed,
