@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
 import { encodeId } from '@/lib/ranking-projection';
+import { readRankingImpact, type RankingImpact } from '@/lib/ranking-impact';
 
 const rankingParticipationsInclude = {
   users: { select: { id: true, username: true, first_name: true, last_name: true } },
@@ -309,4 +310,129 @@ function assignRanks<T extends Rankable>(sorted: T[]): T[] {
     entry.rank = currentRank;
   });
   return sorted;
+}
+
+/** One target the combobox may offer, carrying the kind it belongs to. */
+export interface RankingTargetMatch {
+  readonly kind: string;
+  readonly key: string;
+  readonly label: string;
+}
+
+const TARGET_SEARCH_LIMIT = 20;
+
+async function searchUsers(term: string): Promise<RankingTargetMatch[]> {
+  const rows = await prisma.users.findMany({
+    where: {
+      OR: [
+        { username: { contains: term, mode: 'insensitive' } },
+        { first_name: { contains: term, mode: 'insensitive' } },
+        { last_name: { contains: term, mode: 'insensitive' } },
+      ],
+    },
+    take: TARGET_SEARCH_LIMIT,
+    select: { id: true, username: true, first_name: true, last_name: true },
+  });
+  return rows.map((row) => ({ kind: 'user', key: row.username, label: displayName(row) }));
+}
+
+async function searchTeams(term: string): Promise<RankingTargetMatch[]> {
+  const rows = await prisma.teams.findMany({
+    where: { name: { contains: term, mode: 'insensitive' } },
+    take: TARGET_SEARCH_LIMIT,
+    select: { name: true },
+  });
+  return rows.map((row) => ({ kind: 'team', key: row.name, label: row.name }));
+}
+
+async function searchContests(term: string): Promise<RankingTargetMatch[]> {
+  const rows = await prisma.contests.findMany({
+    where: { name: { contains: term, mode: 'insensitive' } },
+    take: TARGET_SEARCH_LIMIT,
+    select: { name: true },
+  });
+  return rows.map((row) => ({ kind: 'contest', key: encodeId(row.name), label: row.name }));
+}
+
+/**
+ * WHY the task search is scoped to the contest the shard serves: a task hide is keyed by the
+ * composite `<encodedContest>/<encodedTaskName>`, so the contest half is only known once a contest
+ * is chosen — and the composite is only valid for a task that is a member of that contest.
+ */
+async function searchTasks(term: string, contestId: number | null): Promise<RankingTargetMatch[]> {
+  if (contestId === null) return [];
+  const contest = await prisma.contests.findUnique({
+    where: { id: contestId },
+    select: { name: true },
+  });
+  if (contest === null) return [];
+  const memberships = await prisma.contest_tasks.findMany({
+    where: { contest_id: contestId },
+    select: { tasks: { select: { name: true, title: true } } },
+  });
+  const lower = term.toLowerCase();
+  const contestKey = encodeId(contest.name);
+  return memberships
+    .filter((row) => {
+      const name = row.tasks.name.toLowerCase();
+      const title = row.tasks.title.toLowerCase();
+      return name.includes(lower) || title.includes(lower);
+    })
+    .slice(0, TARGET_SEARCH_LIMIT)
+    .map((row) => ({
+      kind: 'task',
+      key: `${contestKey}/${encodeId(row.tasks.name)}`,
+      label: `${contest.name} / ${row.tasks.name}`,
+    }));
+}
+
+async function matchesForKind(
+  kind: string,
+  term: string,
+  contestId: number | null,
+): Promise<RankingTargetMatch[]> {
+  if (kind === 'user') return searchUsers(term);
+  if (kind === 'team') return searchTeams(term);
+  if (kind === 'task') return searchTasks(term, contestId);
+  if (kind === 'contest') return searchContests(term);
+  return [];
+}
+
+/**
+ * The fuzzy target search the combobox runs server-side, restricted to the chosen kind.
+ *
+ * WHY the contest matches ride along for every other kind: contest is deliberately absent from the
+ * kind menu (it is wired, D2), but it must stay reachable, so its matches are appended rather than
+ * dropped. The caller reads each match's own `kind`, so picking one can switch the target kind.
+ *
+ * WHY the search is here and the dropdown list is not: a kind's unique list is fetched once and
+ * filtered in the browser, while an arbitrary query must be answered against rows the browser does
+ * not hold — the users, teams, contests and tasks tables.
+ */
+export async function searchRankingTargets(
+  kind: string,
+  query: string,
+  contestId: number | null,
+): Promise<RankingTargetMatch[]> {
+  await ensurePermission('ranking:override');
+  const term = query.trim();
+  if (term === '') return [];
+  const matches = await matchesForKind(kind, term, contestId);
+  if (kind === 'contest') return matches;
+  return [...matches, ...(await searchContests(term))];
+}
+
+/**
+ * The board impact of one pending override, read from the projection for the scoped contest.
+ * WHY the shard's own contest is passed rather than the draft's key: the reader filters every row
+ * by the contest the shard serves, so the impact must be computed for that contest or it would
+ * describe a board the shard does not draw.
+ */
+export async function getRankingImpact(
+  contestId: number,
+  targetKind: string,
+  targetKey: string,
+): Promise<RankingImpact> {
+  await ensurePermission('ranking:override');
+  return readRankingImpact({ contestId, targetKind, targetKey });
 }

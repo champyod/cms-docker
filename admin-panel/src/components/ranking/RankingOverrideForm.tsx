@@ -1,37 +1,52 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { searchRankingTargets } from '@/app/actions/ranking';
 import { saveRankingOverride } from '@/app/actions/rankingOverrides';
 import { Button } from '@/components/core/Button';
 import { SelectField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
-import { Grid } from '@/components/core/Layout';
+import { Stack } from '@/components/core/Layout';
 import type { Dictionary } from '@/lib/dictionary';
 import { KIND_VERBS, OVERRIDE_ACTIONS } from '@/lib/ranking-override-verbs';
+import { RankingTargetCombobox, type ComboboxOption } from '@/components/ranking/RankingTargetCombobox';
 
 export type RankingOverrideCopy = Dictionary['ranking']['overrides'];
-
-export interface RankingOverrideContest {
-  readonly id: number;
-  readonly name: string;
-}
 
 export interface RankingOverrideKey {
   readonly key: string;
   readonly label: string;
 }
 
+/** The pending row as the diff column reads it. */
+export interface RankingOverrideDraft {
+  readonly targetKind: string;
+  readonly targetKey: string;
+}
+
+/**
+ * The kinds the toolbar's first control offers.
+ *
+ * WHY only three: contest is wired (D2) and is not a target the operator picks as a kind, while
+ * `ranking` is the whole board and not a target at all. Contest stays reachable through the
+ * search — a contest match promotes the effective kind — so the menu is the three the operator
+ * chooses between, not every kind the table may hold.
+ */
+const MENU_KINDS: readonly string[] = ['user', 'team', 'task'];
+
+const VERB_ORDER: readonly string[] = ['hide', 'guest', 'pin', 'rename', 'score', 'freeze'];
+
 export interface RankingOverrideFormProps {
   readonly copy: RankingOverrideCopy;
-  readonly contests: readonly RankingOverrideContest[];
+  readonly contestId: string;
+  readonly targetKind: string;
+  readonly targetKey: string;
   readonly userKeys: readonly RankingOverrideKey[];
   readonly teamKeys: readonly string[];
   readonly contestKeys: readonly RankingOverrideKey[];
   readonly taskKeys: readonly RankingOverrideKey[];
-  readonly contestId: string;
-  readonly targetKind: string;
-  readonly targetKey: string;
+  readonly onDraftChange?: (draft: RankingOverrideDraft) => void;
 }
 
 interface ValueControl {
@@ -52,122 +67,232 @@ const VALUE_CONTROLS: Readonly<Record<string, ValueControl>> = {
 };
 
 // WHY the key options follow the kind: a team is named by its key, a task by the composite
-// contest/task key the projection carries, a contest by the encoded contest name the board
-// files its tasks under, and the whole board by one wildcard, so an operator never has to
-// type a key the chosen target cannot hold.
+// contest/task key the projection carries, a contest by the encoded contest name the board files
+// its tasks under, and the whole board by one wildcard, so an operator is never offered a key the
+// chosen target cannot hold.
 function keyOptions(
   kind: string,
   userKeys: readonly RankingOverrideKey[],
   teamKeys: readonly string[],
   contestKeys: readonly RankingOverrideKey[],
   taskKeys: readonly RankingOverrideKey[],
-): readonly RankingOverrideKey[] {
+): readonly ComboboxOption[] {
   if (kind === 'team') return teamKeys.map((name) => ({ key: name, label: name }));
-  if (kind === 'ranking') return [{ key: '*', label: '*' }];
   if (kind === 'task') return taskKeys;
   if (kind === 'contest') return contestKeys;
   return userKeys;
 }
 
-// The pickers are fed real rows and the value control follows the chosen verb, so an
-// operator names a contest and a target that exist instead of typing a key by hand.
-export function RankingOverrideForm({
+function menuKindFor(targetKind: string): string {
+  return MENU_KINDS.includes(targetKind) ? targetKind : 'user';
+}
+
+function scopeOf(contestId: string): number | null {
+  const parsed = Number.parseInt(contestId, 10);
+  return Number.isInteger(parsed) ? parsed : null;
+}
+
+function hideLabelFor(copy: RankingOverrideCopy, kind: string): string {
+  if (kind === 'task') return copy.actionHideTask;
+  if (kind === 'contest') return copy.actionHideContest;
+  return copy.actionHide;
+}
+
+function KindField({
   copy,
-  contests,
-  userKeys,
-  teamKeys,
-  contestKeys,
-  taskKeys,
-  contestId,
-  targetKind,
-  targetKey,
-}: RankingOverrideFormProps): React.JSX.Element {
-  const [kind, setKind] = useState(targetKind === '' ? 'user' : targetKind);
-  const [action, setAction] = useState('hide');
-  const keys = keyOptions(kind, userKeys, teamKeys, contestKeys, taskKeys);
-  const verbs = KIND_VERBS[kind] ?? OVERRIDE_ACTIONS;
-  const hideLabel =
-    kind === 'task'
-      ? copy.actionHideTask
-      : kind === 'contest'
-        ? copy.actionHideContest
-        : copy.actionHide;
-  const valueControl = VALUE_CONTROLS[action];
+  value,
+  onChange,
+}: {
+  readonly copy: RankingOverrideCopy;
+  readonly value: string;
+  readonly onChange: (kind: string) => void;
+}): React.JSX.Element {
   return (
-    <form action={saveRankingOverride}>
-      <Grid cols={2} gap={3}>
-        <SelectField
-          id="ranking-override-contest"
-          label={copy.contestId}
-          name="contestId"
-          defaultValue={contestId}
-          required
-        >
-          <option value="">{copy.chooseContest}</option>
-          {contests.map((contest) => (
-            <option key={contest.id} value={contest.id}>
-              #{contest.id} — {contest.name}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          id="ranking-override-kind"
-          label={copy.target}
-          name="targetKind"
-          value={kind}
-          onChange={(event) => {
-            const next = event.target.value;
-            setKind(next);
-            if (!(KIND_VERBS[next] ?? OVERRIDE_ACTIONS).includes(action)) setAction('hide');
-          }}
-        >
-          <option value="user">{copy.targetUser}</option>
-          <option value="team">{copy.targetTeam}</option>
-          <option value="ranking">{copy.targetRanking}</option>
-          <option value="task">{copy.targetTask}</option>
-          <option value="contest">{copy.targetContest}</option>
-        </SelectField>
-        <SelectField
-          id="ranking-override-key"
-          label={copy.targetKey}
-          name="targetKey"
-          defaultValue={targetKey}
-          required
-        >
-          <option value="">{copy.chooseTargetKey}</option>
-          {keys.map((entry) => (
-            <option key={entry.key} value={entry.key}>
-              {entry.label}
-            </option>
-          ))}
-        </SelectField>
-        <SelectField
-          id="ranking-override-action"
-          label={copy.action}
-          name="action"
-          value={action}
-          onChange={(event) => setAction(event.target.value)}
-        >
-          {verbs.includes('hide') && <option value="hide">{hideLabel}</option>}
-          {verbs.includes('guest') && <option value="guest">{copy.actionGuest}</option>}
-          {verbs.includes('pin') && <option value="pin">{copy.actionPin}</option>}
-          {verbs.includes('rename') && <option value="rename">{copy.actionRename}</option>}
-          {verbs.includes('score') && <option value="score">{copy.actionScore}</option>}
-          {verbs.includes('freeze') && <option value="freeze">{copy.actionFreeze}</option>}
-        </SelectField>
-        {action !== 'hide' && valueControl !== undefined ? (
-          <Input
-            label={action === 'freeze' ? copy.freezeValue : copy.value}
-            name="value"
-            type={valueControl.type}
-            inputMode={valueControl.inputMode}
-          />
-        ) : null}
-        <Input label={copy.reason} name="reason" required />
+    <SelectField
+      id="ranking-override-kind"
+      label={copy.target}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <option value="user">{copy.targetUser}</option>
+      <option value="team">{copy.targetTeam}</option>
+      <option value="task">{copy.targetTask}</option>
+    </SelectField>
+  );
+}
+
+function ActionField({
+  copy,
+  verbs,
+  action,
+  hideLabel,
+  onChange,
+}: {
+  readonly copy: RankingOverrideCopy;
+  readonly verbs: readonly string[];
+  readonly action: string;
+  readonly hideLabel: string;
+  readonly onChange: (action: string) => void;
+}): React.JSX.Element {
+  const labels: Readonly<Record<string, string>> = {
+    hide: hideLabel,
+    guest: copy.actionGuest,
+    pin: copy.actionPin,
+    rename: copy.actionRename,
+    score: copy.actionScore,
+    freeze: copy.actionFreeze,
+  };
+  return (
+    <SelectField
+      id="ranking-override-action"
+      label={copy.action}
+      name="action"
+      value={action}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {VERB_ORDER.filter((verb) => verbs.includes(verb)).map((verb) => (
+        <option key={verb} value={verb}>
+          {labels[verb]}
+        </option>
+      ))}
+    </SelectField>
+  );
+}
+
+function ValueField({ copy, action }: { readonly copy: RankingOverrideCopy; readonly action: string }): React.JSX.Element | null {
+  const control = VALUE_CONTROLS[action];
+  if (action === 'hide' || control === undefined) return null;
+  return (
+    <Input
+      label={action === 'freeze' ? copy.freezeValue : copy.value}
+      name="value"
+      type={control.type}
+      inputMode={control.inputMode}
+    />
+  );
+}
+
+interface DraftControls {
+  readonly menuKind: string;
+  readonly effectiveKind: string;
+  readonly key: string;
+  readonly action: string;
+  readonly setAction: (action: string) => void;
+  readonly chooseMenuKind: (kind: string) => void;
+  readonly chooseTarget: (option: ComboboxOption) => void;
+}
+
+/**
+ * WHY the draft lives in a hook: the menu kind, the effective kind, the picked key and the verb
+ * move together — changing the menu kind clears a key the new kind cannot hold and drops a verb it
+ * does not offer — so one owner keeps those rules in one place instead of spreading them across
+ * the fields that render them.
+ */
+function useOverrideDraft(props: RankingOverrideFormProps): DraftControls {
+  const [menuKind, setMenuKind] = useState(() => menuKindFor(props.targetKind));
+  const [effectiveKind, setEffectiveKind] = useState(props.targetKind === '' ? 'user' : props.targetKind);
+  const [key, setKey] = useState(props.targetKey);
+  const [action, setAction] = useState('hide');
+  const { onDraftChange } = props;
+  useEffect(() => {
+    onDraftChange?.({ targetKind: effectiveKind, targetKey: key });
+  }, [effectiveKind, key, onDraftChange]);
+  return {
+    menuKind,
+    effectiveKind,
+    key,
+    action,
+    setAction,
+    chooseMenuKind: (next) => {
+      setMenuKind(next);
+      setEffectiveKind(next);
+      setKey('');
+      if (!(KIND_VERBS[next] ?? OVERRIDE_ACTIONS).includes(action)) setAction('hide');
+    },
+    chooseTarget: (option) => {
+      setEffectiveKind(option.kind ?? menuKind);
+      setKey(option.key);
+    },
+  };
+}
+
+interface TargetPickerProps {
+  readonly copy: RankingOverrideCopy;
+  readonly contestId: string;
+  readonly draft: DraftControls;
+  readonly options: readonly ComboboxOption[];
+  readonly search: (query: string) => Promise<readonly ComboboxOption[]>;
+}
+
+/**
+ * The kind chooser and the one control that both lists that kind and searches it.
+ *
+ * WHY the key rides in a hidden field: the visible field holds what the operator typed or picked,
+ * so the value the form submits is the key of a row that exists rather than a string typed into a
+ * box. Contest is not a menu option, but a match from another kind promotes the effective kind, so
+ * a contest or task stays reachable through the search.
+ */
+function TargetPicker({ copy, contestId, draft, options, search }: TargetPickerProps): React.JSX.Element {
+  return (
+    <>
+      <input type="hidden" name="contestId" value={contestId} />
+      <input type="hidden" name="targetKind" value={draft.effectiveKind} />
+      <input type="hidden" name="targetKey" value={draft.key} />
+      <KindField copy={copy} value={draft.menuKind} onChange={draft.chooseMenuKind} />
+      <RankingTargetCombobox
+        id="ranking-override-target"
+        label={copy.targetKey}
+        placeholder={copy.targetSearch}
+        searchingLabel={copy.searching}
+        searchFailedLabel={copy.searchFailed}
+        noMatchesLabel={copy.noMatches}
+        options={options}
+        value={draft.key}
+        onSelect={draft.chooseTarget}
+        search={search}
+      />
+    </>
+  );
+}
+
+/**
+ * The toolbar half of shape V2: the kind chooser and the fields that follow it, pinned above the
+ * work they act on.
+ *
+ * WHY the submit sits at the end of the action row: the toolbar reads left to right as kind, then
+ * target, then verb, then the value the verb needs, and the button that files the row belongs at
+ * the end of that line rather than beside the target it acts on.
+ */
+export function RankingOverrideForm(props: RankingOverrideFormProps): React.JSX.Element {
+  const { copy, contestId, userKeys, teamKeys, contestKeys, taskKeys } = props;
+  const draft = useOverrideDraft(props);
+  const options = useMemo(
+    () => keyOptions(draft.effectiveKind, userKeys, teamKeys, contestKeys, taskKeys),
+    [draft.effectiveKind, userKeys, teamKeys, contestKeys, taskKeys],
+  );
+  const scopedContest = scopeOf(contestId);
+  const search = useCallback(
+    (query: string) => searchRankingTargets(draft.effectiveKind, query, scopedContest),
+    [draft.effectiveKind, scopedContest],
+  );
+  const verbs = KIND_VERBS[draft.effectiveKind] ?? OVERRIDE_ACTIONS;
+  return (
+    <form action={saveRankingOverride} className="space-y-3">
+      <TargetPicker copy={copy} contestId={contestId} draft={draft} options={options} search={search} />
+      <ActionField
+        copy={copy}
+        verbs={verbs}
+        action={draft.action}
+        hideLabel={hideLabelFor(copy, draft.effectiveKind)}
+        onChange={draft.setAction}
+      />
+      <ValueField copy={copy} action={draft.action} />
+      <Input label={copy.reason} name="reason" required />
+      <Stack direction="row" justify="end">
         <Button type="submit" variant="positive">
           {copy.add}
         </Button>
-      </Grid>
+      </Stack>
     </form>
   );
 }

@@ -181,11 +181,18 @@ describe('ranking users pages', () => {
     }
   });
 
-  it('offers the existing override actions and server actions from both views', () => {
+  it('hosts the override surface on both views rather than a second copy of the form', () => {
     for (const file of [LIST_PAGE, DETAIL_PAGE]) {
-      expect(readProjectFile(file)).toContain('RankingOverrideForm');
+      expect(readProjectFile(file)).toContain('RankingOverrideSurface');
     }
-    expect(readProjectFile(DETAIL_PAGE)).toContain('endRankingOverride');
     expect(readProjectFile(OVERRIDE_FORM)).toContain('saveRankingOverride');
+  });
+
+  it('makes the list page the override surface: shard tabs, the diff and the list', () => {
+    const listPage = readProjectFile(LIST_PAGE);
+
+    expect(listPage).toContain('RankingShardTabs');
+    expect(listPage).toContain('RankingOverrideList');
+    expect(listPage).toContain('readRankingShards');
   });
 });

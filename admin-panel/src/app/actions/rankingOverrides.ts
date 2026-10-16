@@ -83,7 +83,7 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
     reason,
     result: 'success',
   });
-  revalidatePath('/[locale]/ranking/settings');
+  revalidateOverridePages();
 }
 
 /**
@@ -93,10 +93,10 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
  */
 export async function endRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
-  const reason = readText(formData, "reason");
+  const reason = readText(formData, 'reason');
   const id = readOverrideId(formData);
-  if (reason === "") {
-    throw new Error("ending an override needs a reason");
+  if (reason === '') {
+    throw new Error('ending an override needs a reason');
   }
   const actorId = await currentActorId();
   await prisma.ranking_overrides.update({
@@ -111,7 +111,43 @@ export async function endRankingOverride(formData: FormData): Promise<void> {
     reason,
     result: 'success',
   });
-  revalidatePath('/[locale]/ranking/settings');
+  revalidateOverridePages();
+}
+
+/**
+ * Ends many rows in one audited write.
+ *
+ * WHY one reason for the batch: the reason explains the correction the operator is making, and it
+ * is the same correction across the selection, so asking per row would ask the same question N
+ * times. WHY `active: true` stays in the filter: a row already ended by another operator must not
+ * have its ending timestamp overwritten by this batch.
+ */
+export async function endRankingOverrides(ids: readonly number[], reason: string): Promise<void> {
+  await ensurePermission('ranking:override');
+  const trimmed = reason.trim();
+  const targets = ids.filter((id) => Number.isInteger(id));
+  if (trimmed === '') throw new Error('ending an override needs a reason');
+  if (targets.length === 0) throw new Error('select at least one override to end');
+  const actorId = await currentActorId();
+  await prisma.ranking_overrides.updateMany({
+    where: { id: { in: targets.map((id) => BigInt(id)) }, active: true },
+    data: { active: false, ended_at: new Date(), ended_by: actorId },
+  });
+  await recordAudit({
+    verb: 'ranking:override:end',
+    entity: 'ranking',
+    entityId: targets.join(','),
+    afterValues: { active: false, ids: targets },
+    reason: trimmed,
+    result: 'success',
+  });
+  revalidateOverridePages();
+}
+
+/** The list is the override surface now, and the detail view reads the same rows. */
+function revalidateOverridePages(): void {
+  revalidatePath('/[locale]/ranking/users');
+  revalidatePath('/[locale]/ranking/users/[key]');
 }
 
 function toOverride(row: {

@@ -21,15 +21,18 @@ function readSource(relativePath: string): string {
 // Route, physical page, and the server action or component the page must delegate to.
 const RANKING_PAGES: readonly [RouteId, string, string][] = [
   ['ranking.board', 'src/app/[locale]/(authenticated)/ranking/page.tsx', '<RankingLogoCard'],
+  ['ranking.users', 'src/app/[locale]/(authenticated)/ranking/users/page.tsx', 'RankingOverrideSurface'],
   ['ranking.appearance', 'src/app/[locale]/(authenticated)/ranking/appearance/page.tsx', 'AppearanceForm'],
-  ['ranking.settings', 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx', 'RankingOverrideForm'],
   ['ranking.credits', 'src/app/[locale]/(authenticated)/ranking/credits/page.tsx', 'submitRankingCredits'],
 ];
+
+const SETTINGS_STUB = 'src/app/[locale]/(authenticated)/ranking/settings/page.tsx';
 
 describe('Ranking target registry', () => {
   it('enables the four sub-routes with their canonical paths', () => {
     expect(buildRoute('en', 'ranking.board')).toBe('/en/ranking');
     expect(buildRoute('en', 'ranking.settings')).toBe('/en/ranking/settings');
+    expect(buildRoute('en', 'ranking.users')).toBe('/en/ranking/users');
     expect(buildRoute('en', 'ranking.appearance')).toBe('/en/ranking/appearance');
     expect(buildRoute('en', 'ranking.credits')).toBe('/en/ranking/credits');
     for (const [routeId] of RANKING_PAGES) expect(route(routeId).enabled).toBe(true);
@@ -82,5 +85,14 @@ describe('Ranking ownership and wiring', () => {
     const source = readSource('src/app/[locale]/(authenticated)/infrastructure/ranking/page.tsx');
     expect(source).toContain("const LEGACY_PATH = '/infrastructure/ranking'");
     expect(source).not.toContain('authorizeRoutePage');
+  });
+
+  it('keeps the old settings address a redirect onto the override list', () => {
+    const source = readSource(SETTINGS_STUB);
+    expect(source).toContain("const MOVED_PATH = '/ranking/settings'");
+    expect(source).toContain('resolveLegacyRedirect');
+    expect(source).not.toContain('authorizeRoutePage');
+    expect(resolveLegacyRedirect('en', '/ranking/settings', new Set(['ranking:list', 'ranking:read'])))
+      .toBe('/en/ranking/users');
   });
 });

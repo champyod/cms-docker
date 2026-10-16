@@ -12,6 +12,9 @@ export const LEGACY_REDIRECT_RULES: readonly LegacyRedirectRule[] = [
   { path: '/permissions?tab=admins', preferredRouteId: 'administration.admins' },
   { path: '/permissions?tab=groups', preferredRouteId: 'administration.groups' },
   { path: '/permissions', preferredRouteId: 'administration.admins' },
+  // The override surface moved onto the ranking users page, so the old settings address stays a
+  // redirect rather than a second copy of the list.
+  { path: '/ranking/settings', preferredRouteId: 'ranking.users' },
 ];
 
 const ROUTE_BY_ID = new Map(ROUTE_REGISTRY.map((route) => [route.id, route]));
