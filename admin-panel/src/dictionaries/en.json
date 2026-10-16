@@ -1180,5 +1180,29 @@
       "signout": { "label": "Sign out" }
     },
     "states": { "loading": "Loading", "error": "could not be loaded", "notFound": "Not found", "retry": "Try again" }
+  },
+  "limits": {
+    "unlimited": "Unlimited",
+    "toggle": "Toggle no limit",
+    "fields": {
+      "max_submission_number": "Max Submissions",
+      "max_user_test_number": "Max User Tests",
+      "token_max_number": "Max Total Tokens",
+      "token_gen_max": "Max Gen Count",
+      "min_submission_interval": "Min Submission Interval",
+      "min_user_test_interval": "Min User Test Interval",
+      "per_user_time": "Per-user Time",
+      "min_submission_interval_grace_period": "Min Submission Interval Grace Period"
+    },
+    "hints": {
+      "max_submission_number": "Per user; blank means no limit.",
+      "max_user_test_number": "Per user; blank means no limit.",
+      "token_max_number": "Total allowed across the contest; blank means no limit.",
+      "token_gen_max": "Highest number of generated tokens; blank means no limit.",
+      "min_submission_interval": "Seconds a user must wait between two submissions; blank means no wait.",
+      "min_user_test_interval": "Seconds a user must wait between two user tests; blank means no wait.",
+      "per_user_time": "Seconds one user may spend on the contest in total; blank means no limit.",
+      "min_submission_interval_grace_period": "Seconds of grace on top of the minimum submission interval; blank means none."
+    }
   }
 }
