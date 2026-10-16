@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { filterReadableFields } from '@/lib/field-permissions';
 import { prisma } from '@/lib/prisma';
-import { NO_CONTEST_THROTTLE, NO_INTERVALS, toIsoDate, toIntervalString, type ContestThrottleColumns, type IntervalColumns } from '@/lib/queries/read-model-format';
+import { NO_INTERVALS, toIsoDate, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
 
 export type ContestEditFields = {
   id: number; name: string; description: string; start: string; stop: string;
@@ -23,9 +23,11 @@ export type ContestEditFields = {
 
 export type ContestEditData = { contest: ContestEditFields; permissionKeys: readonly string[] };
 
-// The throttle columns stay out of this select on purpose: the generated client predates them (the
-// DDL in scripts/__fix_db_schema.sql adds them), so naming them here would fail the type check and,
-// with a stale client, the query itself. They ride the raw read below beside the interval columns.
+// Why the five throttle columns are named here although a raw read is sitting right below: they are a
+// plain int/bool/timestamp set, so the typed client reads them as they are — schema.prisma mirrors them
+// from scripts/__fix_db_schema.sql, and both the panel image and CI regenerate the client from that file
+// (admin-panel/Dockerfile:40, .github/workflows/ci.yml:268). Only the `interval` columns, which Prisma
+// cannot deserialize at all, need the raw read.
 const contestEditSelect = {
   id: true, name: true, description: true, start: true, stop: true, timezone: true,
   allowed_localizations: true, languages: true, submissions_download_allowed: true,
@@ -34,31 +36,31 @@ const contestEditSelect = {
   ip_restriction: true, ip_autologin: true, token_mode: true, token_max_number: true,
   token_gen_initial: true, token_gen_number: true, token_gen_max: true,
   max_submission_number: true, max_user_test_number: true,
-  queue_fairness_penalty_seconds: true, score_precision: true,
+  queue_fairness_penalty_seconds: true,
+  evaluation_throttle_delay_s: true, evaluation_throttle_window_s: true, evaluation_throttle_max: true,
+  evaluation_final_open: true, evaluation_final_open_at: true,
+  score_precision: true,
   analysis_enabled: true, analysis_start: true, analysis_stop: true,
 } satisfies Prisma.contestsSelect;
 
-async function fetchContestRawColumns(contestId: number): Promise<IntervalColumns & ContestThrottleColumns> {
+async function fetchContestRawColumns(contestId: number): Promise<IntervalColumns> {
   try {
     // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
     // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
     // interval" and left every interval input on its default. EPOCH reads it as total seconds,
     // which is exactly what the dialog's parser takes.
-    // Why the throttle columns share this read: they are added by scripts/__fix_db_schema.sql and
-    // the generated client predates them, so they cannot be named in the typed select either — the
-    // same "not in the client" reason the interval columns are read raw.
-    const rows = await prisma.$queryRaw<Array<IntervalColumns & ContestThrottleColumns>>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval, evaluation_throttle_delay_s, evaluation_throttle_window_s, evaluation_throttle_max, evaluation_final_open, evaluation_final_open_at FROM contests WHERE id = ${contestId}`;
-    return rows[0] ?? { ...NO_INTERVALS, ...NO_CONTEST_THROTTLE };
+    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM contests WHERE id = ${contestId}`;
+    return rows[0] ?? NO_INTERVALS;
   } catch {
     // Why degrade, not throw: the interval columns live on a CMS-created table that
     // no admin-panel migration owns, so a schema drift or a connection fault there
     // must leave four cosmetic inputs unset rather than fail the whole edit read —
     // the same reasoning the Task settings read applies to the identical query.
-    return { ...NO_INTERVALS, ...NO_CONTEST_THROTTLE };
+    return NO_INTERVALS;
   }
 }
 
-type ContestEditRow = Prisma.contestsGetPayload<{ select: typeof contestEditSelect }> & IntervalColumns & ContestThrottleColumns;
+type ContestEditRow = Prisma.contestsGetPayload<{ select: typeof contestEditSelect }> & IntervalColumns;
 
 export async function readContestEditData(contestId: number, permissions: ReadonlySet<string>): Promise<ContestEditData | null> {
   const [row, raw] = await Promise.all([

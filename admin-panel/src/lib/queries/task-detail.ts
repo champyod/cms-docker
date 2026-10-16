@@ -3,7 +3,7 @@ import { filterReadableFields } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/server/authorization';
-import { NO_INTERVALS, NO_TASK_THROTTLE, toIntervalString, type IntervalColumns, type TaskThrottleColumns } from '@/lib/queries/read-model-format';
+import { NO_INTERVALS, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
 import { enrichStatements, type TaskStatementSummary } from '@/lib/queries/task-statements';
 
 export type { TaskStatementSummary } from '@/lib/queries/task-statements';
@@ -151,29 +151,31 @@ const taskSettingsSelect = {
   allowed_languages: true, submission_format: true, token_mode: true, token_max_number: true,
   token_gen_initial: true, token_gen_number: true, token_gen_max: true,
   max_submission_number: true, max_user_test_number: true,
+  // Why this is a plain typed column while the intervals right below need a raw read: the throttle
+  // override is an int, which Prisma deserializes fine, and schema.prisma mirrors it from
+  // scripts/__fix_db_schema.sql — the client is regenerated from that file by the panel image and CI
+  // (admin-panel/Dockerfile:40, .github/workflows/ci.yml:268).
+  evaluation_throttle_delay_s: true,
 } satisfies Prisma.tasksSelect;
 
-async function fetchTaskRawColumns(taskId: number): Promise<IntervalColumns & TaskThrottleColumns> {
+async function fetchTaskRawColumns(taskId: number): Promise<IntervalColumns> {
   try {
     // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
     // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
     // interval" and left every interval input on its default. EPOCH reads it as total seconds,
     // which is exactly what the dialog's parser takes.
-    // Why the throttle override shares this read: it is added by scripts/__fix_db_schema.sql and the
-    // generated client predates it, so it cannot be named in the typed select either — the same
-    // "not in the client" reason the interval columns are read raw.
-    const rows = await prisma.$queryRaw<Array<IntervalColumns & TaskThrottleColumns>>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval, evaluation_throttle_delay_s FROM tasks WHERE id = ${taskId}`;
-    return rows[0] ?? { ...NO_INTERVALS, ...NO_TASK_THROTTLE };
+    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM tasks WHERE id = ${taskId}`;
+    return rows[0] ?? NO_INTERVALS;
   } catch {
     // Why degrade, not throw: the interval columns live on a CMS-created table that
     // no admin-panel migration owns, so a schema drift or a connection fault there
     // must leave four cosmetic inputs unset rather than fail the whole settings
     // read — the same reasoning the statement-size and upload-date reads follow.
-    return { ...NO_INTERVALS, ...NO_TASK_THROTTLE };
+    return NO_INTERVALS;
   }
 }
 
-type TaskSettingsRow = Prisma.tasksGetPayload<{ select: typeof taskSettingsSelect }> & IntervalColumns & TaskThrottleColumns;
+type TaskSettingsRow = Prisma.tasksGetPayload<{ select: typeof taskSettingsSelect }> & IntervalColumns;
 
 export async function getTaskSettings(taskId: number): Promise<TaskSettingsData | null> {
   const permissions = await requirePermission('task:read');
