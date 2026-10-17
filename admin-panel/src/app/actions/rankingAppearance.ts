@@ -105,6 +105,11 @@ export type RankingAppearanceSave =
  * The appearance page's entry point. The page holds its fields as form state, so it hands
  * the object it already has rather than a FormData, and the row the write kept comes back
  * with it: that is what the page re-seeds from, and only after the write succeeded.
+ *
+ * WHY the object type is the whole field set: this is the surface that owns every appearance
+ * column, so the object it hands states them all and the write touches them all. A form that
+ * owns one setting posts a FormData through `saveRankingAppearance` instead, where only the
+ * fields actually posted are written.
  */
 export async function updateRankingAppearance(
   fields: AppearanceFields,
@@ -135,11 +140,21 @@ export async function updateRankingAppearance(
   }
 }
 
+/**
+ * The FormData entry point, for a control that owns only some of the appearance columns — the
+ * System page's access-mode card posts the access mode and nothing else.
+ *
+ * WHY the post is read as the set of settings the caller owns rather than as the row: a control
+ * that owns one setting must never be able to clear the others, so a field the post leaves out
+ * is a column this write leaves alone. Clearing a column is stated explicitly — the field is
+ * posted empty — which is why the mapping to a row is the same one `updateRankingAppearance`
+ * uses (see `toRow`).
+ */
 export async function saveRankingAppearance(formData: FormData): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('ranking:appearance');
   try {
-    const appearance = readForm(formData);
-    const row = toRow(appearance, await readShownContestId());
+    const stated = readForm(formData);
+    const row = toRow(stated, await readShownContestId());
     await prisma.ranking_settings.upsert({
       where: { id: SETTINGS_ID },
       create: { id: SETTINGS_ID, ...row },
@@ -149,7 +164,7 @@ export async function saveRankingAppearance(formData: FormData): Promise<{ succe
       verb: 'ranking:appearance:update',
       entity: 'ranking',
       entityId: String(SETTINGS_ID),
-      afterValues: { ...appearance },
+      afterValues: { ...stated },
       result: 'success',
     });
     revalidatePath('/[locale]/ranking/appearance');
@@ -325,39 +340,128 @@ function readAnonymous(columns: unknown): boolean {
   return value === true;
 }
 
-function readForm(formData: FormData): AppearanceFields {
-  const text = (name: string) => String(formData.get(name) ?? '').trim();
-  return {
-    title: text("title"),
-    subtitle: text("subtitle"),
-    organisation: text("organisation"),
-    displayName: text("displayName"),
-    accessMode: formData.get("accessMode") === "protected" ? "protected" : "public",
-    showIdColumn: formData.get("showIdColumn") === "on",
-    anonymous: formData.get("anonymous") === "on",
-    footerText: text("footerText"),
-    creditsText: text("creditsText"),
-    theme: text("theme"),
-    scoreFormat: text("scoreFormat"),
-    perspectives: text("perspectives"),
-  };
+/**
+ * The appearance fields a caller stated: the same shape as `AppearanceFields`, every field
+ * optional. A field that is absent from this shape is one the caller never mentioned, so the
+ * write leaves its column alone — see `toRow`.
+ */
+// `-readonly` because the wording fields are declared readonly on the shared shape (they are
+// read straight off a stored row there); a caller assembling its own statement needs to set them.
+type StatedAppearanceFields = { -readonly [K in keyof AppearanceFields]?: AppearanceFields[K] };
+
+/** The fields whose post carries text; the access mode and the two display flags are read apart. */
+type TextField = Exclude<keyof AppearanceFields, 'accessMode' | 'showIdColumn' | 'anonymous'>;
+const TEXT_FIELDS: readonly TextField[] = [
+  'title',
+  'subtitle',
+  'organisation',
+  'displayName',
+  'footerText',
+  'creditsText',
+  'theme',
+  'scoreFormat',
+  'perspectives',
+];
+
+/**
+ * The fields the caller actually stated — the columns it owns, and no others.
+ *
+ * WHY absence means "leave it alone": a form that owns one control posts only that control,
+ * and a field it never mentioned is not an instruction to clear it. Reading absence as an
+ * empty value is what let the System page's *Save Access Mode* write JSON null over the
+ * theme, the score format and the perspective config it never posted. A caller that *does*
+ * mean to clear a column states that field empty (an emptied text or JSON box still clears,
+ * see `toRow`), never by leaving it out.
+ *
+ * WHY the two display flags are read together: `columns` is one JSON column carrying both
+ * settings, so a post that states either flag writes the column from both — an unchecked box
+ * is absent from a form post by HTML's own rule, not an unstated field.
+ */
+function readForm(formData: FormData): StatedAppearanceFields {
+  const stated: StatedAppearanceFields = {};
+  for (const name of TEXT_FIELDS) {
+    if (formData.has(name)) {
+      stated[name] = String(formData.get(name) ?? '').trim();
+    }
+  }
+  if (formData.has('accessMode')) {
+    stated.accessMode = formData.get('accessMode') === 'protected' ? 'protected' : 'public';
+  }
+  if (formData.has('showIdColumn') || formData.has('anonymous')) {
+    stated.showIdColumn = formData.get('showIdColumn') === 'on';
+    stated.anonymous = formData.get('anonymous') === 'on';
+  }
+  return stated;
 }
 
-function toRow(appearance: AppearanceFields, contestId: number | null) {
-  assertWordingHasContest(appearance, contestId);
-  return {
+/**
+ * The appearance columns a statement may write, each in a form both the create and the update
+ * side of the upsert accept. A key absent from this shape is a column the write leaves alone.
+ */
+interface AppearanceColumns {
+  wording_overrides?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  organisation?: string | null;
+  display_name?: string | null;
+  access_mode?: 'public' | 'protected';
+  columns?: Prisma.InputJsonValue;
+  footer_text?: string | null;
+  credits_text?: string | null;
+  theme?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  score_format?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+  perspectives?: Prisma.InputJsonValue | typeof Prisma.JsonNull;
+}
+
+/**
+ * The columns this write states, and only those.
+ *
+ * WHY a partial row rather than the whole one: the fields a caller hands over are the settings
+ * it owns, and a column it never mentioned must keep its stored value. Building every column
+ * from a partial statement is what wrote JSON null over the theme, the score format and the
+ * perspective config each time the System page saved its access mode. A caller that means to
+ * clear a column states that field empty — an emptied text or JSON box still clears below,
+ * which is why an explicit `''` reaches `Prisma.JsonNull` instead of being skipped.
+ *
+ * WHY the paired fields are written as one column each: `wording_overrides` holds the two
+ * header words of the shown contest as one entry, and `columns` carries both display flags, so
+ * a statement of either member writes the column from both. A caller that states neither leaves
+ * both columns alone.
+ */
+function toRow(fields: StatedAppearanceFields, contestId: number | null): AppearanceColumns {
+  const words = { title: fields.title ?? '', subtitle: fields.subtitle ?? '' };
+  assertWordingHasContest(words, contestId);
+  const row: AppearanceColumns = {};
+  if (fields.title !== undefined || fields.subtitle !== undefined) {
     // The contest is named by the config, not copied here, and the board reads its name and dates
     // from the projected record of the contest the config shows. The words below override that
     // record's own ones; no column of this row names a contest.
-    wording_overrides: toJsonColumn(wordingOverrides(appearance, contestId)),
-    organisation: appearance.organisation || null,
-    display_name: appearance.displayName || null,
-    access_mode: appearance.accessMode,
-    columns: { show_id_column: appearance.showIdColumn, anonymous: appearance.anonymous },
-    footer_text: appearance.footerText || null,
-    credits_text: appearance.creditsText || null,
-    theme: parseJsonObject('the theme', appearance.theme),
-    score_format: parseJsonObject('the score format', appearance.scoreFormat),
-    perspectives: parsePerspectives(appearance.perspectives),
-  };
+    row.wording_overrides = toJsonColumn(wordingOverrides(words, contestId));
+  }
+  if (fields.organisation !== undefined) {
+    row.organisation = fields.organisation || null;
+  }
+  if (fields.displayName !== undefined) {
+    row.display_name = fields.displayName || null;
+  }
+  if (fields.accessMode !== undefined) {
+    row.access_mode = fields.accessMode;
+  }
+  if (fields.showIdColumn !== undefined || fields.anonymous !== undefined) {
+    row.columns = { show_id_column: fields.showIdColumn ?? false, anonymous: fields.anonymous ?? false };
+  }
+  if (fields.footerText !== undefined) {
+    row.footer_text = fields.footerText || null;
+  }
+  if (fields.creditsText !== undefined) {
+    row.credits_text = fields.creditsText || null;
+  }
+  if (fields.theme !== undefined) {
+    row.theme = parseJsonObject('the theme', fields.theme);
+  }
+  if (fields.scoreFormat !== undefined) {
+    row.score_format = parseJsonObject('the score format', fields.scoreFormat);
+  }
+  if (fields.perspectives !== undefined) {
+    row.perspectives = parsePerspectives(fields.perspectives);
+  }
+  return row;
 }
