@@ -15,8 +15,21 @@ import { SUPPORTED_LOCALES } from '@/lib/locales';
 const SRC = 'src';
 const PAGE_ROOT = 'src/app/[locale]';
 
-/** Every in-app target a file can state as a literal: a link, a push, a replace, a redirect. */
-const LITERAL_TARGET = /(?:href=|router\.(?:push|replace)\(|redirect\()\s*["'`](\/(?:\$\{[^}]*\}|[^"'`{}])*)/g;
+/**
+ * Every in-app target a file can state as a literal: a link, a push, a replace, a redirect.
+ *
+ * WHY the optional brace and the alternation on the first character: `href={"/x"}` and
+ * `href={`/${locale}/x`}` are the two most idiomatic Next link shapes, and the first version of
+ * this pattern matched neither — it required the quote to follow `href=` directly and the path to
+ * begin with a slash, so a hard-coded dead link in either shape passed silently. A target may
+ * therefore open with a brace, and may begin with the `${...}` a file interpolates its locale into
+ * (the normalisation below already reads a leading interpolation as the locale slot).
+ *
+ * WHY the navigator is named rather than `\w+\.`: `Array.prototype.push` is called on every list in
+ * this codebase, so a pattern that read `anything.push("...")` as a link would fail on this test's
+ * own source before it ever caught a real dead link.
+ */
+const LITERAL_TARGET = /(?:href=|(?:router|history|navigation)\.(?:push|replace)\(|redirect\()\s*\{?\s*["'`]((?:\/|\$\{)[^"'`]*)/g;
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -49,6 +62,30 @@ function hasPage(suffix: string): boolean {
   });
 }
 
+/** The targets in one source text that name no page the app serves and no declared legacy path. */
+function unresolvedTargets(source: string, legacy: ReadonlySet<string>): string[] {
+  const offenders: string[] = [];
+  for (const match of source.matchAll(LITERAL_TARGET)) {
+    // A `${...}` is the locale, an id or a whole path the file computed at run time, and a
+    // `#fragment` or `?query` is not part of the path — so the check runs on what remains.
+    const target = match[1].replace(/\$\{[^}]*\}/g, '*').replace(/[#?].*$/, '');
+    // An interpolation this pattern could not close — a computed path, or an expression with a
+    // quote inside it — names nothing the filesystem can resolve: there is no claim to check.
+    if (target.includes('${')) continue;
+    const segments = target.split('/').filter(Boolean);
+    // A leading locale or a leading interpolation is not a segment of the app's tree, so the
+    // check starts after it. Nothing left to check is not a failure: the target names no
+    // segment the filesystem could resolve.
+    const rooted = segments[0] === '*' || (SUPPORTED_LOCALES as readonly string[]).includes(segments[0])
+      ? segments.slice(1)
+      : segments;
+    if (rooted.length === 0) continue;
+    if (hasPage(rooted.join('/')) || legacy.has(match[1])) continue;
+    offenders.push(match[1]);
+  }
+  return offenders;
+}
+
 describe('in-app link targets', () => {
   it('names a declared route id at every buildRoute call site', () => {
     const declared = new Set<string>(ROUTE_REGISTRY.map((route) => route.id));
@@ -66,18 +103,42 @@ describe('in-app link targets', () => {
       ...ROUTE_REGISTRY.flatMap((route) => route.legacyPaths),
       ...LEGACY_REDIRECT_RULES.map((rule) => rule.path),
     ]);
-    const offenders: string[] = [];
-    for (const file of sourceFiles(SRC)) {
-      for (const match of readFileSync(file, 'utf8').matchAll(LITERAL_TARGET)) {
-        // A `${...}` is a locale or an id the file supplies at run time; the check is on the path.
-        const segments = match[1].replace(/\$\{[^}]*\}/g, '*').split('/').filter(Boolean);
-        const rooted = segments[0] === '*' || (SUPPORTED_LOCALES as readonly string[]).includes(segments[0])
-          ? segments.slice(1)
-          : segments;
-        if (hasPage(rooted.join('/')) || legacy.has(match[1])) continue;
-        offenders.push(`${file}: ${match[1]}`);
-      }
-    }
+    const offenders = sourceFiles(SRC).flatMap((file) =>
+      unresolvedTargets(readFileSync(file, 'utf8'), legacy).map((target) => `${file}: ${target}`),
+    );
     expect(offenders).toEqual([]);
+  });
+
+  it('reads the idiomatic link shapes, and never an array push', () => {
+    const targets = (source: string): string[] =>
+      [...source.matchAll(LITERAL_TARGET)].map((match) => match[1]);
+
+    expect(targets('href="/system/docs"')).toEqual(['/system/docs']);
+    // The two shapes the first version of this pattern missed: the braced literal and the
+    // template literal whose first segment is the locale.
+    expect(targets('href={"/system/docs"}')).toEqual(['/system/docs']);
+    expect(targets('href={`/${locale}/system/docs`}')).toEqual(['/${locale}/system/docs']);
+    expect(targets("router.push('/system/docs')")).toEqual(['/system/docs']);
+    expect(targets("navigation.replace('/system/docs')")).toEqual(['/system/docs']);
+    expect(targets('redirect("/system/docs")')).toEqual(['/system/docs']);
+    // An array's `push` takes the same shape and is not a link, which is why the navigators are
+    // named: this pattern is matched against this very file.
+    expect(targets('offenders.push(`${file}: ${match[1]}`)')).toEqual([]);
+  });
+
+  it('flags a target the app does not serve, in every shape it reads', () => {
+    const nothing = new Set<string>();
+
+    // The negative control for the widened pattern: a dead link is caught in the braced and the
+    // template shape, not only in the bare literal the first version could read.
+    expect(unresolvedTargets('href="/system/nonexistent-page"', nothing))
+      .toEqual(['/system/nonexistent-page']);
+    expect(unresolvedTargets('href={"/system/nonexistent-page"}', nothing))
+      .toEqual(['/system/nonexistent-page']);
+    expect(unresolvedTargets('href={`/${locale}/system/nonexistent-page`}', nothing))
+      .toEqual(['/${locale}/system/nonexistent-page']);
+    // And a target the app does serve is not one.
+    expect(unresolvedTargets('href="/system/docs"', nothing)).toEqual([]);
+    expect(unresolvedTargets('href={`/${locale}/people/users/${id}`}', nothing)).toEqual([]);
   });
 });
