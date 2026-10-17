@@ -8,30 +8,25 @@ import PeopleLoading from '@/app/[locale]/(authenticated)/people/loading';
 import PeopleError from '@/app/[locale]/(authenticated)/people/error';
 import PeopleNotFound from '@/app/[locale]/(authenticated)/people/not-found';
 import UserProfileLoading from '@/app/[locale]/(authenticated)/people/users/[id]/profile/loading';
-import UserProfileError from '@/app/[locale]/(authenticated)/people/users/[id]/profile/error';
 import UserTeamsLoading from '@/app/[locale]/(authenticated)/people/users/[id]/teams/loading';
-import UserTeamsError from '@/app/[locale]/(authenticated)/people/users/[id]/teams/error';
 import UserHistoryLoading from '@/app/[locale]/(authenticated)/people/users/[id]/history/loading';
-import UserHistoryError from '@/app/[locale]/(authenticated)/people/users/[id]/history/error';
+// One error boundary per record, at the record segment: the tab routes it wraps are siblings, so
+// a per-tab boundary would be the same file under five names.
+import UserRecordError from '@/app/[locale]/(authenticated)/people/users/[id]/error';
 import UserRecordNotFound from '@/app/[locale]/(authenticated)/people/users/[id]/not-found';
 import TeamOverviewLoading from '@/app/[locale]/(authenticated)/people/teams/[id]/overview/loading';
-import TeamOverviewError from '@/app/[locale]/(authenticated)/people/teams/[id]/overview/error';
 import TeamMembersLoading from '@/app/[locale]/(authenticated)/people/teams/[id]/members/loading';
-import TeamMembersError from '@/app/[locale]/(authenticated)/people/teams/[id]/members/error';
 import TeamContestsLoading from '@/app/[locale]/(authenticated)/people/teams/[id]/contests/loading';
-import TeamContestsError from '@/app/[locale]/(authenticated)/people/teams/[id]/contests/error';
+import TeamRecordError from '@/app/[locale]/(authenticated)/people/teams/[id]/error';
 import TeamRecordNotFound from '@/app/[locale]/(authenticated)/people/teams/[id]/not-found';
 import EvaluationLoading from '@/app/[locale]/(authenticated)/evaluation/loading';
 import EvaluationError from '@/app/[locale]/(authenticated)/evaluation/error';
 import EvaluationNotFound from '@/app/[locale]/(authenticated)/evaluation/not-found';
 import SubmissionSummaryLoading from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/summary/loading';
-import SubmissionSummaryError from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/summary/error';
 import SubmissionResultsLoading from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/results/loading';
-import SubmissionResultsError from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/results/error';
 import SubmissionLogsLoading from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/logs/loading';
-import SubmissionLogsError from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/logs/error';
 import SubmissionEvaluationLoading from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/evaluation/loading';
-import SubmissionEvaluationError from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/evaluation/error';
+import SubmissionRecordError from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/error';
 import SubmissionRecordNotFound from '@/app/[locale]/(authenticated)/evaluation/submissions/[id]/not-found';
 
 afterEach(() => cleanup());
@@ -72,17 +67,10 @@ const LOADING_BOUNDARIES: readonly LoadingBoundary[] = [
 
 const ERROR_BOUNDARIES: readonly ErrorBoundary[] = [
   { Component: PeopleError, text: en.states.error.people },
-  { Component: UserProfileError, text: en.states.error.userRecord },
-  { Component: UserTeamsError, text: en.states.error.userRecord },
-  { Component: UserHistoryError, text: en.states.error.userRecord },
-  { Component: TeamOverviewError, text: en.states.error.teamRecord },
-  { Component: TeamMembersError, text: en.states.error.teamRecord },
-  { Component: TeamContestsError, text: en.states.error.teamRecord },
+  { Component: UserRecordError, text: en.states.error.userRecord },
+  { Component: TeamRecordError, text: en.states.error.teamRecord },
   { Component: EvaluationError, text: en.states.error.evaluation },
-  { Component: SubmissionSummaryError, text: en.states.error.submissionRecord },
-  { Component: SubmissionResultsError, text: en.states.error.submissionRecord },
-  { Component: SubmissionLogsError, text: en.states.error.submissionRecord },
-  { Component: SubmissionEvaluationError, text: en.states.error.submissionRecord },
+  { Component: SubmissionRecordError, text: en.states.error.submissionRecord },
 ];
 
 const NOT_FOUND_BOUNDARIES: readonly NotFoundBoundary[] = [
