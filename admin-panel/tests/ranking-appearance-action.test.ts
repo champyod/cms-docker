@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Prisma } from '@prisma/client';
 
 // WHY the prisma mock: what these assert is that the appearance write carries no contest column
 // and that the wording is keyed by the contest the config shows — a contract with the reader, not
@@ -22,7 +23,11 @@ vi.mock('@/lib/permissions', () => ({ ensurePermission: mocks.ensurePermission }
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 vi.mock('next/cache', () => ({ revalidatePath: mocks.revalidatePath }));
 
-import { getRankingAppearance, updateRankingAppearance } from '@/app/actions/rankingAppearance';
+import {
+  getRankingAppearance,
+  updateRankingAppearance,
+  type AppearanceFields,
+} from '@/app/actions/rankingAppearance';
 import { readShownContestId } from '@/lib/ranking-shown';
 
 function settingsRow(overrides: Partial<Record<string, unknown>> = {}) {
@@ -163,5 +168,36 @@ describe('reading the appearance', () => {
 
     expect(appearance.title).toBe('');
     expect(appearance.subtitle).toBe('');
+  });
+});
+
+describe('saving a partial appearance', () => {
+  // WHY the assertion is on a key's absence rather than on its value: the defect was that these
+  // columns were written at all — a field the caller never stated was built as an emptied box and
+  // stored as JSON null, so a save that owned one setting cleared the stored theme, score format
+  // and perspective config. The System page's own *Save Access Mode* button was that caller, and
+  // this is the proof the write stayed partial after that entry point was removed.
+  it('writes the fields the caller stated and leaves the columns it did not mention alone', async () => {
+    mocks.configFindMany.mockResolvedValue([{ target_kind: 'contest', target_key: '9' }]);
+
+    await updateRankingAppearance({ accessMode: 'protected' } as AppearanceFields);
+
+    const written = mocks.settingsUpsert.mock.calls[0][0] as { update: Record<string, unknown> };
+    expect(written.update.access_mode).toBe('protected');
+    expect(written.update).not.toHaveProperty('theme');
+    expect(written.update).not.toHaveProperty('score_format');
+    expect(written.update).not.toHaveProperty('perspectives');
+  });
+
+  it('still clears a column the caller states empty', async () => {
+    mocks.configFindMany.mockResolvedValue([{ target_kind: 'contest', target_key: '9' }]);
+
+    // An emptied box is an instruction to clear the column; only leaving the field out of the
+    // statement is the "leave it alone" this write reads it as.
+    await updateRankingAppearance({ theme: '' } as AppearanceFields);
+
+    const written = mocks.settingsUpsert.mock.calls[0][0] as { update: Record<string, unknown> };
+    expect(written.update).toHaveProperty('theme');
+    expect(written.update.theme).toBe(Prisma.JsonNull);
   });
 });
