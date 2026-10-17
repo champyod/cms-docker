@@ -1081,33 +1081,11 @@
     "rowBehind": "Read {readAt}; the newest read this page has is {surfaceReadAt}.",
     "rowUnconfirmed": "Read {readAt}, and the live stream is reconnecting, so the panel cannot confirm it."
   },
-  "notifications": {
-    "title": "Alerts",
-    "subtitle": "Every critical action and sensitive failure the panel pushed, newest first.",
-    "columns": {
-      "timestamp": "Time",
-      "verb": "Action",
-      "actor": "Actor",
-      "target": "Target",
-      "result": "Result"
-    },
-    "filters": {
-      "search": "Search",
-      "searchPlaceholder": "action, target…",
-      "result": "Result",
-      "allResults": "All results",
-      "fromDate": "From",
-      "toDate": "To",
-      "apply": "Apply",
-      "clear": "Clear"
-    },
-    "liveTitle": "Live alerts",
-    "liveEmpty": "No new alerts.",
+  "systemAlerts": {
+    "title": "System alerts",
     "markAllRead": "Mark all read",
-    "pageInfo": "{total} alerts total",
-    "openRecord": "Open the audit record",
-    "noEntries": "No alerts recorded yet.",
-    "loadFailed": "Alerts could not be loaded."
+    "clear": "Clear",
+    "empty": "No alerts yet."
   },
   "states": {
     "retry": {
@@ -1390,9 +1368,6 @@
       "search": {
         "label": "Search"
       }
-    },
-    "notifications": {
-      "label": "Alerts"
     },
     "auth": {
       "signout": {

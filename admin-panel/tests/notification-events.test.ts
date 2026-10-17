@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CRITICAL_AUDIT_VERBS,
   classifyAuditEvent,
+  classifyAuditEventWithNames,
   isCriticalAuditEvent,
   isDiscordNotify,
   isSubmitBurst,
@@ -33,6 +34,11 @@ describe('notification events', () => {
     expect(event?.detail).toContain('admin #1');
     expect(event?.detail).toContain('admin #7');
     expect(classifyAuditEvent('user:list', 'user', null, 'success', 1)).toBeNull();
+  });
+
+  it('names the audit log as the destination of the alert it frames', () => {
+    expect(classifyAuditEventWithNames('admin:delete', 'success', 'Ada', 'admin #7')?.destination).toBe('administration.audit');
+    expect(classifyAuditEvent('admin:delete', 'admin', '7', 'failure', 1)?.destination).toBe('administration.audit');
   });
 
   it('detects submit bursts at the threshold', () => {

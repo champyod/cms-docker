@@ -56,9 +56,8 @@ export default async function AuthenticatedLayout({
   return (
     <DictionaryProvider dict={dict}>
       <ConfirmProvider>
-        {/* Why the notification service wraps the whole shell rather than the header: the alert
-            centre renders the same service below the header, and two providers would open the alert
-            stream twice. */}
+        {/* Why the notification service wraps the whole shell rather than the header: the header and
+            the palette read the same service, and two providers would open the alert stream twice. */}
         <LiveNotificationProvider permissionKeys={permissionKeys}>
           <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
             <Sidebar

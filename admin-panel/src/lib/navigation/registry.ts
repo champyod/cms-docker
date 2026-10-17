@@ -29,7 +29,7 @@ export const ADMINISTRATION_ROUTE_IDS = [
 ] as const satisfies readonly RouteId[];
 
 export const NAVIGATION_GROUPS: readonly NavigationGroupDescriptor[] = [
-  { id: 'direct', labelKey: 'navigation.groups.direct', routeIds: ['home', 'contests.list', 'tasks.list', 'notifications'] },
+  { id: 'direct', labelKey: 'navigation.groups.direct', routeIds: ['home', 'contests.list', 'tasks.list'] },
   { id: 'people', labelKey: 'navigation.groups.people', routeIds: ['people.users', 'people.teams'] },
   { id: 'evaluation', labelKey: 'navigation.groups.evaluation', routeIds: ['evaluation.submissions', 'evaluation.lanes'] },
   { id: 'administration', labelKey: 'navigation.groups.administration', routeIds: [...ADMINISTRATION_ROUTE_IDS] },
