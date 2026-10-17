@@ -39,11 +39,18 @@ not select a migration strategy; the strategies are in `MIGRATION-OPTIONS.md`.
 | REQ-F05 | Operator entry points retain their surface: service scripts, data tools, launcher, Makefile targets, TUI. | `src/setup.py:121-163`, `Makefile:55-405`, `cms:100,154`, `tools/cms-tui/src/cli/mod.rs:122` | Each command still exists with the same arguments and effect, or an approved replacement is documented. | P1 |
 | REQ-F06 | The transport wire format is preserved, so old and new components interoperate during a phased move. | `src/cms/io/rpc.py` (framing, `__secret`) | A new component and a current component exchange a request and a response successfully. | P1 |
 | REQ-F07 | The configuration surface is preserved. | `src/cms/conf.py:68-164` | Every existing TOML section and key in the current config keeps its meaning. | P1 |
-| REQ-F08 | Prisma remains the authority for tables; the schema is unchanged by this work. | `admin-panel/prisma/schema.prisma` | The model set is identical before and after; no migration is applied. | P0 |
+| REQ-F08 | The schema declaration is the authority for tables and Atlas generates every migration from it; Prisma is retired as the authority. | Operator decision 2026-10-17; `atlas.hcl` | Atlas's first generated migration is a no-op against the live schema; no migration is hand-written; the model set changes only through the generated path. | P0 |
 | REQ-F09 | Large-object storage remains layout-compatible. | `admin-panel/src/lib/fsobjects.ts` | New code reads and writes the same digest-plus-large-object layout; existing files remain readable. | P0 |
 | REQ-F10 | Feature parity is verified through the real user-facing path, not only unit tests. | Repository convention for verification | An end-to-end rehearsal of contest setup, submission, judging, and ranking succeeds on the replacement. | P0 |
 | REQ-F11 | The participant experience is unchanged: training workflows for national and international olympiad preparation continue to feel the same. | `src/cms/server/contest/**`, `src/cmsranking/**` | A participant completes login, task viewing, submission, user tests, and question flow with no perceptible difference, confirmed by the operators. | P0 |
 | REQ-F12 | Every replaced component is described with its current state, the improvement claimed, and the trade-off accepted. | This document set | `ARCHITECTURE.md` carries a per-component comparison row for every service and web server. | P1 |
+
+**REQ-F08 amendment (operator decision, 2026-10-17).** Superseded text: *"Prisma remains the authority for tables; the
+schema is unchanged by this work — the model set is identical before and after; no migration is applied."* Prisma is
+retired as the schema authority; Atlas generates every migration, policy and seed from the schema declaration. The
+authority change alone must not alter the model set, which is why the acceptance criterion is a first generated
+migration that is a no-op against the live schema. Cost tier per REQ-P07: Atlas core is Apache-2 OSS; its paid tiers are
+not used. REQ-F07, REQ-F09 and NG-01…NG-04 are unchanged by this amendment.
 
 ## Delivery and process requirements
 
