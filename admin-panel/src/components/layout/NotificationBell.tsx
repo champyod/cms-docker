@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { BellRing } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { useDictionary } from '@/hooks/useDictionary';
 import { NotificationPopup } from './NotificationPopup';
 import type { QueuedNotification } from '@/lib/notification-queue';
 
@@ -20,18 +21,31 @@ interface NotificationBellProps {
  * Why the bell renders and does not listen: the service owns the connection, the dedup and the
  * alerting, so this stays the same bell whether its alerts arrive from the audit stream or from a
  * later channel.
+ *
+ * Why the count is cleared on the transition and not on the press: the panel opens from the bell,
+ * and that one state change is the only place every opening path passes through.
  */
 export function NotificationBell({ events, unread, onClear, onSeen }: NotificationBellProps): React.JSX.Element {
   const [open, setOpen] = useState(false);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const copy = useDictionary().systemAlerts;
 
-  const toggle = (): void => {
-    setOpen((value) => !value);
-    onSeen();
-  };
+  const handleOpenChange = useCallback((next: boolean): void => {
+    setOpen(next);
+    if (next) onSeen();
+  }, [onSeen]);
 
   return (
-    <div className="relative">
-      <Button variant="ghost" size="sm" iconOnly tooltip="System alerts" onClick={toggle}>
+    <div ref={anchorRef} className="relative">
+      <Button
+        variant="ghost"
+        size="sm"
+        iconOnly
+        tooltip={copy.title}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={(): void => handleOpenChange(!open)}
+      >
         <span className="relative flex">
           <BellRing className="size-4" />
           {unread > 0 && (
@@ -41,7 +55,14 @@ export function NotificationBell({ events, unread, onClear, onSeen }: Notificati
           )}
         </span>
       </Button>
-      {open && <NotificationPopup events={events} onClear={onClear} onMarkAllRead={onSeen} />}
+      <NotificationPopup
+        open={open}
+        onOpenChange={handleOpenChange}
+        anchorRef={anchorRef}
+        events={events}
+        onClear={onClear}
+        onMarkAllRead={onSeen}
+      />
     </div>
   );
 }

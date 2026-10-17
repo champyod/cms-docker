@@ -1081,6 +1081,12 @@
     "rowBehind": "Read {readAt}; the newest read this page has is {surfaceReadAt}.",
     "rowUnconfirmed": "Read {readAt}, and the live stream is reconnecting, so the panel cannot confirm it."
   },
+  "systemAlerts": {
+    "title": "System alerts",
+    "markAllRead": "Mark all read",
+    "clear": "Clear",
+    "empty": "No alerts yet."
+  },
   "states": {
     "retry": {
       "label": "Retry",

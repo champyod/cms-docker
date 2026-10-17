@@ -25,6 +25,20 @@ interface DialogProps {
    * so ignoring the close request is what keeps the action's result on screen.
    */
   pending?: boolean;
+  /**
+   * Leaves the page behind the dialog interactive. The default is a modal dialog: an
+   * overlay, a focus trap and an inert page. A panel that belongs to a control on
+   * the page — the bell's own alerts — is non-modal, so the page it is read against
+   * keeps its focus and its presses.
+   */
+  modal?: boolean;
+  /**
+   * A press or focus move outside the content, for a caller that owns a control the
+   * dialog belongs to: preventing the event keeps that control's own toggle
+   * authoritative instead of letting the dismissal and the toggle fight over one
+   * gesture. Every other dismissal path is untouched.
+   */
+  onInteractOutside?: (event: Event) => void;
 }
 
 export function Dialog({
@@ -36,6 +50,8 @@ export function Dialog({
   children,
   className,
   pending = false,
+  modal = true,
+  onInteractOutside,
 }: DialogProps) {
   const invokeRef = useRef<HTMLElement | null>(null);
   const reasonRef = useRef<DismissReason>('close');
@@ -74,13 +90,16 @@ export function Dialog({
   }, [onOpenChange, pending]);
 
   return (
-    <UIDialog open={open} onOpenChange={handleOpenChange}>
+    <UIDialog modal={modal} open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className={className}
         onOpenAutoFocus={rememberInvoker}
         onCloseAutoFocus={restoreInvoker}
         onEscapeKeyDown={(): void => { reasonRef.current = 'escape'; }}
-        onInteractOutside={(): void => { reasonRef.current = 'backdrop'; }}
+        onInteractOutside={(event): void => {
+          reasonRef.current = 'backdrop';
+          onInteractOutside?.(event);
+        }}
       >
         {(title || description) && (
           <DialogHeader>
