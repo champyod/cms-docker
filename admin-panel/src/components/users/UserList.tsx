@@ -17,7 +17,7 @@ import { useUserSelection } from './useUserSelection';
 
 export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps): React.JSX.Element {
   const rows = useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort });
-  const selection = useUserSelection(rows.users, rows.userCache);
+  const selection = useUserSelection(rows.userCache);
   const dict = useDictionary();
   const capabilities = useUserCapabilities(permissionKeys);
   const dialogs = useUserDialogs();

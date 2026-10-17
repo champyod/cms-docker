@@ -124,7 +124,6 @@ describe('users list select-all', () => {
       selectedIds: new Set<number>(),
       selectedUsers: [],
       missingCount: 0,
-      toggleAll: vi.fn(),
       toggleOne: vi.fn(),
       setMany: vi.fn(),
       clear: vi.fn(),

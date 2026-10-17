@@ -12,7 +12,6 @@ export interface UserSelection {
   readonly selectedUsers: UsersPageRow[];
   /** Selected ids that no already-read page could resolve, so no action can reach them. */
   readonly missingCount: number;
-  readonly toggleAll: (checked: boolean) => void;
   readonly toggleOne: (userId: number, checked: boolean) => void;
   /** Selects or clears a set of ids at once, so select-all can cover a whole filter. */
   readonly setMany: (ids: readonly number[], checked: boolean) => void;
@@ -35,7 +34,6 @@ export function countUnreachableSelection(selectedIdCount: number, resolvedCount
 }
 
 export function useUserSelection(
-  users: readonly UsersPageRow[],
   userCache: Readonly<Record<number, UsersPageRow>>,
 ): UserSelection {
   const session = useListSession(USERS_LIST_ROUTE_ID);
@@ -53,10 +51,6 @@ export function useUserSelection(
     [session.selectedIds],
   );
 
-  const toggleAll = (checked: boolean): void => {
-    users.forEach((user) => session.setSelected(String(user.id), checked));
-  };
-
   const toggleOne = (userId: number, checked: boolean): void => {
     session.setSelected(String(userId), checked);
   };
@@ -72,7 +66,6 @@ export function useUserSelection(
     selectedIds,
     selectedUsers,
     missingCount,
-    toggleAll,
     toggleOne,
     setMany: (ids, checked) => {
       ids.forEach((id) => session.setSelected(String(id), checked));
