@@ -2,17 +2,19 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { recordAudit } from '@/lib/audit';
-import { getSession } from '@/lib/auth';
+import { addOverride, endOverrides } from '@/lib/panel-actions';
+import { requirePanelActorId } from '@/lib/panel-actor';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
-import {
-  KIND_VERBS,
-  OVERRIDE_ACTIONS,
-  OVERRIDE_TARGETS,
-  type OverrideAction,
-  type OverrideTarget,
-} from '@/lib/ranking-override-verbs';
+
+/**
+ * The override surface: the exceptions that win over the board's config.
+ *
+ * WHY these are thin wrappers over `panel-actions`: `./cms panel override` files and ends the same
+ * rows while no panel server is up, so the target vocabulary, the scope check and the audit row
+ * live in that module and this file adds only what a panel request owns — the permission gate, the
+ * session actor and the screen refresh.
+ */
 
 export interface RankingOverride {
   id: string;
@@ -49,98 +51,38 @@ export async function getRankingOverrides(contestId?: number): Promise<RankingOv
   return rows.map(toOverride);
 }
 
+/** Files one override. The write itself is `addOverride`. */
 export async function saveRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
-  const contestId = Number.parseInt(String(formData.get('contestId') ?? ''), 10);
-  const action = readAction(formData);
-  const targetKind = readTargetKind(formData);
-  const targetKey = targetKind === 'ranking' ? '*' : readText(formData, 'targetKey');
-  const reason = readText(formData, 'reason');
-  if (!Number.isInteger(contestId) || targetKey === "" || reason === "") {
-    throw new Error("a contest, a target and a reason are required");
-  }
-  if (!KIND_VERBS[targetKind].includes(action)) {
-    throw new Error(`a ${targetKind} target does not accept the ${action} action`);
-  }
-  const value = action === "hide" ? "" : readText(formData, "value");
-  const actorId = await currentActorId();
-  await prisma.ranking_overrides.create({
-    data: {
-      contest_id: contestId,
-      target_kind: targetKind,
-      target_key: targetKey,
-      action,
-      payload: value === "" ? undefined : { value },
-      reason,
-      created_by: actorId,
-    },
-  });
-  await recordAudit({
-    verb: 'ranking:override:create',
-    entity: 'ranking',
-    entityId: `${targetKind}:${targetKey}`,
-    afterValues: { contestId, targetKind, targetKey, action, value },
-    reason,
-    result: 'success',
+  const actorId = await requirePanelActorId();
+  await addOverride(actorId, {
+    contestId: readText(formData, 'contestId'),
+    targetKind: readText(formData, 'targetKind'),
+    targetKey: readText(formData, 'targetKey'),
+    action: readText(formData, 'action'),
+    value: readText(formData, 'value'),
+    reason: readText(formData, 'reason'),
   });
   revalidateOverridePages();
 }
 
-/**
- * Ending is not deleting: the row keeps its creation reason and gains the ending actor
- * and time, so "who hid this row and why" survives the correction. The ending reason goes
- * to the audit log, which is where a correction belongs.
- */
+/** Ends one override, addressed by its id. */
 export async function endRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
-  const reason = readText(formData, 'reason');
-  const id = readOverrideId(formData);
-  if (reason === '') {
-    throw new Error('ending an override needs a reason');
+  const actorId = await requirePanelActorId();
+  const raw = readText(formData, 'id');
+  if (!/^\d+$/.test(raw)) {
+    throw new Error('the override id is not a number');
   }
-  const actorId = await currentActorId();
-  await prisma.ranking_overrides.update({
-    where: { id },
-    data: { active: false, ended_at: new Date(), ended_by: actorId },
-  });
-  await recordAudit({
-    verb: 'ranking:override:end',
-    entity: 'ranking',
-    entityId: id.toString(),
-    afterValues: { active: false },
-    reason,
-    result: 'success',
-  });
+  await endOverrides(actorId, [Number.parseInt(raw, 10)], readText(formData, 'reason'));
   revalidateOverridePages();
 }
 
-/**
- * Ends many rows in one audited write.
- *
- * WHY one reason for the batch: the reason explains the correction the operator is making, and it
- * is the same correction across the selection, so asking per row would ask the same question N
- * times. WHY `active: true` stays in the filter: a row already ended by another operator must not
- * have its ending timestamp overwritten by this batch.
- */
+/** Ends a selection of overrides in one audited write, under one reason. */
 export async function endRankingOverrides(ids: readonly number[], reason: string): Promise<void> {
   await ensurePermission('ranking:override');
-  const trimmed = reason.trim();
-  const targets = ids.filter((id) => Number.isInteger(id));
-  if (trimmed === '') throw new Error('ending an override needs a reason');
-  if (targets.length === 0) throw new Error('select at least one override to end');
-  const actorId = await currentActorId();
-  await prisma.ranking_overrides.updateMany({
-    where: { id: { in: targets.map((id) => BigInt(id)) }, active: true },
-    data: { active: false, ended_at: new Date(), ended_by: actorId },
-  });
-  await recordAudit({
-    verb: 'ranking:override:end',
-    entity: 'ranking',
-    entityId: targets.join(','),
-    afterValues: { active: false, ids: targets },
-    reason: trimmed,
-    result: 'success',
-  });
+  const actorId = await requirePanelActorId();
+  await endOverrides(actorId, ids, reason);
   revalidateOverridePages();
 }
 
@@ -178,41 +120,6 @@ function readValue(payload: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function readAction(formData: FormData): OverrideAction {
-  const raw = String(formData.get("action") ?? "");
-  const found = OVERRIDE_ACTIONS.find((candidate) => candidate === raw);
-  if (found === undefined) {
-    throw new Error(`unknown override action: ${raw}`);
-  }
-  return found;
-}
-
-function readTargetKind(formData: FormData): OverrideTarget {
-  const raw = String(formData.get("targetKind") ?? "");
-  const found = OVERRIDE_TARGETS.find((candidate) => candidate === raw);
-  if (found === undefined) {
-    throw new Error(`unknown override target: ${raw}`);
-  }
-  return found;
-}
-
-function readOverrideId(formData: FormData): bigint {
-  const raw = String(formData.get("id") ?? "");
-  if (!/^\d+$/.test(raw)) {
-    throw new Error("the override id is not a number");
-  }
-  return BigInt(raw);
-}
-
 function readText(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
 }
-
-/** The audit helper resolves the actor itself; created_by needs the same id explicitly. */
-async function currentActorId(): Promise<number | undefined> {
-  const session = await getSession();
-  if (session === null) return undefined;
-  const parsed = Number.parseInt(session.userId, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-

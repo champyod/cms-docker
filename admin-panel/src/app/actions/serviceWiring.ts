@@ -21,14 +21,15 @@ import {
 } from '@/lib/restart-service-scope';
 import { renderRegistryArtifacts, type RegistryArtifact } from '@/lib/service-wiring-cli';
 import {
-  readRegistry,
   removeExposure,
   removeService,
   removeWiring,
   saveExposure,
   saveService,
   saveWiring,
-} from '@/lib/service-wiring-store';
+} from '@/lib/panel-actions';
+import { requirePanelActorId } from '@/lib/panel-actor';
+import { readRegistry } from '@/lib/service-wiring-store';
 import type {
   ExposureInput,
   ExposureRecord,
@@ -76,13 +77,18 @@ async function afterWrite(write: () => Promise<WriteResult>): Promise<WriteResul
   return result;
 }
 
+/**
+ * Saves one registry row. The write itself is `saveService`, so the panel editor and
+ * `./cms panel registry bind` cannot disagree about what a row means.
+ */
 export async function saveServiceAction(input: ServiceInput): Promise<WriteResult> {
   try {
     await ensurePermission('container:control');
+    const actorId = await requirePanelActorId();
+    return await afterWrite(() => saveService(actorId, input));
   } catch (error) {
     return { success: false, error: denialMessage(error) };
   }
-  return afterWrite(() => saveService(input));
 }
 
 export async function removeServiceAction(id: number): Promise<WriteResult> {

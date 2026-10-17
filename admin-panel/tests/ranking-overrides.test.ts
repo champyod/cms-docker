@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   contestsFindMany: vi.fn(),
+  contestsFindUnique: vi.fn(),
   contestTasksFindMany: vi.fn(),
   participationsFindMany: vi.fn(),
   ensurePermission: vi.fn(),
@@ -14,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     ranking_overrides: { create: mocks.create },
-    contests: { findMany: mocks.contestsFindMany },
+    contests: { findMany: mocks.contestsFindMany, findUnique: mocks.contestsFindUnique },
     contest_tasks: { findMany: mocks.contestTasksFindMany },
     participations: { findMany: mocks.participationsFindMany },
   },
@@ -55,7 +56,8 @@ beforeEach(() => {
   mocks.ensurePermission.mockResolvedValue(undefined);
   mocks.recordAudit.mockResolvedValue(undefined);
   mocks.create.mockResolvedValue({});
-  mocks.getSession.mockResolvedValue(null);
+  mocks.contestsFindUnique.mockResolvedValue({ id: 1 });
+  mocks.getSession.mockResolvedValue({ userId: '3' });
 });
 
 describe('ranking override targets', () => {
@@ -96,6 +98,31 @@ describe('ranking override targets', () => {
     await expect(
       saveRankingOverride(form({ ...CONTEST_HIDE, action: 'rename', value: 'Renamed' })),
     ).rejects.toThrow('a contest target does not accept the rename action');
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('files the override under the signed-in admin and the contest it is scoped to', async () => {
+    await saveRankingOverride(form(TASK_HIDE));
+
+    expect(mocks.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contest_id: 1, created_by: 3 }),
+    });
+  });
+
+  it('refuses a scope the ranking cannot serve, and files nothing', async () => {
+    // The scope is the contest the board draws: an override naming one the database does not
+    // carry never matches, so it is refused rather than filed as a row that quietly does nothing.
+    mocks.contestsFindUnique.mockResolvedValue(null);
+    await expect(saveRankingOverride(form(TASK_HIDE))).rejects.toThrow(
+      'no contest with id 1 to scope this override',
+    );
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a contest id that is not an id', async () => {
+    await expect(saveRankingOverride(form({ ...TASK_HIDE, contestId: 'spring' }))).rejects.toThrow(
+      /needs the contest/,
+    );
     expect(mocks.create).not.toHaveBeenCalled();
   });
 });

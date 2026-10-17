@@ -74,6 +74,9 @@ Commands:
   contest create            create contests from YAML
   contest set-active <id>   set the active contest in the database (config.toml/.env
                             are derived from it; rows and DB are the source of truth)
+  panel <area> <verb> [args]  perform a panel action in-process, with no panel server up:
+                            registry bind | config show|end | override add|end
+                            (writes are audited under the 'root' actor)
   update-server             shard-aware FULL server update (git+img+db+verify)
   update all                alias for update-server (full update)
 
@@ -86,6 +89,9 @@ Examples:
   ./cms db migrate
   bash scripts/__db_migrate.sh --dry-run   # print the migration steps, change nothing
   ./cms backup drill
+  ./cms panel registry bind cms-proxy-1 --contest 9
+  ./cms panel config show 9 --reason 'day two goes live'
+  ./cms panel override add --contest 9 --kind task --key 'Day_202/A_20Plus_20B' --action hide --reason 'withdrawn'
 CMDS
 }
 
@@ -174,6 +180,16 @@ if [[ $# -ge 2 && "$1" == "db" && ( "${2:-}" == "create" || "${2:-}" == "rename"
   _db_admin_rc=0
   bash scripts/__db_admin.sh "$2" "${@:3}" || _db_admin_rc=$?
   exit "$_db_admin_rc"
+fi
+
+# `panel <area> <verb> [args]` performs a panel action itself, in-process, with no panel server
+# up — never by calling panel HTTP. scripts/__panel_action.sh is the single authority for how the
+# action runs (bun inside the panel package, importing the same module the panel's server actions
+# wrap); this shim only routes the verb and propagates the exit code, so a refused write stops here.
+if [[ $# -ge 1 && "$1" == "panel" ]]; then
+  _panel_rc=0
+  bash scripts/__panel_action.sh "${@:2}" || _panel_rc=$?
+  exit "$_panel_rc"
 fi
 
 if [[ $# -eq 1 && "$1" == "help" ]]; then

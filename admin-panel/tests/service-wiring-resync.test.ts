@@ -11,8 +11,7 @@ vi.mock('@/lib/permissions', () => ({ ensurePermission: mocks.ensurePermission }
 vi.mock('@/lib/deploy-config', () => ({ runConfigSync: mocks.runConfigSync }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 vi.mock('@/lib/service-wiring-cli', () => ({ renderRegistryArtifacts: vi.fn() }));
-vi.mock('@/lib/service-wiring-store', () => ({
-  readRegistry: vi.fn(),
+vi.mock('@/lib/panel-actions', () => ({
   saveService: vi.fn(),
   removeService: vi.fn(),
   saveWiring: vi.fn(),
@@ -20,6 +19,7 @@ vi.mock('@/lib/service-wiring-store', () => ({
   saveExposure: vi.fn(),
   removeExposure: vi.fn(),
 }));
+vi.mock('@/lib/service-wiring-store', () => ({ readRegistry: vi.fn() }));
 
 import { resyncRegistryAction } from '@/app/actions/serviceWiring';
 
