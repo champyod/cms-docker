@@ -84,6 +84,24 @@ describe('NotificationBell', () => {
     await waitFor(() => expect(document.activeElement).toBe(button));
   });
 
+  it('dismisses on a press on the page, and keeps the bell its own toggle', async () => {
+    renderBell();
+    const button = bell();
+
+    fireEvent.click(button);
+    await screen.findByRole('dialog');
+    // Why the pair: an outside press is only a dismissal once the click that follows it lands.
+    fireEvent.pointerDown(document.body);
+    fireEvent.click(document.body);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    fireEvent.click(button);
+    await screen.findByRole('dialog');
+    fireEvent.pointerDown(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('marks all read and clears through the callbacks the service handed it', async () => {
     const { onSeen, onClear } = renderBell(1);
     fireEvent.click(bell());
