@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::time::Duration;
 
 use serde::Serialize;
 use sqlx::postgres::PgPool;
@@ -131,12 +132,34 @@ pub struct Standings {
     pub overrides: Overrides,
 }
 
+/// How long a built board is served before a rebuild is forced, even with no notification.
+///
+/// WHY a belt beside the trigger's notification: NOTIFY has no replay, so a change that lands
+/// while the listener is reconnecting — or between the pool connecting and its first LISTEN —
+/// raises an event nobody hears, and that missed invalidate is the one way the cache could serve
+/// the pre-change board forever. The belt bounds that staleness to one interval.
+///
+/// WHY coarse: rebuilding the whole board is the cost this exists to avoid paying per request,
+/// so the interval is the slowest that still bounds a lost notification. The notification is the
+/// fast path; this only covers its absence.
+const STANDINGS_MAX_AGE: Duration = Duration::from_secs(60);
+
+/// One built board and the instant it was built, so a build can be judged stale by age as well as
+/// dropped by invalidation. The build instant has to live beside the value: it is what the belt
+/// measures, and a value on its own cannot say how old it is.
+struct CachedStandings {
+    standings: std::sync::Arc<Standings>,
+    built_at: tokio::time::Instant,
+}
+
 /// Holds one built [`Standings`] and drops it on invalidation. The first reader to find
 /// it empty rebuilds while the others wait on the lock, so the four endpoints a page
-/// load hits cost one rebuild rather than one each.
+/// load hits cost one rebuild rather than one each. A build older than [`STANDINGS_MAX_AGE`]
+/// is rebuilt even with no invalidation, so a notification lost while the listener reconnects
+/// cannot leave the board stale forever.
 #[derive(Clone, Default)]
 pub struct StandingsCache {
-    inner: std::sync::Arc<tokio::sync::Mutex<Option<std::sync::Arc<Standings>>>>,
+    inner: std::sync::Arc<tokio::sync::Mutex<Option<CachedStandings>>>,
 }
 
 impl StandingsCache {
@@ -155,10 +178,17 @@ impl StandingsCache {
     {
         let mut guard = self.inner.lock().await;
         if let Some(cached) = guard.as_ref() {
-            return Ok(cached.clone());
+            // Inside the belt: serve the shared build. Past it: fall through and rebuild, so a
+            // notification the listener never heard costs one stale read at most.
+            if cached.built_at.elapsed() < STANDINGS_MAX_AGE {
+                return Ok(cached.standings.clone());
+            }
         }
         let built = std::sync::Arc::new(build().await?);
-        *guard = Some(built.clone());
+        *guard = Some(CachedStandings {
+            standings: built.clone(),
+            built_at: tokio::time::Instant::now(),
+        });
         Ok(built)
     }
 }
@@ -814,6 +844,77 @@ mod tests {
             builds.load(Ordering::SeqCst),
             2,
             "an invalidation costs one rebuild"
+        );
+    }
+
+    /// One cache read, counting the builds so a test can tell a served build from a rebuild.
+    async fn read_standings(cache: &StandingsCache, builds: &Arc<AtomicUsize>) -> Arc<Standings> {
+        let counter = builds.clone();
+        cache
+            .get_or_build(|| async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok(empty_standings())
+            })
+            .await
+            .expect("the build succeeds")
+    }
+
+    /// The belt: a build older than the interval is rebuilt even with no invalidation, which is
+    /// what stops a notification lost while the listener reconnects from serving the old board
+    /// forever. The clock is driven rather than slept through, so the interval boundary is proven
+    /// without a minute's wait and the production default is untouched.
+    #[tokio::test(start_paused = true)]
+    async fn the_cache_rebuilds_a_build_older_than_the_interval() {
+        let cache = StandingsCache::default();
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        read_standings(&cache, &builds).await;
+        read_standings(&cache, &builds).await;
+        assert_eq!(builds.load(Ordering::SeqCst), 1, "a fresh build is served");
+
+        // Just inside the interval: still the same build, because the belt has not expired.
+        tokio::time::advance(STANDINGS_MAX_AGE - Duration::from_secs(1)).await;
+        read_standings(&cache, &builds).await;
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            1,
+            "a build inside the interval is served, not rebuilt"
+        );
+
+        // Past the interval: the belt forces exactly one rebuild.
+        tokio::time::advance(Duration::from_secs(2)).await;
+        read_standings(&cache, &builds).await;
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            2,
+            "a build past the interval is rebuilt"
+        );
+
+        // The rebuild reset the age, so the next read serves it rather than rebuilding again.
+        read_standings(&cache, &builds).await;
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            2,
+            "the rebuild starts a fresh interval"
+        );
+    }
+
+    /// Invalidation is the primary path and never waits for the belt: a build dropped mid-interval
+    /// is rebuilt on the next read, not when the interval expires.
+    #[tokio::test(start_paused = true)]
+    async fn an_invalidation_inside_the_interval_rebuilds_immediately() {
+        let cache = StandingsCache::default();
+        let builds = Arc::new(AtomicUsize::new(0));
+
+        read_standings(&cache, &builds).await;
+        // Halfway through the interval: the belt alone would serve the old build.
+        tokio::time::advance(STANDINGS_MAX_AGE / 2).await;
+        cache.invalidate().await;
+        read_standings(&cache, &builds).await;
+        assert_eq!(
+            builds.load(Ordering::SeqCst),
+            2,
+            "the invalidation rebuilds without waiting for the belt"
         );
     }
 

@@ -249,3 +249,43 @@ async fn a_projection_write_notifies_listeners() {
         .await
         .expect("the probe is removed");
 }
+
+/// A ranking_config write must reach the board immediately, and it reaches it over the control
+/// channel: the listener republishes that as a `control` event and drops the cached board for
+/// every notification it hears. ranking_config was the one ranking table with no trigger until
+/// 20261017120000_ranking_control_notify_config added this one, so this is the only place that
+/// trigger is exercised as a trigger rather than as a migration that applied.
+#[tokio::test]
+#[ignore = "requires a live postgres carrying the ranking tables and triggers"]
+async fn a_config_write_notifies_the_control_channel() {
+    let pool = pool();
+    let mut listener = sqlx::postgres::PgListener::connect_with(&pool)
+        .await
+        .expect("a listener connects");
+    listener
+        .listen("ranking_control")
+        .await
+        .expect("the channel is listened on");
+    sqlx::query(
+        "INSERT INTO ranking_config (target_kind, target_key) VALUES ('contest', '999999')",
+    )
+    .execute(&pool)
+    .await
+    .expect("the write commits");
+    let notification = tokio::time::timeout(std::time::Duration::from_secs(5), listener.recv())
+        .await
+        .expect("a notification arrives before the timeout")
+        .expect("the notification reads");
+    assert_eq!(notification.channel(), "ranking_control");
+    assert!(
+        notification.payload().starts_with("ranking_config "),
+        "the payload names the table: {}",
+        notification.payload()
+    );
+    sqlx::query(
+        "DELETE FROM ranking_config WHERE target_kind = 'contest' AND target_key = '999999'",
+    )
+    .execute(&pool)
+    .await
+    .expect("the probe is removed");
+}

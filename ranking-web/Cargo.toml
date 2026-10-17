@@ -19,10 +19,13 @@ subtle = "2"
 thiserror = "2"
 tower-http = { version = "0.6", features = ["fs"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 askama = "0.16.1"
 
 [dev-dependencies]
+# The cache's belt test drives the clock instead of sleeping through the interval, which needs
+# tokio's paused-time test utilities. Dev-only: the production build never gets this feature.
+tokio = { version = "1", features = ["test-util"] }
 tower = { version = "0.5", features = ["util"] }
 
 [profile.release]
