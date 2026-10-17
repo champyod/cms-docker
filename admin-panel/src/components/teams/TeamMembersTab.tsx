@@ -2,12 +2,16 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ExternalLink, Users } from 'lucide-react';
+import { ExternalLink, RotateCcw, Users } from 'lucide-react';
 
+import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
+import { Input } from '@/components/core/Input';
+import { SELECTION_CHECKBOX_CLASS } from '@/components/core/SelectionColumn';
 import { TeamBulkActionsDialog } from '@/components/teams/TeamBulkActionsDialog';
+import { TeamRotateAccountsDialog } from '@/components/teams/TeamRotateAccountsDialog';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
 import { interpolate } from '@/lib/interpolate';
@@ -32,12 +36,18 @@ function memberProfileHref(locale: 'en' | 'th', member: TeamMember): string | nu
   return buildRoute(locale, 'people.user-tabs.profile', { id: member.userId });
 }
 
+function matchesTerm(member: TeamMember, needle: string): boolean {
+  if (needle === '') return true;
+  const name = `${member.firstName ?? ''} ${member.lastName ?? ''}`.trim().toLowerCase();
+  return (member.username ?? '').toLowerCase().includes(needle) || name.includes(needle);
+}
+
 function MemberRow({ member, locale, copy, selected, onToggle }: {
   readonly member: TeamMember;
   readonly locale: 'en' | 'th';
   readonly copy: Dictionary['teams'];
   readonly selected: boolean;
-  readonly onToggle: (userId: number) => void;
+  readonly onToggle: (userId: number, checked: boolean) => void;
 }): React.JSX.Element {
   const href = memberProfileHref(locale, member);
   return (
@@ -46,9 +56,10 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
         {member.userId !== null && (
           <input
             type="checkbox"
+            className={SELECTION_CHECKBOX_CLASS}
             checked={selected}
-            onChange={() => onToggle(member.userId as number)}
-            aria-label={member.username ?? undefined}
+            onChange={(event) => onToggle(member.userId as number, event.target.checked)}
+            aria-label={`${copy.members.selectRow} ${member.username ?? ''}`}
           />
         )}
         <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
@@ -80,21 +91,57 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   );
 }
 
+/**
+ * A team's members, with the filter and the selection that drive the day-2 rotation.
+ *
+ * WHY the filter drives the list and the header cell selects what the filter matches: assigning a
+ * team to a term's worth of accounts was one row at a time, and the day-two rotation was the same
+ * work again. The select-all box walks the filtered set, so it never reaches a member the
+ * operator's filter hid, and the toolbar states how many accounts the action will touch before it
+ * runs.
+ *
+ * WHY this surface owns its own selection state: the ids here are users, the rows carry contests
+ * and the action is scoped to this team, so the selection is this page's own — only the write
+ * behind the toolbar is shared (`lib/panel-actions/contest-accounts`).
+ */
 export function TeamMembersTab({ teamId, members, permissionKeys, contests, navigation, copy, locale }: TeamMembersTabProps): React.JSX.Element {
   const router = useAppRouter();
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
   const canUpdateParticipation = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateParticipation);
   const canBulk = canUpdateTeam || canUpdateParticipation;
+  const canRotate = hasEffectivePermission(effective, 'username:set');
 
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
+  const [term, setTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [rotateOpen, setRotateOpen] = useState(false);
 
-  const toggle = (userId: number): void => {
+  const needle = term.trim().toLowerCase();
+  const filtered = useMemo(() => members.filter((member) => matchesTerm(member, needle)), [members, needle]);
+  const filteredIds = useMemo(
+    () => filtered.filter((member) => member.userId !== null).map((member) => member.userId as number),
+    [filtered],
+  );
+  const allSelected = filteredIds.length > 0 && filteredIds.every((id) => selected.has(id));
+  const someSelected = filteredIds.some((id) => selected.has(id));
+
+  const toggleAll = (checked: boolean): void => {
     setSelected((previous) => {
       const next = new Set(previous);
-      if (next.has(userId)) next.delete(userId);
-      else next.add(userId);
+      for (const id of filteredIds) {
+        if (checked) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  };
+
+  const toggleOne = (userId: number, checked: boolean): void => {
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(userId);
+      else next.delete(userId);
       return next;
     });
   };
@@ -106,10 +153,30 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
   ) : null;
 
   const header = (
-    <div className="p-4 flex flex-wrap items-center justify-between gap-3">
-      <span className="font-bold">
-        {`${navigation.people['team-tabs'].members.label} (${members.length})`}
-      </span>
+    <div className="flex flex-wrap items-end justify-between gap-3 p-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <span className="pb-2 font-bold">
+          {`${navigation.people['team-tabs'].members.label} (${members.length})`}
+        </span>
+        <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
+          <input
+            type="checkbox"
+            className={SELECTION_CHECKBOX_CLASS}
+            aria-label={copy.members.selectAll}
+            title={copy.members.selectAll}
+            checked={allSelected}
+            ref={(node) => { if (node !== null) node.indeterminate = someSelected && !allSelected; }}
+            onChange={(event) => toggleAll(event.target.checked)}
+          />
+          {copy.members.selectAll}
+        </label>
+        <Input
+          id="team-member-filter"
+          label={copy.members.filterPlaceholder}
+          value={term}
+          onChange={(event) => setTerm(event.target.value)}
+        />
+      </div>
       {bulkButton}
     </div>
   );
@@ -128,6 +195,33 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
     />
   );
 
+  const rotateDialog = (
+    <TeamRotateAccountsDialog
+      isOpen={rotateOpen}
+      onClose={() => setRotateOpen(false)}
+      onSuccess={() => { setSelected(new Set()); router.refresh(); }}
+      teamId={teamId}
+      selectedUserIds={[...selected]}
+      contests={contests}
+      copy={copy}
+    />
+  );
+
+  const toolbar = canRotate && selected.size > 0 ? (
+    <div className="px-4 pb-4">
+      <BulkActionBar
+        selectedCount={selected.size}
+        countLabel={copy.members.selectionCount}
+        clearLabel={copy.members.selectionClear}
+        onClear={() => setSelected(new Set())}
+      >
+        <Button type="button" variant="secondary" icon={RotateCcw} onClick={() => setRotateOpen(true)}>
+          {copy.rotate.action}
+        </Button>
+      </BulkActionBar>
+    </div>
+  ) : null;
+
   if (members.length === 0) {
     return (
       <>
@@ -145,8 +239,9 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
   return (
     <Card className="overflow-hidden">
       {header}
+      {toolbar}
       <div className="divide-y divide-border">
-        {members.map((member, index) => (
+        {filtered.map((member, index) => (
           // Why: an unreadable user id leaves only the row position to
           // distinguish two members, so it joins the readable key.
           <MemberRow
@@ -155,11 +250,13 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
             locale={locale}
             copy={copy}
             selected={member.userId !== null && selected.has(member.userId)}
-            onToggle={toggle}
+            onToggle={toggleOne}
           />
         ))}
+        {filtered.length === 0 && <EmptyState icon={Users} title={copy.members.emptyTitle} description={copy.members.emptyDescription} />}
       </div>
       {dialog}
+      {rotateDialog}
     </Card>
   );
 }

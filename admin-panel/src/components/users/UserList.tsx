@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppRouter } from '@/hooks/useAppRouter';
+import { useDictionary } from '@/hooks/useDictionary';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { UsersPageRow } from '@/lib/prisma-selects';
 
@@ -17,6 +18,7 @@ import { useUserSelection } from './useUserSelection';
 export function UserList({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort, contests, canReadContests, navigation, permissionKeys, locale }: UserListProps): React.JSX.Element {
   const rows = useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort });
   const selection = useUserSelection(rows.users, rows.userCache);
+  const dict = useDictionary();
   const capabilities = useUserCapabilities(permissionKeys);
   const dialogs = useUserDialogs();
   const router = useAppRouter();
@@ -40,6 +42,7 @@ export function UserList({ initialUsers, totalPages, currentPage, perPage, initi
         rows={rows}
         selection={selection}
         permissionKeys={permissionKeys}
+        selectAllLabel={dict.users.selectAllFiltered}
         onOpen={(user: UsersPageRow) => router.push(buildRoute(locale, 'people.user-record', { id: user.id }))}
         onEdit={dialogs.openEdit}
         onDelete={(userId) => { void removeUser(userId); }}

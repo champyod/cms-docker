@@ -14,6 +14,9 @@ export interface UserSelection {
   readonly missingCount: number;
   readonly toggleAll: (checked: boolean) => void;
   readonly toggleOne: (userId: number, checked: boolean) => void;
+  /** Selects or clears a set of ids at once, so select-all can cover a whole filter. */
+  readonly setMany: (ids: readonly number[], checked: boolean) => void;
+  readonly clear: () => void;
 }
 
 // Why the cache lookup: the visible page can change between selecting a row and
@@ -65,5 +68,15 @@ export function useUserSelection(
 
   const missingCount = countUnreachableSelection(selectedIds.size, selectedUsers.length);
 
-  return { selectedIds, selectedUsers, missingCount, toggleAll, toggleOne };
+  return {
+    selectedIds,
+    selectedUsers,
+    missingCount,
+    toggleAll,
+    toggleOne,
+    setMany: (ids, checked) => {
+      ids.forEach((id) => session.setSelected(String(id), checked));
+    },
+    clear: () => session.clear(),
+  };
 }

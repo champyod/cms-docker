@@ -11,6 +11,7 @@ import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { UnsavedRestartBanner } from '@/components/settings/UnsavedRestartBanner';
 import { EnvSectionCard } from '@/components/settings/EnvSectionCard';
 import type { EnvConfigSection } from '@/components/settings/envConfigSections';
+import en from '@/dictionaries/en.json';
 
 afterEach(() => cleanup());
 
@@ -32,12 +33,16 @@ const SETTINGS_FORM = {
 describe('detail sections render through SectionCard', () => {
   it('marks the task section collapsed with its count and reveals the body when expanded', () => {
     const props = {
+      contestId: 7,
       tasks: [{ id: 3, name: 'sum', title: 'Sum' }],
       locale: 'en',
       permissionKeys: ['task:update'] as readonly string[],
+      copy: en,
       onToggle: () => undefined,
       onAddTask: () => undefined,
+      onAttachTasks: () => undefined,
       onRemoveTask: () => undefined,
+      onRefresh: () => undefined,
     };
     const collapsed = renderToStaticMarkup(<ContestTasksSection {...props} expanded={false} />);
     expect(collapsed).toContain('aria-expanded="false"');

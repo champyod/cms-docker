@@ -187,6 +187,22 @@
       "download": "ดาวน์โหลด",
       "delete": "ลบคำชี้แจง",
       "uploadDialogTitle": "เพิ่มคำชี้แจง"
+    },
+    "contestTasks": {
+      "filterPlaceholder": "กรองโจทย์…",
+      "selectAll": "เลือกโจทย์ทุกข้อที่ตรงกับตัวกรอง",
+      "selectRow": "เลือกโจทย์ข้อนี้",
+      "detachSelected": "ถอด {count} ข้อที่เลือก",
+      "attachSelected": "แนบโจทย์…",
+      "detachDone": "ถอดโจทย์แล้ว {count} ข้อ",
+      "detachPartial": "ถอดแล้ว {count} จาก {total} ข้อที่เลือก",
+      "failed": "ระบบปฏิเสธการเปลี่ยนแปลง",
+      "attachTitle": "แนบโจทย์เข้าแข่งขัน",
+      "attachRun": "แนบ {count} โจทย์",
+      "attachEmpty": "ไม่มีโจทย์ที่แนบได้",
+      "attachFailed": "ระบบปฏิเสธการแนบ",
+      "attachCancel": "ยกเลิก",
+      "createNew": "สร้างโจทย์ใหม่"
     }
   },
   "users": {
@@ -258,7 +274,10 @@
           "empty": "ไม่มีกิจกรรมล่าสุด"
         }
       }
-    }
+    },
+    "selectAllFiltered": "เลือกผู้ใช้ทุกคนที่ตรงกับตัวกรอง",
+    "selectedUnavailable": "มี {count} แถวที่เลือกซึ่งยังไม่ได้โหลด",
+    "editSelectedCount": "แก้ไขที่เลือก ({count})"
   },
   "teams": {
     "title": "ทีม",
@@ -283,7 +302,12 @@
     "members": {
       "emptyTitle": "ยังไม่มีสมาชิกในทีมนี้",
       "emptyDescription": "เพิ่มสมาชิกโดยกำหนดทีมนี้ให้กับการเข้าร่วมในการแข่งขัน",
-      "moreCount": "เพิ่มอีก {count} รายการ"
+      "moreCount": "เพิ่มอีก {count} รายการ",
+      "filterPlaceholder": "กรองสมาชิก…",
+      "selectAll": "เลือกสมาชิกทุกคนที่ตรงกับตัวกรอง",
+      "selectRow": "เลือกสมาชิกคนนี้",
+      "selectionCount": "เลือก {count} รายการ",
+      "selectionClear": "ล้างการเลือก"
     },
     "contests": {
       "emptyTitle": "ไม่พบการแข่งขัน",
@@ -312,6 +336,21 @@
       "needContest": "เลือกการแข่งขันก่อน",
       "needMembers": "เลือกสมาชิกอย่างน้อยหนึ่งคนสำหรับการตั้งค่าการเข้าร่วม",
       "applied": "ใช้งานการดำเนินการหลายรายการแล้ว"
+    },
+    "rotate": {
+      "action": "หมุนบัญชี…",
+      "title": "หมุนชื่อผู้ใช้และกำหนดทีม",
+      "description": "สร้างชื่อผู้ใช้ใหม่ให้ทุกบัญชีที่เลือกและกำหนดทีม ในการบันทึกครั้งเดียว",
+      "reason": "เหตุผล",
+      "run": "หมุน {count} บัญชี",
+      "done": "หมุนชื่อผู้ใช้ {rotated} บัญชี และกำหนดทีม {assigned} บัญชี",
+      "failed": "ระบบปฏิเสธการหมุนบัญชี",
+      "needReason": "ต้องระบุเหตุผล",
+      "contest": "การแข่งขัน",
+      "contestPlaceholder": "เลือกการแข่งขัน",
+      "needContest": "เลือกการแข่งขันที่จะหมุนชื่อผู้ใช้",
+      "cancel": "ยกเลิก",
+      "teamToggle": "กำหนดทีมนี้ให้บัญชีด้วย"
     }
   },
   "submissions": {
@@ -732,11 +771,22 @@
       "selectAll": "เลือกการปรับทั้งหมด",
       "selectRow": "เลือกการปรับ",
       "endSelected": "สิ้นสุดที่เลือก",
-      "endedSelected": "สิ้นสุดการปรับที่เลือกแล้ว",
+      "endedSelected": "จบการใช้งาน {count} รายการแล้ว",
       "endFailed": "ไม่สามารถสิ้นสุดการปรับได้",
       "shardTabs": "เชิร์ดของอันดับ",
       "shardLabel": "เชิร์ด",
-      "noShards": "ยังไม่มีเชิร์ดที่ให้บริการการแข่งขัน"
+      "noShards": "ยังไม่มีเชิร์ดที่ให้บริการการแข่งขัน",
+      "endSelectedCount": "จบการใช้งาน {count} รายการที่เลือก",
+      "endedPartial": "จบแล้ว {ended} จาก {total} รายการที่เลือก",
+      "bulkAddToggle": "เพิ่มหลายเป้าหมายพร้อมกัน",
+      "bulkAddNeedTargets": "เลือกเป้าหมายอย่างน้อยหนึ่งรายการ",
+      "addMany": "เพิ่ม {count} รายการ",
+      "addedMany": "เพิ่มแล้ว {count} รายการ",
+      "bulkAddFailed": "ระบบปฏิเสธการเพิ่มทั้งชุด",
+      "selectionCount": "เลือก {count} รายการ",
+      "selectionClear": "ล้างการเลือก",
+      "bulkAddNeedReason": "ต้องระบุเหตุผล",
+      "batchRemove": "ลบออก"
     },
     "credits": {
       "title": "รายการเครดิต",
@@ -1115,6 +1165,10 @@
       "teamRecord": "ไม่สามารถโหลดข้อมูลทีมนี้ได้",
       "submissionRecord": "ไม่สามารถโหลดข้อมูลการส่งคำตอบนี้ได้",
       "generic": "ไม่สามารถโหลดหน้านี้ได้"
+    },
+    "selection": {
+      "count": "เลือก {count} รายการ",
+      "clear": "ล้างการเลือก"
     }
   },
   "rowActions": {

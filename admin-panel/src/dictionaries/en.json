@@ -187,6 +187,22 @@
       "download": "Download",
       "delete": "Delete statement",
       "uploadDialogTitle": "Add Statement"
+    },
+    "contestTasks": {
+      "filterPlaceholder": "Filter tasks…",
+      "selectAll": "Select every filtered task",
+      "selectRow": "Select this task",
+      "detachSelected": "Detach {count} selected",
+      "attachSelected": "Attach tasks…",
+      "detachDone": "Detached {count} tasks",
+      "detachPartial": "Detached {count} of {total} selected tasks",
+      "failed": "The change was refused",
+      "attachTitle": "Attach tasks to contest",
+      "attachRun": "Attach {count} tasks",
+      "attachEmpty": "No available tasks",
+      "attachFailed": "The attach was refused",
+      "attachCancel": "Cancel",
+      "createNew": "Create new task"
     }
   },
   "users": {
@@ -258,7 +274,10 @@
           "empty": "No recent activity."
         }
       }
-    }
+    },
+    "selectAllFiltered": "Select every user the filter matches",
+    "selectedUnavailable": "{count} selected row(s) are not loaded",
+    "editSelectedCount": "Edit Selected ({count})"
   },
   "teams": {
     "title": "Teams",
@@ -283,7 +302,12 @@
     "members": {
       "emptyTitle": "No members in this team yet.",
       "emptyDescription": "Add members by assigning this team to a participation in a contest.",
-      "moreCount": "+{count} more"
+      "moreCount": "+{count} more",
+      "filterPlaceholder": "Filter members…",
+      "selectAll": "Select every filtered member",
+      "selectRow": "Select this member",
+      "selectionCount": "{count} selected",
+      "selectionClear": "Clear selection"
     },
     "contests": {
       "emptyTitle": "No contests found.",
@@ -312,6 +336,21 @@
       "needContest": "Select a contest first.",
       "needMembers": "Select at least one member for participation settings.",
       "applied": "Bulk actions applied"
+    },
+    "rotate": {
+      "action": "Rotate accounts…",
+      "title": "Rotate usernames and set team",
+      "description": "Give each selected account a fresh display username and set its team, in one write.",
+      "reason": "Reason",
+      "run": "Rotate {count} accounts",
+      "done": "Rotated {rotated} usernames and set the team on {assigned}.",
+      "failed": "The rotation was refused",
+      "needReason": "A reason is required",
+      "contest": "Contest",
+      "contestPlaceholder": "Choose a contest",
+      "needContest": "Pick the contest to rotate usernames in",
+      "cancel": "Cancel",
+      "teamToggle": "Also set this team on the accounts"
     }
   },
   "submissions": {
@@ -732,11 +771,22 @@
       "selectAll": "Select all overrides",
       "selectRow": "Select override",
       "endSelected": "End selected",
-      "endedSelected": "The selected overrides were ended.",
+      "endedSelected": "Ended {count} overrides",
       "endFailed": "The overrides could not be ended.",
       "shardTabs": "Ranking shards",
       "shardLabel": "Shard",
-      "noShards": "No shard serves a contest yet."
+      "noShards": "No shard serves a contest yet.",
+      "endSelectedCount": "End {count} selected",
+      "endedPartial": "Ended {ended} of {total} selected overrides",
+      "bulkAddToggle": "File for several targets",
+      "bulkAddNeedTargets": "Pick at least one target",
+      "addMany": "Add {count} overrides",
+      "addedMany": "Filed {count} overrides",
+      "bulkAddFailed": "The batch was refused",
+      "selectionCount": "{count} selected",
+      "selectionClear": "Clear selection",
+      "bulkAddNeedReason": "A reason is required",
+      "batchRemove": "Remove"
     },
     "credits": {
       "title": "Credit list",
@@ -1115,6 +1165,10 @@
       "teamRecord": "This team could not be loaded",
       "submissionRecord": "This submission could not be loaded",
       "generic": "This page could not be loaded"
+    },
+    "selection": {
+      "count": "{count} selected",
+      "clear": "Clear selection"
     }
   },
   "rowActions": {

@@ -21,6 +21,9 @@ export function UserTable({
   permissionKeys,
   pageNumber,
   perPage,
+  allSelected,
+  partlySelected,
+  selectAllLabel,
   onToggleAll,
   onToggleOne,
   onOpen,
@@ -30,7 +33,6 @@ export function UserTable({
   onSortChange,
 }: UserTableProps) {
   const dict = useDictionary();
-  const allSelected = users.length > 0 && users.every((user) => selectedIds.has(user.id));
 
   const rows = useMemo<UserRow[]>(
     () => users.map((user, index) => ({ user, position: (pageNumber - 1) * perPage + index + 1 })),
@@ -38,8 +40,8 @@ export function UserTable({
   );
 
   const columns = useMemo(
-    () => buildUserColumns({ selectedIds, allSelected, onToggleAll, onToggleOne }),
-    [selectedIds, allSelected, onToggleAll, onToggleOne],
+    () => buildUserColumns({ selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne }),
+    [selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne],
   );
 
   const getRowClassName = (row: UserRow): string | undefined =>
@@ -73,7 +75,8 @@ export function UserTable({
             <TableHead className="w-10">
               <input
                 type="checkbox"
-                title="Select all users"
+                title={selectAllLabel}
+                aria-label={selectAllLabel}
                 className={CHECKBOX_CLASS}
                 checked={allSelected}
                 onChange={(event) => onToggleAll(event.target.checked)}

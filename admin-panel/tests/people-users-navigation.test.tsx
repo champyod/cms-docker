@@ -50,6 +50,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('@/app/actions/contests', () => ({ getContests: vi.fn() }));
+vi.mock('@/app/actions/users', () => ({ listUserIds: vi.fn(async () => []) }));
 vi.mock('@/app/actions/tasks', () => ({ getTasks: vi.fn() }));
 vi.mock('@/app/actions/teams', () => ({ getTeams: vi.fn() }));
 vi.mock('@/lib/apiClient', () => ({ apiClient: { get: vi.fn() } }));
@@ -118,6 +119,9 @@ describe('user list row navigation', () => {
           permissionKeys={[]}
           pageNumber={1}
           perPage={20}
+          allSelected={false}
+          partlySelected={false}
+          selectAllLabel="Select every user the filter matches"
           onToggleAll={vi.fn()}
           onToggleOne={vi.fn()}
           onOpen={onOpen}
@@ -147,6 +151,9 @@ describe('user list row navigation', () => {
           permissionKeys={[]}
           pageNumber={1}
           perPage={20}
+          allSelected={false}
+          partlySelected={false}
+          selectAllLabel="Select every user the filter matches"
           onToggleAll={vi.fn()}
           onToggleOne={onToggleOne}
           onOpen={onOpen}
@@ -204,6 +211,9 @@ describe('user list row action cluster', () => {
           permissionKeys={permissionKeys}
           pageNumber={1}
           perPage={20}
+          allSelected={false}
+          partlySelected={false}
+          selectAllLabel="Select every user the filter matches"
           onToggleAll={vi.fn()}
           onToggleOne={vi.fn()}
           onOpen={vi.fn()}

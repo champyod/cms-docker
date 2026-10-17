@@ -23,6 +23,11 @@ export interface UserTableProps {
   permissionKeys: readonly string[];
   pageNumber: number;
   perPage: number;
+  /** True when every row the filter matches is selected, not just the visible page. */
+  allSelected: boolean;
+  /** True when some but not all of the filtered rows are selected. */
+  partlySelected: boolean;
+  selectAllLabel: string;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (userId: number, checked: boolean) => void;
   onOpen: (user: UsersPageRow) => void;
@@ -42,6 +47,8 @@ export interface UserRow {
 export interface BuildUserColumnsArgs {
   selectedIds: Set<number>;
   allSelected: boolean;
+  partlySelected: boolean;
+  selectAllLabel: string;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (userId: number, checked: boolean) => void;
 }

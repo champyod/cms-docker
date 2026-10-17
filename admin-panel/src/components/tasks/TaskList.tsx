@@ -149,7 +149,7 @@ export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys
           editing limits needs task:update alone, so each group renders behind its own gate and an
           operator who may not move tasks still reaches the limits entry. */}
       {canUpdateTasks && (
-        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+        <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           {canAssignToContest && (
             <>
               <Button variant="secondary" onClick={() => setIsAssignOpen(true)}>Assign to contest</Button>

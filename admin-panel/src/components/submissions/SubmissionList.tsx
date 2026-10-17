@@ -285,7 +285,7 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
       <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
       <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
       {canRecalculate || canOfficial || canComment ? (
-        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+        <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <SubmissionBulkActions
             submissionIds={[...selection.selectedIds]}
             submissions={submissions}

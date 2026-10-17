@@ -14,7 +14,7 @@ function withDictionary(node: React.JSX.Element): string {
 
 describe('contest tab parity', () => {
   it('renders task actions and an empty task state without ContestDetailView', () => {
-    const html = renderToStaticMarkup(<ContestTasksTab data={{ contestId: 7, tasks: [], availableTasks: [], permissionKeys: ['contest:read', 'task:read', 'task:update'] }} />);
+    const html = withDictionary(<ContestTasksTab data={{ contestId: 7, tasks: [], availableTasks: [], permissionKeys: ['contest:read', 'task:read', 'task:update'] }} />);
     expect(html).toContain('No tasks assigned to this contest');
     expect(html).toContain('Add Task');
   });

@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { useTable } from '@/hooks/useTable';
+import { listUserIds } from '@/app/actions/users';
 import { apiClient, type ApiResponse } from '@/lib/apiClient';
 import { listSortQuery, type ListSortInput } from '@/lib/list-sorting';
 import { writeListQuery, type ListQueryState } from '@/lib/list-state';
@@ -37,6 +38,8 @@ export interface UserListRows {
   // Why the cache: a refresh can drop a selected row from the visible page, and
   // a bulk action still needs its full row, so selections resolve by id.
   readonly userCache: Readonly<Record<number, UsersPageRow>>;
+  /** Every id the current search matches, across pages, so select-all can mean the whole filter. */
+  readonly filteredIds: readonly number[];
   readonly fetchUsers: (query?: UserListQuery) => Promise<void>;
   readonly searchUsers: (value: string) => void;
 }
@@ -97,6 +100,7 @@ async function requestUserPage(request: UserPageRequest): Promise<UserPageRespon
 export function useUserListRows({ initialUsers, totalPages, currentPage, perPage, initialSearch, initialSort }: UserListRowsInput): UserListRows {
   const [users, setUsers] = useState<UsersPageRow[]>([...initialUsers]);
   const [userCache, setUserCache] = useState<Record<number, UsersPageRow>>(() => mergeIntoCache({}, initialUsers));
+  const [filteredIds, setFilteredIds] = useState<readonly number[]>(() => initialUsers.map((user) => user.id));
   const [totalPagesState, setTotalPagesState] = useState(totalPages);
   const [loading, setLoading] = useState(false);
   const [searchDraft, setSearchDraft] = useState(initialSearch);
@@ -150,6 +154,17 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
   // anything had changed, while this one moves only when a user write is recorded.
   useLiveCursor('/api/users/stream', () => { void fetchUsersRef.current(); });
 
+  // Why the full id set is read and not the page: the header cell's select-all promises to cover
+  // what the search matches, and the page is only the slice on screen. The read follows the applied
+  // search, so the promise and the filter never disagree.
+  useEffect(() => {
+    let live = true;
+    void listUserIds(table.search)
+      .then((ids) => { if (live) setFilteredIds(ids); })
+      .catch(() => { if (live) setFilteredIds([]); });
+    return () => { live = false; };
+  }, [table.search]);
+
   const searchUsers = useDebouncedSearch({
     value: searchDraft,
     delayMs: SEARCH_DEBOUNCE_MS,
@@ -163,6 +178,6 @@ export function useUserListRows({ initialUsers, totalPages, currentPage, perPage
 
   return {
     users, totalPages: totalPagesState, loading, searchDraft, setSearchDraft, sort, setSort: applySort, pageInput, setPageInput,
-    table, userCache, fetchUsers, searchUsers,
+    table, userCache, filteredIds, fetchUsers, searchUsers,
   };
 }

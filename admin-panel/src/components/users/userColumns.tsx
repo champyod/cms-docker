@@ -16,16 +16,20 @@ function teamCodes(user: UsersPageRow): string {
 // Why: one column definition drives desktop rows and mobile cards, so
 // the two layouts cannot drift apart.
 export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<UserRow>[] {
-  const { selectedIds, allSelected, onToggleAll, onToggleOne } = args;
+  const { selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne } = args;
   return [
     {
       key: 'select',
+      // Why the indeterminate state: the header cell selects every row the filter matches, so a
+      // partial selection has to read as partial rather than as "nothing selected".
       header: (
         <input
           type="checkbox"
-          title="Select all users"
+          title={selectAllLabel}
+          aria-label={selectAllLabel}
           className={CHECKBOX_CLASS}
           checked={allSelected}
+          ref={(node) => { if (node !== null) node.indeterminate = partlySelected && !allSelected; }}
           onChange={(event) => onToggleAll(event.target.checked)}
         />
       ),

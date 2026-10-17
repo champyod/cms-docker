@@ -18,6 +18,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { useListSelection, type ListSelection } from '@/hooks/useListSelection';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { Dictionary } from '@/lib/dictionary';
+import { interpolate } from '@/lib/interpolate';
 
 type OverrideCopy = Dictionary['ranking']['overrides'];
 
@@ -148,9 +149,19 @@ interface EndSelectedBarProps {
 function EndSelectedBar({ copy, selection, onEnd }: EndSelectedBarProps): React.JSX.Element | null {
   if (selection.selectedCount === 0) return null;
   return (
-    <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
-      <Button variant="negative" size="sm" icon={Ban} onClick={() => onEnd([...selection.selectedIds])}>
-        {copy.endSelected}
+    <BulkActionBar
+      selectedCount={selection.selectedCount}
+      countLabel={copy.selectionCount}
+      clearLabel={copy.selectionClear}
+      onClear={selection.clear}
+    >
+      <Button
+        variant="negative"
+        size="sm"
+        icon={Ban}
+        onClick={() => onEnd([...selection.selectedIds])}
+      >
+        {interpolate(copy.endSelectedCount, { count: selection.selectedCount })}
       </Button>
     </BulkActionBar>
   );
@@ -173,15 +184,21 @@ interface EndRequest {
  */
 function askEnd({ copy, selection, reasonPrompt, router, ids }: EndRequest): void {
   reasonPrompt.ask({
-    title: copy.endSelected,
+    title: interpolate(copy.endSelectedCount, { count: ids.length }),
     description: copy.orphanHint,
     submitLabel: copy.end,
     run: async (reason) => {
       try {
-        await endRankingOverrides([...ids], reason);
+        const ended = await endRankingOverrides([...ids], reason);
         selection.clear();
         router.refresh();
-        return { success: true, message: copy.endedSelected };
+        // WHY a short answer is not a plain success: the write matched fewer rows than the operator
+        // selected (another operator ended one first, or a row was already inactive), and reporting
+        // only "done" would hide the difference between the selection and what actually changed.
+        if (ended < ids.length) {
+          return { success: true, message: interpolate(copy.endedPartial, { ended, total: ids.length }) };
+        }
+        return { success: true, message: interpolate(copy.endedSelected, { count: ended }) };
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : copy.endFailed };
       }
@@ -298,13 +315,17 @@ export function RankingOverrideList({
   canOverride,
 }: RankingOverrideListProps): React.JSX.Element {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const selection = useListSelection('ranking.overrides', rows.map((row) => Number(row.id)));
   const reasonPrompt = useReasonPrompt();
   const router = useAppRouter();
   const filtered = useMemo(
     () => rows.filter((row) => matchesFilters(row, filters, orphanContestIds)),
     [rows, filters, orphanContestIds],
   );
+  // WHY the selection is keyed on the filtered ids and not on every row: the header cell promises
+  // to select what the filter matches, so the set the checkbox walks has to be the filtered set —
+  // keying it on `rows` would make select-all quietly reach rows the operator's filter hid.
+  const filteredIds = useMemo(() => filtered.map((row) => Number(row.id)), [filtered]);
+  const selection = useListSelection('ranking.overrides', filteredIds);
   const columns = useMemo(
     () => buildOverrideColumns(copy, selection, orphanContestIds),
     [copy, selection, orphanContestIds],

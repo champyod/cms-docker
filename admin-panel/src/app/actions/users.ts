@@ -29,6 +29,24 @@ interface UsersPageResult {
   effectivePermissions: ReadonlySet<string>;
 }
 
+/**
+ * Every user id the current search matches, across pages.
+ *
+ * WHY a read of its own and not a page: the users list's header cell promises to select what the
+ * search matches, and a page is only the slice the reader is looking at. The list asks for the full
+ * id set when the operator selects all, so a select-all never silently covers fewer rows than the
+ * filter does.
+ */
+export async function listUserIds(search = ''): Promise<number[]> {
+  await ensurePermission('user:list');
+  const rows = await prisma.users.findMany({
+    where: buildUserSearchWhere(search),
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map((row) => row.id);
+}
+
 export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE, sort = null }: { page?: number; search?: string; perPage?: number; sort?: ListSortInput }): Promise<UsersPageResult> {
   await ensurePermission('user:list');
 

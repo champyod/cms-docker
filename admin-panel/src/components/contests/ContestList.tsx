@@ -124,7 +124,7 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
     <div className="space-y-6">
       <ContestListHeader locale={locale} canManage={permissions.canCreate} onCreate={handleCreate} />
       {permissions.canUpdate && (
-        <BulkActionBar selectedCount={selection.selectedCount} onClear={selection.clear}>
+        <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <Button variant="secondary" onClick={() => setIsEditWindowOpen(true)}>Edit window</Button>
           {/* Why both kinds, and why nothing starts applied: the checked rows seed this list's own
               kind and Q4 lets the operator add the other kind in the same picker, so this is the

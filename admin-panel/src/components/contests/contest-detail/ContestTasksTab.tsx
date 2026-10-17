@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import type { ContestTasksData } from '@/lib/queries/contest-detail';
 import { addTaskToContest } from '@/app/actions/contests';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { useDictionary } from '@/hooks/useDictionary';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { TaskModal } from '@/components/tasks/TaskModal';
 import { TaskSelectionModal } from '../TaskSelectionModal';
@@ -30,6 +31,7 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
   const refresh = useTabRefresh();
   const locale = useTabLocale();
   const runAction = useActionFeedback();
+  const dict = useDictionary();
   const canCreateTask = hasEffectivePermission(new Set(data.permissionKeys), 'task:create');
 
   // A task created here is not yet on the contest, so it is linked once the
@@ -48,13 +50,17 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
   return (
     <div className="space-y-6">
       <ContestTasksSection
+        contestId={data.contestId}
         tasks={[...data.tasks]}
         expanded={expanded}
         locale={locale}
         permissionKeys={data.permissionKeys}
+        copy={dict}
         onToggle={() => setExpanded((previous) => !previous)}
         onAddTask={() => actions.setIsTaskModalOpen(true)}
+        onAttachTasks={() => actions.setIsTaskModalOpen(true)}
         onRemoveTask={(taskId) => { void actions.handleRemoveTask(taskId); }}
+        onRefresh={refresh}
       />
       {actions.isTaskModalOpen && (
         <TaskSelectionModal
@@ -65,6 +71,7 @@ export function ContestTasksTab({ data }: ContestTasksTabProps): React.JSX.Eleme
           onSuccess={refresh}
           canCreateTask={canCreateTask}
           onRequestCreate={() => { actions.setIsTaskModalOpen(false); setIsCreateOpen(true); }}
+          copy={dict.tasks.contestTasks}
         />
       )}
       {isCreateOpen && (
