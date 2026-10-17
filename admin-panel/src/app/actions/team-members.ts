@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
+import { assignTeamToParticipants } from '@/lib/panel-actions';
 import { type BulkParticipationSettings } from './participation-sql';
 import { applyBulkParticipationSettings, type BulkParticipationResult } from './participation-settings';
 import { resyncRankingUsers } from '@/lib/ranking-projection';
@@ -46,16 +47,7 @@ export async function addUsersToTeamByUsername(
     const found = new Set(users.map((user) => user.username));
     const missing = wanted.filter((name) => !found.has(name));
 
-    let added = 0;
-    for (const user of users) {
-      const affected = await prisma.$executeRaw`
-        INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-        VALUES (${contestId}, ${user.id}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-        ON CONFLICT (contest_id, user_id) DO UPDATE
-        SET team_id = EXCLUDED.team_id
-      `;
-      if (affected > 0) added += 1;
-    }
+    const added = await assignTeamToParticipants(prisma, contestId, teamId, users.map((user) => user.id));
 
     await resyncRankingUsers(contestId);
     await recordAudit({

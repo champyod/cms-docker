@@ -15,6 +15,12 @@ import {
  * and end the same rows, so the vocabulary check, the payload shape and the audit row belong to
  * one implementation. Nothing here reads a request, so the CLI runs it in-process with no panel
  * server up.
+ *
+ * WHY the bulk add and the single add share one normaliser: the panel's bulk surface files the
+ * same row for several targets at once, and a second copy of the vocabulary rules would let the
+ * batch accept a target the single form rejects — the two boundaries would then disagree about
+ * what an override may be. `addOverride` and `addOverrides` therefore read their input through the
+ * one function below.
  */
 
 /** One override as either boundary states it, before it is filed. */
@@ -23,6 +29,16 @@ export interface OverrideInput {
   readonly targetKind: string;
   readonly targetKey: string;
   readonly action: string;
+  readonly value: string;
+  readonly reason: string;
+}
+
+/** One override once the vocabulary and shape rules have been applied. */
+interface NormalisedOverride {
+  readonly contestId: number;
+  readonly targetKind: OverrideTarget;
+  readonly targetKey: string;
+  readonly action: OverrideAction;
   readonly value: string;
   readonly reason: string;
 }
@@ -40,18 +56,14 @@ function readTargetKind(raw: string): OverrideTarget {
 }
 
 /**
- * Files one override.
+ * Reads one override into the shape the table stores, refusing anything the vocabulary cannot mean.
  *
- * WHY the target and the verb are read through the shared vocabulary: the form offers these verbs
- * and this refuses anything outside them, so a second copy would let the picker offer a verb the
- * server then rejects.
- *
- * WHY the contest is checked against the database: an override scopes its exception to one contest
- * the board draws, so a row naming a contest the ranking cannot serve is a scope that never
- * matches — refused here rather than filed as a dead row an operator later reads as "the hide did
- * not work".
+ * WHY the contest is required and parsed here: an override scopes its exception to one contest the
+ * board draws, so a row naming a contest that is not an id is a scope that never matches — refused
+ * before the caller has anything to write. WHY the whole-board kind takes a wildcard key: the
+ * `ranking` target is not a row of the board, so it carries `*` and needs no target text.
  */
-export async function addOverride(actorId: number, input: OverrideInput): Promise<void> {
+function normaliseOverrideInput(input: OverrideInput): NormalisedOverride {
   const contestId = input.contestId.trim();
   if (!/^\d+$/.test(contestId)) {
     throw new Error(`an override needs the contest it is scoped to, not ${JSON.stringify(input.contestId)}`);
@@ -66,7 +78,38 @@ export async function addOverride(actorId: number, input: OverrideInput): Promis
   if (!KIND_VERBS[targetKind].includes(action)) {
     throw new Error(`a ${targetKind} target does not accept the ${action} action`);
   }
-  const scope = Number.parseInt(contestId, 10);
+  return {
+    contestId: Number.parseInt(contestId, 10),
+    targetKind,
+    targetKey,
+    action,
+    value: action === 'hide' ? '' : input.value.trim(),
+    reason,
+  };
+}
+
+/** The row shape both the single and the batch create hand to Prisma. */
+function toCreateData(row: NormalisedOverride, actorId: number) {
+  return {
+    contest_id: row.contestId,
+    target_kind: row.targetKind,
+    target_key: row.targetKey,
+    action: row.action,
+    payload: row.value === '' ? undefined : { value: row.value },
+    reason: row.reason,
+    created_by: actorId,
+  };
+}
+
+/**
+ * Refuses a scope the ranking cannot serve.
+ *
+ * WHY the contest is checked against the database: an override scopes its exception to one contest
+ * the board draws, so a row naming a contest the ranking cannot serve is a scope that never
+ * matches — refused here rather than filed as a dead row an operator later reads as "the hide did
+ * not work".
+ */
+async function requireContestScope(scope: number): Promise<void> {
   const contest = await prisma.contests.findUnique({
     where: { id: scope },
     select: { id: true },
@@ -74,27 +117,75 @@ export async function addOverride(actorId: number, input: OverrideInput): Promis
   if (contest === null) {
     throw new Error(`no contest with id ${scope} to scope this override`);
   }
-  const value = action === 'hide' ? '' : input.value.trim();
-  await prisma.ranking_overrides.create({
-    data: {
-      contest_id: scope,
-      target_kind: targetKind,
-      target_key: targetKey,
-      action,
-      payload: value === '' ? undefined : { value },
-      reason,
-      created_by: actorId,
-    },
-  });
+}
+
+/**
+ * Files one override.
+ *
+ * WHY the target and the verb are read through the shared vocabulary: the form offers these verbs
+ * and this refuses anything outside them, so a second copy would let the picker offer a verb the
+ * server then rejects.
+ */
+export async function addOverride(actorId: number, input: OverrideInput): Promise<void> {
+  const row = normaliseOverrideInput(input);
+  await requireContestScope(row.contestId);
+  await prisma.ranking_overrides.create({ data: toCreateData(row, actorId) });
   await recordAudit({
     actorId,
     verb: 'ranking:override:create',
     entity: 'ranking',
-    entityId: `${targetKind}:${targetKey}`,
-    afterValues: { contestId: scope, targetKind, targetKey, action, value },
-    reason,
+    entityId: `${row.targetKind}:${row.targetKey}`,
+    afterValues: { contestId: row.contestId, targetKind: row.targetKind, targetKey: row.targetKey, action: row.action, value: row.value },
+    reason: row.reason,
     result: 'success',
   });
+}
+
+/**
+ * Files one override for each stated target in a single transaction.
+ *
+ * WHY the batch and not N calls to `addOverride`: the bulk surface composes one correction and
+ * applies it to a whole selection, so the rows have to land together — a half-filed batch would
+ * leave the board carrying the exception for some of the targets the operator named and not the
+ * rest, with nothing on screen saying which. WHY the whole batch is refused when any target is
+ * out of vocabulary or names a contest the ranking cannot serve: a selection is a set of rows, and
+ * writing the subset that parsed would file a different set than the caller named.
+ *
+ * returns: how many overrides were filed, so the caller can state the result count.
+ */
+export async function addOverrides(
+  actorId: number,
+  inputs: readonly OverrideInput[],
+): Promise<number> {
+  if (inputs.length === 0) throw new Error('select at least one override to file');
+  const rows = inputs.map(normaliseOverrideInput);
+  const scopes = [...new Set(rows.map((row) => row.contestId))];
+  for (const scope of scopes) {
+    await requireContestScope(scope);
+  }
+  const created = await prisma.$transaction(
+    rows.map((row) => prisma.ranking_overrides.create({ data: toCreateData(row, actorId) })),
+  );
+  await recordAudit({
+    actorId,
+    verb: 'ranking:override:create',
+    entity: 'ranking',
+    entityId: rows.map((row) => `${row.targetKind}:${row.targetKey}`).join(','),
+    afterValues: {
+      contestIds: scopes,
+      rows: rows.map((row) => ({
+        contestId: row.contestId,
+        targetKind: row.targetKind,
+        targetKey: row.targetKey,
+        action: row.action,
+        value: row.value,
+      })),
+      filed: created.length,
+    },
+    reason: rows[0].reason,
+    result: 'success',
+  });
+  return created.length;
 }
 
 /**

@@ -6,6 +6,7 @@ import { getFreshPermissions } from '@/lib/permissions';
 import { insertParticipation } from '@/lib/participation-insert';
 import { resolveAllowlistInput } from '@/app/actions/participation-settings';
 import { resolveTeamIdByCode } from '@/lib/teams';
+import { assignTeamToParticipants } from '@/lib/panel-actions';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
 import { resyncRankingUsers, resyncShownRankingUsers } from '@/lib/ranking-projection';
@@ -106,18 +107,7 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
 }
 
 async function assignTeamToUsers(contestId: number, teamId: number, userIds: number[]): Promise<number> {
-  let updatedCount = 0;
-  for (const userId of userIds) {
-    const affected = await prisma.$executeRaw`
-      INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-      VALUES (${contestId}, ${userId}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-      ON CONFLICT (contest_id, user_id) DO UPDATE
-      SET team_id = EXCLUDED.team_id
-    `;
-    if (affected > 0) updatedCount += 1;
-  }
-
-  return updatedCount;
+  return assignTeamToParticipants(prisma, contestId, teamId, userIds);
 }
 
 async function removeUsersFromAnyTeam(userIds: number[]): Promise<number> {

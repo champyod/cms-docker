@@ -3,6 +3,7 @@ import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
+import { writeContestUsername } from '@/lib/panel-actions';
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_-]+$/;
 
@@ -64,29 +65,25 @@ async function readParticipationId(contestId: number, userId: number): Promise<n
   return rows.length > 0 ? rows[0].id : null;
 }
 
+/**
+ * WHY the write itself is not here: the day-2 rotation files the same alias and the same history
+ * row for a whole roster, so the SQL lives in `lib/panel-actions/contest-accounts` once and both
+ * this route and the batch call it. The route keeps only what a request owns — the permission, the
+ * clash checks and the refresh.
+ */
 async function writeUsername(
   input: UsernameInput,
   participationId: number,
   adminId: number,
   next: string | null,
 ): Promise<void> {
-  const { contestId, userId } = input;
-  if (next === null) {
-    await prisma.$executeRaw`
-      DELETE FROM contest_usernames
-      WHERE contest_id = ${contestId} AND user_id = ${userId}`;
-  } else {
-    await prisma.$executeRaw`
-      INSERT INTO contest_usernames (participation_id, contest_id, user_id, username, updated_at, updated_by_admin_id)
-      VALUES (${participationId}, ${contestId}, ${userId}, ${next}, now(), ${adminId})
-      ON CONFLICT (participation_id) DO UPDATE
-        SET username = EXCLUDED.username,
-            updated_at = EXCLUDED.updated_at,
-            updated_by_admin_id = EXCLUDED.updated_by_admin_id`;
-  }
-  await prisma.$executeRaw`
-    INSERT INTO contest_usernames_history (contest_id, user_id, username, set_at, set_by_admin_id)
-    VALUES (${contestId}, ${userId}, ${next}, now(), ${adminId})`;
+  await writeContestUsername(prisma, {
+    contestId: input.contestId,
+    userId: input.userId,
+    participationId,
+    username: next,
+    adminId,
+  });
 }
 
 export async function GET(req: NextRequest): Promise<Response> {

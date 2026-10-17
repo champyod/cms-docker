@@ -21,5 +21,20 @@ export {
   type ServiceBinding,
 } from './registry';
 export { endConfigTargets, showConfigTarget, type ShownTargetInput } from './ranking-config';
-export { addOverride, endOverrides, type OverrideInput } from './ranking-overrides';
+export { addOverride, addOverrides, endOverrides, type OverrideInput } from './ranking-overrides';
+export {
+  assignTeamToParticipants,
+  rotateContestAccounts,
+  writeContestUsername,
+  type ContestUsernameWrite,
+  type RotateAccountsInput,
+  type RotateAccountsResult,
+} from './contest-accounts';
+export {
+  attachContestTask,
+  attachContestTasks,
+  detachContestTask,
+  detachContestTasks,
+  type ContestTaskSelection,
+} from './contest-tasks';
 export { resolveRootActorId } from './root-actor';

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
-import { addOverride, endOverrides } from '@/lib/panel-actions';
+import { addOverride, addOverrides, endOverrides, type OverrideInput } from '@/lib/panel-actions';
 import { requirePanelActorId } from '@/lib/panel-actor';
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
@@ -66,6 +66,23 @@ export async function saveRankingOverride(formData: FormData): Promise<void> {
   revalidateOverridePages();
 }
 
+/**
+ * Files one override per stated target in one write.
+ *
+ * WHY the bulk add is a server action over `addOverrides` and not a loop here: the panel's bulk
+ * surface composes one correction for a whole selection, so the rows have to land together and the
+ * vocabulary/scope rules have to be the ones the single form applies. The write lives in
+ * `lib/panel-actions/ranking-overrides` and this adds only the permission, the actor and the
+ * refresh.
+ */
+export async function saveRankingOverrides(inputs: readonly OverrideInput[]): Promise<number> {
+  await ensurePermission('ranking:override');
+  const actorId = await requirePanelActorId();
+  const filed = await addOverrides(actorId, inputs);
+  revalidateOverridePages();
+  return filed;
+}
+
 /** Ends one override, addressed by its id. */
 export async function endRankingOverride(formData: FormData): Promise<void> {
   await ensurePermission('ranking:override');
@@ -79,11 +96,12 @@ export async function endRankingOverride(formData: FormData): Promise<void> {
 }
 
 /** Ends a selection of overrides in one audited write, under one reason. */
-export async function endRankingOverrides(ids: readonly number[], reason: string): Promise<void> {
+export async function endRankingOverrides(ids: readonly number[], reason: string): Promise<number> {
   await ensurePermission('ranking:override');
   const actorId = await requirePanelActorId();
-  await endOverrides(actorId, ids, reason);
+  const ended = await endOverrides(actorId, ids, reason);
   revalidateOverridePages();
+  return ended;
 }
 
 /** The list is the override surface now, and the detail view reads the same rows. */
