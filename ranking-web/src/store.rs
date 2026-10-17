@@ -1,10 +1,12 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use serde::Serialize;
 use sqlx::postgres::PgPool;
 
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
-use crate::overrides::{OverrideRow, Overrides, ACTION_HIDE, TARGET_CONTEST, TARGET_USER};
+use crate::overrides::{
+    OverrideRow, Overrides, TaskSnapshot, ACTION_HIDE, TARGET_CONTEST, TARGET_USER,
+};
 use crate::scoring::{
     self, parse_extra, Ledger, ScoreError, ScoreMode, Subchange, Submission, TaskMode,
 };
@@ -175,12 +177,34 @@ pub async fn load_standings(pool: &PgPool) -> Result<Standings, StoreError> {
     })
 }
 
+/// One row of the projection snapshot `SNAPSHOT_SQL` reads: a task of a contest, or a contest
+/// with no task of it, which is the only row a withheld task's contest leaves behind.
 #[derive(sqlx::FromRow)]
-struct TaskRow {
-    key: String,
+struct SnapshotRow {
     contest: String,
-    score_mode: String,
+    task: Option<String>,
+    score_mode: Option<String>,
 }
+
+/// The projection's task side for the shown contests, read in the one statement the ledger
+/// already issued.
+///
+/// WHY the contest arm beside the task rows: a task whose only task had no active dataset is
+/// skipped when the push builds its snapshot, so the projection holds no task row for it — and
+/// the contest row the same push wrote anyway is the one trace left to tell that apart from a
+/// task that was renamed. Reading both here means the classification costs no second query.
+///
+/// WHY the two arms are one statement: the causes are a question about these same rows, so a
+/// query of their own would be the reader asking itself something it already knows.
+const SNAPSHOT_SQL: &str = "\
+SELECT contest, task, score_mode FROM (\
+    SELECT t.contest AS contest, t.key AS task, t.score_mode AS score_mode, \
+           t.display_order AS display_order \
+    FROM ranking_tasks AS t WHERE t.contest_id = ANY($1) \
+    UNION ALL \
+    SELECT c.key AS contest, NULL AS task, NULL AS score_mode, NULL AS display_order \
+    FROM ranking_contests AS c WHERE c.contest_id = ANY($1)\
+) AS snapshot ORDER BY display_order, task";
 
 #[derive(sqlx::FromRow)]
 struct SubmissionRow {
@@ -425,7 +449,7 @@ async fn assemble_ledger(
     users: &BTreeMap<String, UserNames>,
     overrides: &Overrides,
 ) -> Result<Ledger, StoreError> {
-    let (tasks, unknown_task_hides) = load_tasks(pool, shown, overrides).await?;
+    let (tasks, snapshot) = load_tasks(pool, shown, overrides).await?;
     let submissions = load_submissions(pool).await?;
     let subchanges = load_subchanges(pool).await?;
     let teams: BTreeMap<String, String> = users
@@ -433,7 +457,7 @@ async fn assemble_ledger(
         .filter_map(|(key, user)| user.team.clone().map(|team| (key.clone(), team)))
         .collect();
     let mut ledger = scoring::assemble_with(&tasks, &submissions, &subchanges, overrides, &teams)?;
-    ledger.set_unknown_task_hides(unknown_task_hides);
+    ledger.set_task_hides(overrides.task_hide_causes(&snapshot));
     Ok(ledger)
 }
 
@@ -448,7 +472,8 @@ pub async fn load_appearance(pool: &PgPool) -> Result<Option<Appearance>, StoreE
     Ok(row)
 }
 
-/// The task modes the ledger replays, and the number of task hides that named no task row.
+/// The task modes the ledger replays, and the projection snapshot the task-hide causes are read
+/// against.
 /// WHY a hidden task or a task under a hidden contest is dropped here and not filtered out
 /// later: the mode is what a submission resolves against, so without it the task's
 /// submissions, scores and history never enter the ledger at all, and the hide reaches the
@@ -465,36 +490,47 @@ async fn load_tasks(
     pool: &PgPool,
     shown: &ShownSet,
     overrides: &Overrides,
-) -> Result<(Vec<TaskMode>, usize), StoreError> {
-    let rows = sqlx::query_as::<_, TaskRow>(
-        "SELECT key, contest, score_mode FROM ranking_tasks \
-         WHERE contest_id = ANY($1) ORDER BY display_order, key",
-    )
-    .bind(shown.contest_ids())
-    .fetch_all(pool)
-    .await?;
-    let known_pairs: HashSet<(String, String)> = rows
-        .iter()
-        .map(|row| (row.contest.clone(), row.key.clone()))
-        .collect();
-    let known_tasks: HashSet<String> = rows.iter().map(|row| row.key.clone()).collect();
-    let unknown_task_hides = overrides.unknown_hidden_tasks(&known_pairs, &known_tasks);
-    let modes = rows
-        .into_iter()
-        .filter(|row| {
-            !overrides.hides_contest(&row.contest) && !overrides.hides_task(&row.contest, &row.key)
-        })
-        .map(|row| {
-            let mode = ScoreMode::from_wire(&row.score_mode).ok_or_else(|| {
-                ScoreError::UnknownScoreMode {
-                    task: row.key.clone(),
-                    mode: row.score_mode.clone(),
-                }
-            })?;
-            Ok(TaskMode { key: row.key, mode })
-        })
-        .collect::<Result<Vec<_>, ScoreError>>()?;
-    Ok((modes, unknown_task_hides))
+) -> Result<(Vec<TaskMode>, TaskSnapshot), StoreError> {
+    let rows = sqlx::query_as::<_, SnapshotRow>(SNAPSHOT_SQL)
+        .bind(shown.contest_ids())
+        .fetch_all(pool)
+        .await?;
+    Ok(project_tasks(rows, overrides)?)
+}
+
+/// Sorts the projection rows into the modes the ledger replays and the snapshot the task-hide
+/// causes are classified against: one pass, because the two are two readings of the same rows.
+/// WHY a task row with no readable mode refuses: the mode is what a submission resolves against,
+/// so a task the board cannot score would drop its submissions out of the totals silently.
+fn project_tasks(
+    rows: Vec<SnapshotRow>,
+    overrides: &Overrides,
+) -> Result<(Vec<TaskMode>, TaskSnapshot), ScoreError> {
+    let mut modes = Vec::new();
+    let mut snapshot = TaskSnapshot::default();
+    for row in rows {
+        let Some(key) = row.task else {
+            // The contest arm: a contest the projection holds, which may hold no task at all.
+            snapshot.add_contest(&row.contest);
+            continue;
+        };
+        snapshot.add_task(&row.contest, &key);
+        if overrides.hides_contest(&row.contest) || overrides.hides_task(&row.contest, &key) {
+            continue;
+        }
+        // The column is NOT NULL on a task row, so only the contest arm can leave it unset — and
+        // that arm never reaches here. A mode the reader cannot read refuses the read the way it
+        // always has rather than leaving the task out of the board.
+        let wire = row.score_mode.unwrap_or_default();
+        let Some(mode) = ScoreMode::from_wire(&wire) else {
+            return Err(ScoreError::UnknownScoreMode {
+                task: key,
+                mode: wire,
+            });
+        };
+        modes.push(TaskMode { key, mode });
+    }
+    Ok((modes, snapshot))
 }
 
 async fn load_submissions(pool: &PgPool) -> Result<Vec<Submission>, StoreError> {
@@ -689,6 +725,62 @@ mod tests {
         ShownSet {
             contest_ids: contest_ids.to_vec(),
         }
+    }
+
+    fn task_hide(key: &str) -> OverrideRow {
+        OverrideRow {
+            target_kind: "task".to_string(),
+            target_key: key.to_string(),
+            action: "hide".to_string(),
+            payload: None,
+        }
+    }
+
+    /// The one snapshot statement carries both arms, and the split between them is what tells a
+    /// withheld task from a renamed one: a contest row holds no task of it, a task row does. The
+    /// contest row must not become a board column, and the hides must be classified from both.
+    /// WHY a unit test: the split is the reader's own parse of the rows, not a property of what
+    /// PostgreSQL returns.
+    #[test]
+    fn a_contest_row_with_no_task_is_a_snapshot_contest_and_not_a_column() {
+        let rows = vec![
+            SnapshotRow {
+                contest: "c0".to_string(),
+                task: None,
+                score_mode: None,
+            },
+            SnapshotRow {
+                contest: "c1".to_string(),
+                task: Some("t0".to_string()),
+                score_mode: Some("max".to_string()),
+            },
+        ];
+        let overrides = Overrides::fold(&[task_hide("c0/gone"), task_hide("c1/stale")]);
+
+        let (modes, snapshot) = project_tasks(rows, &overrides).expect("the modes are readable");
+        let causes = overrides.task_hide_causes(&snapshot);
+
+        assert_eq!(modes.len(), 1, "a contest row is not a board column");
+        assert_eq!(modes[0].key, "t0", "the task row is the column");
+        assert_eq!(causes.withheld(), 1, "c0 holds no task of it: withheld");
+        assert_eq!(causes.renamed(), 1, "c1 holds t0 and not stale: renamed");
+        assert_eq!(causes.unmatched(), 0, "the snapshot names both contests");
+    }
+
+    /// A task row whose mode the reader cannot read still refuses the read, so a task the board
+    /// cannot score never drops its submissions out of the totals silently.
+    #[test]
+    fn a_task_row_with_an_unreadable_mode_still_refuses() {
+        let rows = vec![SnapshotRow {
+            contest: "c0".to_string(),
+            task: Some("t0".to_string()),
+            score_mode: Some("nonsense".to_string()),
+        }];
+
+        assert!(matches!(
+            project_tasks(rows, &Overrides::default()),
+            Err(ScoreError::UnknownScoreMode { .. })
+        ));
     }
 
     /// The reason the cache exists: the four board endpoints a page load hits share one

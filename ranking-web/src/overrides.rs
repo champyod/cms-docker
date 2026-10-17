@@ -138,6 +138,75 @@ pub struct HiddenTargets {
     hidden_contests: HashSet<String>,
 }
 
+/// The projection's task side, as the reader already reads it: the `(contest, task)` pairs it
+/// holds, the task keys it holds anywhere, every contest it holds, and which of those hold a
+/// task. WHY the causes are read against this and not against a query of their own: a task
+/// hide's key is the composite the picker writes, so whether it still names something is a
+/// question about these rows alone.
+#[derive(Debug, Default, Clone)]
+pub struct TaskSnapshot {
+    pairs: HashSet<(String, String)>,
+    tasks: HashSet<String>,
+    contests: HashSet<String>,
+    contests_with_tasks: HashSet<String>,
+}
+
+impl TaskSnapshot {
+    /// A task the projection holds, under the encoded contest key it files it by.
+    pub(crate) fn add_task(&mut self, contest: &str, task: &str) {
+        self.pairs.insert((contest.to_string(), task.to_string()));
+        self.tasks.insert(task.to_string());
+        self.contests.insert(contest.to_string());
+        self.contests_with_tasks.insert(contest.to_string());
+    }
+
+    /// A contest the projection holds. The push writes the contest row even when it announces
+    /// no task of it, which is the only trace a withheld task leaves behind.
+    pub(crate) fn add_contest(&mut self, contest: &str) {
+        self.contests.insert(contest.to_string());
+    }
+}
+
+/// The task hides that named no projected task row, split by the cause the snapshot explains.
+///
+/// WHY the split: the counter's job is to catch a hide that silently stopped applying because
+/// its task was renamed, and a task the projection withholds raised that alarm forever without
+/// anything having been renamed — a false alarm in the one counter that has to be believed.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TaskHideCauses {
+    withheld: usize,
+    renamed: usize,
+    unmatched: usize,
+}
+
+impl TaskHideCauses {
+    /// The hides whose contest the projection holds with no task of it: the push announced the
+    /// contest with an empty task set (its task had no active dataset), so the CMS knows the
+    /// task and the projection withholds it. Nothing was renamed.
+    pub fn withheld(&self) -> usize {
+        self.withheld
+    }
+
+    /// The hides whose contest holds tasks but not the one the hide names: the key is stale,
+    /// which is the rename (or removal) this counter exists to catch.
+    pub fn renamed(&self) -> usize {
+        self.renamed
+    }
+
+    /// The hides naming neither a contest nor, for a bare key, a task the projection holds:
+    /// nothing in the snapshot explains the key.
+    pub fn unmatched(&self) -> usize {
+        self.unmatched
+    }
+
+    /// Every task hide that named no projected task row — the counter's meaning before the
+    /// split. The three causes partition exactly this set, so the split separates a number
+    /// rather than moving one.
+    pub fn total(&self) -> usize {
+        self.withheld + self.renamed + self.unmatched
+    }
+}
+
 impl HiddenTargets {
     /// Whether a `hide` override drops the task, by the contest it is filed under and the key
     /// the board files it by. A pre-composite bare key matches in every contest, so an old row
@@ -165,24 +234,35 @@ impl HiddenTargets {
                 .any(|(_, hidden)| hidden == task)
     }
 
-    /// How many hidden task keys name no row. A renamed or deleted task keeps its hide row, so
-    /// the hide stops applying with no other trace; this is the count /diagnostics surfaces for
-    /// it. A composite pair is known when that (contest, task) membership exists; a bare key is
-    /// known when the task name exists in any contest.
-    pub fn unknown_hidden_tasks(
-        &self,
-        known_pairs: &HashSet<(String, String)>,
-        known_tasks: &HashSet<String>,
-    ) -> usize {
-        self.hidden_task_pairs
-            .iter()
-            .filter(|pair| !known_pairs.contains(*pair))
-            .count()
-            + self
-                .hidden_tasks_any_contest
-                .iter()
-                .filter(|key| !known_tasks.contains(*key))
-                .count()
+    /// How many task hides name no projected task row, split by the cause the snapshot
+    /// explains.
+    ///
+    /// A composite key is classified by its contest half: a contest that holds tasks but not
+    /// the one the hide names is the stale key a rename leaves, a contest that holds no task at
+    /// all is one whose tasks the projection withheld, and a contest the snapshot does not hold
+    /// is a key that names nothing. A bare key carries no contest, so it is unknown exactly
+    /// when the projection holds no task of that name anywhere.
+    pub fn task_hide_causes(&self, snapshot: &TaskSnapshot) -> TaskHideCauses {
+        let mut causes = TaskHideCauses::default();
+        for pair in &self.hidden_task_pairs {
+            let (contest, _task) = pair;
+            if snapshot.pairs.contains(pair) {
+                continue;
+            }
+            if snapshot.contests_with_tasks.contains(contest) {
+                causes.renamed += 1;
+            } else if snapshot.contests.contains(contest) {
+                causes.withheld += 1;
+            } else {
+                causes.unmatched += 1;
+            }
+        }
+        for task in &self.hidden_tasks_any_contest {
+            if !snapshot.tasks.contains(task) {
+                causes.unmatched += 1;
+            }
+        }
+        causes
     }
 
     /// The task target: its key is a composite `"<encodedContestKey>/<encodedTaskName>"`, and
@@ -274,16 +354,10 @@ impl Overrides {
         self.hidden_targets.hides_task_anywhere(task)
     }
 
-    /// How many hidden task keys name no row. A renamed or deleted task keeps its hide row,
-    /// so the hide stops applying with no other trace; this is the count /diagnostics
-    /// surfaces for it.
-    pub fn unknown_hidden_tasks(
-        &self,
-        known_pairs: &HashSet<(String, String)>,
-        known_tasks: &HashSet<String>,
-    ) -> usize {
-        self.hidden_targets
-            .unknown_hidden_tasks(known_pairs, known_tasks)
+    /// The task hides that name no projected task row, split by cause. Read by the store, the
+    /// only place that holds both the hides and the snapshot they are classified against.
+    pub fn task_hide_causes(&self, snapshot: &TaskSnapshot) -> TaskHideCauses {
+        self.hidden_targets.task_hide_causes(snapshot)
     }
 
     fn fold_row(&mut self, row: &OverrideRow) {
@@ -502,7 +576,7 @@ pub async fn load_hidden_tasks(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::{BTreeMap, HashSet};
+    use std::collections::BTreeMap;
 
     fn row(kind: &str, key: &str, action: &str, value: Option<&str>) -> Override {
         Override {
@@ -662,24 +736,57 @@ mod tests {
         assert!(!overrides.hides(TargetKind::Team, "shared"));
     }
 
-    /// A hide whose key names no task row is counted, so a renamed or deleted task's hide
-    /// stops being silent on the diagnostics surface. Both spellings count: a bare key is
-    /// unknown when no task carries its name, a composite pair when no such membership exists.
+    /// The three causes, one fixture each: a contest the projection holds with no task of it
+    /// (the withheld task the CMS knows), a contest that holds tasks but not the named one (the
+    /// stale key a rename leaves), and a key the snapshot does not name at all. WHY a snapshot
+    /// fixture and not a database: the classification is a property of the rows the reader
+    /// already holds.
     #[test]
-    fn a_hide_on_an_absent_task_is_counted_as_unknown() {
+    fn a_hide_that_names_no_task_row_is_classified_by_its_cause() {
         let overrides = Overrides::fold(&[
-            override_row("task", "t0", "hide"),
-            override_row("task", "gone", "hide"),
-            override_row("task", "c0/t0", "hide"),
-            override_row("task", "c0/absent", "hide"),
+            override_row("task", "c0/gone", "hide"),
+            override_row("task", "c1/stale", "hide"),
+            override_row("task", "c9/absent", "hide"),
         ]);
-        let known_pairs = HashSet::from([("c0".to_string(), "t0".to_string())]);
-        let known_tasks = HashSet::from(["t0".to_string()]);
+        let mut snapshot = TaskSnapshot::default();
+        // c0 was announced with no task of it: its task is withheld, not renamed.
+        snapshot.add_contest("c0");
+        // c1 is live and holds t0: a hide naming another task is the stale key.
+        snapshot.add_task("c1", "t0");
+        // c9 is not in the snapshot at all.
 
+        let causes = overrides.task_hide_causes(&snapshot);
+
+        assert_eq!(causes.withheld(), 1, "c0 holds no task: withheld");
+        assert_eq!(causes.renamed(), 1, "c1 holds t0 and not stale: renamed");
+        assert_eq!(causes.unmatched(), 1, "c9 names nothing the snapshot holds");
         assert_eq!(
-            overrides.unknown_hidden_tasks(&known_pairs, &known_tasks),
-            2,
-            "the bare name with no task row and the pair with no membership are both counted"
+            causes.total(),
+            3,
+            "the causes partition every hide that named no task row"
+        );
+    }
+
+    /// A hide the projection can satisfy applies, so it is not a cause; and a bare key, which
+    /// carries no contest for a withheld task set to be attributed to, is unmatched exactly
+    /// when the projection holds no task of that name anywhere.
+    #[test]
+    fn a_hide_the_projection_can_satisfy_is_not_a_cause() {
+        let overrides = Overrides::fold(&[
+            override_row("task", "c1/t0", "hide"),
+            override_row("task", "t0", "hide"),
+            override_row("task", "nobody", "hide"),
+        ]);
+        let mut snapshot = TaskSnapshot::default();
+        snapshot.add_task("c1", "t0");
+
+        let causes = overrides.task_hide_causes(&snapshot);
+
+        assert_eq!(causes.total(), 1, "the two hides that name t0 apply");
+        assert_eq!(
+            causes.unmatched(),
+            1,
+            "the bare key with no task of that name is the one that names nothing"
         );
     }
 }
