@@ -107,9 +107,7 @@ export type RankingAppearanceSave =
  * with it: that is what the page re-seeds from, and only after the write succeeded.
  *
  * WHY the object type is the whole field set: this is the surface that owns every appearance
- * column, so the object it hands states them all and the write touches them all. A form that
- * owns one setting posts a FormData through `saveRankingAppearance` instead, where only the
- * fields actually posted are written.
+ * column, so the object it hands states them all and the write touches them all.
  */
 export async function updateRankingAppearance(
   fields: AppearanceFields,
@@ -137,40 +135,6 @@ export async function updateRankingAppearance(
       success: false,
       error: error instanceof Error ? error.message : 'the appearance could not be saved',
     };
-  }
-}
-
-/**
- * The FormData entry point, for a control that owns only some of the appearance columns — the
- * System page's access-mode card posts the access mode and nothing else.
- *
- * WHY the post is read as the set of settings the caller owns rather than as the row: a control
- * that owns one setting must never be able to clear the others, so a field the post leaves out
- * is a column this write leaves alone. Clearing a column is stated explicitly — the field is
- * posted empty — which is why the mapping to a row is the same one `updateRankingAppearance`
- * uses (see `toRow`).
- */
-export async function saveRankingAppearance(formData: FormData): Promise<{ success: boolean; error?: string }> {
-  await ensurePermission('ranking:appearance');
-  try {
-    const stated = readForm(formData);
-    const row = toRow(stated, await readShownContestId());
-    await prisma.ranking_settings.upsert({
-      where: { id: SETTINGS_ID },
-      create: { id: SETTINGS_ID, ...row },
-      update: row,
-    });
-    await recordAudit({
-      verb: 'ranking:appearance:update',
-      entity: 'ranking',
-      entityId: String(SETTINGS_ID),
-      afterValues: { ...stated },
-      result: 'success',
-    });
-    revalidatePath('/[locale]/ranking/appearance');
-    return { success: true };
-  } catch (error) {
-    return { success: false, error: (error as Error).message };
   }
 }
 
@@ -348,51 +312,6 @@ function readAnonymous(columns: unknown): boolean {
 // `-readonly` because the wording fields are declared readonly on the shared shape (they are
 // read straight off a stored row there); a caller assembling its own statement needs to set them.
 type StatedAppearanceFields = { -readonly [K in keyof AppearanceFields]?: AppearanceFields[K] };
-
-/** The fields whose post carries text; the access mode and the two display flags are read apart. */
-type TextField = Exclude<keyof AppearanceFields, 'accessMode' | 'showIdColumn' | 'anonymous'>;
-const TEXT_FIELDS: readonly TextField[] = [
-  'title',
-  'subtitle',
-  'organisation',
-  'displayName',
-  'footerText',
-  'creditsText',
-  'theme',
-  'scoreFormat',
-  'perspectives',
-];
-
-/**
- * The fields the caller actually stated — the columns it owns, and no others.
- *
- * WHY absence means "leave it alone": a form that owns one control posts only that control,
- * and a field it never mentioned is not an instruction to clear it. Reading absence as an
- * empty value is what let the System page's *Save Access Mode* write JSON null over the
- * theme, the score format and the perspective config it never posted. A caller that *does*
- * mean to clear a column states that field empty (an emptied text or JSON box still clears,
- * see `toRow`), never by leaving it out.
- *
- * WHY the two display flags are read together: `columns` is one JSON column carrying both
- * settings, so a post that states either flag writes the column from both — an unchecked box
- * is absent from a form post by HTML's own rule, not an unstated field.
- */
-function readForm(formData: FormData): StatedAppearanceFields {
-  const stated: StatedAppearanceFields = {};
-  for (const name of TEXT_FIELDS) {
-    if (formData.has(name)) {
-      stated[name] = String(formData.get(name) ?? '').trim();
-    }
-  }
-  if (formData.has('accessMode')) {
-    stated.accessMode = formData.get('accessMode') === 'protected' ? 'protected' : 'public';
-  }
-  if (formData.has('showIdColumn') || formData.has('anonymous')) {
-    stated.showIdColumn = formData.get('showIdColumn') === 'on';
-    stated.anonymous = formData.get('anonymous') === 'on';
-  }
-  return stated;
-}
 
 /**
  * The appearance columns a statement may write, each in a form both the create and the update

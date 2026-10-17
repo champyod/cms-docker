@@ -28,7 +28,7 @@ describe('raw form field touch targets', () => {
 
   it('gives all appearance branding inputs a 44px touch target', () => {
     const markup = renderToStaticMarkup(
-      <BrandingTab branding={{ rankingLogoPath: '' }} onFieldChange={() => undefined} logoPreview="" />,
+      <BrandingTab branding={{ rankingLogoPath: '' }} onFieldChange={() => undefined} logoPreview="" logoHref="/en/ranking" />,
     );
 
     expect(getInputTouchHeightCount(markup)).toBe(1);
