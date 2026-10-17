@@ -58,7 +58,6 @@ export type RouteId =
   | 'system.settings'
   | 'system.docs'
   | 'system.about'
-  | 'notifications'
   | 'system.search'
   | 'auth.signout';
 
