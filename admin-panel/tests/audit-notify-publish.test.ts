@@ -1,10 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const published: { id: string; detail: string }[] = [];
+const published: PublishedFrame[] = [];
 const discordCalls: { title: string; detail: string }[] = [];
 
+// Why the destination is part of the captured frame: the popup renders a link only from what the
+// frame carries, so the field has to survive the publish step this suite exercises.
+interface PublishedFrame {
+  id: string;
+  detail: string;
+  destination?: string;
+}
+
 vi.mock('@/lib/notification-queue', () => ({
-  publishNotification: (frame: { id: string; detail: string }) => {
+  publishNotification: (frame: PublishedFrame) => {
     published.push(frame);
   },
 }));
@@ -36,6 +44,7 @@ describe('recordAudit publishing', () => {
     expect(published).toHaveLength(1);
     expect(published[0].detail).toContain('Ada');
     expect(published[0].detail).toContain('Midterm');
+    expect(published[0].destination).toBe('administration.audit');
     expect(discordCalls).toHaveLength(0);
   });
 
@@ -52,7 +61,7 @@ describe('recordAudit publishing', () => {
     published.length = 0;
     vi.resetModules();
     vi.doMock('@/lib/notification-queue', () => ({
-      publishNotification: (frame: { id: string; detail: string }) => {
+      publishNotification: (frame: PublishedFrame) => {
         published.push(frame);
       },
     }));
@@ -81,7 +90,7 @@ describe('recordAudit publishing', () => {
     vi.resetModules();
     const lookups: string[] = [];
     vi.doMock('@/lib/notification-queue', () => ({
-      publishNotification: (frame: { id: string; detail: string }) => {
+      publishNotification: (frame: PublishedFrame) => {
         published.push(frame);
       },
     }));
@@ -107,7 +116,7 @@ describe('recordAudit publishing', () => {
     published.length = 0;
     vi.resetModules();
     vi.doMock('@/lib/notification-queue', () => ({
-      publishNotification: (frame: { id: string; detail: string }) => {
+      publishNotification: (frame: PublishedFrame) => {
         published.push(frame);
       },
     }));

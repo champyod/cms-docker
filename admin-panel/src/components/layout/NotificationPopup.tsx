@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
+import { useFormatTimestamp, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { QueuedNotification } from '@/lib/notification-queue';
@@ -21,6 +21,42 @@ const POPUP_CLASS =
 
 const ACTION_CLASS = 'text-xs text-muted-foreground hover:text-foreground';
 
+const ROW_CLASS = 'block px-3 py-2 hover:bg-muted/50';
+
+interface AlertEntryProps {
+  readonly event: QueuedNotification;
+  readonly locale: string;
+  readonly formatTimestamp: TimestampFormatter;
+}
+
+/**
+ * One alert: the wording the action that published it produced, and the way out of it.
+ *
+ * Why the row's own markup is built once and wrapped twice: an alert the panel has no page for still
+ * belongs on the list, and linking it to the log would send the reader to a page that cannot resolve
+ * the row they came to read.
+ */
+function AlertEntry({ event, locale, formatTimestamp }: AlertEntryProps): React.JSX.Element {
+  const body = (
+    <>
+      <p className="text-xs font-semibold text-foreground">{event.title}</p>
+      <p className="text-xs text-muted-foreground break-words">{event.detail}</p>
+      <p className="font-mono text-[10px] text-muted-foreground/70">{formatTimestamp(event.timestamp)}</p>
+    </>
+  );
+  return (
+    <li className="border-b border-border/50 last:border-0">
+      {event.destination === undefined ? (
+        <div className={ROW_CLASS}>{body}</div>
+      ) : (
+        <Link href={buildRoute(locale, event.destination)} className={ROW_CLASS}>
+          {body}
+        </Link>
+      )}
+    </li>
+  );
+}
+
 /**
  * The bell's own panel: the alerts the shared live service holds, with the ways out of it.
  *
@@ -33,9 +69,6 @@ const ACTION_CLASS = 'text-xs text-muted-foreground hover:text-foreground';
 export function NotificationPopup({ events, onClear, onMarkAllRead }: NotificationPopupProps): React.JSX.Element {
   const formatTimestamp = useFormatTimestamp();
   const locale = localeFromPathname(usePathname());
-  // Why every alert opens the log rather than its own row: the live frame carries the alert's wording
-  // and its row id only, so the log is the only page that can show the record it came from.
-  const auditLogHref = buildRoute(locale, 'administration.audit');
   return (
     <div className={POPUP_CLASS}>
       <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
@@ -52,17 +85,11 @@ export function NotificationPopup({ events, onClear, onMarkAllRead }: Notificati
       {events.length === 0 ? (
         <p className="px-3 py-4 text-xs text-muted-foreground">No alerts yet.</p>
       ) : (
-        events.map((event) => (
-          <Link
-            key={event.id}
-            href={auditLogHref}
-            className="block border-b border-border/50 px-3 py-2 last:border-0 hover:bg-muted/50"
-          >
-            <p className="text-xs font-semibold text-foreground">{event.title}</p>
-            <p className="text-xs text-muted-foreground break-words">{event.detail}</p>
-            <p className="font-mono text-[10px] text-muted-foreground/70">{formatTimestamp(event.timestamp)}</p>
-          </Link>
-        ))
+        <ul>
+          {events.map((event) => (
+            <AlertEntry key={event.id} event={event} locale={locale} formatTimestamp={formatTimestamp} />
+          ))}
+        </ul>
       )}
     </div>
   );

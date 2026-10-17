@@ -1,3 +1,4 @@
+import type { RouteId } from '@/lib/navigation/types';
 import type { AuditResult } from './audit';
 
 // Why explicit verbs, not keyword matching: lib/audit.ts already flags
@@ -63,7 +64,18 @@ export interface NotificationEvent {
   level: 'critical' | 'warning';
   title: string;
   detail: string;
+  /**
+   * The panel route holding this event's own record, where one exists.
+   *
+   * Why optional: an event the panel has no page for is still worth showing, and it must render as
+   * plain text rather than as a link to a page that cannot show what the reader came to read.
+   */
+  destination?: RouteId;
 }
+
+// Why one constant and not a literal per classifier: every alert here is an audit row, and the log
+// is the one page that can resolve a row, so the destination cannot drift between the two framings.
+const AUDIT_LOG_DESTINATION: RouteId = 'administration.audit';
 
 /** True when an audit row must push immediately (critical success or sensitive failure). */
 export function isCriticalAuditEvent(verb: string, result: AuditResult): boolean {
@@ -102,12 +114,14 @@ export function classifyAuditEvent(
       level: 'critical',
       title: `Failed sensitive action: ${verb}`,
       detail: `${actor} failed ${verb} on ${target}`,
+      destination: AUDIT_LOG_DESTINATION,
     };
   }
   return {
     level: 'critical',
     title: `Critical action: ${verb}`,
     detail: `${actor} ran ${verb} on ${target}`,
+    destination: AUDIT_LOG_DESTINATION,
   };
 }
 
@@ -124,12 +138,14 @@ export function classifyAuditEventWithNames(
       level: 'critical',
       title: `Failed critical action: ${verb}`,
       detail: `${actorName} failed ${verb} on ${targetName}`,
+      destination: AUDIT_LOG_DESTINATION,
     };
   }
   return {
     level: 'critical',
     title: `Critical action: ${verb}`,
     detail: `${actorName} ran ${verb} on ${targetName}`,
+    destination: AUDIT_LOG_DESTINATION,
   };
 }
 
