@@ -80,15 +80,19 @@ async function deliverAt(frame: ResourceFrame, readAt: string, reads?: LiveSecti
 }
 
 /**
- * What the cue states for the section whose rows carry this text.
+ * The one cue's wrapper for the value whose text carries this marker.
  *
- * Why by their text and not by position: the cue marks the row it wraps, and the row the test means is
- * the one showing the value it read back — the same way a reader finds it on the page.
+ * Why by their text and not by position: the cue marks the element it wraps, and the value a test
+ * means is the one showing what it read back — the same way a reader finds it on the page.
  */
-function sectionFreshness(marker: string): string | null {
+function cuedElement(marker: string): Element | null {
   const marked = Array.from(document.querySelectorAll('[data-freshness]'));
-  const section = marked.find((candidate) => (candidate.textContent ?? '').includes(marker));
-  return section?.getAttribute('data-freshness') ?? null;
+  return marked.find((candidate) => (candidate.textContent ?? '').includes(marker)) ?? null;
+}
+
+/** What the cue states for the section whose rows carry this text. */
+function sectionFreshness(marker: string): string | null {
+  return cuedElement(marker)?.getAttribute('data-freshness') ?? null;
 }
 
 function states(copy: string): boolean {
@@ -248,5 +252,64 @@ describe('resources section freshness', () => {
     // section keeps the read it had and stays marked, instead of being dated by an invented instant.
     await deliverAt({ services, traffic }, '2026-10-16T12:00:20.000Z', { services: 'not an instant' });
     expect(sectionFreshness(SERVICES)).toBe('stale');
+  });
+});
+
+/**
+ * The counters' own figures: the two gauges and the metrics card.
+ *
+ * Why they ride on the same cue as a row: the counters are dated on the wire like any other section,
+ * and these cards are single values rather than rows, so the cue marks each one in place through the
+ * one mechanism — the same predicate, the same mark, the same sentence.
+ */
+describe('resources counter figures', () => {
+  const COUNTERS_AT = '2026-10-16T12:00:00.000Z';
+  const SUMMARY_AT = '2026-10-16T12:00:05.000Z';
+
+  const CPU = en.resources.cpuUsage;
+  const MEMORY = en.resources.memoryUsage;
+  const METRICS = en.resources.uptime;
+
+  const services = [{ name: 'cms-database', status: 'healthy' }];
+
+  it('dates the figures by the counters\' own read, not by the frame that carried them forward', async () => {
+    render(surface());
+    await deliverAt({ server: stats('host'), workers: [worker()] }, COUNTERS_AT);
+    expect(sectionFreshness(CPU)).toBe('fresh');
+    expect(sectionFreshness(MEMORY)).toBe('fresh');
+    expect(sectionFreshness(METRICS)).toBe('fresh');
+
+    // The summary pass runs and carries the counters forward: its newer instant is not what dates
+    // them, so no figure is marked by a read that never touched it.
+    await deliverAt({ server: stats('host'), workers: [worker()], services }, SUMMARY_AT, { server: COUNTERS_AT, workers: COUNTERS_AT });
+    expect(sectionFreshness(CPU)).toBe('fresh');
+    expect(sectionFreshness(MEMORY)).toBe('fresh');
+    expect(sectionFreshness(METRICS)).toBe('fresh');
+  });
+
+  it('marks every figure while the stream that read the counters is gone', async () => {
+    render(surface());
+    await deliverAt({ server: stats('host'), workers: [worker()] }, COUNTERS_AT);
+    expect(sectionFreshness(CPU)).toBe('fresh');
+
+    await act(async () => {
+      FakeEventSource.instances.at(-1)?.onerror?.();
+    });
+
+    expect(sectionFreshness(CPU)).toBe('stale');
+    expect(sectionFreshness(MEMORY)).toBe('stale');
+    expect(sectionFreshness(METRICS)).toBe('stale');
+    // Why the sentence and not only the mark: the figure is marked by the cue's rule, so its
+    // accessible half travels with the figure exactly as it does with a row.
+    expect(cuedElement(CPU)?.getAttribute('title')).toContain('reconnecting');
+  });
+
+  it('leaves the figures silent until a read dates the counters', async () => {
+    render(surface());
+    await deliver({ services });
+
+    expect(sectionFreshness(CPU)).toBe('unknown');
+    expect(sectionFreshness(MEMORY)).toBe('unknown');
+    expect(sectionFreshness(METRICS)).toBe('unknown');
   });
 });

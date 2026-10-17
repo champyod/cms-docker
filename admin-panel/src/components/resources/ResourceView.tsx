@@ -7,8 +7,9 @@ import { NetworkTrafficLogs } from '@/components/resources/NetworkTrafficLogs';
 import { GaugeCard } from '@/components/resources/GaugeCard';
 import { Activity, Cpu, Database, Network } from 'lucide-react';
 import { Card } from '@/components/core/Card';
-import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { RowFreshness } from '@/components/core/RowFreshness';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import { useLiveReadInstants } from '@/lib/live/use-live-reads';
 import { sectionReadAt } from '@/lib/live/frames';
@@ -29,14 +30,14 @@ import type { Dictionary } from '@/lib/dictionary';
 import { rowsFromNodes } from '@/lib/worker-nodes';
 
 /**
- * The sections whose rows carry the cue.
+ * The sections whose values carry the cue: all four, because each one is read on a track of its own
+ * and can therefore fall behind the page on its own.
  *
- * Why the counters are not among them: `server` is one read behind the gauges and the metrics card,
- * and those are single figures rather than rows — the cue marks a row where it sits, and marking a
- * figure would mean inventing a row that is not there. The frame still dates the section on the wire,
- * so a surface that renders it as rows can cue it without another contract change.
+ * Why the counters are no longer the exception: the CPU/RAM gauges and the metrics card are single
+ * figures rather than rows, and the cue reaches a figure the same way — it wraps the card, which is
+ * why the gauge is handed a class, so it keeps filling the cell it used to stretch as.
  */
-const CUED_SECTIONS: readonly ResourceSection[] = ['workers', 'services', 'traffic'];
+const CUED_SECTIONS: readonly ResourceSection[] = ['server', 'workers', 'services', 'traffic'];
 
 interface PendingFirstFrame {
   readonly resolve: () => void;
@@ -93,7 +94,8 @@ export function ResourceView(): React.JSX.Element {
 
   // Which read produced each section's value, and the newest read that has covered it: the two facts
   // the cue compares. One record for the whole page, because a section is one read — every row of the
-  // workers, the services and the traffic shares its section's instant.
+  // workers, the services and the traffic shares its section's instant, and so does every figure the
+  // counters section draws.
   const reads = useLiveReadInstants<ResourceSection>();
 
   const onFrame = useCallback((frame: ResourceFrame, readAt: string, sectionReads?: LiveSectionReads): void => {
@@ -103,6 +105,7 @@ export function ResourceView(): React.JSX.Element {
     // section whose own pass ran without refilling it does move forward, because then the frame states
     // the frame's read and the older value still behind it is exactly what the cue has to mark.
     for (const section of CUED_SECTIONS) reads.cover(section, sectionReadAt(readAt, sectionReads, section));
+    if (frame.server) reads.record('server', sectionReadAt(readAt, sectionReads, 'server'));
     if (frame.workers) reads.record('workers', sectionReadAt(readAt, sectionReads, 'workers'));
     if (frame.services) reads.record('services', sectionReadAt(readAt, sectionReads, 'services'));
     if (frame.traffic) reads.record('traffic', sectionReadAt(readAt, sectionReads, 'traffic'));
@@ -152,21 +155,29 @@ export function ResourceView(): React.JSX.Element {
           {/* Why "not here yet" is not "nothing to read": the summary section arrives later. */}
           <CoreServicesStatus services={services ?? []} loading={services === null} freshness={freshness('services')} />
 
-          <GaugeCard
-            icon={<Cpu className="w-4 h-4 text-primary" />}
-            label={dict.resources.cpuUsage}
-            source={source}
-            percent={serverStats?.cpu || 0}
-            tone="auto"
-          />
+          {/* Why the counters are cued as figures: the gauges are the `server` section's own values,
+              so the cue wraps each one, and the card fills that wrapper as the cell it was. */}
+          <RowFreshness {...freshness('server')}>
+            <GaugeCard
+              className="h-full"
+              icon={<Cpu className="w-4 h-4 text-primary" />}
+              label={dict.resources.cpuUsage}
+              source={source}
+              percent={serverStats?.cpu || 0}
+              tone="auto"
+            />
+          </RowFreshness>
 
-          <GaugeCard
-            icon={<Database className="w-4 h-4 text-info" />}
-            label={dict.resources.memoryUsage}
-            source={source}
-            percent={serverStats?.memory || 0}
-            tone="info"
-          />
+          <RowFreshness {...freshness('server')}>
+            <GaugeCard
+              className="h-full"
+              icon={<Database className="w-4 h-4 text-info" />}
+              label={dict.resources.memoryUsage}
+              source={source}
+              percent={serverStats?.memory || 0}
+              tone="info"
+            />
+          </RowFreshness>
         </div>
 
         <div className="space-y-4">
@@ -194,7 +205,11 @@ export function ResourceView(): React.JSX.Element {
               <Network className="w-5 h-5 text-info" />
               <h2 className="text-xl font-bold">{dict.resources.systemMetrics}</h2>
             </div>
-            <MetricsCard serverStats={serverStats} />
+            {/* Why the same section as the gauges: the metrics card draws the counters' own read, so
+                it falls behind and is confirmed with them rather than on a rule of its own. */}
+            <RowFreshness {...freshness('server')}>
+              <MetricsCard serverStats={serverStats} />
+            </RowFreshness>
           </div>
             <NetworkTrafficLogs logs={traffic ?? []} limit={trafficLimit} onLimitChange={setTrafficLimit} loading={traffic === null} freshness={freshness('traffic')} />
         </div>
