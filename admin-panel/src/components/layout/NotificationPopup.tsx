@@ -32,7 +32,7 @@ interface NotificationPopupProps {
  * ancestor the page happens to give it, while the header is pinned to the top edge at every width.
  */
 const POPUP_CLASS =
-  'inset-auto right-3 top-16 left-auto z-50 w-[calc(100vw-1.5rem)] max-h-[min(24rem,70dvh)] max-w-none gap-2 p-3 rounded-xl border border-border bg-card shadow-xl sm:right-3 sm:top-16 sm:left-auto sm:w-80 sm:max-w-80 sm:max-h-96 sm:p-3 sm:translate-x-0 sm:translate-y-0';
+  'inset-auto right-3 top-16 left-auto z-50 w-[calc(100vw-1.5rem)] max-h-[min(24rem,70dvh)] max-w-none gap-2 p-3 rounded-xl border border-border bg-card shadow-xl sm:right-3 sm:top-16 sm:left-auto sm:w-80 sm:max-w-80 sm:max-h-96 sm:rounded-xl sm:p-3 sm:translate-x-0 sm:translate-y-0';
 
 const ACTION_CLASS = 'text-xs text-muted-foreground hover:text-foreground';
 
