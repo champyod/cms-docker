@@ -33,8 +33,20 @@ pub struct Diagnostics {
     pub skipped_overrides: usize,
     pub skipped_subchanges: usize,
     /// Task hides that named no task row: the hide exists but drops nothing, so a renamed
-    /// task silently stops being hidden. It is here so that silence has a surface.
+    /// task silently stops being hidden. It is the three causes below, summed — the meaning
+    /// this key already had, so the panel's consumer reads what it always read.
     pub unknown_task_hides: usize,
+    /// The task hides whose contest the projection holds with no task of it: the push
+    /// announced the contest with an empty task set (its task had no active dataset), so the
+    /// CMS knows the task and the projection withholds it. Split out of `unknown_task_hides`,
+    /// which raised it as a rename alarm forever.
+    pub withheld_task_hides: usize,
+    /// The task hides naming a task a live contest no longer holds: the stale key a rename
+    /// leaves, which is the alarm the counter exists for.
+    pub renamed_task_hides: usize,
+    /// The task hides naming neither a projected contest nor a projected task: nothing in the
+    /// snapshot explains the key.
+    pub unmatched_task_hides: usize,
 }
 
 /// Why the reason is a value and not a Response: clippy::result_large_err is right
@@ -269,6 +281,9 @@ async fn diagnostics(State(state): State<AppState>) -> Response {
             skipped_overrides: standings.ledger.skipped_overrides(),
             skipped_subchanges: standings.ledger.skipped_subchanges(),
             unknown_task_hides: standings.ledger.unknown_task_hides(),
+            withheld_task_hides: standings.ledger.withheld_task_hides(),
+            renamed_task_hides: standings.ledger.renamed_task_hides(),
+            unmatched_task_hides: standings.ledger.unmatched_task_hides(),
         }),
         Err(error) => refuse(&error.to_string()),
     }

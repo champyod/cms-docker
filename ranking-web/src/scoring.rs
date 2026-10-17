@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::board;
-use crate::overrides::Overrides;
+use crate::overrides::{Overrides, TaskHideCauses};
 
 pub use crate::board::BoardRow;
 pub use crate::score::{
@@ -18,10 +18,11 @@ pub struct Ledger {
     board: Vec<BoardRow>,
     skipped_subchanges: usize,
     skipped_overrides: usize,
-    /// Hidden task keys that name no task row: the hide exists but drops nothing, so a
-    /// renamed task stops being hidden silently. Filled by the store, which is the only
-    /// place that can compare the hides against the task table.
-    unknown_task_hides: usize,
+    /// The task hides that named no task row, split by the cause the projection snapshot
+    /// explains: the hides that name no task row at all used to reach /diagnostics as one
+    /// counter, so a task the projection withholds raised the rename alarm forever. Filled by
+    /// the store, which is the only place that holds both the hides and the snapshot.
+    task_hides: TaskHideCauses,
 }
 
 impl Ledger {
@@ -47,17 +48,37 @@ impl Ledger {
         self.skipped_overrides
     }
 
-    /// How many task hides named no task row, so /diagnostics can surface a hide that
-    /// silently stopped applying.
+    /// How many task hides named no task row, so /diagnostics can surface a hide that silently
+    /// stopped applying. It is the three causes below, summed: the meaning this counter already
+    /// had, kept so the panel's consumer reads what it always read.
     pub fn unknown_task_hides(&self) -> usize {
-        self.unknown_task_hides
+        self.task_hides.total()
     }
 
-    /// Records the count the store derived by comparing the hides against the task table.
-    /// WHY not a constructor argument: a ledger assembled for another read makes no such
-    /// comparison, and zero is then the honest answer.
-    pub(crate) fn set_unknown_task_hides(&mut self, unknown_task_hides: usize) {
-        self.unknown_task_hides = unknown_task_hides;
+    /// The hides whose contest the projection holds with no task of it — the CMS knows the
+    /// task and the projection withholds it, so nothing was renamed.
+    pub fn withheld_task_hides(&self) -> usize {
+        self.task_hides.withheld()
+    }
+
+    /// The hides naming a task a live contest no longer holds: the stale key a rename leaves,
+    /// which is the alarm this counter exists for.
+    pub fn renamed_task_hides(&self) -> usize {
+        self.task_hides.renamed()
+    }
+
+    /// The hides naming neither a projected contest nor a projected task: nothing in the
+    /// snapshot explains them.
+    pub fn unmatched_task_hides(&self) -> usize {
+        self.task_hides.unmatched()
+    }
+
+    /// Records the causes the store derived by classifying the hides against the projection
+    /// snapshot.
+    /// WHY not a constructor argument: a ledger assembled for another read classifies nothing,
+    /// and zero is then the honest answer.
+    pub(crate) fn set_task_hides(&mut self, task_hides: TaskHideCauses) {
+        self.task_hides = task_hides;
     }
 
     /// One user's submissions, ordered by (task, time) the way the Python
