@@ -29,7 +29,30 @@ fn pool() -> PgPool {
 
 const SHARD: u32 = 0;
 
+/// Ensures the registry table this suite reads and cleans exists.
+///
+/// WHY the test creates it: `services` belongs to the admin panel's migrations, and CI builds this
+/// suite's database from the ranking migrations alone. The panel's registry migration also carries a
+/// foreign key to `contests` — the classic CMS schema this repository does not contain — so it cannot
+/// be applied here. The columns below are exactly the ones `load_served_contest` reads and the seed
+/// writes, so a drift in the real table surfaces as a failing read instead of a fixture that keeps
+/// passing; a database that already carries the real table is untouched (`IF NOT EXISTS`).
+async fn ensure_registry_table(pool: &PgPool) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS services (\
+         id serial PRIMARY KEY, name text NOT NULL, role text NOT NULL, shard integer NOT NULL, \
+         host text NOT NULL, http_port integer, contest_id integer, \
+         enabled boolean NOT NULL DEFAULT true, \
+         created_at timestamptz NOT NULL DEFAULT now(), \
+         updated_at timestamptz NOT NULL DEFAULT now())",
+    )
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 async fn clear(pool: &PgPool) -> Result<(), sqlx::Error> {
+    ensure_registry_table(pool).await?;
     const STATEMENTS: [&str; 8] = [
         "DELETE FROM ranking_config",
         "DELETE FROM ranking_subchanges",
