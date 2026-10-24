@@ -13,6 +13,17 @@
   },
   "packageRules": [
     {
+      "description": "Digest pinning is the decision in docs/decisions/image-digest-pinning.md: every third-party base image carries its readable tag PLUS an @sha256 digest, so the tag stays legible in the file while the bits are fixed. Renovate is the only thing that moves either — it re-resolves the digest when it bumps a tag, and opens a digest-only PR when the tag has not moved but the registry serves new bits. tests/test_image_pins.sh fails on a floating reference, so a hand edit that drops a digest cannot merge.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true
+    },
+    {
+      "description": "Our own images (ghcr.io/champyod/*, incl. cms-docker-* and cms-security-scan) are built by this repo's CI and selected at deploy time by ${IMG_TAG}. A digest would freeze the stack to one build, so pinning them is wrong by design and Renovate must not propose it — the same reason tests/test_image_pins.sh exempts them.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchPackageNames": ["/^ghcr\\.io\\/champyod\\//"],
+      "enabled": false
+    },
+    {
       "description": "One PR per week for every compose base image: they are read together when the stack is upgraded, and eleven separate PRs is how the stack drifts half-updated",
       "groupName": "compose base images",
       "matchManagers": ["docker-compose"],
@@ -42,11 +53,6 @@
       "description": "Rust lockfiles in ranking-web and tools/cms-tui",
       "groupName": "rust dependencies",
       "matchManagers": ["cargo"]
-    },
-    {
-      "description": "Digest pinning is an OPEN DECISION (docs/SECURITY-FEED.md) — explicitly off so no preset turns it on by accident",
-      "matchManagers": ["dockerfile", "docker-compose"],
-      "pinDigests": false
     }
   ]
 }

@@ -1,11 +1,19 @@
 # CMS Docker Compose — unified stack with profiles: core, admin, contest, worker, monitor
 # Services orchestrate the Competitive Management System platform
+#
+# Image pin policy (docs/decisions/image-digest-pinning.md): every third-party image
+# carries its readable tag PLUS an @sha256 digest, so the reference stays legible and the
+# bits are fixed. Renovate bumps tag+digest; `make test` (tests/test_image_pins.sh) fails
+# on a floating reference.
+# WHY no digest on our own images: ${IMG_TAG} is how a deploy selects the build CI just
+# pushed, so pinning a digest would freeze the whole stack to one commit — the tag IS the
+# selector and the digest lives in the registry manifest it resolves to.
 
 services:
 
   # PostgreSQL Database
   database:
-    image: postgres:15
+    image: postgres:15@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48
     container_name: cms-database
     restart: unless-stopped
     profiles:
@@ -367,7 +375,7 @@ services:
   # its own copy and starts exactly one container.
   # WHY `contest` and not every profile: `make core` must not start it.
   redis-rate-limit:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
     container_name: grader-redis-rate-limit
     restart: unless-stopped
     profiles:
@@ -392,7 +400,7 @@ services:
   # `grader-nginx-proxy` (docker-compose.domain.yml) would merge the two blocks
   # and drop one proxy from the project.
   nginx-proxy:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
     container_name: cms-nginx-contest
     restart: unless-stopped
     profiles:

@@ -4,15 +4,16 @@
 # (docs/SECURITY-FEED.md) accepts exactly one payload shape, and three call sites is three
 # places for that shape to drift. trivy and osv-scanner are static Go binaries, so they are
 # copied out of their pinned upstream images rather than curled from release tarballs whose
-# URLs rot. Renovate's docker manager bumps the three tags below.
+# URLs rot. Renovate's docker manager bumps the three tags below — and, since the pinned-digest
+# pass, the three @sha256 digests with them (docs/decisions/image-digest-pinning.md).
 #
 # Not in this image on purpose: the Diun container itself. It stays upstream
 # (crazymax/diun) and posts to the translator this image serves in `diun-bridge` mode.
 
-FROM ghcr.io/aquasecurity/trivy:0.76.1 AS trivy
-FROM ghcr.io/google/osv-scanner:v2.7.0 AS osv
+FROM ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c AS trivy
+FROM ghcr.io/google/osv-scanner:v2.7.0@sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0 AS osv
 
-FROM alpine:3.22
+FROM alpine:3.22@sha256:2e0b81d60597f449baa56dc25d355367869d2dca4cd57e866f1e2b52af3eb55f
 
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=osv /osv-scanner /usr/local/bin/osv-scanner

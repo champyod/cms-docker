@@ -8,7 +8,11 @@ version: '3.8'
 services:
   # Tailscale container with Funnel enabled
   tailscale:
-    image: tailscale/tailscale:latest
+    # Tag+digest: this was `tailscale/tailscale:latest`, which floated. `v1.104.2` is the
+    # release that `:latest`/`:stable` resolved to at pin time (identical manifest digest),
+    # so the pin changes nothing that runs — it only stops the next upstream push from
+    # silently changing it before an operator reviews the Renovate PR.
+    image: tailscale/tailscale:v1.104.2@sha256:b11583ad2e93e4671128538c88cf11f460444a5d7e449311dd1933a400ab849d
     container_name: cms-tailscale
     hostname: ${TAILSCALE_HOSTNAME:-cms-contest}
     restart: unless-stopped

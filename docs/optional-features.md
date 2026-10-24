@@ -4,7 +4,7 @@ All four are **available but disabled by default** (`=0`), asked in `scripts/__d
 
 | # | Feature | Config flag (default) | Enable via | Compose profile |
 |---|---------|--------------------|------------|-----------------|
-| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` |
+| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | none — no container provides the token; certbot and nginx reach it through PKCS#11 (see §1) |
 | 2 | Vault | `VAULT_ENABLED=0` | `VAULT_ENABLED=1` with `VAULT_ADDR`/`VAULT_TOKEN`/`VAULT_PATH` | `vault` — `docker compose -f docker-compose.vault.yml --profile vault up -d` |
 | 3 | DNSSEC + CAA | `DNSSEC_ENABLED=0`, `CAA_ENABLED=0` | `DNSSEC_ENABLED=1` / `CAA_ENABLED=1` (`CAA_ISSUER=letsencrypt.org`) | none — DNS only (see `docs/dnssec-caa-guide.md`) |
 | 4 | mTLS workers | `MTLS_WORKERS_ENABLED=0` | `MTLS_WORKERS_ENABLED=1` with `MTLS_CA_CERT` etc. | worker service env `MTLS_*` — no extra profile; volumes documented in `docker-compose.yml` |
@@ -34,8 +34,13 @@ Local artefacts are **gitignored**: `config/hsm/*`, `*.db`, `config/vault/data/`
 
   # or TUI: ./scripts/__domain.sh setup --apply  # asks Enable HSM? [y/N]
 
-  # run with profile
-  docker compose -f docker-compose.domain.yml --profile hsm up -d
+  # There is no `hsm` compose service: the token store is a PKCS#11 module, not a daemon,
+  # so nothing has to run alongside the stack. The former `image: opencrypto/softhsm`
+  # service never resolved (that repository does not exist) and was removed by
+  # docs/decisions/image-digest-pinning.md rather than left as an unpinnable name.
+  # SoftHSM for dev: install the package on the host that runs certbot, keep the token DB
+  # at config/hsm/tokens/ (gitignored). Hardware: YubiHSM via yubico/yubihsm if you script
+  # it — pin that image by tag+digest like every other third-party image.
   # certbot HSM issuance (example)
   certbot certonly --hsm --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-pin "$HSM_PIN" -d "$DOMAIN_NAME"
   ```

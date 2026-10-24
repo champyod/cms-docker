@@ -35,6 +35,11 @@ Verified while writing this, not recalled:
   exits**, so a scheduler is what makes it periodic — and its documented output channels are PRs and the
   dashboard issue, with no findings webhook. **Do not invent one.**
 
+**Every image above is pinned by digest** (`tag@sha256:…`) per
+`docs/decisions/image-digest-pinning.md`: an unpinned reference would make "the digest the registry
+now serves" move without a commit, and Diun's `update` event is only meaningful against a pin that
+someone chose to move.
+
 **Host read-only guarantee for the rootfs scan:** the host root is mounted `:ro`, the scan runs with
 `--scanners vuln --pkg-types os`, and the container has **no** write mount anywhere except its own cache
 volume. It cannot change a host package even if it wanted to. `--pkg-types os` is what keeps the run to the
