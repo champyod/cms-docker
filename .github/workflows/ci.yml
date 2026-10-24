@@ -539,16 +539,29 @@ jobs:
           sudo install -m 0755 /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny /usr/local/bin/cargo-deny
           cargo-deny --version
 
-      # --config is explicit: both workspaces sit below the root, and config
-      # discovery walking up from them is exactly the failure mode that would let a
-      # crate ship with no policy applied.
+      # cargo-deny resolves the manifest from the working directory, so each tree is
+      # checked from inside itself. --config is explicit and relative to that
+      # directory: the policy lives at the root, and discovery walking up from a
+      # workspace is exactly the failure mode that would let a crate ship unpoliced.
       - name: cargo-deny (ranking-web)
         if: needs.changes.outputs.rust_ranking == 'true'
-        run: cargo-deny --config deny.toml --manifest-path ranking-web/Cargo.toml check
+        working-directory: ranking-web
+        run: cargo-deny --config ../deny.toml --all-features check
 
+      # WHY the lockfile check comes first: cargo-deny audits the graph a lockfile
+      # pins. Without one it would resolve a fresh graph and report on a dependency
+      # set nobody ships, which is worse than no gate because it looks like one.
+      # A workspace that arrives with no committed lockfile fails here, by name.
       - name: cargo-deny (backend workspace)
         if: needs.changes.outputs.rust_backend == 'true'
-        run: cargo-deny --config deny.toml --manifest-path backend/Cargo.toml check
+        working-directory: backend
+        run: |
+          if [ ! -f Cargo.lock ]; then
+            echo "::error::backend/Cargo.lock is missing — there is no graph to audit."
+            echo "The workspace has no committed lockfile: commit one rather than skip this gate."
+            exit 1
+          fi
+          cargo-deny --config ../deny.toml check
 
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it
