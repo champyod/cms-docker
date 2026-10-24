@@ -5,20 +5,11 @@ import util from 'util';
 
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
-import { resolveHostComposeLocation } from '@/lib/compose-location';
-import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import { runConfigSync } from '@/lib/deploy-config';
 import { readFrontVhosts } from '@/lib/front-vhosts';
 import { ensurePermission } from '@/lib/permissions';
 import { getRepoRoot } from '@/lib/repo-root';
-import { buildComposeFileFlags, buildRestartCommand } from '@/lib/restart-planner';
-import {
-  FRONT_RELOAD_COMMAND,
-  registryApplyPlan,
-  TAILSCALE_COMPOSE_FILE,
-  type RegistryApplyPlan,
-  type RegistryChangeClass,
-} from '@/lib/restart-service-scope';
+import { FRONT_RELOAD_COMMAND } from '@/lib/restart-service-scope';
 import { renderRegistryArtifacts, type RegistryArtifact } from '@/lib/service-wiring-cli';
 import {
   removeExposure,
@@ -174,12 +165,20 @@ export async function previewRegistryAction(): Promise<PreviewResult> {
 }
 
 /**
- * Re-runs the config sync from the panel.
+ * Applies a registry change: re-render the artifacts, then reload the front that serves them.
  *
- * WHY the command is fixed and never operator text: the sync is the one writer of the
- * generated artifacts, and a request that chose the command would turn the panel into an
- * arbitrary shell. WHY an audit row: a sync rewrites the front's routes, so who ran it and
- * whether it succeeded has to outlive the toast.
+ * WHY both halves: the sync writes the generated routes, and a front that keeps its rendered config
+ * keeps serving the old ones — the screen's own copy already says "re-sync, then reload nginx in the
+ * front", so a sync that stopped at the files would promise a change it never applied.
+ *
+ * WHY the commands are fixed and never operator text: the sync and the reload are the one writer of
+ * the generated artifacts, and a request that chose the command would turn the panel into an
+ * arbitrary shell. WHY an audit row: a sync rewrites the front's routes, so who ran it and whether
+ * it succeeded has to outlive the toast.
+ *
+ * WHY there is no recreate class here: a registry edit that needed containers recreated used to
+ * have its own action, which nothing ever called. Recreating a service is the restart the registry
+ * exists to replace, so the hot half is applied and the restart lever is not offered.
  */
 export async function resyncRegistryAction(): Promise<WriteResult> {
   try {
@@ -189,6 +188,7 @@ export async function resyncRegistryAction(): Promise<WriteResult> {
   }
   try {
     await runConfigSync();
+    await execPromise(FRONT_RELOAD_COMMAND, { cwd: getRepoRoot() });
     await recordAudit({ verb: 'service-wiring:resync', entity: 'service_registry', result: 'success' });
     return { success: true };
   } catch (error) {
@@ -196,52 +196,4 @@ export async function resyncRegistryAction(): Promise<WriteResult> {
     await recordAudit({ verb: 'service-wiring:resync', entity: 'service_registry', result: 'failure', reason: message });
     return { success: false, error: message };
   }
-}
-
-/**
- * Applies one registry change by class: the command comes from the reviewed plan, so the panel
- * never assembles shell from a request, and a recreate goes through the same planner the restart
- * page uses, so the two cannot disagree about a compose invocation.
- */
-export async function applyRegistryChangeAction(
-  changeClass: RegistryChangeClass,
-  services: string[],
-): Promise<WriteResult> {
-  try {
-    await ensurePermission('container:control');
-  } catch (error) {
-    return { success: false, error: denialMessage(error) };
-  }
-  const plan = registryApplyPlan(changeClass, services);
-  try {
-    await runRegistryApply(plan);
-    await recordAudit({ verb: 'service-wiring:apply', entity: 'service_registry', afterValues: { changeClass, services }, result: 'success' });
-    return { success: true };
-  } catch (error) {
-    const message = denialMessage(error);
-    await recordAudit({ verb: 'service-wiring:apply', entity: 'service_registry', afterValues: { changeClass, services }, result: 'failure', reason: message });
-    return { success: false, error: message };
-  }
-}
-
-/** Runs a plan: a front reload after a sync, or a targeted recreate of exactly the named services. */
-async function runRegistryApply(plan: RegistryApplyPlan): Promise<void> {
-  const rootDir = getRepoRoot();
-  if (plan.kind === 'front-reload') {
-    await runConfigSync();
-    await execPromise(FRONT_RELOAD_COMMAND, { cwd: rootDir });
-    return;
-  }
-  if (plan.services.length === 0) throw new Error('a recreate needs at least one service');
-  if (plan.compose === 'tailscale') {
-    await execPromise(`docker compose -f ${TAILSCALE_COMPOSE_FILE} up -d ${plan.services.join(' ')}`, { cwd: rootDir });
-    return;
-  }
-  await runConfigSync();
-  const files = await buildComposeFileFlags();
-  const location = await resolveHostComposeLocation();
-  if (!location.ok) throw new Error(location.error);
-  const mode = (await readDeploymentModeSetting()).mode;
-  const restart = await buildRestartCommand('custom', [...plan.services], files, mode, location.location);
-  if (!restart.skip) await execPromise(restart.command, { cwd: rootDir, timeout: 120000 });
 }

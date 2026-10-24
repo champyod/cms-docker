@@ -21,7 +21,7 @@ import { interpolate } from '@/lib/interpolate';
 
 export function DeploymentsClient(): React.JSX.Element {
   const dict = useDictionary();
-  const { state: deployState, deploy: handleDeploy, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
+  const { state: deployState, cancel: cancelDeploy, reset: resetDeploy } = useDeployContest();
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [workersSaving, setWorkersSaving] = useState(false);
   const snapshot = useContestDeploymentSnapshot({
@@ -55,11 +55,6 @@ export function DeploymentsClient(): React.JSX.Element {
     }
     void loadData({ silent: true });
   }, [deployState.phase, deployState.contestId, applyDeployedContestId, loadData]);
-
-  const handleActivateAndRestart = (): void => {
-    if (snapshot.selectedContestId === null || !snapshot.hasChangedContest) return;
-    handleDeploy(snapshot.selectedContestId);
-  };
 
   // Why the refresh is withdrawn while loading: the panel body is the loading surface during
   // that read, and loadData is the read it would restart underneath itself.
@@ -122,12 +117,6 @@ export function DeploymentsClient(): React.JSX.Element {
             activeContestId={snapshot.activeContestId}
             activeContestName={snapshot.activeContestName}
             availableContests={snapshot.availableContests}
-            selectedContestId={snapshot.selectedContestId}
-            deployPhase={deployState.phase}
-            hasChangedContest={snapshot.hasChangedContest}
-            onSelectContest={snapshot.setSelectedContestId}
-            onActivate={handleActivateAndRestart}
-            onCancel={cancelDeploy}
           />
           <ContestSettingsForm
             globalSettings={snapshot.globalSettings}

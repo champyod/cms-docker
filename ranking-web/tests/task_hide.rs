@@ -5,6 +5,7 @@
 //! list and the ledger, so the behaviour under test is what PostgreSQL returns rather
 //! than a property a pure unit test can assert.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::entities::{list_body, Kind};
 use cms_ranking::store::{load_ledger, ShownSet};
@@ -121,7 +122,9 @@ async fn an_unhidden_task_is_a_column_and_a_score() {
     let tasks = listed_tasks(&pool).await;
     assert!(tasks.get("t0").is_some(), "an unhidden task is a column");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert_eq!(
         ledger.scores().get("u0").and_then(|row| row.get("t0")),
         Some(&30.0),
@@ -145,7 +148,9 @@ async fn a_hidden_task_leaves_the_column_and_the_ledger_together() {
         "the hidden task leaves the column list"
     );
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden task leaves the score grid"
@@ -188,7 +193,9 @@ async fn a_bare_task_key_still_hides_the_task() {
         "the legacy bare key still drops the column"
     );
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "and still takes its score with it"

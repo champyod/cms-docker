@@ -1,3 +1,4 @@
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::store::{load_appearance, load_board, load_ledger, StoreError};
 use sqlx::PgPool;
@@ -85,7 +86,7 @@ async fn seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 async fn the_ledger_is_assembled_from_the_tables() {
     let pool = pool();
     seed(&pool).await.expect("the seed applies");
-    let ledger = load_ledger(&pool)
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
         .await
         .expect("the seeded projection assembles");
     assert_eq!(ledger.skipped_subchanges(), 0);
@@ -124,7 +125,7 @@ async fn an_unknown_score_mode_refuses_instead_of_guessing() {
     .execute(&pool)
     .await
     .expect("the row inserts");
-    match load_ledger(&pool).await {
+    match load_ledger(&pool, ServedContest::EveryContest).await {
         Err(StoreError::Score(error)) => {
             assert!(error.to_string().contains("not_a_mode"));
         }
@@ -206,7 +207,9 @@ async fn the_board_applies_overrides_and_names_the_rows() {
     .execute(&pool)
     .await
     .expect("the overrides insert");
-    let board = load_board(&pool).await.expect("the board assembles");
+    let board = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert_eq!(board["u0"].f_name, "Ada");
     assert_eq!(board["u0"].l_name, "Lovelace");
     assert_eq!(board["u0"].score, 10.0);

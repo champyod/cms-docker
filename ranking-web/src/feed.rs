@@ -242,7 +242,7 @@ pub async fn announce(
     // switches on come over ranking_entities.
     if channel == "ranking_control" {
         state.feed().publish("control", payload.to_string());
-    } else if !affects_scores(table) && announced(pool, table, operation, key).await? {
+    } else if !affects_scores(table) && announced(state, pool, table, operation, key).await? {
         state.feed().publish(
             entity_kind(table),
             format!("{} {key}", operation_name(operation)),
@@ -265,6 +265,7 @@ pub async fn announce(
 /// its listener discards as a no-op. This is the one case the projection cannot answer, and it
 /// is covered by the read predicate rather than by this check.
 async fn announced(
+    state: &AppState,
     pool: &sqlx::postgres::PgPool,
     table: &str,
     operation: &str,
@@ -273,8 +274,11 @@ async fn announced(
     if operation == "delete" {
         return Ok(true);
     }
+    // The served contest is asked of the same state the read asks, so an announced key is drawn
+    // by the same answer that decides what the board may draw at all.
+    let served = state.served_contest().await?;
     match EntityKind::of_table(table) {
-        Some(kind) => entity_is_shown(pool, kind, key).await,
+        Some(kind) => entity_is_shown(pool, kind, key, served).await,
         // A table the projection does not scope keeps the event that names it as it is.
         None => Ok(true),
     }

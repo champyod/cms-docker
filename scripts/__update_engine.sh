@@ -639,6 +639,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|RANKING_BIND_IP|str||127.0.0.1"
   "Admin Panel|[admin]|RANKING_LISTEN_PORT|port||8890"
   "Admin Panel|[admin]|RANKING_BIND_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|RANKING_SHARD|num||0"
   "Admin Panel|[admin]|RANKING_DOMAIN|str||ranking.cms.local"
   "Admin Panel|[admin]|RANKING_SESSION_SECRET|secret||hex32"
   "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"

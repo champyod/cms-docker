@@ -261,7 +261,11 @@ async fn shown_of(state: &AppState) -> Result<ShownSet, Refusal> {
     let Some(db) = state.db() else {
         return Err(Refusal("no database is configured".to_string()));
     };
-    load_shown_set(db.pool())
+    let served = state
+        .served_contest()
+        .await
+        .map_err(|error| Refusal(error.to_string()))?;
+    load_shown_set(db.pool(), served)
         .await
         .map_err(|error| Refusal(error.to_string()))
 }

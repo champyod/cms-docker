@@ -66,9 +66,13 @@ async fn list(state: AppState, kind: Kind) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
+    let served = match state.served_contest().await {
+        Ok(served) => served,
+        Err(error) => return refuse(&error.to_string()),
+    };
     // The list is scoped by the same shown set the ledger is, so the page's column metadata and
     // its scores come from one answer rather than two.
-    let shown = match crate::store::load_shown_set(db.pool()).await {
+    let shown = match crate::store::load_shown_set(db.pool(), served).await {
         Ok(shown) => shown,
         Err(error) => return refuse(&error.to_string()),
     };
@@ -82,10 +86,14 @@ async fn one(state: AppState, kind: Kind, key: &str) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
+    let served = match state.served_contest().await {
+        Ok(served) => served,
+        Err(error) => return refuse(&error.to_string()),
+    };
     // The scope is read before the row, so the answer to "does the board draw this key" is the
     // same one the feed asked before it announced the key. A key outside the shown set is a 404,
     // never a body: nothing outside the board renders.
-    let shown = match crate::store::load_shown_set(db.pool()).await {
+    let shown = match crate::store::load_shown_set(db.pool(), served).await {
         Ok(shown) => shown,
         Err(error) => return refuse(&error.to_string()),
     };
