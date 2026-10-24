@@ -92,3 +92,6 @@ ranking-web/target/
 
 # Generated parity captures: the script writes here by default.
 ranking-web/tests/fixtures/parity/captured/*/
+
+# A stray `bun install` at the repo root (the panel has its own) creates this.
+/node_modules/
