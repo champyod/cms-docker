@@ -552,10 +552,21 @@ jobs:
       # pins. Without one it would resolve a fresh graph and report on a dependency
       # set nobody ships, which is worse than no gate because it looks like one.
       # A workspace that arrives with no committed lockfile fails here, by name.
+      #
+      # WHY the directory is tested before the run and not via working-directory:
+      # the rust_backend filter also fires on deny.toml and this file, while
+      # backend/ only exists on the branches that carry the Rust core. A missing
+      # working-directory fails the step before any shell runs, so a policy
+      # change would be reported as a broken backend instead of a skipped tree.
+      # An absent tree is announced; an absent lockfile is still an error.
       - name: cargo-deny (backend workspace)
         if: needs.changes.outputs.rust_backend == 'true'
-        working-directory: backend
         run: |
+          if [ ! -d backend ]; then
+            echo "::notice::backend/ is not present on this ref; there is no Rust core workspace to audit here."
+            exit 0
+          fi
+          cd backend
           if [ ! -f Cargo.lock ]; then
             echo "::error::backend/Cargo.lock is missing — there is no graph to audit."
             echo "The workspace has no committed lockfile: commit one rather than skip this gate."
