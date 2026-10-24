@@ -598,7 +598,14 @@ async fn assemble_ledger(
         .iter()
         .filter_map(|(key, user)| user.team.clone().map(|team| (key.clone(), team)))
         .collect();
-    let mut ledger = scoring::assemble_with(&tasks, &submissions, &subchanges, overrides, &teams)?;
+    let mut ledger = scoring::assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        overrides,
+        &teams,
+        &snapshot,
+    )?;
     ledger.set_task_hides(overrides.task_hide_causes(&snapshot));
     Ok(ledger)
 }

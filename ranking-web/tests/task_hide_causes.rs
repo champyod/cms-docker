@@ -197,6 +197,9 @@ fn the_diagnostics_surface_keeps_its_keys_and_adds_the_causes() {
         ready: true,
         skipped_overrides: 1,
         skipped_subchanges: 2,
+        hidden_task_subchanges: 4,
+        unknown_task_subchanges: 5,
+        orphan_subchanges: 6,
         unknown_task_hides: 3,
         withheld_task_hides: 1,
         renamed_task_hides: 2,
@@ -222,4 +225,7 @@ fn the_diagnostics_surface_keeps_its_keys_and_adds_the_causes() {
     assert_eq!(body["withheld_task_hides"], 1);
     assert_eq!(body["renamed_task_hides"], 2);
     assert_eq!(body["unmatched_task_hides"], 3);
+    assert_eq!(body["hidden_task_subchanges"], 4);
+    assert_eq!(body["unknown_task_subchanges"], 5);
+    assert_eq!(body["orphan_subchanges"], 6);
 }

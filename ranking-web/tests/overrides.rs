@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use cms_ranking::board::{board_view, team_board_view, UserNames};
-use cms_ranking::overrides::{OverrideRow, Overrides};
+use cms_ranking::overrides::{OverrideRow, Overrides, TaskSnapshot};
 use cms_ranking::scoring::{
     assemble_with, BoardRow, Ledger, ScoreMode, Subchange, Submission, TaskMode,
 };
@@ -45,8 +45,15 @@ fn assemble(overrides: &Overrides) -> Ledger {
         },
     ];
     let teams = BTreeMap::from([("u0".to_string(), "team0".to_string())]);
-    assemble_with(&tasks, &submissions, &subchanges, overrides, &teams)
-        .expect("max is a known score mode")
+    assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        overrides,
+        &teams,
+        &TaskSnapshot::default(),
+    )
+    .expect("max is a known score mode")
 }
 
 fn override_row(kind: &str, key: &str, action: &str, value: Option<&str>) -> OverrideRow {
@@ -134,10 +141,16 @@ fn a_hidden_user_leaves_the_history_and_the_sublist() {
     );
 }
 
-/// A hide on a task already absent from the replayed task set is the hide doing its job,
-/// not a malformed submission, so it is not counted as a skipped subchange.
+/// A hide on a task the projection announced is the hide doing its job, so the dropped row is
+/// counted under the hide cause and not as a malformed one.
+///
+/// WHY the total is asserted as well: this assertion used to pin the row out of the total
+/// entirely, because the fold exempted a hidden *task* while counting a hidden *contest*'s
+/// submissions as data faults — one hide, two answers, and no way to read either. The total now
+/// counts every dropped row and the cause says whose doing it was, which is the only reading that
+/// holds for both hide shapes.
 #[test]
-fn a_hidden_task_is_not_counted_as_a_skipped_submission() {
+fn a_hidden_task_is_counted_under_the_hide_cause() {
     let overrides = Overrides::fold(&[override_row("task", "t0", "hide", None)]);
     let tasks: Vec<TaskMode> = Vec::new();
     let submissions = vec![Submission {
@@ -154,6 +167,11 @@ fn a_hidden_task_is_not_counted_as_a_skipped_submission() {
         token: None,
         extra: None,
     }];
+    // Why a snapshot: the projection announced t0 under c0, and the only thing that leaves an
+    // announced task out of the replay set is a hide — that is what tells this row apart from a
+    // task nothing ever announced.
+    let mut snapshot = TaskSnapshot::default();
+    snapshot.add_task("c0", "t0");
 
     let ledger = assemble_with(
         &tasks,
@@ -161,13 +179,67 @@ fn a_hidden_task_is_not_counted_as_a_skipped_submission() {
         &subchanges,
         &overrides,
         &BTreeMap::new(),
+        &snapshot,
     )
     .expect("an empty task set is replayable");
 
     assert_eq!(
-        ledger.skipped_subchanges(),
+        ledger.hidden_task_subchanges(),
+        1,
+        "the hide removed the row, and that is its cause"
+    );
+    assert_eq!(
+        ledger.unknown_task_subchanges(),
         0,
-        "the hide, not a malformed row, removed the submission"
+        "nothing about this row is unexplained"
+    );
+    assert_eq!(
+        ledger.orphan_subchanges(),
+        0,
+        "its subchange left with the submission rather than on its own"
+    );
+    assert_eq!(
+        ledger.skipped_subchanges(),
+        1,
+        "the total counts every dropped row, the hidden one included"
+    );
+}
+
+/// The other side of the same question: a submission whose task the projection never announced
+/// under a drawn contest is the data fault the counter exists to catch, and the two hide shapes
+/// must not be able to hide behind it.
+#[test]
+fn a_submission_for_a_task_nothing_announced_is_counted_as_a_fault() {
+    let tasks: Vec<TaskMode> = Vec::new();
+    let submissions = vec![Submission {
+        key: "s0".to_string(),
+        user: "u0".to_string(),
+        task: "t0".to_string(),
+        time: 1,
+    }];
+    let mut snapshot = TaskSnapshot::default();
+    // c0 is drawn and announces t1; t0 is in no drawn contest at all.
+    snapshot.add_task("c0", "t1");
+
+    let ledger = assemble_with(
+        &tasks,
+        &submissions,
+        &[],
+        &Overrides::default(),
+        &BTreeMap::new(),
+        &snapshot,
+    )
+    .expect("an empty task set is replayable");
+
+    assert_eq!(
+        ledger.unknown_task_subchanges(),
+        1,
+        "no hide and no announcement explains this row"
+    );
+    assert_eq!(
+        ledger.hidden_task_subchanges(),
+        0,
+        "nothing was hidden here"
     );
 }
 
@@ -344,8 +416,15 @@ fn a_team_score_override_replaces_the_summed_total() {
         ("u2".to_string(), "team0".to_string()),
     ]);
     let overrides = Overrides::fold(&[override_row("team", "team0", "score", Some("10"))]);
-    let ledger =
-        assemble_with(&tasks, &submissions, &subchanges, &overrides, &teams).expect("max is known");
+    let ledger = assemble_with(
+        &tasks,
+        &submissions,
+        &subchanges,
+        &overrides,
+        &teams,
+        &TaskSnapshot::default(),
+    )
+    .expect("max is known");
     let users = names(&[
         ("u0", "A", "One", Some("team0")),
         ("u2", "B", "Two", Some("team0")),
