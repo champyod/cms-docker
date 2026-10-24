@@ -662,6 +662,25 @@
       "previewContestSubmit": "Preview",
       "previewContestHint": "Preview only — selecting a contest does not change the live public scoreboard."
     },
+    "diagnostics": {
+      "title": "Dropped rows",
+      "hint": "What the ranking service could not apply, counted per cause. A row dropped by a hide you applied is expected; a row nothing explains is not.",
+      "overridesLabel": "Overrides not applied",
+      "subchangesTitle": "Rows the board dropped",
+      "subchangeTotal": "All dropped rows",
+      "hiddenTaskSubchanges": "Removed by a hide",
+      "unknownTaskSubchanges": "Task no drawn contest announces",
+      "orphanSubchanges": "Subchange with no submission",
+      "hidesTitle": "Task hides that drop nothing",
+      "unknownTaskHides": "All task hides that named no task",
+      "withheldTaskHides": "Task the projection withholds",
+      "renamedTaskHides": "Task a live contest no longer holds",
+      "unmatchedTaskHides": "Key nothing in the projection explains",
+      "faultAlert": "{count} dropped row(s) for a reason no hide explains — the task is in no contest this board draws, or the projection is behind. Check the shown contest, then the push.",
+      "hideAlert": "{count} task hide(s) no longer match a task — a renamed task silently stops being hidden.",
+      "unreachable": "Applied-changes report unavailable ({reason}). The board below may omit rows a dropped override would explain.",
+      "notReported": "This ranking service does not report this breakdown."
+    },
     "appearance": {
       "title": "Scoreboard appearance",
       "identitySection": "Identity",

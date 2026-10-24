@@ -2,13 +2,14 @@ import { getRanking, getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
+import { DefinitionEntry } from '@/components/core/DefinitionEntry';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SelectField } from '@/components/core/FormField';
 import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RankingBoardSurface } from '@/components/ranking/RankingBoardSurface';
+import { RankingDiagnosticsCard } from '@/components/ranking/RankingDiagnosticsCard';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
-import { InlineAlert } from '@/components/core/InlineAlert';
 import { getDictionary } from '@/i18n';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
@@ -16,25 +17,6 @@ import { readShownContestId } from '@/lib/ranking-shown';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 const EMPTY_VALUE = '—';
-const TERM_COLOR = 'text-muted-foreground';
-
-interface BoardEntryProps {
-  readonly term: string;
-  readonly value: string;
-}
-
-function BoardEntry({ term, value }: BoardEntryProps): React.JSX.Element {
-  return (
-    <div>
-      <Text as="dt" variant="label" color={TERM_COLOR}>
-        {term}
-      </Text>
-      <Text as="dd" variant="small" className="text-foreground/80">
-        {value}
-      </Text>
-    </div>
-  );
-}
 
 /** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
 export default async function RankingBoardPage({
@@ -82,45 +64,32 @@ export default async function RankingBoardPage({
         </div>
         <Text variant="muted">{boardHint}</Text>
         <Grid as="dl" cols={2} gap={3} className="text-sm">
-          <BoardEntry
+          <DefinitionEntry
             term={copy.appearance.displayNameField}
             value={appearance.displayName || EMPTY_VALUE}
           />
-          <BoardEntry
+          <DefinitionEntry
             term={copy.shown.contestField}
             value={named?.name ?? copy.shown.contestNone}
           />
-          <BoardEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
-          <BoardEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
-          <BoardEntry
+          <DefinitionEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
+          <DefinitionEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
+          <DefinitionEntry
             term={copy.appearance.organisationField}
             value={appearance.organisation || EMPTY_VALUE}
           />
-          <BoardEntry term={copy.appearance.accessField} value={accessValue} />
+          <DefinitionEntry term={copy.appearance.accessField} value={accessValue} />
         </Grid>
+      </Card>
+      {/* Above the board because it explains what the board is missing, and as its own card
+          because a dropped row is not part of the users list it would otherwise sit in. */}
+      <Card className="space-y-4">
+        <RankingDiagnosticsCard diagnostics={diagnostics} copy={copy.diagnostics} />
       </Card>
       <Card className="space-y-4">
         <Text as="h2" variant="h3">
           {copy.users.title}
         </Text>
-        {/*
-          The service counts the rows it had to drop, and this is the only place that
-          counter reaches a human. It sits above the board because it explains what the
-          board is missing. Unreachable renders as its own warning, never as a clean
-          board: collapsing "could not ask" into "nothing dropped" would hide exactly
-          the problem this card exists to surface.
-        */}
-        {diagnostics.reachable ? (
-          diagnostics.skippedOverrides > 0 || diagnostics.skippedSubchanges > 0 ? (
-            <InlineAlert tone="warning">
-              {`Not applied: ${diagnostics.skippedOverrides} override(s), ${diagnostics.skippedSubchanges} subchange(s). A dropped override shows as a board that never had one.`}
-            </InlineAlert>
-          ) : null
-        ) : (
-          <InlineAlert tone="warning">
-            {`Applied-changes report unavailable (${diagnostics.reason}). The board below may omit rows a dropped override would explain.`}
-          </InlineAlert>
-        )}
         {contests.length === 0 ? (
           <EmptyState title={copy.users.empty} description={copy.users.hint} />
         ) : (
