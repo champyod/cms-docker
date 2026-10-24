@@ -135,7 +135,7 @@ describe('target route registry', () => {
   });
 
   it('enables the direct three plus the Contest, Task, User, Team, and Evaluation routes', () => {
-    expect(ROUTE_REGISTRY).toHaveLength(58);
+    expect(ROUTE_REGISTRY).toHaveLength(59);
     const directIds = DIRECT_ROUTE_CASES.map(({ routeId }) => routeId);
     // Why: the Evaluation shell proves the Submission list, the lane module, and
     // the Submission record landing with its five tabs, and the Administration

@@ -13,6 +13,7 @@ import {
   Info,
   Lock,
   Network,
+  PackageCheck,
   Palette,
   Rocket,
   ScrollText,
@@ -60,6 +61,9 @@ const ROUTE_ICONS: ReadonlyMap<RouteId, LucideIcon> = new Map<RouteId, LucideIco
   ['security.waf', ShieldCheck],
   ['security.blocks', Ban],
   ['security.tls', Lock],
+  // Patching is "what is out of date and what fixes it", so the icon is the patched package,
+  // not the shield the posture fields share.
+  ['security.patching', PackageCheck],
   ['infrastructure.deployments', Rocket],
   ['infrastructure.containers', Box],
   ['infrastructure.resources', Activity],

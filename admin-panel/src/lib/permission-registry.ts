@@ -97,6 +97,10 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'lockout', verb: 'exempt' },
   { module: 'tls', verb: 'read' },
   { module: 'tls', verb: 'renew' },
+  // Why a waive verb beside the read: accepting a finding is an access decision with a
+  // review date, so the read key that opens the patching page must not write it down.
+  { module: 'patching', verb: 'read' },
+  { module: 'patching', verb: 'waive' },
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },

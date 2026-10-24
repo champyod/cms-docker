@@ -37,4 +37,10 @@ export {
   detachContestTasks,
   type ContestTaskSelection,
 } from './contest-tasks';
+export {
+  createWaiver,
+  endWaiver,
+  type WaiverInput,
+  type WaiverWriteResult,
+} from './patching-waivers';
 export { resolveRootActorId } from './root-actor';
