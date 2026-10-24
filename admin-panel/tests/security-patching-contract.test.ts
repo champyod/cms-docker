@@ -71,6 +71,20 @@ describe('security feed schema contract', () => {
     expect(fieldLine(body, 'ended_at')).toBe('ended_at DateTime?');
   });
 
+  it('refuses a waiver row without a review date, a reason or an author at the storage layer', () => {
+    // WHY the migration text and not only the model: the model is what a caller sees, and the
+    // NOT NULLs in the generated DDL are what a hand-written INSERT (a psql session, a script)
+    // actually hits. Verified against a real Postgres: an INSERT that omits review_by fails with
+    // 'null value in column "review_by" … violates not-null constraint'.
+    expect(MIGRATION).toContain('"match" VARCHAR NOT NULL');
+    expect(MIGRATION).toContain('"reason" TEXT NOT NULL');
+    expect(MIGRATION).toContain('"review_by" TIMESTAMP(3) NOT NULL');
+    expect(MIGRATION).toContain('"created_by" INTEGER NOT NULL');
+    // A nullable review date would let the table hold the thing this lane removed.
+    const reviewLine = MIGRATION.split('\n').find((line) => line.includes('"review_by"')) ?? '';
+    expect(reviewLine).toContain('NOT NULL');
+  });
+
   it('ships one generated migration that creates both tables and their RLS guards', () => {
     expect(MIGRATION).toContain('-- GENERATED — do not hand-edit the statements below.');
     expect(MIGRATION).toContain('CREATE TABLE "security_findings"');

@@ -10,6 +10,16 @@ export type PatchingSource = (typeof PATCHING_SOURCES)[number];
 export const PATCHING_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'] as const;
 export type PatchingSeverity = (typeof PATCHING_SEVERITIES)[number];
 
+/**
+ * The longest finding key a producer may report, and therefore the longest a waiver's `match` may
+ * be.
+ *
+ * WHY it lives here and not in the ingest module: the waiver gate validates the committed export
+ * against the same ceiling, and it must stay free of `@prisma/client` (it runs in a CI job that
+ * generates no client), so the one number cannot live in a module that imports Prisma.
+ */
+export const MAX_FINDING_KEY_LENGTH = 200;
+
 /** Severity order inside a source group: the worst finding reads first. */
 const SEVERITY_RANK: Record<PatchingSeverity, number> = {
   CRITICAL: 0,
@@ -58,6 +68,13 @@ export interface PatchingWaiver {
   readonly reviewBy: string;
   readonly createdAt: string;
   readonly createdBy: number;
+  /**
+   * The administrator who signed it, resolved at read time.
+   *
+   * WHY null is possible: the audit trail's actor ids outlive the account, and a waiver whose
+   * author was deleted still has to render with its date rather than vanish from the page.
+   */
+  readonly createdByName: string | null;
   readonly endedAt: string | null;
   readonly expired: boolean;
 }

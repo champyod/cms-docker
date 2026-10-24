@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "generatedAt": "2026-10-24T23:31:44.509Z",
+  "waivers": [
+    {
+      "id": 1,
+      "source": "rootfs",
+      "match": "CVE-2026-78669",
+      "reason": "the bundled Compose plugin ships Go 1.26.8 + x/net 0.58.0, fixed upstream but in no Compose release (v5.6.0) — remove once Compose carries patched Go",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-10-24T23:28:44.880Z",
+      "createdBy": 1,
+      "createdByName": "root",
+      "endedAt": null
+    },
+    {
+      "id": 2,
+      "source": "rootfs",
+      "match": "CVE-2026-78667",
+      "reason": "the bundled Compose plugin ships Go 1.26.8 + x/net 0.58.0, fixed upstream but in no Compose release (v5.6.0) — remove once Compose carries patched Go",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-10-24T23:28:44.900Z",
+      "createdBy": 1,
+      "createdByName": "root",
+      "endedAt": null
+    },
+    {
+      "id": 3,
+      "source": "rootfs",
+      "match": "CVE-2026-97031",
+      "reason": "the bundled Compose plugin ships Go 1.26.8 + x/net 0.58.0, fixed upstream but in no Compose release (v5.6.0) — remove once Compose carries patched Go",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-10-24T23:28:44.907Z",
+      "createdBy": 1,
+      "createdByName": "root",
+      "endedAt": null
+    },
+    {
+      "id": 4,
+      "source": "osv",
+      "match": "GHSA-vfj7-8cjw-p6xm",
+      "reason": "braces@3.0.3 has no fixed release; the package sits only in the eslint glob chain (fast-glob > micromatch), never in the production bundle",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-10-24T23:28:44.910Z",
+      "createdBy": 1,
+      "createdByName": "root",
+      "endedAt": null
+    }
+  ]
+}

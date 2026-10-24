@@ -95,3 +95,7 @@ ranking-web/tests/fixtures/parity/captured/*/
 
 # A stray `bun install` at the repo root (the panel has its own) creates this.
 /node_modules/
+
+# Generated per CI run from the panel's waiver table (security/waivers.json): the ids that may be
+# suppressed are waiver rows, so a local .trivyignore must never be committed.
+.trivyignore

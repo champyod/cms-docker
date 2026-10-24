@@ -1,3 +1,4 @@
+import { loadActorNames } from '@/lib/admin-names';
 import { prisma } from '@/lib/prisma';
 import {
   buildPatchingCards,
@@ -11,6 +12,11 @@ import {
   type PatchingState,
   type PatchingWaiver,
 } from '@/lib/security/patching';
+import {
+  WAIVER_EXPORT_VERSION,
+  type WaiverExport,
+  type WaiverRecord,
+} from '@/lib/security/waiver-gate';
 
 /**
  * The one read path for the security feed.
@@ -22,18 +28,42 @@ import {
  * WHY unresolved is `resolved_at: null` and not a delete: the ingest route resolves rows a
  * complete push no longer mentions, so the unresolved set is exactly what the producers
  * reported most recently. History stays in the table for the audit trail.
+ *
+ * WHY the waiver export is rendered here too: the file CI reads has to mean exactly what the page
+ * shows, so it comes from the same rows through the same mapping rather than from a query beside
+ * this one (docs/SECURITY-FEED.md §"Suppressions in CI").
  */
+
+/**
+ * The live waiver rows: the whole set of decisions that currently suppress something.
+ *
+ * WHY one function for both callers: "live" is `ended_at: null` ordered by the date the decision
+ * is due, and a second copy of that predicate is how the page and CI would start disagreeing.
+ */
+function liveWaiverRows() {
+  return prisma.security_waivers.findMany({
+    where: { ended_at: null },
+    orderBy: [{ review_by: 'asc' }],
+  });
+}
+
+/** The administrator who signed each waiver, in one query; a deleted account stays null. */
+async function waiverOwners(
+  rows: readonly { readonly created_by: number }[],
+): Promise<Map<number, string>> {
+  return loadActorNames(rows.map((row) => row.created_by));
+}
+
 export async function readPatchingSnapshot(now: Date = new Date()): Promise<PatchingState> {
   const [findings, waivers] = await Promise.all([
     prisma.security_findings.findMany({
       where: { resolved_at: null },
       orderBy: [{ source: 'asc' }, { last_seen: 'desc' }],
     }),
-    prisma.security_waivers.findMany({
-      where: { ended_at: null },
-      orderBy: [{ review_by: 'asc' }],
-    }),
+    liveWaiverRows(),
   ]);
+
+  const owners = await waiverOwners(waivers);
 
   const mapped: PatchingFinding[] = findings.flatMap((row) => {
     // Why refuse an unknown source instead of labelling it: the contract's enum is the
@@ -68,6 +98,7 @@ export async function readPatchingSnapshot(now: Date = new Date()): Promise<Patc
     reviewBy: row.review_by.toISOString(),
     createdAt: row.created_at.toISOString(),
     createdBy: row.created_by,
+    createdByName: owners.get(row.created_by) ?? null,
     endedAt: row.ended_at?.toISOString() ?? null,
     expired: isWaiverExpired(row, now),
   }));
@@ -77,5 +108,60 @@ export async function readPatchingSnapshot(now: Date = new Date()): Promise<Patc
     groups,
     waivers: mappedWaivers,
     cards: buildPatchingCards(findings, waivers, now),
+  };
+}
+
+/**
+ * The waiver table as CI reads it.
+ *
+ * WHY a row outside the source enum is an error and not a label: the export is the input to the
+ * gate, and the gate refuses a source it cannot place. Substituting one here would produce a file
+ * that says a Trivy waiver exists for a row that is not a Trivy waiver, so the export stops and
+ * names the row instead — a wrong export must never look like a complete one.
+ */
+function toWaiverRecord(
+  row: {
+    readonly id: number;
+    readonly source: string;
+    readonly match: string;
+    readonly reason: string;
+    readonly review_by: Date;
+    readonly created_at: Date;
+    readonly created_by: number;
+    readonly ended_at: Date | null;
+  },
+  owner: string | undefined,
+): WaiverRecord {
+  if (!isPatchingSource(row.source)) {
+    throw new Error(
+      `security_waivers row ${row.id} has source ${JSON.stringify(row.source)}, outside the contract enum — fix the row before exporting`,
+    );
+  }
+  return {
+    id: row.id,
+    source: row.source,
+    match: row.match,
+    reason: row.reason,
+    reviewBy: row.review_by.toISOString(),
+    createdAt: row.created_at.toISOString(),
+    createdBy: row.created_by,
+    createdByName: owner ?? null,
+    endedAt: null,
+  };
+}
+
+/**
+ * Renders the export CI's waiver gate and scanners read, from the live rows of the one table.
+ *
+ * WHY the caller supplies the clock: `generatedAt` is part of what CI judges (an export nobody has
+ * re-rendered in `MAX_EXPORT_AGE_DAYS` fails), so a test drives it instead of waiting.
+ */
+export async function readWaiverExport(now: Date = new Date()): Promise<WaiverExport> {
+  const rows = await liveWaiverRows();
+  const owners = await waiverOwners(rows);
+  return {
+    version: WAIVER_EXPORT_VERSION,
+    generatedAt: now.toISOString(),
+    waivers: rows.map((row) => toWaiverRecord(row, owners.get(row.created_by))),
   };
 }

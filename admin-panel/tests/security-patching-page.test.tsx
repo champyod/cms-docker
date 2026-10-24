@@ -78,6 +78,7 @@ const STATE: PatchingState = {
       reviewBy: EXPIRED_REVIEW,
       createdAt: '2026-09-01T00:00:00.000Z',
       createdBy: 1,
+      createdByName: 'root',
       endedAt: null,
       expired: true,
     },
@@ -89,6 +90,7 @@ const STATE: PatchingState = {
       reviewBy: ACTIVE_REVIEW,
       createdAt: '2026-10-20T00:00:00.000Z',
       createdBy: 1,
+      createdByName: 'root',
       endedAt: null,
       expired: false,
     },
@@ -117,8 +119,10 @@ describe('security patching page', () => {
   it('renders unresolved findings grouped by source with version, host and dates', async () => {
     await renderPage(['security:read', 'patching:read']);
 
-    expect(screen.getByText('Host OS packages')).toBeTruthy();
-    expect(screen.getByText('Container images')).toBeTruthy();
+    // Both the group heading and the waiver table name the producer family, so this reads as
+    // "at least one row says it" rather than "exactly one element does".
+    expect(screen.getAllByText('Host OS packages').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Container images').length).toBeGreaterThan(0);
     expect(screen.getAllByText('openssl').length).toBeGreaterThan(0);
     expect(screen.getAllByText('1.0 → 1.1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('box-a').length).toBeGreaterThan(0);
@@ -133,8 +137,24 @@ describe('security patching page', () => {
     expect(screen.getAllByText('active until 2026-12-01').length).toBeGreaterThan(0);
     // The dedicated expired section names the reason, so the decision is visible even when
     // the row it covers is gone.
-    expect(screen.getByText('waiting on the vendor backport')).toBeTruthy();
+    expect(screen.getAllByText('waiting on the vendor backport').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Expired waivers').length).toBeGreaterThan(0);
+  });
+
+  it('lists the waivers with who signed them and when they lapse', async () => {
+    await renderPage(['security:read', 'patching:read']);
+
+    // The waiver list is a table of decisions, not a list of ids: the source, what it covers, the
+    // reason, the signer and the review date all read off the same row.
+    expect(screen.getAllByText('Signed by').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Review by').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('root').length).toBeGreaterThan(0);
+    // And the page says why a lapsed one matters: the build fails until it is ended or renewed.
+    expect(
+      screen.getByText(
+        '1 waiver(s) are past their review date: CI fails until each one is ended or renewed.',
+      ),
+    ).toBeTruthy();
   });
 
   it('offers the waiver write only when the reader holds patching:waive', async () => {

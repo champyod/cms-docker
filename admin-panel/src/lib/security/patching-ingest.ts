@@ -5,16 +5,20 @@ import { Prisma } from '@prisma/client';
 import {
   isPatchingSeverity,
   isPatchingSource,
+  MAX_FINDING_KEY_LENGTH,
   PATCHING_SEVERITIES,
   type PatchingSeverity,
   type PatchingSource,
 } from '@/lib/security/patching';
 
+// Re-exported because it is part of this boundary's contract (key ≤ 200) and the write path
+// imports it from here; the number itself lives beside the vocabulary it belongs to.
+export { MAX_FINDING_KEY_LENGTH };
+
 // The feed is an input boundary even though it is machine-to-machine: the caps below are
 // part of the contract (key ≤ 200, array ≤ 2000), and the body cap is what keeps one
 // producer's runaway scan from becoming a memory event in the panel process.
 export const MAX_FINDINGS_PER_PUSH = 2000;
-export const MAX_FINDING_KEY_LENGTH = 200;
 export const MAX_BODY_BYTES = 1_000_000;
 export const FEED_RATE_LIMIT_PER_MINUTE = 30;
 const RATE_WINDOW_MS = 60_000;

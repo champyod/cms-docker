@@ -128,11 +128,62 @@ and TLS, and the overview already renders cards from `app/actions/security*.ts`.
 
 ### Waivers
 
-`security_waivers` is the *only* waiver mechanism, and it replaces the two ad-hoc escapes that exist today:
-`.trivyignore` (three CVEs, "Dated 2026-10-10") and `bun audit --ignore GHSA-vfj7-8cjw-p6xm`. A finding
-covered by a waiver is **not hidden** — it renders as `waived` with its `review_by`, and once `review_by`
-passes it renders as **`expired`** and counts in the overview card. That is the whole point: a waiver is a
-decision with a date, not a deleted line.
+`security_waivers` is the *only* waiver mechanism, and it replaced the two ad-hoc escapes that used to
+exist: `.trivyignore` (three CVEs, "Dated 2026-10-10") and `bun audit --ignore GHSA-vfj7-8cjw-p6xm`.
+Neither exists any more — both files/flags are gone, and a test (`tests/security-waiver-suppression-sources.test.ts`)
+fails if either comes back. A finding covered by a waiver is **not hidden** — it renders as `waived` with its
+`review_by`, and once `review_by` passes it renders as **`expired`** and counts in the overview card. That is
+the whole point: a waiver is a decision with a date, not a deleted line.
+
+A row needs all four things, and each is refused at its own layer:
+
+| field | what it answers | refused by |
+|---|---|---|
+| `match` | what it covers (a finding key, or a CVE/GHSA id the finding carries) | the write path, and the export boundary in `lib/security/waiver-gate.ts` |
+| `reason` | why | `NOT NULL` in the migration, the write path, the export boundary |
+| `review_by` | when the decision is re-read | `NOT NULL` in the migration, the write path (must be in the future), the export boundary |
+| `created_by` | who | `NOT NULL` in the migration, resolved from the session by the server action (the CLI files it under `root`) |
+
+### Suppressions in CI
+
+**How CI learns the waivers.** The panel's read path renders them to a committed file, once, where the
+database is:
+
+```
+(cd admin-panel && bun run scripts/security-waivers.ts export)   # writes security/waivers.json
+```
+
+`security/waivers.json` is machine output — `{version, generatedAt, waivers[]}` from the same
+`readWaiverExport()` query the page reads. It is never hand-edited: the gate refuses a row with no reason,
+no owner, no review date, an unknown `source`, a duplicate id, an ended row, or a version it does not know.
+CI then, on a plain checkout with no credential at all:
+
+| job | command | what it does |
+|---|---|---|
+| `waivers` | `scripts/__security_waivers.sh check` | fails the build, naming ids and dates, when any waiver is past `review_by`, when the export is malformed, or when the export is older than 30 days |
+| `panel` | `... render --audit-ids $RUNNER_TEMP/waiver-audit-ids` | the only `--ignore` ids `bun audit` receives are the live `osv` waivers |
+| `container-scan` | `... render --trivy .trivyignore` | writes Trivy's ignore file from the live `rootfs` waivers; expired and ended ones are not written, so they stop suppressing immediately |
+
+**Why this is the least-privilege option.** The alternatives were an API read with a scoped token, or a
+generated artifact committed by a scheduled job. A token — even a read-only one — is a credential that
+reaches the panel from a hosted runner, and the panel is tailnet-only: it would mean either publishing a
+read endpoint to the internet or putting a tailnet identity in CI, and it would make every PR depend on a
+live panel. A scheduled job that commits the export needs a repo write token *and* still lets the file go
+stale between runs. The committed export gives CI **no credential, no network and no database access**; the
+only thing it can do is read a JSON file that already exists in the tree, and the 30-day bound plus the
+export-boundary validation are what keep that file honest.
+
+**Why a stale export cannot hide a suppression.** Expiry is judged against the current clock, so a lapsed
+date fails even in an old file. A waiver missing from the export can only make CI *stricter* — the finding
+it used to cover fails the scan, and the fix is to re-render. The one direction the age bound closes is an
+ended waiver still suppressing because nobody re-rendered, which is why a month-old export fails rather
+than warns.
+
+**Renewing.** There is no edit: ending a waiver and filing a new one is the decision trail, and the gate
+keeps failing until the lapsed row is ended (`cms panel waiver end <id> --reason …`, or the page). Then
+re-render the export and commit it with the renewal — otherwise the next run reads the old file, and the
+30-day bound is the only thing forcing the refresh.
+
 
 ## Compose shape
 
@@ -164,6 +215,8 @@ decision with a date, not a deleted line.
    `patching:read`, and the four overview cards match the page's numbers.
 5. `tsc` 0, `lint` 0 errors, the panel suite green, icons gate green.
 6. Nothing was installed, written or reconfigured on any host; the only host interaction is a read-only mount.
+7. `bash scripts/__security_waivers.sh check` fails on an expired waiver, naming its id and date, and passes
+   once the lapsed row is ended and a replacement is filed and the export is re-rendered.
 
 ## Operating
 
