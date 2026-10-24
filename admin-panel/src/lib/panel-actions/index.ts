@@ -44,3 +44,15 @@ export {
   type WaiverWriteResult,
 } from './patching-waivers';
 export { resolveRootActorId } from './root-actor';
+
+// WHY the input shapes are re-exported here and not only where they are declared: a caller outside
+// the panel — the CLI, and any script that reaches this module — builds the same inputs the panel's
+// forms build. Publishing them beside the writes keeps one import for "what this module can do",
+// and keeps a caller from reaching into `service-wiring-contract` for the vocabulary on its own.
+export type {
+  ExposureInput,
+  ServiceInput,
+  ServiceRole,
+  WiringInput,
+  WriteResult,
+} from '@/lib/service-wiring-contract';

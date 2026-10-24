@@ -75,7 +75,8 @@ Commands:
   contest set-active <id>   set the active contest in the database (config.toml/.env
                             are derived from it; rows and DB are the source of truth)
   panel <area> <verb> [args]  perform a panel action in-process, with no panel server up:
-                            registry bind | config show|end | override add|end
+                            registry bind|service|wiring|exposure, config show|end,
+                            override add|end, task attach|detach, accounts rotate
                             (writes are audited under the 'root' actor)
   update-server             shard-aware FULL server update (git+img+db+verify)
   update all                alias for update-server (full update)
@@ -92,6 +93,8 @@ Examples:
   ./cms panel registry bind cms-proxy-1 --contest 9
   ./cms panel config show 9 --reason 'day two goes live'
   ./cms panel override add --contest 9 --kind task --key 'Day_202/A_20Plus_20B' --action hide --reason 'withdrawn'
+  ./cms panel task attach 9 --task 4,5
+  ./cms panel accounts rotate 9 --user 12,13 --team 3 --reason 'day two'
 CMDS
 }
 
