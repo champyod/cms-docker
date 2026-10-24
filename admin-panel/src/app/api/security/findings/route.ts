@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 import { recordAudit } from '@/lib/audit';
 import { prisma } from '@/lib/prisma';
+import { resolveRootActorId } from '@/lib/panel-actions/root-actor';
 import {
   applyFeedPush,
   consumeFeedRateLimit,
@@ -76,11 +77,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // WHY the actor is resolved BEFORE anything is written: `audit_log.actor_id` is nullable, and
+  // the operator's standing rule is that the trail never files a write as NULL. Resolving first
+  // means a deployment with no seeded `root` admin refuses the push outright instead of storing
+  // findings nobody is accountable for — a stored push always has its audit row. The producer is
+  // still named in afterValues, so the row reads as "root, on behalf of diun|rootfs|osv".
+  let actorId: number;
+  try {
+    actorId = await resolveRootActorId();
+  } catch (error) {
+    console.error('security feed ingest refused: no root actor to attribute the push to:', error);
+    return json({ success: false, error: 'No actor to attribute this push to' }, 500);
+  }
+
   try {
     const result = await prisma.$transaction((tx) => applyFeedPush(tx, push));
     // Exactly one audit row per accepted push: the row is the only record that a producer
     // spoke, so it is written once for the whole batch rather than per finding.
     await recordAudit({
+      actorId,
       verb: 'security.findings.ingest',
       entity: 'security_findings',
       entityId: push.source,

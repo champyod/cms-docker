@@ -25,6 +25,9 @@ interface FakeFinding {
 const mocks = vi.hoisted(() => {
   const rows = new Map<string, FakeFinding>();
   let nextId = 1;
+  // The seeded `root` admin the ingest route attributes every push to; `null` models a box
+  // where that row is missing, which must refuse the push instead of filing it as NULL.
+  let rootAdmin: { id: number } | null = { id: 1 };
   const rowKey = (source: string, key: string): string => `${source}\u0000${key}`;
 
   const security_findings = {
@@ -79,10 +82,24 @@ const mocks = vi.hoisted(() => {
 
   const fakePrisma = {
     security_findings,
+    // The ingest route resolves the seeded `root` admin before it writes anything, so the fake
+    // has to answer that lookup — and answer "no such admin" on demand, because that case is the
+    // one that must refuse the push rather than file it as NULL.
+    admins: {
+      findUnique: async (): Promise<{ id: number } | null> => rootAdmin,
+    },
     $transaction: async <T>(run: (tx: unknown) => Promise<T>): Promise<T> => run(fakePrisma),
   };
 
-  return { rows, rowKey, fakePrisma, recordAudit: vi.fn() };
+  return {
+    rows,
+    rowKey,
+    fakePrisma,
+    recordAudit: vi.fn(),
+    setRootAdmin: (value: { id: number } | null): void => {
+      rootAdmin = value;
+    },
+  };
 });
 
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.fakePrisma }));
@@ -130,6 +147,7 @@ describe('security feed ingest route', () => {
   beforeEach(() => {
     mocks.rows.clear();
     mocks.recordAudit.mockClear();
+    mocks.setRootAdmin({ id: 1 });
     process.env.SECURITY_FEED_TOKEN = TOKEN;
     return import('@/lib/security/patching-ingest').then((module) => module.resetFeedRateLimits());
   });
@@ -164,12 +182,24 @@ describe('security feed ingest route', () => {
     expect(mocks.recordAudit).toHaveBeenCalledTimes(1);
     expect(mocks.recordAudit).toHaveBeenCalledWith(
       expect.objectContaining({
+        // The trail never files a write as NULL: the row is attributed to the seeded root admin
+        // and names the producer in afterValues, so "who" and "on whose behalf" are both readable.
+        actorId: 1,
         verb: 'security.findings.ingest',
         entity: 'security_findings',
         entityId: 'diun',
         afterValues: expect.objectContaining({ actor: 'diun', source: 'diun', received: 1, resolved: 0 }),
       }),
     );
+  });
+
+  it('refuses the push and stores nothing when no root actor exists to attribute it to', async () => {
+    mocks.setRootAdmin(null);
+    const result = await call(push({ source: 'diun', host: 'box-a', findings: [finding()], complete: true }));
+
+    expect(result.status).toBe(500);
+    expect(mocks.rows.size).toBe(0);
+    expect(mocks.recordAudit).not.toHaveBeenCalled();
   });
 
   it('changes only last_seen on an identical re-push', async () => {
