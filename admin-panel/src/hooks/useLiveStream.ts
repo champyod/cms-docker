@@ -36,6 +36,14 @@ interface UseLiveStreamOptions<TFrame> {
    * data — a viewer who may not read the stream, or a table whose auto-refresh is off.
    */
   enabled?: boolean;
+  /**
+   * Keeps the connection while the tab is hidden, instead of releasing it.
+   *
+   * Why a surface would ask for this: the pause exists so a poller does not sample for nobody, which
+   * is right for everything drawn on the page — but a channel whose whole purpose is to reach an
+   * operator who is not looking at the page cannot reach them by closing. The default stays off.
+   */
+  followHidden?: boolean;
 }
 
 export interface LiveStream {
@@ -59,13 +67,15 @@ export interface LiveStream {
  *
  * Why a hidden tab lets go of the stream: the pollers this replaces skipped their work while the tab
  * was hidden, and a stream would otherwise keep the server sampling for a tab nobody is looking at.
- * The reconnect on focus brings the panel back with a fresh snapshot.
+ * The reconnect on focus brings the panel back with a fresh snapshot. A channel that asks for
+ * `followHidden` is the exception, and the one kind of channel that earns it: it exists to reach the
+ * operator precisely when the tab is not on screen.
  */
-export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }: UseLiveStreamOptions<TFrame>): LiveStream {
+export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true, followHidden = false }: UseLiveStreamOptions<TFrame>): LiveStream {
   // Why the initial state is read from the document: a tab that mounted in the background must not
   // open a connection at all, and a status set from inside the effect would be a cascading render.
   const [status, setStatus] = useState<LiveStatus>(() =>
-    typeof document !== 'undefined' && document.hidden ? 'paused' : 'connecting'
+    typeof document !== 'undefined' && document.hidden && !followHidden ? 'paused' : 'connecting'
   );
   const [readAt, setReadAt] = useState<string | null>(null);
   const onFrameRef = useRef(onFrame);
@@ -157,6 +167,9 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
 
     const onVisibilityChange = (): void => {
       if (document.hidden) {
+        // Why nothing is released here: this channel's one job is to reach the operator when the tab
+        // is not on screen, so a hide that closed it would make it unable to do that.
+        if (followHidden) return;
         clearReconnect();
         closeSource();
         setStatus('paused');
@@ -164,13 +177,16 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
       }
       attemptsRef.current = 0;
       clearReconnect();
+      // Why a still-open source is left alone: a follow-hidden channel kept its connection through the
+      // hide and its frames kept arriving, so reopening here would only replay what it already has.
+      if (followHidden && sourceRef.current !== null) return;
       connect();
     };
 
     refreshRef.current = () => {
       attemptsRef.current = 0;
       clearReconnect();
-      if (document.hidden) return;
+      if (document.hidden && !followHidden) return;
       // A reconnect already in flight will deliver a fresh snapshot on its own, so a second one would
       // only add a connection without adding freshness.
       if (sourceRef.current !== null && sourceRef.current.readyState === EventSource.CONNECTING) return;
@@ -179,13 +195,15 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
 
     // Why the watchdog is not the reconnect timer: a connection can be open and dead — a proxy that
     // swallowed the stream, a laptop that changed networks — and nothing but missing heartbeats says so.
+    // Why it keeps running for a follow-hidden channel: a dead connection there is a silently missed
+    // alert, so the one check that notices it cannot be the check the hide switches off.
     watchdogRef.current = setInterval(() => {
-      if (disposed || document.hidden) return;
+      if (disposed || (document.hidden && !followHidden)) return;
       if (Date.now() - lastFrameAtRef.current > LIVE_IDLE_TIMEOUT_MS) scheduleReconnect();
     }, LIVE_WATCHDOG_CHECK_MS);
 
     document.addEventListener('visibilitychange', onVisibilityChange);
-    if (!document.hidden) connect();
+    if (!document.hidden || followHidden) connect();
 
     return () => {
       disposed = true;
@@ -198,7 +216,7 @@ export function useLiveStream<TFrame>({ url, onFrame, onError, enabled = true }:
       }
       refreshRef.current = () => undefined;
     };
-  }, [url, enabled]);
+  }, [url, enabled, followHidden]);
 
   const refresh = useCallback((): void => refreshRef.current(), []);
 
