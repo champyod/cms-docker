@@ -1170,7 +1170,10 @@
     "title": "การแจ้งเตือนระบบ",
     "markAllRead": "ทำเครื่องหมายว่าอ่านทั้งหมด",
     "clear": "ล้าง",
-    "empty": "ยังไม่มีการแจ้งเตือน"
+    "empty": "ยังไม่มีการแจ้งเตือน",
+    "questionTitle": "มีคำถามใหม่เข้ามา!",
+    "questionDetail": "จาก {username}: {subject}",
+    "questionUnnamedAsker": "ผู้ใช้"
   },
   "states": {
     "retry": {

@@ -3,6 +3,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useLiveStream } from '@/hooks/useLiveStream';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
 import { deliverSystemEvent } from '@/lib/live/alert-delivery';
 import { requestDeviceNotifications } from '@/lib/live/device-notifications';
 import { cursorFromFrameId, isNewFrame, type QueuedNotification } from '@/lib/notification-queue';
@@ -12,9 +14,6 @@ import type { QuestionsFrame } from '@/lib/live/frames';
 const ALERT_STREAM_URL = '/api/notifications/stream';
 const QUESTION_STREAM_URL = '/api/questions/stream';
 const MAX_EVENTS = 20;
-
-/** What a question arrival says outside the panel; the header's own dot carries it inside. */
-const QUESTION_CUE_TITLE = 'New Question Received!';
 
 export interface LiveNotifications {
   readonly events: readonly QueuedNotification[];
@@ -47,6 +46,9 @@ export function LiveNotificationProvider({
   children: React.ReactNode;
 }): React.JSX.Element {
   const keys = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  // Why the copy is read here and not built in the cue: an OS notification leaves the panel, so its
+  // words are the operator's locale's, exactly like every other string the shell renders.
+  const cueCopy = useDictionary().systemAlerts;
   const [events, setEvents] = useState<QueuedNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [unansweredCount, setUnansweredCount] = useState(0);
@@ -79,16 +81,18 @@ export function LiveNotificationProvider({
     // coming back into view after a reply is not an arrival, and two clocks cannot disagree.
     if (latest === null || latest.id <= lastAlertedQuestionId.current) return;
     lastAlertedQuestionId.current = latest.id;
-    const from = latest.username ?? 'User';
     // Why the cue and not a toast: a question is a task for an admin, so it keeps the one surface
     // every other system event has — the header's dot while the panel is on screen, exactly one OS
     // notification while it is not. A persistent toast beside the dot was the same arrival twice.
     deliverSystemEvent({
       id: `question-${latest.id}`,
-      title: QUESTION_CUE_TITLE,
-      detail: `From ${from}: ${latest.subject}`,
+      title: cueCopy.questionTitle,
+      detail: interpolate(cueCopy.questionDetail, {
+        username: latest.username ?? cueCopy.questionUnnamedAsker,
+        subject: latest.subject,
+      }),
     });
-  }, []);
+  }, [cueCopy]);
 
   // Why the cursor travels in the url: the stream replays its backlog on every (re)connect, and
   // `since` narrows that replay to frames this viewer is still missing.

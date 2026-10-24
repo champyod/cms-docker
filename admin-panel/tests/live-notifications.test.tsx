@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiveNotificationProvider, useLiveNotifications } from '@/lib/live/notifications';
 import type { QuestionsFrame } from '@/lib/live/frames';
 import type { QueuedNotification } from '@/lib/notification-queue';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
+import { interpolate } from '@/lib/interpolate';
+import en from '@/dictionaries/en.json';
+import th from '@/dictionaries/th.json';
 import { memoryStorage } from './memory-storage';
 
 interface StreamOptions {
@@ -48,11 +52,13 @@ function Probe(): React.JSX.Element {
   return <span>{`unread:${unread} questions:${unansweredCount}`}</span>;
 }
 
-function renderService(permissionKeys: readonly string[]): ReturnType<typeof render> {
+function renderService(permissionKeys: readonly string[], dict: typeof en = en): ReturnType<typeof render> {
   return render(
-    <LiveNotificationProvider permissionKeys={permissionKeys}>
-      <Probe />
-    </LiveNotificationProvider>,
+    <DictionaryProvider dict={dict}>
+      <LiveNotificationProvider permissionKeys={permissionKeys}>
+        <Probe />
+      </LiveNotificationProvider>
+    </DictionaryProvider>,
   );
 }
 
@@ -184,7 +190,44 @@ describe('live notification service', () => {
     deliver(channel('/api/questions/stream'), QUESTION);
 
     expect(device.notifyDevice).toHaveBeenCalledTimes(1);
-    expect(device.notifyDevice).toHaveBeenCalledWith('New Question Received!', 'From ada: How do I rejudge?');
+    // Why the dictionary and not a literal: this copy leaves the panel as an OS notification, so it
+    // is the operator's locale's copy — the assertion would pass just as well on a hardcoded string
+    // only if the string were this exact one in both files, which the next case rules out.
+    expect(device.notifyDevice).toHaveBeenCalledWith(
+      en.systemAlerts.questionTitle,
+      interpolate(en.systemAlerts.questionDetail, { username: 'ada', subject: 'How do I rejudge?' }),
+    );
+  });
+
+  it('sends the question cue in the panel locale, not in English', () => {
+    panelHidden = true;
+    renderService(['question:list'], th);
+
+    deliver(channel('/api/questions/stream'), QUESTION);
+
+    // The two files disagree on every one of these words, so a string baked into the service cannot
+    // satisfy this case and the English one above at the same time.
+    expect(th.systemAlerts.questionTitle).not.toBe(en.systemAlerts.questionTitle);
+    expect(th.systemAlerts.questionDetail).not.toBe(en.systemAlerts.questionDetail);
+    expect(device.notifyDevice).toHaveBeenCalledWith(
+      th.systemAlerts.questionTitle,
+      interpolate(th.systemAlerts.questionDetail, { username: 'ada', subject: 'How do I rejudge?' }),
+    );
+  });
+
+  it('names an asker who left no username in the panel locale', () => {
+    panelHidden = true;
+    renderService(['question:list'], th);
+
+    deliver(channel('/api/questions/stream'), { ...QUESTION, latest: { ...QUESTION.latest, username: null } });
+
+    expect(device.notifyDevice).toHaveBeenCalledWith(
+      th.systemAlerts.questionTitle,
+      interpolate(th.systemAlerts.questionDetail, {
+        username: th.systemAlerts.questionUnnamedAsker,
+        subject: 'How do I rejudge?',
+      }),
+    );
   });
 
   it('does not alert again when an older question is the newest one left', () => {
