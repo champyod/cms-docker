@@ -52,13 +52,15 @@ describe('MismatchBanner', () => {
     expect(text).toMatch(/Mismatch: the database and the configured CONTEST_ID disagree with each other\./);
   });
 
-  it('keeps the activation advice while the registry holds what the others hold', () => {
+  it('sends the operator to the registry row when the configured value disagrees', () => {
     const { container } = render(
       <MismatchBanner activeContestId={2} activeContestName="Spring" dbActiveContestId={2} containerContestId={5} boundContestId={2} boundContestSource="registry" />,
     );
     const text = container.textContent ?? '';
     expect(text).toMatch(/Mismatch: the configured CONTEST_ID disagrees with the other sources\./);
-    expect(text).toMatch(/Activate & Restart Stack rewrites the database row/);
+    // The activation control is retired, so the advice names the one write that moves a shard.
+    expect(text).toMatch(/the registry row for its shard/);
+    expect(text).not.toMatch(/Activate & Restart Stack/);
     expect(text).not.toMatch(/edit it in the panel's service registry/);
   });
 });

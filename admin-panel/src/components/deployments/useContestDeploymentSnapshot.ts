@@ -103,12 +103,9 @@ export interface ContestDeploymentSnapshot {
   readonly boundContestId: number | null;
   readonly boundContestSource: BoundContestSource;
   readonly shardBindings: readonly ShardContestBinding[];
-  readonly selectedContestId: number | null;
   readonly globalSettings: Record<string, string>;
   readonly isDirty: boolean;
-  readonly hasChangedContest: boolean;
   readonly hasMismatch: boolean;
-  readonly setSelectedContestId: Dispatch<SetStateAction<number | null>>;
   readonly setGlobalSettings: Dispatch<SetStateAction<Record<string, string>>>;
   readonly applyDeployedContestId: (contestId: number) => void;
   readonly loadData: (options?: { silent?: boolean }) => Promise<void>;
@@ -134,7 +131,6 @@ export function useContestDeploymentSnapshot({
   const [boundContestId, setBoundContestId] = useState<number | null>(null);
   const [boundContestSource, setBoundContestSource] = useState<BoundContestSource>(null);
   const [shardBindings, setShardBindings] = useState<readonly ShardContestBinding[]>([]);
-  const [selectedContestId, setSelectedContestId] = useState<number | null>(null);
   const [globalSettings, setGlobalSettings] = useState<Record<string, string>>({});
   const [originalGlobal, setOriginalGlobal] = useState<string>('{}');
   const [failedReads, setFailedReads] = useState<readonly ReadFailure[]>([]);
@@ -143,7 +139,6 @@ export function useContestDeploymentSnapshot({
     // The settings come from config.toml; the active id comes from the database
     // (contests.is_active), which config.toml and .env are derived from.
     setActiveContestId(activeId);
-    setSelectedContestId(activeId);
     setGlobalSettings(settings);
     setOriginalGlobal(JSON.stringify(settings));
     return activeId;
@@ -233,7 +228,6 @@ export function useContestDeploymentSnapshot({
   }, [globalSettings, setSaving, toastCopy]);
 
   const isDirty = JSON.stringify(globalSettings) !== originalGlobal;
-  const hasChangedContest = selectedContestId !== null && selectedContestId !== activeContestId;
   // Why a deploy in flight suppresses the banner: a running deploy or poll is about to
   // rewrite these ids, so reporting the gap it is closing would alarm the operator.
   // The registry binding counts as a source here because it outranks the active row: a server
@@ -255,12 +249,9 @@ export function useContestDeploymentSnapshot({
     boundContestId,
     boundContestSource,
     shardBindings,
-    selectedContestId,
     globalSettings,
     isDirty,
-    hasChangedContest,
     hasMismatch,
-    setSelectedContestId,
     setGlobalSettings,
     applyDeployedContestId,
     loadData,

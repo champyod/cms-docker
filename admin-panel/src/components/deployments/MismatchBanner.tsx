@@ -111,7 +111,7 @@ export function MismatchBanner({
                 {describeMismatch(disagreeing)}
                 {' '}{disagreeing.includes(REGISTRY_SOURCE)
                     ? 'An enabled registry row that names a contest decides what is served, so edit it in the panel\'s service registry (Infrastructure, Services) — activating another contest cannot clear this.'
-                    : 'This can happen after a failed deploy or manual edits. Activate & Restart Stack rewrites the database row, while the registry row decides which contest a server actually serves.'}
+                    : 'This can happen after a failed deploy or manual edits. The database row is the deployment default; what a running instance actually serves is the registry row for its shard, so write that row in the panel (Infrastructure, Services) and the instance follows within seconds.'}
             </Text>
         </InlineAlert>
     );

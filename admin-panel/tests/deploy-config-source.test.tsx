@@ -4,12 +4,11 @@ import { MismatchBanner } from '@/components/deployments/MismatchBanner';
 import { ActiveContestCard } from '@/components/deployments/ActiveContestCard';
 
 /**
- * The activation writes the database row: contests.is_active is the single source of truth for the
- * active contest, and the deploy runs `scripts/__config_sync.sh` after it. That sync never rewrites
- * [contest] CONTEST_ID — the key is the bootstrap a database with no contests table yet is read
- * from, which is why the panel reads the container's configured value and the shard's registry
- * binding beside it. Copy that named config.toml as a file the activation writes sent operators to
- * edit a key nothing on that path touches.
+ * The deployments card states what each shard serves and offers no lever of its own: a shard is
+ * moved by writing its registry row, which a running instance re-reads within seconds, so the
+ * control that activated a contest by recreating the contest stack — the one path that could
+ * restart the board mid-contest — is gone. These tests pin that absence, because a reinstated
+ * control would read as harmless copy rather than as the restart lever it is.
  *
  * Why static markup: the values on screen are strings these components render, and a reader of the
  * banner is what the copy has to be true for. The confirm dialog is not covered here because Radix
@@ -25,29 +24,26 @@ const BINDINGS = [
   { id: 2, name: 'proxy-1', role: 'ProxyService', shard: 1, contestId: 10 },
 ];
 
-describe('deploy copy names the write the activation performs', () => {
+describe('the served-contest card offers no restart lever', () => {
   const cardHtml = renderToStaticMarkup(
     <ActiveContestCard
       shardBindings={BINDINGS}
       activeContestId={12}
       activeContestName="Autumn"
       availableContests={CONTESTS}
-      selectedContestId={12}
-      deployPhase="idle"
-      hasChangedContest={false}
-      onSelectContest={() => undefined}
-      onActivate={() => undefined}
-      onCancel={() => undefined}
     />,
   );
 
-  it('describes the activation as marking the contest active in the database and syncing', () => {
-    expect(cardHtml).toContain('mark the contest as active in the database');
-    expect(cardHtml).toContain('run the config sync');
-    expect(cardHtml).toContain('restart the contest stack');
+  it('renders no control that would recreate the contest stack', () => {
+    expect(cardHtml).not.toContain('Activate');
+    expect(cardHtml).not.toContain('Select Contest to Deploy');
+    expect(cardHtml).not.toContain('restart the contest');
+    expect(cardHtml).not.toContain('<select');
+    expect(cardHtml).not.toContain('<button');
   });
 
-  it('does not claim the activation sets CONTEST_ID in config.toml', () => {
+  it('names the registry as what decides what a running instance serves', () => {
+    expect(cardHtml).toContain('From the service registry');
     expect(cardHtml).not.toContain('CONTEST_ID in config.toml');
     expect(cardHtml).not.toContain('.env');
   });
@@ -82,12 +78,6 @@ describe('the active-contest view shows the per-shard registry truth', () => {
       activeContestId={12}
       activeContestName="Autumn"
       availableContests={CONTESTS}
-      selectedContestId={12}
-      deployPhase="idle"
-      hasChangedContest={false}
-      onSelectContest={() => undefined}
-      onActivate={() => undefined}
-      onCancel={() => undefined}
     />,
   );
 
@@ -114,12 +104,6 @@ describe('the active-contest view shows the per-shard registry truth', () => {
         activeContestId={12}
         activeContestName="Autumn"
         availableContests={CONTESTS}
-        selectedContestId={null}
-        deployPhase="idle"
-        hasChangedContest={false}
-        onSelectContest={() => undefined}
-        onActivate={() => undefined}
-        onCancel={() => undefined}
       />,
     );
     expect(emptyHtml).toContain('No enabled registry row binds a shard to a contest.');
