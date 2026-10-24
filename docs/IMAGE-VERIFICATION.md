@@ -61,6 +61,17 @@ Run it by hand, without pulling anything:
     make verify-images
     bash scripts/__verify_images.sh ghcr.io/champyod/cms-docker-core:major-admin-panel
 
+## Installing cosign on a deploy host
+
+The gate fails closed when cosign is absent (`reason=cosign-missing`) — an
+unchecked image is not a verified one. Install the same release the workflow
+signs with, from the operator's own shell:
+
+    curl -fsSL -o cosign \
+      https://github.com/sigstore/cosign/releases/download/v2.5.2/cosign-linux-amd64
+    sudo install -m 0755 cosign /usr/local/bin/cosign
+    cosign version   # expect GitVersion: v2.5.2
+
 ## The emergency override
 
     CMS_SKIP_IMAGE_VERIFY=1 ./cms deploy all --img
