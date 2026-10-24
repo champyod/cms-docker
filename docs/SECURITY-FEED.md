@@ -141,3 +141,69 @@ decision with a date, not a deleted line.
    `patching:read`, and the four overview cards match the page's numbers.
 5. `tsc` 0, `lint` 0 errors, the panel suite green, icons gate green.
 6. Nothing was installed, written or reconfigured on any host; the only host interaction is a read-only mount.
+
+## Operating
+
+Everything below is a container action. Nothing here installs, writes or reconfigures anything on a host.
+
+**Enable the feed on a box**
+
+1. `cp .env.security.example .env.security` and fill in `SECURITY_HOST` (`hostname -s`),
+   `SECURITY_FEED_TOKEN` (`openssl rand -hex 32` — the panel needs the same value), and
+   `RENOVATE_TOKEN` + `RENOVATE_REPOSITORIES` if Renovate is wanted.
+2. Set `SECURITY_ENABLED = 1` for the host (config sync writes it to `.env`; or pass it in
+   `.env.security`).
+3. Start the profile — the base stack is unchanged, this file only adds to it:
+
+   ```
+   docker compose --env-file .env --env-file .env.security \
+     -f docker-compose.yml -f docker-compose.security.yml --profile security up -d
+   ```
+
+   Both env files are passed because `--env-file` replaces `.env` rather than adding to it;
+   `.env.security` only overrides the keys it sets.
+
+   Without `--profile security` nothing in the overlay starts. With the profile but
+   `SECURITY_ENABLED=0`, the containers start and do nothing: the scan scheduler exits, Renovate
+   idles, the Diun translator accepts notifications and drops them.
+
+**Run one scan by hand** (same image, same POST path, no waiting for the schedule):
+
+```
+docker compose --env-file .env --env-file .env.security \
+  -f docker-compose.yml -f docker-compose.security.yml run --rm security-scan osv        # dependencies in the checked-out repo
+docker compose ... run --rm security-scan rootfs     # host OS packages, read-only
+docker compose ... run --rm security-scan all        # both
+```
+
+The command exits non-zero when it pushed `complete: false` — that is the signal the scan could
+not claim a full set (a scanner failed, or trivy found no OS package database it can read, which
+is the normal result on Arch/CachyOS hosts). `complete: false` never resolves anything, so an
+unreadable host never clears its own CVE list.
+
+To see the payload without a panel, point `PANEL_URL` at any HTTP sink and read the body:
+
+```
+PANEL_URL=http://127.0.0.1:8000 docker compose ... run --rm security-scan rootfs
+```
+
+**Test the Diun translation by hand** (the translator is the only thing that maps Diun's body):
+
+```
+curl -s -X POST http://127.0.0.1:8099/cgi-bin/diun \
+  -H 'Content-Type: application/json' \
+  -d '{"status":"new","provider":"docker","image":"redis:7","digest":"sha256:deadbeef","created":"2026-10-24T00:00:00Z","platform":"linux/amd64","metadata":{"ctn_name":"cms-redis"}}'
+```
+
+It answers `202` when the translated body reached the panel and `502` when it did not.
+
+**Rotate the ingest token**
+
+1. `openssl rand -hex 32` → new value.
+2. Set it on the panel (`SECURITY_FEED_TOKEN`), restart the panel so the route compares against it.
+3. Put the same value in `.env.security` on every reporting host and
+   `docker compose --env-file .env --env-file .env.security ... up -d security-scan diun-bridge` — both read it
+   from the environment, so no image rebuild is needed.
+4. Until every host is updated its pushes get `401` and are logged by the producer; no finding is
+   deleted by a rejected push.
+

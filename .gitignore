@@ -29,6 +29,8 @@ config.toml
 .env.*.local
 *.local
 *.pem.local
+# Security feed: the template is committed, the live copy (.env.security) stays local
+!.env.security.example
 docker-compose.override.yml
 docker-compose.expose.yml
 

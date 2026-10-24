@@ -152,11 +152,15 @@ jobs:
           declare -A OVERLAY_BASE=(
             [docker-compose.tailscale.yml]=docker-compose.yml
             [docker-compose.waf.yml]=docker-compose.domain.yml
+            # The security overlay only adds `diun.enable` labels to base services; validated
+            # standalone those services would have no image, so merge with the base stack.
+            [docker-compose.security.yml]=docker-compose.yml
           )
           # An overlay whose target is profile-gated has to enable those profiles, or
           # compose reports the gated service as undefined instead of validating it.
           declare -A OVERLAY_PROFILES=(
             [docker-compose.tailscale.yml]="--profile core --profile contest"
+            [docker-compose.security.yml]="--profile security"
           )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
             [ -f "$f" ] || continue
