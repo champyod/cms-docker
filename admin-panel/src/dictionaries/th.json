@@ -786,7 +786,23 @@
       "selectionCount": "เลือก {count} รายการ",
       "selectionClear": "ล้างการเลือก",
       "bulkAddNeedReason": "ต้องระบุเหตุผล",
-      "batchRemove": "ลบออก"
+      "batchRemove": "ลบออก",
+      "filtersAuthor": "ผู้บันทึก",
+      "filtersAuthorPanel": "บันทึกจากแผงควบคุม",
+      "filtersAuthorOutside": "เขียนจากนอกแผงควบคุม",
+      "outsidePanelBadge": "นอกแผงควบคุม"
+    },
+    "hides": {
+      "title": "สิ่งที่กระดานซ่อนไว้",
+      "hint": "ทุกแถวที่กระดานของชาร์ดนี้ตัดออก และสิ่งที่ซ่อนแถวนั้น — แถวโอเวอร์ไรด์ที่แผงควบคุมบันทึก หรือการเข้าร่วมที่ข้อมูลการแข่งขันทำเครื่องหมายว่าซ่อน",
+      "empty": "ไม่มีอะไรถูกซ่อนจากกระดานของชาร์ดนี้",
+      "columnTarget": "เป้าหมาย",
+      "columnSource": "ซ่อนโดย",
+      "columnReason": "เหตุผล",
+      "sourceOverride": "แถวโอเวอร์ไรด์",
+      "sourceParticipation": "ธงการเข้าร่วม",
+      "unknownTarget": "ไม่ตรงกับแถวใดบนกระดาน",
+      "wholeBoard": "ทั้งกระดาน"
     },
     "credits": {
       "title": "รายการเครดิต",

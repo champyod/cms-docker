@@ -17,6 +17,18 @@ export function encodeId(entityId: string): string {
   return encoded;
 }
 
+/**
+ * The spellings a target key may hold in the projection.
+ *
+ * WHY both: the panel writes a user or team key as the operator sees it, while the projection keys
+ * its rows with the encoded form ProxyService pushes (encodeId). Reading both means a reader
+ * reports the row that exists whichever spelling the operator's row carries, instead of silently
+ * answering "nothing" for a key the projection stores encoded.
+ */
+export function keySpellings(key: string): string[] {
+  return [...new Set([key, encodeId(key)])];
+}
+
 /** The participation fields the projection is built from. */
 interface ParticipationRow {
   readonly users: { username: string; first_name: string; last_name: string };

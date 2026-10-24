@@ -786,7 +786,23 @@
       "selectionCount": "{count} selected",
       "selectionClear": "Clear selection",
       "bulkAddNeedReason": "A reason is required",
-      "batchRemove": "Remove"
+      "batchRemove": "Remove",
+      "filtersAuthor": "Author",
+      "filtersAuthorPanel": "Filed from the panel",
+      "filtersAuthorOutside": "Written outside the panel",
+      "outsidePanelBadge": "outside the panel"
+    },
+    "hides": {
+      "title": "Hidden from the board",
+      "hint": "Every row this shard's board drops, and the write that hides it — an override row the panel filed, or a participation the contest data marks hidden.",
+      "empty": "Nothing is hidden from this shard's board.",
+      "columnTarget": "Target",
+      "columnSource": "Hidden by",
+      "columnReason": "Reason",
+      "sourceOverride": "override row",
+      "sourceParticipation": "participation flag",
+      "unknownTarget": "names nothing the board has",
+      "wholeBoard": "the whole board"
     },
     "credits": {
       "title": "Credit list",
