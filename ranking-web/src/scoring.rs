@@ -2,12 +2,56 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::board;
-use crate::overrides::{Overrides, TaskHideCauses};
+use crate::overrides::{Overrides, TaskHideCauses, TaskSnapshot};
 
 pub use crate::board::BoardRow;
 pub use crate::score::{
     parse_extra, Score, ScoreError, ScoreMode, Subchange, Submission, SubmissionEntry, TaskMode,
 };
+
+/// The rows the fold dropped, split by the cause that dropped them.
+///
+/// WHY the split: this is the counter an operator reads to decide whether the board is missing
+/// rows it should have, and as one number it mixed two units and four causes — so hiding a
+/// contest (a concealed contest moved it 40 → 466 on prod) read exactly like a data fault, in
+/// the one number that has to be believed. The causes partition the total, so the alarm is the
+/// two fault causes and the hide cause is the operator's own doing, named rather than excused.
+///
+/// WHY the hide cause is counted although a hide is not a fault: the replay set is the
+/// projection's tasks minus the hides, so a hide IS the reason those rows are gone, and a
+/// counter that silently exempts one hide shape while counting the other cannot be trusted for
+/// either. `unknown_task` and `orphan` are the two numbers worth chasing.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct SkippedSubchanges {
+    hidden_task: usize,
+    unknown_task: usize,
+    orphan: usize,
+}
+
+impl SkippedSubchanges {
+    /// The submissions whose task the projection announces and the replay set lacks: a task or
+    /// contest hide dropped it, so these rows are gone because the operator hid them.
+    pub fn hidden_task(&self) -> usize {
+        self.hidden_task
+    }
+
+    /// The submissions whose task no drawn task of the projection carries: the push never
+    /// announced it, or it belongs to a contest this instance does not draw. A data fault.
+    pub fn unknown_task(&self) -> usize {
+        self.unknown_task
+    }
+
+    /// The subchange rows whose submission the projection does not hold at all. A data fault.
+    pub fn orphan(&self) -> usize {
+        self.orphan
+    }
+
+    /// Every row the fold dropped — the counter's meaning before the split, kept so the panel's
+    /// consumer reads what it always read. The three causes partition exactly this set.
+    pub fn total(&self) -> usize {
+        self.hidden_task + self.unknown_task + self.orphan
+    }
+}
 
 /// The scoreboard, assembled from the projection.
 #[derive(Debug, Default, Clone)]
@@ -16,7 +60,7 @@ pub struct Ledger {
     history: Vec<(String, String, i64, f64)>,
     submissions: Vec<SubmissionEntry>,
     board: Vec<BoardRow>,
-    skipped_subchanges: usize,
+    skipped_subchanges: SkippedSubchanges,
     skipped_overrides: usize,
     /// The task hides that named no task row, split by the cause the projection snapshot
     /// explains: the hides that name no task row at all used to reach /diagnostics as one
@@ -40,8 +84,26 @@ impl Ledger {
         &self.board
     }
 
+    /// Every row the fold dropped, so /diagnostics can say whether the board is missing
+    /// anything. The causes below partition it.
     pub fn skipped_subchanges(&self) -> usize {
-        self.skipped_subchanges
+        self.skipped_subchanges.total()
+    }
+
+    /// The dropped rows whose task a hide removed — the operator's own doing.
+    pub fn hidden_task_subchanges(&self) -> usize {
+        self.skipped_subchanges.hidden_task()
+    }
+
+    /// The dropped rows whose task no drawn task of the projection carries: the number to chase.
+    pub fn unknown_task_subchanges(&self) -> usize {
+        self.skipped_subchanges.unknown_task()
+    }
+
+    /// The dropped subchange rows whose submission the projection does not hold: the number to
+    /// chase.
+    pub fn orphan_subchanges(&self) -> usize {
+        self.skipped_subchanges.orphan()
     }
 
     pub fn skipped_overrides(&self) -> usize {
@@ -103,6 +165,10 @@ impl Ledger {
 /// Replays the projection into a scoreboard. Subchanges are applied in (time, key)
 /// order, which is the order Score.create_subchange keeps them in after any
 /// out-of-order arrival forces a reset.
+///
+/// WHY no snapshot: this entry point applies no overrides, so nothing is hidden and no dropped
+/// row can be attributed to a hide — every one it reports is `unknown_task`, which is the honest
+/// answer without one. The store, which holds both, calls `assemble_with`.
 pub fn assemble(
     tasks: &[TaskMode],
     submissions: &[Submission],
@@ -114,20 +180,23 @@ pub fn assemble(
         subchanges,
         &Overrides::default(),
         &BTreeMap::new(),
+        &TaskSnapshot::default(),
     )
 }
 
-/// As assemble, but with the active overrides and each user's team folded into the
-/// existing single pass rather than a second query or a nested scan.
+/// As assemble, but with the active overrides, each user's team folded into the existing
+/// single pass rather than a second query or a nested scan, and the projection snapshot the
+/// dropped rows are classified against.
 pub fn assemble_with(
     tasks: &[TaskMode],
     submissions: &[Submission],
     subchanges: &[Subchange],
     overrides: &Overrides,
     teams: &BTreeMap<String, String>,
+    snapshot: &TaskSnapshot,
 ) -> Result<Ledger, ScoreError> {
-    let mut skipped = 0;
-    let mut scores = project_scores(tasks, submissions, overrides, &mut skipped);
+    let mut skipped = SkippedSubchanges::default();
+    let mut scores = project_scores(tasks, submissions, snapshot, &mut skipped);
     replay_subchanges(
         &mut scores,
         submissions,
@@ -142,8 +211,8 @@ pub fn assemble_with(
 fn project_scores(
     tasks: &[TaskMode],
     submissions: &[Submission],
-    overrides: &Overrides,
-    skipped: &mut usize,
+    snapshot: &TaskSnapshot,
+    skipped: &mut SkippedSubchanges,
 ) -> BTreeMap<(String, String), Score> {
     let mut scores: BTreeMap<(String, String), Score> = BTreeMap::new();
     for submission in submissions {
@@ -152,12 +221,16 @@ fn project_scores(
             .find(|task| task.key == submission.task)
             .map(|task| task.mode);
         let Some(mode) = mode else {
-            // WHY a hidden task is not a skip: its absence from `tasks` is the hide doing
-            // its job, so counting it would report a healthy hide as malformed rows. A
-            // submission carries no contest, so the replay can only ask whether some hide
-            // drops this task anywhere rather than in the contest it was filed under.
-            if !overrides.hides_task_anywhere(&submission.task) {
-                *skipped += 1;
+            // WHY the snapshot decides this and not the override sets: the replay set is the
+            // projection's tasks minus the hides, so a task the snapshot announces and this set
+            // lacks is one a hide dropped — whichever shape the hide took. Asking the overrides
+            // directly saw only the task-target shape, because a submission carries no contest,
+            // so a whole hidden contest's submissions counted as malformed rows (466 on prod)
+            // with nothing wrong. The cause names which it was, so the row is not lost either way.
+            if snapshot.announces(&submission.task) {
+                skipped.hidden_task += 1;
+            } else {
+                skipped.unknown_task += 1;
             }
             continue;
         };
@@ -173,7 +246,7 @@ fn replay_subchanges(
     scores: &mut BTreeMap<(String, String), Score>,
     submissions: &[Submission],
     subchanges: &[Subchange],
-    skipped: &mut usize,
+    skipped: &mut SkippedSubchanges,
     frozen_at: Option<i64>,
 ) {
     let owners: BTreeMap<&str, (&str, &str)> = submissions
@@ -199,19 +272,22 @@ fn replay_subchanges(
             continue;
         }
         let Some((user, task)) = owners.get(change.submission.as_str()) else {
-            *skipped += 1;
+            skipped.orphan += 1;
             continue;
         };
         if let Some(score) = scores.get_mut(&(user.to_string(), task.to_string())) {
             score.append(change);
         }
+        // A change whose submission the fold already dropped for its task leaves with it, and is
+        // counted by that submission's own cause rather than here: one row, one cause, or the
+        // same loss would be reported twice and the causes would stop partitioning the total.
     }
 }
 
 /// The one pass that builds the grid, the history and the board, applying overrides by key.
 fn finish(
     scores: BTreeMap<(String, String), Score>,
-    skipped: usize,
+    skipped: SkippedSubchanges,
     overrides: &Overrides,
     teams: &BTreeMap<String, String>,
 ) -> Ledger {

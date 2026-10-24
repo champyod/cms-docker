@@ -153,7 +153,9 @@ pub struct TaskSnapshot {
 
 impl TaskSnapshot {
     /// A task the projection holds, under the encoded contest key it files it by.
-    pub(crate) fn add_task(&mut self, contest: &str, task: &str) {
+    /// WHY public: the ledger classification needs a snapshot fixture too, and an integration
+    /// test builds one from the pairs it asserts on rather than from a database.
+    pub fn add_task(&mut self, contest: &str, task: &str) {
         self.pairs.insert((contest.to_string(), task.to_string()));
         self.tasks.insert(task.to_string());
         self.contests.insert(contest.to_string());
@@ -162,8 +164,18 @@ impl TaskSnapshot {
 
     /// A contest the projection holds. The push writes the contest row even when it announces
     /// no task of it, which is the only trace a withheld task leaves behind.
-    pub(crate) fn add_contest(&mut self, contest: &str) {
+    pub fn add_contest(&mut self, contest: &str) {
         self.contests.insert(contest.to_string());
+    }
+
+    /// Whether the projection holds a task of that key in a drawn contest.
+    ///
+    /// WHY this is the ledger's hide test: the modes the fold replays are exactly these tasks
+    /// minus the hides, so a task the snapshot announces and the replay set lacks is one a hide
+    /// dropped — whichever shape the hide took. Asking the override sets directly saw only the
+    /// task-target shape, so a hidden contest's submissions counted as data faults.
+    pub fn announces(&self, task: &str) -> bool {
+        self.tasks.contains(task)
     }
 }
 
@@ -221,17 +233,6 @@ impl HiddenTargets {
     /// Whether a `hide` override drops the contest and every task filed under it.
     pub fn hides_contest(&self, contest: &str) -> bool {
         self.hidden_contests.contains(contest)
-    }
-
-    /// Whether any `hide` row drops this task, in any contest. WHY the ledger replay needs it:
-    /// a submission carries no contest, so the skip counter can only ask whether the task left
-    /// the board for some hide rather than for a typo.
-    pub fn hides_task_anywhere(&self, task: &str) -> bool {
-        self.hidden_tasks_any_contest.contains(task)
-            || self
-                .hidden_task_pairs
-                .iter()
-                .any(|(_, hidden)| hidden == task)
     }
 
     /// How many task hides name no projected task row, split by the cause the snapshot
@@ -345,13 +346,6 @@ impl Overrides {
     /// contest's scores and history with it.
     pub fn hides_contest(&self, contest: &str) -> bool {
         self.hidden_targets.hides_contest(contest)
-    }
-
-    /// Whether any `hide` override drops this task, in any contest. Read by the ledger
-    /// replay, where a submission carries no contest and the skip counter only needs to know
-    /// the task left the board for a hide rather than for a typo.
-    pub fn hides_task_anywhere(&self, task: &str) -> bool {
-        self.hidden_targets.hides_task_anywhere(task)
     }
 
     /// The task hides that name no projected task row, split by cause. Read by the store, the

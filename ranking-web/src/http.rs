@@ -31,7 +31,19 @@ pub struct Health {
 pub struct Diagnostics {
     pub ready: bool,
     pub skipped_overrides: usize,
+    /// Every row the fold dropped, so the board's missing rows have one number. The three
+    /// causes below partition it — the meaning this key already had, so the panel's consumer
+    /// reads what it always read.
     pub skipped_subchanges: usize,
+    /// The dropped rows whose task a task or contest hide removed: the operator's own doing, and
+    /// no alarm. Split out of `skipped_subchanges`, which used to count a hidden contest's
+    /// submissions as data faults (466 on prod) while exempting a hidden task's.
+    pub hidden_task_subchanges: usize,
+    /// The dropped rows whose task no drawn task of the projection carries: the push never
+    /// announced it, or it belongs to a contest this instance does not draw. Chase this one.
+    pub unknown_task_subchanges: usize,
+    /// The dropped subchange rows whose submission the projection does not hold. Chase this one.
+    pub orphan_subchanges: usize,
     /// Task hides that named no task row: the hide exists but drops nothing, so a renamed
     /// task silently stops being hidden. It is the three causes below, summed — the meaning
     /// this key already had, so the panel's consumer reads what it always read.
@@ -280,6 +292,9 @@ async fn diagnostics(State(state): State<AppState>) -> Response {
             ready: true,
             skipped_overrides: standings.ledger.skipped_overrides(),
             skipped_subchanges: standings.ledger.skipped_subchanges(),
+            hidden_task_subchanges: standings.ledger.hidden_task_subchanges(),
+            unknown_task_subchanges: standings.ledger.unknown_task_subchanges(),
+            orphan_subchanges: standings.ledger.orphan_subchanges(),
             unknown_task_hides: standings.ledger.unknown_task_hides(),
             withheld_task_hides: standings.ledger.withheld_task_hides(),
             renamed_task_hides: standings.ledger.renamed_task_hides(),
