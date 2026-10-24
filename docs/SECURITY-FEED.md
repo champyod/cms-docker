@@ -13,23 +13,27 @@ The other standing rule: **one source of truth per fact.** The feed has exactly 
 **one** ingest endpoint, **one** findings table, and **one** waiver table. A producer never writes the
 database directly and never keeps its own copy of what it reported.
 
-## Producers (three, all containers)
+## Producers (four, all containers)
 
 | producer | answers | cadence | what it emits |
 |---|---|---|---|
-| **Renovate** (`ghcr.io/renovatebot/renovate`) | "a newer version of X exists, and there is an advisory for what I run" — repos: **compose files** (`docker-compose` manager, `/(^|/)(?:docker-)?compose[^/]*\.ya?ml$/`), Dockerfiles, `bun.lock`, `requirements`/`constraints.txt`, `Cargo.lock`, GitHub Actions | daily | one **PR** per grouped update (the actionable part) **and** one webhook POST of the same findings (the visible part) |
+| **Renovate** (`ghcr.io/renovatebot/renovate`) | "a newer version of X exists" — repos: **compose files** (`docker-compose` manager, `/(^|/)(?:docker-)?compose[^/]*\.ya?ml$/`), Dockerfiles, `bun.lock`, `requirements`/`constraints.txt`, `Cargo.lock`, GitHub Actions | daily | **PRs** and its dependency-dashboard issue. **Not findings**: Renovate has no notifier to POST to, so it owns the *actionable* half and the panel links to it rather than waiting for it |
+| **osv-scan** (`ghcr.io/google/osv-scanner`) | "**our own dependencies** have a known advisory" — `osv-scanner scan source -r` over the checked-out tree (bun.lock, constraints.txt, Cargo.lock) against the OSV database | nightly + on demand | JSON → `POST` (this is the half Renovate cannot deliver: an advisory without a version bump) |
 | **Diun** (`crazymax/diun`) | "the image I am **running** is not the digest the registry now serves" — Docker provider, local socket | `DIUN_WATCH_SCHEDULE`, default every 6 h | webhook POST on `new`/`update` |
-| **rootfs-scan** (`ghcr.io/aquasecurity/trivy`, runs the same binary as `aquasec/trivy`) | "the **host's own** OS packages have CVEs" — without installing anything on it | nightly + on demand | JSON from `trivy rootfs` POSTed to the panel |
+| **rootfs-scan** (`ghcr.io/aquasecurity/trivy`, same binary as `aquasec/trivy`) | "the **host's own** OS packages have CVEs" — without installing anything on it | nightly + on demand | JSON from `trivy rootfs` POSTed to the panel |
 
 Verified while writing this, not recalled:
 
 - `trivy rootfs [flags] ROOTDIR` — the command exists and works against a mounted filesystem; `aquasec/trivy`
   and `ghcr.io/aquasecurity/trivy` are the **same image** (identical digest `sha256:790fd66d…` when pulled
   2026-10-24). The old `aquasecurity/trivy` Hub name no longer resolves.
+- `osv-scanner` runs as `ghcr.io/google/osv-scanner`, usage `osv-scanner scan source -r <dir>` (the image's own
+  `--help`, run 2026-10-24).
 - Diun's webhook notifier is configured `DIUN_NOTIF_WEBHOOK_ENDPOINT` / `_METHOD` / `_HEADERS_<KEY>`, and its
   documented JSON body carries `status`, `provider`, `image`, `digest`, `created`, `platform`, `metadata`.
 - Renovate ships as `renovate/renovate` and `ghcr.io/renovatebot/renovate`; the CLI **processes repos then
-  exits**, so a scheduler is what makes it periodic.
+  exits**, so a scheduler is what makes it periodic — and its documented output channels are PRs and the
+  dashboard issue, with no findings webhook. **Do not invent one.**
 
 **Host read-only guarantee for the rootfs scan:** the host root is mounted `:ro`, the scan runs with
 `--scanners vuln --pkg-types os`, and the container has **no** write mount anywhere except its own cache
@@ -82,7 +86,7 @@ call (the producer sends its full current set); history stays readable and the a
 
 - Auth: `Authorization: Bearer ${SECURITY_FEED_TOKEN}`; the route rejects with 401 otherwise, and the token
   is compared in constant time. No cookie/session path — this is machine-to-machine inside the tailnet.
-- Body: `{ "source": "renovate|diun|rootfs", "host": "<name>", "findings": [ … ], "complete": true }`.
+- Body: `{ "source": "diun|rootfs|osv", "host": "<name>", "findings": [ … ], "complete": true }`.
   `complete: true` is what licenses the route to resolve findings the body did not mention; a partial push
   (`false`) must never resolve anything.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
@@ -128,8 +132,10 @@ decision with a date, not a deleted line.
 ## Acceptance
 
 1. `docker compose -f docker-compose.yml -f docker-compose.security.yml --profile security config` is valid.
-2. A dry run of each producer against the dev box produces a payload that the ingest route accepts
-   (`201`), and a second identical push changes nothing but `last_seen`.
+2. A dry run of each findings producer (`osv-scan`, `diun`, `rootfs-scan`) against the dev box produces a
+   payload the ingest route accepts (`201`), and a second identical push changes nothing but `last_seen`.
+   Renovate's acceptance is a real dry run against the repo (`renovate --dry-run` over the config) that lists
+   the compose-file updates it *would* open PRs for — that is its half, and no POST is expected from it.
 3. `complete: true` with a smaller set sets `resolved_at` on the missing rows; `complete: false` never does.
 4. `security.patching` renders for an admin with `security:read` **and** `patching:read`, 403s without
    `patching:read`, and the four overview cards match the page's numbers.
