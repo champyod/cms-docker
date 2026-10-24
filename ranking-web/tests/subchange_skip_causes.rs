@@ -9,6 +9,7 @@
 //! operator's own hide (a concealed contest moved it 40 → 466 on prod) read exactly like a data
 //! fault. These tests pin each cause to the row shape that produces it.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::store::load_ledger;
 use sqlx::PgPool;
@@ -92,7 +93,9 @@ async fn a_healthy_board_drops_nothing() {
     let pool = pool();
     seed_scored_task(&pool).await.expect("the seed applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(
         ledger.skipped_subchanges(),
@@ -122,7 +125,9 @@ async fn a_hidden_contest_is_reported_as_the_hide_cause() {
     .await
     .expect("the override applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(
         ledger.hidden_task_subchanges(),
@@ -162,7 +167,9 @@ async fn a_submission_for_a_task_nothing_announced_is_the_fault_cause() {
     .await
     .expect("the orphaned submission applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(
         ledger.unknown_task_subchanges(),
@@ -193,7 +200,9 @@ async fn a_subchange_with_no_submission_row_is_the_orphan_cause() {
     .await
     .expect("the orphaned subchange applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(
         ledger.orphan_subchanges(),
@@ -240,7 +249,9 @@ async fn the_causes_partition_the_total() {
     .await
     .expect("the orphan subchange applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(ledger.hidden_task_subchanges(), 1, "the task hide");
     assert_eq!(ledger.unknown_task_subchanges(), 1, "the unannounced task");
