@@ -69,14 +69,14 @@ CREATE OR REPLACE FUNCTION public.cms_actor_any(names text[]) RETURNS boolean
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff() RETURNS boolean
   LANGUAGE sql STABLE AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
-        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration'])
+        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler'])
   $$;
 
 -- The same set plus the pre-session login path. Used only on AUTH_BOOTSTRAP tables.
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff_or_auth() RETURNS boolean
   LANGUAGE sql STABLE AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
-        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:auth'])
+        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler', 'system:auth'])
   $$;
 
 -- admin_groups
@@ -650,6 +650,7 @@ DROP POLICY IF EXISTS cmsuser_delete ON public.wirings;
 DROP POLICY IF EXISTS cms_actor_all ON public.wirings;
 CREATE POLICY cms_actor_all ON public.wirings FOR ALL TO cmsuser USING (public.cms_actor_is_staff()) WITH CHECK (public.cms_actor_is_staff());
 -- END GENERATED POLICY SET
+
 
 
 -- ══ REVERSAL (commented out — this file is forward-only; copy it into a new migration to undo) ══

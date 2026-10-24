@@ -37,6 +37,9 @@ export const SYSTEM_IDENTITIES = {
   INGEST: 'system:ingest',
   /** Seeding and migrations. */
   MIGRATION: 'system:migration',
+  /** The backup scheduler process (src/scheduler/main.ts): it starts and settles backup runs with
+   *  no request and no cookie, so it names itself rather than borrowing a human identity. */
+  SCHEDULER: 'system:scheduler',
 } as const;
 
 export type SystemIdentity = (typeof SYSTEM_IDENTITIES)[keyof typeof SYSTEM_IDENTITIES];

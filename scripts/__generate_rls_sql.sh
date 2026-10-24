@@ -183,14 +183,14 @@ CREATE OR REPLACE FUNCTION public.cms_actor_any(names text[]) RETURNS boolean
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff() RETURNS boolean
   LANGUAGE sql STABLE AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
-        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration'])
+        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler'])
   $$;
 
 -- The same set plus the pre-session login path. Used only on AUTH_BOOTSTRAP tables.
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff_or_auth() RETURNS boolean
   LANGUAGE sql STABLE AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
-        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:auth'])
+        OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler', 'system:auth'])
   $$;
 SQL
 }
