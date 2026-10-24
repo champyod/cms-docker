@@ -10,6 +10,7 @@ export const SERVICE_ROLES = [
   'ContestWebServer',
   'EvaluationService',
   'ProxyService',
+  'RankingWebServer',
   'Worker',
   'Checker',
   'ScoringService',
@@ -21,6 +22,13 @@ export type ServiceRole = (typeof SERVICE_ROLES)[number];
 
 /** The one relay that serves a single contest, so a row of it must name that contest. */
 export const PROXY_SERVICE_ROLE = 'ProxyService';
+
+/**
+ * The role the ranking holds: the row whose `contest_id` says which contest this board serves.
+ * The reader looks itself up by this spelling and its own shard (see `ranking-web`'s binding
+ * module), so a row typed under any other name reaches nothing.
+ */
+export const RANKING_SERVICE_ROLE: ServiceRole = 'RankingWebServer';
 
 /**
  * The role the contest web server holds: the row a running instance's contest binding
