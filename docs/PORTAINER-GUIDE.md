@@ -115,7 +115,7 @@ Deploy stacks in this order:
    - Follow prompts to set password
 
 5. **Access Admin Interface**
-   - Modern Admin Panel (Next.js): `http://your-server-ip:8891` — manage everything here
+   - Modern Admin Panel (Next.js): `http://127.0.0.1:8891` — manage everything here (loopback on the host, or over the tailnet; widening the bind means setting `ADMIN_NEXT_BIND_IP`, a security decision, since the panel takes a caller's identity from a header only the proxy writes)
    - Classic Admin (legacy Python): `http://your-server-ip:8889`
    - Login with created credentials
 

@@ -247,6 +247,6 @@ else
     echo -e "${GREEN}✓ All contests created successfully!${NC}"
     echo ""
     echo "Access the contests at:"
-    echo "  Admin Panel: http://your-server:8891"
+    echo "  Admin Panel: http://127.0.0.1:8891 (loopback on the host, or over the tailnet — widening the bind means ADMIN_NEXT_BIND_IP, a security decision, since the panel trusts a proxy-written caller header)"
     echo "  Classic Admin: http://your-server:8889"
 fi
