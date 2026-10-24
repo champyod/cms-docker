@@ -44,22 +44,34 @@ pub enum ServedContest {
 
 /// The registry's answer for this instance right now.
 ///
-/// WHY a missing `services` table is not an error: the table belongs to the panel's migrations, and
-/// a database that has not had them applied is a deployment with no registry at all — the same
-/// answer as an empty one, never a board that cannot render because a table it does not own is
-/// absent. The check is `to_regclass`, in the same statement, so there is no window between asking
-/// and reading in which the table could appear.
+/// WHY absence is asked in its own statement instead of guarded inside the query: Postgres parses
+/// and plans the whole statement, so `CASE WHEN to_regclass(...) IS NULL THEN NULL ELSE (SELECT …
+/// FROM services …) END` does **not** protect the reference — a missing relation fails at parse
+/// time, before the CASE is ever evaluated, and every board read then refuses on a database that
+/// has not had the panel's migrations. The first statement is a catalog lookup; the second runs
+/// only when the table is really there.
+///
+/// WHY a missing `services` table is not an error: that table belongs to the panel's migrations, so
+/// a database without them is a deployment with no registry at all — the same answer as an empty
+/// one, never a board that cannot render because a table it does not own is absent.
 pub async fn load_served_contest(pool: &PgPool, shard: u32) -> Result<ServedContest, sqlx::Error> {
+    let present =
+        sqlx::query_scalar::<_, bool>("SELECT to_regclass('public.services') IS NOT NULL")
+            .fetch_one(pool)
+            .await?;
+    if !present {
+        return Ok(ServedContest::EveryContest);
+    }
+    // `fetch_optional`, not `fetch_one`: an empty registry is a real answer, and `contest_id` is
+    // nullable, so both "no row" and "a row naming no contest" fall through to one behaviour.
     let row = sqlx::query_scalar::<_, Option<i32>>(
-        "SELECT CASE WHEN to_regclass('public.services') IS NULL THEN NULL ELSE (\
-         SELECT contest_id FROM services \
-         WHERE role = $1 AND shard = $2 AND enabled ORDER BY id LIMIT 1) END",
+        "SELECT contest_id FROM services WHERE role = $1 AND shard = $2 AND enabled ORDER BY id LIMIT 1",
     )
     .bind(SERVICE_ROLE)
     .bind(i32::try_from(shard).unwrap_or(i32::MAX))
-    .fetch_one(pool)
+    .fetch_optional(pool)
     .await?;
-    Ok(match row {
+    Ok(match row.flatten() {
         Some(contest_id) => ServedContest::Contest(contest_id),
         None => ServedContest::EveryContest,
     })
