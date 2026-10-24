@@ -5,6 +5,7 @@
 //! WHY a live database: the scope is a SQL predicate over the shown set, so the behaviour under
 //! test is what PostgreSQL returns, not a property a pure unit test can assert.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::store::{load_board, load_ledger};
 use sqlx::PgPool;
@@ -104,7 +105,9 @@ async fn a_tombstone_reaches_only_the_contest_the_config_shows() {
     seed_two_contests(&pool).await.expect("the seed applies");
 
     show_only(&pool, &[7]).await.expect("the config applies");
-    let day_one = load_board(&pool).await.expect("the board assembles");
+    let day_one = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         !day_one.contains_key("ghost0"),
         "contest 7 hides the participation filed against it"
@@ -115,14 +118,18 @@ async fn a_tombstone_reaches_only_the_contest_the_config_shows() {
     );
 
     show_only(&pool, &[8]).await.expect("the config applies");
-    let day_two = load_board(&pool).await.expect("the board assembles");
+    let day_two = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         day_two.contains_key("ghost0"),
         "contest 7's tombstone must not reach contest 8"
     );
 
     show_only(&pool, &[]).await.expect("the config applies");
-    let none = load_board(&pool).await.expect("the board assembles");
+    let none = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         none.is_empty(),
         "with nothing shown the board draws nothing rather than picking a contest"
@@ -141,7 +148,9 @@ async fn a_board_draws_only_the_columns_of_the_contest_it_shows() {
     seed_two_contests(&pool).await.expect("the seed applies");
 
     show_only(&pool, &[8]).await.expect("the config applies");
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert!(
         ledger.scores().values().any(|row| row.contains_key("t8")),
         "the shown contest's column is drawn"

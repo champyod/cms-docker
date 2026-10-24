@@ -4,6 +4,7 @@
 //! WHY a live database: the scope is a SQL predicate over the shown set, so the behaviour under
 //! test is what PostgreSQL returns, not a property a pure unit test can assert.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::store::load_board;
 use sqlx::PgPool;
@@ -101,7 +102,9 @@ async fn an_override_applies_only_to_the_contest_the_config_shows() {
     seed_two_contests(&pool).await.expect("the seed applies");
 
     show_only(&pool, &[1]).await.expect("the config applies");
-    let contest_one = load_board(&pool).await.expect("the board assembles");
+    let contest_one = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         !contest_one.contains_key("u1"),
         "contest 1 folds its own hide"
@@ -112,7 +115,9 @@ async fn an_override_applies_only_to_the_contest_the_config_shows() {
     );
 
     show_only(&pool, &[2]).await.expect("the config applies");
-    let contest_two = load_board(&pool).await.expect("the board assembles");
+    let contest_two = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         contest_two.is_empty(),
         "a shown contest the projection holds no rows for draws nothing, not another contest"
@@ -130,7 +135,9 @@ async fn a_config_showing_nothing_folds_no_override() {
     seed_two_contests(&pool).await.expect("the seed applies");
     show_only(&pool, &[]).await.expect("the config applies");
 
-    let board = load_board(&pool).await.expect("the board assembles");
+    let board = load_board(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the board assembles");
     assert!(
         board.is_empty(),
         "with nothing shown the board draws nothing"

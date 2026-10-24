@@ -9,6 +9,7 @@
 //! WHY the surface check is not a database test: what must not break is the shape the panel's
 //! consumer parses, and that is a property of the serialized response alone.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::http::Diagnostics;
 use cms_ranking::store::load_ledger;
@@ -106,7 +107,9 @@ async fn a_hide_on_a_withheld_task_is_reported_as_withheld() {
         .await
         .expect("the override applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(ledger.withheld_task_hides(), 1, "the contest holds no task");
     assert_eq!(ledger.renamed_task_hides(), 0, "nothing was renamed");
@@ -137,7 +140,9 @@ async fn a_hide_on_a_task_a_live_contest_no_longer_holds_is_reported_as_renamed(
         .await
         .expect("the override applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(ledger.renamed_task_hides(), 1, "c0 holds t0 and not stale");
     assert_eq!(
@@ -167,7 +172,9 @@ async fn a_hide_naming_no_projected_contest_is_reported_as_unmatched() {
         .await
         .expect("the override applies");
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
 
     assert_eq!(
         ledger.unmatched_task_hides(),

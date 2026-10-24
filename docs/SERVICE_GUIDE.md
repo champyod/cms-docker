@@ -122,14 +122,22 @@ contest surface.
 
 | Variable | Purpose |
 | :--- | :--- |
-| `DATABASE_URL` | the projection tables it reads |
+| `DATABASE_URL` | the projection tables it reads, and the `services`/`ranking_config` rows that decide what the board draws |
 | `RANKING_BIND_ADDRESS` | address the service binds inside its container; with `RANKING_LISTEN_PORT` it forms the bind; `0.0.0.0` by default, and now a `config.toml` key |
+| `RANKING_SHARD` | this instance's shard in the service registry — the second half of the `(role, shard)` key its own `RankingWebServer` row is read by; `0` by default. Which contest it serves is that row's `contest_id`, read per call behind a five-second TTL, so re-pointing the row needs no recreate |
 | `RANKING_STATIC_DIR` | the vendored page it serves |
 | `CMS_CREDITS_FILE` | the licence offer `/credits` returns |
 | `RANKING_LOGO_PATH` | a stem; png, jpg, jpeg, gif and bmp are probed in that order |
 | `RANKING_SESSION_SECRET` | signs the console cookie; empty refuses every login |
 | `RANKING_REDIS_URL` | the failure counters; absent means no login is accepted |
 | `CAPTCHA_*` | the login challenge, configured only in `config.toml` |
+
+Which contest the board serves is not an environment value. The service reads the `services`
+row whose `role` is `RankingWebServer` and whose `shard` is `RANKING_SHARD`, on every board read,
+and the row bounds what is drawn: `ranking_config` still decides what the board shows, and a row
+naming a contest the config does not show is a refusal that names both — never a silent pick.
+An instance no enabled row names follows the config alone, which is what every deployment did
+before the registry carried a ranking row.
 
 `GET /healthz` answers 200 only while the database answers `SELECT 1`. Every other route,
 including `/events`, refuses with 503 rather than drawing an empty scoreboard, and `/login`

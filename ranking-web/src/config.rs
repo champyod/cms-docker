@@ -19,9 +19,16 @@ pub const DEFAULT_CREDITS_FILE: &str = "/home/cmsuser/cms/credits.json";
 /// only a probe that misses.
 pub const DEFAULT_AVATAR_DIR: &str = "/var/local/lib/cms/ranking/avatars";
 
+/// The identity of this ranking instance inside the registry. It is the second half of the
+/// `(role, shard)` key the service's own row is read by, so it is deploy configuration — which
+/// instance this is — and never which contest it serves, which is the row's answer.
+pub const DEFAULT_SHARD: u32 = 0;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RankingConfig {
     pub bind: SocketAddr,
+    /// This instance's shard in the service registry; see [`DEFAULT_SHARD`].
+    pub shard: u32,
     pub database_url: Option<String>,
     pub static_dir: Option<PathBuf>,
     pub credits_file: Option<PathBuf>,
@@ -128,6 +135,7 @@ impl Default for RankingConfig {
     fn default() -> Self {
         Self {
             bind: DEFAULT_BIND.parse().expect("the default bind is a literal"),
+            shard: DEFAULT_SHARD,
             database_url: None,
             static_dir: None,
             credits_file: None,
@@ -163,6 +171,7 @@ impl RankingConfig {
             .collect();
         Ok(Self {
             bind: read_bind(&vars)?,
+            shard: read_shard(&vars),
             database_url: read_database_url(&vars),
             static_dir: read_path(&vars, "RANKING_STATIC_DIR", DEFAULT_STATIC_DIR),
             credits_file: read_path(&vars, "CMS_CREDITS_FILE", DEFAULT_CREDITS_FILE),
@@ -182,6 +191,15 @@ fn read_bind(vars: &HashMap<String, String>) -> Result<SocketAddr, ConfigError> 
         .unwrap_or(DEFAULT_BIND);
     raw.parse::<SocketAddr>()
         .map_err(|_| ConfigError::InvalidBind(raw.to_string()))
+}
+
+/// An unset or unparsable shard is the first one rather than a refusal: the shard only decides
+/// which row is read, and a typo that refused to start the service would take the board down for a
+/// value that is already the default of every deployment.
+fn read_shard(vars: &HashMap<String, String>) -> u32 {
+    vars.get("RANKING_SHARD")
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(DEFAULT_SHARD)
 }
 
 fn read_database_url(vars: &HashMap<String, String>) -> Option<String> {

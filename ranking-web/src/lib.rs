@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod binding;
 pub mod board;
 pub mod config;
 pub mod db;
@@ -38,6 +39,7 @@ struct AppStateInner {
     counter: Option<auth::counter::Counter>,
     http: reqwest::Client,
     standings: store::StandingsCache,
+    binding: binding::BindingCache,
 }
 
 impl AppState {
@@ -54,6 +56,7 @@ impl AppState {
                 counter,
                 http: reqwest::Client::new(),
                 standings: store::StandingsCache::default(),
+                binding: binding::BindingCache::default(),
             }),
         }
     }
@@ -84,6 +87,23 @@ impl AppState {
         &self.inner.http
     }
 
+    /// Which contest this instance serves, as the service registry states it right now.
+    ///
+    /// WHY it is read here rather than once at start-up: the registry row is the operator's hot
+    /// lever, so a re-pointed instance has to follow the row within one TTL instead of waiting for
+    /// a container recreate. The cache lives in the state so every route, the board and the feed
+    /// ask the one answer rather than each reading the row for itself.
+    pub async fn served_contest(&self) -> Result<binding::ServedContest, StoreError> {
+        let Some(db) = self.db() else {
+            return Err(StoreError::NoDatabase);
+        };
+        Ok(self
+            .inner
+            .binding
+            .served_contest(self.inner.config.shard, db.pool())
+            .await?)
+    }
+
     /// The projection-derived board state, built at most once per data change and shared
     /// by every board endpoint. A build holds the lock, so a burst of requests after a
     /// write coalesces into one rebuild rather than one rebuild each.
@@ -91,9 +111,10 @@ impl AppState {
         let Some(db) = self.db() else {
             return Err(StoreError::NoDatabase);
         };
+        let served = self.served_contest().await?;
         self.inner
             .standings
-            .get_or_build(|| store::load_standings(db.pool()))
+            .get_or_build(served, || store::load_standings(db.pool(), served))
             .await
     }
 

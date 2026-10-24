@@ -4,6 +4,7 @@ use std::time::Duration;
 use serde::Serialize;
 use sqlx::postgres::PgPool;
 
+use crate::binding::ServedContest;
 use crate::board::{self, BoardEntry, TeamEntry, UserNames};
 use crate::overrides::{
     OverrideRow, Overrides, TaskSnapshot, ACTION_HIDE, TARGET_CONTEST, TARGET_USER,
@@ -39,6 +40,16 @@ pub enum StoreError {
     /// A contest target whose key is not a contest id.
     #[error("ranking_config shows the contest \"{key}\", which is not an id")]
     BadContestKey { key: String },
+    /// The registry row names one contest and the config does not show it.
+    ///
+    /// WHY a refusal and not an empty board: the two rows answer the same question — which contest
+    /// this board is — so a disagreement is an operator's mistake with a name, and an empty board
+    /// would read as "nothing to draw" instead of "these two rows contradict each other".
+    #[error(
+        "the service registry binds this ranking instance to contest {served}, \
+         and ranking_config shows {shown}"
+    )]
+    ServedContestNotShown { served: i32, shown: String },
 }
 
 /// The contests the board is told to show, read from `ranking_config`.
@@ -94,7 +105,13 @@ struct ConfigRow {
 /// WHY a malformed row is a refusal: a contest key that is not an id cannot be matched against
 /// anything, and skipping it would draw a board smaller than the one the operator configured with
 /// no sign that a declaration was dropped.
-pub async fn load_shown_set(pool: &PgPool) -> Result<ShownSet, StoreError> {
+///
+/// WHY `served` narrows the answer: the registry row says which contest this instance serves, so a
+/// board drawing another one is serving a contest it was not bound to. A row that names a contest
+/// the config does not show is a refusal naming both, never a silent pick between the two — the
+/// board and the binding are two statements about one fact, and the operator has to make them
+/// agree.
+pub async fn load_shown_set(pool: &PgPool, served: ServedContest) -> Result<ShownSet, StoreError> {
     let rows = sqlx::query_as::<_, ConfigRow>(
         "SELECT target_kind, target_key FROM ranking_config WHERE active ORDER BY id",
     )
@@ -118,7 +135,30 @@ pub async fn load_shown_set(pool: &PgPool) -> Result<ShownSet, StoreError> {
             contest_ids.push(contest_id);
         }
     }
-    Ok(ShownSet { contest_ids })
+    match served {
+        ServedContest::EveryContest => Ok(ShownSet { contest_ids }),
+        ServedContest::Contest(bound) => {
+            if !contest_ids.contains(&bound) {
+                return Err(StoreError::ServedContestNotShown {
+                    served: bound,
+                    shown: describe_contests(&contest_ids),
+                });
+            }
+            Ok(ShownSet::new(vec![bound]))
+        }
+    }
+}
+
+/// The shown contests as an error message spells them: ids, or the one word for none.
+fn describe_contests(contest_ids: &[i32]) -> String {
+    if contest_ids.is_empty() {
+        return "no contest".to_string();
+    }
+    contest_ids
+        .iter()
+        .map(i32::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The entity kinds the board draws one at a time, and the ones the feed announces.
@@ -223,8 +263,9 @@ pub async fn entity_is_shown(
     pool: &PgPool,
     kind: EntityKind,
     key: &str,
+    served: ServedContest,
 ) -> Result<bool, StoreError> {
-    let shown = load_shown_set(pool).await?;
+    let shown = load_shown_set(pool, served).await?;
     let found = sqlx::query(kind.drawn())
         .bind(shown.contest_ids())
         .bind(key)
@@ -262,6 +303,10 @@ const STANDINGS_MAX_AGE: Duration = Duration::from_secs(60);
 struct CachedStandings {
     standings: std::sync::Arc<Standings>,
     built_at: tokio::time::Instant,
+    /// The binding this build was made under. A board built for one served contest is not an
+    /// answer for another, so a re-pointed registry row rebuilds at once instead of waiting out
+    /// the belt — the row is the hot lever, and the cache must not be what makes it slow.
+    served: ServedContest,
 }
 
 /// Holds one built [`Standings`] and drops it on invalidation. The first reader to find
@@ -282,6 +327,7 @@ impl StandingsCache {
 
     pub async fn get_or_build<F, Fut>(
         &self,
+        served: ServedContest,
         build: F,
     ) -> Result<std::sync::Arc<Standings>, StoreError>
     where
@@ -292,7 +338,7 @@ impl StandingsCache {
         if let Some(cached) = guard.as_ref() {
             // Inside the belt: serve the shared build. Past it: fall through and rebuild, so a
             // notification the listener never heard costs one stale read at most.
-            if cached.built_at.elapsed() < STANDINGS_MAX_AGE {
+            if cached.served == served && cached.built_at.elapsed() < STANDINGS_MAX_AGE {
                 return Ok(cached.standings.clone());
             }
         }
@@ -300,13 +346,14 @@ impl StandingsCache {
         *guard = Some(CachedStandings {
             standings: built.clone(),
             built_at: tokio::time::Instant::now(),
+            served,
         });
         Ok(built)
     }
 }
 
-pub async fn load_standings(pool: &PgPool) -> Result<Standings, StoreError> {
-    let shown = load_shown_set(pool).await?;
+pub async fn load_standings(pool: &PgPool, served: ServedContest) -> Result<Standings, StoreError> {
+    let shown = load_shown_set(pool, served).await?;
     let users = load_users(pool).await?;
     let team_names = load_team_names(pool).await?;
     let overrides = load_overrides(pool, &shown).await?;
@@ -555,8 +602,8 @@ pub async fn load_contest(
     Ok(row)
 }
 
-pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
-    let shown = load_shown_set(pool).await?;
+pub async fn load_ledger(pool: &PgPool, served: ServedContest) -> Result<Ledger, StoreError> {
+    let shown = load_shown_set(pool, served).await?;
     let users = load_users(pool).await?;
     let overrides = load_overrides(pool, &shown).await?;
     assemble_ledger(pool, &shown, &users, &overrides).await
@@ -565,8 +612,11 @@ pub async fn load_ledger(pool: &PgPool) -> Result<Ledger, StoreError> {
 /// The board the page draws: the ledger's override-shaped rows joined with the names
 /// and team the projection holds, so a reader gets a name already renamed and a rank
 /// already assigned instead of recomputing either.
-pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
-    let standings = load_standings(pool).await?;
+pub async fn load_board(
+    pool: &PgPool,
+    served: ServedContest,
+) -> Result<BTreeMap<String, BoardEntry>, StoreError> {
+    let standings = load_standings(pool, served).await?;
     Ok(board::board_view(
         standings.ledger.board(),
         &standings.users,
@@ -575,8 +625,11 @@ pub async fn load_board(pool: &PgPool) -> Result<BTreeMap<String, BoardEntry>, S
 
 /// The team board: the same rows grouped by team, with a team-level override applied to
 /// the aggregate rather than to each member.
-pub async fn load_team_board(pool: &PgPool) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
-    let standings = load_standings(pool).await?;
+pub async fn load_team_board(
+    pool: &PgPool,
+    served: ServedContest,
+) -> Result<BTreeMap<String, TeamEntry>, StoreError> {
+    let standings = load_standings(pool, served).await?;
     Ok(board::team_board_view(
         standings.ledger.board(),
         &standings.users,
@@ -934,7 +987,7 @@ mod tests {
         for _ in 0..5 {
             let counter = builds.clone();
             cache
-                .get_or_build(|| async move {
+                .get_or_build(ServedContest::EveryContest, || async move {
                     counter.fetch_add(1, Ordering::SeqCst);
                     Ok(empty_standings())
                 })
@@ -946,7 +999,7 @@ mod tests {
         cache.invalidate().await;
         let counter = builds.clone();
         cache
-            .get_or_build(|| async move {
+            .get_or_build(ServedContest::EveryContest, || async move {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Ok(empty_standings())
             })
@@ -963,7 +1016,7 @@ mod tests {
     async fn read_standings(cache: &StandingsCache, builds: &Arc<AtomicUsize>) -> Arc<Standings> {
         let counter = builds.clone();
         cache
-            .get_or_build(|| async move {
+            .get_or_build(ServedContest::EveryContest, || async move {
                 counter.fetch_add(1, Ordering::SeqCst);
                 Ok(empty_standings())
             })

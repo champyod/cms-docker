@@ -611,9 +611,13 @@ services:
       # URL every other service takes rather than a ranking config file.
       DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
       RANKING_BIND_ADDRESS: ${RANKING_BIND_ADDRESS:-0.0.0.0}:${RANKING_LISTEN_PORT:-8890}
-      # The board's scope is not here: which contests it draws is the `ranking_config`
-      # table, written from the panel, so moving the board to another contest is a row and
-      # not a container recreate.
+      # Which contest this board serves is not here either: the service reads the `services`
+      # row that names this (role, shard) on every board read, so re-pointing that row in the
+      # panel moves the board within seconds instead of a container recreate. The shard is
+      # this instance's identity in the registry — the second half of that key — and the only
+      # static value in the binding. `ranking_config` stays what the board draws: the row must
+      # name a contest the config shows, and a contradiction is refused, never picked between.
+      RANKING_SHARD: ${RANKING_SHARD:-0}
       # Where the image keeps the vendored page and the licence offer; both are image
       # layout, so they are not operator configuration.
       RANKING_STATIC_DIR: /home/cmsuser/src/ranking-web/static

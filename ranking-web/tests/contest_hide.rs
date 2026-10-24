@@ -7,6 +7,7 @@
 //! list and the ledger, so the behaviour under test is what PostgreSQL returns rather
 //! than a property a pure unit test can assert.
 
+use cms_ranking::binding::ServedContest;
 use cms_ranking::db::Db;
 use cms_ranking::entities::{list_body, Kind};
 use cms_ranking::store::{load_ledger, ShownSet};
@@ -165,7 +166,9 @@ async fn a_hidden_contest_leaves_the_column_and_the_ledger_together() {
         "another contest's task stays, and this is what the group hide must not drop"
     );
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden contest's task leaves the score grid"
@@ -235,7 +238,9 @@ async fn a_task_hide_is_scoped_to_the_contest_its_key_names() {
         "the other contest keeps its task"
     );
 
-    let ledger = load_ledger(&pool).await.expect("the ledger assembles");
+    let ledger = load_ledger(&pool, ServedContest::EveryContest)
+        .await
+        .expect("the ledger assembles");
     assert!(
         !ledger.scores().values().any(|row| row.contains_key("t0")),
         "the hidden task leaves the score grid"
