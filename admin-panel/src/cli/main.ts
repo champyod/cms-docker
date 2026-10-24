@@ -1,4 +1,5 @@
 import { PANEL_USAGE, PanelUsageError, parsePanelCommand, runPanelCommand } from '@/cli/panel';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 
 /**
  * The process entry point for `./cms panel`.
@@ -20,7 +21,16 @@ async function main(): Promise<void> {
     return;
   }
   try {
-    process.stdout.write(`${await runPanelCommand(parsePanelCommand(argv))}\n`);
+    // WHY the whole command runs as system:cli: a panel command has no session — the operator is
+    // whoever holds shell access to the host — so the audit row is filed under the seeded root admin
+    // and the database identity is the named CLI one. Every query inside inherits it; without this
+    // scope the fail-closed policies would return nothing and the command would report an empty
+    // panel instead of an error.
+    process.stdout.write(
+      `${await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.CLI }, () =>
+        runPanelCommand(parsePanelCommand(argv)),
+      )}\n`,
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`cms panel: ${message}\n`);

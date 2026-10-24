@@ -45,6 +45,9 @@ __all__ = [
     "version", "engine",
     # session
     "Session", "ScopedSession", "SessionGen", "custom_psycopg2_connection",
+    # actor
+    "db_actor", "CORE_ACTOR", "KNOWN_SYSTEM_ACTORS", "ACTOR_ENV",
+    "InvalidActorError", "default_actor", "validate_actor",
     # types
     "CastingArray", "Codename", "Filename", "FilenameSchema",
     "FilenameSchemaArray", "Digest",
@@ -100,6 +103,9 @@ metadata = MetaData(engine)
 
 from .session import Session, ScopedSession, SessionGen, \
     custom_psycopg2_connection
+from . import actor as db_actor
+from .actor import CORE_ACTOR, KNOWN_SYSTEM_ACTORS, ACTOR_ENV, \
+    InvalidActorError, default_actor, validate_actor
 
 from .types import CastingArray, Codename, Filename, FilenameSchema, \
     FilenameSchemaArray, Digest

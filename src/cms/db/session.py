@@ -24,6 +24,12 @@
 Contains context managers and custom methods to create sessions to
 interact with SQLAlchemy objects.
 
+Every transaction started by a session created here is stamped with the
+process's database actor (:mod:`cms.db.actor`) by the ``after_begin`` hook
+below. That is the single place identity enters the core's SQL: no query, no
+DAO and no console script has to remember it, and a transaction that begins
+after a ``commit()`` is stamped again because the hook fires per transaction.
+
 """
 
 import logging
@@ -31,11 +37,12 @@ import typing
 
 import psycopg2
 import sqlalchemy.orm
+from sqlalchemy import event, text
 from sqlalchemy.engine.url import URL, make_url
 from sqlalchemy.orm import sessionmaker, scoped_session
 
 from cms.conf import config
-from . import engine
+from . import engine, actor as db_actor
 
 
 logger = logging.getLogger(__name__)
@@ -50,6 +57,28 @@ else:
 ScopedSession = scoped_session(Session)
 
 
+@event.listens_for(_session.class_, "after_begin")
+def _stamp_actor(session, transaction, connection):
+    """Set ``cms.actor`` on the transaction that just began.
+
+    WHY here and not in SessionGen: a SessionGen may commit and keep going, and
+    every statement after that commit runs in a NEW transaction with the GUC
+    already reset (it is transaction-local). A hint applied only at
+    ``__enter__`` would therefore leave the later half of a long-lived session
+    unidentified — silently, and only in the paths that commit mid-way. The
+    event fires after each BEGIN, so the identity tracks the transaction rather
+    than the object graph.
+
+    WHY it cannot recurse: the statement is plain SQL on the connection; it
+    does not open a session.
+    """
+    actor = db_actor.default_actor()
+    connection.execute(
+        text("SELECT set_config(:setting, :actor, true)"),
+        {"setting": db_actor.ACTOR_SETTING, "actor": actor})
+    logger.debug("stamped %s with actor %s", connection, actor)
+
+
 class SessionGen:
     """This allows us to create handy local sessions simply with:
 
@@ -59,6 +88,12 @@ class SessionGen:
     and at the end the session is automatically rolled back and
     closed. If one wants to commit the session, they have to call
     commit() explicitly.
+
+    The actor is not a parameter: it is the process's identity, and it is
+    applied by the ``after_begin`` hook above to every transaction this session
+    starts, including the ones after a commit. A per-call actor argument would
+    both duplicate the hook and invite call sites to disagree about who they
+    are.
 
     """
     def __init__(self):
@@ -110,4 +145,10 @@ def custom_psycopg2_connection(**kwargs: dict[str, str]):
     args.update(database_url.query)
     args.update(kwargs)
 
-    return psycopg2.connect(**args)
+    connection = psycopg2.connect(**args)
+    # Stamped at session scope, not transaction scope: this connection is
+    # outside the pool and closed by its owner (see the docstring above), but
+    # large-object traffic commits mid-stream, which would drop a
+    # transaction-local setting and leave the rest of the stream unidentified.
+    db_actor.apply_actor_session(connection)
+    return connection
