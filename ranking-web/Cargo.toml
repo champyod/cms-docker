@@ -2,6 +2,10 @@
 name = "cms-ranking"
 version = "0.1.0"
 edition = "2021"
+# WHY: this crate is never published; it ships inside the image. Declaring that
+# is what lets deny.toml's `[licenses] private.ignore` tell this repository's own
+# (AGPL-3.0) code apart from a third-party AGPL dependency, which stays denied.
+publish = false
 
 [dependencies]
 axum = "0.8"

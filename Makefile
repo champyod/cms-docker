@@ -63,7 +63,7 @@ GENERATED_COMPOSE_FLAGS = $(foreach f,$(wildcard docker-compose.*.generated.yml)
 # which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
+.PHONY: expose setup audit help verify-images env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
@@ -71,6 +71,17 @@ WAF_UP_PROFILES      := --profile core --profile waf
 # addresses, one entry per address, so a comma list expands.
 expose:
 	@bash scripts/__render_expose.sh
+
+# ---------------------------------------------------------------------------
+# verify-images — run the signature gate by hand over every stack's images.
+# WHY separate: the deploy targets already call it themselves; this target exists so
+# an operator (or CI on a box) can check the images BEFORE deciding to deploy, and so
+# a refusal can be reproduced without pulling or recreating anything.
+# ---------------------------------------------------------------------------
+verify-images:
+	@bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) \
+		--profile core --profile admin --profile contest --profile worker --profile monitor \
+		config --images | sort -u)
 
 help:
 	@echo "Available commands:"
@@ -136,8 +147,19 @@ env:
 DOMAIN_PROXY_RELOAD := bash scripts/__domain_proxy_reload.sh
 
 # ---------------------------------------------------------------------------
-# Canonical profile targets — DEPLOYMENT_TYPE=img → pull + up --no-build, src → up --build
+# Canonical profile targets — DEPLOYMENT_TYPE=img → verify + pull + up --no-build,
+# src → up --build.
 # DEPLOYMENT_TYPE_OVERRIDE env var (set by *-img aliases) takes precedence over files.
+#
+# WHY every img branch verifies before it pulls: img is the only path that replaces
+# running containers with images fetched from a registry, so it is the only path
+# where a moved tag, a foreign build or a tampered layer can reach a deployment.
+# scripts/__verify_images.sh checks the cosign signature of each image the stack is
+# about to pull against this repository's own release identity and aborts the target
+# (exit 1, so ./cms deploy reports the failed step) on anything that does not verify.
+# The src branch builds locally and has nothing to verify. `make pull` stays a bare
+# prefetch on purpose: it changes nothing that is running.
+# Ignore the gate ONLY with CMS_SKIP_IMAGE_VERIFY=1 — docs/IMAGE-VERIFICATION.md.
 # ---------------------------------------------------------------------------
 # One-stop orchestrator — see ./cms --help  (env -> core -> init -> admin -> contest -> worker -> monitor -> verify)
 .PHONY: setup audit
@@ -149,6 +171,9 @@ core: expose
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
+		bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core config --images | sort -u) || { \
+			echo "REFUSED: core image signature verification failed (reason above) — nothing was pulled." >&2; \
+			exit 1; }; \
 		echo "DEPLOYMENT_TYPE=img → pulling core images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core pull || true; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core up -d --no-build; \
@@ -163,6 +188,9 @@ admin: expose
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
+		bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) config --images | sort -u) || { \
+			echo "REFUSED: admin image signature verification failed (reason above) — nothing was pulled." >&2; \
+			exit 1; }; \
 		echo "DEPLOYMENT_TYPE=img → pulling admin images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) pull || true; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --no-build; \
@@ -178,6 +206,9 @@ contest: expose
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
+		bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) config --images | sort -u) || { \
+			echo "REFUSED: contest image signature verification failed (reason above) — nothing was pulled." >&2; \
+			exit 1; }; \
 		echo "DEPLOYMENT_TYPE=img → pulling contest images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) pull || true; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(CONTEST_UP_PROFILES) up -d --no-build; \
@@ -194,6 +225,9 @@ worker: expose
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
+		bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker config --images | sort -u) || { \
+			echo "REFUSED: worker image signature verification failed (reason above) — nothing was pulled." >&2; \
+			exit 1; }; \
 		echo "DEPLOYMENT_TYPE=img → pulling worker images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker pull || true; \
 	else \
@@ -208,6 +242,9 @@ infra: expose
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
 	if [ "$$DEPLOY_TYPE" = "img" ]; then \
+		bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) config --images | sort -u) || { \
+			echo "REFUSED: infra image signature verification failed (reason above) — nothing was pulled." >&2; \
+			exit 1; }; \
 		echo "DEPLOYMENT_TYPE=img → pulling monitor images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) pull || true; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(MONITOR_UP_PROFILES) up -d --no-build; \

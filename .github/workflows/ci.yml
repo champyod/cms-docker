@@ -47,9 +47,10 @@ jobs:
       scheduler: ${{ steps.filter.outputs.scheduler }}
       rust: ${{ steps.filter.outputs.rust }}
       rust_ranking: ${{ steps.filter.outputs.rust_ranking }}
+      rust_backend: ${{ steps.filter.outputs.rust_backend }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
           filters: |
@@ -79,6 +80,15 @@ jobs:
               - '.github/workflows/ci.yml'
             rust_ranking:
               - 'ranking-web/**'
+              # The advisory policy is a gate on this tree, so editing it must re-run it.
+              - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            # The Rust backend workspace. Absent from this branch today (it lives on
+            # the backend feature branch), so this filter is inert until it lands —
+            # it must not be dropped, or that workspace arrives with no gate at all.
+            rust_backend:
+              - 'backend/**'
+              - 'deny.toml'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -88,7 +98,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install linters
         run: |
@@ -195,7 +205,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: VAR_SPEC parity
         run: bash scripts/__check_spec_parity.sh
@@ -223,7 +233,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # The harness fails (not skips) when a tool it stages is missing.
       - name: Install suite prerequisites
@@ -231,7 +241,7 @@ jobs:
 
       # The proxy-body-size suite imports the panel's testcase limits via `bun -e`.
       - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
       - name: Run the repo suites
@@ -250,14 +260,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # The secret scan diffs the commits of this event, which needs them
           # present locally instead of a single-commit shallow clone.
           fetch-depth: 0
 
       - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Install dependencies
         working-directory: admin-panel
@@ -298,7 +308,7 @@ jobs:
         run: bun audit --audit-level=high --ignore GHSA-vfj7-8cjw-p6xm
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Findings land in the log and job summary, so the job needs no write scopes.
@@ -314,7 +324,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # Plain docker build (not buildx) so the image lands in the local daemon
       # where trivy can read it.
@@ -324,7 +334,7 @@ jobs:
       # ignore-unfixed: base-image packages with no released fix would fail
       # every run forever; exit-code 1 makes real, fixable CRITICAL/HIGH fail.
       - name: Trivy image scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: cms-admin-panel:scan
           severity: CRITICAL,HIGH
@@ -337,7 +347,7 @@ jobs:
       # findings, and misconfig severity mappings are the noisiest part of
       # trivy config — fail only on what would leak or escalate outright.
       - name: Trivy Dockerfile/compose misconfig scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
           scan-ref: .
@@ -356,10 +366,10 @@ jobs:
     if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       # The crate pins its target to musl in .cargo/config.toml, so the target
       # must exist before any cargo command runs.
@@ -367,7 +377,7 @@ jobs:
         run: rustup target add x86_64-unknown-linux-musl
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -434,15 +444,15 @@ jobs:
       RANKING_TEST_REDIS_URL: redis://localhost:6379
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           components: rustfmt, clippy
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -496,6 +506,50 @@ jobs:
           RANKING_E2E_REDIS_URL="${RANKING_TEST_REDIS_URL}" \
             bash ranking-web/tests/e2e/ranking_e2e.sh
 
+  # WHY a job of its own: nothing in this repository read a Rust advisory, licence
+  # or source policy. A CVE in a transitive crate, a copyleft licence that makes a
+  # published image undistributable, or a crate resolved from a git fork could all
+  # reach a release with every other job green. It is path-gated on the two Cargo
+  # trees (and on deny.toml itself) so a panel-only PR never pays for it.
+  deny:
+    name: Advisories, licences, sources (cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: >-
+      github.event_name != 'workflow_dispatch' &&
+      (needs.changes.outputs.rust_ranking == 'true' || needs.changes.outputs.rust_backend == 'true')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # WHY a pinned release binary and not `cargo install`: building it would add
+      # minutes to every run and would float with whatever toolchain the runner
+      # happens to have, so a new advisory-database format could break the gate
+      # without anyone changing this repository. The tarball is checksummed.
+      - name: Install cargo-deny 0.20.2
+        run: |
+          url=https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSL -o /tmp/cargo-deny.tar.gz "$url"
+          echo "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  /tmp/cargo-deny.tar.gz" \
+            | sha256sum --check --strict -
+          tar xzf /tmp/cargo-deny.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny /usr/local/bin/cargo-deny
+          cargo-deny --version
+
+      # --config is explicit: both workspaces sit below the root, and config
+      # discovery walking up from them is exactly the failure mode that would let a
+      # crate ship with no policy applied.
+      - name: cargo-deny (ranking-web)
+        if: needs.changes.outputs.rust_ranking == 'true'
+        run: cargo-deny --config deny.toml --manifest-path ranking-web/Cargo.toml check
+
+      - name: cargo-deny (backend workspace)
+        if: needs.changes.outputs.rust_backend == 'true'
+        run: cargo-deny --config deny.toml --manifest-path backend/Cargo.toml check
+
   # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
   # so that checked-in binary is what an operator actually runs. Without this job it
   # stays at whatever the last person committed, and a merged change to the CLI looks
@@ -510,10 +564,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       - name: Install musl target
         run: rustup target add x86_64-unknown-linux-musl
@@ -564,10 +618,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # raphael.js is vendored in the repo; verify integrity instead of
       # fetching it at build time (no network dependency in the build).
@@ -577,14 +634,14 @@ jobs:
           echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -592,7 +649,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for CMS Core
         id: meta-core
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
           tags: |
@@ -601,7 +658,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push CMS Core
-        uses: docker/build-push-action@v5
+        id: build-core
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -611,6 +669,32 @@ jobs:
           labels: ${{ steps.meta-core.outputs.labels }}
           cache-from: type=gha,scope=core
           cache-to: type=gha,mode=max,scope=core
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
+          DIGEST: ${{ steps.build-core.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-worker:
     name: Build worker image
@@ -621,10 +705,13 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Verify vendored ranking frontend assets
         run: |
@@ -632,14 +719,14 @@ jobs:
           echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -647,7 +734,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for CMS Worker
         id: meta-worker
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
           tags: |
@@ -665,7 +752,8 @@ jobs:
           fi
 
       - name: Build and push CMS Worker
-        uses: docker/build-push-action@v5
+        id: build-worker
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -675,6 +763,32 @@ jobs:
           labels: ${{ steps.meta-worker.outputs.labels }}
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
+          DIGEST: ${{ steps.build-worker.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-admin:
     name: Build admin panel image
@@ -685,20 +799,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -706,7 +823,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Admin Panel (Next.js)
         id: meta-admin
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
           tags: |
@@ -715,7 +832,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push Admin Panel
-        uses: docker/build-push-action@v5
+        id: build-admin
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: ./admin-panel
           file: ./admin-panel/Dockerfile
@@ -725,6 +843,32 @@ jobs:
           labels: ${{ steps.meta-admin.outputs.labels }}
           cache-from: type=gha,scope=admin
           cache-to: type=gha,mode=max,scope=admin
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin
+          DIGEST: ${{ steps.build-admin.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-monitor:
     name: Build monitor image
@@ -735,20 +879,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -756,7 +903,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Monitor
         id: meta-monitor
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
           tags: |
@@ -765,7 +912,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push Monitor
-        uses: docker/build-push-action@v5
+        id: build-monitor
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./docker/monitor/Dockerfile
@@ -775,6 +923,32 @@ jobs:
           labels: ${{ steps.meta-monitor.outputs.labels }}
           cache-from: type=gha,scope=monitor
           cache-to: type=gha,mode=max,scope=monitor
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
+          DIGEST: ${{ steps.build-monitor.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   # Built only by the removed build-and-push workflow; folded in so it still ships.
   build-and-push-scheduler:
@@ -786,20 +960,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -807,7 +984,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Backup Scheduler
         id: meta-scheduler
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler
           tags: |
@@ -816,7 +993,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push Backup Scheduler
-        uses: docker/build-push-action@v5
+        id: build-scheduler
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./docker/scheduler/Dockerfile
@@ -826,6 +1004,32 @@ jobs:
           labels: ${{ steps.meta-scheduler.outputs.labels }}
           cache-from: type=gha,scope=scheduler
           cache-to: type=gha,mode=max,scope=scheduler
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler
+          DIGEST: ${{ steps.build-scheduler.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   # Single required check: passes when every other job succeeded or was skipped.
   gate:
@@ -839,6 +1043,9 @@ jobs:
       - panel
       - container-scan
       - rust
+      # rust-ranking was missing here: its failure never reached the required check.
+      - rust-ranking
+      - deny
       - release-binary
       - build-and-push-core
       - build-and-push-worker
@@ -857,6 +1064,8 @@ jobs:
             [panel]="${{ needs.panel.result }}"
             [container-scan]="${{ needs.container-scan.result }}"
             [rust]="${{ needs.rust.result }}"
+            [rust-ranking]="${{ needs.rust-ranking.result }}"
+            [deny]="${{ needs.deny.result }}"
             [release-binary]="${{ needs.release-binary.result }}"
             [build-and-push-core]="${{ needs.build-and-push-core.result }}"
             [build-and-push-worker]="${{ needs.build-and-push-worker.result }}"
