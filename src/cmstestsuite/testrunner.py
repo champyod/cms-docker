@@ -162,7 +162,9 @@ class TestRunner:
         user_create_args = {
             "username": username,
             "password": "kamikaze",
-            "method": "plaintext",
+            # WHY bcrypt: a "plaintext:" row never authenticates, and the
+            # functional tests log in as this user over HTTP.
+            "method": "bcrypt",
             "first_name": "Ms. Test",
             "last_name": "Wabbit the %d%s" % (self.num_users,
                                               enumerify(self.num_users))

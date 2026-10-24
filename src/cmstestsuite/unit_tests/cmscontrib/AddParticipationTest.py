@@ -100,13 +100,15 @@ class TestAddParticipation(DatabaseMixin, unittest.TestCase):
         # Second add_participation should fail without changing values.
         self.assertFalse(add_participation(
             self.user.username, self.contest.id + 1, "1.2.3.4", 60, 120,
-            "other_pwd", "plaintext", True, self.team.code, True, True))
+            "other_pwd", "bcrypt", True, self.team.code, True, True))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd")
 
     def test_it_stores_the_optional_participation_fields(self):
+        # is_hashed=False: the password is hashed here, which is what lets the
+        # assertion below authenticate with it.
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, "1.2.3.4", 60, 120,
-            "pwd", "plaintext", True, None, True, True))
+            "pwd", "bcrypt", False, None, True, True))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd",
                                      delay_time=60, extra_time=120,
                                      hidden=True, unrestricted=True,

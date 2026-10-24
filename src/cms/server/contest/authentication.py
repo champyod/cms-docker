@@ -144,7 +144,8 @@ def validate_login(
     correct_password = get_password(participation)
 
     try:
-        password_valid = validate_password(correct_password, password)
+        password_valid = validate_password(
+            correct_password, password, participation.user.username)
     except ValueError as e:
         # This is either a programming or a configuration error.
         logger.warning(

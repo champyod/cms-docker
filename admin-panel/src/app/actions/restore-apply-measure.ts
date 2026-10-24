@@ -72,6 +72,49 @@ export function liveDatabaseEnv(): LiveDatabaseEnv {
   return { POSTGRES_USER: scratch.POSTGRES_USER, POSTGRES_PASSWORD: password, POSTGRES_DB: scratch.POSTGRES_DB };
 }
 
+/** The variable every postgres client reads its password from. */
+export const POSTGRES_PASSWORD_VAR = 'PGPASSWORD';
+
+export interface PostgresClientSpawn {
+  /** `docker` argv: no element of it is, or contains, the password. */
+  readonly args: string[];
+  /** The `docker` client's environment, which is the only place the password is handed over. */
+  readonly env: NodeJS.ProcessEnv;
+}
+
+/**
+ * How one postgres client is spawned inside a database container.
+ *
+ * The password goes into the child's environment and the command line only
+ * names the variable (`-e PGPASSWORD`, no `=value`): docker copies a named-only
+ * variable out of the client's own environment. Why it cannot be an argv
+ * element: `/proc/<pid>/cmdline` is world readable, so `-e PGPASSWORD=...`
+ * shows the secret to every local user for as long as the client runs — which,
+ * for the staging lock, is a whole promote — while `/proc/<pid>/environ` is
+ * readable only by the owning user.
+ *
+ * Every postgres client this panel spawns (live psql, the lock session, the
+ * scratch pg_restore) is built here, so there is one place to keep honest.
+ */
+export function postgresClientSpawn(
+  database: { readonly POSTGRES_PASSWORD: string },
+  container: string,
+  client: readonly string[],
+  options: { readonly interactive?: boolean } = {},
+): PostgresClientSpawn {
+  const args = ['exec', ...(options.interactive === true ? ['-i'] : []), '-e', POSTGRES_PASSWORD_VAR, container, ...client];
+  return { args, env: { ...process.env, [POSTGRES_PASSWORD_VAR]: database.POSTGRES_PASSWORD } };
+}
+
+/** The same client, in the container every live statement reaches. */
+export function liveClientSpawn(
+  database: { readonly POSTGRES_PASSWORD: string },
+  client: readonly string[],
+  options: { readonly interactive?: boolean } = {},
+): PostgresClientSpawn {
+  return postgresClientSpawn(database, LIVE_CONTAINER, client, options);
+}
+
 export function lines(stdout: string): string[] {
   return stdout.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
 }
@@ -261,10 +304,11 @@ export async function assertArchiveBlobsIntact(container: string, strategies: Ap
 
 export async function runLiveSql(env: LiveDatabaseEnv, sql: string, timeoutMs: number): Promise<string> {
   await ensurePermission('backup:restore');
+  const client = liveClientSpawn(env, ['psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-c', sql]);
   const { stdout } = await execFileAsync(
     'docker',
-    ['exec', '-e', `PGPASSWORD=${env.POSTGRES_PASSWORD}`, LIVE_CONTAINER, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-c', sql],
-    { timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES },
+    client.args,
+    { env: client.env, timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES },
   );
   return stdout;
 }

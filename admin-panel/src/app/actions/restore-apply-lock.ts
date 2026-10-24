@@ -19,6 +19,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { ensurePermission } from '@/lib/permissions';
+import { liveClientSpawn } from './restore-apply-measure';
 import type { LiveDatabaseEnv } from './restore-apply-measure';
 import { describeFailure } from './restore-preview-run';
 
@@ -33,8 +34,6 @@ export interface StagingLock {
   readonly release: () => Promise<void>;
 }
 
-/** The container the live statements reach; the lock has to be taken in that same database. */
-const LIVE_CONTAINER = 'cms-database';
 /** How long a promote waits for the other one on the same preview before it refuses to start. */
 export const STAGING_LOCK_WAIT_MS = 60_000;
 /** How long a release waits for its session to end, and the grace the request itself gets on top of the wait. */
@@ -73,8 +72,11 @@ export async function acquireStagingLock(env: LiveDatabaseEnv, staging: string, 
 }
 
 function dockerLockSession(env: LiveDatabaseEnv): LockSessionRunner {
-  const args = ['exec', '-i', '-e', `PGPASSWORD=${env.POSTGRES_PASSWORD}`, LIVE_CONTAINER, 'psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-q'];
-  const child = spawn('docker', args, { stdio: ['pipe', 'pipe', 'pipe'] });
+  // The lock client stays open for the whole promote, so the password goes in
+  // its environment through the one shared builder rather than on the command
+  // line, where /proc/<pid>/cmdline would hold it for that whole time.
+  const client = liveClientSpawn(env, ['psql', '-v', 'ON_ERROR_STOP=1', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-t', '-A', '-q'], { interactive: true });
+  const child = spawn('docker', client.args, { env: client.env, stdio: ['pipe', 'pipe', 'pipe'] });
   // A held session is never cut short from here: its bound is the statement timeout the request sets on the server.
   return { runSql: (sql) => printLockMarker(child, sql), close: () => endSession(child) };
 }

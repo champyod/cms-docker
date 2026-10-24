@@ -59,7 +59,8 @@ from cms.server.contest.communication import get_communications
 from cms.server.credits import get_surface
 from cms.server.login_counters import login_attempt_context
 from cms.server.login_refusal import LoginRefusal
-from cmscommon.crypto import hash_password, validate_password
+from cmscommon.crypto import BCRYPT_MAX_PASSWORD_BYTES, hash_password, \
+    validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
 from .contest import ContestHandler, api_login_required
 from ..phase_management import actual_phase_required
@@ -190,6 +191,11 @@ class RegistrationHandler(ContestHandler):
             if not self.MIN_PASSWORD_LENGTH <= len(password) \
                     <= self.MAX_INPUT_LENGTH:
                 raise ValueError()
+            # WHY bytes: bcrypt stores at most 72 bytes, and a longer password
+            # would be hashed as its prefix, so it is refused here — where the
+            # caller gets a 400 — instead of raising out of hash_password().
+            if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
+                raise ValueError()
         except (tornado.web.MissingArgumentError, ValueError):
             raise tornado.web.HTTPError(400)
 
@@ -222,7 +228,7 @@ class RegistrationHandler(ContestHandler):
             raise tornado.web.HTTPError(404)
 
         # Check if password is correct
-        if not validate_password(user.password, password):
+        if not validate_password(user.password, password, user.username):
             # WHY count this: joining an existing account is the only
             # registration path that guesses a credential, so it is the one
             # that has to escalate into a captcha.
