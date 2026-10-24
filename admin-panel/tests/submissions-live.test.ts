@@ -311,6 +311,12 @@ describe('submission record stream', () => {
   });
 });
 
+// WHY these two carry an explicit timeout: each imports a real page module and calls its server
+// component, so the first one pays that page's whole module graph (measured 940 ms warm, ~2 s cold
+// on an idle box). Under a lane-heavy load the same work stretched past Vitest's 5 s default and
+// failed as a timeout — in five separate lanes and on the base tree, with no code change to blame.
+// The assertions are untouched; this is headroom for a legitimately heavy render, not a retiming of
+// a flaky check.
 describe('submissions live wiring', () => {
   it('refreshes the list through its own stream', async () => {
     const { default: EvaluationSubmissionsPage } = await import('@/app/[locale]/(authenticated)/evaluation/submissions/page');
@@ -321,7 +327,7 @@ describe('submissions live wiring', () => {
     });
 
     expect(liveStreamUrl(element)).toBe('/api/submissions/stream');
-  });
+  }, 20_000);
 
   it("refreshes the record through the record's own stream, not the list's", async () => {
     const { default: SubmissionRecordLayout } = await import('@/app/[locale]/(authenticated)/evaluation/submissions/[id]/layout');
@@ -332,5 +338,5 @@ describe('submissions live wiring', () => {
     });
 
     expect(liveStreamUrl(element)).toBe('/api/submissions/19/stream');
-  });
+  }, 20_000);
 });
