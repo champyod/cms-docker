@@ -158,7 +158,7 @@ require_active_profile() {
 
 require_database_exists() {
   local out
-  out="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+  out="$(docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
     psql -U "$DB_USER" -d "postgres" -tAc \
     "SELECT 1 FROM pg_database WHERE datname = '${DB_NAME}'" 2>/dev/null || true)"
   if [[ "$(printf '%s' "$out" | tr -d '[:space:]')" != "1" ]]; then
@@ -219,7 +219,7 @@ verify_migrated() {
   printf '\n== [verify] ==\n'
   local marker out rc=0 compact repo_migrations applied
 
-  marker="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+  marker="$(docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
     psql -U "$DB_USER" -d "$DB_NAME" -tAc \
     "SELECT (to_regclass('public.${SCHEMA_MARKER_TABLE}') IS NOT NULL)
        AND ((SELECT count(*) FROM _prisma_migrations) > 0)" 2>/dev/null || true)"
@@ -231,7 +231,7 @@ verify_migrated() {
   # fewer migrations than the repository holds and still passes the marker check.
   if [[ -d "$REPO_MIGRATIONS_DIR" ]]; then
     repo_migrations="$(find "$REPO_MIGRATIONS_DIR" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d '[:space:]')"
-    applied="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+    applied="$(docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
       psql -U "$DB_USER" -d "$DB_NAME" -tAc \
       "SELECT count(*) FROM _prisma_migrations WHERE rolled_back_at IS NULL" 2>/dev/null | tr -d '[:space:]' || true)"
     if [[ ! "$applied" =~ ^[0-9]+$ ]] || (( applied < repo_migrations )); then
@@ -239,7 +239,7 @@ verify_migrated() {
     fi
   fi
 
-  out="$(docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+  out="$(docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
     psql -U "$DB_USER" -d "$DB_NAME" -tAc \
     "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='public' AND c.relkind='r'

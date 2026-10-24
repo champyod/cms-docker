@@ -56,7 +56,7 @@ CONTAINER_DB="cms-database"
 # with password is applied post-restore via __apply_sql.sh --bootstrap-roles.
 ensure_roles_exist() {
   local _ctr="$1"
-  docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
+  docker_exec_db "$POSTGRES_PASSWORD_VAL" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
     "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_backup') THEN CREATE ROLE cms_backup NOLOGIN; END IF; END \$\$;" >/dev/null 2>&1 || log_warn "Failed to pre-create roles in $_ctr (continuing anyway)"
 }
 
@@ -201,7 +201,7 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   ensure_roles_exist "$SCRATCH_CONTAINER"
 
   log_info "Restoring database dump into scratch postgres..."
-  if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
+  if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
     pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
     err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
     log_warn "pg_restore failed: $err"
@@ -250,7 +250,7 @@ docker cp "$DUMP_FILE" "${CONTAINER_DB}:${local_dump}" >/dev/null 2>&1 || \
 ensure_roles_exist "$CONTAINER_DB"
 
 log_info "Restoring database dump into live postgres..."
-if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
+if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
   pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
   err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
   log_warn "pg_restore failed: $err"

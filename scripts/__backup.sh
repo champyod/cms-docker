@@ -210,7 +210,7 @@ file_size_bytes() {
 get_pg_version() {
   local ver=""
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
-    ver="$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SHOW server_version;' 2>/dev/null | tr -d ' \r\n' || true)"
+    ver="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SHOW server_version;' 2>/dev/null | tr -d ' \r\n' || true)"
   fi
   if [[ -z "$ver" ]]; then
     # Fallback: image version or postgres --version
@@ -646,7 +646,7 @@ run_backup() {
   else
     log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
   fi
-  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" -f "$db_tmp" 2>"$pgdump_log"; then
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" -f "$db_tmp" 2>"$pgdump_log"; then
     local err
     err="$(cat "$pgdump_log" 2>/dev/null || echo 'pg_dump failed')"
     rm -f -- "$pgdump_log"
@@ -769,7 +769,7 @@ run_stdout_dump() {
     log_info "Streaming full pg_dump (Fc) as $pg_dump_user to stdout"
   fi
   # No -f: pg_dump writes to stdout by default, so nothing is staged in the container.
-  if ! docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" \
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" \
       pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" >&3; then
     log_die "pg_dump as $pg_dump_user failed — see stderr above; backups REQUIRE cms_backup (BYPASSRLS)"
   fi

@@ -53,7 +53,7 @@ db_exec() {
   db_user="${POSTGRES_USER_VAL:-cmsuser}"
   db_pass="${POSTGRES_PASSWORD_VAL:-}"
   db_name="${POSTGRES_DB_VAL:-cmsdb}"
-  docker exec -i -e PGPASSWORD="$db_pass" "$DB_CONTAINER" \
+  docker_exec_db "$db_pass" -i "$DB_CONTAINER" \
     psql -U "$db_user" -d "$db_name" -tA -v ON_ERROR_STOP=1 -c "$sql"
 }
 

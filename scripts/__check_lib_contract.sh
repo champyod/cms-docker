@@ -59,6 +59,14 @@ for f in "${SCRIPT_DIR}"/*.sh; do
     done < <(grep -nE '^[[:space:]]*(function[[:space:]]+)?require_disk_free_gb[[:space:]]*\(\)' "$f" 2>/dev/null || true)
   fi
 
+  if grep -nE '^[[:space:]]*(function[[:space:]]+)?docker_exec_db[[:space:]]*\(\)' "$f" >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      lineno="${line%%:*}"
+      printf '%s:%s: duplicate docker_exec_db definition (use __lib/common.sh)\n' "$rel" "$lineno" >> "$tmp_violations"
+      violations=$((violations + 1))
+    done < <(grep -nE '^[[:space:]]*(function[[:space:]]+)?docker_exec_db[[:space:]]*\(\)' "$f" 2>/dev/null || true)
+  fi
+
   if grep -nE 'source[[:space:]]+.*\.env' "$f" >/dev/null 2>&1; then
     while IFS= read -r line; do
       lineno="${line%%:*}"
@@ -73,6 +81,19 @@ for f in "${SCRIPT_DIR}"/*.sh; do
       printf '%s:%s: finding — raw docker exec psql (consider shared helper)\n' "$rel" "$lineno" >> "$tmp_findings"
       findings=$((findings + 1))
     done < <(grep -nE 'docker exec[^|]*psql' "$f" 2>/dev/null || true)
+  fi
+
+  # A database password written into the docker client's argv is world readable at
+  # /proc/<pid>/cmdline for the whole call — backups, restores and migrations hold it
+  # there for minutes. docker_exec_db (__lib/common.sh) hands the same value over
+  # through the client's environment, where only its owner can read it, so the
+  # `-e PGPASSWORD=...` form is refused wherever it reappears instead of only reported.
+  if grep -nE '(^|[[:space:]])(-e|--env)[[:space:]=]*PGPASSWORD=' "$f" >/dev/null 2>&1; then
+    while IFS= read -r line; do
+      lineno="${line%%:*}"
+      printf '%s:%s: database password on the docker client argv — use docker_exec_db (__lib/common.sh)\n' "$rel" "$lineno" >> "$tmp_violations"
+      violations=$((violations + 1))
+    done < <(grep -nE '(^|[[:space:]])(-e|--env)[[:space:]=]*PGPASSWORD=' "$f" 2>/dev/null || true)
   fi
 done
 

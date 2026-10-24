@@ -478,6 +478,48 @@ ensure_ranking_paths_perms() {
 }
 
 # ---------------------------------------------------------------------------
+# docker_exec_db <password> [NAME=VALUE ...] <docker exec args...>
+# ---------------------------------------------------------------------------
+# Run `docker exec` with a database password supplied through the docker client's
+# environment rather than its argv. Every remaining argument is handed to `docker
+# exec` unchanged, so the exec flags, the container, the client command, the
+# caller's stdin redirection (a file, a heredoc, `-i`) and the exit status all
+# behave exactly as a hand-written `docker exec` does.
+# WHY the password cannot be an argv element: `-e PGPASSWORD=...` puts the secret
+# in the docker client's own command line, and /proc/<pid>/cmdline is world
+# readable, so every local user reads the production password for the lifetime of
+# the call. Naming the variable only (`-e PGPASSWORD`, no `=value`) makes docker
+# copy it out of the client's environment, which lives in /proc/<pid>/environ —
+# readable by the owning user alone. The panel's postgresClientSpawn
+# (admin-panel/src/app/actions/restore-apply-measure.ts) is the same handover on
+# the TypeScript side; this is the one place the shell scripts do it.
+# A call that needs a second secret in the container passes it the same way —
+# `NAME=VALUE` before the exec args arrives as both an assignment for the client
+# and a bare `-e NAME` for the container — so no caller reintroduces the `=value`
+# form for a variable of its own (e.g. CMS_DB_PWD for __cms-db-init.sh's
+# `bash -c`). A NAME=VALUE pair is unambiguous at the front of the argument list:
+# a docker exec flag starts with `-` and a container name cannot contain `=`.
+# Empty is allowed because callers such as db_exists pass `${POSTGRES_PASSWORD:-}`
+# and a psql that then fails to authenticate is the caller's decision, not this
+# function's; only a missing argument is an error.
+docker_exec_db() {
+  local db_pass="${1?docker_exec_db: <password> required}"
+  shift
+  local -a forwarded=() forwarded_names=()
+  local pair=""
+
+  while (( $# )) && [[ "$1" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+    pair="$1"
+    shift
+    forwarded+=("$pair")
+    forwarded_names+=(-e "${pair%%=*}")
+  done
+
+  env "${forwarded[@]}" PGPASSWORD="$db_pass" \
+    docker exec -e PGPASSWORD "${forwarded_names[@]}" "$@"
+}
+
+# ---------------------------------------------------------------------------
 # ensure_docker_resource_network <name>
 # ---------------------------------------------------------------------------
 # Idempotently ensure a Docker network exists. Creates it if missing and logs
