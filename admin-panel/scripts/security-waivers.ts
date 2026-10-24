@@ -109,7 +109,15 @@ function write(path: string, body: string): void {
  */
 async function exportWaivers(out: string): Promise<void> {
   const { readWaiverExport } = await import('@/lib/security/patching-read');
-  const rendered = await readWaiverExport();
+  const { SYSTEM_IDENTITIES, withActor } = await import('@/lib/db-actor');
+  // WHY a named identity: every table is row-level secured on cms.actor, and this process has no
+  // request and no cookie. Rendering the export is a read-only operator action on the panel's
+  // behalf, so it runs as system:cli — the same identity `./cms panel` uses — instead of
+  // borrowing a human admin's id, which would make the audit trail lie about who read the table.
+  const rendered = await withActor(
+    { kind: 'system', name: SYSTEM_IDENTITIES.CLI },
+    () => readWaiverExport(),
+  );
   write(out, `${JSON.stringify(rendered, null, 2)}\n`);
   process.stdout.write(
     `wrote ${out}: ${String(rendered.waivers.length)} live waiver(s), rendered ${rendered.generatedAt}\n`,
