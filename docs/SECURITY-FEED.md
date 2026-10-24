@@ -40,6 +40,18 @@ Verified while writing this, not recalled:
 volume. It cannot change a host package even if it wanted to. `--pkg-types os` is what keeps the run to the
 host's package database instead of walking every file under `/home`.
 
+**Two coverage facts, measured 2026-10-24, that the implementation must honour:**
+
+- Trivy's OS scanning covers the distro the hosts run: against a freshly extracted **Ubuntu 22.04** rootfs the
+  command above returned one result, class `os-pkgs`, **37 vulnerabilities**. Against this dev box (CachyOS,
+  Arch/pacman) the same command returned **no `Results` at all** — Arch is not covered. A dev-box run is
+  therefore not a proof of the host path; the Ubuntu fixture is.
+- **An empty scan must never resolve anything.** If trivy reports no `Results` entry of class `os-pkgs`, the run
+  is *incomplete*, not clean — pushing `complete: true` there would mark every existing host finding resolved and
+  silently clear the box's CVE list. The rootfs producer therefore pushes `complete: false` (or exits non-zero and
+  pushes nothing) whenever the package database was not read. The same rule binds the osv producer: `complete:
+  true` only on exit 0 with a parsable report.
+
 ## Consumer — the panel
 
 ### Tables (Prisma, one migration, generated-style naming as the repo does)
