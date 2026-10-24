@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { encodeId } from '@/lib/ranking-projection';
+import { encodeId, keySpellings } from '@/lib/ranking-projection';
 
 /**
  * What a pending override does to the board, read from the projection.
@@ -35,17 +35,11 @@ const EMPTY: RankingImpact = {
 };
 
 /**
- * The spellings a target key may hold in the projection.
+ * A person as the board words them, falling back to the projection key when the name is blank.
  *
- * WHY both: the panel writes a user or team key as the operator sees it, while the projection
- * keys its rows with the encoded form ProxyService pushes (encodeId). Reading both means the diff
- * reports the rows that exist whichever spelling the row carries, instead of silently answering
- * "nothing" for a key the projection stores encoded.
+ * WHY the key as the fallback: an unnamed row is still a row the operator can match to a hide,
+ * and an empty cell would read as "no such user" — the one thing the diff exists to distinguish.
  */
-function spellings(key: string): string[] {
-  return [...new Set([key, encodeId(key)])];
-}
-
 function personName(row: { key: string; f_name: string; l_name: string }): string {
   const name = `${row.f_name} ${row.l_name}`.trim();
   return name === '' ? row.key : name;
@@ -61,7 +55,7 @@ function splitComposite(key: string): { contest: string | null; task: string } {
 
 async function userImpact(targetKey: string): Promise<RankingImpact> {
   const rows = await prisma.ranking_users.findMany({
-    where: { key: { in: spellings(targetKey) } },
+    where: { key: { in: keySpellings(targetKey) } },
     select: { key: true, f_name: true, l_name: true },
   });
   return {
@@ -76,10 +70,10 @@ async function userImpact(targetKey: string): Promise<RankingImpact> {
 async function teamImpact(targetKey: string): Promise<RankingImpact> {
   const [members, teams] = await Promise.all([
     prisma.ranking_users.findMany({
-      where: { team: { in: spellings(targetKey) } },
+      where: { team: { in: keySpellings(targetKey) } },
       select: { key: true, f_name: true, l_name: true },
     }),
-    prisma.ranking_teams.findMany({ where: { key: { in: spellings(targetKey) } }, select: { name: true } }),
+    prisma.ranking_teams.findMany({ where: { key: { in: keySpellings(targetKey) } }, select: { name: true } }),
   ]);
   return {
     columns: [],

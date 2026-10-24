@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { loadActorNames } from '@/lib/admin-names';
 import { addOverride, addOverrides, endOverrides, type OverrideInput } from '@/lib/panel-actions';
 import { requirePanelActorId } from '@/lib/panel-actor';
 import { ensurePermission } from '@/lib/permissions';
@@ -25,6 +26,15 @@ export interface RankingOverride {
   value: string;
   reason: string;
   createdAt: string;
+  /**
+   * The admin who filed the row, or `null` when it was written outside the panel.
+   *
+   * WHY nullable rather than resolved: "no author" is the fact the list has to show — a row filed
+   * by hand, by an import or by the classic admin never reaches `recordAudit`, so it is the only
+   * trace of a write the panel did not make.
+   */
+  createdBy: number | null;
+  createdByName: string | null;
 }
 
 /**
@@ -47,8 +57,22 @@ export async function getRankingOverrides(contestId?: number): Promise<RankingOv
     },
     orderBy: { id: 'desc' },
     take: 200,
+    select: {
+      id: true,
+      contest_id: true,
+      target_kind: true,
+      target_key: true,
+      action: true,
+      payload: true,
+      reason: true,
+      created_at: true,
+      created_by: true,
+    },
   });
-  return rows.map(toOverride);
+  const names = await loadActorNames(
+    rows.map((row) => row.created_by).filter((id): id is number => id !== null),
+  );
+  return rows.map((row) => toOverride(row, names));
 }
 
 /** Files one override. The write itself is `addOverride`. */
@@ -110,16 +134,20 @@ function revalidateOverridePages(): void {
   revalidatePath('/[locale]/ranking/users/[key]');
 }
 
-function toOverride(row: {
-  id: bigint;
-  contest_id: number;
-  target_kind: string;
-  target_key: string;
-  action: string;
-  payload: unknown;
-  reason: string | null;
-  created_at: Date;
-}): RankingOverride {
+function toOverride(
+  row: {
+    id: bigint;
+    contest_id: number;
+    target_kind: string;
+    target_key: string;
+    action: string;
+    payload: unknown;
+    reason: string | null;
+    created_at: Date;
+    created_by: number | null;
+  },
+  actorNames: ReadonlyMap<number, string>,
+): RankingOverride {
   return {
     id: row.id.toString(),
     contestId: row.contest_id,
@@ -129,6 +157,10 @@ function toOverride(row: {
     value: readValue(row.payload),
     reason: row.reason ?? '',
     createdAt: row.created_at.toISOString(),
+    createdBy: row.created_by,
+    // WHY no `#id` fallback here: the surface decides how it words an author, and this read only
+    // knows the name it could find. Keeping the id beside a missing name is the surface's job.
+    createdByName: row.created_by === null ? null : (actorNames.get(row.created_by) ?? null),
   };
 }
 

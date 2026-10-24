@@ -18,6 +18,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { useListSelection, type ListSelection } from '@/hooks/useListSelection';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { Dictionary } from '@/lib/dictionary';
+import { attributionText, isUnattributed } from '@/lib/ranking-attribution';
 import { interpolate } from '@/lib/interpolate';
 
 type OverrideCopy = Dictionary['ranking']['overrides'];
@@ -28,29 +29,65 @@ const ALL_ACTIONS: readonly string[] = ['hide', 'guest', 'pin', 'rename', 'score
 const MUTED = 'text-muted-foreground';
 const TARGET_CELL = 'max-w-[280px]';
 
+/**
+ * The author the list is narrowed to.
+ *
+ * WHY a two-value axis rather than an admin picker: the question this answers is not "which admin"
+ * but "was this row written by the panel at all", because a row with no author is the one an
+ * operator cannot ask about anywhere else.
+ */
+const AUTHOR_PANEL = 'panel';
+const AUTHOR_OUTSIDE = 'outside';
+
 interface Filters {
   readonly kind: string;
   readonly action: string;
+  readonly author: string;
   readonly orphanOnly: boolean;
   readonly term: string;
 }
 
-const NO_FILTERS: Filters = { kind: FILTER_NONE, action: FILTER_NONE, orphanOnly: false, term: '' };
+const NO_FILTERS: Filters = {
+  kind: FILTER_NONE,
+  action: FILTER_NONE,
+  author: FILTER_NONE,
+  orphanOnly: false,
+  term: '',
+};
+
+/**
+ * The author axis, spelled: the two values carry words rather than their ids, because "outside" is
+ * an answer an operator reads, not a token they should have to decode.
+ */
+function authorChoices(copy: OverrideCopy): readonly FilterChoice[] {
+  return [
+    { value: AUTHOR_PANEL, label: copy.filtersAuthorPanel },
+    { value: AUTHOR_OUTSIDE, label: copy.filtersAuthorOutside },
+  ];
+}
 
 function matchesFilters(row: RankingOverride, filters: Filters, orphans: readonly number[]): boolean {
   if (filters.kind !== FILTER_NONE && row.targetKind !== filters.kind) return false;
   if (filters.action !== FILTER_NONE && row.action !== filters.action) return false;
+  if (filters.author === AUTHOR_OUTSIDE && !isUnattributed(row)) return false;
+  if (filters.author === AUTHOR_PANEL && isUnattributed(row)) return false;
   if (filters.orphanOnly && !orphans.includes(row.contestId)) return false;
   if (filters.term === '') return true;
   const needle = filters.term.toLowerCase();
   return row.targetKey.toLowerCase().includes(needle) || row.reason.toLowerCase().includes(needle);
 }
 
+/** One choice on a narrowing axis: the value the filter stores, and the word the operator reads. */
+interface FilterChoice {
+  readonly value: string;
+  readonly label: string;
+}
+
 interface EnumFilterProps {
   readonly id: string;
   readonly label: string;
   readonly value: string;
-  readonly choices: readonly string[];
+  readonly choices: readonly FilterChoice[];
   readonly allLabel: string;
   readonly onChange: (value: string) => void;
 }
@@ -60,12 +97,17 @@ function EnumFilter({ id, label, value, choices, allLabel, onChange }: EnumFilte
     <SelectField id={id} label={label} value={value} onChange={(event) => onChange(event.target.value)}>
       <option value={FILTER_NONE}>{allLabel}</option>
       {choices.map((choice) => (
-        <option key={choice} value={choice}>
-          {choice}
+        <option key={choice.value} value={choice.value}>
+          {choice.label}
         </option>
       ))}
     </SelectField>
   );
+}
+
+/** A list where every choice is spelled the way the row stores it. */
+function asChoices(values: readonly string[]): FilterChoice[] {
+  return values.map((value) => ({ value, label: value }));
 }
 
 interface OrphanToggleProps {
@@ -102,7 +144,7 @@ function OverrideFilterBar({ copy, filters, onChange }: FilterBarProps): React.J
         id="ranking-override-filter-kind"
         label={copy.filtersKind}
         value={filters.kind}
-        choices={ALL_KINDS}
+        choices={asChoices(ALL_KINDS)}
         allLabel={copy.filtersAll}
         onChange={(kind) => onChange({ ...filters, kind })}
       />
@@ -110,9 +152,17 @@ function OverrideFilterBar({ copy, filters, onChange }: FilterBarProps): React.J
         id="ranking-override-filter-action"
         label={copy.filtersAction}
         value={filters.action}
-        choices={ALL_ACTIONS}
+        choices={asChoices(ALL_ACTIONS)}
         allLabel={copy.filtersAll}
         onChange={(action) => onChange({ ...filters, action })}
+      />
+      <EnumFilter
+        id="ranking-override-filter-author"
+        label={copy.filtersAuthor}
+        value={filters.author}
+        choices={authorChoices(copy)}
+        allLabel={copy.filtersAll}
+        onChange={(author) => onChange({ ...filters, author })}
       />
       <Input
         id="ranking-override-filter-search"
@@ -260,7 +310,20 @@ function buildOverrideColumns(
       render: (row) => <ContestCell row={row} copy={copy} orphanContestIds={orphanContestIds} />,
     },
     { key: 'reason', header: copy.columnReason, render: (row) => <span className={MUTED}>{row.reason}</span> },
-    { key: 'created', header: copy.columnCreated, render: (row) => <span className={MUTED}>{row.createdAt}</span> },
+    {
+      key: 'created',
+      header: copy.columnCreated,
+      render: (row) => (
+        <span className="flex flex-wrap items-center gap-2">
+          <span className={MUTED}>{row.createdAt}</span>
+          {isUnattributed(row) ? (
+            <Badge variant="amber">{copy.outsidePanelBadge}</Badge>
+          ) : (
+            <span className={`font-mono text-xs ${MUTED}`}>{attributionText(row)}</span>
+          )}
+        </span>
+      ),
+    },
   ];
 }
 

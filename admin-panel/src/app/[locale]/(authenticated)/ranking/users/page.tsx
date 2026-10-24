@@ -5,12 +5,14 @@ import { Card } from '@/components/core/Card';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { RankingConfigSurface } from '@/components/ranking/RankingConfigSurface';
+import { RankingHidesList } from '@/components/ranking/RankingHidesList';
 import { RankingOverrideList } from '@/components/ranking/RankingOverrideList';
 import { RankingOverrideSurface } from '@/components/ranking/RankingOverrideSurface';
 import { RankingShardTabs } from '@/components/ranking/RankingShardTabs';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
+import { readBoardHides } from '@/lib/ranking-hides';
 import { readOrphanContestIds } from '@/lib/ranking-orphans';
 import { readRankingShards, selectShard, type RankingShard } from '@/lib/ranking-shards';
 
@@ -99,6 +101,33 @@ async function ShardOverrides({ copy, shards, shard, canOverride }: ShardOverrid
   );
 }
 
+/**
+ * What the shard's board hides, beside the rows that ask it to.
+ *
+ * WHY on this page and not a route of its own: the override list answers "what did the operator
+ * file" and this answers "what did the board drop" — two halves of one question, and they differ
+ * exactly where it matters, because a participation flag hides a row with no override row at all.
+ * A separate route would make the operator remember which of the two to open.
+ */
+async function ShardHides({
+  copy,
+  shard,
+}: {
+  readonly copy: RankingCopy;
+  readonly shard: RankingShard;
+}): Promise<React.JSX.Element> {
+  const hides = await readBoardHides(shard.contestId);
+  return (
+    <Card className="space-y-4">
+      <Text as="h2" variant="h3">
+        {copy.hides.title}
+      </Text>
+      <Text variant="muted">{copy.hides.hint}</Text>
+      <RankingHidesList copy={copy} hides={hides} />
+    </Card>
+  );
+}
+
 export default async function RankingOverridesPage({
   params,
   searchParams,
@@ -132,6 +161,7 @@ export default async function RankingOverridesPage({
         shard={shard}
         canOverride={effective.has('ranking:override')}
       />
+      <ShardHides copy={copy} shard={shard} />
     </Stack>
   );
 }

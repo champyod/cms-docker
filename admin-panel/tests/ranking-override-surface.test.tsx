@@ -42,6 +42,8 @@ function override(overrides: Partial<OverrideRow>): OverrideRow {
     value: '',
     reason: 'test account',
     createdAt: '2026-10-15T00:00:00.000Z',
+    createdBy: 3,
+    createdByName: 'root',
     ...overrides,
   };
 }
@@ -181,5 +183,52 @@ describe('ranking override list', () => {
     );
 
     expect(container.querySelector(`input[aria-label="${COPY.selectAll}"]`)).not.toBeNull();
+  });
+
+  it('marks the row no panel actor wrote and names the ones it can', () => {
+    const { container } = render(
+      <RankingOverrideList
+        copy={COPY}
+        rows={[
+          override({ id: '1', createdBy: null, createdByName: null, reason: 'filed by hand' }),
+          override({ id: '2', createdBy: 7, createdByName: 'operator', reason: 'filed in the panel' }),
+        ]}
+        orphanContestIds={[]}
+        canOverride
+      />,
+    );
+
+    const rows = [...container.querySelectorAll('table tbody tr')];
+    const unattributed = rows.filter((row) => row.textContent?.includes(COPY.outsidePanelBadge));
+    expect(unattributed).toHaveLength(1);
+    expect(unattributed[0].textContent).toContain('filed by hand');
+    expect(unattributed[0].textContent).not.toContain('filed in the panel');
+    // The attributable row still says who filed it: the mark only means something beside a name.
+    const attributed = rows.find((row) => row.textContent?.includes('filed in the panel'));
+    expect(attributed?.textContent).toContain('operator');
+  });
+
+  it('narrows the list to the rows written outside the panel', () => {
+    const { container } = render(
+      <RankingOverrideList
+        copy={COPY}
+        rows={[
+          override({ id: '1', createdBy: null, createdByName: null, reason: 'filed by hand' }),
+          override({ id: '2', createdBy: 7, createdByName: 'operator', reason: 'filed in the panel' }),
+        ]}
+        orphanContestIds={[]}
+        canOverride
+      />,
+    );
+
+    const author = container.querySelector<HTMLSelectElement>('#ranking-override-filter-author');
+    if (author === null) throw new Error('the author filter is missing');
+    const outside = [...author.options].find((option) => option.textContent === COPY.filtersAuthorOutside);
+    if (outside === undefined) throw new Error('the outside-panel option is missing');
+    fireEvent.change(author, { target: { value: outside.value } });
+
+    const desktop = container.querySelector('table tbody');
+    expect(desktop?.textContent).toContain('filed by hand');
+    expect(desktop?.textContent).not.toContain('filed in the panel');
   });
 });
