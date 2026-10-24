@@ -25,6 +25,28 @@ for var in CONTEST_BIND_IP NGINX_BIND_IP ADMIN_BIND_IP ADMIN_NEXT_BIND_IP RANKIN
   fi
 done
 
+# The panel's host publish is the one front-door address the base file names itself,
+# and it names it loopback. The panel identifies a caller from a proxy-asserted header
+# (x-real-ip / rightmost x-forwarded-for), so a published address that reaches :8891
+# without a proxy lets the caller choose its own login bucket and the identity its
+# audit rows carry. Widening belongs to ADMIN_NEXT_BIND_IP in the generated override,
+# one entry per address — a routable value is a decision to front the panel with a
+# proxy of your own, never a convenience for reaching it directly.
+PANEL_BLOCK="$(awk '/^  admin-panel-next:/,/^  admin-web-server:/' "$COMPOSE")"
+if printf '%s\n' "$PANEL_BLOCK" | grep -qF -- '- "127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"'; then
+  ok "admin-panel-next publishes on 127.0.0.1"
+else
+  no "admin-panel-next publishes on 127.0.0.1"
+fi
+# One entry only: a second publish is how a routable address gets added alongside the
+# loopback one, and the positive check above would stay green while it was.
+publishes="$(printf '%s\n' "$PANEL_BLOCK" | grep -cE '^      - "[^"]*:[0-9]+"$' || true)"
+if [[ "${publishes:-0}" -eq 1 ]]; then
+  ok "admin-panel-next publishes exactly one host entry"
+else
+  no "admin-panel-next publishes exactly one host entry (found ${publishes:-0})"
+fi
+
 # Peer-facing binds are single-address by design and stay as they were.
 for var in DB_BIND_IP WORKER_BIND_ADDR; do
   if grep -qF -- "\${${var}:-" "$COMPOSE"; then

@@ -41,15 +41,21 @@ Run the automated setup script:
 
 Open your browser:
 
-- **Modern Admin Panel**: http://your-ip:8891 (Login with your admin account)
+- **Modern Admin Panel**: http://127.0.0.1:8891 (Login with your admin account — loopback on the host, or over the tailnet)
 - **Contest Interface**: http://your-ip:8888
 - **Scoreboard**: http://your-ip:8890
+
+The admin panel is published on loopback because it takes a caller's identity from a
+header only the proxy writes, so a routable address would let anyone on that network
+name themselves; reaching it from another machine goes through `tailscale serve` or the
+proxy, and widening the bind means setting `ADMIN_NEXT_BIND_IP` — a security decision,
+not a convenience.
 
 ## Step 4: Create Your First Contest
 
 ### Using Modern Admin Panel (Port 8891)
 
-1. Navigate to http://your-ip:8891
+1. Navigate to http://127.0.0.1:8891 (on the host itself, or over the tailnet)
 2. Click **"Contest"** → **"Contests"** in the sidebar.
 3. Click **"Create New Contest"**
 4. Fill in:
