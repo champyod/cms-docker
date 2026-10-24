@@ -1,5 +1,4 @@
-import { readActiveContestId } from '@/lib/active-contest';
-import { prisma } from '@/lib/prisma';
+import { loadShownContestIds } from '@/lib/ranking-config-store';
 
 /** One override as the orphan read needs it: the contest the row is filed under. */
 export interface ScopedOverride {
@@ -7,47 +6,25 @@ export interface ScopedOverride {
 }
 
 /**
- * The contest ids an enabled registry row binds.
+ * The contest ids present in `overrides` that the board does not show.
  *
- * WHY enabled and named: cms.db.contest_binding reads the enabled rows that name a contest, so a
- * disabled row serves nothing and a row that names no contest serves every one — neither pins a
- * contest an override could be filed under.
- */
-export async function readBoundContestIds(): Promise<Set<number>> {
-  const rows = await prisma.services.findMany({
-    where: { enabled: true, contest_id: { not: null } },
-    select: { contest_id: true },
-  });
-  return new Set(rows.flatMap((row) => (row.contest_id === null ? [] : [row.contest_id])));
-}
-
-/**
- * The contests an override can actually reach.
+ * WHY the shown set and not the service registry: the ranker folds an override only inside the
+ * contests the board draws, and `ranking_config` is the one table that decides them — the read the
+ * config surface, the projection and `resyncRankingUsers` all take. A binding answers a different
+ * question, which contest a process serves, so the two disagree in both directions: a bound
+ * contest the operator took off the board went unflagged, and a shown contest no binding names was
+ * flagged as an orphan. The badge therefore named the wrong rows, and named them confidently.
  *
- * WHY the active contest is added when no row names one: a deployment with an empty registry still
- * serves contests.is_active (that is the same fallback cms.db.contest_binding takes), so treating
- * every override as an orphan there would flag rows that do apply.
- */
-async function servedContestIds(): Promise<Set<number>> {
-  const bound = await readBoundContestIds();
-  if (bound.size > 0) return bound;
-  const active = await readActiveContestId();
-  return active === null ? bound : new Set([active]);
-}
-
-/**
- * The contest ids present in `overrides` that no binding serves.
- *
- * WHY an orphan is knowledge the panel alone holds: the ranking filters its rows by its own scope
- * (`WHERE active AND ($1::bigint IS NULL OR contest_id = $1)`), so a row under a contest it does
- * not serve stops applying with no error and no counter — only the panel reads both the registry
- * and the override rows, so only the panel can name that row.
+ * WHY an orphan is knowledge the panel alone holds: the ranking filters its rows by that scope, so
+ * an override filed under a contest the board does not show stops applying with no error and no
+ * counter — only the panel reads both the config and the override rows, so only the panel can name
+ * that row.
  */
 export async function readOrphanContestIds(
   overrides: readonly ScopedOverride[],
 ): Promise<Set<number>> {
-  const served = await servedContestIds();
+  const shown = await loadShownContestIds();
   return new Set(
-    overrides.map((override) => override.contestId).filter((contestId) => !served.has(contestId)),
+    overrides.map((override) => override.contestId).filter((contestId) => !shown.has(contestId)),
   );
 }
