@@ -134,8 +134,14 @@ decision with a date, not a deleted line.
 `docker-compose.security.yml`, additive overlay in the same style as `docker-compose.monitoring.yml`:
 
 - one `profiles: [security]` gate, off unless the operator enables it;
-- `renovate`, `diun`, `rootfs-scan` services; every published port (if any) bound to `127.0.0.1`;
-- the only host mount in the whole overlay is `/:/rootfs:ro` on `rootfs-scan`;
+- four services as shipped: `renovate`, `diun`, `security-scan` (one image, `osv`/`rootfs`/`schedule`
+  modes) and `diun-bridge`; every published port bound to `127.0.0.1`;
+- **why a fourth service:** Diun notifies one image per POST and its body is not this contract's body, so
+  something has to translate it. `diun-bridge` is that translator, running the same purpose-built image —
+  the alternative was a host-side receiver, which the container-only rule forbids. It always pushes
+  `complete: false`, because a single-image notification says nothing about the other images;
+- the host mounts in the whole overlay are `/:/rootfs:ro` on `security-scan` and `/var/run/docker.sock:ro`
+  on `diun` — both read-only, and nothing in the overlay writes to the host;
 - env in `.env.security` (gitignored) with `.env.security.example` committed — `SECURITY_FEED_TOKEN`,
   `RENOVATE_TOKEN`, `DIUN_*`, `SECURITY_SCAN_SCHEDULE`;
 - documented in `config.toml.example [infra]` the way `MONITORING_ENABLED` is, with the same default-off
