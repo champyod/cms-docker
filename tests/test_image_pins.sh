@@ -42,10 +42,17 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 # WHY `*generated*` is skipped: `./cms config sync` writes docker-compose.*.generated.yml from
 # the service registry at run time. Those files are untracked operator artifacts, not something
 # this repository ships, and the registry rows they mirror are the operator's to pin.
+# WHY a git-ignored file is skipped too: docker-compose.expose.yml is a deployment artifact the
+# operator generates on the host (it is in .gitignore), so it is not repository content and its
+# image lines are not this gate's to police.
 COMPOSE_FILES=()
 for f in "${REPO_ROOT}"/docker-compose*.yml "${REPO_ROOT}"/docker/docker-compose*.yml; do
   [ -f "$f" ] || continue
   case "$f" in *generated*) continue ;; esac
+  if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1 &&
+     git -C "$REPO_ROOT" check-ignore -q -- "$f"; then
+    continue
+  fi
   COMPOSE_FILES+=("$f")
 done
 
