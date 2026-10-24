@@ -154,24 +154,49 @@ class TestParseAuthentication(unittest.TestCase):
 class TestBuildPassword(unittest.TestCase):
     """Tests for the function build_password."""
 
-    def test_it_prefixes_the_payload_with_the_method(self):
-        self.assertEqual(build_password("pwd", "method"), "method:pwd")
+    def test_it_prefixes_an_already_hashed_payload_with_its_method(self):
+        payload = parse_authentication(hash_password("pwd"))[1]
+        self.assertEqual(build_password(payload, "bcrypt"),
+                         "bcrypt:" + payload)
 
-    def test_it_preserves_non_ascii_characters(self):
-        self.assertEqual(build_password("p你好", "m你好"), "m你好:p你好")
+    def test_it_refuses_to_build_a_plaintext_password(self):
+        with self.assertRaises(ValueError):
+            build_password("secret", "plaintext")
 
-    def test_it_defaults_the_method_to_plaintext(self):
-        self.assertEqual(build_password("plain"), "plaintext:plain")
+    def test_the_plaintext_refusal_names_the_security_reason(self):
+        with self.assertRaises(ValueError) as raised:
+            build_password("secret", "plaintext")
+        message = str(raised.exception)
+        # The message has to explain why, not just fail: the stored value would
+        # be the secret itself, readable by anyone who can read the database.
+        self.assertIn("plaintext", message)
+        self.assertIn("database", message)
+        self.assertIn("hash_password", message)
+
+    def test_it_refuses_a_payload_that_is_not_a_bcrypt_hash(self):
+        # Handing the "already hashed" builder a raw password would store it
+        # verbatim under a bcrypt label.
+        with self.assertRaises(ValueError):
+            build_password("raw-secret", "bcrypt")
+
+    def test_it_refuses_an_unknown_method(self):
+        with self.assertRaises(ValueError):
+            build_password("$2b$12$" + "x" * 53, "pwd")
+
+    def test_it_has_no_default_method(self):
+        # A default is what let callers with a raw password write plaintext
+        # without naming a method; the method must be explicit now.
+        with self.assertRaises(TypeError):
+            build_password("$2b$12$" + "x" * 53)
 
 
 class TestHashAndValidatePassword(unittest.TestCase):
     """Tests for the functions hash_password and validate_password."""
 
-    def test_it_validates_a_plaintext_password(self):
-        self.assertTrue(validate_password(
-            hash_password("p你好", method="plaintext"), "p你好"))
-        self.assertFalse(validate_password(
-            hash_password("p你好", method="plaintext"), "你好"))
+    def test_it_hashes_with_bcrypt_by_default(self):
+        method, payload = parse_authentication(hash_password("p你好"))
+        self.assertEqual(method, "bcrypt")
+        self.assertNotEqual(payload, "p你好")
 
     def test_it_validates_a_bcrypt_password(self):
         self.assertTrue(validate_password(
@@ -179,11 +204,36 @@ class TestHashAndValidatePassword(unittest.TestCase):
         self.assertFalse(validate_password(
             hash_password("p你好", method="bcrypt"), "你好"))
 
+    def test_it_refuses_to_store_a_plaintext_password(self):
+        with self.assertRaises(ValueError) as raised:
+            hash_password("p你好", method="plaintext")
+        message = str(raised.exception)
+        self.assertIn("plaintext", message)
+        self.assertIn("database", message)
+
     def test_it_rejects_an_unknown_method(self):
         with self.assertRaises(ValueError):
             hash_password("test", "pwd")
         with self.assertRaises(ValueError):
             validate_password("test:pwd", "pwd")
+
+    def test_it_accepts_a_password_of_exactly_the_bcrypt_limit(self):
+        # 72 bytes is what bcrypt stores; one more would be truncated.
+        self.assertEqual(
+            parse_authentication(hash_password("a" * 72))[0], "bcrypt")
+
+    def test_it_rejects_a_password_over_the_bcrypt_limit(self):
+        with self.assertRaises(ValueError) as raised:
+            hash_password("a" * 73)
+        self.assertIn("72", str(raised.exception))
+
+    def test_it_counts_the_limit_in_bytes_not_characters(self):
+        # "é" is two bytes in UTF-8: 37 of them are 74 bytes, over the limit,
+        # even though there are fewer than 72 characters.
+        with self.assertRaises(ValueError):
+            hash_password("é" * 37)
+        self.assertEqual(
+            parse_authentication(hash_password("é" * 36))[0], "bcrypt")
 
 
 if __name__ == "__main__":

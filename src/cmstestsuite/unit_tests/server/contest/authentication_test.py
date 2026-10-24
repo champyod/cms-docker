@@ -35,9 +35,7 @@ from cms.server.contest.authentication import validate_login, \
     authenticate_request
 from cms.server.login_counter_backend import InProcessBackend
 from cms.server.login_counters import FAILURE_WINDOW, LoginFailureCounters
-# Prefer build_password (which defaults to a plaintext method) over
-# hash_password (which defaults to bcrypt) as it is a lot faster.
-from cmscommon.crypto import build_password, hash_password
+from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
 
 
@@ -57,7 +55,7 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.contest = self.add_contest(allow_password_authentication=True)
         self.add_user(username="otheruser")
         self.user = self.add_user(
-            username="myuser", password=build_password("mypass"))
+            username="myuser", password=hash_password("mypass"))
         self.participation = self.add_participation(
             contest=self.contest, user=self.user)
 
@@ -107,13 +105,13 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
     def test_it_rejects_a_user_without_a_participation_in_the_contest(self):
         other_contest = self.add_contest(allow_password_authentication=True)
         other_user = self.add_user(
-            username="myotheruser", password=build_password("mypass"))
+            username="myotheruser", password=hash_password("mypass"))
         self.add_participation(contest=other_contest, user=other_user)
 
         self.assertFailure("myotheruser", "mypass", "127.0.0.1")
 
     def test_the_participation_password_overrides_the_user_password(self):
-        self.participation.password = build_password("myotherpass")
+        self.participation.password = hash_password("myotherpass")
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
         self.assertSuccess("myuser", "myotherpass", "127.0.0.1")
@@ -130,14 +128,14 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
     def test_it_does_not_raise_on_an_invalid_user_password(self):
-        # It's invalid, as it's not created by build_password.
+        # It's invalid, as it has no method prefix.
         self.user.password = "mypass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
     def test_it_does_not_raise_on_an_invalid_participation_password(self):
-        # It's invalid, as it's not created by build_password.
+        # It's invalid, as it has no method prefix.
         self.participation.password = "myotherpass"
 
         # Mainly checks that no exception is raised.
@@ -243,7 +241,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.add_contest()
         self.contest = self.add_contest()
         self.user = self.add_user(
-            username="myuser", password=build_password("mypass"))
+            username="myuser", password=hash_password("mypass"))
         self.participation = self.add_participation(
             contest=self.contest, user=self.user)
         _, self.cookie = validate_login(
@@ -365,16 +363,16 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.contest.allow_password_authentication = True
 
         # Cookies contain the password, which is validated every time.
-        self.user.password = build_password("newpass")
+        self.user.password = hash_password("newpass")
         self.assertFailure()
 
         # Contest-specific passwords take precedence over global ones.
-        self.participation.password = build_password("mypass")
+        self.participation.password = hash_password("mypass")
         self.assertSuccessAndCookieRefreshed()
 
         # And they do so in the negative case too.
-        self.user.password = build_password("mypass")
-        self.participation.password = build_password("newpass")
+        self.user.password = hash_password("mypass")
+        self.participation.password = hash_password("newpass")
         self.assertFailure()
 
     def test_it_authenticates_by_ip_autologin(self):
@@ -426,7 +424,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.user.password = "not a valid password"
         self.assertFailure()
 
-        self.user.password = build_password("mypass")
+        self.user.password = hash_password("mypass")
         self.participation.password = "not a valid password"
         self.assertFailure()
 
@@ -562,7 +560,7 @@ class TestLoginLockout(DatabaseObjectGeneratorMixin, unittest.TestCase):
     def setUp(self):
         self.captcha = build_captcha()
         self.user = self.get_user(
-            username="myuser", password=build_password("mypass"))
+            username="myuser", password=hash_password("mypass"))
         self.contest = self.get_contest(allow_password_authentication=True)
         self.participation = self.get_participation(
             contest=self.contest, user=self.user)
