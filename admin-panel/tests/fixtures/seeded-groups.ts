@@ -126,6 +126,7 @@ export const SEEDED_GROUPS: Readonly<Record<string, readonly string[]>> = {
     'admin:login',
     'ban:read', 'ban:unban',
     'lockout:exempt', 'lockout:read', 'lockout:unlock',
+    'patching:read', 'patching:waive',
     'security:read',
     'tls:read', 'tls:renew',
     'waf:config', 'waf:control', 'waf:read',

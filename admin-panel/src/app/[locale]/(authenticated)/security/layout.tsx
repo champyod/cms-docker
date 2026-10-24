@@ -21,6 +21,7 @@ export default async function SecurityLayout({
     'security.waf': dict['navigation']['security']['waf']['description'],
     'security.blocks': dict['navigation']['security']['blocks']['description'],
     'security.tls': dict['navigation']['security']['tls']['description'],
+    'security.patching': dict['navigation']['security']['patching']['description'],
   };
   const actionsMap: ModuleActions = {};
   return (

@@ -62,6 +62,10 @@ export const ALLOWLIST: AllowEntry[] = [
   { id: "app/actions/testcase-support.ts#findDatasetOrError", reason: "Internal guard: verifies the dataset exists; every caller gates testcase:create before invoking." },
   { id: "app/actions/admin-update-helpers.ts#handleAdminUpdateWrite", reason: "Internal write helper: the gated updateAdmin strips fields before invoking it." },
   { id: "app/api/users/bulk/bulkRowPreparation.ts#prepareRow", reason: "Row prep helper: every caller gates user:create before invoking." },
+  // Why ungated by a permission key: the security feed is machine-to-machine, so no admin
+  // session exists to authorize. POST compares its bearer token in constant time against
+  // SECURITY_FEED_TOKEN and refuses with 401 without it; the audit row names the source.
+  { id: "app/api/security/findings/route.ts#POST", reason: "Feed ingest: bearer token (constant-time compare) is the whole identity; no admin session exists." },
 ];
 
 export interface FnInfo {

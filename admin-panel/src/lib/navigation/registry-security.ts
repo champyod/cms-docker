@@ -9,6 +9,7 @@ export const SECURITY_ROUTE_IDS = [
   'security.waf',
   'security.blocks',
   'security.tls',
+  'security.patching',
 ] as const satisfies readonly RouteId[];
 
 export const SECURITY_ROUTES: readonly RouteDescriptor[] = [
@@ -22,4 +23,11 @@ export const SECURITY_ROUTES: readonly RouteDescriptor[] = [
     GROUP_PAGE_SURFACES_WITHOUT_CHORD,
   ),
   enabledPageRoute('security.tls', '/security/tls', { all: ['security:read', 'tls:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
+  enabledPageRoute(
+    'security.patching',
+    '/security/patching',
+    { all: ['security:read', 'patching:read'] },
+    [],
+    GROUP_PAGE_SURFACES_WITHOUT_CHORD,
+  ),
 ];

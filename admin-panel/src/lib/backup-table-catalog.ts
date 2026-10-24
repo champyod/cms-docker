@@ -108,6 +108,10 @@ const CATALOG = [
   { name: 'ranking_settings', label: 'Ranking Settings', pk: ['id'] },
   { name: 'ranking_config', label: 'Ranking Shown Targets', pk: ['id'] },
   { name: 'ranking_overrides', label: 'Ranking Overrides', pk: ['id'] },
+  // Security waivers are operator decisions with a review date — the one part of the feed
+  // that exists nowhere else — so they travel with a backup. `created_by` is a bare id by
+  // contract, so the row has no parent to order after.
+  { name: 'security_waivers', label: 'Security Waivers', pk: ['id'] },
   // Service wiring. WHY services sits before wirings: wirings is its edge table,
   // and the catalog order is the parent-before-child order a restore needs.
   { name: 'services', label: 'Services', pk: ['id'] },

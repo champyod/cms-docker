@@ -176,8 +176,9 @@ describe('PERMISSION_REGISTRY', () => {
   });
 
   // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
-  it('holds exactly 231 keys', () => {
-    expect(PERMISSION_REGISTRY.length).toBe(231);
+  // 231 + patching:read + patching:waive, the security feed's read and waive verbs.
+  it('holds exactly 233 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(233);
   });
 
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
@@ -255,6 +256,10 @@ describe('DEFAULT_GROUPS', () => {
       'lockout:exempt',
       'tls:read',
       'tls:renew',
+      // The feed's surface joins the same group: patching:read opens the page and
+      // patching:waive records the decision, so the seed and the registry agree.
+      'patching:read',
+      'patching:waive',
     ]);
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     for (const key of security?.permissions ?? []) {

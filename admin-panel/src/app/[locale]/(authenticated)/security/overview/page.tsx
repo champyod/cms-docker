@@ -1,25 +1,43 @@
 import { Card } from '@/components/core/Card';
+import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { readBannedAddresses, readLoginLockouts } from '@/app/actions/securityBlocks';
+import { readPatchingState } from '@/app/actions/securityPatching';
 import { readTlsState } from '@/app/actions/securityTls';
 import { readWafState } from '@/app/actions/securityWaf';
 
-export default async function SecurityOverviewPage(): Promise<React.JSX.Element> {
+export default async function SecurityOverviewPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}): Promise<React.JSX.Element> {
+  const { locale } = await params;
   await authorizeRoutePage('security.overview');
-  const [waf, banned, lockouts, tls] = await Promise.all([
+  const [waf, banned, lockouts, tls, patching, dict] = await Promise.all([
     readWafState(),
     readBannedAddresses(),
     readLoginLockouts(),
     readTlsState(),
+    // Why the page action and not a query of its own: the four patching cards must show the
+    // same numbers the patching page lists, and two reads would be two definitions of
+    // "unresolved" the day one of them changes.
+    readPatchingState(),
+    getDictionary(locale),
   ]);
   const expiring = tls.lineages.filter((lineage) => lineage.expiresSoon);
+  const labels = dict.security.overview.cards;
+  const values = dict.security.overview.values;
   const cards = [
-    { label: 'WAF', value: waf.containerStatus ?? 'not running' },
-    { label: 'WAF alerts parsed', value: String(waf.alerts.length) },
-    { label: 'Banned addresses', value: String(banned.bans.length) },
-    { label: 'Open lockouts', value: String(lockouts.length) },
-    { label: 'Certificates expiring soon', value: String(expiring.length) },
-    { label: 'Host agent', value: banned.agentReported ? 'reporting' : 'not reporting' },
+    { label: labels.waf, value: waf.containerStatus ?? values.notRunning },
+    { label: labels.wafAlerts, value: String(waf.alerts.length) },
+    { label: labels.banned, value: String(banned.bans.length) },
+    { label: labels.lockouts, value: String(lockouts.length) },
+    { label: labels.certsExpiring, value: String(expiring.length) },
+    { label: labels.hostAgent, value: banned.agentReported ? values.reporting : values.notReporting },
+    { label: dict.security.patching.cards.staleImages, value: String(patching.cards.staleImages) },
+    { label: dict.security.patching.cards.unresolvedCves, value: String(patching.cards.unresolvedCves) },
+    { label: dict.security.patching.cards.expiredWaivers, value: String(patching.cards.expiredWaivers) },
+    { label: dict.security.patching.cards.hostOsUpdates, value: String(patching.cards.hostOsUpdates) },
   ];
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

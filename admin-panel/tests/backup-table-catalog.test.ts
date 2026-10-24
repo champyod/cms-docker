@@ -36,10 +36,16 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * label an attempt's surface key, so a restored database already holds the four
  * rows and a dump would carry nothing a restore needs. The seed is write-if-absent,
  * so a restore keeps the seeded label rather than a hand-edited one.
+ *
+ * `security_findings` is excluded for the same reason as `security_blocks`: it is the
+ * live result of the producers' scans, not panel state, so a restore must let the next
+ * push rebuild it instead of replaying findings that may already be fixed. The waivers
+ * that decide what those findings mean are NOT excluded — they exist nowhere else.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log',
   'security_blocks',
+  'security_findings',
   'contest_usernames_history',
   'login_surfaces',
   'ranking_contests',

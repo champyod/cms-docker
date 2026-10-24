@@ -1191,6 +1191,69 @@
       "captchaHealth": "Health",
       "enabledOn": "on",
       "enabledOff": "off"
+    },
+    "overview": {
+      "cards": {
+        "waf": "WAF",
+        "wafAlerts": "WAF alerts parsed",
+        "banned": "Banned addresses",
+        "lockouts": "Open lockouts",
+        "certsExpiring": "Certificates expiring soon",
+        "hostAgent": "Host agent"
+      },
+      "values": {
+        "notRunning": "not running",
+        "reporting": "reporting",
+        "notReporting": "not reporting"
+      }
+    },
+    "patching": {
+      "title": "Patching",
+      "subtitle": "Unresolved findings from the security feed, grouped by the producer that reported them.",
+      "allClear": "No unresolved findings. Every producer's last push was clean.",
+      "sources": {
+        "diun": "Container images",
+        "rootfs": "Host OS packages",
+        "osv": "Project dependencies"
+      },
+      "columns": {
+        "severity": "Severity",
+        "subject": "Subject",
+        "installed": "Installed",
+        "available": "Available",
+        "host": "Host",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "waiver": "Waiver"
+      },
+      "waiver": {
+        "none": "none",
+        "active": "active until {date}",
+        "expired": "expired {date}"
+      },
+      "cards": {
+        "staleImages": "Stale images",
+        "unresolvedCves": "Unresolved CVEs",
+        "expiredWaivers": "Expired waivers",
+        "hostOsUpdates": "Host OS updates available"
+      },
+      "waiversTitle": "Waivers",
+      "waiversEmpty": "No waiver has been recorded.",
+      "waiverEnded": "ended {date}",
+      "waive": "Waive",
+      "endWaiver": "End waiver",
+      "createTitle": "Waive a finding",
+      "createDescription": "A waiver keeps the finding visible and sets the date its decision must be reviewed.",
+      "endTitle": "End a waiver",
+      "endDescription": "Ending a waiver is a decision, not a deletion: the row and its reason stay readable.",
+      "matchLabel": "Finding key or CVE id",
+      "reasonLabel": "Reason",
+      "reviewByLabel": "Review by",
+      "submit": "Record waiver",
+      "cancel": "Cancel",
+      "failed": "The waiver could not be saved",
+      "saved": "Waiver recorded",
+      "ended": "Waiver ended"
     }
   },
   "navigation": {
@@ -1223,6 +1286,10 @@
       "tls": {
         "label": "TLS",
         "description": "Certificate lineages and ingress container state."
+      },
+      "patching": {
+        "label": "Patching",
+        "description": "Unresolved image, OS-package and dependency findings from the security feed."
       }
     },
     "contests": {

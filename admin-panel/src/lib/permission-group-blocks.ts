@@ -84,6 +84,8 @@ export const SECURITY_ACCESS: readonly string[] = compose(
   'lockout:exempt',
   'tls:read',
   'tls:renew',
+  'patching:read',
+  'patching:waive',
 );
 
 /** Submission review: the reads plus the verbs that reprocess a submission. */

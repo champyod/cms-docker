@@ -839,6 +839,63 @@ model login_surfaces {
   @@map("login_surfaces")
 }
 
+/// One row per thing a security producer says is out of date or known-vulnerable,
+/// keyed by the producer's own stable identity: `(source, key)`. The producers POST
+/// their full current set, so a row that stops being reported is RESOLVED (a
+/// timestamp), never deleted — history stays readable and the audit trail keeps its
+/// subject. `severity` is null when a producer has none (Diun reports drift, not a
+/// CVE); `available` is the version or digest that fixes it, when the producer knows.
+model security_findings {
+  id          Int       @id @default(autoincrement())
+  /// diun | rootfs | osv — the producer that reported this row.
+  source      String    @db.VarChar
+  /// Stable identity within the source, chosen by the producer (image ref, CVE+package).
+  key         String    @db.VarChar
+  /// image | os-package | dependency | advisory.
+  kind        String    @db.VarChar
+  /// CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN, or null when the producer reports no rating.
+  severity    String?   @db.VarChar
+  /// Image reference, package name or dependency name.
+  subject     String    @db.VarChar
+  installed   String?   @db.VarChar
+  /// The version that fixes it, when known.
+  available   String?   @db.VarChar
+  title       String?   @db.VarChar
+  url         String?   @db.VarChar
+  /// Which box reported it, for diun and rootfs.
+  host        String?   @db.VarChar
+  detail      Json?
+  first_seen  DateTime  @default(now())
+  last_seen   DateTime  @updatedAt
+  /// Set by a `complete: true` push that no longer mentions the row. Never a delete.
+  resolved_at DateTime?
+
+  @@unique([source, key])
+  @@index([resolved_at, severity])
+  @@map("security_findings")
+}
+
+/// A decision with a date: this finding (or this CVE a finding carries) is accepted
+/// until `review_by`, then it renders as EXPIRED and counts on the overview. A waiver
+/// is the ONLY waiver mechanism — it replaces `.trivyignore` and `bun audit --ignore`,
+/// because a waived row is still shown, while an ignored one disappears.
+/// Ending is not deleting: `ended_at` keeps the decision and its author readable.
+model security_waivers {
+  id         Int       @id @default(autoincrement())
+  source     String    @db.VarChar
+  /// The finding key, or a CVE id the finding carries.
+  match      String    @db.VarChar
+  reason     String
+  /// Mandatory: a waiver without a review date is how a hole becomes permanent.
+  review_by  DateTime
+  created_by Int
+  created_at DateTime  @default(now())
+  ended_at   DateTime?
+
+  @@index([source, match])
+  @@map("security_waivers")
+}
+
 /// The ranking projection the proxy pushes: one table per entity kind, so the
 /// wire shape and the consistency rules stay readable instead of hiding inside a
 /// jsonb blob.

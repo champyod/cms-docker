@@ -43,6 +43,7 @@ export type RouteId =
   | 'security.waf'
   | 'security.blocks'
   | 'security.tls'
+  | 'security.patching'
   | 'infrastructure.deployments'
   | 'infrastructure.containers'
   | 'infrastructure.resources'
