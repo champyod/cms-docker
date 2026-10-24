@@ -82,7 +82,14 @@ async fn one(state: AppState, kind: Kind, key: &str) -> Response {
     let Some(db) = state.db() else {
         return refuse("no database is configured");
     };
-    match entities::one_body(db.pool(), kind, key).await {
+    // The scope is read before the row, so the answer to "does the board draw this key" is the
+    // same one the feed asked before it announced the key. A key outside the shown set is a 404,
+    // never a body: nothing outside the board renders.
+    let shown = match crate::store::load_shown_set(db.pool()).await {
+        Ok(shown) => shown,
+        Err(error) => return refuse(&error.to_string()),
+    };
+    match entities::one_body(db.pool(), kind, key, &shown).await {
         Ok(Some(body)) => stamped(bytes_response(body)),
         Ok(None) => not_found(),
         Err(error) => refuse(&error.to_string()),

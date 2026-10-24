@@ -754,7 +754,7 @@
       "impactScopeMismatch": "This key names a contest other than the one this shard serves, so the ranker never applies it.",
       "impactBoard": "The whole board this shard draws.",
       "orphanBadge": "orphan",
-      "orphanHint": "No enabled binding serves this contest, so the ranker never applies the row.",
+      "orphanHint": "The board does not show this contest, so the ranker never applies the row.",
       "orphanSummary": "orphan rows",
       "listTitle": "Active overrides",
       "listHint": "Filter the rows, then select the ones to correct.",

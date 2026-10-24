@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::broadcast;
 
 use crate::score_events::{initial_snapshot, publish_changes, Snapshot};
-use crate::store::StoreError;
+use crate::store::{entity_is_shown, EntityKind, StoreError};
 use crate::AppState;
 
 /// How many events a client that reconnects with a last-event-id may replay. The
@@ -169,17 +169,15 @@ fn next_id() -> String {
 /// The entity kind a projection table feeds, so the event name stays what the page
 /// already switches on instead of leaking the table name.
 pub fn entity_kind(table: &str) -> &str {
-    match table {
-        "ranking_contests" => "contest",
-        "ranking_tasks" => "task",
-        "ranking_teams" => "team",
-        "ranking_users" => "user",
-        // A tombstone is a change to the user it hides, so it names the same kind
-        // as the row it takes off the board.
-        "ranking_hidden" => "user",
-        "ranking_submissions" => "submission",
-        "ranking_subchanges" => "subchange",
-        other => other,
+    match EntityKind::of_table(table) {
+        Some(kind) => kind.event_name(),
+        // The score tables name themselves: no entity event is published for them, but the
+        // mapping stays total so a caller never has to guess.
+        None => match table {
+            "ranking_submissions" => "submission",
+            "ranking_subchanges" => "subchange",
+            other => other,
+        },
     }
 }
 
@@ -207,32 +205,78 @@ async fn listen_once(state: &AppState, snapshot: &mut Snapshot) -> Result<(), St
     loop {
         let notification = listener.recv().await?;
         let payload = notification.payload().to_string();
-        let mut parts = payload.splitn(3, ' ');
-        let table = parts.next().unwrap_or_default().to_string();
-        let operation = parts.next().unwrap_or_default().to_string();
-        let key = parts.next().unwrap_or_default().to_string();
-
-        // Every projection change can move the board the page draws (names, teams,
-        // membership, scores, settings or overrides), so the shared build is dropped
-        // before anything is republished; the next read rebuilds it once.
-        state.invalidate_standings().await;
-
-        // Python's DataWatcher registered score callbacks but no submission or
-        // subchange callbacks, so those two tables move scores and publish nothing
-        // else; an entity event there would name something the page cannot read.
-        // Settings and overrides come over ranking_control, the entity events the page
-        // switches on come over ranking_entities.
-        if notification.channel() == "ranking_control" {
-            state.feed().publish("control", payload);
-        } else if !affects_scores(&table) {
-            state.feed().publish(
-                entity_kind(&table),
-                format!("{} {key}", operation_name(&operation)),
-            );
-        }
-
+        let channel = notification.channel().to_string();
+        announce(state, &pool, &channel, &payload).await?;
         let next = publish_changes(state, snapshot).await?;
         *snapshot = next;
+    }
+}
+
+/// One notification, as the page hears it: the shared board is dropped and the change is
+/// announced to the page only when the page draws the entity it names.
+///
+/// WHY this is public: the publication boundary is where a change to a contest the operator does
+/// not show used to reach a page drawing another one, and a rule about what may be published is
+/// proved by publishing into a live projection rather than by racing the notifier's delivery.
+///
+/// WHY the cache is dropped before the decision and for every notification: the entity scope
+/// above is one question about the projection, while the board's contents are another — a change
+/// to a table the page hears nothing about can still move a score.
+pub async fn announce(
+    state: &AppState,
+    pool: &sqlx::postgres::PgPool,
+    channel: &str,
+    payload: &str,
+) -> Result<(), StoreError> {
+    let mut parts = payload.splitn(3, ' ');
+    let table = parts.next().unwrap_or_default();
+    let operation = parts.next().unwrap_or_default();
+    let key = parts.next().unwrap_or_default();
+
+    state.invalidate_standings().await;
+
+    // Python's DataWatcher registered score callbacks but no submission or
+    // subchange callbacks, so those two tables move scores and publish nothing
+    // else; an entity event there would name something the page cannot read.
+    // Settings and overrides come over ranking_control, the entity events the page
+    // switches on come over ranking_entities.
+    if channel == "ranking_control" {
+        state.feed().publish("control", payload.to_string());
+    } else if !affects_scores(table) && announced(pool, table, operation, key).await? {
+        state.feed().publish(
+            entity_kind(table),
+            format!("{} {key}", operation_name(operation)),
+        );
+    }
+    Ok(())
+}
+
+/// Whether a projection change is the page's to hear.
+///
+/// WHY the scope is asked here and not only at the read: an entity event names the key it is
+/// about, so publishing a change to a contest the config does not show hands a page drawing
+/// another contest the name of something it never draws. The read refuses exactly the same keys
+/// (both ask [`entity_is_shown`]), so an announcable key and a readable key are one set.
+///
+/// WHY a delete is announced without asking the scope: the notifier reports the key of a row
+/// that is already gone, so the projection the scope is read from can no longer say which
+/// contest it belonged to. Suppressing it would strand an entity the board does draw — a column
+/// whose task was deleted — while announcing it can only name a key the page never held, which
+/// its listener discards as a no-op. This is the one case the projection cannot answer, and it
+/// is covered by the read predicate rather than by this check.
+async fn announced(
+    pool: &sqlx::postgres::PgPool,
+    table: &str,
+    operation: &str,
+    key: &str,
+) -> Result<bool, StoreError> {
+    if operation == "delete" {
+        return Ok(true);
+    }
+    match EntityKind::of_table(table) {
+        Some(kind) => entity_is_shown(pool, kind, key).await,
+        // A table the projection does not scope keeps the event that names it as it is.
+        None => Ok(true),
     }
 }
 
