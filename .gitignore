@@ -92,3 +92,8 @@ ranking-web/target/
 
 # Generated parity captures: the script writes here by default.
 ranking-web/tests/fixtures/parity/captured/*/
+
+# Generated per CI run from the panel's waiver table (security/waivers.json): the ids that may be
+# suppressed are waiver rows, so a local .trivyignore must never be committed.
+.trivyignore
+

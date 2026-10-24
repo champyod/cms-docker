@@ -1263,7 +1263,12 @@
         "host": "Host",
         "firstSeen": "First seen",
         "lastSeen": "Last seen",
-        "waiver": "Waiver"
+        "waiver": "Waiver",
+        "source": "Source",
+        "match": "Covers",
+        "reason": "Reason",
+        "owner": "Signed by",
+        "reviewBy": "Review by"
       },
       "waiver": {
         "none": "none",
@@ -1292,7 +1297,8 @@
       "cancel": "Cancel",
       "failed": "The waiver could not be saved",
       "saved": "Waiver recorded",
-      "ended": "Waiver ended"
+      "ended": "Waiver ended",
+      "expiredNotice": "{count} waiver(s) are past their review date: CI fails until each one is ended or renewed."
     }
   },
   "navigation": {

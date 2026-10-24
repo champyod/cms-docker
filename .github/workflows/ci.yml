@@ -298,14 +298,32 @@ jobs:
         working-directory: admin-panel
         run: bun run icons:check
 
-      # WHY blocking now: the tree audits clean at high/critical except
-      # braces@3.0.3 (GHSA-vfj7-8cjw-p6xm) — no fixed release exists, and the
-      # package sits only in the eslint glob chain (fast-glob > micromatch),
-      # never in the standalone production bundle. The ignore keeps that one
-      # visible in the log while every NEW advisory fails the run.
+      # WHY the audit's ignore list is rendered rather than written here: a CVE id or GHSA id that
+      # suppresses a finding is a waiver row with an owner, a reason and a review date (see the
+      # `waivers` job, which fails the build once one lapses). This only turns the live `osv`
+      # waivers into the flags the command below may take.
+      - name: Waiver suppressions for the audit
+        run: bash scripts/__security_waivers.sh render --audit-ids "$RUNNER_TEMP/waiver-audit-ids"
+
+      # WHY blocking now: the tree audits clean at high/critical except the advisories the waiver
+      # table owns. The ids this run may skip are rendered from security/waivers.json — the export
+      # of the panel's `security_waivers` table — so a suppression has an owner, a reason and a
+      # review date, and a new advisory with no waiver still fails the run. There is no `--ignore`
+      # literal here: an id nobody waived cannot reach this command.
       - name: Dependency audit
         working-directory: admin-panel
-        run: bun audit --audit-level=high --ignore GHSA-vfj7-8cjw-p6xm
+        run: |
+          args=()
+          # One id per line; an empty file means nothing is waived, so the audit runs with no
+          # skips at all rather than with an empty flag.
+          while IFS= read -r id; do
+            if [ -n "$id" ]; then args+=(--ignore "$id"); fi
+          done < "$RUNNER_TEMP/waiver-audit-ids"
+          if [ "${#args[@]}" -eq 0 ]; then
+            bun audit --audit-level=high
+          else
+            bun audit --audit-level=high "${args[@]}"
+          fi
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
@@ -313,6 +331,29 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Findings land in the log and job summary, so the job needs no write scopes.
           GITLEAKS_ENABLE_COMMENTS: "false"
+
+  # WHY a job of its own for the waivers: P5 removed the two hand-kept suppression lists, and a
+  # waiver is only a decision *with a date* if something fails when the date passes. This is that
+  # something — it runs on a checkout alone (no panel, no database, no credential, no network),
+  # reading `security/waivers.json`, which the panel's own read path renders from the one waiver
+  # table. A lapsed waiver, an export nobody has re-rendered in a month, or a hand-edited entry
+  # without a review date fails here, naming the ids and the dates.
+  waivers:
+    name: Waivers (review dates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Fail on a waiver past its review date
+        run: bash scripts/__security_waivers.sh check
 
   # WHY: the image jobs build and push but never inspect what ships — OS package
   # CVEs in the base image and Dockerfile misconfigurations (root user, secrets
@@ -325,6 +366,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      # The image scan's suppressions ARE the waiver table: this writes `.trivyignore` from the
+      # committed export on every run, so no CVE id can be ignored by editing a file. `.trivyignore`
+      # is generated output (gitignored) — the ids live in `security_waivers`, not in the tree.
+      - name: Render the waiver suppressions
+        run: bash scripts/__security_waivers.sh render --trivy .trivyignore
 
       # Plain docker build (not buildx) so the image lands in the local daemon
       # where trivy can read it.
@@ -1054,6 +1104,9 @@ jobs:
       - gates
       - suites
       - panel
+      # A waiver failure must reach the required check, or an expired suppression would land as
+      # "skipped" and the build would go green on it.
+      - waivers
       - container-scan
       - rust
       # rust-ranking was missing here: its failure never reached the required check.
@@ -1075,6 +1128,7 @@ jobs:
             [gates]="${{ needs.gates.result }}"
             [suites]="${{ needs.suites.result }}"
             [panel]="${{ needs.panel.result }}"
+            [waivers]="${{ needs.waivers.result }}"
             [container-scan]="${{ needs.container-scan.result }}"
             [rust]="${{ needs.rust.result }}"
             [rust-ranking]="${{ needs.rust-ranking.result }}"
