@@ -5,8 +5,8 @@ import { useMemo } from 'react';
 import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { AttributionMark } from '@/components/ranking/AttributionMark';
 import type { Dictionary } from '@/lib/dictionary';
-import { attributionText, isUnattributed } from '@/lib/ranking-attribution';
 import type { RankingHide, RankingHideSource } from '@/lib/ranking-hides';
 
 type RankingCopy = Dictionary['ranking'];
@@ -59,11 +59,7 @@ function SourceMark({
   return (
     <span className="flex flex-wrap items-center gap-2">
       <Badge variant="cyan">{copy.hides.sourceOverride}</Badge>
-      {isUnattributed(source) ? (
-        <Badge variant="amber">{copy.overrides.outsidePanelBadge}</Badge>
-      ) : (
-        <span className={`font-mono text-xs ${MUTED}`}>{attributionText(source)}</span>
-      )}
+      <AttributionMark row={source} unattributedLabel={copy.overrides.outsidePanelBadge} />
     </span>
   );
 }

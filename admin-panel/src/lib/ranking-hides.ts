@@ -21,6 +21,11 @@ import { keySpellings } from '@/lib/ranking-projection';
 
 /** One hide as a recorded row: an override the panel or the CLI filed. */
 export interface HideOverrideRow extends AttributedRow {
+  /**
+   * WHY this narrows the shared shape: this surface resolves the names itself, so a hide's author
+   * is a name or a missing admin — never "not loaded", which is what the shared optional means.
+   */
+  readonly createdByName: string | null;
   readonly targetKind: string;
   readonly targetKey: string;
   readonly reason: string | null;
