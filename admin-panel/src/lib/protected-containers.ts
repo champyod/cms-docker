@@ -48,7 +48,6 @@ export const PROTECTED_CONTAINER_NAMES: readonly string[] = [
   'grader-nginx-proxy',
   'grader-certbot',
   'grader-redis-rate-limit',
-  'grader-hsm',
   'grader-vault-inline',
 ];
 
