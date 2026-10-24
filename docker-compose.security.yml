@@ -1,0 +1,208 @@
+# Security feed — Renovate (version PRs) + Diun (stale images) + the two scanners.
+#
+# ADDITIVE: this file never replaces docker-compose.yml and edits no file the base stack owns.
+# Enable with:
+#   docker compose --env-file .env.security -f docker-compose.yml -f docker-compose.security.yml --profile security up -d
+# Disabled by default twice over: nothing here starts without `--profile security`, and the
+# long-running containers do no work until SECURITY_ENABLED=1 — documented in
+# config.toml.example [infra] beside MONITORING_ENABLED, values in .env.security.
+#
+# Host interaction, the complete list: /:/rootfs:ro on security-scan and
+# /var/run/docker.sock:ro on diun. Both read-only; nothing in this file writes to the host.
+# Every published port is bound to 127.0.0.1.
+#
+# The payload shape, the source enum and the endpoint are fixed by docs/SECURITY-FEED.md.
+# One script builds and POSTs that body for every producer: docker/security-scan/lib/feed.sh.
+
+x-security-scan: &security-scan
+  build:
+    context: ./docker/security-scan
+    dockerfile: Dockerfile
+  image: ghcr.io/champyod/cms-security-scan:${IMG_TAG:-major-admin-panel}
+
+# Diun watches containers that opt in with a label, not every container on the socket: an
+# image nobody runs on purpose (a one-off debug container) is not a finding. Add
+# `diun.enable=true` to any other service to include it; `diun.watch_repo=true` additionally
+# watches for new tags, `diun.notify_on=new` narrows notifications.
+x-diun-watch: &diun-watch
+  - "diun.enable=true"
+
+services:
+
+  # Renovate opens the version PRs. It has no findings webhook upstream and this file does not
+  # invent one — its half of the feed is PRs plus the dependency dashboard issue.
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44.181.3
+    container_name: cms-renovate
+    restart: on-failure
+    profiles:
+      - security
+    environment:
+      RENOVATE_PLATFORM: github
+      RENOVATE_TOKEN: ${RENOVATE_TOKEN:-}
+      # WHY required rather than autodiscover: a token that can see more than this repo would
+      # otherwise open PRs in every repo it can reach.
+      RENOVATE_REPOSITORIES: ${RENOVATE_REPOSITORIES:-}
+      RENOVATE_AUTODISCOVER: "false"
+      RENOVATE_CONFIG_FILE: /usr/src/app/renovate.json
+      RENOVATE_CACHE_DIR: /tmp/renovate/cache
+      RENOVATE_INTERVAL_SECONDS: ${RENOVATE_INTERVAL_SECONDS:-86400}
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      LOG_LEVEL: ${RENOVATE_LOG_LEVEL:-info}
+    volumes:
+      # Read-only: the config is the repo's, so the container and a local `renovate` run
+      # cannot disagree about policy.
+      - ./renovate.json:/usr/src/app/renovate.json:ro
+      - renovate-cache:/tmp/renovate/cache
+    # WHY a loop: the Renovate CLI processes the repos and EXITS, so periodicity has to come
+    # from the container command. SECURITY_ENABLED is read inside the container ($$ escapes
+    # compose interpolation), so the config-level switch works without editing this file.
+    command:
+      - sh
+      - -c
+      - |
+        while :; do
+          if [ "$$SECURITY_ENABLED" = "1" ]; then
+            renovate || echo "renovate: run failed; next attempt in $$RENOVATE_INTERVAL_SECONDS s" >&2
+          else
+            echo "renovate: SECURITY_ENABLED=0 — idle"
+          fi
+          sleep "$$RENOVATE_INTERVAL_SECONDS"
+        done
+    networks:
+      - cms-network
+
+  # Diun compares what is RUNNING against what the registry serves now.
+  diun:
+    image: crazymax/diun:4.33.1
+    container_name: cms-diun
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      # Plural PROVIDERS: that is the env prefix Diun documents for the provider block
+      # (`DIUN_PROVIDERS_DOCKER` enables it, sub-options configure it).
+      DIUN_PROVIDERS_DOCKER: "true"
+      DIUN_PROVIDERS_DOCKER_ENDPOINT: "unix:///var/run/docker.sock"
+      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: "false"
+      DIUN_WATCH_SCHEDULE: "${DIUN_WATCH_SCHEDULE:-0 */6 * * *}"
+      DIUN_WATCH_FIRSTCHECKNOTIF: "true"
+      DIUN_WATCH_WORKERS: "4"
+      # NOT the panel endpoint: Diun's body is not the contract body, so it posts to the
+      # translator below, which is the only thing that maps one onto the other.
+      DIUN_NOTIF_WEBHOOK_ENDPOINT: "http://diun-bridge:8099/cgi-bin/diun"
+      DIUN_NOTIF_WEBHOOK_METHOD: "POST"
+      DIUN_LOG_LEVEL: "info"
+    volumes:
+      # Read-only: Diun only lists and inspects containers.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # WHY Diun gets state: its bolt db records what it has already seen, and without it every
+      # restart re-announces every watched image as "new".
+      - diun-data:/data
+    networks:
+      - cms-network
+
+  # The Diun translator. Same image as the scanners (one build, one POST path), different mode.
+  diun-bridge:
+    <<: *security-scan
+    container_name: cms-diun-bridge
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      SECURITY_HOST: ${SECURITY_HOST:-cms}
+      PANEL_URL: ${PANEL_URL:-http://admin-panel-next:3000}
+      SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+      SECURITY_BRIDGE_PORT: "${SECURITY_BRIDGE_PORT:-8099}"
+    ports:
+      # Loopback only: the port exists so an operator can POST a sample Diun body at the
+      # translator by hand (docs/SECURITY-FEED.md → Operating), not to expose the feed.
+      - "${SECURITY_BRIDGE_BIND_IP:-127.0.0.1}:${SECURITY_BRIDGE_PORT:-8099}:8099"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8099/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cms-network
+    command: ["diun-bridge"]
+
+  # The scanners: osv over the checked-out repo, trivy over the host root read-only.
+  # `docker compose run --rm security-scan osv|rootfs|all` for one run by hand.
+  security-scan:
+    <<: *security-scan
+    container_name: cms-security-scan
+    restart: on-failure
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      SECURITY_HOST: ${SECURITY_HOST:-cms}
+      PANEL_URL: ${PANEL_URL:-http://admin-panel-next:3000}
+      SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+      SECURITY_SCAN_SCHEDULE: "${SECURITY_SCAN_SCHEDULE:-0 3 * * *}"
+      # The cache volume is the only writable path in the container; HOME keeps osv-scanner
+      # from looking for a cache under a read-only /root.
+      HOME: /tmp
+    volumes:
+      # The repo as checked out — osv-scanner reads lockfiles, never writes.
+      - ./:/src:ro
+      # THE host interaction of this whole overlay: read-only, and the scan only reads the
+      # package database (--pkg-types os), so it cannot modify a host package even in theory.
+      - /:/rootfs:ro
+      # The one writable mount: trivy's vulnerability DB cache, so a nightly run does not
+      # re-download ~100 MB and a scan cannot touch anything else.
+      - security-scan-cache:/var/cache/security-scan
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Everything is dropped except the two caps busybox crond needs to switch to the
+    # crontab's user for each job. Without them crond starts, logs nothing and silently never
+    # runs a scan — verified by running this image with `--cap-drop ALL` alone.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    command: ["schedule"]
+
+  # Diun's opt-in labels, applied here rather than in docker-compose.yml: the base stack must
+  # stay usable without the feed, and an overlay is where an optional feature's labels belong.
+  admin-panel-next:
+    labels: *diun-watch
+  nginx-proxy:
+    labels: *diun-watch
+  database:
+    labels: *diun-watch
+  redis-rate-limit:
+    labels: *diun-watch
+  monitor:
+    labels: *diun-watch
+  worker:
+    labels: *diun-watch
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  diun-data:
+    name: cms-diun-data
+  renovate-cache:
+    name: cms-renovate-cache
+  security-scan-cache:
+    name: cms-security-scan-cache

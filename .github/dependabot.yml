@@ -1,49 +1,14 @@
-# Please see the documentation for all configuration options:
-# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
+# Dependabot VERSION UPDATES are retired here — Renovate is the only bot that opens version
+# PRs for this repo (see renovate.json at the repo root).
+#
+# WHY one bot: two bots open competing PRs for the same bump, each with its own grouping and
+# schedule, and neither sees the other's open branch — the merge queue then churns on
+# duplicates and a bump can land twice. Renovate also covers what Dependabot cannot see here:
+# the docker-compose manager for docker-compose*.yml, which is where most of this repo's
+# image pins live.
+#
+# SECURITY updates are NOT configured in this file: GitHub delivers those from the repo's
+# Dependabot alerts / security-update settings, which stay enabled and are unaffected by the
+# empty list below. This file only ever configured version updates.
 version: 2
-updates:
-  - package-ecosystem: "pip"
-    directory: "/"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 30
-  # The admin panel ships from bun.lock; npm is the closest ecosystem Dependabot
-  # understands for it and it covers advisory PRs bun audit would only report.
-  - package-ecosystem: "npm"
-    directory: "/admin-panel"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 30
-  # Base images otherwise move only by hand-editing, which is how pins drift years
-  # behind. One entry per Dockerfile directory: Dependabot resolves each image
-  # against its own registry, so an unpinned or :latest tag becomes a concrete
-  # update rather than a guess.
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 30
-  - package-ecosystem: "docker"
-    directory: "/src"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "docker"
-    directory: "/admin-panel"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "docker"
-    directory: "/docker/monitor"
-    schedule:
-      interval: "daily"
-  - package-ecosystem: "docker"
-    directory: "/docker/scheduler"
-    schedule:
-      interval: "daily"
-  # Action versions move only by hand-editing otherwise; shellcheck and yamllint are
-  # installed unpinned in CI, so this covers the pins that do exist.
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "daily"
-    open-pull-requests-limit: 30
+updates: []

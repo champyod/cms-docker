@@ -1,0 +1,52 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Asia/Bangkok",
+  "schedule": ["after 10pm and before 6am every weekday"],
+  "labels": ["dependencies", "renovate"],
+  "prConcurrentLimit": 8,
+  "prHourlyLimit": 4,
+  "separateMinorPatch": true,
+  "docker-compose": {
+    "enabled": true,
+    "managerFilePatterns": ["/(^|/)(?:docker-)?compose[^/]*\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "One PR per week for every compose base image: they are read together when the stack is upgraded, and eleven separate PRs is how the stack drifts half-updated",
+      "groupName": "compose base images",
+      "matchManagers": ["docker-compose"],
+      "separateMinorPatch": false
+    },
+    {
+      "description": "Dockerfile base images move together with the compose ones they must match",
+      "groupName": "docker base images",
+      "matchManagers": ["dockerfile"]
+    },
+    {
+      "description": "Actions are pinned by tag in .github/workflows; one PR keeps the CI change reviewable",
+      "groupName": "github actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "The panel ships from bun.lock in one directory; grouped so a bump is tested against the suite once",
+      "groupName": "admin panel dependencies",
+      "matchFileNames": ["admin-panel/**"]
+    },
+    {
+      "description": "Python constraints are pinned by constraints.txt; minor and patch land together",
+      "groupName": "python dependencies",
+      "matchManagers": ["pip_requirements", "pip-compile", "pep621"]
+    },
+    {
+      "description": "Rust lockfiles in ranking-web and tools/cms-tui",
+      "groupName": "rust dependencies",
+      "matchManagers": ["cargo"]
+    },
+    {
+      "description": "Digest pinning is an OPEN DECISION (docs/SECURITY-FEED.md) — explicitly off so no preset turns it on by accident",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": false
+    }
+  ]
+}

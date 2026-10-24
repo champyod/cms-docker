@@ -262,6 +262,24 @@ FUNNEL_BIND_IP = "127.0.0.1"     # str; address the funnel panel/ranking gateway
 GRAFANA_ADMIN_USER = "admin"    # str; Grafana admin login (GF_SECURITY_ADMIN_USER)
 GRAFANA_PASSWORD = ""           # secret; Grafana admin password (GF_SECURITY_ADMIN_PASSWORD) — empty falls back to the insecure image default 'admin'
 GRAFANA_ROOT_URL = "http://localhost:3001/" # url; GF_SERVER_ROOT_URL — external URL Grafana builds links and redirects from
+# Security feed — docker-compose.security.yml, off by default. WHY a profile plus a flag: the
+# overlay needs a GitHub token and the docker socket, so it must be opt-in twice — the profile
+# decides which containers start, SECURITY_ENABLED decides whether they do anything. That is
+# what lets a host carry the overlay before it reports to the panel. Values live in
+# .env.security (gitignored; .env.security.example is the committed template) because they are
+# per-host secrets, not shared configuration.
+SECURITY_ENABLED = 0            # enum:0,1; 1 = the scheduled scan, the Diun translator and Renovate actually run; 0 = they start and idle
+SECURITY_HOST = ""              # str; name the panel shows in the findings' host column — set it to the box's own `hostname -s`; empty falls back to the container hostname
+PANEL_URL = "http://admin-panel-next:3000" # url; panel base URL every producer appends /api/security/findings to — the compose service name needs no host port
+SECURITY_FEED_TOKEN = ""        # secret; bearer token the ingest route compares in constant time — generate with: openssl rand -hex 32
+SECURITY_SCAN_SCHEDULE = "0 3 * * *" # str; cron for the nightly osv+rootfs pass (container time, UTC) — nightly because a CVE published today must be visible tomorrow
+DIUN_WATCH_SCHEDULE = "0 */6 * * *" # str; cron for Diun's registry sweep — every 6 h is Diun's own documented default
+SECURITY_BRIDGE_PORT = 8099     # port; loopback port the Diun translator publishes (SECURITY_BRIDGE_BIND_IP:SECURITY_BRIDGE_PORT:8099)
+SECURITY_BRIDGE_BIND_IP = "127.0.0.1" # str; address the Diun translator publishes on; loopback keeps the feed's write path host-local
+RENOVATE_TOKEN = ""             # secret; GitHub token (contents + pull requests) Renovate opens version PRs with
+RENOVATE_REPOSITORIES = ""      # str; owner/repo Renovate processes — autodiscover is off so the token cannot open PRs in other repos
+RENOVATE_INTERVAL_SECONDS = 86400 # num; seconds between Renovate passes — the CLI exits after each one, so this is the period
+RENOVATE_LOG_LEVEL = "info"     # enum:debug,info,warn,error; LOG_LEVEL inside the Renovate container
 HSM_ENABLED = 0                 # enum:0,1; price: $0 SoftHSM | ~$800 YubiHSM 2
 HSM_MODULE = "softhsm"          # enum:softhsm,yubihsm,cloudhsm; HSM backend the certbot PKCS#11 integration targets — softhsm ships as a container in docker-compose.domain.yml
 HSM_PIN = ""                    # secret; PKCS#11 user PIN for the HSM token — passed to the softhsm container and certbot --hsm-pin

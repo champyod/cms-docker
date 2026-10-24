@@ -611,9 +611,11 @@ lint:
 		declare -A overlay_base=( \
 			[docker-compose.tailscale.yml]=docker-compose.yml \
 			[docker-compose.waf.yml]=docker-compose.domain.yml \
+			[docker-compose.security.yml]=docker-compose.yml \
 		); \
 		declare -A overlay_profiles=( \
 			[docker-compose.tailscale.yml]="--profile core --profile contest" \
+			[docker-compose.security.yml]="--profile security" \
 		); \
 		compose_failed=0; \
 		for f in docker-compose*.yml docker/docker-compose*.yml; do \
