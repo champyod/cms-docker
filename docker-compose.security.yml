@@ -13,6 +13,11 @@
 #
 # The payload shape, the source enum and the endpoint are fixed by docs/SECURITY-FEED.md.
 # One script builds and POSTs that body for every producer: docker/security-scan/lib/feed.sh.
+#
+# Image pin policy (docs/decisions/image-digest-pinning.md): renovate and diun are
+# third-party and carry tag+digest; the scanner below is our own image.
+# WHY no digest on our own images: ${IMG_TAG} is how a deploy selects the build CI just
+# pushed, so pinning a digest would freeze the feed to one commit — the tag is the selector.
 
 x-security-scan: &security-scan
   build:
@@ -32,7 +37,7 @@ services:
   # Renovate opens the version PRs. It has no findings webhook upstream and this file does not
   # invent one — its half of the feed is PRs plus the dependency dashboard issue.
   renovate:
-    image: ghcr.io/renovatebot/renovate:44.181.3
+    image: ghcr.io/renovatebot/renovate:44.181.3@sha256:00f4f69be3060d6ad1ff3481a0e44490aba37ab17c501cbf2de179bc3751dc78
     container_name: cms-renovate
     restart: on-failure
     profiles:
@@ -74,7 +79,7 @@ services:
 
   # Diun compares what is RUNNING against what the registry serves now.
   diun:
-    image: crazymax/diun:4.33.1
+    image: crazymax/diun:4.33.1@sha256:8cc638b4c54e8a0c47898a51b20dae73037ad43310168b5da543a311dc668f77
     container_name: cms-diun
     restart: unless-stopped
     profiles:

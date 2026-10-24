@@ -7,7 +7,7 @@
 # TypeScript, so the image and the admin panel cannot drift apart in how they
 # build Prisma types.
 
-FROM node:20-bookworm-slim AS build
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS build
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@9 --activate
@@ -25,7 +25,7 @@ RUN pnpm exec tsc -p src/scheduler/tsconfig.build.json
 # The runtime carries the compiled poller, the Prisma client it queries with and
 # the Docker CLI it launches backups through. The socket is mounted at run time,
 # never baked in. `make` is not installed: the poller runs no compose targets.
-FROM node:20-bookworm-slim AS release
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS release
 
 RUN apt-get update && \
     apt-get install -y curl && \

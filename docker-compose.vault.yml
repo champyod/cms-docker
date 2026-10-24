@@ -9,7 +9,7 @@
 
 services:
   vault:
-    image: hashicorp/vault:1.15
+    image: hashicorp/vault:1.15@sha256:0450896c43b13879b19442b204ce29dd19b5a10fce43d5cf38af17da20f56f4d
     container_name: grader-vault
     restart: unless-stopped
     profiles:

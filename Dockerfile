@@ -1,13 +1,18 @@
 # syntax=docker/dockerfile:1
 
-# Base image (ubuntu:noble or debian:bookworm); pin by digest manually, never apt-upgraded in-build.
-ARG BASE_IMAGE=ubuntu:noble
+# Base image (ubuntu:noble or debian:bookworm); never apt-upgraded in-build.
+# Base-image policy (docs/decisions/image-digest-pinning.md): the default carries tag+digest
+# so `FROM ${BASE_IMAGE}` resolves to fixed bits, and package drift is handled by bumping the
+# digest (Renovate's dockerfile manager) rather than by an in-build upgrade. An operator
+# override via --build-arg BASE_IMAGE=... must carry its own tag AND @sha256 digest; a bare
+# tag here would reintroduce the float this pin removes.
+ARG BASE_IMAGE=ubuntu:noble@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
 
 # The ranking web server is a Rust binary. It is built in a stage of its own
 # because the runtime image must not carry a compiler: the same image also
 # runs untrusted submission tooling, and a toolchain there would widen what
 # a sandbox escape can reach.
-FROM rust:1-bookworm AS ranking-build
+FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS ranking-build
 WORKDIR /build
 COPY ranking-web/ ./
 RUN cargo build --release
