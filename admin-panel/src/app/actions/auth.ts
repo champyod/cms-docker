@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 import { createSession, deleteSession, getSession } from '@/lib/auth';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { getFreshPermissions } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { getCaptchaEnv, resolveActiveProvider, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
@@ -131,7 +132,12 @@ async function verifyStoredPassword(password: string, stored: string): Promise<b
 }
 
 async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | null> {
-  const admin = await prisma.admins.findUnique({ where: { username } });
+  // WHY system:auth: this is credential verification, which by definition runs before a session
+  // exists. It is the only code in the app allowed to use that identity, and `admins` is the only
+  // table whose policy admits it.
+  const admin = await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, () =>
+    prisma.admins.findUnique({ where: { username } }),
+  );
   if (!admin || !admin.enabled) return null;
   return admin;
 }

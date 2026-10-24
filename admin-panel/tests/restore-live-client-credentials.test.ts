@@ -116,7 +116,7 @@ describe('a live statement', () => {
     // The whole command line is asserted, so the password cannot come back in a
     // different position and go unnoticed.
     expect(invocation?.args).toEqual([
-      'exec', '-e', 'PGPASSWORD', 'cms-database',
+      'exec', '-e', 'PGPASSWORD', '-e', 'PGOPTIONS', 'cms-database',
       'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'cmsuser', '-d', 'cmsdb', '-t', '-A', '-c', 'SELECT 1',
     ]);
     expect(visibleOnTheCommandLine(invocation?.args ?? [])).not.toContain(SECRET);
@@ -133,7 +133,7 @@ describe('the staging lock session', () => {
     const [invocation] = harness.spawn;
     expect(invocation?.file).toBe('docker');
     expect(invocation?.args).toEqual([
-      'exec', '-i', '-e', 'PGPASSWORD', 'cms-database',
+      'exec', '-i', '-e', 'PGPASSWORD', '-e', 'PGOPTIONS', 'cms-database',
       'psql', '-v', 'ON_ERROR_STOP=1', '-U', 'cmsuser', '-d', 'cmsdb', '-t', '-A', '-q',
     ]);
     expect(visibleOnTheCommandLine(invocation?.args ?? [])).not.toContain(SECRET);
@@ -147,8 +147,8 @@ describe('postgresClientSpawn', () => {
     const live = liveClientSpawn(ENV, ['psql'], { interactive: true });
     const scratch = postgresClientSpawn(ENV, 'cms-restore-preview-x', ['pg_restore']);
 
-    expect(live.args).toEqual(['exec', '-i', '-e', 'PGPASSWORD', 'cms-database', 'psql']);
-    expect(scratch.args).toEqual(['exec', '-e', 'PGPASSWORD', 'cms-restore-preview-x', 'pg_restore']);
+    expect(live.args).toEqual(['exec', '-i', '-e', 'PGPASSWORD', '-e', 'PGOPTIONS', 'cms-database', 'psql']);
+    expect(scratch.args).toEqual(['exec', '-e', 'PGPASSWORD', '-e', 'PGOPTIONS', 'cms-restore-preview-x', 'pg_restore']);
     for (const client of [live, scratch]) {
       expect(visibleOnTheCommandLine(client.args)).not.toContain(SECRET);
       expect(client.env.PGPASSWORD).toBe(SECRET);
@@ -158,5 +158,17 @@ describe('postgresClientSpawn', () => {
   it('keeps the rest of the panel environment so the child is otherwise unchanged', () => {
     const client = postgresClientSpawn(ENV, 'cms-database', ['psql']);
     expect(client.env.PATH).toBe(process.env.PATH);
+  });
+
+  it('gives every spawned client an actor, because a restore writes through psql and not Prisma', () => {
+    // WHY this is asserted here: a restore is a bulk write that never touches the panel's
+    // actor-aware Prisma client, and every table is row-level secured on cms.actor. Without this
+    // the restore fails closed in the middle — some tables rejected, the count read back as zero —
+    // which an operator would read as "the restore did nothing" rather than "the restore was
+    // refused". `system:migration` is the named identity the policies admit for bulk writes.
+    const client = postgresClientSpawn(ENV, 'cms-database', ['psql']);
+    expect(client.env.PGOPTIONS).toBe('-c cms.actor=system:migration');
+    // And the value travels in the environment, never in argv, for the same reason the password does.
+    expect(client.args.some((arg) => arg.includes('cms.actor'))).toBe(false);
   });
 });

@@ -75,6 +75,22 @@ export function liveDatabaseEnv(): LiveDatabaseEnv {
 /** The variable every postgres client reads its password from. */
 export const POSTGRES_PASSWORD_VAR = 'PGPASSWORD';
 
+/**
+ * The database actor a restore acts as, handed to every spawned client.
+ *
+ * WHY this exists: a restore is a bulk write through `psql` / `pg_restore`, not through Prisma, so
+ * the panel's actor-aware client never sees it — and every table is row-level secured on
+ * `cms.actor`. Without this the restore would fail closed half-way: some tables rejected, counts
+ * read back as zero, an operator looking at a database that appears not to have been restored.
+ * `system:migration` is the named identity the policies admit for exactly this, and PGOPTIONS
+ * applies it at connection time, which is the right scope — one spawned client is one operation
+ * and is closed when it finishes.
+ */
+export const RESTORE_ACTOR_OPTIONS = `-c cms.actor=system:migration`;
+
+/** The variable libpq reads connection-time SET options from. */
+export const PGOPTIONS_VAR = 'PGOPTIONS';
+
 export interface PostgresClientSpawn {
   /** `docker` argv: no element of it is, or contains, the password. */
   readonly args: string[];
@@ -100,10 +116,28 @@ export function postgresClientSpawn(
   database: { readonly POSTGRES_PASSWORD: string },
   container: string,
   client: readonly string[],
-  options: { readonly interactive?: boolean } = {},
+  options: { readonly interactive?: boolean; readonly actorOptions?: string } = {},
 ): PostgresClientSpawn {
-  const args = ['exec', ...(options.interactive === true ? ['-i'] : []), '-e', POSTGRES_PASSWORD_VAR, container, ...client];
-  return { args, env: { ...process.env, [POSTGRES_PASSWORD_VAR]: database.POSTGRES_PASSWORD } };
+  // WHY both variables are named on the command line and valued only in the environment: docker
+  // copies a named variable out of the client's own environment, which keeps every value off
+  // `/proc/<pid>/cmdline`. PGOPTIONS carries no secret, but it travels the same way so there is one
+  // rule for this argv rather than an exception a later reader has to notice.
+  const args = [
+    'exec',
+    ...(options.interactive === true ? ['-i'] : []),
+    '-e', POSTGRES_PASSWORD_VAR,
+    '-e', PGOPTIONS_VAR,
+    container,
+    ...client,
+  ];
+  return {
+    args,
+    env: {
+      ...process.env,
+      [POSTGRES_PASSWORD_VAR]: database.POSTGRES_PASSWORD,
+      [PGOPTIONS_VAR]: options.actorOptions ?? RESTORE_ACTOR_OPTIONS,
+    },
+  };
 }
 
 /** The same client, in the container every live statement reaches. */

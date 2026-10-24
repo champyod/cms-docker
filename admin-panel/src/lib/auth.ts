@@ -1,58 +1,35 @@
-import { SignJWT, jwtVerify, type JWTPayload } from "jose";
-import { cookies } from "next/headers";
 import type { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { cookies } from "next/headers";
+
+import { withActor, SYSTEM_IDENTITIES } from "@/lib/db-actor";
 import { prisma } from "@/lib/prisma";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_PATH,
+  SESSION_DURATION_MS,
+  SESSION_REFRESH_INTERVAL_MS,
+  decrypt,
+  encrypt,
+  readSessionClaims,
+  type SessionClaims,
+  type SessionPayload,
+} from "@/lib/session-token";
 
-// Why: use 7-day session cookie but 2-hour JWT expiry so the session has to be re-signed on a timer
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Session handling. The cookie itself — its name, signing key and the two JWT operations — lives in
+ * `./session-token` so that reading it never has to import the database layer; that is what lets
+ * `./db-actor` derive the actor for a request from the same cookie without a cycle. Everything
+ * here adds what needs the database: liveness, sliding, clearing.
+ */
 
-// Why: tokens hard-expire at 2h, so re-signing at half that age always leaves a presented
-// token more than half its life remaining while still sliding the 7-day cookie window
-const SESSION_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
-
-// Why the name is configurable: two panels on one host — a /beta deployment beside the root one —
-// share a cookie namespace, and a name only one of them writes is what keeps their sessions apart.
-const SESSION_COOKIE_NAME = process.env.SESSION_COOKIE_NAME?.trim() || "session";
-
-// Why: a clear must repeat the path the cookie was written with. Without it the browser
-// scopes the expiring cookie to the request directory and keeps the original session alive
-const SESSION_COOKIE_PATH = "/";
-
-const secretKey = (() => {
-  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
-  console.warn("WARNING: AUTH_SECRET is not set. Using a random secret — sessions will not persist across restarts.");
-  return crypto.randomBytes(32).toString("hex");
-})();
-const key = new TextEncoder().encode(secretKey);
+// Why re-exported: `./session-token` is an implementation detail of this pair of modules, and
+// every caller in the app already imports these names from here.
+export { encrypt, decrypt };
+export type { SessionPayload };
 
 // COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
 const isSecureCookie = process.env.COOKIE_SECURE === 'true';
-
-// Why: permissions are resolved per request via getFreshPermissions, never stored on the token,
-// so a re-signed session cannot carry stale grants.
-export interface SessionPayload {
-  userId: string;
-  username: string;
-  expiresAt: string | Date;
-}
-
-/** Signs a payload as an HS256 JWT with a fixed 2h expiry (short-lived by design; sessions refresh via slideSessionCookie). */
-export async function encrypt<T extends JWTPayload>(payload: T): Promise<string> {
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("2h")
-    .sign(key);
-}
-
-/** Verifies signature/expiry and returns the decoded payload; callers re-validate shape before trusting fields. */
-export async function decrypt<T = unknown>(input: string): Promise<T> {
-  const { payload } = await jwtVerify(input, key, {
-    algorithms: ["HS256"],
-  });
-  return payload as T;
-}
 
 function buildCookieOptions(expiresAt: Date) {
   return {
@@ -86,10 +63,15 @@ export type SessionStatus =
 
 async function findAdminLiveness(userId: string): Promise<AdminLiveness | null> {
   try {
-    const admin = await prisma.admins.findUnique({
-      where: { id: Number.parseInt(userId, 10) },
-      select: { username: true, enabled: true },
-    });
+    // WHY system:auth: this read is the session-liveness check itself, so it runs while the session
+    // is still unproven — that is the definition of the pre-session identity. `admins` is the one
+    // table whose policy admits it (AUTH_BOOTSTRAP in the generator), and nothing else may use it.
+    const admin = await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, () =>
+      prisma.admins.findUnique({
+        where: { id: Number.parseInt(userId, 10) },
+        select: { username: true, enabled: true },
+      }),
+    );
     if (!admin) return { isEnabled: false, username: "" };
     return { isEnabled: admin.enabled, username: admin.username };
   } catch {
@@ -108,17 +90,6 @@ export async function readSessionStatus(userId: string): Promise<SessionStatus> 
   if (liveness === null) return { state: "unreachable" };
   if (!liveness.isEnabled) return { state: "revoked" };
   return { state: "active", username: liveness.username };
-}
-
-type SessionClaims = SessionPayload & { readonly iat?: number };
-
-async function readSessionClaims(token: string): Promise<SessionClaims | null> {
-  try {
-    return await decrypt<SessionClaims>(token);
-  } catch {
-    // Bad signature or past exp — the caller decides whether that means clearing the cookie
-    return null;
-  }
 }
 
 function isRefreshDue(claims: SessionClaims): boolean {

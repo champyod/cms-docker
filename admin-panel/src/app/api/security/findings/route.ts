@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 import { recordAudit } from '@/lib/audit';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { prisma } from '@/lib/prisma';
 import { resolveRootActorId } from '@/lib/panel-actions/root-actor';
 import {
@@ -29,6 +30,15 @@ function declaredTooLarge(request: NextRequest): boolean {
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  // WHY the whole handler runs as system:ingest: the feed is a container pushing findings inside
+  // the tailnet, with a bearer token as its whole identity and no admin account to act as. Naming
+  // it here is what lets `security_findings` accept the write while every other table's policy
+  // still refuses it — an unnamed push would be indistinguishable from an anonymous one, and the
+  // fail-closed policies would store nothing.
+  return withActor({ kind: 'system', name: SYSTEM_IDENTITIES.INGEST }, () => handlePush(request));
+}
+
+async function handlePush(request: NextRequest): Promise<NextResponse> {
   if (!feedTokenMatches(request.headers.get('authorization'))) {
     return json({ success: false, error: 'Unauthorized' }, 401);
   }
