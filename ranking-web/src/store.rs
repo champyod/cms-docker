@@ -121,6 +121,119 @@ pub async fn load_shown_set(pool: &PgPool) -> Result<ShownSet, StoreError> {
     Ok(ShownSet { contest_ids })
 }
 
+/// The entity kinds the board draws one at a time, and the ones the feed announces.
+///
+/// WHY it lives beside [`ShownSet`] rather than in `entities`: the entity module owns the wire
+/// shapes, and this owns the question "does the board draw it" — the question the feed's
+/// publication boundary and the one-entity reads both ask, which is why both take their answer
+/// from here instead of each spelling the scope for itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntityKind {
+    Contest,
+    Task,
+    Team,
+    User,
+}
+
+impl EntityKind {
+    /// The kind a projection table feeds, when the board draws it as an entity at all.
+    ///
+    /// WHY a tombstone reads as a user: it is a change to the user it hides, so it is scoped
+    /// like one rather than by the row it leaves in `ranking_hidden`.
+    pub fn of_table(table: &str) -> Option<Self> {
+        match table {
+            "ranking_contests" => Some(Self::Contest),
+            "ranking_tasks" => Some(Self::Task),
+            "ranking_teams" => Some(Self::Team),
+            "ranking_users" | "ranking_hidden" => Some(Self::User),
+            _ => None,
+        }
+    }
+
+    /// The event name the page switches on, so the table name never reaches it.
+    pub fn event_name(self) -> &'static str {
+        match self {
+            Self::Contest => "contest",
+            Self::Task => "task",
+            Self::Team => "team",
+            Self::User => "user",
+        }
+    }
+
+    /// The rows of this kind the board draws. `$1` is the shown set and `$2` is either one key
+    /// or NULL for the whole list.
+    ///
+    /// WHY one statement per kind, used by the list, the one-entity read and the feed's
+    /// publication check: a contest and a task are drawn by the contest id they carry, while a
+    /// user is drawn when they submitted to a shown contest's task and a team when one of its
+    /// members did — two shapes of the single rule "belongs to a contest the config shows". Two
+    /// statements would be two spellings of that rule, and a key the feed announced while the
+    /// read refused would close the page's stream: its listener treats a refused read as a dead
+    /// connection.
+    ///
+    /// WHY the key is a bind and not a second statement: `$2` narrows the same rows the list
+    /// serves, so "which entity is this" can never be answered by a different predicate than
+    /// "which entities are there".
+    fn drawn(self) -> &'static str {
+        match self {
+            Self::Contest => {
+                "SELECT c.key, c.name, c.begin, c.\"end\", c.score_precision \
+                 FROM ranking_contests c \
+                 WHERE c.contest_id = ANY($1) AND ($2::text IS NULL OR c.key = $2) \
+                 ORDER BY c.key"
+            }
+            Self::Task => {
+                "SELECT t.key, t.name, t.short_name, t.contest, t.max_score, t.extra_headers, \
+                 t.display_order, t.score_mode, t.score_precision \
+                 FROM ranking_tasks t \
+                 WHERE t.contest_id = ANY($1) AND ($2::text IS NULL OR t.key = $2) \
+                 ORDER BY t.key"
+            }
+            // A team carries no contest of its own — it is shared across contests — so it is
+            // drawn exactly when the team board is: one of its members submitted to a task of a
+            // shown contest.
+            Self::Team => {
+                "SELECT t.key, t.name FROM ranking_teams t WHERE EXISTS (\
+                 SELECT 1 FROM ranking_users u \
+                 JOIN ranking_submissions s ON s.\"user\" = u.key \
+                 JOIN ranking_tasks k ON k.key = s.task \
+                 WHERE u.team = t.key AND k.contest_id = ANY($1)) \
+                 AND ($2::text IS NULL OR t.key = $2) ORDER BY t.key"
+            }
+            // A user is drawn exactly when the board has a row for them, which is the join the
+            // ledger makes: a submission of theirs on a task of a shown contest. A participant
+            // with no submission is on no board row, so nothing draws them either.
+            Self::User => {
+                "SELECT u.key, u.f_name, u.l_name, u.team FROM ranking_users u WHERE EXISTS (\
+                 SELECT 1 FROM ranking_submissions s \
+                 JOIN ranking_tasks k ON k.key = s.task \
+                 WHERE s.\"user\" = u.key AND k.contest_id = ANY($1)) \
+                 AND ($2::text IS NULL OR u.key = $2) ORDER BY u.key"
+            }
+        }
+    }
+}
+
+/// Whether the board draws `kind` with this key: the one answer behind the feed's publication
+/// boundary and the one-entity reads.
+///
+/// WHY it asks the statement the read asks, only for existence: "the row is there" and "the row
+/// is served" become one question asked twice, so the two boundaries cannot drift into a key one
+/// announces and the other refuses.
+pub async fn entity_is_shown(
+    pool: &PgPool,
+    kind: EntityKind,
+    key: &str,
+) -> Result<bool, StoreError> {
+    let shown = load_shown_set(pool).await?;
+    let found = sqlx::query(kind.drawn())
+        .bind(shown.contest_ids())
+        .bind(key)
+        .fetch_optional(pool)
+        .await?;
+    Ok(found.is_some())
+}
+
 /// Everything the board endpoints derive from one projection read: the ledger, the
 /// names, the teams and the overrides. Built once per data change and shared, so a
 /// page load (board + teams + scores + history) does not replay the whole contest

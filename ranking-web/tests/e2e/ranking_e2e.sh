@@ -138,14 +138,21 @@ compare_to_oracle() {
 }
 
 events_follow_a_write() {
+    local key
+    key="$(python3 -c "import json,sys;print(next(iter(json.load(open(sys.argv[1]))['entities']['contests'])))" \
+        "${PARITY}/seed.json")" || fail "seed.json carries no contest to touch"
     (timeout 10 curl -sS -N "${BASE}/events" >"${LOG}.events" || true) &
     local reader=$!
     sleep 1
+    # The probe writes a contest the seeded config shows. The feed announces an entity only
+    # when the board draws it (item R1), so a row outside the shown set — the probe used to be
+    # a members-less team — would test the scope rather than the stream and report no event
+    # even though live delivery works.
     psql "${DATABASE_URL}" -q -c \
-        "INSERT INTO ranking_teams (key,name) VALUES ('e2e_probe','Probe') ON CONFLICT (key) DO UPDATE SET name = EXCLUDED.name" \
+        "UPDATE ranking_contests SET name = name WHERE key = '${key}'" \
         >/dev/null
     wait "${reader}" || true
-    grep -q "event:team" "${LOG}.events" || fail "no live event reached an open stream"
+    grep -q "event:contest" "${LOG}.events" || fail "no live event reached an open stream"
     rm -f "${LOG}.events"
     pass "a write reaches an open event stream"
 }
