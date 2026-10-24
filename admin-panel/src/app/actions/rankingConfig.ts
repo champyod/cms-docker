@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 
 import { ensurePermission } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
+import { loadActorNames } from '@/lib/admin-names';
 import { endConfigTargets, showConfigTarget } from '@/lib/panel-actions';
 import { requirePanelActorId } from '@/lib/panel-actor';
 import type { ShownTarget, ShownTargetChoice } from '@/lib/ranking-config';
@@ -31,7 +32,13 @@ import { readActiveConfigRows } from '@/lib/ranking-config-store';
 export async function getShownTargets(): Promise<ShownTarget[]> {
   await ensurePermission('ranking:read');
   const rows = await readActiveConfigRows();
-  return rows.map(toShownTarget);
+  // WHY names here as well as the id: this list answers "who put this on the board", and
+  // `created_by` alone is a number to the operator. A row with no id has nothing to look up, so
+  // the surface can mark it as unattributed rather than naming a person it does not have.
+  const names = await loadActorNames(
+    rows.map((row) => row.created_by).filter((id): id is number => id !== null),
+  );
+  return rows.map((row) => toShownTarget(row, names));
 }
 
 /** The contests the operator can put on the board. Gated on reading, not on writing. */
@@ -76,14 +83,17 @@ function revalidateConfigPages(): void {
   revalidatePath('/[locale]/ranking/users');
 }
 
-function toShownTarget(row: {
-  id: bigint;
-  target_kind: string;
-  target_key: string;
-  reason: string | null;
-  created_at: Date;
-  created_by: number | null;
-}): ShownTarget {
+function toShownTarget(
+  row: {
+    id: bigint;
+    target_kind: string;
+    target_key: string;
+    reason: string | null;
+    created_at: Date;
+    created_by: number | null;
+  },
+  names: ReadonlyMap<number, string>,
+): ShownTarget {
   return {
     id: row.id.toString(),
     kind: row.target_kind,
@@ -91,6 +101,7 @@ function toShownTarget(row: {
     reason: row.reason ?? '',
     createdAt: row.created_at.toISOString(),
     createdBy: row.created_by,
+    createdByName: row.created_by === null ? null : (names.get(row.created_by) ?? null),
   };
 }
 

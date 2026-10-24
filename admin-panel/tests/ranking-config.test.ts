@@ -8,6 +8,7 @@ const {
   configCreate,
   configUpdateMany,
   contestFindUnique,
+  adminsFindMany,
   executeRaw,
   transaction,
   ensurePermission,
@@ -18,6 +19,7 @@ const {
   configCreate: vi.fn(),
   configUpdateMany: vi.fn(),
   contestFindUnique: vi.fn(),
+  adminsFindMany: vi.fn(),
   executeRaw: vi.fn(),
   transaction: vi.fn(),
   ensurePermission: vi.fn(),
@@ -29,6 +31,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     ranking_config: { findMany: configFindMany, create: configCreate, updateMany: configUpdateMany },
     contests: { findUnique: contestFindUnique },
+    admins: { findMany: adminsFindMany },
     $executeRaw: executeRaw,
     $transaction: transaction,
   },
@@ -144,6 +147,8 @@ describe('what the board shows', () => {
   beforeEach(() => {
     configFindMany.mockReset();
     configUpdateMany.mockReset();
+    adminsFindMany.mockReset();
+    adminsFindMany.mockResolvedValue([]);
     transaction.mockReset();
     ensurePermission.mockReset();
     recordAudit.mockReset();
@@ -160,6 +165,7 @@ describe('what the board shows', () => {
         created_by: 3,
       },
     ]);
+    adminsFindMany.mockResolvedValue([{ id: 3, username: 'root' }]);
     await expect(getShownTargets()).resolves.toEqual([
       {
         id: '4',
@@ -168,11 +174,29 @@ describe('what the board shows', () => {
         reason: 'day two',
         createdAt: '2026-10-16T01:00:00.000Z',
         createdBy: 3,
+        createdByName: 'root',
       },
     ]);
     expect(configFindMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { active: true } }),
     );
+  });
+
+  it('names no author for a row written outside the panel, and looks nobody up for it', async () => {
+    configFindMany.mockResolvedValue([
+      {
+        id: BigInt(5),
+        target_kind: 'contest',
+        target_key: '7',
+        reason: 'filed by the classic admin',
+        created_at: new Date('2026-10-16T02:00:00Z'),
+        created_by: null,
+      },
+    ]);
+    await expect(getShownTargets()).resolves.toEqual([
+      expect.objectContaining({ id: '5', createdBy: null, createdByName: null }),
+    ]);
+    expect(adminsFindMany).not.toHaveBeenCalled();
   });
 
   it('ends without deleting, so the author and the reason survive', async () => {

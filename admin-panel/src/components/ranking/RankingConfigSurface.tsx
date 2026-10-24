@@ -12,6 +12,7 @@ import { Input } from '@/components/core/Input';
 import { Stack } from '@/components/core/Layout';
 import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { Text } from '@/components/core/Typography';
+import { AttributionMark } from '@/components/ranking/AttributionMark';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { Dictionary } from '@/lib/dictionary';
@@ -151,8 +152,18 @@ function ShownList({ copy, rows, onEnd }: ShownListProps): React.JSX.Element {
         <li key={row.id} className="flex items-center justify-between gap-3 py-3">
           <span className="flex min-w-0 flex-col">
             <span className="truncate font-medium">{row.key}</span>
-            <span className="truncate text-sm text-muted-foreground">
-              {row.kind} · {row.reason}
+            <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span className="truncate">
+                {row.kind} · {row.reason}
+              </span>
+              {/*
+                WHY the author is on every row: a config row can be written outside the panel
+                (`created_by` NULL), and a list that printed nothing there would read exactly like
+                one whose author it simply did not show. The mark comes from the same predicate and
+                the same shape the override list uses, so the two surfaces cannot disagree about
+                which rows the panel wrote.
+              */}
+              <AttributionMark row={row} unattributedLabel={copy.outsidePanelBadge} />
             </span>
           </span>
           {onEnd !== null ? (

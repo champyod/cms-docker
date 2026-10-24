@@ -14,11 +14,12 @@ import { Stack } from '@/components/core/Layout';
 import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { SELECTION_CHECKBOX_CLASS, buildSelectionColumn } from '@/components/core/SelectionColumn';
+import { AttributionMark } from '@/components/ranking/AttributionMark';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useListSelection, type ListSelection } from '@/hooks/useListSelection';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
 import type { Dictionary } from '@/lib/dictionary';
-import { attributionText, isUnattributed } from '@/lib/ranking-attribution';
+import { isUnattributed } from '@/lib/ranking-attribution';
 import { interpolate } from '@/lib/interpolate';
 
 type OverrideCopy = Dictionary['ranking']['overrides'];
@@ -316,11 +317,7 @@ function buildOverrideColumns(
       render: (row) => (
         <span className="flex flex-wrap items-center gap-2">
           <span className={MUTED}>{row.createdAt}</span>
-          {isUnattributed(row) ? (
-            <Badge variant="amber">{copy.outsidePanelBadge}</Badge>
-          ) : (
-            <span className={`font-mono text-xs ${MUTED}`}>{attributionText(row)}</span>
-          )}
+          <AttributionMark row={row} unattributedLabel={copy.outsidePanelBadge} />
         </span>
       ),
     },

@@ -729,7 +729,8 @@
       "endTitle": "Take this contest off the board",
       "end": "Take off the board",
       "ended": "The contest is off the board",
-      "endFailed": "The contest could not be taken off the board"
+      "endFailed": "The contest could not be taken off the board",
+      "outsidePanelBadge": "written outside the panel"
     },
     "overrides": {
       "title": "Manual ranking overrides",

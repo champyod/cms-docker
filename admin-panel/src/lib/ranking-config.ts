@@ -27,8 +27,11 @@ export interface ShownTarget {
   readonly kind: string;
   readonly key: string;
   readonly reason: string;
-  readonly createdAt: string;
+  /** The admin who showed it, or `null` for a row written outside the panel. */
   readonly createdBy: number | null;
+  /** The resolved name, or `null` when the admin row is gone; the id is still the attribution. */
+  readonly createdByName: string | null;
+  readonly createdAt: string;
 }
 
 /** A contest the operator can put on the board, as the picker offers it. */
