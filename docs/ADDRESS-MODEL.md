@@ -72,10 +72,27 @@ make admin        # or ./cms deploy all
 The override uses Compose's `!override` tag to replace a service's `ports` list, so
 it needs Compose >= 2.24. The generated file is gitignored.
 
+### The panel is not a front door
+
+`admin-panel-next` is the one service the base file publishes on `127.0.0.1`, and it
+is not an oversight to be tidied into `0.0.0.0`. The panel names a caller from a header
+only a proxy asserts — `x-real-ip`, or the rightmost `x-forwarded-for` hop, read in
+`admin-panel/src/lib/request-identity.ts` — so the published address decides whether
+that name is the proxy's or the caller's. On a routable address a caller connects to
+`:8891` directly, sends the header itself, and picks both the login bucket its failures
+count against and the address its audit rows carry. No proxy here needs the host port:
+the grader vhost and the funnel gateway dial `cms-admin-panel-next:3000` over
+`cms-network`. The host publish serves an operator on the box (and `tailscale serve`,
+which dials `127.0.0.1`). `ADMIN_NEXT_BIND_IP` widens it through the same generated
+override, one published entry per address — a routable value is a decision to front the
+panel with a proxy of your own, not a way to reach it directly.
+
 Because the base files no longer read the `*_BIND_IP` keys themselves, a bare
-`docker compose up` that skips the generator binds the front-door ports on
-`0.0.0.0` — including the ones that default to loopback. Bring stacks up through
-`make`/`./cms deploy` so the configured addresses apply.
+`docker compose up` that skips the generator binds the front-door web ports on
+`0.0.0.0` — including the ones whose key defaults to loopback. The panel is not among
+them: its base entry names `127.0.0.1`, so skipping the generator narrows it instead of
+widening it. Bring stacks up through `make`/`./cms deploy` so the configured addresses
+apply.
 
 ## Hand-written local overrides
 
@@ -170,10 +187,11 @@ generated override expands it:
 ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
 ```
 
-Loopback only (local testing) — unset the key and the compose default keeps it there:
+Loopback only (local testing) — name it, because the base file's own default for the
+front-door web ports is `0.0.0.0`:
 
 ```
-ADMIN_BIND_IP = ""
+ADMIN_BIND_IP = "127.0.0.1"
 ```
 
 Workers reachable on the tailnet only:
