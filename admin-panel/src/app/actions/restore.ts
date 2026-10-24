@@ -31,6 +31,7 @@ import {
   teardownPreview,
   waitForPostgres,
 } from './restore-preview-run';
+import { postgresClientSpawn } from './restore-apply-measure';
 
 const PREVIEW_LABEL = 'cms.restore-preview';
 
@@ -108,14 +109,14 @@ export async function startPreview(previewId: string): Promise<PreviewStartResul
     await runDocker(['cp', dump, `${container}:${CONTAINER_DUMP_PATH}`]);
     toc = await readToc(container);
     if (toc.catalogTables.length === 0) throw new Error('The archive holds none of the backup catalog tables.');
-    await runDocker([
-      'exec', '-e', `PGPASSWORD=${env.POSTGRES_PASSWORD}`, container,
+    const client = postgresClientSpawn(env, container, [
       'pg_restore', '-U', env.POSTGRES_USER, '-d', env.POSTGRES_DB, '-Fc',
       // Ownership and privileges are irrelevant in a throwaway container and would
       // fail on roles the dump names; --exit-on-error makes a non-zero exit mean a
       // real restore failure instead of ignorable warnings.
       '--no-owner', '--no-privileges', '--exit-on-error', CONTAINER_DUMP_PATH,
-    ], RESTORE_TIMEOUT_MS);
+    ]);
+    await runDocker(client.args, RESTORE_TIMEOUT_MS, client.env);
   } catch (error) {
     const cleanup = await teardownPreview(previewId).then(
       () => '',

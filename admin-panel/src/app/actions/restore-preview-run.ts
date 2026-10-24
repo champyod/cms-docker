@@ -47,9 +47,9 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function runDocker(args: string[], timeoutMs: number = DOCKER_TIMEOUT_MS): Promise<string> {
+export async function runDocker(args: string[], timeoutMs: number = DOCKER_TIMEOUT_MS, env?: NodeJS.ProcessEnv): Promise<string> {
   await ensurePermission('backup:restore');
-  const { stdout } = await execFileAsync('docker', args, { timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES });
+  const { stdout } = await execFileAsync('docker', args, { timeout: timeoutMs, maxBuffer: DOCKER_MAX_OUTPUT_BYTES, ...(env === undefined ? {} : { env }) });
   return stdout;
 }
 

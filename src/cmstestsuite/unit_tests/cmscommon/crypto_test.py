@@ -167,17 +167,50 @@ class TestBuildPassword(unittest.TestCase):
 class TestHashAndValidatePassword(unittest.TestCase):
     """Tests for the functions hash_password and validate_password."""
 
-    def test_it_validates_a_plaintext_password(self):
-        self.assertTrue(validate_password(
-            hash_password("p你好", method="plaintext"), "p你好"))
-        self.assertFalse(validate_password(
-            hash_password("p你好", method="plaintext"), "你好"))
-
     def test_it_validates_a_bcrypt_password(self):
         self.assertTrue(validate_password(
             hash_password("p你好", method="bcrypt"), "p你好"))
         self.assertFalse(validate_password(
             hash_password("p你好", method="bcrypt"), "你好"))
+
+    def test_it_refuses_a_password_stored_in_plaintext(self):
+        # WHY: a "plaintext:" row is the password itself, so comparing it would
+        # hand the account to anyone who can read the database. The refusal has
+        # to be unconditional, whatever the caller supplies.
+        with self.assertLogs("cmscommon.crypto", level="WARNING") as logged:
+            self.assertFalse(validate_password(
+                "plaintext:some-secret", "some-secret", "someuser"))
+        self.assertFalse(validate_password("plaintext:some-secret",
+                                           "some-secret"))
+        self.assertIn("someuser", logged.output[0])
+        # The password itself is not part of the security warning.
+        self.assertNotIn("some-secret", logged.output[0])
+
+    def test_it_rejects_a_password_over_72_bytes_when_hashing(self):
+        # bcrypt stores at most 72 bytes, so this is where the limit has to be
+        # named: a stored truncation would authenticate its own prefix.
+        with self.assertRaises(ValueError) as raised:
+            hash_password("a" * 73)
+        self.assertIn("72", str(raised.exception))
+        # The limit is on bytes, not characters: 25 characters, 73 bytes.
+        with self.assertRaises(ValueError):
+            hash_password("你" * 24 + "a")
+
+    def test_it_hashes_a_password_of_exactly_72_bytes(self):
+        # The boundary stays usable: 72 bytes is what bcrypt can hold.
+        authentication = hash_password("a" * 72)
+        self.assertTrue(validate_password(authentication, "a" * 72))
+        self.assertFalse(validate_password(authentication, "a" * 71))
+
+    def test_it_returns_false_for_a_long_candidate_instead_of_raising(self):
+        # bcrypt < 5 hashes and compares its own 72-byte truncation, so
+        # "a"*72+"tail" compares equal to the stored hash of "a"*72; bcrypt >= 5
+        # raises ValueError instead. Neither may reach the login path: the
+        # candidate is a definite non-match.
+        authentication = hash_password("a" * 72)
+        self.assertFalse(validate_password(authentication, "a" * 72 + "tail"))
+        self.assertFalse(validate_password(
+            hash_password("p你好"), "你" * 24 + "a"))
 
     def test_it_rejects_an_unknown_method(self):
         with self.assertRaises(ValueError):

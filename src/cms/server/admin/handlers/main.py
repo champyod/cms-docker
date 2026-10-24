@@ -103,7 +103,8 @@ class LoginHandler(SimpleHandler("login.html", authenticated=False)):
             return
 
         try:
-            allowed = validate_password(admin.authentication, password)
+            allowed = validate_password(admin.authentication, password,
+                                        username)
         except ValueError:
             logger.warning("Unable to validate password for admin %r", username,
                            exc_info=True)
