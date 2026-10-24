@@ -171,10 +171,9 @@ impl EntityKind {
     /// read refused would close the page's stream: its listener treats a refused read as a dead
     /// connection.
     ///
-    /// WHY the key is a bind and not a second statement: `$2` narrows the same rows the list
-    /// serves, so "which entity is this" can never be answered by a different predicate than
-    /// "which entities are there".
-    fn drawn(self) -> &'static str {
+    /// `$2` narrows the same rows the list serves, so "which entity is this" can never be
+    /// answered by a different predicate than "which entities are there".
+    pub fn drawn(self) -> &'static str {
         match self {
             Self::Contest => {
                 "SELECT c.key, c.name, c.begin, c.\"end\", c.score_precision \
