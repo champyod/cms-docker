@@ -1304,7 +1304,7 @@ DB_CONTAINER="cms-database"
 # the stack is pointed at.
 db_query() {
   local sql="$1"
-  docker exec -i -e PGPASSWORD="${__TOML[core.POSTGRES_PASSWORD]:-}" \
+  docker_exec_db "${__TOML[core.POSTGRES_PASSWORD]:-}" -i \
     "$DB_CONTAINER" psql -U "${__TOML[core.POSTGRES_USER]:-cmsuser}" \
     -d "${__TOML[core.POSTGRES_DB]:-cmsdb}" -tA -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
 }

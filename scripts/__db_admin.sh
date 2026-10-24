@@ -227,7 +227,7 @@ single_user_psql() {
 # Existence probe against the maintenance database. -tAc yields a bare 1/0.
 db_exists() {
   local name="$1" out
-  out="$(docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
+  out="$(docker_exec_db "${POSTGRES_PASSWORD:-}" "$DB_CONTAINER" \
     psql -U "${POSTGRES_USER:-cmsuser}" -d "postgres" -tAc \
     "SELECT 1 FROM pg_database WHERE datname = '${name}'" 2>/dev/null || true)"
   [[ "$(printf '%s' "$out" | tr -d '[:space:]')" == "1" ]]
