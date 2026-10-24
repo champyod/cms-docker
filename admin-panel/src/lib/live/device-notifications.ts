@@ -16,11 +16,11 @@ export function requestDeviceNotifications(): void {
 }
 
 /**
- * Posts one device notification beside the in-page toast.
+ * Posts the one OS notification a panel that is not on screen uses to reach its operator.
  *
  * Why the failure is dropped: the constructor throws when the page may not show one — an insecure
- * context, a grant revoked between the check and the call — and the toast has already carried the
- * alert on screen.
+ * context, a grant revoked between the check and the call. The panel's own record still holds the
+ * event, so a refused notification costs the cue outside the panel and nothing else.
  */
 export function notifyDevice(title: string, detail: string): void {
   if (!deviceNotificationsAvailable() || Notification.permission !== 'granted') return;

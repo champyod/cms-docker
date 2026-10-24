@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLiveStream } from '@/hooks/useLiveStream';
 
@@ -30,6 +30,16 @@ function DisabledHarness(): React.JSX.Element {
   return <span>{status}</span>;
 }
 
+/** A channel that exists to reach an operator who is not looking at the panel. */
+function FollowHiddenHarness(): React.JSX.Element {
+  const { status } = useLiveStream<{ ok: true }>({
+    url: '/api/notifications/stream',
+    onFrame: () => undefined,
+    followHidden: true,
+  });
+  return <span>{status}</span>;
+}
+
 beforeEach(() => {
   FakeEventSource.instances = [];
   vi.useFakeTimers();
@@ -38,6 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -59,5 +70,37 @@ describe('Infrastructure stream route regression', () => {
     render(<DisabledHarness />);
     expect(screen.getByText('paused')).toBeTruthy();
     expect(FakeEventSource.instances).toHaveLength(0);
+  });
+
+  it('releases the connection when the tab is hidden, for a channel that did not ask to follow it', () => {
+    let hidden = false;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    render(<Harness />);
+    expect(FakeEventSource.instances).toHaveLength(1);
+
+    hidden = true;
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    expect(screen.getByText('paused')).toBeTruthy();
+    expect(FakeEventSource.instances[0].readyState).toBe(2);
+  });
+
+  it('keeps a follow-hidden channel connected while the tab is hidden, and reopens nothing on return', () => {
+    let hidden = true;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    render(<FollowHiddenHarness />);
+
+    // Why it opens at all: the tab mounted while hidden, which is precisely the state this channel
+    // exists for, so the connection cannot wait for a show.
+    expect(FakeEventSource.instances).toHaveLength(1);
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+    expect(FakeEventSource.instances[0].readyState).toBe(0);
+
+    hidden = false;
+    act(() => document.dispatchEvent(new Event('visibilitychange')));
+
+    // Why no second source: the one that stayed open is still the alert channel, and reopening it
+    // would only replay frames this connection already delivered.
+    expect(FakeEventSource.instances).toHaveLength(1);
   });
 });

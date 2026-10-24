@@ -1,10 +1,10 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 
 import { useLiveStream } from '@/hooks/useLiveStream';
-import { notifyDevice, requestDeviceNotifications } from '@/lib/live/device-notifications';
+import { deliverSystemEvent } from '@/lib/live/alert-delivery';
+import { requestDeviceNotifications } from '@/lib/live/device-notifications';
 import { cursorFromFrameId, isNewFrame, type QueuedNotification } from '@/lib/notification-queue';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { QuestionsFrame } from '@/lib/live/frames';
@@ -12,6 +12,9 @@ import type { QuestionsFrame } from '@/lib/live/frames';
 const ALERT_STREAM_URL = '/api/notifications/stream';
 const QUESTION_STREAM_URL = '/api/questions/stream';
 const MAX_EVENTS = 20;
+
+/** What a question arrival says outside the panel; the header's own dot carries it inside. */
+const QUESTION_CUE_TITLE = 'New Question Received!';
 
 export interface LiveNotifications {
   readonly events: readonly QueuedNotification[];
@@ -30,6 +33,11 @@ const LiveNotificationsContext = createContext<LiveNotifications | null>(null);
  * Why both signals share one service: they are the same notification surface seen from two channels,
  * and keeping their dedup, their alerting and their device notifications in one place is what stops a
  * reconnect from alerting twice or the two channels from drifting apart.
+ *
+ * Why both channels stay connected while the tab is hidden: this service exists to reach an operator
+ * who is not looking at the panel, and a channel that closes on `visibilitychange` can never do that.
+ * The pause other surfaces take is a cost they pay for sampling nobody; here nobody looking is exactly
+ * the case the channel is for.
  */
 export function LiveNotificationProvider({
   permissionKeys,
@@ -59,12 +67,9 @@ export function LiveNotificationProvider({
     setAlertCursor((previous) => cursorFromFrameId(previous, frame.id));
     setEvents((previous) => [frame, ...previous].slice(0, MAX_EVENTS));
     setUnread((count) => count + 1);
-    if (frame.level === 'critical') {
-      toast.error(frame.title, { description: frame.detail });
-      notifyDevice(frame.title, frame.detail);
-      return;
-    }
-    toast.warning(frame.title, { description: frame.detail });
+    // Why the record is written before the cue: the bell's list is this event's history whatever
+    // surface carries it, and the decision below only says which one cue goes beside it.
+    deliverSystemEvent(frame);
   }, []);
 
   const onQuestions = useCallback((frame: QuestionsFrame): void => {
@@ -75,13 +80,14 @@ export function LiveNotificationProvider({
     if (latest === null || latest.id <= lastAlertedQuestionId.current) return;
     lastAlertedQuestionId.current = latest.id;
     const from = latest.username ?? 'User';
-    // Why the alert persists: an unanswered question is a task for an admin, not a status the panel
-    // may quietly drop.
-    toast.warning('New Question Received!', {
-      description: `From ${from}: ${latest.subject.substring(0, 30)}...`,
-      duration: Infinity,
+    // Why the cue and not a toast: a question is a task for an admin, so it keeps the one surface
+    // every other system event has — the header's dot while the panel is on screen, exactly one OS
+    // notification while it is not. A persistent toast beside the dot was the same arrival twice.
+    deliverSystemEvent({
+      id: `question-${latest.id}`,
+      title: QUESTION_CUE_TITLE,
+      detail: `From ${from}: ${latest.subject}`,
     });
-    notifyDevice('New Question Received!', `From ${from}: ${latest.subject}`);
   }, []);
 
   // Why the cursor travels in the url: the stream replays its backlog on every (re)connect, and
@@ -90,11 +96,13 @@ export function LiveNotificationProvider({
     url: `${ALERT_STREAM_URL}?since=${alertCursor}`,
     onFrame: onAlert,
     enabled: hasEffectivePermission(keys, 'audit:read'),
+    followHidden: true,
   });
   useLiveStream<QuestionsFrame>({
     url: QUESTION_STREAM_URL,
     onFrame: onQuestions,
     enabled: hasEffectivePermission(keys, 'question:list'),
+    followHidden: true,
   });
 
   const value = useMemo<LiveNotifications>(

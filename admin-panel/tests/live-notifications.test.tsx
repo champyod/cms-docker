@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LiveNotificationProvider, useLiveNotifications } from '@/lib/live/notifications';
 import type { QuestionsFrame } from '@/lib/live/frames';
 import type { QueuedNotification } from '@/lib/notification-queue';
+import { memoryStorage } from './memory-storage';
 
 interface StreamOptions {
   url: string;
   onFrame: (frame: unknown) => void;
   enabled?: boolean;
+  followHidden?: boolean;
 }
 
 const streams = vi.hoisted(() => ({ opened: [] as StreamOptions[] }));
@@ -38,13 +40,16 @@ const QUESTION: QuestionsFrame = {
   latest: { id: 4, subject: 'How do I rejudge?', username: 'ada', askedAt: '2026-10-13T09:00:00.000Z' },
 };
 
+/** Whether the tab this service runs in is on screen; every test states it before it renders. */
+let panelHidden = false;
+
 function Probe(): React.JSX.Element {
   const { unread, unansweredCount } = useLiveNotifications();
   return <span>{`unread:${unread} questions:${unansweredCount}`}</span>;
 }
 
-function renderService(permissionKeys: readonly string[]): void {
-  render(
+function renderService(permissionKeys: readonly string[]): ReturnType<typeof render> {
+  return render(
     <LiveNotificationProvider permissionKeys={permissionKeys}>
       <Probe />
     </LiveNotificationProvider>,
@@ -64,6 +69,11 @@ function deliver(options: StreamOptions, frame: unknown): void {
 }
 
 beforeEach(() => {
+  panelHidden = false;
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => panelHidden });
+  // Why a fresh store per case: the claim is shared between tabs, so it survives a remount and would
+  // otherwise leak the previous case's claim into the next.
+  vi.stubGlobal('localStorage', memoryStorage());
   streams.opened = [];
   device.notifyDevice.mockReset();
   device.requestDeviceNotifications.mockReset();
@@ -71,7 +81,10 @@ beforeEach(() => {
   toast.warning.mockReset();
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /**
  * The panel's one notification service: both channels feed one state, and neither the bell nor the
@@ -85,6 +98,15 @@ describe('live notification service', () => {
     expect(channel('/api/questions/stream').enabled).toBe(false);
   });
 
+  it('keeps both channels open while the tab is hidden, so an alert can still reach the operator', () => {
+    renderService(['audit:read']);
+
+    // Why the channels ask for this: a channel that closed on the hide could never alert a tab
+    // nobody was looking at, which is the only case an OS notification exists for.
+    expect(channel('/api/notifications/stream').followHidden).toBe(true);
+    expect(channel('/api/questions/stream').followHidden).toBe(true);
+  });
+
   it('counts an alert once, however often the backlog replays it', () => {
     renderService(['audit:read']);
     const alerts = channel('/api/notifications/stream');
@@ -93,8 +115,47 @@ describe('live notification service', () => {
     deliver(alerts, ALERT);
 
     expect(screen.getByText('unread:1 questions:0')).toBeTruthy();
-    expect(toast.error).toHaveBeenCalledTimes(1);
+    expect(device.notifyDevice).not.toHaveBeenCalled();
+  });
+
+  it('raises no second surface while the operator is looking at the panel', () => {
+    renderService(['audit:read']);
+    deliver(channel('/api/notifications/stream'), ALERT);
+
+    // Why both: the toast and the OS notification are the two surfaces the bell's own list already
+    // covers, and one arrival is one surface.
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(device.notifyDevice).not.toHaveBeenCalled();
+  });
+
+  it('posts exactly one OS notification when the panel is not on screen', () => {
+    panelHidden = true;
+    renderService(['audit:read']);
+
+    deliver(channel('/api/notifications/stream'), ALERT);
+
     expect(device.notifyDevice).toHaveBeenCalledTimes(1);
+    expect(device.notifyDevice).toHaveBeenCalledWith(ALERT.title, ALERT.detail);
+    expect(toast.error).not.toHaveBeenCalled();
+    // Why the count still moves: the notification is the cue outside the panel, not a replacement for
+    // the record the panel keeps for the operator's return.
+    expect(screen.getByText('unread:1 questions:0')).toBeTruthy();
+  });
+
+  it('leaves the notification to the tab that claimed the event', () => {
+    panelHidden = true;
+    const first = renderService(['audit:read']);
+    deliver(channel('/api/notifications/stream'), ALERT);
+    first.unmount();
+
+    // A second tab has its own connection, its own seen-set and its own record; only the claim is
+    // shared, which is what keeps one arrival from becoming one notification per tab.
+    renderService(['audit:read']);
+    deliver(channel('/api/notifications/stream'), ALERT);
+
+    expect(device.notifyDevice).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('unread:1 questions:0')).toBeTruthy();
   });
 
   it('carries the alert cursor forward so a reconnect does not replay it', () => {
@@ -104,7 +165,7 @@ describe('live notification service', () => {
     expect(channel('/api/notifications/stream').url).toBe('/api/notifications/stream?since=9');
   });
 
-  it('reports the unanswered count and alerts on a new question once', () => {
+  it('reports the unanswered count without a cue of its own', () => {
     renderService(['question:list']);
     const questions = channel('/api/questions/stream');
 
@@ -112,18 +173,29 @@ describe('live notification service', () => {
     deliver(questions, QUESTION);
 
     expect(screen.getByText('unread:0 questions:1')).toBeTruthy();
-    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(device.notifyDevice).not.toHaveBeenCalled();
+  });
+
+  it('notifies once for a question when the panel is not on screen', () => {
+    panelHidden = true;
+    renderService(['question:list']);
+
+    deliver(channel('/api/questions/stream'), QUESTION);
+
     expect(device.notifyDevice).toHaveBeenCalledTimes(1);
+    expect(device.notifyDevice).toHaveBeenCalledWith('New Question Received!', 'From ada: How do I rejudge?');
   });
 
   it('does not alert again when an older question is the newest one left', () => {
+    panelHidden = true;
     renderService(['question:list']);
     const questions = channel('/api/questions/stream');
 
     deliver(questions, QUESTION);
     deliver(questions, { unansweredCount: 1, latest: { ...QUESTION.latest, id: 2 } });
 
-    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(device.notifyDevice).toHaveBeenCalledTimes(1);
     expect(screen.getByText('unread:0 questions:1')).toBeTruthy();
   });
 
