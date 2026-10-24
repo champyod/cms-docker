@@ -761,7 +761,14 @@ class BaseHandler(CommonRequestHandler):
 
         # If a password is given, we use that.
         if len(password) > 0:
-            dest["password"] = hash_password(password, method)
+            # WHY 400 and not a 500 from hash_password: the form no longer offers
+            # a plaintext method, so reaching this with one means a stale page or
+            # a hand-made request. The admin gets told the choice is refused
+            # instead of a traceback, and the refused method is never stored.
+            try:
+                dest["password"] = hash_password(password, method)
+            except ValueError as exc:
+                raise tornado.web.HTTPError(400, str(exc)) from exc
         # If the password was set and was hashed, and the admin kept
         # the method unchanged and didn't specify anything, they must
         # have meant to keep the old password unchanged.

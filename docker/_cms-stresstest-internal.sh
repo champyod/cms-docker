@@ -32,4 +32,17 @@ cd ..
 cmsResourceService -a 1 &
 sleep 5
 
-python3 cmstestsuite/StressTest.py --contest-id 1 --submissions-path stress_sols/
+# WHY this can fail loudly: passwords are stored bcrypt-hashed, so the harness
+# cannot read them back. It needs the contest's plaintext passwords, which are
+# not in the database by design. Without the file it exits non-zero instead of
+# reporting a passing run that logged in as nobody — mount the fixture and point
+# CMS_STRESSTEST_PASSWORDS at it (see StressTest.py --passwords-file).
+PASSWORDS_ARG=""
+if [ -n "${CMS_STRESSTEST_PASSWORDS:-}" ]; then
+  PASSWORDS_ARG="--passwords-file ${CMS_STRESSTEST_PASSWORDS}"
+else
+  echo "warning: CMS_STRESSTEST_PASSWORDS is unset; the stress test cannot log in" >&2
+fi
+
+# shellcheck disable=SC2086 # PASSWORDS_ARG is a deliberately empty-or-one-flag word
+python3 cmstestsuite/StressTest.py --contest-id 1 --submissions-path stress_sols/ ${PASSWORDS_ARG}

@@ -26,7 +26,10 @@ Patched:
 
 Plus: `src/install.py` constraints stripped from pip install; `ranking-web/static/lib/raphael.js` vendored.
 
-Note: `cmscommon/crypto.py` **untouched** — `bcrypt:`/`plaintext:` prefix logic is upstream, not fork work.
+Note: `cmscommon/crypto.py` diverges from upstream: the `plaintext:` method is now refused at both
+storage and login (a plaintext row never authenticates), `build_password()` no longer wraps a
+plaintext payload, `hash_password()` is the single entry that stores a raw password, and bcrypt's
+72-byte limit is enforced at set time. The `bcrypt:`/`plaintext:` prefix format itself is upstream.
 
 ## Built new (not upstream at all)
 
