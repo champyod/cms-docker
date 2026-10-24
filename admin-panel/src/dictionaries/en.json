@@ -1170,7 +1170,10 @@
     "title": "System alerts",
     "markAllRead": "Mark all read",
     "clear": "Clear",
-    "empty": "No alerts yet."
+    "empty": "No alerts yet.",
+    "questionTitle": "New Question Received!",
+    "questionDetail": "From {username}: {subject}",
+    "questionUnnamedAsker": "User"
   },
   "states": {
     "retry": {
