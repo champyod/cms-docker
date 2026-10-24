@@ -172,10 +172,20 @@ ceiling, so it bounds a burst and not a password-guessing run.
 
 ## 3. What the panel considers your address
 
-The panel derives the identity used for rate limiting from the first entry of the
-`x-forwarded-for` request header (`admin-panel/src/app/actions/auth.ts:37`, and again in
-`resolveBucketKeys` at line 57). When that header is absent it falls back to the literal
-string `local`.
+The panel derives the identity used for rate limiting from `parseForwardedFor` in
+`admin-panel/src/lib/request-identity.ts`: the rightmost non-empty `x-forwarded-for`
+hop — the one the nearest proxy appended, never the leftmost one the caller sent — and,
+when no chain arrives at all, the rightmost `x-real-ip`. When neither header is present
+it falls back to the literal string `local`. The login action
+(`resolveRequestIdentity` in `admin-panel/src/app/actions/auth.ts`) and the audit rows
+read the same helper, so the bucket a failure counts against and the address the audit
+log records cannot disagree.
+
+That reading is only sound while nothing reaches the panel except a proxy that writes
+those headers itself: both are caller-supplied by default, so a caller that connects
+directly picks the value the panel then treats as its address. This is why the panel's
+host port is published on loopback in `docker-compose.yml` and widened only through
+`ADMIN_NEXT_BIND_IP` — see [`ADDRESS-MODEL.md`](ADDRESS-MODEL.md).
 
 `isLoopbackIp` in the same file skips the per-IP counter when the resolved address is
 loopback — `127.x`, `::1`, the dual-stack form `::ffff:127.x`, or the `local` fallback.

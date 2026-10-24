@@ -543,7 +543,16 @@ services:
     group_add:
       - "${DOCKER_GID:-999}"
     ports:
-      - "0.0.0.0:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
+      # WHY loopback, not the 0.0.0.0 the other front-door UIs publish on: the panel
+      # names the caller from a header only a proxy asserts (x-real-ip, or the rightmost
+      # x-forwarded-for hop — src/lib/request-identity.ts), so an address that reaches
+      # :8891 without passing a proxy lets the caller pick its own login bucket and the
+      # address its audit rows carry. Every proxy in this stack — the grader vhost and the
+      # funnel gateway — dials cms-admin-panel-next:3000 over cms-network and never needs
+      # the host port; the host publish exists for the operator's browser and for
+      # `tailscale serve`, both of which are on the box. ADMIN_NEXT_BIND_IP widens this
+      # through the generated expose override, one published entry per address.
+      - "127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.cms-admin-next.rule=Host(`${ADMIN_NEXT_DOMAIN:-admin-next.cms.local}`)"
