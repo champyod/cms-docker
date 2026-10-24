@@ -35,10 +35,7 @@ from cms.server.contest.authentication import validate_login, \
     authenticate_request
 from cms.server.login_counter_backend import InProcessBackend
 from cms.server.login_counters import FAILURE_WINDOW, LoginFailureCounters
-# Stored credentials are bcrypt: a "plaintext:" row never authenticates, so a
-# test that wants a working password has to store the hash it would really hold.
-# build_password stays for the one test that stores such a row on purpose.
-from cmscommon.crypto import build_password, hash_password
+from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
 
 
@@ -116,7 +113,10 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         # address is allowed explicitly so the refusal can only come from the
         # credential.
         self.contest.ip_restriction = False
-        self.user.password = build_password("mypass")
+        # A legacy row is constructed literally here: this test exists to prove
+        # that such a row can no longer log in, so it must not go through the
+        # builder (which refuses to write one).
+        self.user.password = "plaintext:mypass"
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
         self.assertFailure("myuser", "wrongpass", "127.0.0.1")
@@ -150,14 +150,14 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
     def test_it_does_not_raise_on_an_invalid_user_password(self):
-        # It's invalid, as it is not an authentication string.
+        # It's invalid, as it has no method prefix.
         self.user.password = "mypass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
     def test_it_does_not_raise_on_an_invalid_participation_password(self):
-        # It's invalid, as it is not an authentication string.
+        # It's invalid, as it has no method prefix.
         self.participation.password = "myotherpass"
 
         # Mainly checks that no exception is raised.

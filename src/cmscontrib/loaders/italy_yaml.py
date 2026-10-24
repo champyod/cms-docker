@@ -39,7 +39,7 @@ from cms.db import Contest, User, Task, Statement, Attachment, Team, Dataset, \
 from cms.grading.languagemanager import LANGUAGES, HEADER_EXTS
 from cmscommon.constants import \
     SCORE_MODE_MAX, SCORE_MODE_MAX_SUBTASK, SCORE_MODE_MAX_TOKENED_LAST
-from cmscommon.crypto import build_password
+from cmscommon.crypto import hash_password
 from cmscontrib import touch
 from .base_loader import ContestLoader, TaskLoader, UserLoader, TeamLoader, LANGUAGE_MAP
 
@@ -257,7 +257,8 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
         participations: list[dict] | None = load(conf, None, ["users", "utenti"])
         participations = [] if participations is None else participations
         for p in participations:
-            p["password"] = build_password(p["password"])
+            # contest.yaml holds the raw password: hash it, never store it.
+            p["password"] = hash_password(p["password"])
 
         # Import was successful
         os.remove(os.path.join(self.path, ".import_error_contest"))
@@ -293,7 +294,7 @@ class YamlLoader(ContestLoader, TaskLoader, UserLoader, TeamLoader):
             return None
 
         load(conf, args, "username")
-        load(conf, args, "password", conv=build_password)
+        load(conf, args, "password", conv=hash_password)
 
         load(conf, args, ["first_name", "nome"])
         load(conf, args, ["last_name", "cognome"])

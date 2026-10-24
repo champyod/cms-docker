@@ -36,7 +36,7 @@ from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
 from sqlalchemy.types import Boolean, Integer, String, Unicode, DateTime, \
     Enum, Interval
 
-from cmscommon.crypto import generate_random_password, build_password
+from cmscommon.crypto import generate_random_password, hash_password
 from . import CastingArray, Codename, Base, Admin, Contest
 from .contest import ContestTeam
 import typing
@@ -71,7 +71,7 @@ class User(Base):
     password: str = Column(
         Unicode,
         nullable=False,
-        default=lambda: build_password(generate_random_password()))
+        default=lambda: hash_password(generate_random_password()))
 
     # Email for any communications in case of remote contest.
     email: str | None = Column(
