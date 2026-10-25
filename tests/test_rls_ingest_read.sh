@@ -70,6 +70,33 @@ while read -r tbl; do
   done
 done <<<"$INGEST_TABLES"
 
+printf '\nevery table the ingest identity may append to, it may also read back\n'
+# WHY stated as a rule and not a table list: Prisma writes with INSERT … RETURNING, so a table an
+# ingest identity may append to but not read fails every write with 42501 — that is how both
+# security_findings and audit_log broke, one after the other. The rule catches the next one.
+# The audit_log predicate wraps over several lines, so the candidate list comes from the statement
+# heads and the grant is checked on the whole statement.
+append_tables="$(printf '%s\n' "$GENERATED" | grep -oE '^CREATE POLICY cms_actor_append ON public\.[a-z_]+ FOR INSERT' | sed 's/.*public\.//; s/ FOR INSERT//' | sort -u)"
+append_ingest=""
+while read -r tbl; do
+  [[ -n "$tbl" ]] || continue
+  if policy_stmt "$GENERATED" cms_actor_append "$tbl" | grep -q "system:ingest"; then
+    append_ingest="${append_ingest}${tbl}"$'\n'
+  fi
+done <<<"$append_tables"
+append_ingest="$(printf '%s' "$append_ingest" | sed '/^$/d')"
+if [[ -z "$append_ingest" ]]; then
+  no "no table grants the ingest identity append — the parse is broken, not the tree"
+fi
+while read -r tbl; do
+  [[ -n "$tbl" ]] || continue
+  if policy_stmt "$GENERATED" cms_actor_read "$tbl" | grep -q "system:ingest"; then
+    ok "$tbl: appendable by ingest, and readable by ingest"
+  else
+    no "$tbl: ingest may append but not read — every write to it fails with 42501 (RETURNING)"
+  fi
+done <<<"$append_ingest"
+
 printf '\nthe applied migration chain carries the same grant\n'
 while read -r tbl; do
   [[ -n "$tbl" ]] || continue

@@ -255,6 +255,7 @@ emit_policy_set() {
         "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING (" \
         "  $(read_predicate "$tbl")" \
         "  OR public.cms_actor_any(ARRAY['$AUDIT_RETENTION'])" \
+        "  OR public.cms_actor_any(ARRAY['system:ingest'])" \
         ");" \
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (" \
         "  ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']))" \
