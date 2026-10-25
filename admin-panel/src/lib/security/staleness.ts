@@ -214,3 +214,52 @@ export async function readStalenessSnapshot(
     return unknownStaleness(`Prometheus is not reachable at ${options.baseUrl} (${reason})`);
   }
 }
+
+/**
+ * A render-time cache in front of the reading above.
+ *
+ * WHY: the snapshot costs one HTTP call with a 1.5 s timeout, and the patching page plus the overview
+ * render it on every request. A dead monitoring stack would therefore hold every page for the timeout —
+ * latency paid by the operator for a fact that changes at most once per backup run (hours).
+ *
+ * WHY a cache and not a second reading: it stores the output of the same function for the same options,
+ * so there is still one query, one parser and one definition of "stale". It is not a fallback — when the
+ * call fails the failure is cached too, for the same short window, so a page cannot hammer a dead target.
+ *
+ * WHY process-local: the panel is allowed to run several instances, and a divergence between them for
+ * seconds has no meaning when the underlying series move on the scale of hours. A shared cache would be
+ * a new service dependency for a value that is already stale by design.
+ */
+export const DEFAULT_READING_CACHE_MS = 15_000;
+
+interface CachedReading {
+  readonly expiresAt: number;
+  readonly value: Promise<StalenessSnapshot>;
+}
+
+let cache: CachedReading | null = null;
+
+/** Test seam: lets a test assert two renders in the same window share one call, then start over. */
+export function resetStalenessCache(): void {
+  cache = null;
+}
+
+export function stalenessCacheMs(env: Record<string, string | undefined> = process.env): number {
+  const raw = env.SECURITY_STALENESS_CACHE_MS;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_READING_CACHE_MS;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_READING_CACHE_MS;
+}
+
+/** The reading a page render should use. Same function, same verdict, at most one call per window. */
+export function readStalenessSnapshotCached(
+  options: StalenessOptions = stalenessOptionsFromEnv(),
+  ttlMs: number = stalenessCacheMs(),
+): Promise<StalenessSnapshot> {
+  const now = Date.now();
+  if (cache !== null && cache.expiresAt > now) return cache.value;
+  const value = readStalenessSnapshot(new Date(), options);
+  cache = { expiresAt: now + ttlMs, value };
+  return value;
+}
+

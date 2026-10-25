@@ -13,7 +13,7 @@ import {
   type PatchingWaiver,
 } from '@/lib/security/patching';
 import { buildSecurityDigest, type SecurityDigest } from '@/lib/security/signal';
-import { readStalenessSnapshot } from '@/lib/security/staleness';
+import { readStalenessSnapshotCached } from '@/lib/security/staleness';
 import {
   WAIVER_EXPORT_VERSION,
   type WaiverExport,
@@ -78,8 +78,10 @@ export async function readPatchingSnapshot(now: Date = new Date()): Promise<Patc
     // WHY the backup age is read beside the findings and not from them: a backup age is not a
     // finding (docs/SECURITY-FEED.md fixes the producer contract), so it arrives as its own reading
     // and the digest joins the two. This call never throws — an unreachable scrape target is an
-    // `unknown` reading — so it cannot turn a page render into an error.
-    readStalenessSnapshot(now),
+    // `unknown` reading — so it cannot turn a page render into an error. Read through the short
+    // render cache: this function runs on every request, the series move once per backup run, and a
+    // dead target would otherwise cost every render the request timeout.
+    readStalenessSnapshotCached(),
   ]);
 
   const owners = await waiverOwners(waivers);

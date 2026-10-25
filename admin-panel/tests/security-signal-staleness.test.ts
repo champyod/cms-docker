@@ -4,6 +4,8 @@ import {
   DEFAULT_STALE_WINDOW_HOURS,
   parseStalenessPayload,
   readStalenessSnapshot,
+  readStalenessSnapshotCached,
+  resetStalenessCache,
   stalenessOptionsFromEnv,
   STALENESS_QUERY,
 } from '@/lib/security/staleness';
@@ -115,6 +117,50 @@ describe('backup staleness reading', () => {
       const snapshot = parseStalenessPayload(payload, NOW, WINDOW, null);
       expect(snapshot.readings.map((reading) => reading.state)).toEqual(['unknown', 'unknown']);
     }
+  });
+
+  describe('the render cache', () => {
+    afterEach(() => {
+      resetStalenessCache();
+      vi.unstubAllGlobals();
+    });
+
+    it('spends one query on every render inside the window, verdict unchanged', async () => {
+      const fetchStub = vi.fn(async () => new Response(JSON.stringify(vector([
+        { name: 'cms_backup_stale', value: 0 },
+        { name: 'cms_backup_last_success_age_seconds', value: 2 * 3600 },
+      ])), { status: 200 }));
+      vi.stubGlobal('fetch', fetchStub);
+
+      const first = await readStalenessSnapshotCached({ baseUrl: 'http://prometheus:9090', timeoutMs: 50, staleWindowHours: 26 }, 60_000);
+      const second = await readStalenessSnapshotCached({ baseUrl: 'http://prometheus:9090', timeoutMs: 50, staleWindowHours: 26 }, 60_000);
+
+      expect(fetchStub).toHaveBeenCalledTimes(1);
+      expect(second).toBe(first);
+    });
+
+    it('caches the failure too, so a dead target is asked once per window', async () => {
+      const fetchStub = vi.fn(async () => Promise.reject(new Error('getaddrinfo ENOTFOUND prometheus')));
+      vi.stubGlobal('fetch', fetchStub);
+      const options = { baseUrl: 'http://prometheus:9090', timeoutMs: 50, staleWindowHours: 26 };
+
+      const first = await readStalenessSnapshotCached(options, 60_000);
+      const second = await readStalenessSnapshotCached(options, 60_000);
+
+      expect(fetchStub).toHaveBeenCalledTimes(1);
+      expect(second.readings.map((reading) => reading.state)).toEqual(['unknown', 'unknown']);
+      expect(first.readings[0]?.detail).toContain('not reachable');
+    });
+
+    it('reads again once the window has passed', async () => {
+      const fetchStub = vi.fn(async () => new Response(JSON.stringify(vector([])), { status: 200 }));
+      vi.stubGlobal('fetch', fetchStub);
+
+      await readStalenessSnapshotCached({ baseUrl: 'http://prometheus:9090', timeoutMs: 50, staleWindowHours: 26 }, 0);
+      await readStalenessSnapshotCached({ baseUrl: 'http://prometheus:9090', timeoutMs: 50, staleWindowHours: 26 }, 0);
+
+      expect(fetchStub).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('reading over HTTP', () => {
