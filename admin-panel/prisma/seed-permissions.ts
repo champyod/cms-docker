@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
 import { DEFAULT_GROUPS, ROOT_ACTOR_GROUP_NAME } from '@/lib/permission-groups';
 
@@ -143,7 +144,13 @@ async function seed(): Promise<SeedSummary> {
   );
 }
 
-seed()
+// WHY the named identity: migration 20261025120000 puts FORCE RLS on every table, and FORCE
+// applies to the owner too — so the seed's own writes need an actor like any other statement.
+// Without it the first query reaches the request-scoped resolution, which imports
+// next/headers outside a request and dies with MODULE_NOT_FOUND: the seed failed that way on
+// the first production run, mid-migration, leaving admins holding groups that grant nothing.
+// `system:migration` is the identity the generator already trusts for schema work.
+withActor({ kind: 'system', name: SYSTEM_IDENTITIES.MIGRATION }, () => seed())
   .then((summary) => {
     console.log(
       `Seed complete: ${summary.permissionsUpserted} permissions upserted, ` +
