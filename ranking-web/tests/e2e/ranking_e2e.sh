@@ -65,18 +65,13 @@ require_tools() {
     [[ -d "${REPO}/ranking-web/static" ]] || fail "the vendored page is not in this checkout"
 }
 
-# Every ranking migration in timestamp order — the same glob CI applies — so a new one
-# is picked up here rather than quietly missing from the schema this rehearsal drives.
+# The strict apply lives in scripts/__apply_ranking_migrations.sh, which CI calls too: this
+# rehearsal and the CI job must judge the ranking schema identically. It used to run psql here
+# without ON_ERROR_STOP, so psql exited 0 after a failed statement and the `|| fail` below could
+# never fire — the [PASS] was printed for a schema that had not fully applied.
 apply_migrations() {
-    local migration applied=0
-    for migration in "${REPO}"/admin-panel/prisma/migrations/*_ranking_*/; do
-        [[ -d "${migration}" ]] || continue
-        psql "${DATABASE_URL}" -q -f "${migration}migration.sql" >/dev/null ||
-            fail "migration $(basename "${migration}") did not apply"
-        applied=$((applied + 1))
-    done
-    [[ "${applied}" -gt 0 ]] || fail "no ranking migration was found to apply"
-    pass "the ${applied} ranking migrations apply in order"
+    bash "${REPO}/scripts/__apply_ranking_migrations.sh" "${DATABASE_URL}" "${REPO}" ||
+        fail "the ranking migrations did not all apply"
 }
 
 seed_rows() {

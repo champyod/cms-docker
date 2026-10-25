@@ -5,9 +5,11 @@ const discordCalls: { title: string; detail: string }[] = [];
 
 // Why the destination is part of the captured frame: the popup renders a link only from what the
 // frame carries, so the field has to survive the publish step this suite exercises.
+// Why the parts and not a sentence: the frame is what a Thai panel reads, so the sentence is composed
+// where the reader's dictionary is — see `system-alert-copy.ts`.
 interface PublishedFrame {
   id: string;
-  detail: string;
+  cue: { kind: string; verb: string; actor: string; target: string };
   destination?: string;
 }
 
@@ -42,9 +44,12 @@ describe('recordAudit publishing', () => {
     const { recordAudit } = await import('@/lib/audit');
     await recordAudit({ verb: 'deployment:deploy', entity: 'deployment', entityId: '3', result: 'success' });
     expect(published).toHaveLength(1);
-    expect(published[0].detail).toContain('Ada');
-    expect(published[0].detail).toContain('Midterm');
+    expect(published[0].cue.actor).toContain('Ada');
+    expect(published[0].cue.target).toContain('Midterm');
+    expect(published[0].cue.kind).toBe('critical');
     expect(published[0].destination).toBe('administration.audit');
+    // Why this absence is the assertion: a sentence on the frame is what made the copy untranslatable.
+    expect(published[0]).not.toHaveProperty('detail');
     expect(discordCalls).toHaveLength(0);
   });
 
@@ -80,8 +85,9 @@ describe('recordAudit publishing', () => {
     const { recordAudit } = await import('@/lib/audit');
     await recordAudit({ verb: 'deployment:deploy', entity: 'deployment', entityId: '3', result: 'failure', actorId: 2 });
     expect(published).toHaveLength(1);
-    expect(published[0].detail).toContain('admin #2');
-    expect(published[0].detail).toContain('deployment #3');
+    expect(published[0].cue.actor).toContain('admin #2');
+    expect(published[0].cue.target).toContain('deployment #3');
+    expect(published[0].cue.kind).toBe('failed');
   });
 
   it('skips name lookups for rows that notify nowhere', async () => {
@@ -139,6 +145,6 @@ describe('recordAudit publishing', () => {
     const { recordAudit } = await import('@/lib/audit');
     await recordAudit({ verb: 'deployment:deploy', entity: 'deployment', entityId: 'xyz', result: 'success' });
     expect(published).toHaveLength(1);
-    expect(published[0].detail).toContain('deployment #xyz');
+    expect(published[0].cue.target).toContain('deployment #xyz');
   });
 });

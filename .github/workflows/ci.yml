@@ -706,11 +706,16 @@ jobs:
 
       # Every ranking migration in timestamp order, so new ones auto-apply and the database
       # tests see a deployment's schema. The rehearsal applies the same set itself.
+      #
+      # WHY this is strict now: these migrations used to be applied with `psql -f` and no
+      # ON_ERROR_STOP, so every statement that reached for the classic CMS schema failed
+      # silently and the job tested against whatever happened to apply. That is how a board
+      # read that refused on a table the tests never created passed review locally and failed
+      # in a rehearsal. The two files below genuinely need the classic schema, which this
+      # repository does not ship, so their failure is named here by its exact signature and
+      # nothing else is tolerated: a new migration that fails is a red job, not a quiet gap.
       - name: Apply the ranking migrations
-        run: |
-          for migration in admin-panel/prisma/migrations/*_ranking_*/; do
-            psql "$RANKING_TEST_DATABASE_URL" -f "${migration}migration.sql"
-          done
+        run: bash scripts/__apply_ranking_migrations.sh "$RANKING_TEST_DATABASE_URL"
 
       - name: Format check
         working-directory: ranking-web

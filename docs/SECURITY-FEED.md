@@ -163,6 +163,7 @@ CI then, on a plain checkout with no credential at all:
 | `waivers` | `scripts/__security_waivers.sh check` | fails the build, naming ids and dates, when any waiver is past `review_by`, when the export is malformed, or when the export is older than 30 days |
 | `panel` | `... render --audit-ids $RUNNER_TEMP/waiver-audit-ids` | the only `--ignore` ids `bun audit` receives are the live `osv` waivers |
 | `container-scan` | `... render --trivy .trivyignore` | writes Trivy's ignore file from the live `rootfs` waivers; expired and ended ones are not written, so they stop suppressing immediately |
+| `image-scan` (nightly) | `... render --trivy .trivyignore` | the same ignore file, for the pinned **third-party** images — see "Nightly image scan" below |
 
 **Why this is the least-privilege option.** The alternatives were an API read with a scoped token, or a
 generated artifact committed by a scheduled job. A token — even a read-only one — is a credential that
@@ -183,6 +184,62 @@ than warns.
 keeps failing until the lapsed row is ended (`cms panel waiver end <id> --reason …`, or the page). Then
 re-render the export and commit it with the renewal — otherwise the next run reads the old file, and the
 30-day bound is the only thing forcing the refresh.
+
+
+## Nightly image scan (CI, advisory)
+
+**What runs.** `.github/workflows/image-scan.yml`, nightly at **03:17 Asia/Bangkok** (`17 20 * * *` UTC) and
+on demand (`workflow_dispatch`). It is **not** part of `ci.yml` and **not** in that file's required `CI`
+aggregator: a finding here arrives overnight, without a commit, so reddening a PR for it would be a gate on
+something the PR did not cause. It holds `contents: read` + `issues: write` and nothing else — no registry
+login, no host, no deploy token.
+
+**What it scans.** Every third-party `image:` reference in the compose files this repository ships
+(`docker-compose*.yml`, `docker/docker-compose*.yml`; `*generated*` and gitignored files skipped), with
+`${VAR:-default}` resolved to its default — the reference a checkout actually runs. The list is
+**discovered, never hardcoded** (`scripts/__image_scan.sh refs`), so a new service is covered the day it
+lands, and the workflow fails when the list comes back empty rather than reporting a clean scan of nothing.
+Each ref is scanned at the digest committed in `docker-compose*.yml` — scanning a floating tag would answer
+a question nobody asked, because nothing deploys it. Severity `CRITICAL,HIGH` with `--ignore-unfixed` and the
+rendered `.trivyignore`: the same policy and the same waivers as `container-scan`.
+
+**What it reports, and where.** The job summary lists every scanned ref with its total CRITICAL/HIGH count,
+its fixable count and its top three packages — so the unfixed tail stays visible without failing a run
+(measured 2026-10-25: `postgres:15` 88 findings of which 26 are fixable, 3 of those waived today so the job
+counts 23; `nginx:alpine` 1; `redis:7-alpine` 0; the whole set 13 refs). The job
+itself fails **only** on a fixable CRITICAL/HIGH. Notification is **one upserted issue**, titled
+`Nightly image scan: fixable CVEs`: created if absent, body replaced each run, closed with a one-line
+`Clean as of <date>` when there is nothing fixable. Its body carries a hidden
+`<!-- image-scan:state=… refs=… fixable=… drift=… at=… run=… -->` marker, and a run that cannot reach a
+verdict replaces the body with an **INCOMPLETE** notice rather than leaving the previous table standing as
+if it were current.
+
+**Digest drift.** For every pin it asks the registry what that tag serves *now* (Docker Hub and GHCR
+anonymous token flow) and compares it to the committed digest. A differ means a newer build of the tag we
+already run exists — the cheapest fix, independent of CVE data. A check that cannot answer (429 after
+retries, 401 on a repo we cannot read, no digest header) is reported as **`unknown`, never `up to date`**.
+Measured 2026-10-25: all 13 refs matched, which is what makes the equality meaningful rather than vacuous.
+
+**What it can and cannot see.**
+
+- **Sees:** the pinned third-party images, at the digest pinned, OS and library CVEs (CRITICAL/HIGH), and
+  whether the pin is behind the tag.
+- **Does not see our own images.** `ghcr.io/champyod/*` is skipped by design: those refs are built by this
+  repo's CI, selected at deploy time by `${IMG_TAG}` rather than pinned, and `ci.yml`'s `container-scan`
+  scans the image it builds from our Dockerfile on the push that produces it. This workflow covers the half
+  CI cannot: the images we pull.
+- **Does not see** an operator's env override (`ACME_CERTBOT_IMAGE`, `IMG_TAG`), anything pulled outside
+  compose, severities below HIGH, or a fixable finding the waiver table currently covers (waived ids are
+  filtered exactly as in CI, and their `review_by` gates keep the lapse visible through the `waivers` job).
+- **Does not gate anything.** It never runs on a PR and is not a required check.
+
+**When the issue appears.** Read the table: `fixable` > 0 means a fixed release exists in that image's
+repository now. In order of preference: (1) bump that one image's digest to what its tag serves today
+(`docker buildx imagetools inspect <ref>`), one image per commit, per
+`docs/decisions/image-digest-pinning.md`; (2) if the fix is not in any usable tag yet, file a
+`security_waivers` row with a `review_by` date — the only suppression mechanism, never a second ignore file;
+(3) for a **drift** row, bumping the digest is the cheap win and often clears the CVE rows with it. An
+**unknown** row is not a clearance: it means the registry could not be read, so check by hand.
 
 
 ## Compose shape

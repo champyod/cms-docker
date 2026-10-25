@@ -5,9 +5,9 @@ describe('notification queue', () => {
   it('delivers each published frame once per subscriber', () => {
     const seen: string[] = [];
     const off = subscribe((frame) => { seen.push(frame.id); });
-    publishNotification({ id: 'audit-1', level: 'critical', title: 't', detail: 'd', timestamp: new Date(0).toISOString() });
+    publishNotification({ id: 'audit-1', level: 'critical', cue: { kind: 'critical', verb: 'v', actor: 'a', target: 't' }, timestamp: new Date(0).toISOString() });
     off();
-    publishNotification({ id: 'audit-2', level: 'critical', title: 't', detail: 'd', timestamp: new Date(0).toISOString() });
+    publishNotification({ id: 'audit-2', level: 'critical', cue: { kind: 'critical', verb: 'v', actor: 'a', target: 't' }, timestamp: new Date(0).toISOString() });
     expect(seen).toEqual(['audit-1']);
   });
 
@@ -17,7 +17,7 @@ describe('notification queue', () => {
   });
 
   it('exposes published frames as recent backlog', () => {
-    publishNotification({ id: 'audit-3', level: 'critical', title: 't', detail: 'd', timestamp: new Date(0).toISOString() });
+    publishNotification({ id: 'audit-3', level: 'critical', cue: { kind: 'critical', verb: 'v', actor: 'a', target: 't' }, timestamp: new Date(0).toISOString() });
     expect(getRecent().some((frame) => frame.id === 'audit-3')).toBe(true);
   });
 });

@@ -7,6 +7,7 @@ import type { QuestionsFrame } from '@/lib/live/frames';
 import type { QueuedNotification } from '@/lib/notification-queue';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { interpolate } from '@/lib/interpolate';
+import { auditCueCopy } from '@/lib/system-alert-copy';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import { memoryStorage } from './memory-storage';
@@ -34,8 +35,7 @@ vi.mock('sonner', () => ({ toast }));
 const ALERT: QueuedNotification = {
   id: 'audit-9',
   level: 'critical',
-  title: 'Critical action: admin:delete',
-  detail: 'Ada ran admin:delete on admin #4',
+  cue: { kind: 'critical', verb: 'admin:delete', actor: 'Ada', target: 'admin #4' },
   timestamp: '2026-10-13T09:00:00.000Z',
 };
 
@@ -142,11 +142,26 @@ describe('live notification service', () => {
     deliver(channel('/api/notifications/stream'), ALERT);
 
     expect(device.notifyDevice).toHaveBeenCalledTimes(1);
-    expect(device.notifyDevice).toHaveBeenCalledWith(ALERT.title, ALERT.detail);
+    // Why the expected words come from the dictionary: the frame carries parts, so the OS notification is
+    // the reader's locale, and a test that spelled the sentence out would pass while the panel showed English.
+    const expected = auditCueCopy(ALERT.cue, en.systemAlerts.audit);
+    expect(device.notifyDevice).toHaveBeenCalledWith(expected.title, expected.detail);
     expect(toast.error).not.toHaveBeenCalled();
     // Why the count still moves: the notification is the cue outside the panel, not a replacement for
     // the record the panel keeps for the operator's return.
     expect(screen.getByText('unread:1 questions:0')).toBeTruthy();
+  });
+
+  it('speaks the reader’s locale in the OS notification, not the server’s English', () => {
+    panelHidden = true;
+    renderService(['audit:read'], th);
+    deliver(channel('/api/notifications/stream'), ALERT);
+
+    // Why Thai plus an inequality: the frame used to carry a sentence the server had already written in
+    // English, and a single-locale assertion cannot tell a translation from that sentence.
+    const thai = auditCueCopy(ALERT.cue, th.systemAlerts.audit);
+    expect(device.notifyDevice).toHaveBeenCalledWith(thai.title, thai.detail);
+    expect(thai.detail).not.toBe(auditCueCopy(ALERT.cue, en.systemAlerts.audit).detail);
   });
 
   it('leaves the notification to the tab that claimed the event', () => {

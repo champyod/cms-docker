@@ -8,6 +8,7 @@ import { interpolate } from '@/lib/interpolate';
 import { deliverSystemEvent } from '@/lib/live/alert-delivery';
 import { requestDeviceNotifications } from '@/lib/live/device-notifications';
 import { cursorFromFrameId, isNewFrame, type QueuedNotification } from '@/lib/notification-queue';
+import { auditCueCopy } from '@/lib/system-alert-copy';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { QuestionsFrame } from '@/lib/live/frames';
 
@@ -71,8 +72,10 @@ export function LiveNotificationProvider({
     setUnread((count) => count + 1);
     // Why the record is written before the cue: the bell's list is this event's history whatever
     // surface carries it, and the decision below only says which one cue goes beside it.
-    deliverSystemEvent(frame);
-  }, []);
+    // Why the copy is composed here: the frame carries the parts, not a sentence, so the words an OS
+    // notification shows are this reader's locale — the same dictionary the bell's list uses.
+    deliverSystemEvent({ id: frame.id, ...auditCueCopy(frame.cue, cueCopy.audit) });
+  }, [cueCopy]);
 
   const onQuestions = useCallback((frame: QuestionsFrame): void => {
     setUnansweredCount(frame.unansweredCount);
