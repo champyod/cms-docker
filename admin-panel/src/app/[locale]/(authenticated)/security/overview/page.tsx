@@ -1,4 +1,5 @@
 import { Card } from '@/components/core/Card';
+import { SecuritySignalCard } from '@/components/security/SecuritySignalCard';
 import { getDictionary } from '@/i18n';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { readBannedAddresses, readLoginLockouts } from '@/app/actions/securityBlocks';
@@ -40,13 +41,18 @@ export default async function SecurityOverviewPage({
     { label: dict.security.patching.cards.hostOsUpdates, value: String(patching.cards.hostOsUpdates) },
   ];
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {cards.map((card) => (
-        <Card key={card.label}>
-          <p className="text-sm text-muted-foreground">{card.label}</p>
-          <p className="mt-1 font-mono text-2xl text-foreground">{card.value}</p>
-        </Card>
-      ))}
+    <div className="space-y-4">
+      {/* The digest leads the surface: it is the one card that answers "does anything need me now",
+          and it needs no query of its own — `patching.signal` came with the read above. */}
+      <SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {cards.map((card) => (
+          <Card key={card.label}>
+            <p className="text-sm text-muted-foreground">{card.label}</p>
+            <p className="mt-1 font-mono text-2xl text-foreground">{card.value}</p>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

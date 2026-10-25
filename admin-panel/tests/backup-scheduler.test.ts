@@ -785,7 +785,12 @@ describe('scheduler process entry', () => {
 
   it('resolves the emitted path alias before the first load', () => {
     expect(BOOTSTRAP_SOURCE).toContain("request.startsWith('@/')");
-    expect(BOOTSTRAP_SOURCE).toContain("loadCompiled(path.join(DIST_ROOT, 'scheduler', 'main.js'))");
+    // The default entry is still the backup scheduler; the security signal is the second entry into
+    // the same compiled tree, selected by an explicit argument from a closed allowlist.
+    expect(BOOTSTRAP_SOURCE).toContain("process.argv[2] ?? 'scheduler'");
+    expect(BOOTSTRAP_SOURCE).toContain("['scheduler', 'main']");
+    expect(BOOTSTRAP_SOURCE).toContain("['security-signal', 'security-signal']");
+    expect(BOOTSTRAP_SOURCE).toContain("loadCompiled(path.join(DIST_ROOT, 'scheduler', `${entry}.js`))");
   });
 
   it('reaches the compiled CommonJS tree through createRequire, not a bare require', () => {

@@ -1299,6 +1299,38 @@
       "saved": "Waiver recorded",
       "ended": "Waiver ended",
       "expiredNotice": "{count} waiver(s) are past their review date: CI fails until each one is ended or renewed."
+    },
+    "signal": {
+      "title": "Security digest",
+      "tone": {
+        "act": "Needs attention",
+        "unevaluable": "Partly unreadable",
+        "watch": "Watching",
+        "clear": "All clear"
+      },
+      "counts": {
+        "unwaivedCritical": "Unwaived critical",
+        "unwaivedHigh": "Unwaived high",
+        "expiredWaivers": "Expired waivers",
+        "expiringWaivers": "Waivers due in {days}d",
+        "agedFindings": "Older than {days}d"
+      },
+      "worst": "Worst finding",
+      "oldest": "Oldest unowned",
+      "ageDays": "{days}d old",
+      "channel": {
+        "backup": "Backup",
+        "offsite": "Offsite copy"
+      },
+      "state": {
+        "current": "current",
+        "stale": "stale",
+        "unknown": "cannot evaluate"
+      },
+      "ageHours": "{hours}h ago",
+      "detail": "Open patching",
+      "clear": "Nothing needs a decision: no expired waiver, no unwaived critical, and both copies of the data are current.",
+      "unreadable": "A backup reading could not be taken, so this card does not claim the backups are healthy."
     }
   },
   "navigation": {
