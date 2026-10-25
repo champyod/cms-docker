@@ -960,6 +960,43 @@ services:
     networks:
       - cms-network
 
+  # The exposure reconciler: a row written outside the panel (a migration, a seed, another agent, a raw
+  # SQL fix) reaches the front through this loop, which re-renders from the database and reloads only
+  # when the rendered set differs. WHY it sits in the admin profile: it needs the same database, the
+  # same repository mount and the same docker socket the panel does, and nothing at all without them.
+  exposure-reconciler:
+    image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+    container_name: cms-exposure-reconciler
+    restart: unless-stopped
+    profiles:
+      - admin
+    depends_on:
+      # WHY optional: the database lives in the `core` profile, so a bare `--profile admin` would
+      # otherwise be an invalid project ("depends on undefined service"). The condition still holds
+      # when both profiles are up, which is how the service is meant to be started.
+      database:
+        condition: service_healthy
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a
+      # secret it warns and rotates one on every boot.
+      AUTH_SECRET: ${AUTH_SECRET:-exposure-reconciler-no-session}
+      IS_DOCKER: "true"
+      EXPOSURE_RECONCILE_INTERVAL_SECS: ${EXPOSURE_RECONCILE_INTERVAL_SECS:-60}
+    volumes:
+      # WHY both: the render writes the host's config/generated through /repo-root, and the front is
+      # reloaded through the socket the panel also uses.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/repo-root
+    command:
+      - ./node_modules/.bin/tsx
+      - scripts/reconcile-exposures.ts
+    networks:
+      - cms-network
+    group_add:
+      - "${DOCKER_GID:-999}"
+
 networks:
   cms-network:
     name: cms-network

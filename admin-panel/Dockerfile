@@ -119,13 +119,32 @@ COPY --from=base /app/src/lib/prisma.ts /app/src/lib/permission-registry.ts /app
 COPY --from=base /app/src/lib/db-actor.ts ./src/lib/
 COPY --from=base /app/src/lib/db-actor-request.ts ./src/lib/
 COPY --from=base /app/scripts/audit-log.ts ./scripts/audit-log.ts
+# The exposure reconciler's command and the modules it loads. WHY these and not all of src: it renders
+# through the same writers the panel uses, so it needs those readers and nothing the panel owns.
+COPY --from=base /app/scripts/reconcile-exposures.ts ./scripts/reconcile-exposures.ts
+COPY --from=base \
+     /app/src/lib/reconciler.ts \
+     /app/src/lib/exposure-apply.ts \
+     /app/src/lib/front-nginx.ts \
+     /app/src/lib/front-vhosts.ts \
+     /app/src/lib/repo-root.ts \
+     /app/src/lib/with-timeout.ts \
+     /app/src/lib/service-wiring.ts \
+     /app/src/lib/service-wiring-apply.ts \
+     /app/src/lib/service-wiring-artifacts.ts \
+     /app/src/lib/service-wiring-contract.ts \
+     /app/src/lib/service-wiring-front-vhosts.ts \
+     /app/src/lib/service-wiring-render.ts \
+     /app/src/lib/service-wiring-store.ts \
+     ./src/lib/
 COPY --from=base /app/tsconfig.json ./tsconfig.json
 
 # WHY: missing tooling or seed imports should fail the build, not a deployment;
 # loading the imports constructs the client without connecting or seeding.
 RUN CHECKPOINT_DISABLE=1 ./node_modules/.bin/prisma --version \
  && ./node_modules/.bin/tsx --version \
- && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry"); require("@/lib/audit-chain");'
+ && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry"); require("@/lib/audit-chain");' \
+ && ./node_modules/.bin/tsx -e 'require("@/lib/reconciler"); require("@/lib/front-nginx");'
 
 # Unprivileged runtime: compose grants the host docker group (group_add) so the
 # node user can still reach the mounted socket, and the cache dir must be
