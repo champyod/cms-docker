@@ -117,6 +117,8 @@ ROUTE_UPSTREAM_VAR=()
 ROUTE_PORT_VAR=()
 ROUTE_PATH=()
 ROUTE_OWNER=()
+ROUTE_PRIMARY_PATH=()
+ROUTE_PRIMARY_PATH_VAR=()
 ROUTE_PRIMARY_DOMAIN_VAR=""
 
 # Validates one *_ROUTE_PATH and normalises it into the variable named by $3. An
@@ -177,7 +179,7 @@ _routes_collect() {
   local label domain_var path_var upstream_var port_var primary_path_var
   local path upstream port mirror claimed="" seen="" mirrors=""
   ROUTE_LABEL=() ROUTE_DOMAIN_VAR=() ROUTE_PATH_VAR=()
-  ROUTE_UPSTREAM_VAR=() ROUTE_PORT_VAR=() ROUTE_OWNER=() ROUTE_PATH=() ROUTE_PRIMARY_PATH=()
+  ROUTE_UPSTREAM_VAR=() ROUTE_PORT_VAR=() ROUTE_OWNER=() ROUTE_PATH=() ROUTE_PRIMARY_PATH=() ROUTE_PRIMARY_PATH_VAR=()
   while IFS='|' read -r label domain_var path_var upstream_var port_var primary_path_var; do
     [[ -n "$label" ]] || continue
     upstream="${!upstream_var:-}"
@@ -214,6 +216,7 @@ _routes_collect() {
     ROUTE_PORT_VAR+=("$port_var")
     ROUTE_PATH+=("$path")
     ROUTE_PRIMARY_PATH+=("$mirror")
+    ROUTE_PRIMARY_PATH_VAR+=("$primary_path_var")
     if [[ " ${claimed} " == *" ${domain_var} "* ]]; then
       ROUTE_OWNER+=(0)
     else
@@ -313,25 +316,27 @@ _routes_row_serves_vhost() {
   [[ "$is_primary" == "1" && -n "${ROUTE_PRIMARY_PATH[$index]}" ]]
 }
 
-# The paths the vhost named by $1 answers on, space separated: the vhost root for the row that
-# owns it, then the path every further row is mounted at there.
+# The paths the vhost named by $1 answers on, as `path=KEY` tokens: the vhost root for the row that
+# owns it, then the path every further row is mounted at there. KEY is the operator's `*_ROUTE_PATH`
+# name, or `-` for a location the vhost's own template declares.
 #
 # WHY the map publishes them: a registry exposure under this vhost may not claim a path its own
 # block already serves, and which paths those are is the operator's `*_ROUTE_PATH` keys — so a
 # reader that held a list of its own would refuse a path nobody curates and admit a fragment that
-# shadows one that is still served.
+# shadows one that is still served. WHY the key rides with the path: the panel names the exact config
+# key that owns a curated route, so the route table states it once instead of a second table.
 _routes_vhost_locations() {
-  local domain_var="$1" is_primary="$2" index path paths=""
+  local domain_var="$1" is_primary="$2" index path key paths=""
   for index in "${!ROUTE_LABEL[@]}"; do
     _routes_row_serves_vhost "$index" "$domain_var" "$is_primary" || continue
     if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$domain_var" ]] && (( ROUTE_OWNER[$index] )); then
-      path="/"
+      path="/"; key="${ROUTE_PATH_VAR[$index]}"
     elif [[ "$is_primary" == "1" ]]; then
-      path="${ROUTE_PRIMARY_PATH[$index]}"
+      path="${ROUTE_PRIMARY_PATH[$index]}"; key="${ROUTE_PRIMARY_PATH_VAR[$index]}"
     else
-      path="${ROUTE_PATH[$index]}"
+      path="${ROUTE_PATH[$index]}"; key="${ROUTE_PATH_VAR[$index]}"
     fi
-    paths+=" ${path}"
+    paths+=" ${path}=${key:--}"
   done
   # The primary vhost's own block declares two locations no table row owns — the login endpoint
   # and the WebSocket upgrade (config/grader.nginx.conf.template). WHY they are published here:
@@ -341,7 +346,7 @@ _routes_vhost_locations() {
   # static-asset rule is not among them: it is a regex over the whole vhost with no prefix, so no
   # single fragment path can name it. WHY only the primary: no other vhost's block declares them.
   if [[ "$is_primary" == "1" ]]; then
-    paths+=" /login /ws"
+    paths+=" /login=- /ws=-"
   fi
   printf '%s' "${paths# }"
 }
@@ -418,7 +423,7 @@ _routes_domain_of() {
 # hostname renders into its block, so the reader has to refuse a path the block already
 # answers on — and only the placement rule above knows which paths those are.
 _routes_front_vhost_map() {
-  local index is_primary
+  local index is_primary tokens paths token
   for index in "${!ROUTE_LABEL[@]}"; do
     (( ROUTE_OWNER[$index] )) || continue
     [[ -n "${!ROUTE_DOMAIN_VAR[$index]:-}" ]] || continue
@@ -426,8 +431,11 @@ _routes_front_vhost_map() {
     if [[ "${ROUTE_DOMAIN_VAR[$index]}" == "$ROUTE_PRIMARY_DOMAIN_VAR" ]]; then
       is_primary=1
     fi
-    printf '%s|%s|%s\n' "${ROUTE_LABEL[$index]}" "${!ROUTE_DOMAIN_VAR[$index]}" \
-      "$(_routes_vhost_locations "${ROUTE_DOMAIN_VAR[$index]}" "$is_primary")"
+    tokens="$(_routes_vhost_locations "${ROUTE_DOMAIN_VAR[$index]}" "$is_primary")"
+    paths=""
+    for token in $tokens; do paths+=" ${token%%=*}"; done
+    printf '%s|%s|%s|%s\n' "${ROUTE_LABEL[$index]}" "${!ROUTE_DOMAIN_VAR[$index]}" \
+      "${paths# }" "$tokens"
   done
 }
 

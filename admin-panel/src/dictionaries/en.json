@@ -28,7 +28,8 @@
         "hostname": "Hostname",
         "path": "Path",
         "tls": "TLS",
-        "tailnet": "Tailnet"
+        "tailnet": "Tailnet",
+        "source": "Source"
       },
       "fields": {
         "name": "Name",
@@ -67,7 +68,12 @@
         "allContests": "all contests",
         "none": "—",
         "http": "http",
-        "rpc": "rpc"
+        "rpc": "rpc",
+        "database": "database"
+      },
+      "source": {
+        "curated": "{file} · {key}",
+        "readOnly": "Curated here: this route is rendered from {file}, so the panel can only remove the exposure, not move it."
       },
       "empty": {
         "service": "No service is registered yet.",

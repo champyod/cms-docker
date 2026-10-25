@@ -8,6 +8,7 @@ import { useConfirm } from '@/hooks/useConfirm';
 import { useDictionary } from '@/hooks/useDictionary';
 import { useToast } from '@/components/providers/ToastProvider';
 import { collectWiringProblems } from '@/lib/service-wiring-problems';
+import { exposureOwnerships, type ExposureOwnership } from '@/lib/service-wiring-ownership';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { interpolate } from '@/lib/interpolate';
 import {
@@ -73,6 +74,11 @@ export function ServiceRegistryView({
   const [pending, setPending] = useState(false);
   const confirm = useConfirm();
   const problems = collectWiringProblems(services, wirings, exposures, frontVhosts);
+  // The ownership comes from the renderer's own refusal rule, so the screen and the sync cannot
+  // disagree about which route `config.toml` owns.
+  const owners = exposureOwnerships(exposures, services, frontVhosts);
+  const ownerById = new Map<number, ExposureOwnership | null>(exposures.map((exposure, index) => [exposure.id, owners[index]]));
+  const ownershipOf = (id: number): ExposureOwnership | null => ownerById.get(id) ?? null;
   // Why the same key on both: the screen offers only what its server actions already demand.
   const canControl = hasEffectivePermission(new Set(permissionKeys), 'container:control');
 
@@ -207,12 +213,16 @@ export function ServiceRegistryView({
           addLabel={copy.actions.addExposure}
           onAdd={(): void => open('exposure', { ...BLANK.exposure })}
           canAdd={canControl}
-          columns={exposureColumns(copy, nameOf)}
+          columns={exposureColumns(copy, nameOf, ownershipOf)}
           rows={exposures}
           getRowKey={(exposure) => exposure.id}
           actionsHeader={copy.columns.actions}
           renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
-            onEdit: (): void => open('exposure', draftOfExposure(exposure)),
+            // A curated route is moved in `config.toml`; offering an editor here would promise a
+            // change the next sync refuses.
+            onEdit: ownershipOf(exposure.id)?.kind === 'curated'
+              ? undefined
+              : (): void => open('exposure', draftOfExposure(exposure)),
             onRemove: (): void => {
               void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
             },

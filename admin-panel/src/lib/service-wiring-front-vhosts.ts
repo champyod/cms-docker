@@ -25,9 +25,20 @@ export interface FrontVhost {
   hostname: string;
   label: string | null;
   paths: readonly string[];
+  /**
+   * The `config.toml` key that owns each path, or `-` where the vhost's own template declares it.
+   *
+   * WHY it travels with the paths: the panel reports which config key owns a curated route, and the
+   * route table already knows it — a lookup here beats a second label-to-key table.
+   */
+  pathKeys: ReadonlyMap<string, string>;
 }
 
 const FIELD_SEPARATOR = '|';
+const KEY_SEPARATOR = '=';
+
+/** Written where a path belongs to the vhost template's own literals rather than an operator key. */
+export const NO_OPERATOR_KEY = '-';
 
 /** The space-separated paths one entry carries, deduplicated and in the order it wrote them. */
 function parseFrontVhostPaths(field: string): string[] {
@@ -39,8 +50,25 @@ function parseFrontVhostPaths(field: string): string[] {
 }
 
 /**
- * The front's own vhosts, each written `label|hostname|paths` when a route row owns it and as a bare
- * hostname when the front declares it outside the route table.
+ * The operator key each path came from, written `path=KEY` beside the path list.
+ *
+ * WHY this travels with the paths: the panel must name the exact `config.toml` key that owns a
+ * curated route, and deriving the key from the vhost label would be a second copy of the route
+ * table's own naming.
+ */
+function parseFrontVhostKeys(field: string): Map<string, string> {
+  const keys = new Map<string, string>();
+  for (const token of field.split(/\s+/)) {
+    const separator = token.indexOf(KEY_SEPARATOR);
+    if (separator <= 0) continue;
+    keys.set(token.slice(0, separator), token.slice(separator + 1));
+  }
+  return keys;
+}
+
+/**
+ * The front's own vhosts, each written `label|hostname|paths|keys` when a route row owns it and as a
+ * bare hostname when the front declares it outside the route table.
  *
  * WHY the table's own line shape is the input: the config sync writes it to
  * `config/generated/front-vhosts.txt` and the vhost includes the file that label names beside the
@@ -48,6 +76,9 @@ function parseFrontVhostPaths(field: string): string[] {
  * instead of by a second list of paths here. A labelled entry always wins over a bare one, whichever
  * order the two arrive in: the label is what names the fragment, and a bare duplicate states nothing
  * new about it.
+ *
+ * WHY the keys field is optional: a map published before it existed still parses, and the panel then
+ * names the file that owns the path without naming a key, rather than refusing to show the row.
  */
 export function parseFrontVhostList(entries: readonly string[]): FrontVhost[] {
   const byHostname = new Map<string, FrontVhost>();
@@ -59,8 +90,11 @@ export function parseFrontVhostList(entries: readonly string[]): FrontVhost[] {
     const hostname = (hostnameEnd === -1 ? rest : rest.slice(0, hostnameEnd)).trim().toLowerCase();
     if (hostname === '') continue;
     if ((byHostname.get(hostname)?.label ?? null) !== null) continue;
-    const paths = hostnameEnd === -1 ? [] : parseFrontVhostPaths(rest.slice(hostnameEnd + 1));
-    byHostname.set(hostname, { hostname, label: label === '' ? null : label, paths });
+    const fields = hostnameEnd === -1 ? '' : rest.slice(hostnameEnd + 1);
+    const pathsEnd = fields.indexOf(FIELD_SEPARATOR);
+    const paths = hostnameEnd === -1 ? [] : parseFrontVhostPaths(pathsEnd === -1 ? fields : fields.slice(0, pathsEnd));
+    const pathKeys = pathsEnd === -1 ? new Map<string, string>() : parseFrontVhostKeys(fields.slice(pathsEnd + 1));
+    byHostname.set(hostname, { hostname, label: label === '' ? null : label, paths, pathKeys });
   }
   return [...byHostname.values()];
 }

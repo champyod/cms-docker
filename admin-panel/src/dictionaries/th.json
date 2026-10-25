@@ -28,7 +28,8 @@
         "hostname": "ชื่อโฮสต์",
         "path": "พาธ",
         "tls": "TLS",
-        "tailnet": "เทลเน็ต"
+        "tailnet": "เทลเน็ต",
+        "source": "แหล่งที่มา"
       },
       "fields": {
         "name": "ชื่อ",
@@ -67,7 +68,12 @@
         "allContests": "ทุกการแข่งขัน",
         "none": "—",
         "http": "http",
-        "rpc": "rpc"
+        "rpc": "rpc",
+        "database": "ฐานข้อมูล"
+      },
+      "source": {
+        "curated": "{file} · {key}",
+        "readOnly": "เส้นทางนี้มาจาก {file} จึงแก้จากแผงควบคุมไม่ได้ ลบรายการเปิดเผยได้เท่านั้น"
       },
       "empty": {
         "service": "ยังไม่มีบริการที่ลงทะเบียน",

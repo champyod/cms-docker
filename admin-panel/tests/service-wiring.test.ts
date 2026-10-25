@@ -236,21 +236,26 @@ describe('exposureRoutes', () => {
 });
 
 describe('parseFrontVhostList', () => {
-  it('reads the label, the hostname and the paths of each entry', () => {
-    expect(parseFrontVhostList(['primary|Front.Example.com|/ /admin /ranking'])).toEqual([
-      { hostname: 'front.example.com', label: 'primary', paths: ['/', '/admin', '/ranking'] },
+  it('reads the label, the hostname, the paths and the key behind each path', () => {
+    expect(parseFrontVhostList(['primary|Front.Example.com|/ /admin /ranking|/=CONTEST_ROUTE_PATH /admin=ADMIN_ROUTE_PATH /ranking=RANKING_ROUTE_PATH'])).toEqual([
+      {
+        hostname: 'front.example.com',
+        label: 'primary',
+        paths: ['/', '/admin', '/ranking'],
+        pathKeys: new Map([['/', 'CONTEST_ROUTE_PATH'], ['/admin', 'ADMIN_ROUTE_PATH'], ['/ranking', 'RANKING_ROUTE_PATH']]),
+      },
     ]);
   });
 
-  it('keeps a bare hostname without a label or paths', () => {
+  it('keeps a bare hostname without a label, paths or keys', () => {
     expect(parseFrontVhostList(['acme.example.com'])).toEqual([
-      { hostname: 'acme.example.com', label: null, paths: [] },
+      { hostname: 'acme.example.com', label: null, paths: [], pathKeys: new Map() },
     ]);
   });
 
   it('keeps a labelled entry that carries no paths, so a stale map is refused rather than trusted', () => {
     expect(parseFrontVhostList(['primary|front.example.com'])).toEqual([
-      { hostname: 'front.example.com', label: 'primary', paths: [] },
+      { hostname: 'front.example.com', label: 'primary', paths: [], pathKeys: new Map() },
     ]);
   });
 
@@ -260,12 +265,18 @@ describe('parseFrontVhostList', () => {
 
   it('lets the label win over a bare duplicate, whatever the order', () => {
     expect(parseFrontVhostList(['front.example.com', 'primary|front.example.com|/ /admin'])).toEqual([
-      { hostname: 'front.example.com', label: 'primary', paths: ['/', '/admin'] },
+      { hostname: 'front.example.com', label: 'primary', paths: ['/', '/admin'], pathKeys: new Map() },
     ]);
   });
 
   it('drops an entry that names no hostname', () => {
     expect(parseFrontVhostList(['', '   ', 'primary|'])).toEqual([]);
+  });
+
+  it('still parses a map published before the keys field existed', () => {
+    const [vhost] = parseFrontVhostList(['primary|front.example.com|/ /admin']);
+    expect(vhost.paths).toEqual(['/', '/admin']);
+    expect(vhost.pathKeys.size).toBe(0);
   });
 });
 

@@ -3,8 +3,10 @@
 import type { ReactNode } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 
-import { RowActions } from '@/components/core/RowActions';
+import { RowActions, type RowAction } from '@/components/core/RowActions';
 import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { interpolate } from '@/lib/interpolate';
+import type { ExposureOwnership } from '@/lib/service-wiring-ownership';
 import type { ExposureRecord, ServiceRecord, WiringRecord } from '@/lib/service-wiring-contract';
 import type { ServicesCopy } from './registry-spec';
 
@@ -38,18 +40,38 @@ export function wiringColumns(copy: ServicesCopy, nameOf: (id: number) => string
   ];
 }
 
-export function exposureColumns(copy: ServicesCopy, nameOf: (id: number) => string): ResponsiveColumn<ExposureRecord>[] {
+/**
+ * The owner of one exposure's route, as the row states it.
+ *
+ * WHY the source and not only the problems list: a curated row looks editable until the next sync
+ * refuses it, and naming the file and key that own the route is what tells the operator where to
+ * change it instead.
+ */
+function sourceCell(copy: ServicesCopy, owner: ExposureOwnership | null): ReactNode {
+  if (owner === null) return copy.values.none;
+  if (owner.kind === 'database') return copy.values.database;
+  const hint = interpolate(copy.source.readOnly, { file: owner.file });
+  return <span title={hint}>{owner.key === null ? owner.file : interpolate(copy.source.curated, { file: owner.file, key: owner.key })}</span>;
+}
+
+export function exposureColumns(
+  copy: ServicesCopy,
+  nameOf: (id: number) => string,
+  ownershipOf: (id: number) => ExposureOwnership | null,
+): ResponsiveColumn<ExposureRecord>[] {
   return [
     { key: 'service', header: copy.kinds.service, render: (exposure) => nameOf(exposure.service_id) },
     { key: 'hostname', header: copy.columns.hostname, render: (exposure) => exposure.hostname },
     { key: 'path', header: copy.columns.path, render: (exposure) => exposure.path },
+    { key: 'source', header: copy.columns.source, render: (exposure) => sourceCell(copy, ownershipOf(exposure.id)) },
     { key: 'tls', header: copy.columns.tls, render: (exposure) => (exposure.tls ? copy.values.yes : copy.values.no) },
     { key: 'tailnet', header: copy.columns.tailnet, render: (exposure) => exposure.tailnet ?? copy.values.none },
   ];
 }
 
 interface RowActionHandlers {
-  readonly onEdit: () => void;
+  /** Absent where the row must not be edited — a curated route is changed in `config.toml`, not here. */
+  readonly onEdit?: () => void;
   readonly onRemove: () => void;
 }
 
@@ -65,14 +87,9 @@ export function registryRowActions(
   permissionKeys: readonly string[],
   handlers: RowActionHandlers,
 ): ReactNode {
-  return (
-    <RowActions
-      ariaLabel={copy.actions.rowGroup}
-      permissionKeys={permissionKeys}
-      actions={[
-        { key: 'edit', label: copy.actions.edit, icon: Pencil, onClick: handlers.onEdit, permission: ['container:control'] },
-        { key: 'remove', label: copy.actions.remove, icon: Trash2, variant: 'negativeOutline', onClick: handlers.onRemove, permission: ['container:control'] },
-      ]}
-    />
-  );
+  const onEdit = handlers.onEdit;
+  const removeAction: RowAction = { key: 'remove', label: copy.actions.remove, icon: Trash2, variant: 'negativeOutline', onClick: handlers.onRemove, permission: ['container:control'] };
+  if (onEdit === undefined) return <RowActions ariaLabel={copy.actions.rowGroup} permissionKeys={permissionKeys} actions={[removeAction]} />;
+  const editAction: RowAction = { key: 'edit', label: copy.actions.edit, icon: Pencil, onClick: onEdit, permission: ['container:control'] };
+  return <RowActions ariaLabel={copy.actions.rowGroup} permissionKeys={permissionKeys} actions={[editAction, removeAction]} />;
 }
