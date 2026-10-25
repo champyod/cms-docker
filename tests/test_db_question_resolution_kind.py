@@ -46,14 +46,17 @@ def load_surface():
     try:
         import cms.db as database
         from cms.server.admin.handlers import contestquestion
-        from cmscommon.crypto import build_password
+        # WHY hash_password: build_password() only wraps an already-hashed payload and
+        # refuses a plaintext one; this fixture holds a raw secret, so it goes through the
+        # single entry that stores one.
+        from cmscommon.crypto import hash_password
         from cmscommon.datetime import make_datetime
         from sqlalchemy import inspect
     except ImportError:
         return None
     return types.SimpleNamespace(
         database=database, reply_handler=contestquestion.QuestionReplyHandler,
-        make_datetime=make_datetime, inspect=inspect, build_password=build_password)
+        make_datetime=make_datetime, inspect=inspect, build_password=hash_password)
 
 
 SURFACE = load_surface()
