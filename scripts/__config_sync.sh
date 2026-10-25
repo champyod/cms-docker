@@ -1650,27 +1650,6 @@ publish_front_vhost_placeholders() {
   done <<< "$lines"
 }
 
-# One fragment per front vhost the registry names an exposure on: the locations that vhost's own
-# include pulls in, and nothing else.
-#
-# WHY the render lands in a variable: a vhost whose registry names no exposure renders empty, and
-# writing that would replace the placeholder the publisher wrote — but the include names the file,
-# so it has to stay on disk. An empty render therefore leaves the placeholder untouched.
-render_front_vhost_fragments() {
-  local payload="$1" lines="$2" bun_bin="$3" front_vhosts="$4" label hostname rendered
-  while IFS='|' read -r label hostname _; do
-    # A bare hostname line names no label, so there is no fragment file for it to render into.
-    [[ -n "$label" && -n "$hostname" ]] || continue
-    if ! rendered="$(printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" location "$label" \
-        --front-vhosts "$front_vhosts")"; then
-      log_error "the wiring renderer refused the registry for the $label vhost; fix the exposure rows."
-      return 1
-    fi
-    [[ -n "$rendered" ]] || continue
-    printf '%s\n' "$rendered" > "$WIRING_OUT_DIR/locations-$label.conf" || return 1
-  done <<< "$lines"
-}
-
 # Renders the generated route artifacts from the registry.
 #
 # WHY the placeholders are published first, before every guard below: every front vhost includes
@@ -1746,38 +1725,31 @@ render_wiring_artifacts() {
   # file, so the label that names a fragment, the hostname it belongs to and the paths that vhost
   # already answers on cannot drift apart between what the sync renders and what the screen reports.
   # The publisher already wrote those same lines to front-vhosts.txt; the renderer gets them inline.
-  local front_lines front_vhosts
+  local front_lines front_vhosts report
   front_lines="$(front_vhost_lines)" || return 1
   front_vhosts="$(printf '%s\n' "$front_lines" | paste -sd',' - || true)"
-  if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" nginx \
+
+  # WHY one call for the whole set: the renderer owns every file name and every byte, so the shell can
+  # no longer assemble a server block, a fragment or a serve config the panel would write differently.
+  if ! report="$(printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" apply "$WIRING_OUT_DIR" \
       --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
       --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
       --ssl-include /etc/nginx/conf.d/nginx-ssl.conf \
-      --front-vhosts "$front_vhosts" \
-      > "$WIRING_OUT_DIR/contest-routes.conf"; then
-    rm -f "$WIRING_OUT_DIR/contest-routes.conf"
+      --front-vhosts "$front_vhosts")"; then
     log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
     return 1
   fi
-  render_front_vhost_fragments "$payload" "$front_lines" "$bun_bin" "$front_vhosts" || return 1
+  # WHY the report is logged and not only returned: a sync that rewrote nothing and one that rewrote
+  # every route read the same in the log otherwise.
+  local changed
+  changed="$(printf '%s' "$report" | grep -c '"status": *"\(added\|changed\|removed\)"' || true)"
+  [[ -z "$changed" || "$changed" == "0" ]] || log_info "Rewrote $changed generated route artifact(s) in $WIRING_OUT_DIR/"
 
-  # One serve file per tailnet node, because each exposed contest gets its own tailscale
-  # container and a container reads exactly one file. WHY the node list comes from the
-  # table and not from the renderer: the shell needs a file per name, and asking the
-  # database for the names keeps the renderer a pure function of its input.
-  local nodes node
+  # The node list comes from the table, not the renderer: compose needs one container per name, and
+  # asking the database keeps the renderer a pure function of its input.
+  local nodes
   nodes="$(db_query "SELECT DISTINCT tailnet FROM contest_exposures WHERE tailnet IS NOT NULL ORDER BY tailnet;")" || return 1
-  rm -rf "$WIRING_OUT_DIR/tailscale"
   if [[ -n "$nodes" ]]; then
-    mkdir -p "$WIRING_OUT_DIR/tailscale" || return 1
-    while IFS= read -r node; do
-      [[ -n "$node" ]] || continue
-      if ! printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" serve "$node" > "$WIRING_OUT_DIR/tailscale/$node.json"; then
-        rm -f "$WIRING_OUT_DIR/tailscale/$node.json"
-        log_error "the wiring renderer refused tailnet node \"$node\"; fix the exposure rows."
-        return 1
-      fi
-    done <<< "$nodes"
     render_tailscale_compose "$nodes"
   else
     rm -f "$WIRING_COMPOSE"
