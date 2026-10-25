@@ -1136,7 +1136,12 @@ jobs:
       - name: Sign the pushed digest
         if: github.event_name != 'pull_request'
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin
+          # WHY this must name the image the build step pushed: it named `-admin`, a
+          # repository that holds no image at all. cosign signs a digest you hand it, so
+          # the step stayed green while the image that actually ships carried no
+          # signature — and the deploy gate then refused every panel deploy. tests/
+          # test_ci_signing_parity.sh compares this value against the metadata step.
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
           DIGEST: ${{ steps.build-admin.outputs.digest }}
         run: |
           test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
