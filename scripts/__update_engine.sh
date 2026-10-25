@@ -790,6 +790,7 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS|num||1500"
   "Infra & Monitoring|[infra]|SECURITY_STALENESS_CACHE_MS|num||15000"
   "Infra & Monitoring|[infra]|AUDIT_RETENTION_INTERVAL_SECS|num||86400"
+  "Infra & Monitoring|[infra]|EXPOSURE_RECONCILE_INTERVAL_SECS|num||60"
   "Infra & Monitoring|[infra]|MONITORING_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|PROMETHEUS_PORT|port||9090"
   "Infra & Monitoring|[infra]|PROMETHEUS_BIND_IP|str||127.0.0.1"
