@@ -36,8 +36,33 @@ scan_osv() {
     findings="$WORK_DIR/osv-findings.json"
     rm -f "$out"
 
+    # WHY the lockfiles are named instead of walking the tree: `scan source -r /src` recurses
+    # through everything under the mount, and on a real host the checkout contains paths the
+    # container user cannot read (./src/backups holds root-owned archives). osv-scanner treats
+    # that as a fatal error and exits 127 with no report at all — so the nightly OSV scan
+    # produced nothing while looking like it ran. The dependency set we ship is in the
+    # lockfiles, and there is a closed list of them.
+    set --
+    # Only extractors osv-scanner actually has: `src/constraints.txt` is a pip constraints file
+    # and package.json is not a lockfile, and naming either makes osv exit 127 with no report at
+    # all — the same failure mode as an unreadable walk, and just as silent.
+    for lock in \
+        "$SRC_DIR"/admin-panel/bun.lock \
+        "$SRC_DIR"/admin-panel/package-lock.json \
+        "$SRC_DIR"/ranking-web/Cargo.lock \
+        "$SRC_DIR"/requirements.txt \
+        "$SRC_DIR"/uv.lock; do
+        [ -f "$lock" ] && set -- "$@" -L "$lock"
+    done
+    if [ "$#" -eq 0 ]; then
+        log "osv: no lockfile found under $SRC_DIR — complete:false, nothing is resolved"
+        printf '[]\n' > "$findings"
+        feed_post osv "$findings" false || true
+        return 1
+    fi
+
     rc=0
-    osv-scanner scan source -r "$SRC_DIR" --format json --output-file "$out" \
+    osv-scanner scan source "$@" --format json --output-file "$out" \
         --verbosity warn || rc=$?
 
     # osv-scanner exits 1 when it FOUND vulnerabilities — that is a completed scan, not a
@@ -80,9 +105,19 @@ scan_rootfs() {
     rm -f "$out"
 
     rc=0
+    # WHY these skips are load-bearing: a host root includes /var/lib/docker, whose overlay
+    # layers hold every image this box has ever pulled, and /proc,/sys,/dev are not filesystems
+    # at all. Scanning them reported 34,606 "host" findings on a box with a normal package set —
+    # the number is other people's images, and it buried the host's own CVEs.
     trivy rootfs \
         --scanners vuln \
         --pkg-types os \
+        --skip-dirs "$ROOTFS_DIR/var/lib/docker" \
+        --skip-dirs "$ROOTFS_DIR/var/lib/containers" \
+        --skip-dirs "$ROOTFS_DIR/proc" \
+        --skip-dirs "$ROOTFS_DIR/sys" \
+        --skip-dirs "$ROOTFS_DIR/dev" \
+        --skip-dirs "$ROOTFS_DIR/run" \
         --format json \
         --output "$out" \
         --cache-dir "${TRIVY_CACHE_DIR:-$WORK_DIR/trivy-cache}" \
