@@ -14,9 +14,11 @@ import {
   SYSTEM_IDENTITIES,
   actorClaim,
   currentDbActor,
-  requireDbActor,
   withActor,
 } from '@/lib/db-actor';
+// WHY from the request module: reading the cookie needs next/headers, which is why the identity
+// rules and the cookie read are separate modules.
+import { requireDbActor } from '@/lib/db-actor-request';
 import { buildActorAwareClient } from '@/lib/prisma';
 
 /**

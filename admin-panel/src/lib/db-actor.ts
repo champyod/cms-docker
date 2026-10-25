@@ -1,9 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import { cookies } from 'next/headers';
-
-import { readSessionClaimsFromCookies } from '@/lib/session-token';
-
 /**
  * Who a database transaction acts as.
  *
@@ -86,7 +82,10 @@ export function actorClaim(actor: DbActor): string {
  */
 type ActorStore = { actor: DbActor };
 
-const actorStorage = new AsyncLocalStorage<ActorStore>();
+// Exported for db-actor-request.ts, the module that reads the session cookie: the scope itself must
+// stay here, because this file is what non-request processes (scheduler, CLI, the image smoke check)
+// can import safely — it has no dependency on next/headers.
+export const actorStorage = new AsyncLocalStorage<ActorStore>();
 
 /** The actor of the current scope, if one was established. */
 export function currentDbActor(): DbActor | undefined {
@@ -106,59 +105,4 @@ export function withActor<T>(actor: DbActor, fn: () => PromiseLike<T>): Promise<
   // Validated before the scope opens: a malformed identity must fail here, not at the first query.
   actorClaim(actor);
   return actorStorage.run({ actor }, async () => await fn());
-}
-
-/**
- * The actor for the request in flight, resolved from the session cookie.
- *
- * WHY it reads the cookie instead of asking each route: Next gives one request-scoped cookie API to
- * pages, layouts, route handlers and server actions alike, so this is the single point that can
- * see the session for all of them. A page or route that forgets to pass an actor still acts as its
- * admin, which is what makes fail-closed enforcement survivable.
- *
- * WHY it does not re-check that the admin is still enabled: that check needs a read of `admins`,
- * and reading `admins` needs an actor — the resolver would recurse. The signature and expiry are
- * verified here, and every action gates on `getSession()`, which does perform the liveness read.
- * The exposure of a disabled admin keeping row access until the token expires (at most the 2h JWT
- * lifetime) is recorded in the register as the residual risk of this design.
- *
- * Returns null when there is no request scope (CLI, tests, a script) or no valid cookie; the caller
- * decides whether that is a missing actor or an anonymous one.
- */
-export async function resolveRequestActor(): Promise<DbActor | null> {
-  const claims = await readSessionClaimsFromCookies();
-  if (claims === null) return null;
-  const id = Number.parseInt(claims.userId, 10);
-  if (!Number.isInteger(id) || id <= 0) return null;
-  return { kind: 'admin', id };
-}
-
-/**
- * Resolve the actor for a database call: the scope's, else the request's, else throw.
- *
- * The resolved request actor is written into the scope so a page that issues twenty queries
- * verifies one cookie rather than twenty — but only the identity, never a cached decision about
- * database state.
- */
-export async function requireDbActor(): Promise<DbActor> {
-  const scoped = currentDbActor();
-  if (scoped !== undefined) return scoped;
-
-  const fromRequest = await resolveRequestActor();
-  if (fromRequest !== null) {
-    actorStorage.enterWith({ actor: fromRequest });
-    return fromRequest;
-  }
-
-  throw new MissingDbActorError('no withActor() scope and no session cookie on this request');
-}
-
-/** True when `cookies()` is usable — i.e. we are inside a request. Used only for diagnostics. */
-export async function inRequestScope(): Promise<boolean> {
-  try {
-    await cookies();
-    return true;
-  } catch {
-    return false;
-  }
 }

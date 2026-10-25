@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 
-import { actorClaim, requireDbActor } from '@/lib/db-actor';
+import { actorClaim } from '@/lib/db-actor';
 
 /** See {@link buildActorAwareClient}. */
 export { buildActorAwareClient };
@@ -100,6 +100,11 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
   async function inActorTransaction<T>(
     operation: (tx: AnyClient, claim: string) => Promise<T>,
   ): Promise<T> {
+    // WHY the import is dynamic: the request actor is resolved from the session cookie, which lives
+    // in `next/headers` and only exists inside a request. A static import would make every
+    // non-request process that loads this client — the backup scheduler, the CLI, the waiver export,
+    // the image's own `tsx -e 'require("@/lib/prisma")'` smoke check — fail at import time.
+    const { requireDbActor } = await import('@/lib/db-actor-request');
     const claim = actorClaim(await requireDbActor());
     return base.$transaction(async (tx) => {
       const client = tx as unknown as AnyClient;
