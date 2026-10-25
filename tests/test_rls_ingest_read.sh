@@ -27,6 +27,16 @@ if [[ ! -f "$GEN" ]]; then
   exit 1
 fi
 
+# A policy statement may span lines (the generator wraps the audit_log predicate). Reading to the
+# semicolon is the only way to test the statement rather than its first line.
+policy_stmt() {
+  local text="$1" pol="$2" tbl="$3"
+  printf '%s\n' "$text" | awk -v pol="$pol" -v tbl="$tbl" '
+    !on && $0 ~ ("^CREATE POLICY " pol " ON public\\.\"?" tbl "\"? FOR") { on = 1 }
+    on { printf "%s ", $0; if ($0 ~ /;[[:space:]]*$/) exit }
+  '
+}
+
 GENERATED="$(bash "$GEN" --emit-policies 2>/dev/null)"
 if [[ -z "$GENERATED" ]]; then
   printf '  FAIL the generator produced no policy set\n'
@@ -45,14 +55,14 @@ fi
 printf '\nthe generated policy set grants ingest read + write on every ingest table\n'
 while read -r tbl; do
   [[ -n "$tbl" ]] || continue
-  read_policy="$(printf '%s\n' "$GENERATED" | grep -E "^CREATE POLICY cms_actor_read ON public\.${tbl} FOR SELECT")"
+  read_policy="$(policy_stmt "$GENERATED" cms_actor_read "$tbl")"
   if [[ "$read_policy" == *"system:ingest"* ]]; then
     ok "$tbl: read policy names system:ingest (so INSERT … RETURNING can see its own row)"
   else
     no "$tbl: read policy does not name system:ingest — Prisma's upsert will fail with 42501"
   fi
   for verb in append update; do
-    if printf '%s\n' "$GENERATED" | grep -E "^CREATE POLICY cms_actor_${verb} ON public\.${tbl} " | grep -q "system:ingest"; then
+    if policy_stmt "$GENERATED" "cms_actor_${verb}" "$tbl" | grep -q "system:ingest"; then
       ok "$tbl: $verb policy names system:ingest"
     else
       no "$tbl: $verb policy does not name system:ingest"
@@ -76,6 +86,29 @@ while read -r tbl; do
     no "$tbl: the newest read policy in the chain ($(basename "$(dirname "$last")")) does NOT grant ingest — the generator was fixed but the database was not"
   fi
 done <<<"$INGEST_TABLES"
+
+printf '\nthe ingest identity may append to the audit trail it is required to write\n'
+# WHY this is the same rule: every accepted push writes one audit row, so an ingest identity that
+# cannot append to audit_log means the feed records findings and the trail records nothing. The
+# first host scan produced 139 audit refusals that way, alarmed as "cannot write audit logs".
+if policy_stmt "$GENERATED" cms_actor_append audit_log | grep -q "system:ingest"; then
+  ok "generated: audit_log append policy names system:ingest"
+else
+  no "generated: audit_log append policy omits system:ingest — every feed push fails to audit"
+fi
+# The attribution rule must survive: a system identity may name another actor, an admin may not.
+if policy_stmt "$GENERATED" cms_actor_append audit_log | grep -q "cms_actor_admin_id"; then
+  ok "generated: the attribution rule is still in the append predicate"
+else
+  no "generated: the attribution rule vanished — an admin could forge another actor"
+fi
+
+last_audit="$(grep -rl "CREATE POLICY cms_actor_append ON public\.\"\?audit_log\"\? FOR INSERT" "$MIGRATIONS" 2>/dev/null | sort | tail -1)"
+if [[ -n "$last_audit" ]] && policy_stmt "$(cat "$last_audit")" cms_actor_append audit_log | grep -q "system:ingest"; then
+  ok "migrations: the newest audit_log append policy grants ingest ($(basename "$(dirname "$last_audit")"))"
+else
+  no "migrations: the newest audit_log append policy does not grant ingest — the database would still refuse feed audits"
+fi
 
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
