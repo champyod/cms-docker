@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CRITICAL_AUDIT_VERBS,
-  classifyAuditEvent,
   classifyAuditEventWithNames,
-  isCriticalAuditEvent,
   isDiscordNotify,
   isSubmitBurst,
   isWebNotify,
@@ -11,34 +9,27 @@ import {
 } from '@/lib/notification-events';
 
 describe('notification events', () => {
-  it('flags critical verbs on success', () => {
-    expect(isCriticalAuditEvent('admin:delete', 'success')).toBe(true);
-    expect(isCriticalAuditEvent('deployment:deploy', 'success')).toBe(true);
-    expect(isCriticalAuditEvent('override:set', 'success')).toBe(true);
-  });
-
-  it('flags sensitive failures as possible break-ins', () => {
-    expect(isCriticalAuditEvent('password:reveal', 'failure')).toBe(true);
-    expect(isCriticalAuditEvent('password:reveal', 'success')).toBe(false);
-  });
-
-  it('ignores routine verbs', () => {
-    expect(isCriticalAuditEvent('contest:list', 'success')).toBe(false);
-    expect(isCriticalAuditEvent('user:update', 'success')).toBe(false);
-    expect(isCriticalAuditEvent('user:update', 'failure')).toBe(false);
-  });
-
-  it('classifies with actor and target detail', () => {
-    const event = classifyAuditEvent('admin:delete', 'admin', '7', 'success', 1);
+  it('frames a critical success as the parts of the event, not as a sentence', () => {
+    const event = classifyAuditEventWithNames('admin:delete', 'success', 'Ada', 'admin #7');
     expect(event?.level).toBe('critical');
-    expect(event?.detail).toContain('admin #1');
-    expect(event?.detail).toContain('admin #7');
-    expect(classifyAuditEvent('user:list', 'user', null, 'success', 1)).toBeNull();
+    // Why the parts: the sentence is the reader's dictionary's to write, so the frame may not carry one.
+    expect(event?.cue).toEqual({ kind: 'critical', verb: 'admin:delete', actor: 'Ada', target: 'admin #7' });
+  });
+
+  it('distinguishes a sensitive failure from a critical success', () => {
+    const failed = classifyAuditEventWithNames('override:set', 'failure', 'system', 'contest #3');
+    expect(failed?.cue.kind).toBe('failed');
+    const succeeded = classifyAuditEventWithNames('override:set', 'success', 'system', 'contest #3');
+    expect(succeeded?.cue.kind).toBe('critical');
+  });
+
+  it('leaves routine verbs off the bell', () => {
+    expect(classifyAuditEventWithNames('user:list', 'success', 'Ada', 'user #7')).toBeNull();
+    expect(classifyAuditEventWithNames('contest:list', 'success', 'Ada', 'contest #1')).toBeNull();
   });
 
   it('names the audit log as the destination of the alert it frames', () => {
     expect(classifyAuditEventWithNames('admin:delete', 'success', 'Ada', 'admin #7')?.destination).toBe('administration.audit');
-    expect(classifyAuditEvent('admin:delete', 'admin', '7', 'failure', 1)?.destination).toBe('administration.audit');
   });
 
   it('detects submit bursts at the threshold', () => {

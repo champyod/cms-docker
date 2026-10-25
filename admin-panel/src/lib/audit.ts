@@ -124,9 +124,16 @@ async function publishFrame(
       publishNotification({ ...framed, id: `audit-${String(rowId)}`, timestamp: timestamp.toISOString() });
     }
     if (!discord) return;
+    // Why this sentence is composed here and not on the frame: Discord is an operator channel with no
+    // reader locale to honour, so it keeps one language while the panel's copy comes from its dictionary.
     const { logToDiscord } = await import('@/lib/discord-notifier');
-    const detail = framed?.detail ?? `${actorName} ran ${entry.verb} on ${targetName}`;
-    void logToDiscord(`Critical admin action: ${entry.verb}`, `${detail} (${entry.result})`, 15158332, true);
+    const outcome = entry.result === 'failure' ? 'failed' : 'ran';
+    void logToDiscord(
+      `Critical admin action: ${entry.verb}`,
+      `${actorName} ${outcome} ${entry.verb} on ${targetName} (${entry.result})`,
+      15158332,
+      true,
+    );
   } catch {
     return;
   }

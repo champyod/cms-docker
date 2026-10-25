@@ -10,6 +10,7 @@ import { useDictionary } from '@/hooks/useDictionary';
 import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
 import { buildRoute } from '@/lib/navigation/routes';
 import type { QueuedNotification } from '@/lib/notification-queue';
+import { auditCueCopy, type AuditCueCopy } from '@/lib/system-alert-copy';
 
 interface NotificationPopupProps {
   readonly open: boolean;
@@ -42,6 +43,7 @@ interface AlertEntryProps {
   readonly event: QueuedNotification;
   readonly locale: string;
   readonly formatTimestamp: TimestampFormatter;
+  readonly copy: AuditCueCopy;
 }
 
 /**
@@ -51,11 +53,14 @@ interface AlertEntryProps {
  * belongs on the list, and linking it to the log would send the reader to a page that cannot resolve
  * the row they came to read.
  */
-function AlertEntry({ event, locale, formatTimestamp }: AlertEntryProps): React.JSX.Element {
+function AlertEntry({ event, locale, formatTimestamp, copy }: AlertEntryProps): React.JSX.Element {
+  // Why the row composes its own words: the frame carries the parts of the event, so every row reads
+  // in the language the reader is using — including rows received before a locale switch.
+  const { title, detail } = auditCueCopy(event.cue, copy);
   const body = (
     <>
-      <p className="text-xs font-semibold text-foreground">{event.title}</p>
-      <p className="text-xs text-muted-foreground break-words">{event.detail}</p>
+      <p className="text-xs font-semibold text-foreground">{title}</p>
+      <p className="text-xs text-muted-foreground break-words">{detail}</p>
       <p className="font-mono text-[10px] text-muted-foreground/70">{formatTimestamp(event.timestamp)}</p>
     </>
   );
@@ -123,7 +128,13 @@ export function NotificationPopup({
       ) : (
         <ul>
           {events.map((event) => (
-            <AlertEntry key={event.id} event={event} locale={locale} formatTimestamp={formatTimestamp} />
+            <AlertEntry
+              key={event.id}
+              event={event}
+              locale={locale}
+              formatTimestamp={formatTimestamp}
+              copy={copy.audit}
+            />
           ))}
         </ul>
       )}

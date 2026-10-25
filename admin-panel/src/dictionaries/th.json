@@ -1174,7 +1174,13 @@
     "empty": "ยังไม่มีการแจ้งเตือน",
     "questionTitle": "มีคำถามใหม่เข้ามา!",
     "questionDetail": "จาก {username}: {subject}",
-    "questionUnnamedAsker": "ผู้ใช้"
+    "questionUnnamedAsker": "ผู้ใช้",
+    "audit": {
+      "criticalTitle": "การกระทำสำคัญ: {verb}",
+      "criticalDetail": "{actor} ทำ {verb} กับ {target}",
+      "failedTitle": "การกระทำที่ละเอียดอ่อนล้มเหลว: {verb}",
+      "failedDetail": "{actor} พยายาม {verb} กับ {target} ไม่สำเร็จ"
+    }
   },
   "states": {
     "retry": {

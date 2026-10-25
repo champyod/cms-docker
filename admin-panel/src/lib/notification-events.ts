@@ -60,10 +60,26 @@ export const ENROL_BURST_COUNT = 10;
 export const ENROL_BURST_WINDOW_MINUTES = 5;
 export const NOTIFICATION_COOLDOWN_MS = 15 * 60 * 1000;
 
+/**
+ * The parts of a critical audit row a reader is shown — never the sentence itself.
+ *
+ * WHY the row travels as parts: the panel renders a Thai operator's copy in Thai, and the server
+ * composes at request time with no reader. Sending a finished English sentence made the operator's
+ * language unrepresentable for every audit-derived alert; sending the parts lets the one locale that
+ * exists where the reader is compose it. The verb is an identifier (`admin:delete`), so it stays as
+ * written; the words around it are the dictionary's.
+ */
+export interface AuditCue {
+  /** A failure of a sensitive verb reads differently from a critical action that succeeded. */
+  readonly kind: 'critical' | 'failed';
+  readonly verb: string;
+  readonly actor: string;
+  readonly target: string;
+}
+
 export interface NotificationEvent {
   level: 'critical' | 'warning';
-  title: string;
-  detail: string;
+  cue: AuditCue;
   /**
    * The panel route holding this event's own record, where one exists.
    *
@@ -76,13 +92,6 @@ export interface NotificationEvent {
 // Why one constant and not a literal per classifier: every alert here is an audit row, and the log
 // is the one page that can resolve a row, so the destination cannot drift between the two framings.
 const AUDIT_LOG_DESTINATION: RouteId = 'administration.audit';
-
-/** True when an audit row must push immediately (critical success or sensitive failure). */
-export function isCriticalAuditEvent(verb: string, result: AuditResult): boolean {
-  if (result === 'success' && CRITICAL_AUDIT_VERBS.has(verb)) return true;
-  if (result === 'failure' && SENSITIVE_FAILURE_VERBS.has(verb)) return true;
-  return false;
-}
 
 /** True when an audit row belongs on the web bell (all critical, both results). */
 export function isWebNotify(verb: string, result: AuditResult): boolean {
@@ -98,34 +107,16 @@ export function isDiscordNotify(verb: string, result: AuditResult): boolean {
   return true;
 }
 
-/** Human frame for a critical audit row; null when the row is not push-worthy. */
-export function classifyAuditEvent(
-  verb: string,
-  entity: string,
-  entityId: string | null,
-  result: AuditResult,
-  actorId: number | null,
-): NotificationEvent | null {
-  if (!isCriticalAuditEvent(verb, result)) return null;
-  const target = entityId === null ? entity : `${entity} #${entityId}`;
-  const actor = actorId === null ? 'system' : `admin #${actorId}`;
-  if (result === 'failure') {
-    return {
-      level: 'critical',
-      title: `Failed sensitive action: ${verb}`,
-      detail: `${actor} failed ${verb} on ${target}`,
-      destination: AUDIT_LOG_DESTINATION,
-    };
-  }
-  return {
-    level: 'critical',
-    title: `Critical action: ${verb}`,
-    detail: `${actor} ran ${verb} on ${target}`,
-    destination: AUDIT_LOG_DESTINATION,
-  };
-}
-
-/** Name-aware frame for a published row; null when the row stays off the bell. */
+/**
+ * The frame for a published row; null when the row stays off the bell.
+ *
+ * WHY it carries parts and not a sentence: the reader's language is the panel's, and this runs on the
+ * server where no reader exists — see `AuditCue`.
+ *
+ * WHY the id-based classifier is gone: it had no caller. Every publish path resolves the actor's and
+ * the target's names before framing, so the name-aware variant was the only one in use, and the
+ * predicate it relied on (`isCriticalAuditEvent`) went with it.
+ */
 export function classifyAuditEventWithNames(
   verb: string,
   result: AuditResult,
@@ -133,18 +124,9 @@ export function classifyAuditEventWithNames(
   targetName: string,
 ): NotificationEvent | null {
   if (!isWebNotify(verb, result)) return null;
-  if (result === 'failure') {
-    return {
-      level: 'critical',
-      title: `Failed critical action: ${verb}`,
-      detail: `${actorName} failed ${verb} on ${targetName}`,
-      destination: AUDIT_LOG_DESTINATION,
-    };
-  }
   return {
     level: 'critical',
-    title: `Critical action: ${verb}`,
-    detail: `${actorName} ran ${verb} on ${targetName}`,
+    cue: { kind: result === 'failure' ? 'failed' : 'critical', verb, actor: actorName, target: targetName },
     destination: AUDIT_LOG_DESTINATION,
   };
 }

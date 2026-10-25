@@ -8,6 +8,7 @@ import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import type { QueuedNotification } from '@/lib/notification-queue';
+import { auditCueCopy } from '@/lib/system-alert-copy';
 
 // Why the pathname is supplied: the panel resolves the locale its links are built with from the
 // router, which a bare render does not provide.
@@ -23,8 +24,7 @@ function alert(overrides: Partial<QueuedNotification> = {}): QueuedNotification 
   return {
     id: 'audit-42',
     level: 'critical',
-    title: 'Critical action: service:deploy',
-    detail: 'Ada ran service:deploy on Midterm',
+    cue: { kind: 'critical', verb: 'service:deploy', actor: 'Ada', target: 'Midterm' },
     timestamp: '2026-10-14T09:00:00.000Z',
     destination: 'administration.audit',
     ...overrides,
@@ -68,15 +68,32 @@ describe('alert popup entries', () => {
     render(<Harness events={[alert()]} />);
 
     expect(screen.getByRole('link').getAttribute('href')).toBe('/en/administration/audit');
-    expect(screen.getByText('Critical action: service:deploy')).toBeTruthy();
+    expect(screen.getByText(auditCueCopy(alert().cue, en.systemAlerts.audit).title)).toBeTruthy();
   });
 
   it('renders an alert with no destination as text, never as a dead link', () => {
     render(<Harness events={[alert({ destination: undefined })]} />);
 
     expect(screen.queryByRole('link')).toBeNull();
-    expect(screen.getByText('Critical action: service:deploy')).toBeTruthy();
-    expect(screen.getByText('Ada ran service:deploy on Midterm')).toBeTruthy();
+    // Why derived from the dictionary: the row composes its words from the frame's parts, so a test that
+    // hard-coded the sentence would keep passing after the copy moved.
+    const copy = auditCueCopy(alert().cue, en.systemAlerts.audit);
+    expect(screen.getByText(copy.title)).toBeTruthy();
+    expect(screen.getByText(copy.detail)).toBeTruthy();
+  });
+
+  it('writes the row in the reader’s locale, not in one stored sentence', () => {
+    // Why two locales and an inequality: a single-locale assertion passes whether the words came from
+    // the dictionary or from an English sentence beside it — the defect this row had.
+    const { unmount } = render(<Harness events={[alert()]} />);
+    expect(screen.getByText(auditCueCopy(alert().cue, en.systemAlerts.audit).detail)).toBeTruthy();
+    unmount();
+
+    const thai = auditCueCopy(alert().cue, th.systemAlerts.audit);
+    render(<Harness events={[alert()]} dictionary={th} />);
+    expect(screen.getByText(thai.title)).toBeTruthy();
+    expect(screen.getByText(thai.detail)).toBeTruthy();
+    expect(screen.queryByText(auditCueCopy(alert().cue, en.systemAlerts.audit).title)).toBeNull();
   });
 
   it('keeps an alert the panel has no page for on the same list as the linked ones', () => {
@@ -84,7 +101,11 @@ describe('alert popup entries', () => {
       <Harness
         events={[
           alert({ id: 'audit-1' }),
-          alert({ id: 'audit-2', title: 'Submit burst', detail: '20 submissions in a minute', destination: undefined }),
+          alert({
+            id: 'audit-2',
+            cue: { kind: 'critical', verb: 'contest:delete', actor: 'Ada', target: 'Midterm' },
+            destination: undefined,
+          }),
         ]}
       />,
     );

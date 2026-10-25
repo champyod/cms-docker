@@ -1174,7 +1174,13 @@
     "empty": "No alerts yet.",
     "questionTitle": "New Question Received!",
     "questionDetail": "From {username}: {subject}",
-    "questionUnnamedAsker": "User"
+    "questionUnnamedAsker": "User",
+    "audit": {
+      "criticalTitle": "Critical action: {verb}",
+      "criticalDetail": "{actor} ran {verb} on {target}",
+      "failedTitle": "Failed sensitive action: {verb}",
+      "failedDetail": "{actor} failed {verb} on {target}"
+    }
   },
   "states": {
     "retry": {
