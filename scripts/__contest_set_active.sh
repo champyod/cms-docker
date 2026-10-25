@@ -48,12 +48,17 @@ read_env_value() {
 
 # Run one SQL statement in the running database and print its single value. Fail-loud on
 # any psql error so a query that cannot run is never mistaken for an empty result.
+# WHY the actor: every table it reads carries FORCE ROW LEVEL SECURITY, and the policies
+# read `cms.actor`; without it the contest and registry queries below return nothing and the
+# UPDATE is a silent "UPDATE 0" that this command would then report as a success.
+# WHY system:cli: this is one change an operator asked for through `./cms contest set-active`,
+# not seeding or schema work — the identity the policies admit for a script-side write.
 db_exec() {
   local sql="$1" db_user db_pass db_name
   db_user="${POSTGRES_USER_VAL:-cmsuser}"
   db_pass="${POSTGRES_PASSWORD_VAL:-}"
   db_name="${POSTGRES_DB_VAL:-cmsdb}"
-  docker_exec_db "$db_pass" -i "$DB_CONTAINER" \
+  docker_exec_db "$db_pass" "PGOPTIONS=${DB_ACTOR_SYSTEM_CLI}" -i "$DB_CONTAINER" \
     psql -U "$db_user" -d "$db_name" -tA -v ON_ERROR_STOP=1 -c "$sql"
 }
 

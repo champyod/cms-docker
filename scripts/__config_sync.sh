@@ -1302,9 +1302,18 @@ DB_CONTAINER="cms-database"
 # One value out of the running database, or empty. Uses the resolved core.POSTGRES_* values
 # (already projected from the active [db_<name>] profile), so it follows the same database
 # the stack is pointed at.
+# WHY the actor: contest_exposures is one of the 43 tables whose EVERY verb is gated on
+# `cms.actor`. Without an identity the exposure count, the tls/tailnet/hostname reads and the
+# service-registry rows all come back empty — this script would then render a compose/domain
+# graph with no exposures in it and report a clean sync over an unchanged database.
+# WHY system:migration: the sync is bring-up and provisioning — `make env`, the post-update
+# refresh, `./cms config sync` — with no request and no human identity behind it, and what it
+# reads was written by the seeding path (the exposures a panel admin registered). The policies
+# admit it as staff, so it sees exactly what the panel and the core see; it claims the
+# unattended, deploy-time identity rather than borrowing an admin's or a login's.
 db_query() {
   local sql="$1"
-  docker_exec_db "${__TOML[core.POSTGRES_PASSWORD]:-}" -i \
+  docker_exec_db "${__TOML[core.POSTGRES_PASSWORD]:-}" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" -i \
     "$DB_CONTAINER" psql -U "${__TOML[core.POSTGRES_USER]:-cmsuser}" \
     -d "${__TOML[core.POSTGRES_DB]:-cmsdb}" -tA -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
 }
