@@ -63,7 +63,7 @@ GENERATED_COMPOSE_FLAGS = $(foreach f,$(wildcard docker-compose.*.generated.yml)
 # which WAF does not front.
 WAF_UP_PROFILES      := --profile core --profile waf
 
-.PHONY: expose setup audit help verify-images env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
+.PHONY: expose setup audit help verify-images env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban security-up security-off security-check security-dry-run security-verify security-print db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
 
 # Regenerate the bind override from .env before a stack comes up. The base compose
 # file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
@@ -93,6 +93,10 @@ help:
 	@echo "  make infra          - Build+start monitor profile (alias: infra → monitor)"
 	@echo "  make domain         - Start domain stack: grader-nginx-proxy (host 80/443) + certbot + redis-rate-limit"
 	@echo "  make waf            - Start WAF profile on top of the domain stack (OWASP CRS, DetectionOnly by default)"
+	@echo "  make security-up    - Start the security stack (monitoring + security + security-signal) WITHOUT touching a running container"
+	@echo "  make security-dry-run - Print the container set, ports, volumes and image digests it would use; no side effects"
+	@echo "  make security-check - Run only the prerequisite gate (token, webhook, loopback ports, prometheus DNS from the panel)"
+	@echo "  make security-off   - Stop ONLY the overlay containers (findings/waivers survive in the panel database)"
 	@echo "  make proxy          - Start the optional contest nginx front (publishes 80/443 only if NGINX_BIND_IP is set)"
 	@echo "  make core-stop      - Stop core profile (down --profile core)"
 	@echo "  make admin-stop     - Stop admin profile"
@@ -391,6 +395,44 @@ security-state:
 security-unban:
 	@[ -n "$(JAIL)" ] && [ -n "$(IP)" ] || { echo "usage: make security-unban JAIL=<jail> IP=<address>" >&2; exit 2; }
 	@bash scripts/__security-agent.sh --unban "$(JAIL)" "$(IP)"
+
+# ---------------------------------------------------------------------------
+# Security stack — the feed (Renovate + Diun + the scanners) and its signal.
+#
+# WHY make owns the verb and scripts/__security_stack.sh owns the argv: every other optional
+# overlay is brought up from here (infra, waf, domain, proxy), and `./cms <verb>` is dispatched
+# by the Rust cms-tui binary, so an operator verb there would mean a Rust change and a rebuilt
+# binary on each host. The script holds the prerequisite gate, the plan renderer and the
+# off-switch; these targets are the four words an operator types.
+#
+# WHY the compose files are NOT added to COMPOSE_FILES: this overlay is opt-in twice (profile +
+# SECURITY_ENABLED) and publishes loopback ports on a live contest box, so it must never come up
+# as a side effect of `make core`/`make admin`. The targets below pass their own -f set.
+#
+# The invariant these targets must keep: no container serving contestants is touched. The target
+# list is explicit and `--no-deps` is used, because docker-compose.security.yml adds Diun labels
+# to six base services and a label change makes an unscoped `up -d` recreate them.
+#
+# Flags ride through SECURITY_ARGS, e.g. `make security-up SECURITY_ARGS=--feed-only`.
+SECURITY_ARGS ?=
+
+security-check:
+	@bash scripts/__security_stack.sh check $(SECURITY_ARGS)
+
+security-dry-run:
+	@bash scripts/__security_stack.sh dry-run $(SECURITY_ARGS)
+
+security-up:
+	@bash scripts/__security_stack.sh up $(SECURITY_ARGS)
+
+security-verify:
+	@bash scripts/__security_stack.sh verify $(SECURITY_ARGS)
+
+security-off:
+	@bash scripts/__security_stack.sh off
+
+security-print:
+	@bash scripts/__security_stack.sh print $(SECURITY_ARGS)
 
 # Install the fail2ban jails (nginx-http-auth, nginx-limit-req) with the log path
 # resolved to the nginx Docker volumes. Needs sudo and fail2ban installed.

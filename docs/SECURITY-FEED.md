@@ -279,26 +279,127 @@ repository now. In order of preference: (1) bump that one image's digest to what
 
 Everything below is a container action. Nothing here installs, writes or reconfigures anything on a host.
 
-**Enable the feed on a box**
+**Enable the feed on a box — one command**
+
+`make security-up`. It starts the `monitoring`, `security` and `security-signal` profiles as **eight named
+services** and touches nothing that is serving contestants. `make` is the home for this rather than
+`./cms` because every `./cms <verb>` is dispatched by the Rust cms-tui binary (`tools/cms-tui`,
+`cli/mod.rs`) — a new operator verb there means a Rust change and a rebuilt binary on every host — while
+optional-profile bring-up already lives in the Makefile beside `infra`, `waf`, `domain` and `proxy`.
+`scripts/__security_stack.sh` owns the argv, the prerequisite gate and the plan renderer.
+
+```bash
+make security-dry-run    # 1. what would happen — reads only, changes nothing
+make security-check      # 2. the prerequisites, each failure naming what breaks
+make security-up         # 3. the same plan, then the up, then the cross-checks
+make security-off        # off-switch: stops ONLY the eight overlay containers
+```
+
+The invocation underneath is exactly this — the eight names and `--no-deps` are the whole safety
+property, so they are visible here rather than hidden in a script:
+
+```bash
+docker compose --env-file .env --env-file .env.security \
+  -f docker-compose.yml -f docker-compose.monitoring.yml -f docker-compose.security.yml \
+  --profile monitoring --profile security --profile security-signal \
+  up -d --no-deps \
+  prometheus grafana node-exporter renovate diun diun-bridge security-scan security-signal
+```
+
+`make security-print` prints it resolved for the host it runs on. Both env files are passed because
+`--env-file` replaces `.env` rather than adding to it; `.env.security` only overrides the keys it sets.
+
+**Why the service list is not cosmetic.** `docker-compose.security.yml` adds Diun's opt-in labels to
+`admin-panel-next`, `nginx-proxy`, `database`, `redis-rate-limit`, `monitor` and `worker`. A label is part
+of a container's config hash, so the obvious spelling — `--profile security up -d` over the merged
+project — plans a **recreate** for all six. Measured on compose v5 with a two-service probe: a scoped
+`up -d <name>` left a sibling whose labels had changed untouched (same container ID); the unscoped
+`up -d` replaced it (new container ID). That is a full restart of the panel, the proxy and the database
+caused by enabling an optional feed, on a box mid-contest. `tests/test_security_profiles_enable.sh`
+pins the scoped form.
+
+**Proving the resulting set is a superset.** `make security-dry-run` renders the project twice: once with
+only these three profiles (the set the command will start) and once with every profile enabled (the
+resulting project model), then compares both against what is running now:
+
+```
+SUPERSET PROOF  (docker compose config, every profile enabled)
+  running now in project cms : 6  [cms-admin-panel-next cms-database cms-monitor cms-nginx-contest ...]
+  in the resulting model     : 25 services
+  dropped by this command    : 0
+  -> the resulting container set is a SUPERSET of the running one; nothing is dropped
+
+CONTAINER SET
+  prometheus   grader-prometheus   no-op   092eb471e037a5ec
+  ...
+  create 0 · start 0 · no-op 8 · recreate 0
+```
+
+The `action` column is the decision compose itself makes: it compares the rendered service hash with the
+container's `com.docker.compose.config-hash` label. `no-op` means a second run replaces nothing;
+`create` means the container does not exist yet; `start` means it exists and is stopped.
+
+**Before the first run, fill in `.env.security`**
 
 1. `cp .env.security.example .env.security` and fill in `SECURITY_HOST` (`hostname -s`),
    `SECURITY_FEED_TOKEN` (`openssl rand -hex 32` — the panel needs the same value), and
    `RENOVATE_TOKEN` + `RENOVATE_REPOSITORIES` if Renovate is wanted.
-2. Set `SECURITY_ENABLED = 1` for the host (config sync writes it to `.env`; or pass it in
-   `.env.security`).
-3. Start the profile — the base stack is unchanged, this file only adds to it:
+2. `SECURITY_ENABLED=1` in `.env.security` (or in `config.toml` `[infra]`, which `./cms config sync`
+   writes to `.env`). With the profile up and the flag at `0` the containers start and do nothing: the
+   scan scheduler exits, Renovate idles, the Diun translator accepts and drops. `make security-check`
+   refuses that state, because "the stack is up" would be a false success; `SECURITY_ARGS=--allow-idle`
+   stages it deliberately.
+3. `DISCORD_WEBHOOK_URL` in `[infra]` / `.env`. The signal works without it — it reads Postgres and
+   Prometheus and dedupes through `audit_log` — but `lib/discord-notifier.ts` drops the message, so a
+   lapsed waiver, an unwaived CRITICAL or a stale backup reaches nobody. The gate says so and refuses;
+   `SECURITY_ARGS=--feed-only` starts the feed without the signal instead.
 
-   ```
-   docker compose --env-file .env --env-file .env.security \
-     -f docker-compose.yml -f docker-compose.security.yml --profile security up -d
-   ```
+**What the gate checks, and what breaks if it is ignored**
 
-   Both env files are passed because `--env-file` replaces `.env` rather than adding to it;
-   `.env.security` only overrides the keys it sets.
+| check | if nobody looks |
+|---|---|
+| `SECURITY_FEED_TOKEN` set | the ingest route rejects every push with 401 by design — findings never land, the patching page stays empty, every producer logs a 401 per run |
+| `DISCORD_WEBHOOK_URL` set | the signal runs, dedupes and logs, but no human is paged |
+| `SECURITY_ENABLED=1` | eight containers run and do no work |
+| `PROMETHEUS_BIND_IP` / `GRAFANA_BIND_IP` / `SECURITY_BRIDGE_BIND_IP` loopback | Grafana's login and the translator's write path are published on a routable address |
+| `prometheus` resolves from the panel container | the panel's digest card and the four patching cards read `cannot evaluate` for backup staleness — fail-closed, permanently, and the signal then pages "cannot evaluate" once per window |
 
-   Without `--profile security` nothing in the overlay starts. With the profile but
-   `SECURITY_ENABLED=0`, the containers start and do nothing: the scan scheduler exits, Renovate
-   idles, the Diun translator accepts notifications and drops them.
+The name lookup is run **inside** `cms-admin-panel-next` (`node -e 'require("dns").lookup(...)'`), because
+that is where `PROMETHEUS_URL` is read; a name that resolves on the host proves nothing. On a first
+enable the panel is normally already running, so the check is real; with no panel running it is reported
+as *unverified*, never as passed, and `make security-verify` repeats it once the panel is up.
+
+**What you will see on first enable — nothing is instant**
+
+- **The patching page is empty until the first `security-scan` run pushes a report.** The schedule is
+  `SECURITY_SCAN_SCHEDULE` (`0 3 * * *`). To see it now, run one by hand — same image, same POST path:
+  `docker compose ... run --rm security-scan all` (see below). An empty page before that run means "no
+  producer has reported yet", not "nothing is vulnerable".
+- **The digest card reads `cannot evaluate` until Prometheus has scraped `cms_backup.prom` once**, which
+  is ~15 s after `node-exporter` starts and only if a backup has run (the textfile is written by
+  `publish_backup_metrics`). That is the fail-closed answer by design: a missing series is not "healthy",
+  and the card says so rather than claiming the backups are fine.
+- **Discord stays quiet.** The signal pushes only what a human must act on and cannot discover from one
+  page: a waiver past `review_by`, an unwaived CRITICAL, `cms_backup_stale`/`cms_offsite_stale` = 1, or a
+  copy whose staleness cannot be evaluated. Dedupe lives in `audit_log` (`security.signal.notified`), so
+  the first enable of a healthy box sends nothing, and re-enabling after an off-switch does not re-page a
+  fact someone was already told.
+- **Ports are loopback**: Prometheus `127.0.0.1:9090`, Grafana `127.0.0.1:3001`, the Diun translator
+  `127.0.0.1:8099`. `node-exporter` publishes none (scraped internally as `node-exporter:9100`).
+
+**Off-switch — and what survives it**
+
+`make security-off` stops exactly the eight overlay containers (`stop`, not `down`, not `rm`). Nothing is
+deleted, so `make security-up` starts them again with no pull and no rebuild.
+
+- **Findings and waivers survive**: they are rows in the panel's database (`security_findings`,
+  `security_waivers`). The panel keeps rendering them while the overlay is down — no producer needed.
+- **The audit trail survives**, including every `security.findings.ingest` and
+  `security.signal.notified` row, which is what the signal dedupes against.
+- **Volumes survive**: `cms-prometheus-data`, `cms-grafana-data`, `cms-diun-data`, `cms-renovate-cache`
+  and `cms-security-scan-cache`. The scan cache is disposable — it holds Trivy's vulnerability database
+  and the next run re-downloads it — so `docker volume rm cms-security-scan-cache` is a safe reclaim.
+- To make the containers go away as well: `docker compose ... rm -f <the same service list>`.
 
 **Run one scan by hand** (same image, same POST path, no waiting for the schedule):
 
