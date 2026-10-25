@@ -915,6 +915,51 @@ services:
     networks:
       - cms-network
 
+  # Audit-log retention — the ONE thing allowed to delete an audit row, on its own profile.
+  #
+  # WHY a service and not a host cron entry: a scheduled deletion path that lives outside the stack
+  # is invisible to `docker ps`, is not covered by the health checks, and its absence looks exactly
+  # like "retention has not come due". Here its absence is a missing container, and `make
+  # audit-status` still reports the backlog either way.
+  #
+  # WHY the admin image: the prune has to write a hash-chained anchor, and the digest lives in
+  # admin-panel/src/lib/audit-chain.ts — one implementation shared with the verifier and with the
+  # panel's writer, not a psql re-statement of it. The command is the same script an operator runs by
+  # hand, so `make audit-retention` and the service cannot diverge.
+  #
+  # NOT in the `core`, `admin` or `monitor` profile on purpose: pruning is a decision with a window,
+  # and starting it should be a deliberate act (--profile core --profile audit), never a side effect
+  # of bringing the panel up.
+  audit-retention:
+    image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+    container_name: cms-audit-retention
+    restart: unless-stopped
+    profiles:
+      - audit
+    depends_on:
+      # WHY optional: the database lives in the `core` profile, so a bare `--profile audit` would
+      # otherwise be an invalid project ("depends on undefined service"). The condition still holds
+      # when both profiles are up, which is how the service is meant to be started.
+      database:
+        condition: service_healthy
+        required: false
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The script never reads a session, but @/lib/prisma pulls the auth module in; without a
+      # secret it warns and rotates one on every boot, which fills the log of a job that runs daily.
+      AUTH_SECRET: ${AUTH_SECRET:-audit-retention-no-session}
+      AUDIT_RETENTION_INTERVAL_SECS: ${AUDIT_RETENTION_INTERVAL_SECS:-86400}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        while :; do
+          ./node_modules/.bin/tsx scripts/audit-log.ts prune --apply || exit 1
+          sleep "$${AUDIT_RETENTION_INTERVAL_SECS:-86400}"
+        done
+    networks:
+      - cms-network
+
 networks:
   cms-network:
     name: cms-network

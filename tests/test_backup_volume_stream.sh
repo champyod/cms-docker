@@ -42,7 +42,9 @@ new_run_root complete
 run_backup
 expect_exit "a database-only backup is still a success" "0"
 
-check_eq "one dump is on disk" "1" "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+# `*.dump` now also matches the audit-log archive this run writes beside the database dump, so the
+# assertion names the database dump it is actually about.
+check_eq "one dump is on disk" "1" "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
 DUMP="$(find "${RUN_ROOT}/backups/db" -maxdepth 1 -type f -name '*.dump' | head -1)"
 # The run's own timestamp, read out of the filename it wrote rather than out of the alert that
 # has to name it — so an alert that stops naming its run fails on the two sides disagreeing,
@@ -50,7 +52,7 @@ DUMP="$(find "${RUN_ROOT}/backups/db" -maxdepth 1 -type f -name '*.dump' | head 
 RUN_TS="${DUMP##*/cmsdb-}"
 RUN_TS="${RUN_TS%.dump}"
 check_eq "one checksum sidecar is written next to it" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump.sha256')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump.sha256')"
 check_eq "the checksum names the dump it belongs to" "$(sha_of "$DUMP")" \
   "$(awk '{print $1}' "${DUMP}.sha256")"
 
@@ -85,8 +87,8 @@ new_run_root helpers-fail
 run_backup STUB_VOLUME=all-fail
 expect_exit "a run that never archives anything cannot be partial over an archive" "0"
 
-check_eq "the dump is kept" "1" "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
-check_eq "the checksum is written" "1" "$(count_matching "${RUN_ROOT}/backups/db" '*.dump.sha256')"
+check_eq "the dump is kept" "1" "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
+check_eq "the checksum is written" "1" "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump.sha256')"
 check_eq "the manifest records the run" "1" \
   "$(entry_count "${RUN_ROOT}/backups/manifest.json")"
 check_eq "no archive is written" "0" \
@@ -109,7 +111,7 @@ run_backup STUB_FAULT_JQ=--argjson
 expect_exit "a kept dump the manifest cannot record is still exit 3" "3"
 
 check_eq "the dump the partial run kept is on disk" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
 check_eq "the run names the manifest as what failed" "yes" \
   "$(grep_yes "$RUN_LOG" 'could not build the manifest entry')"
 no_archive_channel "a partial run does not reach for an archive either"
@@ -135,9 +137,9 @@ check_eq "rotation removed the retired checksum" "0" \
 check_eq "no artefact of the retired timestamp survives" "0" \
   "$(count_matching "${RUN_ROOT}/backups/db" "*${LEGACY_TS}*")"
 check_eq "the run's own dump is the only one left" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
 check_eq "the run's own checksum survived with it" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump.sha256')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump.sha256')"
 no_archive_channel "a pruning run still asks for no archive"
 
 printf '\n== summary ==\n'

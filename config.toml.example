@@ -265,6 +265,10 @@ PROMETHEUS_URL = "http://prometheus:9090" # url; scrape target the security sign
 SECURITY_SIGNAL_INTERVAL_SECONDS = 30 # num; seconds between security-signal ticks; a fact that changed inside the same tick interval is picked up on the next one
 SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS = 1500 # num; ms the signal waits for Prometheus before calling the reading unreadable — keep it short so a dead target cannot hold a tick
 SECURITY_STALENESS_CACHE_MS = 15000 # num; ms the panel caches one backup/offsite reading across page renders — the series move once per backup run, so this bounds a dead target's cost to one render per window
+# Audit retention (docker-compose.yml, profile `audit`). The window itself is NOT a config key: it
+# lives in public.cms_audit_retention_days() so changing it is a migration, i.e. a recorded decision
+# (400 days — one full contest cycle). This key only tunes how often the service looks.
+AUDIT_RETENTION_INTERVAL_SECS = 86400 # num; seconds between the audit-retention service runs; the service is profile-gated and never starts with the panel
 MONITORING_ENABLED = 0          # enum:0,1; 1 = render nginx stub_status /metrics so Prometheus can scrape it (re-run domain setup --apply to regenerate the vhost)
 PROMETHEUS_PORT = 9090          # port; host port Prometheus publishes on (PROMETHEUS_BIND_IP:PROMETHEUS_PORT:9090)
 PROMETHEUS_BIND_IP = "127.0.0.1" # str; address Prometheus publishes on; loopback keeps the metrics API host-local

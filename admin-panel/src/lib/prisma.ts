@@ -154,13 +154,14 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
   return new Proxy(base, {
     get(target, prop, receiver) {
       if (typeof prop === 'string' && RAW_VERBS.has(prop)) {
-        return (strings: TemplateStringsArray, ...values: unknown[]) =>
+        // WHY `apply(tx, args)`: Prisma's raw verbs are *methods* on the transaction client — they
+        // read `this._createPrismaPromise`, so calling the extracted function unbound throws
+        // "undefined is not an object". Passing the receiver through is what makes a top-level
+        // `prisma.$queryRaw` work at all (the statement still runs inside the stamped transaction).
+        return (...args: unknown[]) =>
           defer(async (tx) => {
-            const fn = tx[prop] as unknown as (
-              s: TemplateStringsArray,
-              ...v: unknown[]
-            ) => Promise<unknown>;
-            return await fn(strings, ...values);
+            const fn = tx[prop] as unknown as (...a: unknown[]) => Promise<unknown>;
+            return await fn.apply(tx, args);
           });
       }
 

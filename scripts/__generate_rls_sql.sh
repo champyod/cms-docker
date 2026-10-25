@@ -131,6 +131,11 @@ INGEST_WRITE=" security_findings "
 # DELETE (create/remove an admin) require staff. Column-level narrowing is not something RLS can
 # express, so this is the narrowest rule the verb set allows.
 CONSOLE_LOGIN_UPDATE=" admins "
+# AUDIT_RETENTION — the one identity allowed to shorten the audit log (see the audit_log branch
+# below). It is deliberately NOT in the staff set: it may read the log and delete rows past the
+# window, and nothing else. The trigger in 20261026120100_audit_log_durable enforces the window
+# even for this identity, so the grant is a shape, not a licence.
+AUDIT_RETENTION="system:audit-retention"
 
 in_list() {
   case " $2 " in
@@ -230,14 +235,22 @@ emit_policy_set() {
         "CREATE POLICY cms_actor_delete ON public.$tbl FOR DELETE TO cmsuser USING ($(read_predicate "$tbl"));"
     elif [ "$tbl" = "audit_log" ]; then
       printf '%s\n' \
-        '-- AUDIT_LOG: append-only by ABSENCE of UPDATE/DELETE, and no admin may forge an attribution: an' \
-        '-- admin actor can only file a row under itself (or under nobody); only a system identity names another.' \
+        '-- AUDIT_LOG: append-only. No UPDATE policy exists and UPDATE is refused by the guard trigger,' \
+        '-- so editing a row is not a zero-row no-op for anyone. DELETE is granted to one identity only,' \
+        '-- and the trigger refuses it for any row inside the retention window. No admin may forge an' \
+        '-- attribution: an admin actor can only file a row under itself (or under nobody); only a system' \
+        '-- identity names another.' \
         "DROP POLICY IF EXISTS cmsuser_all ON public.$tbl;" \
         "DROP POLICY IF EXISTS cmsuser_select ON public.$tbl;" \
         "DROP POLICY IF EXISTS cmsuser_insert ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cmsuser_delete ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_read ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_append ON public.$tbl;" \
-        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING ($(read_predicate "$tbl"));" \
+        "DROP POLICY IF EXISTS cms_audit_retention_delete ON public.$tbl;" \
+        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING (" \
+        "  $(read_predicate "$tbl")" \
+        "  OR public.cms_actor_any(ARRAY['$AUDIT_RETENTION'])" \
+        ");" \
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (" \
         "  $(read_predicate "$tbl")" \
         "  AND (" \
@@ -245,6 +258,25 @@ emit_policy_set() {
         "    OR actor_id IS NULL" \
         "    OR actor_id = public.cms_actor_admin_id()" \
         "  )" \
+        ");" \
+        "CREATE POLICY cms_audit_retention_delete ON public.$tbl FOR DELETE TO cmsuser" \
+        "  USING (public.cms_actor_any(ARRAY['$AUDIT_RETENTION']));"
+    elif [ "$tbl" = "audit_log_retention" ]; then
+      printf '%s\n' \
+        '-- AUDIT_LOG_RETENTION: the prune ledger. Staff read it; only the retention identity writes it,' \
+        '-- because a prune is the one event that must be recorded without a human in the loop. No DELETE' \
+        '-- policy exists at all — anchors are the proof a gap was a decision, so nothing may remove them.' \
+        "DROP POLICY IF EXISTS cmsuser_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_read ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_append ON public.$tbl;" \
+        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING (" \
+        "  $(read_predicate "$tbl")" \
+        "  OR public.cms_actor_any(ARRAY['$AUDIT_RETENTION'])" \
+        ");" \
+        "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (" \
+        "  $(read_predicate "$tbl")" \
+        "  OR public.cms_actor_any(ARRAY['$AUDIT_RETENTION'])" \
         ");"
     else
       printf '%s\n' \

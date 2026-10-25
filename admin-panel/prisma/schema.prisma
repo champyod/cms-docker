@@ -705,6 +705,38 @@ model audit_log {
   @@index([timestamp], map: "ix_audit_log_timestamp")
 }
 
+/// The retention ledger: one row per prune run, written by the retention service
+/// alone and never deleted.
+///
+/// WHY this is not a column on `audit_log`: the row recording a prune would be the
+/// first row the next prune removes, so the proof that a gap is a decision has to
+/// live outside the chain it cuts. Each row anchors the boundary — the last id and
+/// hash that were removed and the first id that remains — so a verifier can tell a
+/// retention gap from a deleted row.
+///
+/// `entry_hash`/`prev_hash` chain these rows to each other with the same recipe as
+/// `audit_log`, so removing an anchor is as detectable as editing a log row.
+model audit_log_retention {
+  id                BigInt   @id @default(autoincrement())
+  performed_at      DateTime @default(now()) @db.Timestamp(6)
+  /// The window in force when the run happened; the constant lives in
+  /// public.cms_audit_retention_days().
+  window_days       Int
+  /// Rows strictly older than this were eligible.
+  cutoff            DateTime @db.Timestamp(6)
+  deleted_count     Int
+  first_deleted_id  BigInt?
+  last_deleted_id   BigInt?
+  last_deleted_hash String?  @db.VarChar
+  /// Lowest audit_log.id still present after the run; NULL when the log is empty.
+  retained_from_id  BigInt?
+  actor             String   @db.VarChar
+  entry_hash        String?  @db.VarChar
+  prev_hash         String?  @db.VarChar
+
+  @@index([performed_at], map: "ix_audit_log_retention_performed_at")
+}
+
 /// A group of contestants. Unlike the RBAC `groups`, which hold
 /// admin permissions, these groups hold contestants only: a
 /// username policy on a group applies to every member, which is

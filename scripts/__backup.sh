@@ -238,7 +238,8 @@ delete_backup_set() {
   local ts="$1"
   local f
   local removed=0
-  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256"; do
+  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" \
+           "${BACKUP_DB_DIR}/audit-log-${ts}.dump" "${BACKUP_DB_DIR}/audit-log-${ts}.dump.sha256"; do
     if [[ -f "$f" ]]; then
       # WHY the status is read instead of left to errexit: the caller tests the rotation in a
       # condition, and errexit is ignored inside a function called that way — so an unchecked
@@ -675,6 +676,47 @@ run_backup() {
   chmod 600 "$db_sha_file" 2>/dev/null || true
   local db_sha
   db_sha="$(awk '{print $1}' "$db_sha_file")"
+
+  # 1b) The audit log travels beside the archive, never inside the restore catalog.
+  # WHY its own artifact: the selective catalog deliberately excludes `audit_log`, because the
+  # panel's restore replays catalog rows INTO a live database and replaying audit rows would put
+  # actions in the trail that never happened on the restored host (tests/backup-table-catalog.test.ts
+  # argues this at length). That reasoning is right about replay and wrong about archival: the trail
+  # is the one thing that exists nowhere else, so a backup that omits it cannot answer "what
+  # happened" after the database is gone. So it ships as `audit-log-<ts>.dump` — structure and data,
+  # so it stands alone even if the schema has moved on — and it is restored only into a scratch
+  # database, where `admin-panel/scripts/audit-log.ts verify` proves the chain.
+  local audit_tmp audit_file audit_sha_file audit_log_file audit_err_file
+  audit_tmp="$(mktemp -u /tmp/cmsdb-audit.XXXXXX)"
+  audit_file="${BACKUP_DB_DIR}/audit-log-${ts}.dump"
+  audit_sha_file="${audit_file}.sha256"
+  audit_err_file="$(mktemp "${TMPDIR:-/tmp}/cms-backup-audit.XXXXXX")"
+  chmod 600 "$audit_err_file" 2>/dev/null || true
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" \
+      pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc \
+      -t audit_log -t audit_log_retention -f "$audit_tmp" 2>"$audit_err_file"; then
+    local audit_err
+    audit_err="$(cat "$audit_err_file" 2>/dev/null || echo 'pg_dump failed')"
+    rm -f -- "$audit_err_file"
+    docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+    log_warn "audit-log archive failed: $audit_err"
+    send_discord "❌ **Backup Failed** — the audit-log archive is missing from this run: ${audit_err}" 16711680 "true"
+    return 1
+  fi
+  rm -f -- "$audit_err_file"
+  if ! docker cp "${CONTAINER_DB}:${audit_tmp}" "$audit_file"; then
+    docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+    log_warn "audit-log archive: docker cp failed"
+    send_discord "❌ **Backup Failed** — the audit-log archive could not be copied out" 16711680 "true"
+    return 1
+  fi
+  docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+  chmod 600 "$audit_file" 2>/dev/null || true
+  sha256sum "$audit_file" | awk '{print $1"  " $2}' > "$audit_sha_file"
+  chmod 600 "$audit_sha_file" 2>/dev/null || true
+  audit_log_file="$(basename -- "$audit_file")"
+  log_info "audit-log archive written: ${audit_log_file} ($(file_size_bytes "$audit_file") bytes) — verify it with: make audit-restore-verify"
+
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 

@@ -169,7 +169,7 @@ expect_says "a partial run" "$ALERT_AMBER" 'this run is unrecorded'
 expect_says "a partial run" "$ALERT_AMBER" 'database-only'
 expect_names_run "a partial run" "$ALERT_AMBER"
 check_eq "the dump the partial run kept is on disk" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
 check_eq "the run log says it degraded rather than completed" "yes" \
   "$(grep_yes "$RUN_LOG" 'Backup degraded')"
 

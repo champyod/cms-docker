@@ -160,6 +160,20 @@ set_encryption_policy() {
 mapfile -t ARCHIVES < <(ls -1t "${BACKUP_DIR}"/*.tar.gz 2>/dev/null || true)
 (( ${#ARCHIVES[@]} > 0 )) || log_die "no backup archives (*.tar.gz) found in $BACKUP_DIR" 1
 
+# WHY the newest audit-log archive rides along: nothing else on this host holds the audit trail, and
+# `backups/db/cmsdb-*.dump` is not in the *.tar.gz set either — those tarballs are the panel's
+# volume archives. The audit archive is small, self-contained, and its absence offsite is exactly
+# the gap D3 named ("no offsite copy"), so it ships even when nothing else from db/ does. A missing
+# one is not fatal on its own: an operator who has not taken a backup yet has nothing to ship, and
+# the run says so instead of failing the volume archives with it.
+newest_audit_archive="$(ls -1t "${BACKUP_DIR}/db/audit-log-"*.dump 2>/dev/null | head -n1 || true)"
+if [[ -n "$newest_audit_archive" && -f "$newest_audit_archive" ]]; then
+  ARCHIVES+=("$newest_audit_archive")
+  log_info "shipping the audit-log archive too: $(basename -- "$newest_audit_archive")"
+else
+  log_warn "no audit-log archive in ${BACKUP_DIR}/db — this offsite copy will not carry the audit trail"
+fi
+
 set_encryption_policy
 
 if (( ENCRYPT == 1 )) && ! command -v gpg >/dev/null 2>&1; then

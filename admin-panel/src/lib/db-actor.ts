@@ -36,6 +36,10 @@ export const SYSTEM_IDENTITIES = {
   /** The backup scheduler process (src/scheduler/main.ts): it starts and settles backup runs with
    *  no request and no cookie, so it names itself rather than borrowing a human identity. */
   SCHEDULER: 'system:scheduler',
+  /** The audit-log retention service (scripts/audit-log.ts prune): the only identity the database
+   *  lets prune `audit_log`, and only rows older than public.cms_audit_retention_cutoff(). It is
+   *  deliberately not in the staff set: it reads the log and shortens it, nothing else. */
+  AUDIT_RETENTION: 'system:audit-retention',
 } as const;
 
 export type SystemIdentity = (typeof SYSTEM_IDENTITIES)[keyof typeof SYSTEM_IDENTITIES];

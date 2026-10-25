@@ -188,6 +188,101 @@ exported on the endpoint Prometheus already scrapes. Age is `time() - <timestamp
 *never*, not 1970. The thresholds are `BACKUP_STALE_HOURS` (default 26), the same number the
 monitor's own staleness warning uses.
 
+## Audit log — durability, retention and proof
+
+The audit log is append-only in the database, not just in the application. Four commands cover it,
+and they are the whole operator surface.
+
+### What stops a rewrite
+
+| Attempt | Result |
+|---|---|
+| `UPDATE audit_log …` | `permission denied for table audit_log` — the grant is gone, and a guard trigger refuses it a second time |
+| `DELETE FROM audit_log …` | `audit_log is append-only: DELETE refused (actor=…)` — only `system:audit-retention` may delete, and only past the window |
+| `TRUNCATE audit_log` | refused. Row security never covered `TRUNCATE`, so before this change one statement emptied the log |
+| `ALTER TABLE audit_log DISABLE TRIGGER …` | `must be owner of table audit_log` — once the owner separation has been applied |
+
+The hash chain is a *detection* control: it makes a rewrite visible. The refusals above are what
+stop one. They are separate on purpose — see "Owner separation" below for the one step that needs a
+maintenance window.
+
+### Verify the chain
+
+```bash
+make audit-verify            # exit 0 intact · 1 broken (names the row) · 2 could not be checked
+make audit-verify | grep -E 'prevention|WARN'
+```
+
+Exit 2 is not a pass: an unreadable log has not been verified. The run also prints the *prevention*
+posture (`triggers=…`, `owner=…`, `ownerSeparated=…`) because a chain that verifies while the app
+role could still disable the guard is detection without prevention.
+
+What it recomputes: every row's `entry_hash` from the row's own columns, using
+`admin-panel/src/lib/audit-chain.ts` — the same module `recordAudit()` writes with, so the recipe
+cannot drift. Rows written before 2026-10-26 were hashed over the caller's entry object (which
+omitted the resolved `ip`/session); those verify under the legacy recipe and are counted separately
+as `legacyRecipe=N` rather than quietly passed.
+
+Known limit, stated rather than hidden: deleting the **newest** rows leaves a shorter but internally
+consistent chain that nothing inside the log can detect. Retention only ever deletes from the front,
+and proving the tip needs a copy off the box — which is what the offsite copy is for.
+
+### Retention — 400 days, and why
+
+`public.cms_audit_retention_days()` returns **400** and is the only place the number lives; the
+trigger, the service and the verifier all read it. 400 days covers one full contest cycle — the
+contest, an appeal filed months later, the off-season review, and the same contest the following
+year — which is the horizon a dispute actually appears on. Changing it is a migration, i.e. a
+recorded decision, not an environment variable.
+
+Retention is the only thing that deletes, it runs as the `audit-retention` service, and every run
+writes one `audit_log_retention` anchor (the boundary id + hash) so the gap it leaves is provable
+afterwards:
+
+```bash
+make audit-status            # window, cutoff, eligible rows, last prune; non-zero when overdue
+make audit-retention APPLY=1 # the same prune the service runs, by hand
+docker compose --profile core --profile audit up -d audit-retention   # the scheduled path
+```
+
+`make audit-status` saying `RETENTION OVERDUE: N row(s)` means the service has not run — either it
+is not started (`docker ps | grep cms-audit-retention`) or it is failing (`docker logs
+cms-audit-retention`). Nothing prunes in a request path.
+
+### Prove a backup still carries a valid log
+
+Every backup writes `backups/db/audit-log-<ts>.dump` beside the database dump — the log is
+deliberately **not** in the selective restore catalog (replaying audit rows into a restored database
+would put actions in the trail that never happened there), so this artifact is the only copy. It is
+small and it is the one thing that exists nowhere else.
+
+```bash
+make backup
+make audit-restore-verify                       # newest archive; checksum → restore → verify
+make audit-restore-verify DUMP=backups/db/audit-log-20261025-120000.dump
+```
+
+The script refuses to restore an archive whose `.sha256` does not match, restores into a scratch
+database it creates and drops, runs the same verifier against it, and exits non-zero if any step
+cannot be shown to have worked. `make audit-restore-verify` is the answer to "can you prove the
+chain is intact after a restore" — run it after any restore drill.
+
+### Owner separation (one-time, needs a maintenance window)
+
+A guard trigger is only as strong as the role that owns the table: the owner may `DISABLE TRIGGER`
+or `NO FORCE ROW LEVEL SECURITY`, and no trigger refuses its own owner. The cluster has no
+superuser by design (`postgres --single` is the only route — see `docs/DB-ROTATION.md`), so moving
+`audit_log` and its guard functions to `cms_audit_owner` is a deliberate step:
+
+```bash
+make audit-owner-bootstrap CONFIRM=1      # stops cms-database briefly, applies, restarts, verifies
+```
+
+Until it runs, `make audit-verify` prints `ownerSeparated=false` and warns: the *trigger* still
+refuses UPDATE/DELETE/TRUNCATE, but the role that owns the table could disable it. `scripts/__backup.sh`
+and every migration are unaffected by this step — only a future `ALTER TABLE audit_log` needs the
+owner.
+
 ## Configuration Files
 
 - `config.toml` - **Source of truth** (single config; edit this)
