@@ -42,41 +42,74 @@ feed_post() {
 
     _count=$(jq 'length' "$_file")
 
-    # The ingest route rejects arrays over 2000. Sending the first 2000 of a bigger set and
-    # still claiming complete would license the route to resolve the rows we left out, so a
-    # capped push is downgraded to complete:false — it never resolves anything.
-    if [ "$_count" -gt 2000 ]; then
-        feed_log "$_source produced $_count findings; capping at 2000 and sending complete:false (no resolution)"
-        jq '.[0:2000]' "$_file" > "${_file}.capped"
-        _file="${_file}.capped"
-        _count=2000
-        _complete=false
+    # WHY chunking instead of a hard cap: the route's body limit is 1 MB, and one finding is
+    # roughly half a kilobyte — so even 2000 findings overflow it, and the earlier "cap at 2000"
+    # produced a 413 on the first real host, which meant NOTHING was recorded. The set is split
+    # into batches that fit; `complete` rides only on the last one, so the route can resolve the
+    # omitted rows exactly when it has actually seen them all. A batch that fails aborts the
+    # whole push and still claims nothing.
+    _batch=250
+    _seen=0
+    _total=$_count
+    _remaining=$_count
+    _n=0
+
+    if [ "$_count" -eq 0 ]; then
+        _body=$(jq -c --arg source "$_source" --arg host "$(feed_host)" --argjson complete "$_complete" \
+            '{source: $source, host: $host, findings: ., complete: $complete}' "$_file")
+        _code=$(printf '%s' "$_body" | curl -sS --max-time 60 --retry 3 --retry-connrefused \
+            -o /dev/null -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${_token}" -H 'Content-Type: application/json' \
+            --data-binary @- "$_url") || _code=000
+        case "$_code" in
+            2*) feed_log "POST $_url accepted 0 findings (source=$_source, complete=$_complete) → HTTP $_code"; return 0 ;;
+            *)  feed_log "POST $_url FAILED → HTTP $_code"; return 1 ;;
+        esac
     fi
 
-    _body=$(jq -c \
-        --arg source "$_source" \
-        --arg host "$(feed_host)" \
-        --argjson complete "$_complete" \
-        '{source: $source, host: $host, findings: ., complete: $complete}' "$_file")
+    _batches=$(( (_count + _batch - 1) / _batch ))
+    [ "$_batches" -gt 1 ] && feed_log "$_source: $_count findings exceed one body, sending $_batches batches of $_batch"
 
-    _resp=$(mktemp)
-    _code=$(printf '%s' "$_body" | curl -sS --max-time 60 --retry 3 --retry-connrefused \
-        -o "$_resp" -w '%{http_code}' \
-        -X POST \
-        -H "Authorization: Bearer ${_token}" \
-        -H 'Content-Type: application/json' \
-        --data-binary @- "$_url") || _code=000
+    while [ "$_remaining" -gt 0 ]; do
+        _n=$((_n + 1))
+        # The last batch carries the producer's completeness claim; every earlier one must not.
+        if [ "$_n" -eq "$_batches" ]; then _claim="$_complete"; else _claim=false; fi
 
-    case "$_code" in
-        2*)
-            feed_log "POST $_url accepted $_count findings (source=$_source, complete=$_complete) → HTTP $_code"
-            rm -f "$_resp"
-            return 0
-            ;;
-        *)
-            feed_log "POST $_url FAILED → HTTP $_code: $(head -c 400 "$_resp" 2>/dev/null || true)"
-            rm -f "$_resp"
-            return 1
-            ;;
-    esac
+        _body=$(jq -c \
+            --arg source "$_source" \
+            --arg host "$(feed_host)" \
+            --argjson complete "$_claim" \
+            --argjson off "$_seen" \
+            --argjson lim "$_batch" \
+            '{source: $source, host: $host, findings: (.[$off:$off + $lim]), complete: $complete}' "$_file")
+
+        _size=$(printf '%s' "$_body" | wc -c | tr -d ' ')
+        _resp=$(mktemp)
+        _code=$(printf '%s' "$_body" | curl -sS --max-time 120 --retry 3 --retry-connrefused \
+            -o "$_resp" -w '%{http_code}' \
+            -X POST \
+            -H "Authorization: Bearer ${_token}" \
+            -H 'Content-Type: application/json' \
+            --data-binary @- "$_url") || _code=000
+
+        case "$_code" in
+            2*)
+                feed_log "POST $_url accepted batch $_n/$_batches ($_batch or fewer findings, ${_size} bytes, source=$_source, complete=$_claim) → HTTP $_code"
+                rm -f "$_resp"
+                ;;
+            *)
+                feed_log "POST $_url FAILED on batch $_n/$_batches → HTTP $_code: $(head -c 400 "$_resp" 2>/dev/null || true)"
+                feed_log "$_source: $_seen of $_total findings were accepted before the failure; the run claims nothing"
+                rm -f "$_resp"
+                return 1
+                ;;
+        esac
+
+        _seen=$((_seen + _batch))
+        _remaining=$((_remaining - _batch))
+        [ "$_remaining" -lt 0 ] && _remaining=0
+    done
+
+    feed_log "$_source: all $_total findings accepted in $_batches batch(es), complete=$_complete"
+    return 0
 }
