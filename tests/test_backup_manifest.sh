@@ -132,12 +132,12 @@ check_eq "a run no admin asked for names the system actor" "root" \
 # something no reader could ever find on disk.
 printf '\n== the entry carries exactly the database-only fields ==\n'
 check_eq "a complete entry has no key beyond the database-only set" \
-  "db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
+  "audit_dump,db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
   "$(entry_field "$QUIET_MANIFEST" 0 'keys | join(",")')"
 check_eq "the sizes object counts the dump alone" "db_bytes,total_bytes" \
   "$(entry_field "$QUIET_MANIFEST" 0 '.sizes | keys | join(",")')"
 check_eq "no stale volume key is left on the newest entry either" \
-  "db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
+  "audit_dump,db_dump,db_sha256,kind,pg_version,requested_by,sizes,tables,ts" \
   "$(entry_field "$QUIET_MANIFEST" 1 'keys | join(",")')"
 
 LAST_TS="$(entry_field "$QUIET_MANIFEST" 1 '.ts')"
@@ -197,6 +197,7 @@ jq -n --arg first 20200101-000000 --arg second 20200102-000000 '
   def complete($ts):
     {ts: $ts,
      db_dump: ("db/cmsdb-" + $ts + ".dump"),
+     audit_dump: null,
      db_sha256: "0000000000000000000000000000000000000000000000000000000000000000",
      pg_version: "15.4",
      sizes: {db_bytes: 18, total_bytes: 18},
@@ -234,7 +235,7 @@ check_eq "the moment is named in UTC" "true" \
 check_eq "the newest entry, whose files are still on disk, is unmarked" "false" \
   "$(entry_field "$PRUNED_MANIFEST" 2 'has("pruned")')"
 check_eq "a mark adds no key to the entry it marks" \
-  "db_dump,db_sha256,kind,pg_version,pruned,pruned_at,sizes,tables,ts" \
+  "audit_dump,db_dump,db_sha256,kind,pg_version,pruned,pruned_at,sizes,tables,ts" \
   "$(entry_field "$PRUNED_MANIFEST" 0 'keys | join(",")')"
 
 printf '\n== summary ==\n'

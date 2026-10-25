@@ -45,7 +45,7 @@ expect_exit "a database-only backup is still a success" "0"
 # `*.dump` now also matches the audit-log archive this run writes beside the database dump, so the
 # assertion names the database dump it is actually about.
 check_eq "one dump is on disk" "1" "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
-DUMP="$(find "${RUN_ROOT}/backups/db" -maxdepth 1 -type f -name '*.dump' | head -1)"
+DUMP="$(find "${RUN_ROOT}/backups/db" -maxdepth 1 -type f -name 'cmsdb-*.dump' | head -1)"
 # The run's own timestamp, read out of the filename it wrote rather than out of the alert that
 # has to name it — so an alert that stops naming its run fails on the two sides disagreeing,
 # not on a substring both happened to share.
@@ -60,6 +60,12 @@ MANIFEST="${RUN_ROOT}/backups/manifest.json"
 check_eq "the manifest exists and holds the run" "1" "$(entry_count "$MANIFEST")"
 check_eq "the entry describes the dump that was written" \
   "db/$(basename "$DUMP")" "$(entry_field "$MANIFEST" 0 '.db_dump')"
+# WHY the audit archive is asserted here: the manifest is what a restore reads back, so a run that
+# wrote the trail and did not record it would look database-only. The earlier version of this file
+# globbed `*.dump`, matched the audit archive, and passed only because `find` happened to list the
+# database dump first on the machine it was written on.
+check_eq "the entry names the audit archive the run wrote" \
+  "db/audit-log-${RUN_TS}.dump" "$(entry_field "$MANIFEST" 0 '.audit_dump')"
 
 # The volumes directory is not pre-created by the harness, so its absence is the run's
 # doing and not the fixture's.

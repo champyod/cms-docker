@@ -81,7 +81,7 @@ scratch_psql() { docker_exec_db "$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d
 
 cleanup() {
   if (( KEEP == 0 )); then
-    docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+    docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
       psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=0 -c "DROP DATABASE IF EXISTS \"$SCRATCH\"" >/dev/null 2>&1 || true
   else
     log_warn "scratch database kept: ${SCRATCH} (drop it with: DROP DATABASE \"${SCRATCH}\")"
@@ -94,10 +94,10 @@ trap cleanup EXIT
 # database always needs `./cms db create`, which runs in single-user mode with the container
 # stopped. Guessing at that here would either restart the stack or silently point the restore at the
 # live database; naming the command is the only honest answer.
-if ! docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+if ! docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
       psql -U "$DB_USER" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$SCRATCH'" 2>/dev/null | grep -q 1; then
   log_info "creating scratch database ${SCRATCH} …"
-  if ! docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+  if ! docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
         psql -U "$DB_USER" -d postgres -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"$SCRATCH\"" >/dev/null 2>&1; then
     KEEP=1
     log_die "could not create ${SCRATCH}: ${DB_USER} holds no CREATEDB. Create it first, then re-run with --scratch-name ${SCRATCH}:
@@ -133,7 +133,7 @@ filtered="$(mktemp "${TMPDIR:-/tmp}/cms-audit-toc-filtered.XXXXXX")"
 grep -vE ' (POLICY|TRIGGER|FK CONSTRAINT|ACL|COMMENT|ROW SECURITY) ' "$toc" > "$filtered" || true
 docker cp -- "$filtered" "${DB_CONTAINER}:${container_dump}.toc" >/dev/null || log_die "could not stage the restore plan" 1
 restore_rc=0
-docker exec -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" \
+docker_exec_db "$DB_PASS" "$DB_CONTAINER" \
   pg_restore -U "$DB_USER" -d "$SCRATCH" --no-owner --no-privileges \
   -L "${container_dump}.toc" "$container_dump" || restore_rc=$?
 docker exec "$DB_CONTAINER" rm -f "$container_dump" "${container_dump}.toc" 2>/dev/null || true

@@ -52,6 +52,11 @@ done
 BACKUP_ROOT="${BACKUP_DIR:-${REPO_ROOT}/backups}"
 BACKUP_DB_DIR="${BACKUP_ROOT}/db"
 MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
+# The audit-log archive this run wrote, if any — set by the dump step, read by the manifest entry.
+# WHY a run-level variable rather than a tenth argument threaded through three functions: the file is
+# created in one step and recorded in another, and an entry that silently omitted the trail would make
+# the manifest claim a run is database-only when it is not.
+AUDIT_ARCHIVE_NAME=""
 
 # Rotation envs — support both new and legacy names
 BACKUP_MAX_COUNT="${BACKUP_MAX_COUNT:-${MAX_BACKUPS:-50}}"
@@ -366,6 +371,7 @@ manifest_entry_json() {
   local ts="$1" db_sha="$2"
   local pg_ver="$3" db_bytes="$4" total_bytes="$5"
   local kind="${6:-full}" tables_csv="${7:-}" requested_by="${8:-root}"
+  local audit_dump="${9:-}"
   # WHY tables is an array and not a joined string: a reader asks whether a table is
   # in the set, and split-on-comma in every reader is a second place to get it wrong.
   # WHY requested_by defaults to root: a launch that names no admin is a script
@@ -377,12 +383,16 @@ manifest_entry_json() {
     --arg pg_version "$pg_ver" \
     --arg requested_by "$requested_by" \
     --arg kind "$kind" \
+    --arg audit_dump "$audit_dump" \
     --arg tables_csv "$tables_csv" \
     --argjson db_bytes "$db_bytes" \
     --argjson total_bytes "$total_bytes" \
     '{
        ts: $ts,
        db_dump: ("db/cmsdb-" + $ts + ".dump"),
+       # WHY null and not an absent key: a reader that asks whether this run carries the audit trail
+       # gets a definitive "no" instead of a missing field it has to distinguish from an empty one.
+       audit_dump: (if $audit_dump == "" then null else $audit_dump end),
        db_sha256: $db_sha256,
        pg_version: $pg_version,
        requested_by: $requested_by,
@@ -715,6 +725,7 @@ run_backup() {
   sha256sum "$audit_file" | awk '{print $1"  " $2}' > "$audit_sha_file"
   chmod 600 "$audit_sha_file" 2>/dev/null || true
   audit_log_file="$(basename -- "$audit_file")"
+  AUDIT_ARCHIVE_NAME="db/${audit_log_file}"
   log_info "audit-log archive written: ${audit_log_file} ($(file_size_bytes "$audit_file") bytes) — verify it with: make audit-restore-verify"
 
   local db_bytes
@@ -738,7 +749,8 @@ run_backup() {
   # itself. Judged with the rest of the run's verdict below, it still reaches an exit code.
   local manifest_status=0
   manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$pg_ver" "$db_bytes" \
-    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" "$REQUESTED_BY" || manifest_status=$?
+    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" "$REQUESTED_BY" \
+    "$AUDIT_ARCHIVE_NAME" || manifest_status=$?
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
   # 3) Rotation
