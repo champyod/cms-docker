@@ -269,6 +269,9 @@ SECURITY_STALENESS_CACHE_MS = 15000 # num; ms the panel caches one backup/offsit
 # lives in public.cms_audit_retention_days() so changing it is a migration, i.e. a recorded decision
 # (400 days — one full contest cycle). This key only tunes how often the service looks.
 AUDIT_RETENTION_INTERVAL_SECS = 86400 # num; seconds between the audit-retention service runs; the service is profile-gated and never starts with the panel
+# Exposure reconciler (docker-compose.yml, profile `admin`). Rows written outside the panel reach the front through
+# this loop; it reloads only when the rendered set differs, so the interval trades latency for a file compare.
+EXPOSURE_RECONCILE_INTERVAL_SECS = 60 # num; seconds between exposure-reconciler ticks; the service is profile-gated and never starts with the panel
 MONITORING_ENABLED = 0          # enum:0,1; 1 = render nginx stub_status /metrics so Prometheus can scrape it (re-run domain setup --apply to regenerate the vhost)
 PROMETHEUS_PORT = 9090          # port; host port Prometheus publishes on (PROMETHEUS_BIND_IP:PROMETHEUS_PORT:9090)
 PROMETHEUS_BIND_IP = "127.0.0.1" # str; address Prometheus publishes on; loopback keeps the metrics API host-local
