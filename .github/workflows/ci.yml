@@ -44,6 +44,10 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       admin: ${{ steps.filter.outputs.admin }}
       monitor: ${{ steps.filter.outputs.monitor }}
+      # WHY this line is the whole point: a filter block without an output mapping evaluates
+      # nothing the jobs can see, so the build reported "skipped" and looked green while the
+      # image was never produced. The map is what hands the filter's answer to `if:`.
+      security_scan: ${{ steps.filter.outputs.security_scan }}
       scheduler: ${{ steps.filter.outputs.scheduler }}
       rust: ${{ steps.filter.outputs.rust }}
       rust_ranking: ${{ steps.filter.outputs.rust_ranking }}
