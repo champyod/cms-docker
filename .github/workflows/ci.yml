@@ -715,47 +715,7 @@ jobs:
       # repository does not ship, so their failure is named here by its exact signature and
       # nothing else is tolerated: a new migration that fails is a red job, not a quiet gap.
       - name: Apply the ranking migrations
-        run: |
-          set -uo pipefail
-          url="$RANKING_TEST_DATABASE_URL"
-          # The deployment's runtime role. RLS policies in these migrations name it, and a real
-          # installation always has it, so the database the tests run against must have it too.
-          psql "$url" -q -v ON_ERROR_STOP=1 -c \
-            "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'cmsuser') THEN CREATE ROLE cmsuser; END IF; END \$\$;"
-
-          # The file(s) that genuinely write the panel's identity tables (permissions, groups,
-          # group_permissions, admins, admin_groups). Those belong to the classic CMS schema,
-          # which this repository carries neither as a migration nor as a fixture. NAMING the
-          # file matters: tolerating the signature anywhere would let a future migration reach
-          # for that schema and pass silently, which is the hole this step closes.
-          needs_classic="20261012020000_drop_ranking_console_users"
-          classic='relation "(permissions|groups|group_permissions|admins|admin_groups|ranking_console_users)" does not exist'
-
-          strict=0
-          known=0
-          total=0
-          for migration in admin-panel/prisma/migrations/*_ranking_*/; do
-            total=$((total + 1))
-            name="$(basename "$migration")"
-            if psql "$url" -q -v ON_ERROR_STOP=1 -f "${migration}migration.sql" 2>/tmp/migration.err; then
-              strict=$((strict + 1))
-              continue
-            fi
-            if [[ "$name" == "$needs_classic" ]] && grep -qE "ERROR:  ${classic}" /tmp/migration.err; then
-              known=$((known + 1))
-              echo "::notice::${name} needs the classic CMS schema, as expected"
-              continue
-            fi
-            echo "::error::${name} failed for a reason this job does not tolerate"
-            cat /tmp/migration.err
-            exit 1
-          done
-
-          echo "applied strictly: ${strict}, classic-schema dependency: ${known}, files: ${total}"
-          if [[ $((strict + known)) -ne ${total} ]]; then
-            echo "::error::${total} migration files found but only $((strict + known)) accounted for"
-            exit 1
-          fi
+        run: bash scripts/__apply_ranking_migrations.sh "$RANKING_TEST_DATABASE_URL"
 
       - name: Format check
         working-directory: ranking-web
