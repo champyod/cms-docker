@@ -146,6 +146,48 @@ tar -xzf config-backup.tar.gz
 ./cms config sync
 ```
 
+### Offsite copy (encrypted)
+
+```bash
+bash scripts/__offsite-sync.sh --dry-run   # print what would be sent, send nothing
+bash scripts/__offsite-sync.sh --apply     # encrypt, verify, rsync
+```
+
+The run **refuses to ship without `OFFSITE_ENCRYPT_KEY`**: it exits 1, names the missing key,
+and sends nothing. The old behaviour — no key, so the plain `*.tar.gz` goes over rsync and the
+log still reads "Offsite sync complete" — is gone; a plaintext copy now has to be asked for:
+
+```bash
+OFFSITE_ALLOW_PLAINTEXT=1 bash scripts/__offsite-sync.sh --apply   # one run, printed loudly
+```
+
+The override prints a banner naming what is exposed, marks the completion line `PLAINTEXT`, and
+records `cms_offsite_last_ship_encrypted 0`. It is not a `config.toml` key on purpose: it is typed
+for one run, so `./cms config sync` can never switch it on permanently.
+
+What a run does with a key:
+
+1. encrypts each `backups/*.tar.gz` with `gpg --symmetric` (AES256) into a private staging
+   directory, the passphrase arriving on a file descriptor (`--passphrase-fd 3`) and never on a
+   command line, so `/proc/<pid>/cmdline` has nothing to read;
+2. proves the result before it sends it — gpg must parse it as symmetric ciphertext, its gzip
+   header must be gone, and the key must decrypt it back to the archive byte for byte;
+3. rsyncs the ciphertext and checks the status. A failed ssh, encryption, verification or rsync
+   exits non-zero, names the archive and the status, and records **no** offsite success.
+
+How old the copies are (this is the part that used to be invisible):
+
+```bash
+cat backups/metrics/cms_backup.prom     # written by every backup run and every offsite sync
+```
+
+`cms_backup_last_success_timestamp_seconds`, `cms_backup_stale`, `cms_offsite_last_ship_timestamp_seconds`,
+`cms_offsite_stale` and `cms_offsite_last_ship_encrypted` are read by node-exporter's textfile
+collector in `docker-compose.monitoring.yml` (`--collector.textfile.directory=/metrics`) and
+exported on the endpoint Prometheus already scrapes. Age is `time() - <timestamp>`; `0` means
+*never*, not 1970. The thresholds are `BACKUP_STALE_HOURS` (default 26), the same number the
+monitor's own staleness warning uses.
+
 ## Configuration Files
 
 - `config.toml` - **Source of truth** (single config; edit this)

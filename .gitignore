@@ -73,6 +73,10 @@ config/*.pem.local
 
 # Backup archives
 backups/*.tar.gz
+# The monitoring stack's textfile collector reads backups/metrics (docker-compose.monitoring.yml).
+# What lands there is a runtime fact — the ages of the newest backups — not a source file.
+backups/metrics/*
+!backups/metrics/.gitkeep
 
 # Monitoring data (Docker volumes — not files, but ignore stray local copies)
 prometheus-data/
