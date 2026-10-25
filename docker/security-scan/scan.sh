@@ -105,10 +105,11 @@ scan_rootfs() {
     rm -f "$out"
 
     rc=0
-    # WHY these skips are load-bearing: a host root includes /var/lib/docker, whose overlay
-    # layers hold every image this box has ever pulled, and /proc,/sys,/dev are not filesystems
-    # at all. Scanning them reported 34,606 "host" findings on a box with a normal package set —
-    # the number is other people's images, and it buried the host's own CVEs.
+    # WHAT these skips are for: /proc,/sys,/dev,/run are not filesystems, and /var/lib/docker
+    # holds every image layer the box has pulled — those are not host packages and must never be
+    # attributed to the host. Measured on the production host with and without the docker skip:
+    # the OS package count is 788 either way, i.e. this host's 34,606 findings are its own
+    # packages, not the images' (the earlier note claiming otherwise was wrong).
     trivy rootfs \
         --scanners vuln \
         --pkg-types os \

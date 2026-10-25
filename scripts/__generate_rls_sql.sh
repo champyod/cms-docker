@@ -223,13 +223,18 @@ emit_policy_set() {
       fi
     elif in_list "$tbl" "$INGEST_WRITE"; then
       printf '%s\n' \
-        '-- INGEST_WRITE: readable by staff, appended and updated by the security-feed container too.' \
+        '-- INGEST_WRITE: readable by staff AND the security-feed container, appended and updated by' \
+        '-- both too. WHY the reader clause matters as much as the writer: Prisma upserts with' \
+        '-- INSERT … RETURNING, and Postgres refuses RETURNING when the new row is not visible under' \
+        '-- the SELECT policy (42501 "new row violates row-level security policy"). An ingest identity' \
+        '-- that could write but not read its own row failed on every push while the policy looked' \
+        '-- correct in isolation.' \
         "DROP POLICY IF EXISTS cmsuser_all ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_read ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_append ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_update ON public.$tbl;" \
         "DROP POLICY IF EXISTS cms_actor_delete ON public.$tbl;" \
-        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING ($(read_predicate "$tbl"));" \
+        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
         "CREATE POLICY cms_actor_update ON public.$tbl FOR UPDATE TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest'])) WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
         "CREATE POLICY cms_actor_delete ON public.$tbl FOR DELETE TO cmsuser USING ($(read_predicate "$tbl"));"
