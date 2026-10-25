@@ -39,7 +39,11 @@ RUN bun install --frozen-lockfile
 RUN mkdir -p /prisma-cli \
  && cd /prisma-cli \
  && echo '{"private":true,"overrides":{"deepmerge-ts":"8.0.0"}}' > package.json \
- && bun add prisma@6.19.3 tsx@4
+# WHY jose is installed here as well: the tsx-run scripts (the permission seed, the audit-log
+# verifier, the waiver export) resolve their imports with bare node, not through the Next bundler —
+# and the actor chain reaches session-token.ts, which imports `jose`. Without it the seed died at
+# run time with MODULE_NOT_FOUND, after the migrations had already committed.
+ && bun add prisma@6.19.3 tsx@4 jose@6.1.3
 
 # Copy source code
 COPY . .
@@ -118,14 +122,23 @@ COPY --from=base /app/prisma ./prisma
 COPY --from=base /app/src/lib/prisma.ts /app/src/lib/permission-registry.ts /app/src/lib/audit-chain.ts ./src/lib/
 COPY --from=base /app/src/lib/db-actor.ts ./src/lib/
 COPY --from=base /app/src/lib/db-actor-request.ts ./src/lib/
+# The actor-resolution chain is prisma -> db-actor-request -> session-token; a file missing from
+# this list fails the seed at run time, not at build time, so the module that reads the cookie is
+# named explicitly rather than assumed to come along.
+COPY --from=base /app/src/lib/session-token.ts ./src/lib/
 COPY --from=base /app/scripts/audit-log.ts ./scripts/audit-log.ts
 COPY --from=base /app/tsconfig.json ./tsconfig.json
 
 # WHY: missing tooling or seed imports should fail the build, not a deployment;
 # loading the imports constructs the client without connecting or seeding.
+# WHY the second import line: the client resolves its actor through db-actor-request, which reads
+# the session cookie, which reaches next/headers. That chain is exactly what the permission seed
+# loads outside a request, so importing only the client proved the wrong thing — the first
+# production seed died with MODULE_NOT_FOUND after the migrations had already committed.
 RUN CHECKPOINT_DISABLE=1 ./node_modules/.bin/prisma --version \
  && ./node_modules/.bin/tsx --version \
- && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry"); require("@/lib/audit-chain");'
+ && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry"); require("@/lib/audit-chain");' \
+ && ./node_modules/.bin/tsx -e 'Promise.all([import("@/lib/db-actor-request"), import("@/lib/session-token"), import("@/lib/db-actor")]).then(() => console.log("ACTOR_IMPORT_OK"))'
 
 # Unprivileged runtime: compose grants the host docker group (group_add) so the
 # node user can still reach the mounted socket, and the cache dir must be

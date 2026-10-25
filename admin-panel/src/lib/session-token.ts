@@ -1,7 +1,13 @@
 import crypto from 'crypto';
 
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose';
-import { cookies } from 'next/headers';
+/*
+ * WHY `next/headers` is imported lazily rather than at the top: this module is reached from the
+ * Prisma client's actor resolution, and the client is loaded by processes that are not requests at
+ * all — the permission seed, the backup scheduler, the CLI, the waiver export. A static import made
+ * every one of them die with MODULE_NOT_FOUND the moment they touched the database, which is how
+ * the first production seed failed after the migrations had already committed.
+ */
 
 /**
  * The session cookie: its name, the key that signs it, and the two operations on it.
@@ -84,6 +90,7 @@ export async function readSessionClaims(token: string): Promise<SessionClaims | 
 export async function readSessionClaimsFromCookies(): Promise<SessionClaims | null> {
   let token: string | undefined;
   try {
+    const { cookies } = await import('next/headers');
     token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
   } catch {
     return null;
