@@ -57,12 +57,18 @@ const RAW_VERBS = new Set([
  *
  * WHY $queryRaw and not $executeRaw: `set_config` returns the value it set, so the statement has a
  * result set. `$executeRaw` is for statements that only report an affected-row count.
+ *
+ * WHY bound to its client: a template tag is called as a plain function, so an unbound method loses
+ * its receiver and Prisma's implementation then dereferences `this` (`_createPrismaPromise`) as
+ * undefined. Bun happens to keep the receiver; node — which is what the poller image runs — does not,
+ * and the failure appeared the first time this path was exercised outside a request (the security
+ * signal's first run). Binding is exactly the receiver a direct call would have had.
  */
 function stamp(client: AnyClient, claim: string): Promise<unknown> {
-  const queryRaw = client['$queryRaw'] as (
+  const queryRaw = (client['$queryRaw'] as (
     strings: TemplateStringsArray,
     ...values: unknown[]
-  ) => Promise<unknown>;
+  ) => Promise<unknown>).bind(client);
   return queryRaw`SELECT set_config('cms.actor', ${claim}, true)`;
 }
 

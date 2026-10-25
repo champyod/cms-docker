@@ -12,6 +12,8 @@ import {
   type PatchingState,
   type PatchingWaiver,
 } from '@/lib/security/patching';
+import { buildSecurityDigest, type SecurityDigest } from '@/lib/security/signal';
+import { readStalenessSnapshot } from '@/lib/security/staleness';
 import {
   WAIVER_EXPORT_VERSION,
   type WaiverExport,
@@ -47,20 +49,37 @@ function liveWaiverRows() {
   });
 }
 
-/** The administrator who signed each waiver, in one query; a deleted account stays null. */
+/**
+ * The state the page renders, plus the one digest derived from it.
+ *
+ * WHY the digest is part of the snapshot and not a second read: the card, the channel and the page
+ * must agree about what is wrong and how bad it is, so all three consume one computation of the same
+ * rows (the read path's rule — see the module comment). A caller that only wants the tables ignores
+ * `signal`; nothing else has to be queried to get it.
+ */
+export type PatchingSnapshot = PatchingState & { readonly signal: SecurityDigest };
+
+/**
+ * The administrator who signed each waiver, in one query; a deleted account stays null.
+ */
 async function waiverOwners(
   rows: readonly { readonly created_by: number }[],
 ): Promise<Map<number, string>> {
   return loadActorNames(rows.map((row) => row.created_by));
 }
 
-export async function readPatchingSnapshot(now: Date = new Date()): Promise<PatchingState> {
-  const [findings, waivers] = await Promise.all([
+export async function readPatchingSnapshot(now: Date = new Date()): Promise<PatchingSnapshot> {
+  const [findings, waivers, staleness] = await Promise.all([
     prisma.security_findings.findMany({
       where: { resolved_at: null },
       orderBy: [{ source: 'asc' }, { last_seen: 'desc' }],
     }),
     liveWaiverRows(),
+    // WHY the backup age is read beside the findings and not from them: a backup age is not a
+    // finding (docs/SECURITY-FEED.md fixes the producer contract), so it arrives as its own reading
+    // and the digest joins the two. This call never throws — an unreachable scrape target is an
+    // `unknown` reading — so it cannot turn a page render into an error.
+    readStalenessSnapshot(now),
   ]);
 
   const owners = await waiverOwners(waivers);
@@ -104,11 +123,12 @@ export async function readPatchingSnapshot(now: Date = new Date()): Promise<Patc
   }));
 
   const groups: readonly PatchingGroup[] = groupFindings(mapped);
-  return {
+  const state: PatchingState = {
     groups,
     waivers: mappedWaivers,
     cards: buildPatchingCards(findings, waivers, now),
   };
+  return { ...state, signal: buildSecurityDigest(state, staleness, now) };
 }
 
 /**

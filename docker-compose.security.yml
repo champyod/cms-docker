@@ -184,6 +184,59 @@ services:
       - cms-network
     command: ["schedule"]
 
+  # The security signal: the one external channel for the facts that must not wait (a lapsed waiver,
+  # an unwaived CRITICAL, a stale or unreadable backup), deduplicated and rate-limited by the panel's
+  # own read path. It is the poller image's SECOND ENTRY POINT, not a second image: the decision has
+  # to use `readPatchingSnapshot` and `logToDiscord`, and a re-implementation elsewhere would be a
+  # second definition of "expired" and "stale".
+  #
+  # WHY its own profile: `--profile security` starts the feed (Renovate, Diun, the scanners) without
+  # starting a notifier. Turning the channel on is then one explicit decision:
+  #   docker compose --env-file .env --env-file .env.security \
+  #     -f docker-compose.yml -f docker-compose.security.yml --profile security-signal up -d security-signal
+  #
+  # WHY no host mount and no docker socket: it reads Postgres, Prometheus and one webhook. Nothing on
+  # the host is touched, and the container is read-only with every capability dropped.
+  security-signal:
+    build:
+      context: .
+      dockerfile: docker/scheduler/Dockerfile
+    image: ghcr.io/champyod/cms-docker-scheduler:${IMG_TAG:-major-admin-panel}
+    container_name: cms-security-signal
+    restart: unless-stopped
+    profiles:
+      - security-signal
+    depends_on:
+      # WHY required: false: `database` is in the core profile, and this service has its own, so
+      # compose would otherwise refuse to build the model when only `--profile security-signal` is
+      # selected (the CI gate validates the overlay exactly that way). When the base stack is up it
+      # is honoured; when it is not, the process retries on its own tick.
+      database:
+        condition: service_healthy
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The same webhook the backup and lockout alerts already use — one channel, one implementation.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
+      # The backup scripts' own stale window, so the publisher-liveness check uses the same number
+      # they used to write `cms_backup_stale`/`cms_offsite_stale`. Nothing here re-defines "stale".
+      BACKUP_STALE_HOURS: ${BACKUP_STALE_HOURS:-26}
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+      SECURITY_SIGNAL_INTERVAL_SECONDS: ${SECURITY_SIGNAL_INTERVAL_SECONDS:-60}
+      SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS: ${SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS:-1500}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    command: ["node", "bootstrap.mjs", "security-signal"]
+
   # Diun's opt-in labels, applied here rather than in docker-compose.yml: the base stack must
   # stay usable without the feed, and an overlay is where an optional feature's labels belong.
   admin-panel-next:

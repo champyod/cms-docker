@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { resolveClientIp } from '@/lib/request-identity';
 
 export type AuditResult = 'success' | 'failure';
 
@@ -12,7 +11,16 @@ export interface AuditEntry {
   afterValues?: unknown;
   reason?: string;
   result: AuditResult;
-  actorId?: number;
+  /**
+   * The admin the row is filed under, `null` for a named system process, or absent to resolve the
+   * signed-in administrator from the session.
+   *
+   * WHY `null` is a distinct value and not "0": a background service has no session to read (it
+   * runs outside any request), and the audit table's whole job is to say who acted. Filing its rows
+   * under a person would be a false attribution; `null` says "the acting identity is the database
+   * actor, which for these rows is a `system:` one".
+   */
+  actorId?: number | null;
   ip?: string;
   sessionId?: string;
 }
@@ -158,19 +166,24 @@ async function tryResolve<T>(resolve: () => Promise<T>): Promise<T | null> {
 
 async function resolveAuditContext(): Promise<AuditRequestContext> {
   return {
-    ip: await tryResolve(() => resolveClientIp()),
+    // Why the dynamic import: `request-identity` reads `next/headers`, and this module is also
+    // loaded by the poller image (the security signal), which runs outside Next and outside any
+    // request. Both reads below are best-effort by design, so the import lives behind the same
+    // guard as the call.
+    ip: await tryResolve(async () => (await import('@/lib/request-identity')).resolveClientIp()),
     sessionId: await tryResolve(async () => (await import('@/lib/auth')).getSessionId()),
   };
 }
 
 export async function recordAudit(entry: AuditEntry): Promise<void> {
   try {
-    const { getSession } = await import('@/lib/auth');
     const { prisma } = await import('@/lib/prisma');
 
-    let actorId = entry.actorId;
+    // `undefined` means "resolve the session" (the request path); `null` means a named process that
+    // has no session, and must not be looked up as if it had one.
+    let actorId: number | null | undefined = entry.actorId;
     if (actorId === undefined) {
-      const session = await getSession();
+      const session = await tryResolve(async () => (await import('@/lib/auth')).getSession());
       if (session) {
         const parsedActorId = Number.parseInt(session.userId, 10);
         if (Number.isFinite(parsedActorId)) {

@@ -5,8 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/app/actions/auth';
 import { ensurePermission } from '@/lib/permissions';
 import { createWaiver, endWaiver, type WaiverInput, type WaiverWriteResult } from '@/lib/panel-actions/patching-waivers';
-import { readPatchingSnapshot } from '@/lib/security/patching-read';
-import type { PatchingState } from '@/lib/security/patching';
+import { readPatchingSnapshot, type PatchingSnapshot } from '@/lib/security/patching-read';
 
 const PATCHING_PAGE_PATH = '/[locale]/security/patching';
 
@@ -18,9 +17,13 @@ export type PatchingActionResult = WaiverWriteResult;
  * WHY both keys here and not only in the route descriptor: the descriptor decides whether
  * the page is offered, and this decides whether its data is returned — a caller who reaches
  * the action another way still has to hold the same pair. The overview calls this same
- * function, so its four numbers cannot come from a second query.
+ * function, so its cards and the digest cannot come from a second query.
+ *
+ * WHY it returns the digest with the table state: the card, the push channel and the page have to
+ * agree on "what is wrong and how bad", and the only way to guarantee that is one read that computes
+ * it once (`readPatchingSnapshot`). A caller wanting only the groups ignores `signal`.
  */
-export async function readPatchingState(): Promise<PatchingState> {
+export async function readPatchingState(): Promise<PatchingSnapshot> {
   await ensurePermission('security:read');
   await ensurePermission('patching:read');
   return readPatchingSnapshot();
