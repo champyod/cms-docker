@@ -48,6 +48,7 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       rust_ranking: ${{ steps.filter.outputs.rust_ranking }}
       rust_backend: ${{ steps.filter.outputs.rust_backend }}
+      core_db_identity: ${{ steps.filter.outputs.core_db_identity }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
@@ -89,6 +90,18 @@ jobs:
             rust_backend:
               - 'backend/**'
               - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            # The core's database identity. Every input the gate consumes is here: the hook and
+            # the modules it imports, the constraint that pins SQLAlchemy, the suite that pins the
+            # hook, the migration that turns an unidentified transaction into an empty result set,
+            # and the role SQL its bootstrap applies.
+            core_db_identity:
+              - 'src/cms/db/**'
+              - 'src/cmscommon/**'
+              - 'src/constraints.txt'
+              - 'tests/test_rls_actor*.py'
+              - 'admin-panel/prisma/migrations/**'
+              - 'admin-panel/prisma/sql/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -246,6 +259,186 @@ jobs:
       # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
       - name: Run the repo suites
         run: make test
+
+  # WHY a job of its own: every table is row-level secured on `cms.actor`, so a core process that
+  # does not stamp its transactions reads nothing and writes nothing — an empty result set, not an
+  # error. tests/test_rls_actor_identity.py is the only CI-detectable guard on
+  # src/cms/db/session.py, and it SKIPS on a bare python3, which is exactly what `suites` runs
+  # (hermetic `env -i`, no core dependencies). Without this job a regression in the after_begin
+  # hook would reach production silently, so the suite gets its pinned dependencies and a real
+  # Postgres and its failure fails the required check. Path-gated: only a change that can break it
+  # pays for it.
+  core-db-identity:
+    name: Core DB identity (RLS actor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.core_db_identity == 'true'
+    permissions:
+      contents: read
+    # WHY postgres:15 and not 16: 15 is the major the stack runs (docker-compose.yml). 16 refuses
+    # `ALTER ROLE cmsuser NOSUPERUSER` on the image's bootstrap superuser — the one statement
+    # 20260912000500_owner_hardening exists to make — and an owner that keeps SUPERUSER bypasses
+    # every policy created here, so the database would stop being the one production has.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: cmsuser
+          POSTGRES_PASSWORD: ci-not-a-secret
+          POSTGRES_DB: cmsdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # The URL the suite's live half drives. cmsuser is the role the core connects as, so the
+      # session below runs under the production policies, not a test-only grant.
+      CMS_RLS_TEST_DATABASE_URL: postgresql+psycopg2://cmsuser:ci-not-a-secret@127.0.0.1:5432/cmsdb
+      # psql speaks libpq, not SQLAlchemy URLs (+psycopg2 is not a libpq scheme), so the schema
+      # steps reach the same database through these instead.
+      PGHOST: 127.0.0.1
+      PGUSER: cmsuser
+      PGPASSWORD: ci-not-a-secret
+      PGDATABASE: cmsdb
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # WHY here and not at job level: `runner` is not an available context in a job's `env`, and
+      # these two paths must sit outside the checkout so nothing is written into the working tree.
+      # CMS_CONFIG is where the core looks for its configuration; the suite cannot import without
+      # it (see the write step below).
+      - name: Point the job at its scratch paths
+        run: |
+          echo "CMS_CONFIG=${RUNNER_TEMP}/cms.toml" >> "$GITHUB_ENV"
+          echo "CORE_VENV=${RUNNER_TEMP}/core-venv" >> "$GITHUB_ENV"
+
+      # 3.11 is the core's floor (src/pyproject.toml requires-python >=3.11) and the version its
+      # constraints were frozen on; SQLAlchemy 1.3 is not supported above it.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+
+      # psycopg2 has no wheel — it compiles against libpq — and postgresql-client is what the
+      # schema steps drive. Named here rather than assumed from the runner image, so the build
+      # cannot drift with it.
+      - name: Install libpq and the Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpq-dev postgresql-client
+
+      # WHY the whole constraints file: importing cms.db loads the models, which load the core's
+      # real dependency set, so a partial install would make the suite SKIP — a green tick that
+      # proves nothing. This is the same install the image builds with.
+      - name: Install the core's pinned dependencies
+        run: |
+          python3 -m venv "$CORE_VENV"
+          "$CORE_VENV/bin/python" -m pip install --upgrade pip wheel
+          "$CORE_VENV/bin/python" -m pip install -r src/constraints.txt
+          # The suite's assertions are meaningless against a different SQLAlchemy, and its
+          # sessionmaker semantics are 1.3's, so assert the pin rather than trust the resolver.
+          pinned="$(awk -F'==' '$1=="SQLAlchemy"{print $2}' src/constraints.txt)"
+          "$CORE_VENV/bin/python" -c \
+            'import sqlalchemy, sys; assert sqlalchemy.__version__ == sys.argv[1], sqlalchemy.__version__' \
+            "$pinned"
+          echo "SQLAlchemy ${pinned} installed"
+
+      # WHY a file rather than a committed fixture: it carries a URL that only exists inside this
+      # job. These are the only two values the loader requires — a database, and a secret that is
+      # not the shipped default (cms.conf.ConfigError refuses that one).
+      - name: Write the CMS configuration the suite imports
+        run: |
+          cat > "$CMS_CONFIG" <<'TOML'
+          [database]
+          url = "postgresql+psycopg2://cmsuser:ci-not-a-secret@127.0.0.1:5432/cmsdb"
+
+          [web_server]
+          secret_key = "core-db-identity-gate-not-a-real-secret"
+
+          [services]
+          TOML
+
+      # WHY rebuild the schema at all: the live half drives the application's own sessionmaker, and
+      # a transaction that is stamped looks exactly like one that is not unless the policies are
+      # there to act on it. cmsInitDB makes the core's tables (the call the image makes at
+      # install), the role bootstrap makes cms_backup (a migration grants to it and fails by name
+      # if it is missing), and the committed migrations put the policies over `cms.actor`.
+      - name: Create the core's schema
+        run: PYTHONPATH=src "$CORE_VENV/bin/python" -c 'from cms.db.init import init_db; init_db()'
+
+      # WHY this DROP: SQLAlchemy 1.3 creates every named type in the metadata on
+      # metadata.before_create, so cmsInitDB emits the enums of the prisma-owned username tables it
+      # deliberately does not create — and the migration that owns them creates them with their
+      # tables, where CREATE TYPE is not IF NOT EXISTS. Releasing the two restores the order the
+      # migration history assumes, and is a no-op the day cmsInitDB stops over-emitting them.
+      - name: Release the enum types cmsInitDB emits for prisma-owned tables
+        run: psql -q -v ON_ERROR_STOP=1 -c 'DROP TYPE IF EXISTS username_policy_scope, username_policy'
+
+      - name: Bootstrap the database roles
+        run: |
+          for role_sql in admin-panel/prisma/sql/20260820120000_db_roles.sql \
+                          admin-panel/prisma/sql/20260820125000_backup_role.sql; do
+            echo "-- $role_sql"
+            psql -q -v ON_ERROR_STOP=1 -v cms_backup_password=ci-not-a-secret -f "$role_sql" >/dev/null
+          done
+
+      # WHY psql and not `prisma migrate deploy`: the chain is plain SQL, and the only thing the CLI
+      # adds is _prisma_migrations bookkeeping this gate never reads. Filename order is timestamp
+      # order, the order the CLI applies them in; the ranking job applies its migrations the same
+      # way. ON_ERROR_STOP is what turns a failed migration into a failed job.
+      - name: Apply the committed migrations
+        run: |
+          applied=0
+          for migration in admin-panel/prisma/migrations/*/migration.sql; do
+            psql -q -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+            applied=$((applied + 1))
+          done
+          echo "applied ${applied} migrations"
+
+      # WHY read the result and not the exit codes: every policy statement is guarded by
+      # DROP POLICY IF EXISTS, so a migration that skipped a missing table still "succeeds" — the
+      # same reason scripts/__apply_sql.sh re-reads pg_class after applying. This asks the committed
+      # migration which tables it writes a policy for and requires each of them to have one.
+      - name: Require every policy the migration names to exist
+        run: |
+          actor_migration="$(ls -d admin-panel/prisma/migrations/*_rls_actor_policies)/migration.sql"
+          tables="$(grep -oE 'CREATE POLICY [a-z_]+ ON public\.[a-z_]+' "$actor_migration" \
+            | sed 's/.*public\.//' | LC_ALL=C sort -u | tr '\n' ' ')"
+          test -n "$tables" || { echo "::error::no policies parsed out of $actor_migration"; exit 1; }
+          missing="$(psql -v ON_ERROR_STOP=1 -tAc "
+            WITH expected(t) AS (SELECT unnest(string_to_array('${tables}', ' ')))
+            SELECT t FROM expected e
+             WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                WHERE p.schemaname = 'public' AND p.tablename = e.t)")"
+          if [ -n "$missing" ]; then
+            echo "::error::tables named by the actor-policy migration with no policy: ${missing}"
+            exit 1
+          fi
+          echo "every table named by $(basename "$(dirname "$actor_migration")") has a policy"
+
+      # The command the suite's header documents, with its live half switched on.
+      - name: Run the actor identity suite
+        run: |
+          set -o pipefail
+          "$CORE_VENV/bin/python" tests/test_rls_actor_identity.py 2>&1 | tee "$RUNNER_TEMP/rls-actor.log"
+
+      # WHY a skip fails here: the suite turns a missing dependency into a loud SKIP and exit 0 —
+      # right for `make test` on a bare python3 (that is what its header promises), wrong for the
+      # gate whose whole purpose is to run it, where a skip is a green tick proving nothing.
+      - name: Fail if the suite skipped instead of running
+        run: |
+          log="$RUNNER_TEMP/rls-actor.log"
+          if grep -qE '^SKIP:|set CMS_RLS_TEST_DATABASE_URL to run the live half' "$log"; then
+            echo "::error::the suite skipped — this job exists to run it"
+            exit 1
+          fi
+          grep -q 'Ran [1-9][0-9]* test' "$log" || { echo "::error::the suite ran no tests"; exit 1; }
+          grep 'Ran ' "$log"
 
   # WHY a separate job: nothing else type-checks or tests the admin panel, so a
   # type error or a failing unit test could reach main unnoticed. The secret
@@ -1114,6 +1307,8 @@ jobs:
       - lint
       - gates
       - suites
+      # The core's RLS identity: its failure must reach the required check, not land as "skipped".
+      - core-db-identity
       - panel
       # A waiver failure must reach the required check, or an expired suppression would land as
       # "skipped" and the build would go green on it.
@@ -1138,6 +1333,7 @@ jobs:
             [lint]="${{ needs.lint.result }}"
             [gates]="${{ needs.gates.result }}"
             [suites]="${{ needs.suites.result }}"
+            [core-db-identity]="${{ needs.core-db-identity.result }}"
             [panel]="${{ needs.panel.result }}"
             [waivers]="${{ needs.waivers.result }}"
             [container-scan]="${{ needs.container-scan.result }}"
