@@ -61,16 +61,22 @@ Run it by hand, without pulling anything:
     make verify-images
     bash scripts/__verify_images.sh ghcr.io/champyod/cms-docker-core:major-admin-panel
 
-## Installing cosign on a deploy host
+## Where the verifier runs
 
-The gate fails closed when cosign is absent (`reason=cosign-missing`) — an
-unchecked image is not a verified one. Install the same release the workflow
-signs with, from the operator's own shell:
+**Nothing has to be installed on the host.** When `cosign` is on `PATH` the gate
+uses it; otherwise it runs the same pinned release from a container
+(`ghcr.io/sigstore/cosign/cosign:v2.5.2@sha256:23d07b53…`, overridable with
+`CMS_COSIGN_IMAGE`), mounting `~/.docker` read-only so a private package can still
+be read. Verification therefore needs a docker daemon and network, not a host
+install — which is what the operator-manual host decision requires.
 
-    curl -fsSL -o cosign \
-      https://github.com/sigstore/cosign/releases/download/v2.5.2/cosign-linux-amd64
-    sudo install -m 0755 cosign /usr/local/bin/cosign
-    cosign version   # expect GitVersion: v2.5.2
+The gate fails closed with `reason=no-verifier` when neither a binary nor a
+reachable daemon exists: an unchecked image is not a verified one. It never
+reports "verified" for a check it did not run, and a missing binary is not a
+fallback to skipping.
+
+If you would rather have the binary on a host anyway, use the release the workflow
+signs with (`v2.5.2`); the gate treats the two paths identically.
 
 ## The emergency override
 

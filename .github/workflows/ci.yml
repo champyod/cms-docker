@@ -68,6 +68,11 @@ jobs:
             monitor:
               - 'docker/monitor/**'
               - 'scripts/__monitor.sh'
+            # The security overlay's own image. Without this filter nothing built it, so the
+            # compose overlay named an image that did not exist anywhere.
+            security_scan:
+              - 'docker/security-scan/**'
+              - '.github/workflows/ci.yml'
             scheduler:
               - 'admin-panel/src/scheduler/**'
               - 'admin-panel/src/lib/**'
@@ -1136,7 +1141,12 @@ jobs:
       - name: Sign the pushed digest
         if: github.event_name != 'pull_request'
         env:
-          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin
+          # WHY this must name the image the build step pushed: it named `-admin`, a
+          # repository that holds no image at all. cosign signs a digest you hand it, so
+          # the step stayed green while the image that actually ships carried no
+          # signature — and the deploy gate then refused every panel deploy. tests/
+          # test_ci_signing_parity.sh compares this value against the metadata step.
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
           DIGEST: ${{ steps.build-admin.outputs.digest }}
         run: |
           test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
@@ -1303,6 +1313,87 @@ jobs:
           test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
           cosign sign --yes "${IMAGE}@${DIGEST}"
 
+  # The security overlay's scanner: Trivy + osv-scanner + the feed/rootfs/diun-bridge entry
+  # points. Built like every other image — SBOM, provenance, keyless signature — because the
+  # deploy gate refuses an image it cannot verify, including this one.
+  build-and-push-security-scan:
+    name: Build security scan image
+    needs: changes
+    if: needs.changes.outputs.security_scan == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Security scan
+        id: meta-security-scan
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-security-scan
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Security scan
+        id: build-security-scan
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./docker/security-scan
+          file: ./docker/security-scan/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-security-scan.outputs.tags }}
+          labels: ${{ steps.meta-security-scan.outputs.labels }}
+          cache-from: type=gha,scope=security-scan
+          cache-to: type=gha,mode=max,scope=security-scan
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-security-scan
+          DIGEST: ${{ steps.build-security-scan.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
   # Single required check: passes when every other job succeeded or was skipped.
   gate:
     name: CI
@@ -1329,6 +1420,8 @@ jobs:
       - build-and-push-admin
       - build-and-push-monitor
       - build-and-push-scheduler
+      # The overlay's scanner: a missing image here is how the security stack failed to start.
+      - build-and-push-security-scan
     runs-on: ubuntu-latest
     steps:
       - name: Require every upstream job to have succeeded or been skipped

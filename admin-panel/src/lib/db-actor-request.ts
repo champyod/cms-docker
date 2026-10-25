@@ -1,5 +1,3 @@
-import { cookies } from 'next/headers';
-
 import { readSessionClaimsFromCookies } from '@/lib/session-token';
 import {
   actorStorage,
@@ -54,6 +52,7 @@ export async function requireDbActor(): Promise<DbActor> {
 /** True when `cookies()` is usable — i.e. we are inside a request. Used only for diagnostics. */
 export async function inRequestScope(): Promise<boolean> {
   try {
+    const { cookies } = await import('next/headers');
     await cookies();
     return true;
   } catch {

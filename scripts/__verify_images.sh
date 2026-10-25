@@ -29,11 +29,16 @@
 #   CMS_SKIP_IMAGE_VERIFY=1
 #       EMERGENCY ONLY. See docs/IMAGE-VERIFICATION.md. Skips the whole gate and
 #       says so loudly; it is the only way to deploy an unsigned image.
+#   CMS_COSIGN_IMAGE
+#       The pinned cosign used when the host has no cosign binary. Verification runs
+#       in a container, so the gate needs no host install — which is what the
+#       operator-manual host decision requires (P1=D): nothing lands on the box.
 #
 # Exit codes:
 #   0  every image under the prefix verified (or there was nothing of ours to check)
 #   2  no image refs were passed — the caller could not say what to check
-#   3  cosign is not installed (fail closed: an unchecked image is not a verified one)
+#   3  neither a cosign binary nor a usable docker daemon (fail closed: an unchecked
+#      image is not a verified one)
 #   4  an image did not verify; the reason is printed as `reason=<name>`
 
 set -euo pipefail
@@ -64,11 +69,47 @@ if [[ $# -lt 1 ]]; then
   log_die "reason=no-images — no image refs were passed, so nothing could be checked. A deploy that cannot be verified is not started." 2
 fi
 
-if ! command -v cosign >/dev/null 2>&1; then
-  log_die "reason=cosign-missing — cosign is not installed, so no image can be verified. Install cosign v2.5.2 (docs/IMAGE-VERIFICATION.md); for an emergency only, CMS_SKIP_IMAGE_VERIFY=1." 3
+# WHY a container instead of requiring the binary: the hosts are operator-manual by
+# decision, so a deploy that only works after someone installs a tool on the box is a
+# host change wearing a deploy's clothes. The same pinned cosign runs from the registry,
+# which also means the verifier's version is a reviewed value rather than whatever the
+# operator happened to have.
+COSIGN_IMAGE="${CMS_COSIGN_IMAGE:-ghcr.io/sigstore/cosign/cosign:v2.5.2@sha256:23d07b53d59a1233e1ab5e7d082cf4182fc90067d2f86a662ba3003215cb0c95}"
+
+cosign_runner=""
+if command -v cosign >/dev/null 2>&1; then
+  cosign_runner="host"
+elif docker info >/dev/null 2>&1; then
+  cosign_runner="container"
 fi
 
-log_info "verifying image signatures against issuer ${OIDC_ISSUER}"
+if [[ -z "$cosign_runner" ]]; then
+  log_die "reason=no-verifier — neither a cosign binary nor a reachable docker daemon, so no image can be verified. For an emergency only, CMS_SKIP_IMAGE_VERIFY=1." 3
+fi
+
+# One place that shapes the argv, so the host and container paths cannot drift into
+# verifying different things.
+cosign_verify() {
+  local image="$1"
+  if [[ "$cosign_runner" == "host" ]]; then
+    cosign verify "$image" \
+      --certificate-identity-regexp "$IDENTITY_REGEXP" \
+      --certificate-oidc-issuer "$OIDC_ISSUER"
+  else
+    # Read-only docker config: a private package needs the registry credential the
+    # host already has, and cosign must not be able to rewrite it. `-i` keeps the
+    # caller's stdin (an unattended deploy has none) from being consumed.
+    local -a mount=()
+    if [[ -d "${DOCKER_CONFIG:-$HOME/.docker}" ]]; then
+      mount=(-v "${DOCKER_CONFIG:-$HOME/.docker}:/root/.docker:ro")
+    fi
+    docker run --rm -i "${mount[@]}" "$COSIGN_IMAGE" verify "$image" \
+      --certificate-identity-regexp "$IDENTITY_REGEXP" \
+      --certificate-oidc-issuer "$OIDC_ISSUER"
+  fi
+}
+
+log_info "verifying image signatures against issuer ${OIDC_ISSUER} (verifier: ${cosign_runner})"
 
 verified=0
 upstream=0
@@ -88,9 +129,7 @@ for image in "$@"; do
   # cosign exits non-zero for a missing signature, a wrong identity and a registry
   # failure alike, so the output is captured and classified instead of printed raw.
   set +e
-  output="$(cosign verify "$image" \
-    --certificate-identity-regexp "$IDENTITY_REGEXP" \
-    --certificate-oidc-issuer "$OIDC_ISSUER" 2>&1)"
+  output="$(cosign_verify "$image" 2>&1)"
   rc=$?
   set -e
 

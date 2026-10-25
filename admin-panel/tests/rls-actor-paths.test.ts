@@ -34,6 +34,14 @@ function walk(dir: string): string[] {
 
 const SOURCE_FILES = walk(SRC).filter((f) => /\.(ts|tsx)$/.test(f));
 
+/**
+ * The entry points that run OUTSIDE a request: seeding, migrations, the CLI and the waiver
+ * export. They are the ones a request-scoped actor can never resolve for, so each has to name an
+ * identity itself — and the inventory above, which walks `src`, cannot see them.
+ */
+const ENTRY_DIRS = [path.join(PANEL_ROOT, 'prisma'), path.join(PANEL_ROOT, 'scripts')];
+const ENTRY_FILES = ENTRY_DIRS.flatMap((dir) => walk(dir)).filter((f) => /\.(ts|mjs)$/.test(f));
+
 function relative(file: string): string {
   return path.relative(PANEL_ROOT, file).split(path.sep).join('/');
 }
@@ -93,6 +101,25 @@ describe('every database path is accounted for', () => {
       (f) => f.startsWith(path.join(SRC, 'app')) && fs.readFileSync(f, 'utf8').includes('prismaUnscoped'),
     ).map(relative);
     expect(offenders).toEqual([]);
+  });
+
+  it('makes every out-of-request entry point name its identity', () => {
+    // WHY: migration 20261025120000 puts FORCE RLS on every table, and FORCE applies to the owner
+    // too. An entry point that queries the client without establishing an actor reaches the
+    // request-scoped resolution, which imports next/headers outside a request — so the first
+    // production seed died with MODULE_NOT_FOUND after the migrations had already run, leaving
+    // every admin holding groups that grant nothing. Nothing compared the two facts, so nothing
+    // could notice it before the deploy did.
+    const dbEntries = ENTRY_FILES.filter((f) =>
+      /from '@\/lib\/prisma'|from "@\/lib\/prisma"/.test(fs.readFileSync(f, 'utf8')),
+    );
+    expect(dbEntries.length).toBeGreaterThan(0);
+    for (const file of dbEntries) {
+      const text = fs.readFileSync(file, 'utf8');
+      expect(text, `${relative(file)} reads the database but never establishes an actor`).toMatch(
+        /withActor\(/,
+      );
+    }
   });
 
   it('routes every server action and route handler through the one client', () => {
