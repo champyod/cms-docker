@@ -22,6 +22,34 @@ readonly DISK_WARN_GB=5
 readonly KIB_PER_GB=1048576
 
 # ---------------------------------------------------------------------------
+# Database identity
+# ---------------------------------------------------------------------------
+# WHY every host-side client has to announce one: every table carries FORCE ROW LEVEL SECURITY
+# and its policy reads `cms.actor` (admin-panel/prisma/migrations/20261025120000_rls_actor_policies).
+# A client that sets nothing is not refused — it reads zero rows, and a write is a "UPDATE 0" or a
+# quietly rejected INSERT with exit status 0. A script that is not told who it is therefore reports
+# success over a database it changed nothing in, which is the failure these constants exist to end.
+#
+# WHY PGOPTIONS and not a SQL prefix: libpq reads PGOPTIONS when it connects and sends the settings
+# in the startup packet, so one assignment covers every statement the client runs — a multi-statement
+# `-c`, a `-f` script, COPY, and pg_restore's replay — with nothing prefixed onto any statement and no
+# wrapper to forget. It is also the same handover the panel's own spawned clients use
+# (admin-panel/src/app/actions/restore-apply-measure.ts), so both sides of the product announce
+# themselves the same way.
+#
+# WHY the value is written once, here: a mistyped identity does not error. `public.cms_actor_is_staff()`
+# matches an exact allowlist, so `system:migratoin` is indistinguishable from no actor at all — the
+# rows just stop appearing. Spelling the string in one place is what makes a typo impossible rather
+# than merely unlikely.
+#
+# The identities below are the ones the policy allowlist admits and that a host script can honestly
+# claim; `admin:<id>` belongs to a signed-in human and is never a script's identity.
+#   system:migration  schema/data work and bring-up — restores, migrations, provisioning renders.
+#   system:cli        one change an operator asked for through ./cms.
+readonly DB_ACTOR_SYSTEM_MIGRATION='-c cms.actor=system:migration'
+readonly DB_ACTOR_SYSTEM_CLI='-c cms.actor=system:cli'
+
+# ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 
@@ -499,6 +527,9 @@ ensure_ranking_paths_perms() {
 # form for a variable of its own (e.g. CMS_DB_PWD for __cms-db-init.sh's
 # `bash -c`). A NAME=VALUE pair is unambiguous at the front of the argument list:
 # a docker exec flag starts with `-` and a container name cannot contain `=`.
+# This is also how a caller announces the identity it acts as: the database's policies
+# read `cms.actor`, libpq reads it from `PGOPTIONS`, and `PGOPTIONS=...` handed here
+# crosses into the container as a bare `-e PGOPTIONS`. See DB_ACTOR_SYSTEM_* above.
 # Empty is allowed because callers such as db_exists pass `${POSTGRES_PASSWORD:-}`
 # and a psql that then fails to authenticate is the caller's decision, not this
 # function's; only a missing argument is an error.

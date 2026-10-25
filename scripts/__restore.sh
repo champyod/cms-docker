@@ -48,7 +48,19 @@ done
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
 POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
+POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 CONTAINER_DB="cms-database"
+
+# WHY every client below announces `system:migration`: every table carries FORCE ROW LEVEL
+# SECURITY and its policy reads `cms.actor`, so an unidentified psql reads 0 rows — which for
+# this script means the verification counts at the end report an empty database after a restore
+# that may have worked. The actor is handed over in the child environment (PGOPTIONS, read by
+# libpq at connect time) rather than prefixed onto statements, so it covers a whole pg_restore
+# replay or a multi-statement -c with nothing wrapped.
+# WHY system:migration and not a narrower identity: replacing a database's entire contents from
+# an archive is seeding, which is the one thing this identity is for. The panel's own restore
+# path names the same identity for the same work
+# (admin-panel/src/app/actions/restore-apply-measure.ts).
 
 # WHY pre-create cms_backup before pg_restore: dumps contain grants to cms_backup
 # which fail with "role does not exist" on a fresh database. Creating a stub
@@ -56,7 +68,7 @@ CONTAINER_DB="cms-database"
 # with password is applied post-restore via __apply_sql.sh --bootstrap-roles.
 ensure_roles_exist() {
   local _ctr="$1"
-  docker_exec_db "$POSTGRES_PASSWORD_VAL" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
+  docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
     "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_backup') THEN CREATE ROLE cms_backup NOLOGIN; END IF; END \$\$;" >/dev/null 2>&1 || log_warn "Failed to pre-create roles in $_ctr (continuing anyway)"
 }
 
@@ -201,7 +213,10 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   ensure_roles_exist "$SCRATCH_CONTAINER"
 
   log_info "Restoring database dump into scratch postgres..."
-  if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
+  # WHY the owner (and no bypass role) in this mode: the throwaway container is created with
+  # POSTGRES_USER as its superuser, and a superuser is not subject to row-level security, so the
+  # dump's COPY lands. The live path below is the one that needs a bypassing role.
+  if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" \
     pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
     err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
     log_warn "pg_restore failed: $err"
@@ -214,12 +229,12 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   sub_count="0"
   lob_count="0"
 
-  sub_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+  sub_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-  lob_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+  lob_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
   log_info "Top 10 tables by rowcount:"
-  docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
+  docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
     "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \
     while IFS='|' read -r schema name changes; do
       log_info "  $schema.$name — ~$changes rows"
@@ -250,8 +265,31 @@ docker cp "$DUMP_FILE" "${CONTAINER_DB}:${local_dump}" >/dev/null 2>&1 || \
 ensure_roles_exist "$CONTAINER_DB"
 
 log_info "Restoring database dump into live postgres..."
-if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
-  pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
+
+# WHY the live restore connects as a bypassing role, with what was measured: PostgreSQL refuses
+# COPY FROM into a table that has row-level security enabled for the connecting role ("COPY FROM
+# not supported with row-level security", PG 16), and a custom-format dump replays its data as
+# COPY — after its own `SET row_security = off` preamble, whose failure reads "query would be
+# affected by row-level security policy". Neither is a question about identity: `cms.actor` cannot
+# make COPY evaluate policies, so an owner connection WITH the actor still writes 0 rows into every
+# FORCE-RLS table. Only a role that bypasses the policy can, and this stack already has one for
+# bulk work: cms_backup (BYPASSRLS, member of cmsuser, so it inherits the owner's DML and DDL
+# rights) — the same role the backup side dumps as, for the same reason.
+# WHY not silently keep the owner: a restore that "succeeds" and puts nothing back is the exact
+# failure this script must never report, so a deployment without the backup secret says so here,
+# before the first COPY is attempted.
+RESTORE_ROLE="$POSTGRES_USER_VAL"
+RESTORE_PASSWORD="$POSTGRES_PASSWORD_VAL"
+if [[ -n "$POSTGRES_BACKUP_PASSWORD_VAL" ]]; then
+  RESTORE_ROLE="cms_backup"
+  RESTORE_PASSWORD="$POSTGRES_BACKUP_PASSWORD_VAL"
+else
+  log_warn "POSTGRES_BACKUP_PASSWORD is empty, so the restore connects as ${POSTGRES_USER_VAL} — every table is FORCE-RLS, so pg_restore cannot write a row. Run './cms config sync' to generate the backup role's password."
+fi
+log_info "Restoring as ${RESTORE_ROLE}..."
+
+if ! docker_exec_db "$RESTORE_PASSWORD" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+  pg_restore -U "$RESTORE_ROLE" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
   err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
   log_warn "pg_restore failed: $err"
   log_die "Restore failed"
@@ -272,12 +310,12 @@ log_info "Running verification queries against live container..."
 sub_count="0"
 lob_count="0"
 
-sub_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+sub_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-lob_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+lob_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
 log_info "Top 10 tables by rowcount:"
-docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
+docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
   "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \
   while IFS='|' read -r schema name changes; do
     log_info "  $schema.$name — ~$changes rows"

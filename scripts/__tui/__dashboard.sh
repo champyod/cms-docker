@@ -68,8 +68,18 @@ dash::collect_database() {
 	db=$(dash::env_val .env.core POSTGRES_DB);     db=${db:-cmsdb}
 	health=$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null || echo absent)
 	if [[ "$health" == healthy ]]; then
-		contests=$(docker exec cms-database psql -U "$user" -d "$db" -tAc 'select count(*) from contests' 2>/dev/null || echo n/a)
-		users=$(docker exec cms-database psql -U "$user" -d "$db" -tAc 'select count(*) from users' 2>/dev/null || echo n/a)
+		# WHY -e PGOPTIONS: contests and users are STRICT tables — their policies read `cms.actor`,
+		# so an unidentified connection counts 0 rows and this panel would report an empty contest
+		# to an operator looking at a full one. The identity is passed in the child environment,
+		# which is what libpq reads at connect time; nothing is prefixed onto the query.
+		# WHY system:cli: the dashboard is an operator's read of their own deployment.
+		# WHY not docker_exec_db: no password is read or handed over here (the container's local
+		# auth admits the owner), and the helper exists to keep a secret off the client argv.
+		# The value is spelled the same as DB_ACTOR_SYSTEM_CLI in scripts/__lib/common.sh, which
+		# tests/test_script_db_actor.sh pins; the TUI does not source that library (it must not
+		# inherit its `set -euo pipefail`).
+		contests=$(docker exec -e PGOPTIONS='-c cms.actor=system:cli' cms-database psql -U "$user" -d "$db" -tAc 'select count(*) from contests' 2>/dev/null || echo n/a)
+		users=$(docker exec -e PGOPTIONS='-c cms.actor=system:cli' cms-database psql -U "$user" -d "$db" -tAc 'select count(*) from users' 2>/dev/null || echo n/a)
 	fi
 	DASH_DB_PANEL=(
 		"health   $(dash::paint "$(dash::state_color "$health")" "$health")"
