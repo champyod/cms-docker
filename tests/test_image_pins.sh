@@ -148,6 +148,56 @@ for f in "${COMPOSE_FILES[@]}"; do
   done < <(grep -nE '^[[:space:]]*image:[[:space:]]*' "$f")
 done
 
+# ── Dockerfiles: a FROM is an image reference too ───────────────────────────────────────────
+# WHY this half exists: the compose-only scan let `admin-panel/Dockerfile` name
+# `node:20-bookworm-slim` with no digest for the whole life of the pin policy, while
+# docker/scheduler/Dockerfile pinned its own — and nothing failed. A base image selected by tag
+# can change between two builds of the same commit with no PR, which is exactly what pinning is
+# for, and it is the path a runtime CVE takes into the image.
+printf '\nthe Dockerfiles pin their bases too\n'
+dfrom_total=0
+dfrom_third=0
+dfrom_ours=0
+# `find`, not `git ls-files`: the gate has to answer the same way from an exported tree as from a
+# checkout, and a scan that silently covers nothing because git is absent is the failure mode this
+# whole section exists to prevent. Build artifacts are pruned by path, not by trusting .gitignore.
+for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' | sed 's|^\./||'); do
+  while IFS= read -r line; do
+    ref="$(printf '%s' "$line" | awk '{print $2}')"
+    # `FROM base AS build` style references a previous stage, not a registry image.
+    case "$ref" in
+      *"$SENTINEL"*|*"\$"*) continue ;;
+    esac
+    if printf '%s' "$line" | grep -qE '^[[:space:]]*FROM[[:space:]]+[A-Za-z0-9_.-]+([[:space:]]+AS[[:space:]]+[A-Za-z0-9_-]+)?[[:space:]]*$' \
+       && ! printf '%s' "$ref" | grep -q '[/:]'; then
+      continue
+    fi
+    dfrom_total=$((dfrom_total + 1))
+    if printf '%s' "$ref" | grep -qE '^ghcr\.io/champyod/'; then
+      dfrom_ours=$((dfrom_ours + 1))
+      continue
+    fi
+    dfrom_third=$((dfrom_third + 1))
+    img="${ref%@*}"
+    if ! printf '%s' "$ref" | grep -qE '@sha256:[0-9a-f]{64}$'; then
+      no "${f}: FROM ${img} has no @sha256 digest — the base can change under a build with no PR"
+    elif printf '%s' "$img" | grep -qE ':(latest)?$'; then
+      no "${f}: FROM ${img} is tagged latest"
+    else
+      ok "${f}: ${img} is pinned by digest"
+    fi
+  done < <(grep -iE '^[[:space:]]*FROM[[:space:]]' "$REPO_ROOT/$f")
+done
+if [ "$dfrom_total" -eq 0 ]; then
+  no "no FROM lines matched — the Dockerfile scan is broken, not the tree"
+fi
+if [ "$dfrom_third" -gt 0 ]; then
+  ok "scanned ${dfrom_total} FROM lines: ${dfrom_third} third-party, ${dfrom_ours} our own"
+else
+  no "no third-party FROM lines found — the exemption filter is swallowing everything"
+fi
+
 # ── the decision record ─────────────────────────────────────────────────────────────────────
 printf '\nthe decision lives in one place\n'
 if [ -f "$ADR" ]; then

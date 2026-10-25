@@ -1,0 +1,189 @@
+# Nightly image scan — what we PIN, not what we build.
+#
+# WHY this workflow exists: ci.yml's `container-scan` builds cms-admin-panel:scan from our own
+# Dockerfile and scans that one image. Every third-party image this stack runs (postgres, nginx,
+# redis, vault, the monitoring pair, …) is digest-pinned in docker-compose*.yml and nothing reads
+# those digests, so a CVE published against an image we already run has no signal anywhere: the
+# stack keeps starting the vulnerable digest and nobody is told. Measured by hand 2026-10-25 with
+# this same trivy: postgres:15 carried 88 CRITICAL/HIGH findings, 26 of them fixable, and no job
+# in this repository would ever have said so.
+#
+# WHY it is NOT part of ci.yml and NOT in the `CI` aggregator: this is an advisory scan, and it
+# fails on data that arrives without a commit — a CVE feed overnight, a base image rebuilt. A
+# merge gate that goes red for a reason the PR did not cause teaches people to bypass it, so the
+# nightly run is its own signal and the required check stays a property of the diff. Nothing in
+# ci.yml references this file; tests/test_image_scan_workflow.sh fails if that changes.
+#
+# WHY it costs nothing: the repository is public, so scheduled runs are unmetered. It touches no
+# host, holds no credential beyond the default token (contents: read, issues: write), and pulls
+# only public images from public registries.
+name: Nightly image scan
+
+on:
+  schedule:
+    # 03:17 Asia/Bangkok (UTC+07) = 20:17 UTC the previous day. Chosen, not defaulted:
+    #   * after the CVE feeds and the registries have had the whole day to publish — anything that
+    #     landed during the working day is in the 03:17 scan, so the finding is waiting when the
+    #     operator starts;
+    #   * 03:17 local is the quietest hour of a contest stack: no round in progress, no backup
+    #     window (those run just after midnight), so a run that pulls a dozen manifests contends
+    #     with nothing;
+    #   * offset from :00 and from the hour Renovate fires, so it does not queue behind the burst
+    #     of scheduled workflows GitHub starts on the hour.
+    - cron: '17 20 * * *'
+  # On demand, so a CVE published mid-day can be checked without waiting for the window, and so
+  # the first run after this lands is not a day away.
+  workflow_dispatch:
+
+# Read the tree; write one issue. No packages, no registry login, no deploy token — the scan reads
+# public images anonymously and the notification needs nothing but the default GITHUB_TOKEN.
+permissions:
+  contents: read
+  issues: write
+
+# WHY serialised: two runs would both replace the same issue body, and the slower one would win
+# with older data. Interleaving two nightly scans has no upside, so they queue.
+concurrency:
+  group: nightly-image-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: Trivy (pinned third-party images)
+    runs-on: ubuntu-latest
+    # 13 images × 2 passes, plus the vulnerability database on a cold cache. Generous because a
+    # timeout is indistinguishable from "nothing found" in the job list, which is the failure
+    # mode this workflow exists to remove.
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      # The suppressions are the waiver table, exactly as ci.yml's container-scan does it: the ids
+      # come from security/waivers.json and are rendered per run, so no CVE can be ignored by
+      # editing a file in the tree. One waiver mechanism, one ignore file (docs/SECURITY-FEED.md).
+      - name: Render the waiver suppressions
+        run: bash scripts/__security_waivers.sh render --trivy .trivyignore
+
+      # The inventory is discovered from the compose files, never listed here: a hardcoded list
+      # goes stale the day a service is added, and a stale list reads as coverage. The step fails
+      # on zero refs, so a renamed file or an empty glob cannot pass as a clean scan.
+      - name: Discover the pinned third-party images
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          mkdir -p "$out"
+          # No pipe: `bash … | tee` would report tee's exit status, and a discovery that found
+          # nothing would then look like a successful step.
+          bash scripts/__image_scan.sh refs --out "$out" > "$out/refs.txt"
+          cat "$out/refs.txt"
+          echo "refs scanned: $(grep -c . "$out/refs.txt")"
+
+      # The policy run: severity CRITICAL,HIGH with --ignore-unfixed and the rendered waivers, the
+      # same flags ci.yml passes the trivy action. Exit 1 means a fixable finding exists, and that
+      # is the only thing that reddens this job. The verdict is written to a state file so the
+      # notification can tell "found something" from "could not tell" — they look identical in
+      # an exit code once the summary step has run.
+      - name: Scan every pinned image
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          set +e
+          bash scripts/__image_scan.sh scan --refs "$out/refs.txt" --out "$out"
+          rc=$?
+          exit "$rc"
+
+      # Independent of the CVE data: this answers "does the tag still serve the digest we pinned".
+      # It is the cheap win (bump the digest, the table often clears) and it runs even when the
+      # scan failed, because a moved tag is a fact about the registry, not about our scan.
+      - name: Check pinned digests against the registries
+        if: always()
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          bash scripts/__image_scan.sh drift --refs "$out/refs.txt" --out "$out"
+
+      # The job summary is the half that stays readable: every ref with its total, its fixable
+      # count and its top three packages, so the unfixed tail stays countable without a red run
+      # every night. Written before the job is allowed to fail — a summary that only exists on
+      # green runs is a summary nobody reads on the day it matters.
+      - name: Publish the job summary
+        if: always()
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          bash scripts/__image_scan.sh report --out "$out" \
+            --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      # Notification is one UPSERTED issue, not one per run: a nightly workflow that opens a new
+      # issue every night trains its reader to ignore the title. A stable title, the body replaced
+      # each run, closed when there is nothing fixable, and an explicit INCOMPLETE body when the
+      # scan could not reach a verdict — so yesterday's table never reads as today's.
+      - name: Upsert the tracking issue
+        if: always()
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          IMAGE_SCAN_OUT: ${{ runner.temp }}/image-scan
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const dir = process.env.IMAGE_SCAN_OUT;
+            const title = 'Nightly image scan: fixable CVEs';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            // The state file is written only when every ref produced a verdict. Its absence is
+            // the difference between "clean" and "we do not know", and it must never be reported
+            // as clean: an unanswered scan is exactly the hole this workflow closes.
+            const stateFile = path.join(dir, 'state');
+            const state = fs.existsSync(stateFile)
+              ? fs.readFileSync(stateFile, 'utf8').trim()
+              : 'incomplete';
+
+            const issueFile = path.join(dir, 'issue.md');
+            const body = fs.existsSync(issueFile)
+              ? fs.readFileSync(issueFile, 'utf8')
+              : [
+                  '<!-- image-scan:state=incomplete refs=0 fixable=? at=' + new Date().toISOString() + ' -->',
+                  '',
+                  '> **INCOMPLETE RUN — no scan table was produced.**',
+                  '>',
+                  `> The report step did not finish (${runUrl}), so no result is current.`,
+                ].join('\n');
+
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'all',
+              per_page: 100,
+            });
+            const existing = issues.find((i) => i.title === title && !i.pull_request);
+
+            // Clean closes, anything else opens: a closed issue with a "clean as of <date>" body
+            // is the lowest-noise way to say "checked, nothing to do" without a second channel.
+            const nextState = state === 'clean' ? 'closed' : 'open';
+
+            if (existing) {
+              await github.rest.issues.update({
+                owner,
+                repo,
+                issue_number: existing.number,
+                title,
+                body,
+                state: nextState,
+              });
+              core.info(`updated issue #${existing.number} (${state} -> ${nextState})`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`created issue #${created.data.number} (${state})`);
+              if (nextState === 'closed') {
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: created.data.number,
+                  state: 'closed',
+                });
+              }
+            }

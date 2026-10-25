@@ -1,15 +1,24 @@
 # Use Node.js for deterministic Next.js builds (avoids Bun runtime crashes in buildx)
-FROM node:20-bookworm-slim AS base
+# WHY the digest: Node 20 went EOL on 2026-03-24 — the 2026-10-21 security release shipped
+# fixes for 26.x/24.x/22.x only and EOL lines are affected by every one of them. 24 is the
+# active LTS (fixes to 2028-04). The readable tag stays for humans; the digest is what fixes
+# the bits, because a floating `node:20-bookworm-slim` can change under a build with no PR.
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS base
 WORKDIR /app
 
 # WHY bun + frozen lockfile: the committed bun.lock is the tree `bun audit`
 # verifies — a pnpm --no-frozen-lockfile install could silently drift from it.
 # Prisma picks its engine binaries by probing the platform's OpenSSL, so slim
 # images need openssl at install time; bun's installer needs curl/unzip/certs.
+#
+# WHY bun is installed at a pinned version: an unpinned `curl https://bun.com/install | bash`
+# installs whatever bun is current at build time, so two builds of the same commit can carry
+# different runtimes and a bun advisory is neither reliably fixed nor reliably absent. The
+# version argument pins the release; the lockfile it installs from is already committed.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl curl ca-certificates unzip \
  && rm -rf /var/lib/apt/lists/* \
- && curl -fsSL https://bun.com/install | bash
+ && curl -fsSL https://bun.com/install | bash -s "bun-v1.4.2"
 ENV BUN_INSTALL="/root/.bun"
 ENV PATH="${BUN_INSTALL}/bin:${PATH}"
 
@@ -44,7 +53,7 @@ RUN ./node_modules/.bin/prisma generate --schema=./prisma/schema.prisma
 RUN DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy" bun run build
 
 # Production image, copy all the files and run next
-FROM node:20-bookworm-slim AS release
+FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS release
 
 # Install Docker CLI, make and python3 to allow managing containers, running make
 # commands, and running `make env` (./cms config sync) from inside the container.
@@ -55,7 +64,7 @@ FROM node:20-bookworm-slim AS release
 # COMPOSE_CMD with `docker compose version` and nothing here calls buildx, the model
 # plugin or rootless docker. They are attack surface with no caller, and they are
 # what the image scan reports on, so they are removed rather than shipped.
-# WHY the upgrade: `node:20-bookworm-slim` lags the Debian point releases that are
+# WHY the upgrade: the Debian slim base lags the point releases that are
 # already published, and the image scan reads what ships — libcap2, libgnutls30 and
 # libpcre2-8-0 all had fixes available that the base image had not picked up. Taking
 # them here means the image carries today's security updates instead of waiting for

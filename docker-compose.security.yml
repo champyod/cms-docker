@@ -1,11 +1,22 @@
 # Security feed — Renovate (version PRs) + Diun (stale images) + the two scanners.
 #
 # ADDITIVE: this file never replaces docker-compose.yml and edits no file the base stack owns.
-# Enable with:
-#   docker compose --env-file .env.security -f docker-compose.yml -f docker-compose.security.yml --profile security up -d
-# Disabled by default twice over: nothing here starts without `--profile security`, and the
-# long-running containers do no work until SECURITY_ENABLED=1 — documented in
-# config.toml.example [infra] beside MONITORING_ENABLED, values in .env.security.
+#
+# Enable with ONE command:  make security-up        (dry run first: make security-dry-run)
+# Off-switch:               make security-off
+# The supported procedure is docs/SECURITY-FEED.md -> Operating; the command is implemented in
+# Makefile + scripts/__security_stack.sh, which is what keeps the invocation scoped.
+#
+# DO NOT enable this overlay with a bare `up -d` over the merged project. The label blocks at the
+# bottom of this file add Diun's opt-in labels to admin-panel-next, nginx-proxy, database,
+# redis-rate-limit, monitor and worker; a label is part of a container's config hash, so an unscoped
+# `--profile security up -d` RECREATES every one of them — a full restart of the panel, the proxy and
+# the database, on a box mid-contest, to turn on an optional feed. The supported command names the
+# eight overlay services explicitly and passes --no-deps.
+#
+# Disabled by default twice over: nothing here starts without its profile, and the long-running
+# containers do no work until SECURITY_ENABLED=1 — documented in config.toml.example [infra] beside
+# MONITORING_ENABLED, values in .env.security.
 #
 # Host interaction, the complete list: /:/rootfs:ro on security-scan and
 # /var/run/docker.sock:ro on diun. Both read-only; nothing in this file writes to the host.
@@ -191,9 +202,8 @@ services:
   # second definition of "expired" and "stale".
   #
   # WHY its own profile: `--profile security` starts the feed (Renovate, Diun, the scanners) without
-  # starting a notifier. Turning the channel on is then one explicit decision:
-  #   docker compose --env-file .env --env-file .env.security \
-  #     -f docker-compose.yml -f docker-compose.security.yml --profile security-signal up -d security-signal
+  # starting a notifier. Turning the channel on is then one explicit decision, and `make security-up`
+  # makes it together with the feed (`SECURITY_ARGS=--feed-only` starts the feed without it).
   #
   # WHY no host mount and no docker socket: it reads Postgres, Prometheus and one webhook. Nothing on
   # the host is touched, and the container is read-only with every capability dropped.

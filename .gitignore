@@ -103,3 +103,7 @@ ranking-web/tests/fixtures/parity/captured/*/
 # Generated per CI run from the panel's waiver table (security/waivers.json): the ids that may be
 # suppressed are waiver rows, so a local .trivyignore must never be committed.
 .trivyignore
+
+# scripts/__image_scan.sh's working directory: trivy reports, the drift table and the issue body it
+# renders. Run output, not source — the nightly workflow writes it under $RUNNER_TEMP.
+/.image-scan/
