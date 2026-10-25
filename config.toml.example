@@ -252,7 +252,7 @@ BACKUP_MAX_SIZE_GB = 5          # num; retention cap — oldest archives pruned 
 DOCKER_GID = 999                # num; host group of /var/run/docker.sock, added to the monitor container via group_add for docker API access; find with: stat -c %g /var/run/docker.sock
 DOCKER_UID = 1000               # num; find with: stat -c %u backups (monitor image build arg; backup write access)
 OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP/hostname of the offsite backup target — __offsite-sync.sh rsyncs archives to it over ssh (required, no default)
-OFFSITE_ENCRYPT_KEY = ""        # secret; optional gpg --symmetric passphrase — archives are encrypted before offsite transfer when set; generate with: openssl rand -hex 32
+OFFSITE_ENCRYPT_KEY = ""        # secret; gpg --symmetric passphrase, REQUIRED for an offsite copy — with it empty __offsite-sync.sh refuses to ship (OFFSITE_ALLOW_PLAINTEXT=1, typed for one run, is the only way to accept a plaintext copy); generate with: openssl rand -hex 32
 OFFSITE_BACKUP_PATH = "/var/local/backups/cms" # str; reserved — no code reads it; __offsite-sync.sh uses OFFSITE_REMOTE_PATH for the remote destination
 MONITORING_ENABLED = 0          # enum:0,1; 1 = render nginx stub_status /metrics so Prometheus can scrape it (re-run domain setup --apply to regenerate the vhost)
 PROMETHEUS_PORT = 9090          # port; host port Prometheus publishes on (PROMETHEUS_BIND_IP:PROMETHEUS_PORT:9090)

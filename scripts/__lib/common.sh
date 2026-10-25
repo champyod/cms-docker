@@ -576,6 +576,218 @@ docs_path_from_toml() {
 }
 
 # ---------------------------------------------------------------------------
+# Backup observability — the textfile the monitoring stack scrapes
+# ---------------------------------------------------------------------------
+# WHY a textfile and not a new endpoint or a new container: node-exporter already
+# runs in docker-compose.monitoring.yml with the host mounted read-only, and Prometheus
+# already scrapes it. One file under the backup tree — which that mount already reaches
+# through the explicit /metrics bind — turns "how old is the newest backup" into a time
+# series with no new service, no restart of anything, and no second alerting path. The
+# writer is the run that holds the fact (a backup run, an offsite sync), so the timestamp
+# cannot drift from what is actually on disk.
+#
+# WHAT A READER MUST KNOW, because each of these is a way to read a green light off a
+# red box:
+#   * `*_timestamp_seconds 0` means NEVER, not 1970. No run has ever recorded a success
+#     under this contract, so `*_stale` is 1 and `*_age_seconds` is the whole age of the
+#     box. Fail closed: an unproven backup is not a green light.
+#   * `*_age_seconds` is computed when the file is written, so the value that stays true
+#     forever is the timestamp — `time() - cms_backup_last_success_timestamp_seconds` is
+#     the age at scrape time. node_textfile_mtime_seconds{file="cms_backup.prom"} says
+#     whether anything is still writing this file at all, which is the one fact a
+#     timestamp cannot carry by itself.
+#   * the cms_offsite_* families are ABSENT, not zero, when no offsite sync has ever run.
+#     Absent is "not configured"; a zero would be a permanent alarm on every box that
+#     never ships offsite, and an alarm nobody can clear stops being read.
+BACKUP_METRICS_FILE="cms_backup.prom"
+BACKUP_METRICS_SUCCESS_FILE="last-backup-success"
+BACKUP_METRICS_OFFSITE_FILE="offsite-last-ship.env"
+readonly BACKUP_METRICS_STALE_DEFAULT_HOURS=26
+
+# backup_metrics_dir <backup_root> — where the textfile and the state files live.
+# Beside db/ and manifest.json rather than in a directory of its own so the same bind
+# mount the backup tree already has carries it, and one path means one directory.
+backup_metrics_dir() {
+  printf '%s/metrics' "${1%/}"
+}
+
+# _metrics_state_read <file> <KEY> — the value of one KEY=VALUE line, or nothing.
+# WHY substr and not a field split: a destination carries ':' and can carry '=', so the
+# value is everything after the first '=' of the matching line and nothing else.
+_metrics_state_read() {
+  local file="$1" key="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v k="$key" 'index($0, k "=") == 1 { print substr($0, length(k) + 2); exit }' \
+    "$file" 2>/dev/null || true
+}
+
+# _metrics_write <file> <line>... — replace the file atomically.
+# WHY a rename and not a write in place: Prometheus scrapes every 15s and a reader must
+# never see half a family. The mode is 0644 because node-exporter runs as nobody in its
+# own container and has to read the file; what it carries is ages, never a secret.
+_metrics_write() {
+  local file="$1"
+  shift
+  local dir tmp
+  dir="$(dirname -- "$file")"
+  mkdir -p -- "$dir" 2>/dev/null || return 1
+  tmp="$(mktemp "${dir}/.$(basename -- "$file").XXXXXX" 2>/dev/null)" || return 1
+  if ! printf '%s\n' "$@" > "$tmp" 2>/dev/null; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+  chmod 644 "$tmp" 2>/dev/null || true
+  if ! mv -- "$tmp" "$file" 2>/dev/null; then
+    rm -f -- "$tmp"
+    return 1
+  fi
+}
+
+# record_backup_success <backup_root> <epoch> — the one write that says a run succeeded.
+# WHY a separate marker and not the dump's mtime: a dump on disk is not proof of a
+# recorded run — a run that kept its dump but could not record it exits 3, and its file
+# would otherwise read as a success for the whole staleness window.
+record_backup_success() {
+  local root="${1:?record_backup_success: <backup_root> required}"
+  local epoch="${2:?record_backup_success: <epoch> required}"
+  [[ "$epoch" =~ ^[0-9]+$ ]] || return 1
+  _metrics_write "$(backup_metrics_dir "$root")/${BACKUP_METRICS_SUCCESS_FILE}" \
+    "LAST_BACKUP_SUCCESS_EPOCH=${epoch}"
+}
+
+# record_offsite_ship <backup_root> <epoch> <encrypted 0|1> <archives> <destination>
+# WHY the destination and the encryption flag are stored with the timestamp: "the offsite
+# copy is 30h old" is only actionable next to where it went and whether it went
+# encrypted, and the ciphertext-or-not fact is the one an operator must be able to check
+# without reading a log.
+record_offsite_ship() {
+  local root="${1:?record_offsite_ship: <backup_root> required}"
+  local epoch="${2:?record_offsite_ship: <epoch> required}"
+  local encrypted="${3:?record_offsite_ship: <encrypted> required}"
+  local archives="${4:?record_offsite_ship: <archives> required}"
+  local destination="${5:-unknown}"
+  [[ "$epoch" =~ ^[0-9]+$ ]] || return 1
+  [[ "$encrypted" == "0" || "$encrypted" == "1" ]] || return 1
+  [[ "$archives" =~ ^[0-9]+$ ]] || return 1
+  _metrics_write "$(backup_metrics_dir "$root")/${BACKUP_METRICS_OFFSITE_FILE}" \
+    "OFFSITE_LAST_SHIP_EPOCH=${epoch}" \
+    "OFFSITE_LAST_SHIP_ENCRYPTED=${encrypted}" \
+    "OFFSITE_LAST_SHIP_ARCHIVES=${archives}" \
+    "OFFSITE_LAST_SHIP_DESTINATION=${destination}"
+}
+
+# publish_backup_metrics <backup_root> [last_run_exit_code]
+# Rewrites the textfile from what is on disk now, so any writer produces the same file
+# for the same tree and two writers cannot disagree. Returns non-zero when the file could
+# not be written; a caller reports that and never fails a backup over it — the backup is
+# the product, this is the observation of it.
+publish_backup_metrics() {
+  local root="${1:?publish_backup_metrics: <backup_root> required}"
+  local last_exit="${2:-}"
+  local dir file now stale_after newest_dump dump_epoch success_epoch
+  local stale=0
+  local -a lines=()
+
+  dir="$(backup_metrics_dir "$root")"
+  file="${dir}/${BACKUP_METRICS_FILE}"
+  now="$(date +%s)"
+
+  # The same knob the monitor's own staleness warning reads, with the same default, so
+  # the series and the log line can never disagree about when a backup is late.
+  stale_after="${BACKUP_STALE_HOURS:-$BACKUP_METRICS_STALE_DEFAULT_HOURS}"
+  [[ "$stale_after" =~ ^[0-9]+$ ]] || stale_after="$BACKUP_METRICS_STALE_DEFAULT_HOURS"
+
+  newest_dump="$(ls -1t "${root%/}/db"/cmsdb-*.dump 2>/dev/null | head -n 1 || true)"
+  dump_epoch=0
+  if [[ -n "$newest_dump" ]]; then
+    dump_epoch="$(stat -c %Y "$newest_dump" 2>/dev/null || echo 0)"
+    [[ "$dump_epoch" =~ ^[0-9]+$ ]] || dump_epoch=0
+  fi
+
+  success_epoch="$(_metrics_state_read "${dir}/${BACKUP_METRICS_SUCCESS_FILE}" LAST_BACKUP_SUCCESS_EPOCH)"
+  [[ "$success_epoch" =~ ^[0-9]+$ ]] || success_epoch=0
+  # WHY the marker alone is not enough: it outlives the archive it describes — rotation,
+  # a restore rehearsal or `down -v` can remove the dump while the marker stays — and a
+  # timestamp naming a backup nobody can restore is worse than no timestamp at all. No
+  # dump under db/ is "no proven backup", whatever the marker says.
+  if (( dump_epoch == 0 )); then
+    success_epoch=0
+  fi
+  if (( success_epoch == 0 )); then
+    stale=1
+  elif (( now - success_epoch > stale_after * 3600 )); then
+    stale=1
+  fi
+
+  lines+=(
+    "# HELP cms_backup_last_success_timestamp_seconds Unix time of the newest backup run that reported success; 0 means no run has ever recorded one."
+    "# TYPE cms_backup_last_success_timestamp_seconds gauge"
+    "cms_backup_last_success_timestamp_seconds ${success_epoch}"
+    "# HELP cms_backup_last_success_age_seconds Age of that run in seconds as of the moment this file was written; without a recorded success it is the whole age of the box."
+    "# TYPE cms_backup_last_success_age_seconds gauge"
+    "cms_backup_last_success_age_seconds $(( now - success_epoch ))"
+    "# HELP cms_backup_stale 1 when the newest proven backup is older than BACKUP_STALE_HOURS or no backup has ever been proven."
+    "# TYPE cms_backup_stale gauge"
+    "cms_backup_stale ${stale}"
+    "# HELP cms_backup_newest_dump_timestamp_seconds Unix time of the newest cmsdb-*.dump on disk, whatever run wrote it; 0 means there is none."
+    "# TYPE cms_backup_newest_dump_timestamp_seconds gauge"
+    "cms_backup_newest_dump_timestamp_seconds ${dump_epoch}"
+  )
+
+  if [[ "$last_exit" =~ ^[0-9]+$ ]]; then
+    local run_success=0
+    (( last_exit == 0 )) && run_success=1
+    lines+=(
+      "# HELP cms_backup_last_run_exit_code Exit status of the most recent backup run (0 complete, 1 nothing usable, 2 disk guard, 3 dump unrecorded)."
+      "# TYPE cms_backup_last_run_exit_code gauge"
+      "cms_backup_last_run_exit_code ${last_exit}"
+      "# HELP cms_backup_last_run_success 1 when the most recent backup run exited 0."
+      "# TYPE cms_backup_last_run_success gauge"
+      "cms_backup_last_run_success ${run_success}"
+    )
+  fi
+
+  local offsite_file offsite_epoch offsite_age
+  offsite_file="${dir}/${BACKUP_METRICS_OFFSITE_FILE}"
+  if [[ -f "$offsite_file" ]]; then
+    offsite_epoch="$(_metrics_state_read "$offsite_file" OFFSITE_LAST_SHIP_EPOCH)"
+    [[ "$offsite_epoch" =~ ^[0-9]+$ ]] || offsite_epoch=0
+    offsite_age=$(( now - offsite_epoch ))
+    local offsite_stale=0
+    if (( offsite_epoch == 0 )); then
+      offsite_stale=1
+    elif (( offsite_age > stale_after * 3600 )); then
+      offsite_stale=1
+    fi
+    lines+=(
+      "# HELP cms_offsite_last_ship_timestamp_seconds Unix time of the newest offsite sync that reported success; 0 means one has never succeeded."
+      "# TYPE cms_offsite_last_ship_timestamp_seconds gauge"
+      "cms_offsite_last_ship_timestamp_seconds ${offsite_epoch}"
+      "# HELP cms_offsite_last_ship_age_seconds Age of that sync in seconds as of the moment this file was written."
+      "# TYPE cms_offsite_last_ship_age_seconds gauge"
+      "cms_offsite_last_ship_age_seconds ${offsite_age}"
+      "# HELP cms_offsite_stale 1 when the newest offsite copy is older than BACKUP_STALE_HOURS."
+      "# TYPE cms_offsite_stale gauge"
+      "cms_offsite_stale ${offsite_stale}"
+      "# HELP cms_offsite_last_ship_encrypted 1 when the newest offsite copy was encrypted before transfer, 0 when it was shipped in the clear."
+      "# TYPE cms_offsite_last_ship_encrypted gauge"
+      "cms_offsite_last_ship_encrypted $(_metrics_state_read "$offsite_file" OFFSITE_LAST_SHIP_ENCRYPTED)"
+      "# HELP cms_offsite_last_ship_archives Number of archives in the newest offsite sync."
+      "# TYPE cms_offsite_last_ship_archives gauge"
+      "cms_offsite_last_ship_archives $(_metrics_state_read "$offsite_file" OFFSITE_LAST_SHIP_ARCHIVES)"
+    )
+  fi
+
+  lines+=(
+    "# HELP cms_backup_metrics_written_timestamp_seconds Unix time this file was written; if it stops advancing nothing is publishing backup ages any more."
+    "# TYPE cms_backup_metrics_written_timestamp_seconds gauge"
+    "cms_backup_metrics_written_timestamp_seconds ${now}"
+  )
+
+  _metrics_write "$file" "${lines[@]}"
+}
+
+# ---------------------------------------------------------------------------
 # docs_language <docs_path>
 # ---------------------------------------------------------------------------
 # The language folder a docs tree exposes: the directory under <docs_path> holding an

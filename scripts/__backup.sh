@@ -580,7 +580,11 @@ run_backup() {
   ( require_disk_free_gb "$disk_guard_target" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
   if (( disk_guard_status != 0 )); then
     send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
-    exit "$disk_guard_status"
+    # WHY return and not exit: the entry point publishes the run's verdict — including this
+    # one — to the staleness textfile, and an exit here would skip it and leave the last
+    # successful timestamp standing while the box can no longer take a backup. The status
+    # is unchanged, so a caller reads exactly what the exit contract promises.
+    return "$disk_guard_status"
   fi
 
   # After the guard, so a run that cannot start leaves no directories behind.
@@ -923,5 +927,22 @@ fi
 case "$BACKUP_MODE" in
   cleanup) run_cleanup_only ;;
   help) usage ;;
-  *) if [[ "$BACKUP_STDOUT" -eq 1 ]]; then run_stdout_dump; else run_backup; fi ;;
+  *) if [[ "$BACKUP_STDOUT" -eq 1 ]]; then
+       run_stdout_dump
+     else
+       # WHY the verdict is published here and nowhere else: this is the one place that
+       # knows how the run ended, and a backup that stops working is only visible as the
+       # age of the last success — which nothing could read before this file existed. The
+       # marker is written only for exit 0, so a run that kept its dump but could not
+       # record it (3) or that the disk guard stopped (2) never resets the clock.
+       run_status=0
+       run_backup || run_status=$?
+       if (( run_status == 0 )); then
+         record_backup_success "$BACKUP_ROOT" "$(date +%s)" ||
+           log_warn "could not record this run as the newest successful backup under $(backup_metrics_dir "$BACKUP_ROOT")"
+       fi
+       publish_backup_metrics "$BACKUP_ROOT" "$run_status" ||
+         log_warn "could not publish the backup metrics under $(backup_metrics_dir "$BACKUP_ROOT")"
+       exit "$run_status"
+     fi ;;
 esac

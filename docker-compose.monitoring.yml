@@ -77,10 +77,21 @@ services:
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)"
+      # WHY the textfile collector: it is how a fact that only a script knows becomes a
+      # Prometheus series without adding a service. The backup and offsite runs write
+      # backups/metrics/cms_backup.prom (see publish_backup_metrics in scripts/__lib/common.sh),
+      # and this reads it — so "how old is the newest backup" is scraped by the job that is
+      # already here, with no exporter to run and nothing in the production stack restarted.
+      - "--collector.textfile.directory=/metrics"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host:ro,rslave
+      # WHY read-only and why this directory: the writers are the backup run and the offsite
+      # sync, both of which already own the archive tree, so the file is published where the
+      # facts are rather than in a second location that can drift. Read-only because the
+      # exporter's only job is to read it.
+      - ./backups/metrics:/metrics:ro
     networks:
       - cms-network
     # No host ports — scraped internally as node-exporter:9100
