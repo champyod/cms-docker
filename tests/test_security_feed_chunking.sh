@@ -109,6 +109,7 @@ if ! start_server 18801 0; then
   no "the capture server did not start"
 else
   ( set +e
+    SECURITY_RUN_STARTED_AT="2026-10-25T10:00:00Z" \
     PANEL_URL="http://127.0.0.1:18801" SECURITY_FEED_TOKEN="test-token" SECURITY_HOST="test-host" \
       sh -c ". '$FEED_LIB'; feed_post rootfs '$WORK/findings.json' true" > "$WORK/run1.log" 2>&1
     echo $? > "$WORK/run1.rc" )
@@ -150,6 +151,14 @@ else
   done < <(find "$WORK/req-18801" -name 'req-*.json')
   [[ "$bodies_ok" == "1" ]] && ok "every batch carries the contract's source and host" \
                             || no "a batch dropped the source/host envelope"
+
+  runs=$(find "$WORK/req-18801" -name 'req-*.json' -exec jq -r '.run_started_at' {} + | sort -u | wc -l | tr -d ' ')
+  run_value=$(find "$WORK/req-18801" -name 'req-*.json' -exec jq -r '.run_started_at' {} + | sort -u | head -1)
+  if [[ "$runs" == "1" && -n "$run_value" ]]; then
+    ok "every batch carries the same run_started_at ($run_value)"
+  else
+    no "run_started_at differs across batches (${runs} distinct values) — resolution would close the run's own rows"
+  fi
 
   auth="$(cat "$WORK/req-18801"/hdr-01.txt 2>/dev/null)"
   [[ "$auth" == "Bearer test-token" ]] && ok "every batch carries the feed token" \

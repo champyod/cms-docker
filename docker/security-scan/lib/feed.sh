@@ -6,8 +6,13 @@
 # trivy path, the osv path and the Diun translator is how one of them silently drifts from
 # the contract. Every producer in this image ends here.
 #
-# Contract fields owned by this file: source, host, complete, the auth header, the 2000-item
-# cap. Per-source shapes live in *.jq beside it and nowhere else.
+# Contract fields owned by this file: source, host, complete, run_started_at, the auth header and
+# the batch size. Per-source shapes live in *.jq beside it and nowhere else.
+#
+# WHY run_started_at: a complete push resolves the rows this run did not see, and a run can be
+# several pushes (a 34,606-finding host scan is 139 of them). The panel cannot tell "not seen by
+# this run" from "sent in an earlier batch" without the instant the run began, so the producer
+# sends it with every batch and the panel resolves only rows last seen before it.
 set -eu
 
 feed_log() { printf '%s security-feed: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >&2; }
@@ -21,6 +26,12 @@ feed_host() {
         hostname 2>/dev/null || printf 'unknown'
     fi
 }
+
+# The instant this run began, computed once however many batches follow. SECURITY_RUN_STARTED_AT
+# lets scan.sh stamp one run across several modes; the fallback is this process's own start.
+if [ -z "${SECURITY_RUN_STARTED_AT:-}" ]; then
+    SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+fi
 
 # feed_post SOURCE FINDINGS_FILE COMPLETE
 #   SOURCE   diun | rootfs | osv (the contract's enum — never anything else)
@@ -56,7 +67,8 @@ feed_post() {
 
     if [ "$_count" -eq 0 ]; then
         _body=$(jq -c --arg source "$_source" --arg host "$(feed_host)" --argjson complete "$_complete" \
-            '{source: $source, host: $host, findings: ., complete: $complete}' "$_file")
+            --arg run "$SECURITY_RUN_STARTED_AT" \
+            '{source: $source, host: $host, findings: ., complete: $complete, run_started_at: $run}' "$_file")
         _code=$(printf '%s' "$_body" | curl -sS --max-time 60 --retry 3 --retry-connrefused \
             -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${_token}" -H 'Content-Type: application/json' \
@@ -81,7 +93,8 @@ feed_post() {
             --argjson complete "$_claim" \
             --argjson off "$_seen" \
             --argjson lim "$_batch" \
-            '{source: $source, host: $host, findings: (.[$off:$off + $lim]), complete: $complete}' "$_file")
+            --arg run "$SECURITY_RUN_STARTED_AT" \
+            '{source: $source, host: $host, findings: (.[$off:$off + $lim]), complete: $complete, run_started_at: $run}' "$_file")
 
         _size=$(printf '%s' "$_body" | wc -c | tr -d ' ')
         _resp=$(mktemp)

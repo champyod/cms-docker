@@ -14,6 +14,14 @@
 # not another container invocation.
 set -eu
 
+# The instant this invocation began, shared by every mode it runs. WHY it is stamped here and not
+# inside feed.sh: `all` runs osv and rootfs one after the other, and a complete push may only
+# resolve what the whole run did not see. Two different stamps would make the second mode look
+# older than the first mode's rows — safe here only because they are different sources, and
+# needlessly fragile the day one mode feeds two sources.
+SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+export SECURITY_RUN_STARTED_AT
+
 MODE="${1:-help}"
 LIB_DIR="${SECURITY_SCAN_LIB:-/usr/local/lib/security-feed}"
 SRC_DIR="${SRC_DIR:-/src}"

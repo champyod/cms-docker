@@ -41,6 +41,12 @@ export interface FeedPush {
   readonly host: string | null;
   readonly findings: readonly FeedFindingInput[];
   readonly complete: boolean;
+  /**
+   * When the producing run started (UTC). Required: `complete` now means "I saw nothing outside
+   * this run", and the only way to know what "this run" covered across several pushes is the
+   * instant it began. Anything with `last_seen` older than this was not seen by the run.
+   */
+  readonly runStartedAt: Date;
 }
 
 export type FeedValidation =
@@ -180,6 +186,18 @@ export function parseFeedPush(body: unknown): FeedValidation {
   }
   const host = optionalText(record.host);
   if (host === undefined) return { ok: false, error: 'host must be a string or null' };
+  // WHY required and not defaulted: a default of "now" would silently resolve nothing on a
+  // single-push producer and silently resolve *everything* on a chunked one, because the run's
+  // earlier batches would all look older than the last batch. The producer knows when it started;
+  // the panel must not guess.
+  const runStartedAtRaw = record.run_started_at;
+  if (typeof runStartedAtRaw !== 'string') {
+    return { ok: false, error: 'run_started_at must be an ISO-8601 string' };
+  }
+  const runStartedAt = new Date(runStartedAtRaw);
+  if (Number.isNaN(runStartedAt.getTime())) {
+    return { ok: false, error: 'run_started_at is not a date' };
+  }
   if (!Array.isArray(record.findings)) {
     return { ok: false, error: 'findings must be an array' };
   }
@@ -201,6 +219,7 @@ export function parseFeedPush(body: unknown): FeedValidation {
       host: host ?? null,
       findings,
       complete: record.complete === true,
+      runStartedAt,
     },
   };
 }
@@ -233,9 +252,16 @@ function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUn
  * WHY upsert on `(source, key)` and not a delete-then-insert: `first_seen` is the age of the
  * finding and the audit trail names it, so an identical re-push may change only `last_seen`
  * (Prisma's @updatedAt) — recreating the row would reset that history on every scan.
- * WHY `complete` alone resolves: a partial push says "here is what I saw this time", not
- * "here is everything", so treating an absent key as gone would erase findings a producer
- * simply did not include in that batch.
+ * WHY `complete` alone is not enough to resolve: a partial push says "here is what I saw this
+ * time", not "here is everything", so treating an absent key as gone would erase findings a
+ * producer simply did not include in that batch. But a *chunked* complete push says something
+ * weaker than it looks — each batch carries a slice, and only the last one is marked complete.
+ * Resolving "everything not in this push" would then delete the earlier batches' own rows. That
+ * is not hypothetical: a 34,606-finding host scan sent as 139 batches left 110 open.
+ *
+ * So resolution is scoped by the run, not by the push: on `complete`, every open row of this
+ * source (and host, when named) whose `last_seen` predates the run start is resolved. Rows this
+ * run touched carry a `last_seen` at or after that instant, wherever they arrived.
  */
 export async function applyFeedPush(
   client: Prisma.TransactionClient,
@@ -247,18 +273,18 @@ export async function applyFeedPush(
     await client.security_findings.upsert({
       where: { source_key: { source: push.source, key: finding.key } },
       create: { source: push.source, key: finding.key, ...data, first_seen: now, last_seen: now },
-      update: data,
+      update: { ...data, last_seen: now },
     });
   }
 
   if (!push.complete) return { received: push.findings.length, resolved: 0 };
 
-  const keys = push.findings.map((finding) => finding.key);
   const resolved = await client.security_findings.updateMany({
     where: {
       source: push.source,
+      ...(push.host === null ? {} : { host: push.host }),
       resolved_at: null,
-      ...(keys.length > 0 ? { key: { notIn: keys } } : {}),
+      last_seen: { lt: push.runStartedAt },
     },
     data: { resolved_at: now },
   });

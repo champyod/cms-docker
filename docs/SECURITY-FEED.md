@@ -103,9 +103,15 @@ call (the producer sends its full current set); history stays readable and the a
 
 - Auth: `Authorization: Bearer ${SECURITY_FEED_TOKEN}`; the route rejects with 401 otherwise, and the token
   is compared in constant time. No cookie/session path — this is machine-to-machine inside the tailnet.
-- Body: `{ "source": "diun|rootfs|osv", "host": "<name>", "findings": [ … ], "complete": true }`.
-  `complete: true` is what licenses the route to resolve findings the body did not mention; a partial push
-  (`false`) must never resolve anything.
+- Body: `{ "source": "diun|rootfs|osv", "host": "<name>", "findings": [ … ], "complete": true,
+  "run_started_at": "2026-10-25T10:00:00Z" }`.
+  `run_started_at` is **required** — the instant the producing run began, sent with every push of that run.
+  `complete: true` licenses the route to resolve this source's findings (`host`-scoped when the push names
+  one) that were last seen **before `run_started_at`**; a partial push (`false`) must never resolve anything.
+  WHY resolution is run-scoped and not push-scoped: a host scan is delivered in batches (34,606 findings is
+  139 of them), and "everything this body did not mention" would close the earlier batches' own rows — that
+  happened once, on a live host, taking 34,500 findings with it. A row this run touched carries
+  `last_seen >= run_started_at`, wherever it arrived.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
   array ≤ 2000), 422 with the offending index, never a stack trace.
 - Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).
@@ -267,7 +273,8 @@ repository now. In order of preference: (1) bump that one image's digest to what
    payload the ingest route accepts (`201`), and a second identical push changes nothing but `last_seen`.
    Renovate's acceptance is a real dry run against the repo (`renovate --dry-run` over the config) that lists
    the compose-file updates it *would* open PRs for — that is its half, and no POST is expected from it.
-3. `complete: true` with a smaller set sets `resolved_at` on the missing rows; `complete: false` never does.
+3. `complete: true` sets `resolved_at` on this source's rows last seen before the push's `run_started_at`;
+   `complete: false` never resolves anything, and rows written earlier in the same run stay open.
 4. `security.patching` renders for an admin with `security:read` **and** `patching:read`, 403s without
    `patching:read`, and the four overview cards match the page's numbers.
 5. `tsc` 0, `lint` 0 errors, the panel suite green, icons gate green.

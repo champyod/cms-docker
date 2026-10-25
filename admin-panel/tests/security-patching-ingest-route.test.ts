@@ -66,12 +66,22 @@ const mocks = vi.hoisted(() => {
       return existing;
     },
     updateMany: async (args: {
-      where: { source: string; resolved_at: null; key?: { notIn: string[] } };
+      where: {
+        source: string;
+        resolved_at: null;
+        host?: string;
+        last_seen?: { lt: Date };
+        key?: { notIn: string[] };
+      };
       data: { resolved_at: Date };
     }): Promise<{ count: number }> => {
       let count = 0;
       for (const row of rows.values()) {
         if (row.source !== args.where.source || row.resolved_at !== null) continue;
+        // The run-scoped predicate: only rows this run did not touch. Without modelling it the
+        // suite would pass while the real route resolved an earlier batch's own findings.
+        if (args.where.host !== undefined && row.host !== args.where.host) continue;
+        if (args.where.last_seen !== undefined && !(row.last_seen < args.where.last_seen.lt)) continue;
         if (args.where.key !== undefined && args.where.key.notIn.includes(row.key)) continue;
         row.resolved_at = args.data.resolved_at;
         count += 1;
@@ -106,8 +116,17 @@ vi.mock('@/lib/prisma', () => ({ prisma: mocks.fakePrisma }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
 
 const TOKEN = 'test-feed-token';
+const RUN_STARTED_AT = '2026-10-25T00:00:00.000Z';
+/** A symbol value is dropped by JSON.stringify, so a test can demand a body with no run start. */
+const OMIT_RUN = Symbol('omit-run-start');
 
 function push(body: unknown, token: string | null = TOKEN, headers: Record<string, string> = {}): Request {
+  // Every push carries the run start; a body that names it (even with OMIT_RUN) is left alone,
+  // which is how the "contract refuses a run-less push" case stays expressible.
+  const payload =
+    typeof body === 'object' && body !== null && !Array.isArray(body) && !('run_started_at' in body)
+      ? { run_started_at: RUN_STARTED_AT, ...body }
+      : body;
   return new Request('http://localhost/api/security/findings', {
     method: 'POST',
     headers: {
@@ -115,7 +134,7 @@ function push(body: unknown, token: string | null = TOKEN, headers: Record<strin
       ...(token === null ? {} : { authorization: `Bearer ${token}` }),
       ...headers,
     },
-    body: typeof body === 'string' ? body : JSON.stringify(body),
+    body: typeof payload === 'string' ? payload : JSON.stringify(payload),
   });
 }
 
@@ -219,15 +238,27 @@ describe('security feed ingest route', () => {
     expect(second.resolved_at).toBeNull();
   });
 
-  it('resolves rows the complete push no longer mentions', async () => {
-    await call(push({ source: 'rootfs', findings: [finding({ key: 'a' }), finding({ key: 'b' })], complete: true }));
+  it('refuses a push with no run start', async () => {
+    // The contract needs the instant the producing run began; a body without it would leave the
+    // panel unable to tell "not seen this run" from "sent in an earlier batch".
+    const result = await call(
+      push({ source: 'rootfs', findings: [finding()], complete: true, run_started_at: OMIT_RUN }),
+    );
+
+    expect(result.status).toBe(422);
+    expect(mocks.rows.size).toBe(0);
+  });
+
+  it('does not resolve rows written earlier in the same run', async () => {
+    // Both rows arrive inside one run (one run_started_at), so nothing is resolvable — the shape
+    // that used to close 34,500 findings of a 139-batch scan. Resolution across runs is covered in
+    // security-patching-ingest-resolve.test.ts, where the timeline is explicit.
     const result = await call(push({ source: 'rootfs', findings: [finding({ key: 'a' })], complete: true }));
 
     expect(result.status).toBe(201);
-    expect(result.body.resolved).toBe(1);
+    expect(result.body).toMatchObject({ resolved: 0 });
     const rows = [...mocks.rows.values()];
     expect(rows.find((row) => row.key === 'a')?.resolved_at).toBeNull();
-    expect(rows.find((row) => row.key === 'b')?.resolved_at).not.toBeNull();
   });
 
   it('never resolves anything on a partial push', async () => {
