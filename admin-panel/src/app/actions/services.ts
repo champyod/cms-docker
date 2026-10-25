@@ -21,16 +21,11 @@ import {
 
 const execPromise = util.promisify(exec);
 
-/**
- * The mode the next restart uses, so the operator can see what that restart does before running it.
- * Gated like the rest of the read-only service surface: this decides whether a restart pulls or rebuilds.
- */
+/** The mode the next restart uses; gated because it decides whether that restart pulls or rebuilds. */
 export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
     await ensurePermission('service:read');
     const setting = await readDeploymentModeSetting();
-    // Why entity config rather than deployment: what this reads is config.toml's
-    // [admin] DEPLOYMENT_TYPE, the same key updateConfigTomlValues writes, so the view row lands
-    // on the entity the edit that would change it also uses. Keys and the resolved flag only.
+    // Entity 'config', not 'deployment': it reads config.toml [admin] DEPLOYMENT_TYPE.
     await recordAudit({
       verb: 'config:view',
       entity: 'config',
@@ -40,9 +35,7 @@ export async function getDeploymentMode(): Promise<DeploymentModeSetting> {
     return setting;
 }
 
-// Why: client components must not import the fs-backed planner directly —
-// Turbopack bundles client imports for the browser and cannot resolve
-// node:fs. Exposed as a server action (permission-gated like its siblings).
+// Client components cannot import the fs-backed planner: Turbopack cannot resolve node:fs for the browser.
 export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
     await ensurePermission('container:read');
     return analyzeContainerDependenciesLib(containerNames);
@@ -82,14 +75,18 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     return { requiredRestarts: Array.from(finalSet) };
 }
 
+type RestartServicesResult =
+  | { readonly success: true; readonly message: string; readonly output?: string }
+  | { readonly success: false; readonly error: string };
+
 export async function restartServices(
   type: 'all' | 'core' | 'admin' | 'worker' | 'custom',
   customList: string[] | undefined,
   reason: string,
-) {
+): Promise<RestartServicesResult> {
   await ensurePermission('service:restart');
 
-  // Refused here, not only in the dialog: the panel also restarts from paths that ask nobody.
+  // Refused here too: the panel also restarts from paths that ask nobody.
   const justification = normalizeRestartReason(reason);
   if (!justification.ok) return { success: false, error: justification.error };
 
@@ -97,16 +94,10 @@ export async function restartServices(
     const rootDir = getRepoRoot();
     await execPromise('make env', { cwd: rootDir });
 
-    // Why: the restart runs the same project the make targets and ./cms deploy. The partial stack
-    // files declare locally-built image names (cms-monitor, cms-admin-panel-next) that no registry
-    // serves, so an image-mode pull against them can only fail.
+    // The partial stack files name locally-built images, so an image-mode pull against them cannot work.
     const files = await buildComposeFileFlags();
 
-    // Why: inside the panel container the repo is the /repo-root bind mount, so relative bind
-    // sources in docker-compose.yml would resolve to a host path the daemon does not have. Compose
-    // has to be told the host repository directory instead. Resolved once per restart and threaded
-    // through the planner like files/mode. On the host the resolution is null and the command is
-    // left as before; when it cannot be determined we refuse rather than compose against a guess.
+    // In the panel container the repo is a bind mount, so compose needs the host path; refuse if unknown.
     const location = await resolveHostComposeLocation();
     if (!location.ok) {
       return { success: false, error: location.error };
@@ -142,8 +133,7 @@ export async function getServiceStatus() {
     try {
         const { stdout } = await execPromise('docker ps -a --format "{{json .}}"');
         const summary = summariseCmsContainers(stdout);
-        // Why counts and not names: the row answers "who looked at the stack's health", and the
-        // container list it would otherwise carry is what the caller is about to see anyway.
+        // Counts, not container names: the caller is about to see the list anyway.
         await recordAudit({
             verb: 'service:view',
             entity: 'service',

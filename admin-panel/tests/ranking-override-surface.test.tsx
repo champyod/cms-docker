@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { renderWithDictionary } from './support/render-with-dictionary';
 
 const mocks = vi.hoisted(() => ({
   getRankingImpact: vi.fn(),
@@ -55,7 +56,7 @@ afterEach(() => {
 
 describe('ranking override surface shape', () => {
   it('pins the kind chooser as the toolbar beside the impact column', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideSurface
         copy={COPY}
         contestId={9}
@@ -74,7 +75,7 @@ describe('ranking override surface shape', () => {
 
   it('reads the board impact once a target is picked', async () => {
     mocks.getRankingImpact.mockResolvedValue({ ...EMPTY_IMPACT, users: ['Ada Lovelace'] });
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideSurface
         copy={COPY}
         contestId={9}
@@ -104,7 +105,7 @@ describe('ranking override surface shape', () => {
 
 describe('ranking impact column', () => {
   it('lists the board entities the pending row changes', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingImpactDiff
         copy={COPY}
         impact={{ ...EMPTY_IMPACT, columns: ['aplusb'], users: ['Ada Lovelace'], teams: ['Alpha'] }}
@@ -118,13 +119,13 @@ describe('ranking impact column', () => {
   });
 
   it('says so when the pending row changes nothing yet', () => {
-    const { container } = render(<RankingImpactDiff copy={COPY} impact={null} loading={false} />);
+    const { container } = renderWithDictionary(<RankingImpactDiff copy={COPY} impact={null} loading={false} />);
 
     expect(container.textContent).toContain(COPY.impactEmpty);
   });
 
   it('names the silent no-op when the key names another contest', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingImpactDiff
         copy={COPY}
         impact={{ ...EMPTY_IMPACT, scopeMismatch: true }}
@@ -138,7 +139,7 @@ describe('ranking impact column', () => {
 
 describe('ranking override list', () => {
   it('marks the row no enabled binding serves', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideList
         copy={COPY}
         rows={[override({ id: '1', contestId: 9 }), override({ id: '2', contestId: 3 })]}
@@ -156,7 +157,7 @@ describe('ranking override list', () => {
   });
 
   it('narrows the rows by the search term', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideList
         copy={COPY}
         rows={[
@@ -178,7 +179,7 @@ describe('ranking override list', () => {
   });
 
   it('offers a select-all box on the header cell', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideList copy={COPY} rows={[override({})]} orphanContestIds={[]} canOverride />,
     );
 
@@ -186,7 +187,7 @@ describe('ranking override list', () => {
   });
 
   it('marks the row no panel actor wrote and names the ones it can', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideList
         copy={COPY}
         rows={[
@@ -209,7 +210,7 @@ describe('ranking override list', () => {
   });
 
   it('narrows the list to the rows written outside the panel', () => {
-    const { container } = render(
+    const { container } = renderWithDictionary(
       <RankingOverrideList
         copy={COPY}
         rows={[

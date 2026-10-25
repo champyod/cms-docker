@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * The action is the place the rule has to hold: the dialog is one caller, while the panel also
- * restarts services from paths that ask nobody anything (a saved environment setting, a monitor
- * recreation). A refusal that lived only in the dialog would leave those paths unrecorded.
- */
+/** The action is where the rule must hold: other restart paths ask nobody anything. */
 describe('restartServices requires and records a justification', () => {
   beforeEach(() => vi.resetModules());
 
@@ -66,8 +62,7 @@ describe('restartServices requires and records a justification', () => {
     const result = await restartServices('core', undefined, '  applying the kernel patch  ');
 
     expect(result.success).toBe(true);
-    // Why the command and not a call count: `make env` runs through the same executor, so a count
-    // would pin an implementation detail rather than the fact that the restart command ran.
+    // The command, not a call count: `make env` runs through the same executor.
     expect(execMock.mock.calls.map((call) => String(call[0])).join('\n')).toContain('docker compose restart core');
     const row = auditMock.mock.calls.find((call) => (call[0] as { verb?: string }).verb === 'service:restart');
     expect(row).toBeDefined();

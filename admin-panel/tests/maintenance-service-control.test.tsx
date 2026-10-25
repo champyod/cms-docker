@@ -4,10 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import en from '@/dictionaries/en.json';
 
-/**
- * The card is where an operator decides to take a stack down, so it has to say that a board is live
- * *before* the button is pressed, and the restart it triggers has to carry a stated reason.
- */
+/** The card decides a stack outage, so it warns before the press and the restart carries a reason. */
 const { boundMock, restartMock } = vi.hoisted(() => ({
   boundMock: vi.fn(),
   restartMock: vi.fn(),
@@ -23,7 +20,7 @@ vi.mock('@/app/actions/docker-ops', () => ({
   pullLatestImages: async () => ({ success: true }),
   rebuildImages: async () => ({ success: true }),
 }));
-// Why: the dialog inside the card resolves copy through the router, which a bare render lacks.
+// The dialog resolves copy through the router, which a bare render lacks.
 vi.mock('next/navigation', () => ({ usePathname: () => '/en/administration/settings' }));
 
 const { ManualServiceControlCard } = await import('@/components/settings/MaintenanceControls');
@@ -70,8 +67,7 @@ describe('the manual service control card', () => {
   });
 
   it('warns rather than staying quiet when the binding cannot be read', async () => {
-    // Why fail-safe: a missing warning is the dangerous direction, so an unreadable binding has to
-    // render as "there may be a board" rather than as "nothing is running".
+    // Fail-safe: a missing warning is the dangerous direction.
     boundMock.mockRejectedValue(new Error('registry unreachable'));
 
     renderCard();

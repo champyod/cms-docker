@@ -1,12 +1,5 @@
-/**
- * The one rule for a restart's justification, shared by the dialog that asks and the action that runs.
- *
- * Why a module: the action refuses a blank reason, and the dialog refuses one before submitting. Two
- * copies of "is this reason long enough" drift, and the drift is invisible until a restart lands in the
- * audit log with an empty explanation.
- */
+/** The one rule for a restart's justification: the dialog refuses a blank one, the action enforces it. */
 
-/** Enough for a sentence and a half, short enough to stay readable in the audit table. */
 export const MAX_RESTART_REASON_CHARS = 500;
 
 export type RestartJustification =

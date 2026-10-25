@@ -47,9 +47,7 @@ interface DiscordSettings {
   readonly configWebhookUrl: string;
 }
 
-// This screen edits config.toml [infra]: the generated .env is rewritten from it by
-// ./cms config sync (update-server runs one on every deploy), so a backup policy written
-// into .env alone would be gone before the monitor ever restarted with it.
+// config.toml [infra], not the generated .env: ./cms config sync rewrites .env from it on every deploy.
 const BACKUP_POLICY_KEYS: readonly ConfigTomlKey[] = [
   { section: 'infra', key: 'BACKUP_INTERVAL_MINS' },
   { section: 'infra', key: 'BACKUP_MAX_COUNT' },
@@ -67,8 +65,7 @@ const MAINTENANCE_CONFIG_KEYS: readonly ConfigTomlKey[] = [
   ...NOTIFICATION_KEYS,
 ];
 
-// Why: config.toml is the only file the panel reads the webhook from, so the state names what
-// that file holds rather than comparing it against a generated render that only lags it.
+// Names what config.toml holds, since that is the only file the panel reads the webhook from.
 function describeDiscordState(settings: DiscordSettings): string {
   if (!settings.configTomlPresent) {
     return "config.toml not found — run './cms config sync' so saved values survive the next sync.";
@@ -105,10 +102,7 @@ export async function loadMaintenanceData(
 ): Promise<void> {
   if (canConfigure) {
     const result = await readConfigTomlValues(MAINTENANCE_CONFIG_KEYS);
-    // Why it throws instead of leaving the fields empty: a read that failed and a read that
-    // returned nothing look the same on screen, and the surface can only offer a retry if it
-    // is told the load ended without data. A refused key never reaches here — the gate throws
-    // its own "Unauthorized" first, which the surface renders as denied.
+    // Throws so the surface can offer a retry: an empty field cannot be told from a failed read.
     if (!result.success) {
       throw new Error(result.error);
     }
@@ -131,8 +125,7 @@ export async function saveConfiguration(config: MaintenanceActionConfig): Promis
       toast.error(interpolate(toasts.saveFailed, { error: backupResult.error }));
       return;
     }
-    // The webhook goes through its own action: unlike a backup policy it is validated,
-    // because a malformed URL silently drops every monitor alert.
+    // Its own action, not the config write: a malformed webhook URL silently drops every alert.
     const notificationResult = await saveDiscordNotificationSettings({
       webhookUrl: state.data['DISCORD_WEBHOOK_URL'] ?? '',
       roleId: state.data['DISCORD_ROLE_ID'] ?? '',
@@ -213,10 +206,12 @@ export async function runManualBackup(
   }
 }
 
+// The audit row records the cause: saving settings recreates the monitor without an operator asking.
+const NOTIFICATION_SAVED_RESTART_REASON =
+  'Notification settings were saved, so the monitor container was recreated.';
+
 async function restartMonitorOrWarn(toasts: MaintenanceToasts): Promise<void> {
-  // Why this path states its own reason: saving notification settings recreates the monitor without
-  // an operator justifying it, so the audit row records the cause rather than a blank.
-  const restart = await restartServices('custom', ['monitor'], 'Notification settings were saved, so the monitor container was recreated.');
+  const restart = await restartServices('custom', ['monitor'], NOTIFICATION_SAVED_RESTART_REASON);
   if (restart.success) {
     toast.success(toasts.notificationsSavedMonitorRecreated);
     return;

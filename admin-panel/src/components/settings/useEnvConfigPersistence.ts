@@ -48,14 +48,15 @@ async function saveFileUpdates(
   return true;
 }
 
+// The audit row still needs a cause, and no operator typed one on this path.
+const SAVED_SETTING_RESTART_REASON = 'A saved environment setting required these services to restart.';
+
 async function restartAffectedServices(
   requiredRestarts: string[],
   clearRequiredRestarts: () => void,
   toasts: EnvConfigToasts,
 ): Promise<void> {
-  // Why this path states its own reason: the audit row has to say what justified the restart, and
-  // "a saved setting required it" is the truth here — no operator typed anything for this one.
-  const restartRes = await restartServices('custom', requiredRestarts, 'A saved environment setting required these services to restart.');
+  const restartRes = await restartServices('custom', requiredRestarts, SAVED_SETTING_RESTART_REASON);
   if (restartRes.success) {
     toast.success(interpolate(toasts.restarted, { services: requiredRestarts.join(', ') }));
     clearRequiredRestarts();
@@ -72,8 +73,8 @@ export function useEnvConfigPersistence(deps: PersistenceDeps): EnvConfigPersist
   const persistChanges = async (filename: string, shouldRestart: boolean = false): Promise<void> => {
     setSaving(true);
     try {
-      const saved = await saveFileUpdates(filename, data, setOriginalData, toasts);
-      if (!saved) return;
+      const isSaved = await saveFileUpdates(filename, data, setOriginalData, toasts);
+      if (!isSaved) return;
 
       if (shouldRestart && requiredRestarts.length > 0) {
         await restartAffectedServices(requiredRestarts, clearRequiredRestarts, toasts);

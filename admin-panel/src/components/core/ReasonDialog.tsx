@@ -10,14 +10,7 @@ interface ReasonDialogProps {
   readonly onSubmit: (reason: string) => Promise<ReasonActionResult>;
 }
 
-/**
- * Asks for the reason behind an audited action, in the dialog that runs it.
- * Delegates to NameDialog: a reason is one required string, exactly its shape.
- *
- * Why the two fixed strings come from the dictionary: this dialog sits in front of a Thai operator on
- * every audited action in the panel, and "Cancel" beside Thai body copy is the same defect as an
- * alert composed in English — the reader is asked to justify an action in a language they may not read.
- */
+/** Asks for the reason behind an audited action, in the dialog that runs it; labels come from the dictionary. */
 export function ReasonDialog({ request, onClose, onSubmit }: ReasonDialogProps): React.JSX.Element {
   const copy = useDictionary().reasonDialog;
   return (
