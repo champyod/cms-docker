@@ -244,7 +244,9 @@ export function resetStalenessCache(): void {
   cache = null;
 }
 
-export function stalenessCacheMs(env: Record<string, string | undefined> = process.env): number {
+export function stalenessCacheMs(
+  env: Record<string, string | undefined> = { SECURITY_STALENESS_CACHE_MS: process.env.SECURITY_STALENESS_CACHE_MS },
+): number {
   const raw = env.SECURITY_STALENESS_CACHE_MS;
   if (raw === undefined || raw.trim() === '') return DEFAULT_READING_CACHE_MS;
   const parsed = Number(raw);

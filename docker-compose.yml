@@ -497,6 +497,10 @@ services:
       # reach the container that verifies it. Left empty the route refuses every push, which is
       # the correct default — the overlay that produces them is profile-gated and off.
       SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+      # WHY: the digest renders a backup/offsite reading on every patching page. The reading costs a
+      # scrape with a timeout, so the panel caches it for this window; a value compose never passed
+      # would make the config.toml key an advertisement rather than a setting.
+      SECURITY_STALENESS_CACHE_MS: ${SECURITY_STALENESS_CACHE_MS:-15000}
 
       # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
       BACKUP_DIR: ${BACKUP_DIR:-/app/backups}

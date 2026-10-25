@@ -374,14 +374,24 @@ echo "every setting the panel reads is one an operator can actually set"
 #
 # WHY NODE_ENV is exempt: the panel Dockerfile sets it (ENV NODE_ENV=production) and
 # compose has no business overriding a value the image already fixes.
+#
+# WHY the search spans every compose file rather than only the base one: some of this image's code
+# runs in a container the optional overlays define — the security scheduler reads its interval from
+# a service in docker-compose.security.yml, not from the panel service. What must hold is that SOME
+# service in SOME shipped compose file puts the variable in the container that reads it; requiring the
+# base file would demand a variable the panel never reads be pasted into it, which is the opposite of
+# the invariant this check exists for.
 panel_env_vars="$(grep -rhoE 'process\.env\.[A-Z_][A-Z0-9_]*' "${REPO_ROOT}/admin-panel/src" \
   | sed 's/process\.env\.//' | sort -u)"
+compose_files=$(cd "${REPO_ROOT}" && ls docker-compose*.yml)
 for var in ${panel_env_vars}; do
   [[ "${var}" == "NODE_ENV" ]] && continue
-  if grep -qE "^[[:space:]]*${var}:" "${REPO_ROOT}/docker-compose.yml"; then
-    ok "${var} reaches the panel container"
+  # shellcheck disable=SC2086  # the list is word-split on purpose: one grep over every compose file
+  home_file=$(grep -lE "^[[:space:]]*${var}:" ${compose_files} | head -1)
+  if [ -n "${home_file}" ]; then
+    ok "${var} reaches the container that reads it (${home_file})"
   else
-    no "${var} is read by the panel but never put in the container"
+    no "${var} is read by the panel but no compose service puts it in a container"
   fi
 done
 

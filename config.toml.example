@@ -254,6 +254,17 @@ DOCKER_UID = 1000               # num; find with: stat -c %u backups (monitor im
 OFFSITE_TAILNET_NODE = ""       # str; Tailscale IP/hostname of the offsite backup target — __offsite-sync.sh rsyncs archives to it over ssh (required, no default)
 OFFSITE_ENCRYPT_KEY = ""        # secret; gpg --symmetric passphrase, REQUIRED for an offsite copy — with it empty __offsite-sync.sh refuses to ship (OFFSITE_ALLOW_PLAINTEXT=1, typed for one run, is the only way to accept a plaintext copy); generate with: openssl rand -hex 32
 OFFSITE_BACKUP_PATH = "/var/local/backups/cms" # str; reserved — no code reads it; __offsite-sync.sh uses OFFSITE_REMOTE_PATH for the remote destination
+# Security signal (docker-compose.security.yml, profile `security-signal`). The scheduler pushes only
+# what a human must act on — a waiver past its review date, an unwaived CRITICAL, a stale or
+# unevaluable backup copy — through DISCORD_WEBHOOK_URL above. The ages it judges are the ones the
+# backup scripts publish, so BACKUP_STALE_HOURS must be the window those scripts use, and
+# PROMETHEUS_URL must be a scrape target this container can reach: an unreachable target reads
+# "cannot evaluate" and pages once, which is the intended fail-closed answer, not a silent healthy.
+BACKUP_STALE_HOURS = 26         # num; hours before a backup or offsite copy counts as stale — the single definition, read by the backup scripts, the signal and the page
+PROMETHEUS_URL = "http://prometheus:9090" # url; scrape target the security signal reads cms_backup_*/cms_offsite_* from (inside the compose network unless monitoring publishes elsewhere)
+SECURITY_SIGNAL_INTERVAL_SECONDS = 30 # num; seconds between security-signal ticks; a fact that changed inside the same tick interval is picked up on the next one
+SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS = 1500 # num; ms the signal waits for Prometheus before calling the reading unreadable — keep it short so a dead target cannot hold a tick
+SECURITY_STALENESS_CACHE_MS = 15000 # num; ms the panel caches one backup/offsite reading across page renders — the series move once per backup run, so this bounds a dead target's cost to one render per window
 MONITORING_ENABLED = 0          # enum:0,1; 1 = render nginx stub_status /metrics so Prometheus can scrape it (re-run domain setup --apply to regenerate the vhost)
 PROMETHEUS_PORT = 9090          # port; host port Prometheus publishes on (PROMETHEUS_BIND_IP:PROMETHEUS_PORT:9090)
 PROMETHEUS_BIND_IP = "127.0.0.1" # str; address Prometheus publishes on; loopback keeps the metrics API host-local
