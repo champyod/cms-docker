@@ -24,9 +24,11 @@ import {
 } from '@/lib/service-wiring-contract';
 import { RegistryEntryDialog } from './RegistryEntryDialog';
 import { RegistrySection } from './RegistrySection';
+import { ExposureApplyNotice, type ExposureApplyReport } from './ExposureApplyNotice';
+import { RegistryProblems } from './RegistryProblems';
 import { PreviewPanel } from './PreviewPanel';
 import { exposureColumns, registryRowActions, serviceColumns, wiringColumns } from './registry-columns';
-import { persist } from './registry-mutations';
+import { persist, type RegistryWriteResult } from './registry-mutations';
 import {
   BLANK,
   KIND_LABEL_KEY,
@@ -34,6 +36,7 @@ import {
   draftOfExposure,
   draftOfService,
   draftOfWiring,
+  exposureDraftLabel,
   type ContestOption,
   type Draft,
   type Kind,
@@ -72,6 +75,7 @@ export function ServiceRegistryView({
   const [kind, setKind] = useState<Kind | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [pending, setPending] = useState(false);
+  const [applyReport, setApplyReport] = useState<ExposureApplyReport | null>(null);
   const confirm = useConfirm();
   const problems = collectWiringProblems(services, wirings, exposures, frontVhosts);
   // The ownership comes from the renderer's own refusal rule, so the screen and the sync cannot
@@ -87,9 +91,13 @@ export function ServiceRegistryView({
     setKind(next);
   };
 
-  const finish = (result: WriteResult, done: string): void => {
+  /** Keeps the front's verdict on the screen, not only in a toast the operator may miss. */
+  const finish = (result: RegistryWriteResult, done: string, rowLabel?: string): void => {
+    if (result.outcome !== undefined) {
+      setApplyReport({ label: rowLabel ?? done, outcome: result.outcome, error: result.error });
+    }
     if (result.success) {
-      addToast({ type: 'success', title: done });
+      addToast({ type: 'success', title: result.outcome === 'applied' ? copy.apply.applied : done });
       setKind(null);
       router.refresh();
       return;
@@ -114,7 +122,8 @@ export function ServiceRegistryView({
     setPending(true);
     try {
       const label = copyText(copy, KIND_LABEL_KEY[kind]);
-      finish(await persist(kind, draft, copy), interpolate(copy.toast.savedTitle, { kind: label }));
+      const rowLabel = kind === 'exposure' ? exposureDraftLabel(draft) : label;
+      finish(await persist(kind, draft, copy), interpolate(copy.toast.savedTitle, { kind: label }), rowLabel);
     } catch (error) {
       addToast({
         type: 'error',
@@ -142,18 +151,7 @@ export function ServiceRegistryView({
         <p className="text-sm text-muted-foreground">{description}</p>
       </header>
 
-      {problems.length > 0 && (
-        <section className="space-y-2 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
-          <h2 className="text-sm font-medium text-destructive">
-            {interpolate(problems.length === 1 ? copy.problems.one : copy.problems.title, { count: problems.length })}
-          </h2>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-foreground">
-            {problems.map((problem) => (
-              <li key={`${problem.area}:${problem.message}`}>{problem.message}</li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <RegistryProblems problems={problems} copy={copy} />
 
       <Tabs
         items={TAB_IDS.map((id) => ({ id, label: tabLabels[id] }))}
@@ -206,28 +204,31 @@ export function ServiceRegistryView({
       )}
 
       {activeTab === 'exposure' && (
-        <RegistrySection
-          title={copy.kinds.exposure}
-          count={exposures.length}
-          empty={copy.empty.exposure}
-          addLabel={copy.actions.addExposure}
-          onAdd={(): void => open('exposure', { ...BLANK.exposure })}
-          canAdd={canControl}
-          columns={exposureColumns(copy, nameOf, ownershipOf)}
-          rows={exposures}
-          getRowKey={(exposure) => exposure.id}
-          actionsHeader={copy.columns.actions}
-          renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
-            // A curated route is moved in `config.toml`; offering an editor here would promise a
-            // change the next sync refuses.
-            onEdit: ownershipOf(exposure.id)?.kind === 'curated'
-              ? undefined
-              : (): void => open('exposure', draftOfExposure(exposure)),
-            onRemove: (): void => {
-              void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
-            },
-          })}
-        />
+        <div className="space-y-4">
+          <ExposureApplyNotice report={applyReport} />
+          <RegistrySection
+            title={copy.kinds.exposure}
+            count={exposures.length}
+            empty={copy.empty.exposure}
+            addLabel={copy.actions.addExposure}
+            onAdd={(): void => open('exposure', { ...BLANK.exposure })}
+            canAdd={canControl}
+            columns={exposureColumns(copy, nameOf, ownershipOf)}
+            rows={exposures}
+            getRowKey={(exposure) => exposure.id}
+            actionsHeader={copy.columns.actions}
+            renderRowActions={(exposure) => registryRowActions(copy, permissionKeys, {
+              // A curated route is moved in `config.toml`; offering an editor here would promise a
+              // change the next sync refuses.
+              onEdit: ownershipOf(exposure.id)?.kind === 'curated'
+                ? undefined
+                : (): void => open('exposure', draftOfExposure(exposure)),
+              onRemove: (): void => {
+                void remove(`${exposure.hostname}${exposure.path}`, () => removeExposureAction(exposure.id));
+              },
+            })}
+          />
+        </div>
       )}
 
       {activeTab === 'preview' && <PreviewPanel />}

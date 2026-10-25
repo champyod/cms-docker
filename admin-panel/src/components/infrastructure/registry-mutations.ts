@@ -1,5 +1,8 @@
 import {
-  saveExposureAction,
+  saveExposureApplyAction,
+  type ExposureApplyResult,
+} from '@/app/actions/exposureApply';
+import {
   saveServiceAction,
   saveWiringAction,
 } from '@/app/actions/serviceWiring';
@@ -14,8 +17,16 @@ import {
   type ServicesCopy,
 } from './registry-spec';
 
-/** Dispatches one draft to the action that owns its kind, as an edit when the draft carries an id. */
-export async function persist(kind: Kind, draft: Draft, copy: ServicesCopy): Promise<WriteResult> {
+/** What a save answers: a plain write for two kinds, the front's own verdict for an exposure. */
+export type RegistryWriteResult = WriteResult & Partial<Pick<ExposureApplyResult, 'outcome' | 'changed'>>;
+
+/**
+ * Dispatches one draft to the action that owns its kind, as an edit when the draft carries an id.
+ *
+ * WHY an exposure is saved through its own action: a route reaches the front by being written AND
+ * applied, and the panel learns which of the two failed from that action's outcome.
+ */
+export async function persist(kind: Kind, draft: Draft, copy: ServicesCopy): Promise<RegistryWriteResult> {
   const id = optionalInt(draft.id) ?? undefined;
   if (kind === 'service') {
     return saveServiceAction({
@@ -42,7 +53,7 @@ export async function persist(kind: Kind, draft: Draft, copy: ServicesCopy): Pro
       enabled: draft.enabled === 'true',
     });
   }
-  return saveExposureAction({
+  return saveExposureApplyAction({
     id,
     service_id: requiredInt(draft.service_id, copy.errors.numberRequired),
     hostname: draft.hostname ?? '',

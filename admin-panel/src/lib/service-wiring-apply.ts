@@ -27,6 +27,13 @@ export interface ArtifactWrite {
 
 export interface ApplyOptions {
   readonly outDir: string;
+  /**
+   * The directory the comparison is made against, when the caller renders to staging.
+   *
+   * WHY separate from `outDir`: a save writes to staging but must report what differs from what the
+   * front is serving, or every save would look like it added every file.
+   */
+  readonly compareDir?: string;
   readonly frontVhosts?: readonly string[];
   readonly certificate?: CertificateSpec;
 }
@@ -48,25 +55,29 @@ async function readExisting(file: string): Promise<string | null> {
 }
 
 /** Writes one file only when its bytes differ, so an unchanged tree is never rewritten. */
-async function writeWhenChanged(outDir: string, relative: string, body: string): Promise<ArtifactStatus> {
+async function writeWhenChanged(compareDir: string, outDir: string, relative: string, body: string): Promise<ArtifactStatus> {
   const file = path.join(outDir, relative);
-  const existing = await readExisting(file);
+  const existing = await readExisting(path.join(compareDir, relative));
   if (existing === body) return 'unchanged';
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, body);
   return existing === null ? 'added' : 'changed';
 }
 
-/** Serve configs whose node the registry no longer names, so a removed tunnel keeps no file. */
-async function removeStaleServeConfigs(outDir: string, keep: ReadonlySet<string>): Promise<ArtifactWrite[]> {
-  const dir = path.join(outDir, SERVE_DIR);
-  const entries = await fs.readdir(dir).catch(() => []);
+/**
+ * Serve configs whose node the registry no longer names, so a removed tunnel keeps no file.
+ *
+ * WHY the list comes from the compare directory: a staged render holds no stale file to find, and the
+ * caller applies the removal to the live directory when it swaps.
+ */
+async function removeStaleServeConfigs(compareDir: string, outDir: string, keep: ReadonlySet<string>): Promise<ArtifactWrite[]> {
+  const entries = await fs.readdir(path.join(compareDir, SERVE_DIR)).catch(() => []);
   const removed: ArtifactWrite[] = [];
   for (const entry of entries.sort()) {
     if (!entry.endsWith(SERVE_EXTENSION)) continue;
     const node = entry.slice(0, -SERVE_EXTENSION.length);
     if (keep.has(node)) continue;
-    await fs.rm(path.join(dir, entry), { force: true });
+    if (compareDir === outDir) await fs.rm(path.join(compareDir, SERVE_DIR, entry), { force: true });
     removed.push({ path: `${SERVE_DIR}/${entry}`, status: 'removed' });
   }
   return removed;
@@ -82,14 +93,15 @@ export async function applyRegistryArtifacts(payload: WiringPayload, options: Ap
     options.frontVhosts ?? [],
     options.certificate ?? CONTEST_PROXY_CERTIFICATE,
   );
+  const compareDir = options.compareDir ?? options.outDir;
   const writes: ArtifactWrite[] = [];
   const keep = new Set<string>();
   for (const artifact of artifacts) {
     if (artifact.mode === 'serve' && artifact.node !== null) keep.add(artifact.node);
     writes.push({
       path: artifactPath(artifact),
-      status: await writeWhenChanged(options.outDir, artifactPath(artifact), artifactBody(artifact)),
+      status: await writeWhenChanged(compareDir, options.outDir, artifactPath(artifact), artifactBody(artifact)),
     });
   }
-  return [...writes, ...(await removeStaleServeConfigs(options.outDir, keep))];
+  return [...writes, ...(await removeStaleServeConfigs(compareDir, options.outDir, keep))];
 }

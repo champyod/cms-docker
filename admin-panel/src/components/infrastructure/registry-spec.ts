@@ -128,6 +128,13 @@ export function draftOfWiring(wiring: WiringRecord): Draft {
   };
 }
 
+/** How a draft names the row it edits, for a strip that has to say which save it answered. */
+export function exposureDraftLabel(draft: Draft): string {
+  const hostname = (draft.hostname ?? '').trim();
+  const path = (draft.path ?? '').trim();
+  return `${hostname === '' ? '(path only)' : hostname}${path === '' ? '/' : path}`;
+}
+
 export function draftOfExposure(exposure: ExposureRecord): Draft {
   return {
     id: String(exposure.id),

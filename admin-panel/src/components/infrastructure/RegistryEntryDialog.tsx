@@ -38,7 +38,7 @@ export function RegistryEntryDialog({
       footer={
         <ModalFooter
           cancelLabel={copy.actions.cancel}
-          confirmLabel={copy.actions.save}
+          confirmLabel={kind === 'exposure' ? copy.actions.saveApply : copy.actions.save}
           confirmLoading={pending}
           onCancel={onClose}
           onConfirm={onSubmit}

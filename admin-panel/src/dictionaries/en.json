@@ -59,6 +59,7 @@
         "edit": "Edit",
         "remove": "Remove",
         "save": "Save",
+        "saveApply": "Save & apply",
         "cancel": "Cancel",
         "rowGroup": "Registry actions"
       },
@@ -74,6 +75,14 @@
       "source": {
         "curated": "{file} · {key}",
         "readOnly": "Curated here: this route is rendered from {file}, so the panel can only remove the exposure, not move it."
+      },
+      "apply": {
+        "applied": "Applied",
+        "refusedValidation": "Refused by validation",
+        "refusedNginx": "Refused by nginx",
+        "refused": "Not saved",
+        "appliedMessage": "{label} is live: the front reloaded with it.",
+        "refusedMessage": "{label}: {message}"
       },
       "empty": {
         "service": "No service is registered yet.",

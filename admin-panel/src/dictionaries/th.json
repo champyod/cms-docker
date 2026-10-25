@@ -59,6 +59,7 @@
         "edit": "แก้ไข",
         "remove": "ลบ",
         "save": "บันทึก",
+        "saveApply": "บันทึกและใช้งาน",
         "cancel": "ยกเลิก",
         "rowGroup": "การจัดการรีจิสทรี"
       },
@@ -74,6 +75,14 @@
       "source": {
         "curated": "{file} · {key}",
         "readOnly": "เส้นทางนี้มาจาก {file} จึงแก้จากแผงควบคุมไม่ได้ ลบรายการเปิดเผยได้เท่านั้น"
+      },
+      "apply": {
+        "applied": "ใช้งานแล้ว",
+        "refusedValidation": "ถูกปฏิเสธจากการตรวจสอบ",
+        "refusedNginx": "ถูกปฏิเสธจาก nginx",
+        "refused": "ยังไม่บันทึก",
+        "appliedMessage": "{label} ใช้งานได้แล้ว ส่วนหน้าโหลดใหม่หนึ่งครั้ง",
+        "refusedMessage": "{label}: {message}"
       },
       "empty": {
         "service": "ยังไม่มีบริการที่ลงทะเบียน",
