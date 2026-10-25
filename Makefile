@@ -739,6 +739,54 @@ clean:
 	rm -f .env
 
 # ---------------------------------------------------------------------------
+# Audit-log durability — verify the chain, read the retention state, run a prune
+# ---------------------------------------------------------------------------
+# WHY these run the panel's own code and not SQL: the verifier recomputes every `entry_hash` with
+# admin-panel/src/lib/audit-chain.ts — the module recordAudit() writes with — so there is one recipe
+# and no psql re-statement of it. The container is where that code is pinned; a host bun is used
+# only when no panel container is up (a scratch database, a CI box).
+AUDIT_TSX := ./node_modules/.bin/tsx
+audit-run = { \
+	if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-audit-retention"; then \
+		docker exec "cms-audit-retention" $(AUDIT_TSX) scripts/audit-log.ts $(1); \
+	elif docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-admin-panel-next"; then \
+		docker exec "cms-admin-panel-next" $(AUDIT_TSX) scripts/audit-log.ts $(1); \
+	elif command -v bun >/dev/null 2>&1; then \
+		cd admin-panel && bun run scripts/audit-log.ts $(1); \
+	else \
+		echo "ERROR: no audit runner — start the panel (make admin) or install bun." >&2; exit 1; \
+	fi; }
+
+# Exits 1 when the chain is broken, 2 when it cannot be checked at all. Both are failures here:
+# "could not read the log" must never read as "the log is fine".
+.PHONY: audit-verify
+audit-verify:
+	@$(call audit-run,verify)
+
+# What retention has actually done, and the backlog when it has not run. Non-zero when rows are
+# past the window, so a scheduled caller can alarm on it.
+.PHONY: audit-status
+audit-status:
+	@$(call audit-run,status)
+
+# Manual prune. Dry run unless APPLY=1 names the window's backlog as the thing being removed.
+.PHONY: audit-retention
+audit-retention:
+	@$(call audit-run,prune $(if $(filter 1 yes true,$(APPLY)),--apply,))
+
+# Prove a backup's audit archive restores and verifies: needs the dump path, and a scratch database
+# it may create and drop. Never points at the live database — see scripts/__audit_restore_proof.sh.
+.PHONY: audit-restore-verify
+audit-restore-verify:
+	@bash scripts/__audit_restore_proof.sh $(if $(DUMP),--dump "$(DUMP)",)
+
+# The one-time owner separation (CREATE ROLE + ALTER TABLE OWNER). Needs a maintenance window: the
+# cluster has no superuser, so this is `postgres --single` with cms-database stopped.
+.PHONY: audit-owner-bootstrap
+audit-owner-bootstrap:
+	@bash scripts/__audit_owner_bootstrap.sh $(if $(filter 1 yes true,$(CONFIRM)),--yes,)
+
+# ---------------------------------------------------------------------------
 # Regression audit — catches stale paths, exec-bit loss, bind-mount perms,
 # invalid compose profile graphs, and CLI-contract drift (P1-P5 class bugs).
 # ---------------------------------------------------------------------------

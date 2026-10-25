@@ -103,15 +103,20 @@ COPY --from=base /app/.next/static ./.next/static
 COPY --from=base /prisma-cli/node_modules ./node_modules
 COPY --from=base /app/prisma ./prisma
 # WHY: standalone tracing does not guarantee the seed's imports or alias config;
-# explicitly include only its two source dependencies and config, not all of src.
-COPY --from=base /app/src/lib/prisma.ts /app/src/lib/permission-registry.ts ./src/lib/
+# explicitly include only its source dependencies and config, not all of src.
+# The audit-log entry (scripts/audit-log.ts) is the retention service's only command and the
+# operator verifier; it needs the shared chain module beside the client, and nothing else.
+COPY --from=base /app/src/lib/prisma.ts /app/src/lib/permission-registry.ts /app/src/lib/audit-chain.ts ./src/lib/
+COPY --from=base /app/src/lib/db-actor.ts ./src/lib/
+COPY --from=base /app/src/lib/db-actor-request.ts ./src/lib/
+COPY --from=base /app/scripts/audit-log.ts ./scripts/audit-log.ts
 COPY --from=base /app/tsconfig.json ./tsconfig.json
 
 # WHY: missing tooling or seed imports should fail the build, not a deployment;
 # loading the imports constructs the client without connecting or seeding.
 RUN CHECKPOINT_DISABLE=1 ./node_modules/.bin/prisma --version \
  && ./node_modules/.bin/tsx --version \
- && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry");'
+ && ./node_modules/.bin/tsx -e 'require("@/lib/prisma"); require("@/lib/permission-registry"); require("@/lib/audit-chain");'
 
 # Unprivileged runtime: compose grants the host docker group (group_add) so the
 # node user can still reach the mounted socket, and the cache dir must be

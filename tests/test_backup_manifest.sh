@@ -53,7 +53,13 @@ check_eq "the checksum of the partial run is kept" "1" \
 check_eq "every superseded set was pruned" "0" \
   "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-2020010*.dump')"
 check_eq "only the newest set is left" "1" \
-  "$(count_matching "${RUN_ROOT}/backups/db" '*.dump')"
+  "$(count_matching "${RUN_ROOT}/backups/db" 'cmsdb-*.dump')"
+# The audit archive is part of the set, so it is pruned with it and never left behind as an orphan
+# the rotated database dump no longer explains.
+check_eq "the audit archive is kept with the set it belongs to" "1" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'audit-log-*.dump')"
+check_eq "no audit archive of a superseded set survives" "0" \
+  "$(count_matching "${RUN_ROOT}/backups/db" 'audit-log-2020010*.dump')"
 check_eq "the manifest is never created for a run that could not record itself" "0" \
   "$(count_matching "${RUN_ROOT}/backups" 'manifest.json')"
 check_eq "the reason is named in the run log" "yes" \

@@ -1,6 +1,11 @@
-import { createHash } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { resolveClientIp } from '@/lib/request-identity';
+import { canonicaliseAuditRow, computeEntryHash, stableStringify, type AuditRowPayload } from '@/lib/audit-chain';
+
+// The digest and the canonical form live in lib/audit-chain.ts, which the operator verifier
+// (scripts/audit-log.ts) imports too. Re-exported here so the panel's existing callers and tests
+// keep one import site.
+export { computeEntryHash };
 
 export type AuditResult = 'success' | 'failure';
 
@@ -57,29 +62,6 @@ export function assertReasonForDestructive(
     return { ok: true };
   }
   return { ok: false, error: `A reason is required for the destructive action "${verb}"` };
-}
-
-export function computeEntryHash(previousHash: string | null, canonicalPayload: string): string {
-  return createHash('sha256').update(`${previousHash ?? ''}|${canonicalPayload}`).digest('hex');
-}
-
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== 'object') {
-    return JSON.stringify(value) ?? 'null';
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableStringify(item)).join(',')}]`;
-  }
-  const record = value as Record<string, unknown>;
-  const parts: string[] = [];
-  for (const key of Object.keys(record).sort()) {
-    const nested = record[key];
-    if (nested === undefined) {
-      continue;
-    }
-    parts.push(`${JSON.stringify(key)}:${stableStringify(nested)}`);
-  }
-  return `{${parts.join(',')}}`;
 }
 
 export function canonicaliseEntry(entry: AuditEntry): string {
@@ -185,21 +167,38 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     });
     // Why: chaining each row to the previous entry_hash makes the log tamper-evident — editing or dropping any row breaks every later hash.
     const previousHash = previous?.entry_hash ?? null;
-    const entryHash = computeEntryHash(previousHash, canonicaliseEntry(entry));
     const context = await resolveAuditContext();
+
+    // WHY the hash is taken over the row payload and not over `entry`: the caller's object omits
+    // whatever the writer resolves from the request (ip, session id, actor), so a hash of it could
+    // not be re-derived from the database — and a chain nobody can recompute verifies nothing.
+    // `canonicaliseAuditRow` is the same function the verifier uses.
+    const payload: AuditRowPayload = {
+      actor_id: actorId ?? null,
+      after_values: entry.afterValues ?? null,
+      before_values: entry.beforeValues ?? null,
+      entity: entry.entity,
+      entity_id: entry.entityId ?? null,
+      ip: entry.ip ?? context.ip,
+      reason: entry.reason ?? null,
+      result: entry.result,
+      session_id: entry.sessionId ?? context.sessionId,
+      verb: entry.verb,
+    };
+    const entryHash = computeEntryHash(previousHash, canonicaliseAuditRow(payload));
 
     const created = await prisma.audit_log.create({
       data: {
-        actor_id: actorId ?? null,
-        verb: entry.verb,
-        entity: entry.entity,
-        entity_id: entry.entityId ?? null,
+        actor_id: payload.actor_id,
+        verb: payload.verb,
+        entity: payload.entity,
+        entity_id: payload.entity_id,
         before_values: jsonInput(entry.beforeValues),
         after_values: jsonInput(entry.afterValues),
-        reason: entry.reason ?? null,
-        ip: entry.ip ?? context.ip,
-        session_id: entry.sessionId ?? context.sessionId,
-        result: entry.result,
+        reason: payload.reason,
+        ip: payload.ip,
+        session_id: payload.session_id,
+        result: payload.result,
         entry_hash: entryHash,
         prev_hash: previousHash,
       },

@@ -41,9 +41,17 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * live result of the producers' scans, not panel state, so a restore must let the next
  * push rebuild it instead of replaying findings that may already be fixed. The waivers
  * that decide what those findings mean are NOT excluded — they exist nowhere else.
+ *
+ * `audit_log_retention` is excluded for the same reason as `audit_log`: it is the ledger of which
+ * id boundaries retention pruned and where the chain re-anchored, so every row in it names a row in
+ * the log and a sequence id that a partial restore has no reason to reproduce. Restored on its own
+ * it would either point at nothing or — worse — at different rows, and the verifier would report a
+ * gap that the restore created rather than one an operator caused. It travels with the log instead,
+ * in `backups/db/audit-log-<ts>.dump`, which carries both tables together.
  */
 const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log',
+  'audit_log_retention',
   'security_blocks',
   'security_findings',
   'contest_usernames_history',
