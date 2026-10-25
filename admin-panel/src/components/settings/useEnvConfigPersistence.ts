@@ -53,7 +53,9 @@ async function restartAffectedServices(
   clearRequiredRestarts: () => void,
   toasts: EnvConfigToasts,
 ): Promise<void> {
-  const restartRes = await restartServices('custom', requiredRestarts);
+  // Why this path states its own reason: the audit row has to say what justified the restart, and
+  // "a saved setting required it" is the truth here — no operator typed anything for this one.
+  const restartRes = await restartServices('custom', requiredRestarts, 'A saved environment setting required these services to restart.');
   if (restartRes.success) {
     toast.success(interpolate(toasts.restarted, { services: requiredRestarts.join(', ') }));
     clearRequiredRestarts();

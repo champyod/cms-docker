@@ -214,7 +214,9 @@ export async function runManualBackup(
 }
 
 async function restartMonitorOrWarn(toasts: MaintenanceToasts): Promise<void> {
-  const restart = await restartServices('custom', ['monitor']);
+  // Why this path states its own reason: saving notification settings recreates the monitor without
+  // an operator justifying it, so the audit row records the cause rather than a blank.
+  const restart = await restartServices('custom', ['monitor'], 'Notification settings were saved, so the monitor container was recreated.');
   if (restart.success) {
     toast.success(toasts.notificationsSavedMonitorRecreated);
     return;

@@ -8,6 +8,7 @@ import { getRepoRoot } from '@/lib/repo-root';
 import { resolveHostComposeLocation } from '@/lib/compose-location';
 import { logToDiscord } from '@/lib/discord-notifier';
 import { recordAudit } from '@/lib/audit';
+import { normalizeRestartReason } from '@/lib/restart-reason';
 import { readDeploymentModeSetting } from '@/lib/deployment-mode-file';
 import type { DeploymentModeSetting } from '@/lib/deployment-mode';
 import { CONFIG_TOML_FILE } from '@/lib/config-toml';
@@ -81,8 +82,17 @@ export async function analyzeRestartRequirements(changedKeys: string[]) {
     return { requiredRestarts: Array.from(finalSet) };
 }
 
-export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' | 'custom', customList?: string[]) {
+export async function restartServices(
+  type: 'all' | 'core' | 'admin' | 'worker' | 'custom',
+  customList: string[] | undefined,
+  reason: string,
+) {
   await ensurePermission('service:restart');
+
+  // Refused here, not only in the dialog: the panel also restarts from paths that ask nobody.
+  const justification = normalizeRestartReason(reason);
+  if (!justification.ok) return { success: false, error: justification.error };
+
   try {
     const rootDir = getRepoRoot();
     await execPromise('make env', { cwd: rootDir });
@@ -105,7 +115,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     const plan = await buildRestartCommand(type, customList, files, (await readDeploymentModeSetting()).mode, location.location);
     if (plan.skip) return { success: true, message: plan.message };
 
-    await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}`, 16753920, true);
+    await logToDiscord('Service Restart', `Admin triggered restart: **${type}** ${customList ? `(${customList.join(', ')})` : ''}\nReason: ${justification.reason}`, 16753920, true);
 
     const { stdout, stderr } = await execPromise(plan.command, { cwd: rootDir, timeout: 120000 });
 
@@ -116,7 +126,7 @@ export async function restartServices(type: 'all' | 'core' | 'admin' | 'worker' 
     await recordAudit({
       verb: 'service:restart',
       entity: 'service',
-      afterValues: { type, customList: customList ?? null },
+      afterValues: { type, customList: customList ?? null, reason: justification.reason },
       result: 'success',
     });
     return { success: true, message: `Services (${type}) restarted.`, output: stdout };

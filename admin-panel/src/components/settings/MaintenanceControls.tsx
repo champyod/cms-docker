@@ -1,17 +1,21 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { getBoundContestId } from '@/app/actions/contests';
 import { getDeploymentMode, restartServices, updateServer } from '@/app/actions/services';
 import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
 import { FALLBACK_DEPLOYMENT_MODE, deploymentModeCopyKey, type DeploymentModeSetting } from '@/lib/deployment-mode';
 import type { ReactElement } from 'react';
 import { Card } from '@/components/core/Card';
+import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { Button } from '@/components/core/Button';
 import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
+import { useReasonPrompt } from '@/hooks/useReasonPrompt';
+import type { Dictionary } from '@/lib/dictionary';
 import { interpolate } from '@/lib/interpolate';
 
 type DeploymentModeRead = { loaded: false } | { loaded: true; setting: DeploymentModeSetting };
@@ -56,6 +60,11 @@ export function DeploymentModeNote(): ReactElement | null {
 }
 
 export function ManualServiceControlCard(): ReactElement {
+  const copy = useDictionary();
+  const toasts = copy.toasts.serviceControl;
+  const bound = useBoundContest();
+  const warning = bound.loaded ? restartWarning(bound.contestId, copy.settings.serviceControl) : null;
+
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -64,17 +73,59 @@ export function ManualServiceControlCard(): ReactElement {
           <p className="text-muted-foreground text-sm mt-1">Force restart services if needed.</p>
         </div>
       </div>
+      {/* Why the warning stands on the card and not only in the dialog: the operator has to know the
+          board is live before they pick a button, not after they have committed to one. */}
+      {warning !== null && (
+        <p
+          role="status"
+          className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-foreground"
+        >
+          {warning}
+        </p>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <RestartButton type="core" label="Core Stack" />
-        <RestartButton type="admin" label="Admin Stack" />
-        <RestartButton type="worker" label="Worker Stack" />
-        <RestartButton type="all" label="All Services" />
+        <RestartButton type="core" label={copy.confirmations.restartStack.labels.core} warning={warning} />
+        <RestartButton type="admin" label={copy.confirmations.restartStack.labels.admin} warning={warning} />
+        <RestartButton type="worker" label={copy.confirmations.restartStack.labels.worker} warning={warning} />
+        <RestartButton type="all" label={copy.confirmations.restartStack.labels.all} warning={warning} />
       </div>
       <p className="text-xs text-muted-foreground mt-4">
-        Note: Contest instances are managed in <strong>Infrastructure → Deployments</strong> page.
+        {toasts.contestManagedElsewhere}
       </p>
     </Card>
   );
+}
+
+/**
+ * Whether the stack in front of the operator is serving a contest right now.
+ *
+ * Why 'unknown' is its own answer and not null: a failed read must never render as "no contest bound".
+ * That would hide the one warning this card exists for exactly when the panel cannot see the truth.
+ */
+function useBoundContest(): { loaded: false } | { loaded: true; contestId: number | null | 'unknown' } {
+  const [read, setRead] = useState<{ loaded: false } | { loaded: true; contestId: number | null | 'unknown' }>({
+    loaded: false,
+  });
+
+  useEffect(() => {
+    void (async () => {
+      const result = await getBoundContestId().catch((): { success: false } => ({ success: false }));
+      const contestId = result.success && result.binding !== undefined ? result.binding.contestId : 'unknown';
+      setRead({ loaded: true, contestId });
+    })();
+  }, []);
+
+  return read;
+}
+
+/** The sentence the card and the dialog both use, so the warning cannot drift between the two. */
+function restartWarning(
+  contestId: number | null | 'unknown',
+  copy: Dictionary['settings']['serviceControl'],
+): string | null {
+  if (contestId === null) return null;
+  if (contestId === 'unknown') return copy.contestLiveRestartUnknown;
+  return interpolate(copy.contestLiveRestart, { contest: String(contestId) });
 }
 
 export function MaintenanceUpdatesCard(): ReactElement {
@@ -139,35 +190,59 @@ function UpdateServerButton(): ReactElement {
   );
 }
 
-function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
+function RestartButton({
+  type,
+  label,
+  warning,
+}: {
+  type: 'core' | 'admin' | 'worker' | 'all';
+  label: string;
+  warning: string | null;
+}): ReactElement {
   const [restarting, setRestarting] = useState(false);
-  const confirm = useConfirm();
+  const prompt = useReasonPrompt();
   const { restartStackConfirm } = useConfirmationCopy();
   const toasts = useDictionary().toasts.serviceControl;
 
-  const handleRestart = async (): Promise<void> => {
-    if (!(await confirm(restartStackConfirm(type)))) return;
-    setRestarting(true);
-    try {
-      const res = await restartServices(type);
-      if (res.success) toast.success(res.message);
-      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
-    } catch {
-      toast.error(toasts.restartFailed);
-    }
-    setRestarting(false);
+  const handleRestart = (): void => {
+    const base = restartStackConfirm(type);
+    // Why the reason is asked in the dialog that runs the action and not up front: a reason box on the
+    // card would demand a justification before the operator has chosen what to justify.
+    prompt.ask({
+      title: base.title,
+      description:
+        warning === null ? `${base.description} ${toasts.restartReasonHint}` : `${base.description} ${toasts.restartReasonHint} ${warning}`,
+      submitLabel: base.confirmLabel,
+      run: async (reason) => {
+        setRestarting(true);
+        try {
+          const res = await restartServices(type, undefined, reason);
+          if (res.success) toast.success(res.message);
+          else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
+          return res;
+        } catch {
+          toast.error(toasts.restartFailed);
+          return { success: false, error: toasts.restartFailed };
+        } finally {
+          setRestarting(false);
+        }
+      },
+    });
   };
 
   return (
-    <Button
-      variant="positiveOutline"
-      onClick={() => void handleRestart()}
-      disabled={restarting}
-      loading={restarting}
-      icon={RefreshCw}
-    >
-      {restarting ? 'Restarting...' : label}
-    </Button>
+    <>
+      <ReasonDialog request={prompt.request} onClose={prompt.close} onSubmit={prompt.submit} />
+      <Button
+        variant="positiveOutline"
+        onClick={handleRestart}
+        disabled={restarting}
+        loading={restarting}
+        icon={RefreshCw}
+      >
+        {restarting ? toasts.restarting : label}
+      </Button>
+    </>
   );
 }
 
