@@ -34,7 +34,11 @@ x-security-scan: &security-scan
   build:
     context: ./docker/security-scan
     dockerfile: Dockerfile
-  image: ghcr.io/champyod/cms-security-scan:${IMG_TAG:-major-admin-panel}
+  # WHY `cms-docker-security-scan`: every other image this repository builds is named
+  # `${github.repository}-<part>` by the workflow's metadata step. This one said
+  # `cms-security-scan`, which no workflow ever produced — so the overlay started by failing with
+  # `No such image` on the first host it ran on.
+  image: ghcr.io/champyod/cms-docker-security-scan:${IMG_TAG:-major-admin-panel}
 
 # Diun watches containers that opt in with a label, not every container on the socket: an
 # image nobody runs on purpose (a one-off debug container) is not a finding. Add
