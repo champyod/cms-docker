@@ -6,10 +6,12 @@ import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import {
   hasEffectivePermission,
-  getTargetEffectivePermissions,
   isEffectiveSuperset,
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
+// WHY from the server module: resolving another admin's grants needs Prisma, and
+// permission-engine.ts is imported by client components (action buttons read their key from it).
+import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { type ListSortInput } from '@/lib/list-sorting';
 import { adminSortOrderBy } from '@/lib/admin-sorting';
