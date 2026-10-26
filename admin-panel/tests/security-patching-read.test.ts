@@ -85,9 +85,23 @@ function sourceGroupByRows(): Record<string, unknown>[] {
   ];
 }
 
-function lastFindingQuery(): Record<string, any> {
+/**
+ * The where-clause shape these assertions read.
+ *
+ * WHY a declared shape and not `any`: the point of the test is that particular keys reach the
+ * database (`take`, `skip`, the source filter). An `any` documents nothing and would let a typo in
+ * a key name pass as a valid assertion.
+ */
+interface FindingQuery {
+  readonly where?: Readonly<Record<string, unknown>>;
+  readonly orderBy?: readonly Readonly<Record<string, unknown>>[];
+  readonly take?: number;
+  readonly skip?: number;
+}
+
+function lastFindingQuery(): FindingQuery {
   const calls = mocks.findMany.mock.calls.filter(([args]) => args !== undefined);
-  return calls[calls.length - 1][0];
+  return calls[calls.length - 1][0] as FindingQuery;
 }
 
 /**
@@ -97,7 +111,7 @@ function lastFindingQuery(): Record<string, any> {
  * the aged total or the total read the fix-version count, and the test would still pass.
  */
 function mockCounts(fixVersion: number): void {
-  mocks.count.mockImplementation(async ({ where }: { where?: Record<string, any> }) => {
+  mocks.count.mockImplementation(async ({ where }: { where?: Readonly<Record<string, unknown>> }) => {
     if (where?.available !== undefined) return fixVersion;
     if (where?.OR !== undefined) return 1;
     return TOTAL;
@@ -212,7 +226,7 @@ describe('query validation and the clamp', () => {
 
     expect(state.page.query.source).toBe('all');
     expect(state.page.query.severity).toBe('all');
-    const where = lastFindingQuery().where;
+    const where = lastFindingQuery().where ?? {};
     expect(where.source).toEqual({ in: ['diun', 'rootfs', 'osv'] });
     expect(where.severity).toBeUndefined();
   });
