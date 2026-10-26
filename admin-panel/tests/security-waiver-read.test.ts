@@ -4,11 +4,19 @@ const mocks = vi.hoisted(() => ({
   findings: vi.fn(),
   waivers: vi.fn(),
   admins: vi.fn(),
+  count: vi.fn(),
+  groupBy: vi.fn(),
+  findFirst: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    security_findings: { findMany: mocks.findings },
+    security_findings: {
+      findMany: mocks.findings,
+      count: mocks.count,
+      groupBy: mocks.groupBy,
+      findFirst: mocks.findFirst,
+    },
     security_waivers: { findMany: mocks.waivers },
     admins: { findMany: mocks.admins },
   },
@@ -38,6 +46,9 @@ describe('the expired-waiver read', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.findings.mockResolvedValue([]);
+    mocks.findFirst.mockResolvedValue(null);
+    mocks.count.mockResolvedValue(0);
+    mocks.groupBy.mockResolvedValue([]);
     mocks.admins.mockResolvedValue([{ id: 1, username: 'root' }]);
   });
 

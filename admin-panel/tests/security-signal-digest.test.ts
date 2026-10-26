@@ -4,7 +4,7 @@ import { buildSecurityDigest, SIGNAL_RULES } from '@/lib/security/signal';
 import {
   currentStaleness,
   makeFinding,
-  makeState,
+  makeSignalFacts,
   makeWaiver,
   NOW,
   staleStaleness,
@@ -19,7 +19,7 @@ import {
 describe('security digest', () => {
   it('counts what the card shows and names the worst and the longest-standing item', () => {
     const digest = buildSecurityDigest(
-      makeState(
+      makeSignalFacts(
         [
           makeFinding(1, { severity: 'CRITICAL', subject: 'glibc', firstSeen: '2026-09-01T00:00:00.000Z' }),
           makeFinding(2, { severity: 'HIGH', subject: 'curl', firstSeen: '2026-10-23T00:00:00.000Z' }),
@@ -49,7 +49,7 @@ describe('security digest', () => {
 
   it('pushes the lapsed decision, the unwaived critical and the stale copy — nothing else', () => {
     const digest = buildSecurityDigest(
-      makeState(
+      makeSignalFacts(
         [
           makeFinding(1, { severity: 'CRITICAL' }),
           makeFinding(2, { severity: 'HIGH' }),
@@ -68,17 +68,20 @@ describe('security digest', () => {
       'stale:backup',
     ]);
     // HIGH, the aged MEDIUM and the drifted image are context for a message, never a reason to send
-    // one — see the module comment in lib/security/signal.ts.
-    const riderKeys = digest.riders.map((fact) => fact.key);
-    expect(riderKeys).toContain('high:finding:rootfs:CVE-2026-2|openssl');
-    expect(riderKeys).toContain('aged:finding:rootfs:CVE-2026-3|openssl');
-    expect(riderKeys).toContain('image:ghcr.io/example/api');
+    // one — see the module comment in lib/security/signal.ts. They are counted, not listed: a rider
+    // is only ever rendered as a number, so the digest must not walk the feed to enumerate them.
+    expect(digest.riderCounts).toEqual({
+      unwaivedHigh: 1,
+      aged: 1,
+      staleImages: 1,
+      expiringWaivers: 0,
+    });
     expect(digest.counts.agedFindings).toBe(1);
   });
 
   it('counts a critical whose waiver lapsed as unwaived but pushes the waiver only once', () => {
     const digest = buildSecurityDigest(
-      makeState(
+      makeSignalFacts(
         [makeFinding(1, { severity: 'CRITICAL', waiver: { status: 'expired', reviewBy: '2026-10-01T00:00:00.000Z' } })],
         [makeWaiver(5, { reviewBy: '2026-10-01T00:00:00.000Z', expired: true })],
       ),
@@ -93,17 +96,22 @@ describe('security digest', () => {
   });
 
   it('is quiet and green when nothing is push-worthy', () => {
-    const digest = buildSecurityDigest(makeState([], []), currentStaleness(), NOW);
+    const digest = buildSecurityDigest(makeSignalFacts([], []), currentStaleness(), NOW);
 
     expect(digest.triggers).toEqual([]);
-    expect(digest.riders).toEqual([]);
+    expect(digest.riderCounts).toEqual({
+      unwaivedHigh: 0,
+      aged: 0,
+      staleImages: 0,
+      expiringWaivers: 0,
+    });
     expect(digest.tone).toBe('clear');
     expect(digest.worst).toBeNull();
     expect(digest.oldest).toBeNull();
   });
 
   it('reports a reading it could not take as a trigger, never as a healthy one', () => {
-    const digest = buildSecurityDigest(makeState([], []), unknownStalenessFixture(), NOW);
+    const digest = buildSecurityDigest(makeSignalFacts([], []), unknownStalenessFixture(), NOW);
 
     // Not "act": there is no finding to act on, and a card that shouts "needs attention" beside an
     // empty finding list sends the operator looking for something that is not there.
@@ -118,7 +126,7 @@ describe('security digest', () => {
 
   it('keeps a HIGH out of the triggers on its own, but names it on the page', () => {
     const onlyHigh = buildSecurityDigest(
-      makeState([makeFinding(1, { severity: 'HIGH', firstSeen: '2026-10-24T00:00:00.000Z' })]),
+      makeSignalFacts([makeFinding(1, { severity: 'HIGH', firstSeen: '2026-10-24T00:00:00.000Z' })]),
       currentStaleness(),
       NOW,
     );
@@ -131,7 +139,7 @@ describe('security digest', () => {
 
   it('calls out a waiver that is about to lapse on the page only', () => {
     const digest = buildSecurityDigest(
-      makeState(
+      makeSignalFacts(
         [makeFinding(1, { severity: 'CRITICAL', waiver: { status: 'active', reviewBy: '2026-10-30T00:00:00.000Z' } })],
         [makeWaiver(4, { reviewBy: '2026-10-30T00:00:00.000Z' })],
       ),
@@ -142,8 +150,9 @@ describe('security digest', () => {
     // A live waiver still suppresses the critical (so nothing pushes), yet the review date is inside
     // the warning window, which is exactly the planning fact the page exists for.
     expect(digest.triggers).toEqual([]);
-    expect(digest.riders.map((fact) => fact.key)).toEqual(['waiver:4:expiring']);
+    expect(digest.riderCounts.expiringWaivers).toBe(1);
     expect(digest.counts.expiringWaivers).toBe(1);
+    expect(digest.riderCounts.unwaivedHigh).toBe(0);
     expect(SIGNAL_RULES.waiverWarningDays).toBe(7);
   });
 });

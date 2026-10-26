@@ -75,7 +75,13 @@ export async function recordPage(digest: SecurityDigest, plan: NotifyPlan, now: 
     beforeValues: null,
     afterValues: {
       notifiedAt: now.toISOString(),
-      keys: plan.facts.map((fact) => fact.key),
+      // WHY the overflow key travels with the named ones: the count is how the message reports the
+      // facts it could not name, so the next tick has to diff against it too — otherwise a fresh
+      // CRITICAL beyond the named ones would change the count and still be judged "unchanged".
+      keys:
+        plan.overflowKey === null
+          ? plan.facts.map((fact) => fact.key)
+          : [...plan.facts.map((fact) => fact.key), plan.overflowKey],
       fresh: plan.fresh.map((fact) => fact.key),
       tone: digest.tone,
       counts: digest.counts,

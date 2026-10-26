@@ -1,21 +1,30 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 import en from '@/dictionaries/en.json';
-import type { PatchingState } from '@/lib/security/patching';
+import {
+  PATCHING_PAGE_SIZE,
+  readPatchingQuery,
+  type PatchingListState,
+} from '@/lib/security/patching';
 
 const mocks = vi.hoisted(() => ({
   authorizeRoutePage: vi.fn(),
-  readPatchingState: vi.fn(),
+  readPatchingFindingsPage: vi.fn(),
   createPatchingWaiver: vi.fn(),
   endPatchingWaiver: vi.fn(),
+  push: vi.fn(),
 }));
 
 vi.mock('server-only', () => ({}));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mocks.push, replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
+  usePathname: () => '/en/security/patching',
+}));
 vi.mock('@/lib/navigation/page-authorization', () => ({ authorizeRoutePage: mocks.authorizeRoutePage }));
 vi.mock('@/app/actions/securityPatching', () => ({
-  readPatchingState: mocks.readPatchingState,
+  readPatchingFindingsPage: mocks.readPatchingFindingsPage,
   createPatchingWaiver: mocks.createPatchingWaiver,
   endPatchingWaiver: mocks.endPatchingWaiver,
 }));
@@ -23,8 +32,10 @@ vi.mock('@/i18n', () => ({ getDictionary: async () => en }));
 
 const EXPIRED_REVIEW = '2026-10-01T00:00:00.000Z';
 const ACTIVE_REVIEW = '2026-12-01T00:00:00.000Z';
+/** The shape of the live host's feed: far more rows than one page can hold. */
+const TOTAL = 34_610;
 
-const STATE: PatchingState = {
+const STATE: PatchingListState = {
   groups: [
     {
       source: 'rootfs',
@@ -96,15 +107,30 @@ const STATE: PatchingState = {
     },
   ],
   cards: { staleImages: 1, unresolvedCves: 1, expiredWaivers: 1, hostOsUpdates: 1 },
+  page: {
+    query: { page: 1, source: 'all', severity: 'all', sort: 'lastSeen', direction: 'desc' },
+    pageSize: PATCHING_PAGE_SIZE,
+    total: TOTAL,
+    pageCount: Math.ceil(TOTAL / PATCHING_PAGE_SIZE),
+  },
 };
 
-async function renderPage(effective: readonly string[]): Promise<void> {
+async function renderPage(
+  effective: readonly string[],
+  searchParams: Record<string, string | undefined> = {},
+  state: PatchingListState = STATE,
+): Promise<void> {
   mocks.authorizeRoutePage.mockResolvedValue(new Set(effective));
-  mocks.readPatchingState.mockResolvedValue(STATE);
+  mocks.readPatchingFindingsPage.mockResolvedValue(state);
   const { default: SecurityPatchingPage } = await import(
     '@/app/[locale]/(authenticated)/security/patching/page'
   );
-  render(await SecurityPatchingPage({ params: Promise.resolve({ locale: 'en' }) }));
+  render(
+    await SecurityPatchingPage({
+      params: Promise.resolve({ locale: 'en' }),
+      searchParams: Promise.resolve(searchParams),
+    }),
+  );
 }
 
 describe('security patching page', () => {
@@ -164,5 +190,92 @@ describe('security patching page', () => {
     cleanup();
     await renderPage(['security:read', 'patching:read', 'patching:waive']);
     expect(screen.getAllByText('Waive').length).toBeGreaterThan(0);
+  });
+
+  it('hands the raw query string to the read without interpreting it here', async () => {
+    // The page is a pass-through: one validator exists (`readPatchingQuery` + `clampPatchingPage`)
+    // and the page must not grow a second one that could disagree with it.
+    await renderPage(['security:read', 'patching:read'], {
+      page: 'not-a-number',
+      source: 'renovate',
+      severity: 'TERMINAL',
+      sort: 'whatever',
+    });
+
+    expect(mocks.readPatchingFindingsPage).toHaveBeenCalledWith({
+      page: 'not-a-number',
+      source: 'renovate',
+      severity: 'TERMINAL',
+      sort: 'whatever',
+    });
+    // The rendered controls show the validated view: page 1, both filters open, default sort.
+    expect((screen.getByLabelText('Source') as HTMLSelectElement).value).toBe('all');
+    expect((screen.getByLabelText('Severity') as HTMLSelectElement).value).toBe('all');
+    expect((screen.getByLabelText('Sort by') as HTMLSelectElement).value).toBe('lastSeen');
+  });
+
+  it('shows the SQL totals and a pager over the count, not over the rows it was given', async () => {
+    await renderPage(['security:read', 'patching:read']);
+
+    const pages = Math.ceil(TOTAL / PATCHING_PAGE_SIZE);
+    expect(screen.getByText(`Page 1 of ${String(pages)}`)).toBeTruthy();
+    expect(screen.getByText('Showing 1–25 of 34610')).toBeTruthy();
+    // Two rows were handed to the page, 34,610 exist: the number comes from the count.
+    expect(screen.getAllByText(/34610 findings/).length).toBeGreaterThan(0);
+    // The next page is a URL, because the database is what slices the feed.
+    const next = screen.getAllByRole('link', { name: 'Next' })[0];
+    expect(next.getAttribute('href')).toBe('/en/security/patching?page=2');
+  });
+
+  it('navigates with a filter and drops the page number it no longer belongs to', async () => {
+    const pages = Math.ceil(TOTAL / PATCHING_PAGE_SIZE);
+    const onThirdPage: PatchingListState = {
+      ...STATE,
+      page: { ...STATE.page, query: { ...STATE.page.query, page: 3 } },
+    };
+    await renderPage(['security:read', 'patching:read'], { page: '3' }, onThirdPage);
+    expect(screen.getByText(`Page 3 of ${String(pages)}`)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('Source'), { target: { value: 'rootfs' } });
+    expect(mocks.push).toHaveBeenCalledWith('/en/security/patching?source=rootfs', { scroll: false });
+
+    fireEvent.change(screen.getByLabelText('Severity'), { target: { value: 'CRITICAL' } });
+    expect(mocks.push).toHaveBeenLastCalledWith('/en/security/patching?severity=CRITICAL', { scroll: false });
+
+    fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'subject' } });
+    expect(mocks.push).toHaveBeenLastCalledWith('/en/security/patching?sort=subject', { scroll: false });
+  });
+});
+
+describe('query validation', () => {
+  it('falls back to a usable query when the URL says nothing usable', () => {
+    expect(readPatchingQuery({})).toEqual({
+      page: 1,
+      source: 'all',
+      severity: 'all',
+      sort: 'lastSeen',
+      direction: 'desc',
+    });
+    expect(readPatchingQuery({ page: '0' }).page).toBe(1);
+    expect(readPatchingQuery({ page: '-4' }).page).toBe(1);
+    expect(readPatchingQuery({ page: '12.5' }).page).toBe(1);
+    expect(readPatchingQuery({ page: 'abc' }).page).toBe(1);
+    expect(readPatchingQuery({ page: ' 42 ' }).page).toBe(42);
+    expect(readPatchingQuery({ source: 'renovate' }).source).toBe('all');
+    expect(readPatchingQuery({ severity: 'TERMINAL' }).severity).toBe('all');
+    expect(readPatchingQuery({ sort: 'whatever' }).sort).toBe('lastSeen');
+    expect(readPatchingQuery({ dir: 'sideways' }).direction).toBe('desc');
+  });
+
+  it('keeps a real filter and a real sort, and defaults the direction to the column', () => {
+    expect(readPatchingQuery({ source: 'rootfs', severity: 'HIGH' })).toEqual({
+      page: 1,
+      source: 'rootfs',
+      severity: 'HIGH',
+      sort: 'lastSeen',
+      direction: 'desc',
+    });
+    expect(readPatchingQuery({ sort: 'subject' }).direction).toBe('asc');
+    expect(readPatchingQuery({ sort: 'subject', dir: 'desc' }).direction).toBe('desc');
   });
 });

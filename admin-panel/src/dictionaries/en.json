@@ -1326,7 +1326,30 @@
       "failed": "The waiver could not be saved",
       "saved": "Waiver recorded",
       "ended": "Waiver ended",
-      "expiredNotice": "{count} waiver(s) are past their review date: CI fails until each one is ended or renewed."
+      "expiredNotice": "{count} waiver(s) are past their review date: CI fails until each one is ended or renewed.",
+      "filters": {
+        "source": "Source",
+        "severity": "Severity",
+        "sort": "Sort by",
+        "direction": "Order",
+        "allSources": "All sources",
+        "allSeverities": "All severities",
+        "sorts": {
+          "lastSeen": "Last seen",
+          "firstSeen": "First seen",
+          "subject": "Subject",
+          "host": "Host",
+          "source": "Producer"
+        },
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "match": "{count} findings match the filter",
+        "noMatch": "No finding matches this filter. The feed may still hold unresolved rows under other filters."
+      },
+      "pager": {
+        "row": "findings",
+        "range": "Showing {from}–{to} of {total}"
+      }
     },
     "signal": {
       "title": "Security digest",

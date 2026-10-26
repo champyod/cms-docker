@@ -5,7 +5,7 @@ import { runSignalTick, shouldReportReadFailure, READ_FAILURE_INTERVAL_MS } from
 import {
   currentStaleness,
   makeFinding,
-  makeState,
+  makeSignalFacts,
   makeWaiver,
   NOW,
   unknownStalenessFixture,
@@ -13,7 +13,7 @@ import {
 
 function lapsed(): SecurityDigest {
   return buildSecurityDigest(
-    makeState(
+    makeSignalFacts(
       [makeFinding(1, { severity: 'MEDIUM', waiver: { status: 'expired', reviewBy: '2026-10-02T00:00:00.000Z' } })],
       [makeWaiver(9, { reviewBy: '2026-10-02T00:00:00.000Z', expired: true })],
     ),
@@ -107,7 +107,7 @@ describe('security signal tick', () => {
 
   it('says nothing when only page-worthy facts exist', async () => {
     const fake = harness({
-      digest: async () => buildSecurityDigest(makeState([makeFinding(1, { severity: 'HIGH' })]), currentStaleness(), NOW),
+      digest: async () => buildSecurityDigest(makeSignalFacts([makeFinding(1, { severity: 'HIGH' })]), currentStaleness(), NOW),
     });
 
     const outcome = await runSignalTick(fake.sinks);
@@ -118,7 +118,7 @@ describe('security signal tick', () => {
 
   it('treats an unevaluable backup as push-worthy', async () => {
     const fake = harness({
-      digest: async () => buildSecurityDigest(makeState([]), unknownStalenessFixture(), NOW),
+      digest: async () => buildSecurityDigest(makeSignalFacts([]), unknownStalenessFixture(), NOW),
     });
 
     const outcome = await runSignalTick(fake.sinks);

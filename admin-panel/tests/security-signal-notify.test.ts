@@ -11,15 +11,15 @@ import {
 import {
   currentStaleness,
   makeFinding,
-  makeState,
+  makeSignalFacts,
   makeWaiver,
   NOW,
   staleStaleness,
   unknownStalenessFixture,
 } from './security-signal-fixture';
 
-function digestOf(findings: Parameters<typeof makeState>[0], waivers: Parameters<typeof makeState>[1] = []): SecurityDigest {
-  return buildSecurityDigest(makeState(findings, waivers), currentStaleness(), NOW);
+function digestOf(findings: Parameters<typeof makeSignalFacts>[0], waivers: Parameters<typeof makeSignalFacts>[1] = []): SecurityDigest {
+  return buildSecurityDigest(makeSignalFacts(findings, waivers), currentStaleness(), NOW);
 }
 
 function lapsedWaiverDigest(id = 9): SecurityDigest {
@@ -100,7 +100,7 @@ describe('security notification plan', () => {
   });
 
   it('says nothing at all when nothing is push-worthy', () => {
-    const clean = buildSecurityDigest(makeState([makeFinding(1, { severity: 'HIGH' })]), currentStaleness(), NOW);
+    const clean = buildSecurityDigest(makeSignalFacts([makeFinding(1, { severity: 'HIGH' })]), currentStaleness(), NOW);
     const plan = planNotification(clean, null, NOW);
 
     expect(plan.send).toBe(false);
@@ -112,7 +112,7 @@ describe('security notification plan', () => {
     expect(planNotification(lapsedWaiverDigest(), null, NOW).mention).toBe(false);
     expect(planNotification(digestOf([makeFinding(2, { severity: 'CRITICAL' })]), null, NOW).mention).toBe(true);
     expect(
-      planNotification(buildSecurityDigest(makeState([]), unknownStalenessFixture(), NOW), null, NOW).mention,
+      planNotification(buildSecurityDigest(makeSignalFacts([]), unknownStalenessFixture(), NOW), null, NOW).mention,
     ).toBe(true);
   });
 
@@ -120,12 +120,36 @@ describe('security notification plan', () => {
     const many = Array.from({ length: SIGNAL_RULES.maxLines + 3 }, (_, index) =>
       makeFinding(index + 1, { severity: 'CRITICAL', subject: `pkg-${String(index + 1)}` }),
     );
-    const digest = buildSecurityDigest(makeState(many), staleStaleness(), NOW);
+    const digest = buildSecurityDigest(makeSignalFacts(many), staleStaleness(), NOW);
+
+    // The list is bounded to what a message prints; the COUNT still reports the whole push set, so
+    // a truncation cannot turn 16 facts into 12.
+    expect(digest.triggerCount).toBe(many.length + 1);
+    expect(digest.triggers.filter((fact) => fact.kind === 'finding-critical')).toHaveLength(
+      SIGNAL_RULES.maxLines,
+    );
 
     const lines = renderMessage(digest, digest.triggers).split('\n');
     const factLines = lines.filter((line) => line.startsWith('• ') && !line.includes('…and'));
     expect(factLines).toHaveLength(SIGNAL_RULES.maxLines);
-    expect(lines.join('\n')).toContain(`…and ${String(digest.triggers.length - SIGNAL_RULES.maxLines)} more`);
+    expect(lines.join('\n')).toContain(`…and ${String(digest.triggerCount - SIGNAL_RULES.maxLines)} more`);
+  });
+
+  it('reports a fact it could not name as a change, or the count would hide it', () => {
+    const digest = buildSecurityDigest(makeSignalFacts([]), staleStaleness(), NOW);
+    // A staleness trigger with a hidden overflow: the same bounded list, a bigger count.
+    const withHidden = { ...digest, triggerCount: digest.triggerCount + 40 };
+
+    const first = planNotification(withHidden, null, NOW);
+    expect(first.send).toBe(true);
+    expect(first.overflowKey).toBe('more:on-page:40');
+
+    // Recording the plan must carry that key, otherwise the next tick sees an unchanged list and
+    // never mentions that forty more facts exist.
+    const recorded = [...first.facts.map((fact) => fact.key), ...(first.overflowKey === null ? [] : [first.overflowKey])];
+    const repeat = planNotification(withHidden, { notifiedAt: NOW.toISOString(), keys: recorded }, NOW);
+    expect(repeat.send).toBe(false);
+    expect(repeat.reason).toBe('unchanged');
   });
 
   it('summarises the page-only facts in one counted line', () => {

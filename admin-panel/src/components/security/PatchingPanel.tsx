@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, useTransition } from 'react';
+import { usePathname } from 'next/navigation';
 
 import { createPatchingWaiver, endPatchingWaiver } from '@/app/actions/securityPatching';
 import { Badge } from '@/components/core/Badge';
@@ -9,21 +10,33 @@ import { Card } from '@/components/core/Card';
 import { Dialog } from '@/components/core/Dialog';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
+import { SelectField } from '@/components/core/FormField';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { RecordListPager } from '@/components/list/RecordListPager';
+import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
-import type {
-  PatchingFinding,
-  PatchingGroup,
-  PatchingState,
-  PatchingWaiver,
-  WaiverState,
+import {
+  defaultDirection,
+  isPatchingSource,
+  PATCHING_SEVERITIES,
+  PATCHING_SORTS,
+  PATCHING_SOURCES,
+  patchingSearchParams,
+  type PatchingFinding,
+  type PatchingGroup,
+  type PatchingListState,
+  type PatchingQuery,
+  type PatchingSeverity,
+  type PatchingSort,
+  type PatchingWaiver,
+  type WaiverState,
 } from '@/lib/security/patching';
-import { isPatchingSource } from '@/lib/security/patching';
 
 type PatchingCopy = Dictionary['security']['patching'];
 
 interface PatchingPanelProps {
-  readonly state: PatchingState;
+  /** One page of the feed plus the counts for all of it; the filters live in `state.page.query`. */
+  readonly state: PatchingListState;
   readonly copy: PatchingCopy;
   /** Whether the reader holds patching:waive; the read key alone must not offer a write. */
   readonly canWaive: boolean;
@@ -40,6 +53,14 @@ function fill(template: string, date: string): string {
 
 function counted(template: string, count: number): string {
   return template.replace('{count}', String(count));
+}
+
+/** Fills `{name}` placeholders; the pager line needs three of them. */
+function filled(template: string, values: Record<string, number>): string {
+  return Object.entries(values).reduce(
+    (line, [key, value]) => line.replace(`{${String(key)}}`, String(value)),
+    template,
+  );
 }
 
 const SEVERITY_VARIANT: Record<string, 'red' | 'amber' | 'cyan' | 'neutral'> = {
@@ -82,9 +103,39 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
   const [reviewBy, setReviewBy] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const router = useAppRouter();
+  const pathname = usePathname();
 
+  const query = state.page.query;
   const expired = useMemo(() => state.waivers.filter((waiver) => waiver.expired), [state.waivers]);
-  const total = state.groups.reduce((sum, group) => sum + group.findings.length, 0);
+  // The whole filtered set, from the SQL count — not the rows on this page. The empty state and the
+  // pager both have to describe the set, or "page 1 of 1" would mean "the feed is clean" the moment
+  // a filter matched nothing.
+  const total = state.page.total;
+  const filtered = query.source !== 'all' || query.severity !== 'all';
+
+  /**
+   * The URL for a view of this table.
+   *
+   * WHY the page number lives in the URL and not in state: the rows are sliced by the database, so a
+   * page is something the server resolves. A link is therefore the honest control — it survives a
+   * reload, can be shared, and needs no client cache to stay in step with the SQL.
+   */
+  function hrefFor(next: Partial<PatchingQuery>): string {
+    const params = new URLSearchParams(patchingSearchParams({ ...query, ...next }));
+    const search = params.toString();
+    return search === '' ? pathname : `${pathname}?${search}`;
+  }
+
+  /**
+   * A filter change always returns to the first page.
+   *
+   * WHY: page 7 of the old filter is not page 7 of the new one — keeping the number would land the
+   * reader on a page that may not exist for the rows they just asked for.
+   */
+  function applyFilter(next: Partial<PatchingQuery>): void {
+    router.push(hrefFor({ ...next, page: 1 }));
+  }
 
   function openWaive(target: { source: string; match: string }): void {
     setWaiveTarget(target);
@@ -273,6 +324,74 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
 
   return (
     <div className="space-y-4">
+      <Card>
+        <div className="flex flex-wrap items-end gap-3">
+          <SelectField
+            id="patching-source"
+            label={copy.filters.source}
+            value={query.source}
+            className="sm:w-56"
+            onChange={(event) => applyFilter({ source: event.target.value as PatchingQuery['source'] })}
+          >
+            <option value="all">{copy.filters.allSources}</option>
+            {PATCHING_SOURCES.map((source) => (
+              <option key={source} value={source}>
+                {copy.sources[source]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            id="patching-severity"
+            label={copy.filters.severity}
+            value={query.severity}
+            className="sm:w-48"
+            onChange={(event) =>
+              applyFilter({ severity: event.target.value as PatchingQuery['severity'] })
+            }
+          >
+            <option value="all">{copy.filters.allSeverities}</option>
+            {PATCHING_SEVERITIES.map((severity: PatchingSeverity) => (
+              <option key={severity} value={severity}>
+                {severity}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            id="patching-sort"
+            label={copy.filters.sort}
+            value={query.sort}
+            className="sm:w-48"
+            onChange={(event) => {
+              // A new sort field brings its own default direction; keeping the previous field's is
+              // how "sort by subject" rendered Z→A because the date column sorted descending.
+              const sort = event.target.value as PatchingSort;
+              applyFilter({ sort, direction: defaultDirection(sort) });
+            }}
+          >
+            {PATCHING_SORTS.map((sort: PatchingSort) => (
+              <option key={sort} value={sort}>
+                {copy.filters.sorts[sort]}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            id="patching-direction"
+            label={copy.filters.direction}
+            value={query.direction}
+            className="sm:w-40"
+            onChange={(event) =>
+              applyFilter({ direction: event.target.value === 'asc' ? 'asc' : 'desc' })
+            }
+          >
+            <option value="desc">{copy.filters.descending}</option>
+            <option value="asc">{copy.filters.ascending}</option>
+          </SelectField>
+          <p className="ml-auto font-mono text-sm text-muted-foreground">
+            {counted(copy.filters.match, total)}
+          </p>
+        </div>
+      </Card>
+
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {(
           [
@@ -301,10 +420,30 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
 
       {total === 0 ? (
         <Card>
-          <EmptyState title={copy.allClear} />
+          {/* Why the two sentences: "nothing is wrong" and "nothing matches your filter" are
+              different facts, and showing the first one under a filter would be a lie. */}
+          <EmptyState title={filtered ? copy.filters.noMatch : copy.allClear} />
         </Card>
       ) : (
-        state.groups.map(renderGroup)
+        <>
+          {state.groups.map(renderGroup)}
+          <div className="space-y-2">
+            <p className="text-center text-sm text-muted-foreground">
+              {filled(copy.pager.range, {
+                from: Math.min(total, (state.page.query.page - 1) * state.page.pageSize) + 1,
+                to: Math.min(total, state.page.query.page * state.page.pageSize),
+                total,
+              })}
+            </p>
+            <RecordListPager
+              currentPage={state.page.query.page}
+              totalPages={state.page.pageCount}
+              totalRows={total}
+              rowLabel={copy.pager.row}
+              hrefForPage={(page) => hrefFor({ page })}
+            />
+          </div>
+        </>
       )}
 
       <Card>

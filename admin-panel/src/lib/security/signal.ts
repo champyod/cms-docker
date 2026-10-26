@@ -1,4 +1,11 @@
-import type { PatchingFinding, PatchingSeverity, PatchingState } from '@/lib/security/patching';
+import {
+  PATCHING_SEVERITIES,
+  type PatchingCards,
+  type PatchingFinding,
+  type PatchingSeverity,
+  type PatchingSource,
+  type PatchingWaiver,
+} from '@/lib/security/patching';
 
 /**
  * What deserves to reach a human, and how loudly.
@@ -112,6 +119,44 @@ export interface SignalLead {
   readonly ageDays: number | null;
 }
 
+/** How many page-only facts each label covers — the "Also on the page" line, as numbers. */
+export interface SignalRiderCounts {
+  readonly unwaivedHigh: number;
+  readonly aged: number;
+  readonly staleImages: number;
+  readonly expiringWaivers: number;
+}
+
+/**
+ * What the read path hands the digest: SQL totals plus the few rows it can still name.
+ *
+ * WHY this is not a `PatchingState`: the state is every unresolved finding, and building a digest
+ * from it is what made one page render read 34,610 rows. Every number below is either an aggregate
+ * the database computed or the count of a bounded list; the lists are only the rows a message can
+ * put in a line. `waived` is the one row list that is not bounded by the message, because it is
+ * bounded by the waivers instead: a row no live waiver matches has no waiver state to look up.
+ */
+export interface PatchingSignalFacts {
+  readonly cards: PatchingCards;
+  /** The live waiver decisions — a decision, not a finding, so the set is small by construction. */
+  readonly waivers: readonly PatchingWaiver[];
+  /** Unresolved findings per producer family, over the whole feed. */
+  readonly bySource: Readonly<Record<PatchingSource, number>>;
+  /** Unresolved findings per severity, over the whole feed; `unrated` is the rest. */
+  readonly bySeverity: Readonly<Record<PatchingSeverity, number>>;
+  /** Unresolved rows carrying no severity the contract knows (Diun reports none). */
+  readonly unrated: number;
+  /** Rows first seen longer ago than {@link SIGNAL_RULES.findingAgeDays}, waiver state not applied. */
+  readonly aged: number;
+  /** Every row a live waiver touches, already mapped: their state is `active` or `expired`. */
+  readonly waived: readonly PatchingFinding[];
+  /** Unwaived CRITICAL rows, bounded to what a message can name. */
+  readonly criticals: readonly PatchingFinding[];
+  readonly worst: PatchingFinding | null;
+  /** The oldest unresolved row no live waiver touches, from an ordered `take: 1` query. */
+  readonly oldest: PatchingFinding | null;
+}
+
 export interface SecurityDigest {
   readonly tone: SignalTone;
   readonly counts: SignalCounts;
@@ -119,10 +164,23 @@ export interface SecurityDigest {
   readonly worst: SignalLead | null;
   /** The item that has been wrong the longest: the oldest unowned thing. */
   readonly oldest: SignalLead | null;
-  /** Facts that start a message. */
+  /**
+   * Facts that start a message, bounded to {@link SIGNAL_RULES.maxLines}.
+   *
+   * WHY a bounded list beside an exact `triggerCount`: the feed can hold tens of thousands of
+   * rows, and a message prints at most `maxLines` of them. The list is what a message can name;
+   * the count is what is true.
+   */
   readonly triggers: readonly SignalFact[];
-  /** Facts named in a message that some other fact started. Never a reason to send one. */
-  readonly riders: readonly SignalFact[];
+  /** How many facts would start a message, from SQL counts rather than from the rows above. */
+  readonly triggerCount: number;
+  /**
+   * Facts named only as a counted line ("Also on the page: 2 unwaived HIGH").
+   *
+   * WHY counts and not a fact per row: a rider is never printed individually, so enumerating one
+   * per finding made the digest's cost grow with the feed for a number that was only ever summed.
+   */
+  readonly riderCounts: SignalRiderCounts;
   readonly staleness: readonly StalenessReading[];
 }
 
@@ -146,20 +204,7 @@ export const SIGNAL_RULES = {
   maxLines: 12,
 } as const;
 
-const SEVERITY_ORDER: Record<PatchingSeverity, number> = {
-  CRITICAL: 0,
-  HIGH: 1,
-  MEDIUM: 2,
-  LOW: 3,
-  UNKNOWN: 4,
-};
-
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** A waiver suppresses a finding only while it is unexpired; a lapsed one suppresses nothing. */
-function isUnwaived(finding: PatchingFinding): boolean {
-  return finding.waiver.status !== 'active';
-}
 
 function ageDays(since: string, now: Date): number {
   return Math.floor((now.getTime() - new Date(since).getTime()) / DAY_MS);
@@ -184,24 +229,34 @@ export function expiredWaiverKey(waiverId: number): string {
   return `waiver:${String(waiverId)}:expired`;
 }
 
+/** The instant a first sighting becomes "aged": exactly `ageDays(since) > findingAgeDays`. */
+export function agedCutoff(now: Date): Date {
+  return new Date(now.getTime() - (SIGNAL_RULES.findingAgeDays + 1) * DAY_MS);
+}
+
+function isAged(firstSeen: string, now: Date): boolean {
+  return ageDays(firstSeen, now) > SIGNAL_RULES.findingAgeDays;
+}
+
 /**
- * Builds the digest from the read path's state plus the staleness snapshot.
+ * Builds the digest from the read path's facts plus the staleness snapshot.
  *
- * WHY the two inputs and not a query each: `PatchingState` is already the one answer to "what is
- * unresolved and what is waived", and staleness is not a finding (docs/SECURITY-FEED.md — a backup
- * age is not a finding), so it arrives as its own reading instead of being squeezed into either
- * security table.
+ * WHY the facts and not a `PatchingState`: the state is every unresolved finding, and a digest that
+ * walked all of them made one page render read the whole feed. Every number below is therefore
+ * either a SQL total or the count of a bounded list — and the arithmetic (what "unwaived" and "aged"
+ * mean) still happens once, here, rather than in a query per number.
+ *
+ * WHY staleness is still its own input: a backup age is not a finding (docs/SECURITY-FEED.md), so it
+ * arrives as its own reading instead of being squeezed into either security table.
  */
 export function buildSecurityDigest(
-  state: PatchingState,
+  facts: PatchingSignalFacts,
   staleness: StalenessSnapshot,
   now: Date,
 ): SecurityDigest {
-  const findings = state.groups.flatMap((group) => group.findings);
   const triggers: SignalFact[] = [];
-  const riders: SignalFact[] = [];
 
-  const expiredWaivers = state.waivers.filter((waiver) => waiver.expired);
+  const expiredWaivers = facts.waivers.filter((waiver) => waiver.expired);
   for (const waiver of expiredWaivers) {
     triggers.push({
       key: expiredWaiverKey(waiver.id),
@@ -211,12 +266,11 @@ export function buildSecurityDigest(
     });
   }
 
-  const critical = findings.filter(
-    (finding) => finding.severity !== null && SIGNAL_RULES.pushSeverities.includes(finding.severity as 'CRITICAL'),
-  );
-  // WHY only the ones with no waiver at all: a CRITICAL whose waiver lapsed is already pushed as
-  // the lapsed decision, and one item producing two lines is how a digest starts to look like noise.
-  for (const finding of critical.filter((row) => row.waiver.status === 'none')) {
+  // WHY the rows arrive already filtered to "no waiver at all": a CRITICAL whose waiver lapsed is
+  // already pushed as the lapsed decision, and one item producing two lines is how a digest starts
+  // to look like noise. The read path applies that predicate in SQL; `triggerCount` below keeps the
+  // number exact even when the message can only name the first few.
+  for (const finding of facts.criticals) {
     triggers.push({
       key: findingKey(finding),
       kind: 'finding-critical',
@@ -225,8 +279,10 @@ export function buildSecurityDigest(
     });
   }
 
+  let stalenessTriggers = 0;
   for (const reading of staleness.readings) {
     if (reading.state === 'current') continue;
+    stalenessTriggers += 1;
     triggers.push({
       key: reading.state === 'stale' ? `stale:${reading.channel}` : `cannot-evaluate:${reading.channel}`,
       kind: 'staleness',
@@ -241,61 +297,36 @@ export function buildSecurityDigest(
     });
   }
 
-  for (const finding of findings) {
-    if (!isUnwaived(finding)) continue;
-    if (finding.severity === 'HIGH') {
-      riders.push({
-        key: `high:${findingKey(finding)}`,
-        kind: 'finding-critical',
-        detail: findingDetail(finding),
-        since: finding.firstSeen,
-      });
-    }
-    if (ageDays(finding.firstSeen, now) > SIGNAL_RULES.findingAgeDays) {
-      riders.push({
-        key: `aged:${findingKey(finding)}`,
-        kind: 'finding-critical',
-        detail: `${findingDetail(finding)} — first seen ${finding.firstSeen.slice(0, 10)}`,
-        since: finding.firstSeen,
-      });
-    }
-  }
-
-  // Diun's drift is a rider, never a trigger; it carries no severity, so it is named by subject.
-  for (const finding of findings.filter((row) => row.source === 'diun')) {
-    riders.push({
-      key: `image:${finding.key}`,
-      kind: 'finding-critical',
-      detail: `${finding.subject} is not the digest the registry serves`,
-      since: finding.firstSeen,
-    });
-  }
+  // The rows a live waiver covers are the only ones whose state is not 'none', so everything a
+  // waiver could hide is subtractable from a total rather than requiring the rows themselves.
+  const active = facts.waived.filter((finding) => finding.waiver.status === 'active');
+  const activeWith = (severity: PatchingSeverity): number =>
+    active.filter((finding) => finding.severity === severity).length;
+  const isPushSeverity = (severity: PatchingSeverity | null): boolean =>
+    severity !== null && (SIGNAL_RULES.pushSeverities as readonly PatchingSeverity[]).includes(severity);
+  const pushedTotal = SIGNAL_RULES.pushSeverities.reduce(
+    (sum, severity) => sum + facts.bySeverity[severity],
+    0,
+  );
+  const pushedTouched = facts.waived.filter(
+    (finding) => isPushSeverity(finding.severity) && finding.waiver.status !== 'none',
+  ).length;
 
   const warningCutoff = now.getTime() + SIGNAL_RULES.waiverWarningDays * DAY_MS;
-  const expiringWaivers = state.waivers.filter(
+  const expiringWaivers = facts.waivers.filter(
     (waiver) => !waiver.expired && new Date(waiver.reviewBy).getTime() <= warningCutoff,
   );
-  for (const waiver of expiringWaivers) {
-    riders.push({
-      key: `waiver:${String(waiver.id)}:expiring`,
-      kind: 'waiver-expired',
-      detail: `${waiver.source} waiver ${waiver.match} — review due ${waiver.reviewBy.slice(0, 10)}`,
-      since: waiver.reviewBy,
-    });
-  }
 
   const counts: SignalCounts = {
-    openFindings: findings.length,
-    unwaivedCritical: critical.filter(isUnwaived).length,
-    unwaivedHigh: findings.filter((finding) => finding.severity === 'HIGH' && isUnwaived(finding)).length,
+    openFindings: facts.unrated + PATCHING_SEVERITIES.reduce((sum, severity) => sum + facts.bySeverity[severity], 0),
+    unwaivedCritical: facts.bySeverity.CRITICAL - activeWith('CRITICAL'),
+    unwaivedHigh: facts.bySeverity.HIGH - activeWith('HIGH'),
     expiredWaivers: expiredWaivers.length,
     expiringWaivers: expiringWaivers.length,
-    agedFindings: findings.filter(
-      (finding) => isUnwaived(finding) && ageDays(finding.firstSeen, now) > SIGNAL_RULES.findingAgeDays,
-    ).length,
+    agedFindings: facts.aged - active.filter((finding) => isAged(finding.firstSeen, now)).length,
     // From the shared cards so the digest cannot count stale images differently from the card
     // that has shown that number since the feed shipped.
-    staleImages: state.cards.staleImages,
+    staleImages: facts.cards.staleImages,
     staleSources: staleness.readings.filter((reading) => reading.state === 'stale').length,
     unevaluable: staleness.readings.filter((reading) => reading.state === 'unknown').length,
   };
@@ -303,10 +334,17 @@ export function buildSecurityDigest(
   return {
     tone: toneFor(triggers, counts),
     counts,
-    worst: worstFinding(findings),
-    oldest: oldestUnowned(findings, expiredWaivers, now),
+    worst: worstFinding(facts.worst),
+    oldest: oldestUnowned(facts.oldest, expiredWaivers, now),
     triggers: sortFacts(triggers),
-    riders: sortFacts(riders),
+    triggerCount: expiredWaivers.length + (pushedTotal - pushedTouched) + stalenessTriggers,
+    // Diun's drift is a rider, never a trigger; it carries no severity, so it is named by subject.
+    riderCounts: {
+      unwaivedHigh: counts.unwaivedHigh,
+      aged: counts.agedFindings,
+      staleImages: facts.bySource.diun,
+      expiringWaivers: expiringWaivers.length,
+    },
     staleness: staleness.readings,
   };
 }
@@ -344,17 +382,15 @@ function sortFacts(facts: readonly SignalFact[]): readonly SignalFact[] {
   });
 }
 
-/** The most severe unresolved finding; ties go to the one seen first. */
-function worstFinding(findings: readonly PatchingFinding[]): SignalLead | null {
-  const ranked = [...findings].sort((left, right) => {
-    const severity =
-      (left.severity === null ? 99 : SEVERITY_ORDER[left.severity]) -
-      (right.severity === null ? 99 : SEVERITY_ORDER[right.severity]);
-    if (severity !== 0) return severity;
-    return left.firstSeen.localeCompare(right.firstSeen);
-  });
-  const worst = ranked[0];
-  if (worst === undefined) return null;
+/**
+ * The most severe unresolved finding; ties go to the one seen first.
+ *
+ * WHY the row arrives already chosen: "the worst" is one row, and the database can order by severity
+ * rank without handing over the feed — the read path picks the top severity with a count, then takes
+ * its earliest sighting. Sorting every finding to name one is what this replaced.
+ */
+function worstFinding(worst: PatchingFinding | null): SignalLead | null {
+  if (worst === null) return null;
   const waiver =
     worst.waiver.status === 'active'
       ? `waived until ${worst.waiver.reviewBy.slice(0, 10)}`
@@ -374,22 +410,25 @@ function worstFinding(findings: readonly PatchingFinding[]): SignalLead | null {
  *
  * WHY unowned and not simply oldest: a finding under a current waiver has been decided about, so it
  * is not "the oldest problem" — naming it would tell the operator to look at the one item that is
- * already handled.
+ * already handled. `oldestUnwaived` is the read path's `take: 1` over rows no live waiver matches,
+ * which is why one row is enough to decide the finding half of this.
  */
 function oldestUnowned(
-  findings: readonly PatchingFinding[],
+  oldestUnwaived: PatchingFinding | null,
   expiredWaivers: readonly { readonly id: number; readonly source: string; readonly match: string; readonly reviewBy: string }[],
   now: Date,
 ): SignalLead | null {
   const candidates: SignalLead[] = [
-    ...findings
-      .filter((finding) => finding.waiver.status === 'none')
-      .map((finding) => ({
-        label: findingLabel(finding),
-        detail: `${finding.severity ?? 'unrated'} · no waiver · first seen ${finding.firstSeen.slice(0, 10)}`,
-        since: finding.firstSeen,
-        ageDays: ageDays(finding.firstSeen, now),
-      })),
+    ...(oldestUnwaived === null
+      ? []
+      : [
+          {
+            label: findingLabel(oldestUnwaived),
+            detail: `${oldestUnwaived.severity ?? 'unrated'} · no waiver · first seen ${oldestUnwaived.firstSeen.slice(0, 10)}`,
+            since: oldestUnwaived.firstSeen,
+            ageDays: ageDays(oldestUnwaived.firstSeen, now),
+          },
+        ]),
     ...expiredWaivers.map((waiver) => ({
       label: `${waiver.source} waiver ${waiver.match}`,
       detail: `review was due ${waiver.reviewBy.slice(0, 10)}`,
@@ -416,9 +455,26 @@ export interface NotifyPlan {
   readonly facts: readonly SignalFact[];
   /** The facts the last message did not carry; these are what make it worth sending. */
   readonly fresh: readonly SignalFact[];
+  /**
+   * The key of the "…and N more" line, when the trigger count exceeded what a message names.
+   *
+   * WHY it is part of the record: the count is the only thing that reports those rows, so a change in
+   * it is a new fact. Without a key of its own, a fresh CRITICAL beyond the named ones would never be
+   * mentioned.
+   */
+  readonly overflowKey: string | null;
   readonly mention: boolean;
   readonly title: string;
   readonly body: string;
+}
+
+/**
+ * The key for "…and N more": stable for as long as the number of unnamed facts is.
+ *
+ * WHY a count and not the unnamed keys: the point of the bound is not to fetch them.
+ */
+export function overflowFactKey(hidden: number): string {
+  return `more:on-page:${String(hidden)}`;
 }
 
 /**
@@ -436,24 +492,28 @@ export function planNotification(
   now: Date,
 ): NotifyPlan {
   const facts = digest.triggers;
+  const hidden = Math.max(0, digest.triggerCount - facts.length);
+  const overflowKey = hidden > 0 ? overflowFactKey(hidden) : null;
   const known = new Set(last?.keys ?? []);
   const fresh = facts.filter((fact) => !known.has(fact.key));
-  const title = `Security: ${String(facts.length)} item${facts.length === 1 ? '' : 's'} need attention`;
+  const overflowIsFresh = overflowKey !== null && !known.has(overflowKey);
+  const title = `Security: ${String(digest.triggerCount)} item${digest.triggerCount === 1 ? '' : 's'} need attention`;
 
-  if (facts.length === 0) {
-    return { send: false, reason: 'nothing-to-say', facts, fresh, mention: false, title, body: '' };
+  if (facts.length === 0 && overflowKey === null) {
+    return { send: false, reason: 'nothing-to-say', facts, fresh, overflowKey, mention: false, title, body: '' };
   }
-  if (fresh.length === 0) {
-    return { send: false, reason: 'unchanged', facts, fresh, mention: false, title, body: '' };
+  if (fresh.length === 0 && !overflowIsFresh) {
+    return { send: false, reason: 'unchanged', facts, fresh, overflowKey, mention: false, title, body: '' };
   }
   if (last !== null && now.getTime() - new Date(last.notifiedAt).getTime() < SIGNAL_RULES.minIntervalMs) {
-    return { send: false, reason: 'rate-limited', facts, fresh, mention: false, title, body: '' };
+    return { send: false, reason: 'rate-limited', facts, fresh, overflowKey, mention: false, title, body: '' };
   }
   return {
     send: true,
     reason: 'send',
     facts,
     fresh,
+    overflowKey,
     mention: facts.some((fact) => fact.kind === 'staleness' || fact.kind === 'finding-critical'),
     title,
     body: renderMessage(digest, fresh),
@@ -466,32 +526,40 @@ export function planNotification(
  * WHY the full set and not only the new lines: a message that names one fact leaves the operator
  * guessing whether the backup is still broken. Riders ride because they are the context that makes
  * the page worth opening — they are not the reason the message exists.
+ *
+ * WHY the "…and N more" count comes from `triggerCount`: the list is bounded to what the message
+ * prints, so its length is no longer the size of the push set.
  */
 export function renderMessage(digest: SecurityDigest, fresh: readonly SignalFact[]): string {
   const lines: string[] = [];
   const shown = digest.triggers.slice(0, SIGNAL_RULES.maxLines);
   for (const fact of shown) lines.push(`• ${fact.detail}`);
-  const hidden = digest.triggers.length - shown.length;
+  const hidden = Math.max(0, digest.triggerCount - shown.length);
   if (hidden > 0) lines.push(`• …and ${String(hidden)} more on the Patching page`);
 
-  const riderCounts = new Map<string, number>();
-  for (const rider of digest.riders) {
-    const label = riderLabel(rider);
-    riderCounts.set(label, (riderCounts.get(label) ?? 0) + 1);
-  }
-  if (riderCounts.size > 0) {
-    const summary = [...riderCounts.entries()].map(([label, count]) => `${String(count)} ${label}`).join(' · ');
-    lines.push(`Also on the page: ${summary}.`);
-  }
+  const summary = renderRiderSummary(digest);
+  if (summary !== null) lines.push(`Also on the page: ${summary}.`);
   if (fresh.length > 0) {
     lines.push(`${String(fresh.length)} of these ${fresh.length === 1 ? 'is' : 'are'} new since the last message.`);
   }
   return lines.join('\n');
 }
 
-function riderLabel(rider: SignalFact): string {
-  if (rider.key.startsWith('high:')) return 'unwaived HIGH';
-  if (rider.key.startsWith('aged:')) return `older than ${String(SIGNAL_RULES.findingAgeDays)} days`;
-  if (rider.key.startsWith('image:')) return 'stale image';
-  return 'expiring waiver';
+/**
+ * The page-only facts as one line: "2 unwaived HIGH · 3 older than 14 days".
+ *
+ * WHY the numbers and not a fact list: this line is the only thing a rider is ever rendered as, so
+ * the digest carries the counts and never a row per finding. The order is fixed (most actionable
+ * first) so the same state always reads the same way.
+ */
+function renderRiderSummary(digest: SecurityDigest): string | null {
+  const counts: readonly [number, string][] = [
+    [digest.riderCounts.unwaivedHigh, 'unwaived HIGH'],
+    [digest.riderCounts.aged, `older than ${String(SIGNAL_RULES.findingAgeDays)} days`],
+    [digest.riderCounts.staleImages, 'stale image'],
+    [digest.riderCounts.expiringWaivers, 'expiring waiver'],
+  ];
+  const named = counts.filter(([count]) => count > 0);
+  if (named.length === 0) return null;
+  return named.map(([count, label]) => `${String(count)} ${label}`).join(' · ');
 }

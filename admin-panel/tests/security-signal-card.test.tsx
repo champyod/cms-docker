@@ -8,7 +8,7 @@ import { buildSecurityDigest } from '@/lib/security/signal';
 import {
   currentStaleness,
   makeFinding,
-  makeState,
+  makeSignalFacts,
   makeWaiver,
   NOW,
   staleStaleness,
@@ -17,8 +17,8 @@ import {
 
 const copy = en.security.signal;
 
-function renderCard(findings: Parameters<typeof makeState>[0], waivers: Parameters<typeof makeState>[1] = [], staleness = currentStaleness()): void {
-  const state = makeState(findings, waivers);
+function renderCard(findings: Parameters<typeof makeSignalFacts>[0], waivers: Parameters<typeof makeSignalFacts>[1] = [], staleness = currentStaleness()): void {
+  const state = makeSignalFacts(findings, waivers);
   render(
     <SecuritySignalCard digest={buildSecurityDigest(state, staleness, NOW)} locale="en" copy={copy} />,
   );

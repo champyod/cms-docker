@@ -140,12 +140,20 @@ describe('one read path', () => {
     const overview = read('src/app/[locale]/(authenticated)/security/overview/page.tsx');
     for (const source of [page, overview]) {
       expect(source).toContain("from '@/app/actions/securityPatching'");
-      expect(source).toContain('readPatchingState(');
+      // Neither surface may reach for the read path or the client itself: the action is where the
+      // gate lives, and a query beside it would be a second definition of "unresolved".
       expect(source).not.toContain('patching-read');
       expect(source).not.toContain('prisma.');
     }
+    // The page asks for one page of the feed; the overview asks for the numbers over all of it.
+    expect(page).toContain('readPatchingFindingsPage(');
+    expect(overview).toContain('readPatchingState(');
     const actions = read('src/app/actions/securityPatching.ts');
     expect(actions).toContain("from '@/lib/security/patching-read'");
     expect(actions).toContain('readPatchingSnapshot(');
+    expect(actions).toContain('readPatchingPage(');
+    // One gate for both reads: a second `ensurePermission` in this file would be a second chance
+    // for the two to drift apart.
+    expect(actions.match(/ensurePermission\('patching:read'\)/g)).toHaveLength(1);
   });
 });
