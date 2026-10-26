@@ -161,15 +161,25 @@ emit_policy_helpers() {
 -- WHY current_setting(..., true): the missing_ok form returns NULL instead of raising when the
 -- GUC is unset, so an actor-less connection reads as "no actor" (and every predicate below is
 -- false) rather than erroring the whole query out. Fail closed, not fail loud, at the row level.
+-- WHY every helper below carries `SET search_path`: a plain SQL function this simple is INLINED
+-- into the policy expression, so `cms_actor_is_staff()` was re-evaluated once per row — a regex,
+-- two split_parts and two array comparisons times 34,610 rows, on every query in the panel.
+-- Measured: 25 ms of a 55 ms GROUP BY. A function with a SET clause cannot be inlined, so the
+-- identity is resolved once per statement. The search_path is pinned at the same time, which is
+-- the other half of what makes these safe to call from a policy.
 CREATE OR REPLACE FUNCTION public.cms_actor() RETURNS text
-  LANGUAGE sql STABLE AS $$
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $$
     SELECT nullif(current_setting('cms.actor', true), '')
   $$;
 
 -- Only the exact shape `admin:<decimal>` yields an id. Anything else (a malformed value, a system
 -- identity) is NULL, so a forged or truncated GUC cannot name an admin.
 CREATE OR REPLACE FUNCTION public.cms_actor_admin_id() RETURNS integer
-  LANGUAGE sql STABLE AS $$
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $$
     SELECT CASE
              WHEN public.cms_actor() ~ '^admin:[0-9]{1,9}$'
              THEN split_part(public.cms_actor(), ':', 2)::integer
@@ -179,21 +189,27 @@ CREATE OR REPLACE FUNCTION public.cms_actor_admin_id() RETURNS integer
 -- A system identity must carry the `system:` prefix AND be named here. The prefix check is what
 -- keeps `admin:7` out of the allowlist even if a name collided with it.
 CREATE OR REPLACE FUNCTION public.cms_actor_any(names text[]) RETURNS boolean
-  LANGUAGE sql STABLE AS $$
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $$
     SELECT public.cms_actor() LIKE 'system:%' AND public.cms_actor() = ANY(names)
   $$;
 
 -- The trusted application identities: a signed-in panel admin, the Python core, the panel's CLI,
 -- and migrations/seeding. Everything outside this set is an unidentified connection.
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff() RETURNS boolean
-  LANGUAGE sql STABLE AS $$
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
         OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler'])
   $$;
 
 -- The same set plus the pre-session login path. Used only on AUTH_BOOTSTRAP tables.
 CREATE OR REPLACE FUNCTION public.cms_actor_is_staff_or_auth() RETURNS boolean
-  LANGUAGE sql STABLE AS $$
+  LANGUAGE sql STABLE
+  SET search_path = pg_catalog, public
+AS $$
     SELECT public.cms_actor_admin_id() IS NOT NULL
         OR public.cms_actor_any(ARRAY['system:core', 'system:cli', 'system:migration', 'system:scheduler', 'system:auth'])
   $$;
