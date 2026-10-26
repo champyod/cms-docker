@@ -61,6 +61,22 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => controller.abort());
 }
 
-log(`starting: every ${intervalMs() / 1000}s`);
-await runReconciler({ once, log, intervalMs: intervalMs(), signal: controller.signal });
-log('stopped');
+/**
+ * WHY this is a function and not top-level `await`: the panel's package is CommonJS (no
+ * `"type": "module"`, and the image's build is CJS), so `tsx` refuses to transform a top-level await —
+ * the service died at import with `Top-level await is currently not supported with the "cjs" output
+ * format` and restart-looped, which is how it was found in production. An async `main()` is the same
+ * program under either module format.
+ */
+async function main(): Promise<void> {
+  log(`starting: every ${intervalMs() / 1000}s`);
+  await runReconciler({ once, log, intervalMs: intervalMs(), signal: controller.signal });
+  log('stopped');
+}
+
+main().catch((error: unknown) => {
+  // A refused startup (no socket, no registry, unreadable certificate) is a real failure and must
+  // exit non-zero: a container that stays "up" while reconciling nothing is worse than one that stops.
+  log(`fatal: ${error instanceof Error ? error.message : String(error)}`);
+  process.exitCode = 1;
+});
