@@ -23,6 +23,7 @@ import {
 import { readFrontVhosts } from '@/lib/front-vhosts';
 import { reconcileOnce, runReconciler, type ReconcileResult } from '@/lib/reconciler';
 import { readRegistry } from '@/lib/service-wiring-store';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 
 const DEFAULT_INTERVAL_SECS = 60;
 
@@ -70,7 +71,15 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
  */
 async function main(): Promise<void> {
   log(`starting: every ${intervalMs() / 1000}s`);
-  await runReconciler({ once, log, intervalMs: intervalMs(), signal: controller.signal });
+  // WHY the whole loop runs inside withActor(): every table this reads is row-level secured on
+  // `cms.actor`, and this process has no request and no cookie to resolve one from — without a named
+  // scope each tick fails with "no database actor" and the front keeps a config nobody refreshed.
+  // `system:cli` because the reconciler is repository automation acting for the deployment (it reads the
+  // wiring registry and writes the front's files, never a row the panel owns), and naming it keeps the
+  // audit trail honest instead of borrowing an admin's identity.
+  await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.CLI }, () =>
+    runReconciler({ once, log, intervalMs: intervalMs(), signal: controller.signal }),
+  );
   log('stopped');
 }
 

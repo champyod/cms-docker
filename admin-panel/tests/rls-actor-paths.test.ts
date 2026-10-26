@@ -42,6 +42,55 @@ const SOURCE_FILES = walk(SRC).filter((f) => /\.(ts|tsx)$/.test(f));
 const ENTRY_DIRS = [path.join(PANEL_ROOT, 'prisma'), path.join(PANEL_ROOT, 'scripts')];
 const ENTRY_FILES = ENTRY_DIRS.flatMap((dir) => walk(dir)).filter((f) => /\.(ts|mjs)$/.test(f));
 
+/**
+ * Does this file reach the database, directly or through the modules it imports?
+ *
+ * Follows local `@/…` imports breadth-first, up to `depth` levels, and answers true on the first
+ * hit of the one module that owns the client. A depth limit keeps a cyclic import graph finite; the
+ * chains that matter here are one or two hops (entry point → store → client).
+ */
+function reachesPrisma(file: string, depth: number): boolean {
+  const seen = new Set<string>();
+  const queue: Array<{ file: string; depth: number }> = [{ file, depth }];
+  while (queue.length > 0) {
+    const next = queue.shift();
+    if (!next || seen.has(next.file)) continue;
+    seen.add(next.file);
+    const text = fs.readFileSync(next.file, 'utf8');
+    if (/from '@\/lib\/prisma'|from "@\/lib\/prisma"/.test(text)) return true;
+    if (next.depth === 0) continue;
+    for (const spec of text.matchAll(/from '(@\/[^']+)'/g)) {
+      const resolved = resolveAlias(spec[1]);
+      if (resolved) queue.push({ file: resolved, depth: next.depth - 1 });
+      if (resolved && /^src\/lib\/prisma\.ts$/.test(path.relative(PANEL_ROOT, resolved).split(path.sep).join('/'))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * Source with its comments removed.
+ *
+ * WHY: the assertion below looks for a CALL, and a comment that mentions the helper ("wrap the query in
+ * withActor()") satisfies a bare pattern and turns the gate into a pass that proves nothing. Measured —
+ * the very file that motivated the reachability walk passed on its own explanatory comment. Matching the
+ * de-commented text is the honest form: block and line comments out, code left exactly as written.
+ */
+function withoutComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/** `@/lib/x` → the file on disk, trying the extensionless and index forms tsconfig allows. */
+function resolveAlias(spec: string): string | null {
+  const base = path.join(SRC, spec.replace(/^@\//, ''));
+  for (const candidate of [`${base}.ts`, `${base}.tsx`, path.join(base, 'index.ts')]) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 function relative(file: string): string {
   return path.relative(PANEL_ROOT, file).split(path.sep).join('/');
 }
@@ -110,15 +159,23 @@ describe('every database path is accounted for', () => {
     // production seed died with MODULE_NOT_FOUND after the migrations had already run, leaving
     // every admin holding groups that grant nothing. Nothing compared the two facts, so nothing
     // could notice it before the deploy did.
-    const dbEntries = ENTRY_FILES.filter((f) =>
-      /from '@\/lib\/prisma'|from "@\/lib\/prisma"/.test(fs.readFileSync(f, 'utf8')),
-    );
+    //
+    // WHY reach is followed instead of the direct import: the entry points that broke in production
+    // did not import the client themselves — `scripts/reconcile-exposures.ts` imported a store that
+    // does, so a rule keyed on `from '@/lib/prisma'` read it as absent and passed while every tick
+    // died with "no database actor" and the front kept a stale config. A reachability walk is the
+    // property that actually matters: does this process end up at Postgres or not.
+    const dbEntries = ENTRY_FILES.filter((f) => reachesPrisma(f, 3));
     expect(dbEntries.length).toBeGreaterThan(0);
     for (const file of dbEntries) {
       const text = fs.readFileSync(file, 'utf8');
-      expect(text, `${relative(file)} reads the database but never establishes an actor`).toMatch(
-        /withActor\(/,
-      );
+      // The call, not the word: comments are stripped first (see `withoutComments`), and the argument
+      // is deliberately not constrained — `withActor(VERIFY_ACTOR, …)` names a constant actor and is
+      // just as correct as an inline object.
+      expect(
+        withoutComments(text),
+        `${relative(file)} reaches the database but never establishes an actor`,
+      ).toMatch(/withActor\(/);
     }
   });
 
