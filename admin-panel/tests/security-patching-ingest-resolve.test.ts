@@ -25,43 +25,76 @@ interface Row {
   resolved_at: Date | null;
 }
 
+type UpdateWhere = {
+  source: string;
+  key?: string;
+  host?: string;
+  resolved_at?: null;
+  last_seen?: { lt: Date };
+  OR?: ReadonlyArray<{ resolved_at: null | { lt: Date } }>;
+};
+
+function rowMatches(row: Row, where: UpdateWhere): boolean {
+  if (row.source !== where.source) return false;
+  if (where.key !== undefined && row.key !== where.key) return false;
+  if (where.host !== undefined && row.host !== where.host) return false;
+  if (where.resolved_at === null && row.resolved_at !== null) return false;
+  if (where.last_seen !== undefined && !(row.last_seen < where.last_seen.lt)) return false;
+  if (where.OR !== undefined) {
+    const any = where.OR.some((clause) =>
+      clause.resolved_at === null
+        ? row.resolved_at === null
+        : row.resolved_at !== null && row.resolved_at < clause.resolved_at.lt,
+    );
+    if (!any) return false;
+  }
+  return true;
+}
+
+/**
+ * An in-memory stand-in for the two writes the rule uses.
+ *
+ * WHY it reproduces the SQL predicates rather than recording the arguments: a recorder would
+ * pass whether the predicate is `last_seen < runStart` or `last_seen < now`, and that difference
+ * is the whole rule.
+ */
 function fakeClient(rows: Row[]) {
   let nextId = rows.length + 1;
   const client = {
     security_findings: {
-      upsert: async ({ where, create, update }: {
-        where: { source_key: { source: string; key: string } };
-        create: Record<string, unknown>;
-        update: Record<string, unknown>;
-      }) => {
-        const found = rows.find(
-          (row) => row.source === where.source_key.source && row.key === where.source_key.key,
-        );
-        if (found !== undefined) {
-          Object.assign(found, update);
-          return found;
-        }
-        const created: Row = {
-          id: nextId++,
-          source: where.source_key.source,
-          key: where.source_key.key,
-          host: (create.host as string | null) ?? null,
-          last_seen: create.last_seen as Date,
-          resolved_at: null,
-        };
-        rows.push(created);
-        return created;
-      },
       updateMany: async ({ where, data }: {
-        where: { source: string; host?: string; resolved_at: null; last_seen?: { lt: Date } };
-        data: { resolved_at: Date };
+        where: UpdateWhere;
+        data: { resolved_at: Date | null } & Record<string, unknown>;
       }) => {
         let count = 0;
         for (const row of rows) {
-          if (row.source !== where.source || row.resolved_at !== null) continue;
-          if (where.host !== undefined && row.host !== where.host) continue;
-          if (where.last_seen !== undefined && !(row.last_seen < where.last_seen.lt)) continue;
-          row.resolved_at = data.resolved_at;
+          if (!rowMatches(row, where)) continue;
+          Object.assign(row, data);
+          count += 1;
+        }
+        return { count };
+      },
+      createMany: async ({ data, skipDuplicates }: {
+        data: ReadonlyArray<Record<string, unknown>>;
+        skipDuplicates?: boolean;
+      }) => {
+        let count = 0;
+        for (const datum of data) {
+          const found = rows.find(
+            (row) => row.source === datum.source && row.key === datum.key,
+          );
+          if (found !== undefined) {
+            if (skipDuplicates === true) continue;
+            throw new Error(`unique constraint: ${String(datum.source)}/${String(datum.key)}`);
+          }
+          rows.push({
+            id: nextId++,
+            source: datum.source as string,
+            key: datum.key as string,
+            host: (datum.host as string | null) ?? null,
+            last_seen: datum.last_seen as Date,
+            resolved_at: (datum.resolved_at as Date | null) ?? null,
+          });
           count += 1;
         }
         return { count };
@@ -176,5 +209,123 @@ describe('run-scoped resolution', () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0].last_seen).toEqual(now);
+  });
+});
+
+/**
+ * Two runs over one source, interleaved.
+ *
+ * WHY this is a separate group: every case above is a single run against rows it can only
+ * resolve, so they all pass whether "newest evidence wins" is enforced or not. The producer
+ * schedule makes two runs overlap for real — the nightly host scan takes ~3 minutes as 139
+ * batches, so a manual re-scan started mid-scan is two runs writing one source at once — and
+ * the rule has to say which run's evidence survives.
+ *
+ * The rule: a row's state is decided by the *newest run that touched it*. A late batch from an
+ * older run may not reopen a resolution a newer run made, and an older run completing last may
+ * not resolve rows a newer run has written.
+ */
+describe('two runs interleaved over one source', () => {
+  const finding = (key: string, host = 'box-a'): FeedPush['findings'][number] =>
+    ({
+      key,
+      kind: 'os',
+      severity: 'HIGH',
+      subject: key,
+      installed: '1.0.0',
+      available: '1.0.1',
+      title: null,
+      url: null,
+      host,
+      detail: null,
+    }) as FeedPush['findings'][number];
+
+  const at = (iso: string): Date => new Date(iso);
+
+  it('the older run completing last does not resolve the newer run’s rows', async () => {
+    const rows: Row[] = [];
+    const client = fakeClient(rows);
+
+    // The newer run starts at 10:10 and lands a batch two minutes in.
+    const newer = await applyFeedPush(
+      client as never,
+      push({ complete: false, runStartedAt: at('2026-10-25T10:10:00Z'), findings: [finding('b-1')] }),
+      at('2026-10-25T10:12:00Z'),
+    );
+    expect(newer.resolved).toBe(0);
+
+    // The older run (started 10:00) finishes at 10:40 and claims the source is complete.
+    const older = await applyFeedPush(
+      client as never,
+      push({ complete: true, runStartedAt: at('2026-10-25T10:00:00Z'), findings: [finding('a-1')] }),
+      at('2026-10-25T10:40:00Z'),
+    );
+
+    expect(older.resolved).toBe(0);
+    expect(rows.find((row) => row.key === 'b-1')?.resolved_at).toBeNull();
+  });
+
+  it('a late batch from the older run does not reopen what the newer run resolved', async () => {
+    const rows: Row[] = [
+      { id: 1, source: 'rootfs', key: 'libssl', host: 'box-a', last_seen: at('2026-10-20T00:00:00Z'), resolved_at: null },
+    ];
+    const client = fakeClient(rows);
+
+    // The newer run started at 10:10, found nothing, and closed the row at 10:20.
+    const newer = await applyFeedPush(
+      client as never,
+      push({ complete: true, runStartedAt: at('2026-10-25T10:10:00Z'), findings: [] }),
+      at('2026-10-25T10:20:00Z'),
+    );
+    expect(newer.resolved).toBe(1);
+    expect(rows[0].resolved_at).toEqual(at('2026-10-25T10:20:00Z'));
+
+    // The run that started at 10:00 was still scanning; its last batch arrives at 10:30 and
+    // reports the row the newer, complete run has just declared gone.
+    const older = await applyFeedPush(
+      client as never,
+      push({ complete: false, runStartedAt: at('2026-10-25T10:00:00Z'), findings: [finding('libssl')] }),
+      at('2026-10-25T10:30:00Z'),
+    );
+
+    // The newer run's evidence wins: the row stays resolved and the older observation does not
+    // freshen it, so the next scan's window is not widened by a phantom.
+    expect(rows[0].resolved_at).toEqual(at('2026-10-25T10:20:00Z'));
+    expect(rows[0].last_seen).toEqual(at('2026-10-20T00:00:00Z'));
+    expect(older.held).toBe(1);
+  });
+
+  it('a run that started after the resolution still revives the row', async () => {
+    const rows: Row[] = [
+      { id: 1, source: 'rootfs', key: 'libssl', host: 'box-a', last_seen: at('2026-10-20T00:00:00Z'), resolved_at: at('2026-10-25T10:20:00Z') },
+    ];
+
+    const later = await applyFeedPush(
+      fakeClient(rows) as never,
+      push({ complete: false, runStartedAt: at('2026-10-25T11:00:00Z'), findings: [finding('libssl')] }),
+      at('2026-10-25T11:02:00Z'),
+    );
+
+    expect(rows[0].resolved_at).toBeNull();
+    expect(rows[0].last_seen).toEqual(at('2026-10-25T11:02:00Z'));
+    expect(later.held).toBe(0);
+  });
+
+  it('a run that started in the same instant as the resolution is not newer than it', async () => {
+    // WHY the boundary is pinned: `lt` versus `lte` here decides whether a tie reopens a row.
+    // A tie is not newer evidence, and treating it as newer would let a batch that raced the
+    // resolving push undo it.
+    const rows: Row[] = [
+      { id: 1, source: 'rootfs', key: 'libssl', host: 'box-a', last_seen: at('2026-10-20T00:00:00Z'), resolved_at: at('2026-10-25T10:20:00Z') },
+    ];
+
+    const tied = await applyFeedPush(
+      fakeClient(rows) as never,
+      push({ complete: false, runStartedAt: at('2026-10-25T10:20:00Z'), findings: [finding('libssl')] }),
+      at('2026-10-25T10:30:00Z'),
+    );
+
+    expect(rows[0].resolved_at).toEqual(at('2026-10-25T10:20:00Z'));
+    expect(tied.held).toBe(1);
   });
 });

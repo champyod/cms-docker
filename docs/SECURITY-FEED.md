@@ -96,6 +96,8 @@ model security_waivers {
 
 **Resolution is never a delete.** A finding that stops being reported gets `resolved_at` set by the ingest
 call (the producer sends its full current set); history stays readable and the audit row keeps its subject.
+A late report from a run that began *before* another run closed the row does not reopen it — the newer
+evidence wins, and the push's response counts those reports as `held`.
 
 ### Ingest
 
@@ -274,7 +276,11 @@ repository now. In order of preference: (1) bump that one image's digest to what
    Renovate's acceptance is a real dry run against the repo (`renovate --dry-run` over the config) that lists
    the compose-file updates it *would* open PRs for — that is its half, and no POST is expected from it.
 3. `complete: true` sets `resolved_at` on this source's rows last seen before the push's `run_started_at`;
-   `complete: false` never resolves anything, and rows written earlier in the same run stay open.
+   `complete: false` never resolves anything, and rows written earlier in the same run stay open. Two runs
+   over one source, interleaved (the nightly scan takes minutes, so a re-scan started mid-scan overlaps it):
+   the newer run's evidence wins both ways — the older run completing last resolves nothing the newer run
+   wrote, and the older run's late batch does not reopen a row the newer run closed (it is reported as
+   `held` in the response and the audit row).
 4. `security.patching` renders for an admin with `security:read` **and** `patching:read`, 403s without
    `patching:read`, and the four overview cards match the page's numbers.
 5. `tsc` 0, `lint` 0 errors, the panel suite green, icons gate green.

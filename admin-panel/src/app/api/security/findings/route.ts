@@ -115,6 +115,9 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
         host: push.host,
         received: result.received,
         resolved: result.resolved,
+        // Reported, not silent: a re-scan that raced a newer one needs to read back why its
+        // findings did not reopen the rows it saw.
+        held: result.held,
         complete: push.complete,
       },
       result: 'success',
@@ -125,6 +128,7 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
         source: push.source,
         received: result.received,
         resolved: result.resolved,
+        held: result.held,
         complete: push.complete,
       },
       201,

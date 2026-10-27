@@ -227,6 +227,12 @@ export function parseFeedPush(body: unknown): FeedValidation {
 export interface FeedPushResult {
   readonly received: number;
   readonly resolved: number;
+  /**
+   * Reports that were not applied because the row they name was resolved by a run that started
+   * after this one did. Counted rather than silent: a producer that re-scans while the nightly
+   * scan is still running should be able to see that its evidence lost to newer evidence.
+   */
+  readonly held: number;
 }
 
 function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUncheckedCreateInput, 'source' | 'key'> {
@@ -249,9 +255,20 @@ function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUn
 /**
  * Writes one accepted push.
  *
- * WHY upsert on `(source, key)` and not a delete-then-insert: `first_seen` is the age of the
- * finding and the audit trail names it, so an identical re-push may change only `last_seen`
- * (Prisma's @updatedAt) — recreating the row would reset that history on every scan.
+ * WHY a conditional update and not an upsert on `(source, key)`: `first_seen` is the age of the
+ * finding and the audit trail names it, so an identical re-push may change only `last_seen` —
+ * recreating the row would reset that history on every scan. But `upsert` also wrote
+ * `resolved_at = null` unconditionally, which made a re-report from a *stale* run reopen a row a
+ * newer run had just closed. The producer schedule makes that reachable rather than theoretical:
+ * the nightly host scan takes ~3 minutes as 139 batches, so a re-scan started mid-scan is two
+ * runs writing one source, and the older run's late batch would revive a finding the newer,
+ * complete run had already declared gone — a phantom on a security surface for one whole cycle.
+ *
+ * So the write is causal, not last-writer-wins: a row is touched only when this run's evidence is
+ * at least as new as the resolution that closed it (`resolved_at` older than this run's start, or
+ * no resolution at all). Everything else is counted in `held`, because a write that silently does
+ * not apply is the shape that costs a debugging session later.
+ *
  * WHY `complete` alone is not enough to resolve: a partial push says "here is what I saw this
  * time", not "here is everything", so treating an absent key as gone would erase findings a
  * producer simply did not include in that batch. But a *chunked* complete push says something
@@ -268,16 +285,40 @@ export async function applyFeedPush(
   push: FeedPush,
   now: Date = new Date(),
 ): Promise<FeedPushResult> {
+  // One statement per reported finding, then a single insert for the ones no row matched — the
+  // insert covers both "never seen before" and "closed by a newer run", and `skipDuplicates`
+  // makes the second case a no-op instead of a unique violation.
+  const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
   for (const finding of push.findings) {
     const data = findingData(finding);
-    await client.security_findings.upsert({
-      where: { source_key: { source: push.source, key: finding.key } },
-      create: { source: push.source, key: finding.key, ...data, first_seen: now, last_seen: now },
-      update: { ...data, last_seen: now },
+    const touched = await client.security_findings.updateMany({
+      where: {
+        source: push.source,
+        key: finding.key,
+        OR: [{ resolved_at: null }, { resolved_at: { lt: push.runStartedAt } }],
+      },
+      data: { ...data, last_seen: now },
+    });
+    if (touched.count > 0) continue;
+    unseen.set(finding.key, {
+      source: push.source,
+      key: finding.key,
+      ...data,
+      first_seen: now,
+      last_seen: now,
     });
   }
 
-  if (!push.complete) return { received: push.findings.length, resolved: 0 };
+  // `unseen` is keyed by finding key, so a producer that repeats a key in one push counts once.
+  const created = unseen.size === 0
+    ? 0
+    : (await client.security_findings.createMany({
+        data: [...unseen.values()],
+        skipDuplicates: true,
+      })).count;
+  const held = unseen.size - created;
+
+  if (!push.complete) return { received: push.findings.length, resolved: 0, held };
 
   const resolved = await client.security_findings.updateMany({
     where: {
@@ -288,5 +329,5 @@ export async function applyFeedPush(
     },
     data: { resolved_at: now },
   });
-  return { received: push.findings.length, resolved: resolved.count };
+  return { received: push.findings.length, resolved: resolved.count, held };
 }

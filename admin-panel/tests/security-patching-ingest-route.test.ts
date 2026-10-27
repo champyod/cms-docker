@@ -31,59 +31,78 @@ const mocks = vi.hoisted(() => {
   const rowKey = (source: string, key: string): string => `${source}\u0000${key}`;
 
   const security_findings = {
-    upsert: async (args: {
-      where: { source_key: { source: string; key: string } };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-    }): Promise<FakeFinding> => {
-      const { source, key } = args.where.source_key;
-      const id = rowKey(source, key);
-      const existing = rows.get(id);
-      if (existing === undefined) {
-        const created: FakeFinding = {
-          id: nextId++,
-          source,
-          key,
-          kind: String(args.create.kind),
-          severity: (args.create.severity as string | null) ?? null,
-          subject: String(args.create.subject),
-          installed: (args.create.installed as string | null) ?? null,
-          available: (args.create.available as string | null) ?? null,
-          title: (args.create.title as string | null) ?? null,
-          url: (args.create.url as string | null) ?? null,
-          host: (args.create.host as string | null) ?? null,
-          detail: args.create.detail,
-          first_seen: args.create.first_seen as Date,
-          last_seen: args.create.last_seen as Date,
-          resolved_at: null,
-        };
-        rows.set(id, created);
-        return created;
-      }
-      // Prisma's @updatedAt writes last_seen on every update; the fake does the same so an
-      // identical re-push is observably "only last_seen changed".
-      Object.assign(existing, args.update, { last_seen: new Date() });
-      return existing;
-    },
+    // One matcher for both writes the rule makes: the per-finding conditional update and the
+    // run-scoped resolution. Modelling `OR`/`last_seen` here is the point — a fake that only
+    // recorded the arguments would pass whether the predicate is `resolved_at < runStart` or
+    // `resolved_at < now`, and that difference is what keeps a stale run from reopening a row.
     updateMany: async (args: {
       where: {
         source: string;
-        resolved_at: null;
+        resolved_at?: null;
         host?: string;
         last_seen?: { lt: Date };
-        key?: { notIn: string[] };
+        key?: string | { notIn: string[] };
+        OR?: ReadonlyArray<{ resolved_at: null | { lt: Date } }>;
       };
-      data: { resolved_at: Date };
+      data: { resolved_at?: Date | null } & Record<string, unknown>;
     }): Promise<{ count: number }> => {
       let count = 0;
       for (const row of rows.values()) {
-        if (row.source !== args.where.source || row.resolved_at !== null) continue;
-        // The run-scoped predicate: only rows this run did not touch. Without modelling it the
-        // suite would pass while the real route resolved an earlier batch's own findings.
+        if (row.source !== args.where.source) continue;
+        if (args.where.resolved_at === null && row.resolved_at !== null) continue;
         if (args.where.host !== undefined && row.host !== args.where.host) continue;
         if (args.where.last_seen !== undefined && !(row.last_seen < args.where.last_seen.lt)) continue;
-        if (args.where.key !== undefined && args.where.key.notIn.includes(row.key)) continue;
-        row.resolved_at = args.data.resolved_at;
+        if (typeof args.where.key === 'string' && row.key !== args.where.key) continue;
+        if (
+          args.where.key !== undefined
+          && typeof args.where.key !== 'string'
+          && args.where.key.notIn.includes(row.key)
+        ) continue;
+        if (args.where.OR !== undefined) {
+          const any = args.where.OR.some((clause) =>
+            clause.resolved_at === null
+              ? row.resolved_at === null
+              : row.resolved_at !== null && row.resolved_at < clause.resolved_at.lt,
+          );
+          if (!any) continue;
+        }
+        // Prisma writes `last_seen` from the payload here, so the assignment is exactly the
+        // update object; `resolved_at` is only in it when the write means to change it.
+        Object.assign(row, args.data);
+        count += 1;
+      }
+      return { count };
+    },
+    createMany: async (args: {
+      data: ReadonlyArray<Record<string, unknown>>;
+      skipDuplicates?: boolean;
+    }): Promise<{ count: number }> => {
+      let count = 0;
+      for (const datum of args.data) {
+        const source = String(datum.source);
+        const key = String(datum.key);
+        const id = rowKey(source, key);
+        if (rows.has(id)) {
+          if (args.skipDuplicates === true) continue;
+          throw new Error(`unique constraint violated: ${source}/${key}`);
+        }
+        rows.set(id, {
+          id: nextId++,
+          source,
+          key,
+          kind: String(datum.kind),
+          severity: (datum.severity as string | null) ?? null,
+          subject: String(datum.subject),
+          installed: (datum.installed as string | null) ?? null,
+          available: (datum.available as string | null) ?? null,
+          title: (datum.title as string | null) ?? null,
+          url: (datum.url as string | null) ?? null,
+          host: (datum.host as string | null) ?? null,
+          detail: datum.detail,
+          first_seen: datum.first_seen as Date,
+          last_seen: datum.last_seen as Date,
+          resolved_at: (datum.resolved_at as Date | null) ?? null,
+        });
         count += 1;
       }
       return { count };
