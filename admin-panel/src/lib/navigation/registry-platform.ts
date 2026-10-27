@@ -10,7 +10,7 @@ import type { RouteDescriptor } from '@/lib/navigation/types';
 // Search is deep-link-only: it declares no sidebar or mobile surface.
 export const PLATFORM_ROUTES: readonly RouteDescriptor[] = [
   enabledPageRoute('administration.admins', '/administration/admins', { all: ['admin:list', 'admin:read'] }, ['/admins']),
-  enabledPageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read'] }, ['/groups']),
+  enabledPageRoute('administration.groups', '/administration/groups', { all: ['group:list', 'group:read', 'permission:read'] }, ['/groups']),
   enabledPageRoute('administration.audit', '/administration/audit', { all: ['audit:list', 'audit:read'] }, ['/audit']),
 
   enabledPageRoute('infrastructure.deployments', '/infrastructure/deployments', { all: ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'] }, ['/deployments']),

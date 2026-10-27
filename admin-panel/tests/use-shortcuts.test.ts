@@ -214,8 +214,8 @@ describe('shortcut permission parity', () => {
   it('keeps Admins and Groups independently reachable by their own keys', () => {
     expect(chordRouteIds(['admin:list', 'admin:read'])).toContain('administration.admins');
     expect(chordRouteIds(['admin:list', 'admin:read'])).not.toContain('administration.groups');
-    expect(chordRouteIds(['group:list', 'group:read'])).toContain('administration.groups');
-    expect(chordRouteIds(['group:list', 'group:read'])).not.toContain('administration.admins');
+    expect(chordRouteIds(['group:list', 'group:read', 'permission:read'])).toContain('administration.groups');
+    expect(chordRouteIds(['group:list', 'group:read', 'permission:read'])).not.toContain('administration.admins');
   });
 
   it('hides the Administration group when neither list key is granted', () => {

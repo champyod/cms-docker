@@ -318,7 +318,7 @@ describe('route permissions', () => {
   it('applies the same partial-set rule to every all-of module route', () => {
     const moduleCases = [
       ['administration.admins', ['admin:list', 'admin:read']],
-      ['administration.groups', ['group:list', 'group:read']],
+      ['administration.groups', ['group:list', 'group:read', 'permission:read']],
       ['administration.audit', ['audit:list', 'audit:read']],
       ['infrastructure.deployments', ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read']],
       ['infrastructure.containers', ['container:list', 'container:read']],
@@ -408,7 +408,7 @@ describe('legacy redirects', () => {
       ['/submissions', ['submission:list'], '/th/evaluation/submissions'],
       ['/submissions/lanes', ['evaluation:list'], '/th/evaluation/lanes'],
       ['/admins', ['admin:list', 'admin:read'], '/th/administration/admins'],
-      ['/groups', ['group:list', 'group:read'], '/th/administration/groups'],
+      ['/groups', ['group:list', 'group:read', 'permission:read'], '/th/administration/groups'],
       ['/audit', ['audit:list', 'audit:read'], '/th/administration/audit'],
       ['/deployments', ['deployment:list', 'deployment:read', 'env:read', 'env:list', 'contest:list', 'container:read', 'settings:read', 'settings:list', 'task:read'], '/th/infrastructure/deployments'],
       ['/containers', ['container:list', 'container:read'], '/th/infrastructure/containers'],
@@ -429,7 +429,7 @@ describe('legacy redirects', () => {
     expect(resolveLegacyRedirect('th', '/permissions', new Set(['audit:list', 'audit:read']))).toBe(
       '/th/administration/audit',
     );
-    expect(resolveLegacyRedirect('th', '/permissions', new Set(['group:list', 'group:read']))).toBe(
+    expect(resolveLegacyRedirect('th', '/permissions', new Set(['group:list', 'group:read', 'permission:read']))).toBe(
       '/th/administration/groups',
     );
     expect(resolveLegacyRedirect('th', '/permissions', new Set(['admin:list', 'admin:read']))).toBe(
@@ -438,7 +438,7 @@ describe('legacy redirects', () => {
   });
 
   it('falls back when an explicit permissions tab target is denied', () => {
-    expect(resolveLegacyRedirect('th', '/permissions?tab=admins', new Set(['group:list', 'group:read']))).toBe(
+    expect(resolveLegacyRedirect('th', '/permissions?tab=admins', new Set(['group:list', 'group:read', 'permission:read']))).toBe(
       '/th/administration/groups',
     );
     expect(resolveLegacyRedirect('th', '/permissions?tab=groups', new Set(['audit:list', 'audit:read']))).toBe(

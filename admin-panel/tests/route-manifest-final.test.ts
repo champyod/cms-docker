@@ -29,7 +29,7 @@ const PRIMARY_SURFACES: readonly NavigationSurface[] = [
   'mobile-more',
 ];
 const ADMIN_READER = ['admin:list', 'admin:read'];
-const GROUP_READER = ['group:list', 'group:read'];
+const GROUP_READER = ['group:list', 'group:read', 'permission:read'];
 const AUDIT_READER = ['audit:list', 'audit:read'];
 
 function pageFiles(directory: string): readonly string[] {

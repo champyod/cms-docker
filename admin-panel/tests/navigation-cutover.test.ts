@@ -128,7 +128,7 @@ describe('final navigation cutover', () => {
   it('keeps locale in buildRoute and preserves the approved redirect fallback', () => {
     expect(buildRoute('th', 'people.users')).toBe('/th/people/users');
     expect(buildRoute('en', 'contests.tabs.overview', { id: 42 })).toBe('/en/contests/42/overview');
-    expect(resolveLegacyRedirect('en', '/permissions', new Set(['group:list', 'group:read']))).toBe(
+    expect(resolveLegacyRedirect('en', '/permissions', new Set(['group:list', 'group:read', 'permission:read']))).toBe(
       '/en/administration/groups',
     );
     expect(resolveLegacyRedirect('en', '/permissions', new Set(['settings:update']))).toBeNull();

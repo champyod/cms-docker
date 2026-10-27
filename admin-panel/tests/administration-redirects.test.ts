@@ -66,6 +66,7 @@ beforeEach(() => {
       'admin:read',
       'group:list',
       'group:read',
+      'permission:read',
       'audit:list',
       'audit:read',
     ]),

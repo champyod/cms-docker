@@ -52,16 +52,16 @@ describe('Administration legacy redirects', () => {
   it('defaults to Admins, then Groups, then Audit', () => {
     expect(resolveLegacyRedirect('th', '/permissions', new Set(['audit:list', 'audit:read'])))
       .toBe('/th/administration/audit');
-    expect(resolveLegacyRedirect('en', '/permissions', new Set(['group:list', 'group:read'])))
+    expect(resolveLegacyRedirect('en', '/permissions', new Set(['group:list', 'group:read', 'permission:read'])))
       .toBe('/en/administration/groups');
     expect(resolveLegacyRedirect('th', '/permissions', new Set(['admin:list', 'admin:read'])))
       .toBe('/th/administration/admins');
   });
 
   it('honors permitted query tabs and falls back when denied', () => {
-    expect(resolveLegacyRedirect('th', '/permissions?tab=groups', new Set(['group:list', 'group:read'])))
+    expect(resolveLegacyRedirect('th', '/permissions?tab=groups', new Set(['group:list', 'group:read', 'permission:read'])))
       .toBe('/th/administration/groups');
-    expect(resolveLegacyRedirect('th', '/permissions?tab=admins', new Set(['group:list', 'group:read'])))
+    expect(resolveLegacyRedirect('th', '/permissions?tab=admins', new Set(['group:list', 'group:read', 'permission:read'])))
       .toBe('/th/administration/groups');
     expect(resolveLegacyRedirect('th', '/permissions?tab=groups', new Set(['admin:list', 'admin:read'])))
       .toBe('/th/administration/admins');
@@ -70,7 +70,7 @@ describe('Administration legacy redirects', () => {
   it('redirects direct legacy paths and conceals denied targets', () => {
     expect(resolveLegacyRedirect('en', '/admins', new Set(['admin:list', 'admin:read'])))
       .toBe('/en/administration/admins');
-    expect(resolveLegacyRedirect('en', '/groups', new Set(['group:list', 'group:read'])))
+    expect(resolveLegacyRedirect('en', '/groups', new Set(['group:list', 'group:read', 'permission:read'])))
       .toBe('/en/administration/groups');
     expect(resolveLegacyRedirect('en', '/audit', new Set(['audit:read', 'audit:list'])))
       .toBe('/en/administration/audit');

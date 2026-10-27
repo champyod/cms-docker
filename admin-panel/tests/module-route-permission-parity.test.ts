@@ -11,7 +11,7 @@ const ROUTE_CASES = [
   },
   {
     routeId: 'administration.groups',
-    requiredKeys: ['group:list', 'group:read'],
+    requiredKeys: ['group:list', 'group:read', 'permission:read'],
   },
   {
     routeId: 'administration.audit',

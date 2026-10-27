@@ -13,12 +13,18 @@ export const SECURITY_ROUTE_IDS = [
 ] as const satisfies readonly RouteId[];
 
 export const SECURITY_ROUTES: readonly RouteDescriptor[] = [
-  enabledPageRoute('security.overview', '/security/overview', { all: ['security:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
+  enabledPageRoute(
+    'security.overview',
+    '/security/overview',
+    { all: ['security:read', 'waf:read', 'ban:read', 'lockout:read', 'tls:read', 'patching:read'] },
+    [],
+    GROUP_PAGE_SURFACES_WITHOUT_CHORD,
+  ),
   enabledPageRoute('security.waf', '/security/waf', { all: ['security:read', 'waf:read'] }, [], GROUP_PAGE_SURFACES_WITHOUT_CHORD),
   enabledPageRoute(
     'security.blocks',
     '/security/blocks',
-    { all: ['security:read'], any: ['ban:read', 'lockout:read'] },
+    { all: ['security:read', 'ban:read', 'lockout:read'] },
     [],
     GROUP_PAGE_SURFACES_WITHOUT_CHORD,
   ),

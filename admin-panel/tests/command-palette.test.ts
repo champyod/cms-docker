@@ -70,8 +70,8 @@ describe('palette navigation destinations', () => {
   it('keeps Admins and Groups independently gated', () => {
     expect(paletteRouteIds(['admin:list', 'admin:read'])).toContain('administration.admins');
     expect(paletteRouteIds(['admin:list', 'admin:read'])).not.toContain('administration.groups');
-    expect(paletteRouteIds(['group:list', 'group:read'])).toContain('administration.groups');
-    expect(paletteRouteIds(['group:list', 'group:read'])).not.toContain('administration.admins');
+    expect(paletteRouteIds(['group:list', 'group:read', 'permission:read'])).toContain('administration.groups');
+    expect(paletteRouteIds(['group:list', 'group:read', 'permission:read'])).not.toContain('administration.admins');
   });
 
   it('hides the Administration group without either list key', () => {
