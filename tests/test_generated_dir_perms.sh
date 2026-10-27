@@ -116,6 +116,24 @@ else
   no "a dead daemon falls back to sudo (saw: ${out:-nothing})"
 fi
 
+printf '\n== the deploy path repairs it ==\n'
+# WHY a grep and not a run: `make admin` starts the stack. What can be pinned here is that the target
+# carries the repair at all — without it, a box whose directory still belongs to the operator deploys
+# green and the reconciler refuses every tick, which is exactly how this was found.
+recipe="$(awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile")"
+if printf '%s' "$recipe" | grep -q 'ensure_generated_dir_perms'; then
+  ok "the admin target hands config/generated over before the profile starts"
+else
+  no "the admin target hands config/generated over"
+fi
+if printf '%s' "$recipe" | grep -q 'ensure_generated_dir_perms' &&
+   [[ "$(printf '%s' "$recipe" | grep -n 'ensure_generated_dir_perms' | cut -d: -f1)" -lt \
+      "$(printf '%s' "$recipe" | grep -n 'DOMAIN_PROXY_RELOAD' | cut -d: -f1)" ]]; then
+  ok "the repair runs before the front is reloaded, not after"
+else
+  no "the repair runs before the front reload"
+fi
+
 printf '\n== summary ==\n'
 printf 'PASS: %d  FAIL: %d\n' "$pass" "$fail"
 if [[ "$fail" -ne 0 ]]; then exit 1; fi

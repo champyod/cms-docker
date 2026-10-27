@@ -202,6 +202,10 @@ admin: expose
 		echo "DEPLOYMENT_TYPE=src → building admin images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --build; \
 	fi
+	@# The reconciler in this profile writes the front's vhosts into config/generated from inside its
+	@# container, as the panel image's uid — a directory this deploy owns. Hand it over before the loop
+	@# starts, or every tick refuses with EACCES and the front keeps a config nobody refreshed.
+	@bash -c '. scripts/__lib/common.sh && ensure_generated_dir_perms "$$PWD"' || true
 	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Admin profile started."
 
