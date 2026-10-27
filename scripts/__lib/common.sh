@@ -506,6 +506,48 @@ ensure_ranking_paths_perms() {
 }
 
 # ---------------------------------------------------------------------------
+# ensure_generated_dir_perms [repo_root]
+# ---------------------------------------------------------------------------
+# WHY: the exposure reconciler renders the front's vhosts into config/generated from inside a
+# container, as the panel image's `node` user (uid 1000), while the directory belongs to whoever ran
+# the deploy. Its first tick in production read the registry, then refused to write:
+#   EACCES: permission denied, mkdir '/repo-root/config/generated/.staging'
+# and kept the front's previous config — a reconciler that reconciles nothing, safely and silently.
+# WHY owner = panel uid but group = the operator's group: chowning the directory to the panel alone
+# takes it away from the deploy, which writes exposed-hosts.txt there as the operator. With owner
+# 1000:operator-group and mode 0775 the reconciler writes as the owner and the deploy keeps writing
+# as a group member, so neither side is locked out.
+# WHY through a container: changing a host file's owner needs root, and this host has neither
+# passwordless sudo nor setfacl — but the docker daemon is root and every deploy already requires it.
+# The shape is ensure_ranking_paths_perms': quiet when already correct, one repair otherwise.
+ensure_generated_dir_perms() {
+  local repo_root uid gid dir
+  repo_root="${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)}"
+  uid="${PANEL_UID:-1000}"
+  # Default to the group running the deploy: that identity keeps writing to the directory itself.
+  gid="${PANEL_GID:-$(id -g)}"
+  dir="${repo_root}/config/generated"
+
+  mkdir -p "$dir" 2>/dev/null || true
+
+  if [[ "$(stat -c '%u:%g:%a' "$dir" 2>/dev/null || true)" == "${uid}:${gid}:775" ]]; then
+    return 0
+  fi
+
+  if docker info >/dev/null 2>&1; then
+    docker run --rm --user 0:0 -v "${dir}:/g" alpine sh -c       "chown -R ${uid}:${gid} /g && chmod -R u+rwX,g+rwX /g" >/dev/null 2>&1 \
+      || log_warn "config/generated may stay unwritable by the reconciler (uid ${uid})"
+    return 0
+  fi
+
+  chown -R "${uid}:${gid}" "$dir" 2>/dev/null \
+    || run_privileged chown -R "${uid}:${gid}" "$dir" 2>/dev/null \
+    || log_warn "config/generated may stay unwritable by the reconciler (uid ${uid})"
+  chmod -R u+rwX,g+rwX "$dir" 2>/dev/null || true
+  return 0
+}
+
+# ---------------------------------------------------------------------------
 # docker_exec_db <password> [NAME=VALUE ...] <docker exec args...>
 # ---------------------------------------------------------------------------
 # Run `docker exec` with a database password supplied through the docker client's

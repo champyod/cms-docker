@@ -2058,6 +2058,8 @@ main() {
     # After the logo sync above: that writes through a root helper, so this also reclaims
     # the file it just dropped into the volume.
     ensure_ranking_paths_perms "$CMS_ROOT" || log_warn "the panel may not be able to upload the ranking logo"
+    # The exposure reconciler writes the front's vhosts into config/generated as the panel uid.
+    ensure_generated_dir_perms "$CMS_ROOT" || log_warn "the exposure reconciler may not be able to write config/generated"
   fi
 
   if [[ "$DRY_RUN" -eq 0 ]]; then
