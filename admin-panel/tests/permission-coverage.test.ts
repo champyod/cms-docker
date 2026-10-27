@@ -7,7 +7,7 @@ import { FIELD_PERMISSION_MAP } from '@/lib/field-permissions';
 import { hasEffectivePermission, resolveEffectivePermissions } from '@/lib/permission-engine';
 import { ROUTE_REGISTRY, visibleRoutes } from '@/lib/navigation/registry';
 import type { PermissionRequirement } from '@/lib/navigation/types';
-import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, PERMISSIONS_FILE, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
+import { ACTIONS_DIR, API_DIR, FOLLOW_FILES, PERMISSIONS_FILE, ROUTE_GATE_RE, SRC_DIR, type FileInfo } from '../scripts/coverage/model';
 import { parseActionPermissions, parseFile, listFilesRecursive } from '../scripts/coverage/scan';
 import { resolveDemanded, tableUpdateKeys, isAllowlisted } from '../scripts/coverage/resolve';
 
@@ -138,7 +138,8 @@ const PAGE_GATE_RE = /\b(?:ensurePermission|checkPermission|requirePermission)\s
 // Why descriptor gates count: a module page that authorizes through
 // authorizeRoutePage enforces the requirement its registry descriptor declares,
 // so the descriptor is the enforcement site and the source holds only the id.
-const ROUTE_GATE_RE = /\bauthorizeRoutePage\s*\(\s*['"`]([^'"`]+)['"`]/g;
+// The matcher is shared with `scripts/coverage/page-reads.ts`, which needs the
+// same page-to-descriptor link to compare a page's reads against its gate.
 
 /** The descriptor fields a page gate reads: its id, its enabled state, and its requirement. */
 interface GateDescriptor {

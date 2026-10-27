@@ -26,6 +26,9 @@ export const PERMISSIONS_FILE = path.join(SRC_DIR, "lib", "permission-engine.ts"
 export const HAS_EFFECTIVE_RE =
   /\bhasEffectivePermission\s*\(\s*\w+\s*,\s*['"`]([^'"`]+)['"`]\s*\)/g;
 export const SESSION_ONLY_RE = /\bverifyApiAuth\s*\(\s*\)/;
+
+/** How a page names the route descriptor that gates it; one definition, two checkers read it. */
+export const ROUTE_GATE_RE = /\bauthorizeRoutePage\s*\(\s*['"`]([^'"`]+)['"`]/g;
 export const STRIP_FIELDS_RE = /\bstripDisallowedFields\s*\(\s*['"`]([^'"`]+)['"`]/g;
 export const MEMBER_CALL_RE = /(\w+)\.(\w+)\s*\(/g;
 export const BARE_CALL_RE = /(?<![\w$.])(\w+)\s*\(/g;
