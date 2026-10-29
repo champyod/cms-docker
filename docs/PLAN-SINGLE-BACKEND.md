@@ -52,6 +52,14 @@ guarantee; without it the two layers grow back.
   handler failing its DB write is a local error; after the change the panel is a network
   dependency on the admin's critical path.
 
+## Decided — not to be re-litigated
+
+- **Runtime is Tokio; io_uring is not adopted** — see `docs/decisions/no-io-uring.md`: the io_uring
+  runtimes are unmaintained (`tokio-uring` last released 2024-05-27, `compio` still beta), it replaces
+  the runtime rather than accelerating it, Docker's default seccomp profile denies `io_uring_setup`
+  outright, and this workload is Postgres-bound rather than local-disk-bound. It reopens only on a
+  measured local-disk bottleneck, and then as a spike.
+
 ## Open items unchanged by this plan
 
 - Two TUI files still exceed the 250-line limit (`action_menu.rs`, `menus.rs`).
