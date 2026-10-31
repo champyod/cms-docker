@@ -21,8 +21,8 @@ write is a commit, every commit is attributed, and a wrong claim is visible in t
   the agent doing it, the **declared files** it will touch, the current step, and status.
 - **Files to touch must be declared before they are edited.** If another agent's row already
   declares a file you need, stop: it is an overlap. Do not edit. Resolve via chat.
-- Statuses: `planning` → `in-flight` → `verify` → `merge` → `done`. Anything not listed here
-  is not being worked on.
+- Statuses: `planning` → `in-flight` → `verify` → `merge` → `done`, plus `blocked` (why,
+  in the row). Anything not listed here is not being worked on.
 - The file is owned by whatever agent last touched it: the **Owner** column names that agent.
   Update your own row when your state changes; leave everyone else's rows alone.
 - Overlap (same file declared twice): the later claimer backs off and opens a chat thread.
