@@ -613,6 +613,13 @@ verb_reconcile() {
     [ -n "$ref" ] || continue
     want="$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null || true)"
     if [ -n "$have" ] && [ -n "$want" ] && [ "$have" != "$want" ]; then
+      # WHY this one exception: the scanner is a cron runner, and its container is also where a scan is
+      # EXECUTING. Recreating it mid-scan kills the run, and that night then reports nothing while the
+      # container looks healthy — the same silent-failure shape this verb exists to remove.
+      if [ "$svc" = "security-scan" ] && docker top "$cid" 2>/dev/null | grep -q "security-scan"; then
+        log_warn "security-scan is mid-run — left on its current image so the scan can finish"
+        continue
+      fi
       stale+=("$svc")
     fi
   done

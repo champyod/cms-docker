@@ -122,7 +122,24 @@ else
   no "says how many of how many (saw: ${out:-nothing})"
 fi
 
-printf '\n== the deploy path does NOT call it, and says why ==\n'
+printf '\n== a scan that is running is not killed ==\n'
+# WHY this is a static check: `docker top` is a host call the stub cannot model faithfully enough to
+# prove the behaviour, and a test that fakes it would prove the fake. What is pinned here is that the
+# guard exists, that it is scoped to the scanner (the only overlay service that EXECUTES work in its
+# container), and that it reports why it skipped — the part a future edit would silently drop.
+guard="$(awk '/verb_reconcile\(\)/,/^}/' "${SCRIPT}")"
+if printf '%s' "$guard" | grep -q 'docker top'; then
+  ok "the verb asks whether the scanner is executing"
+else
+  no "the verb asks whether the scanner is executing"
+fi
+if printf '%s' "$guard" | grep -q 'security-scan is mid-run'; then
+  ok "the guard says why it skipped"
+else
+  no "the guard says why it skipped"
+fi
+
+printf '\n== the deploy path calls it ==\n'
 # The verb shipped, the wiring did not: on the production host the comparison recreated three healthy
 # containers (the id a container records and the id `docker image inspect <tag>` reports disagree for the
 # refs built from our own registry). A deploy step that restarts healthy containers is worse than the
@@ -130,14 +147,15 @@ printf '\n== the deploy path does NOT call it, and says why ==\n'
 # carries the reason, so nobody re-adds it as an "obvious" one-liner.
 recipe="$(awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile")"
 if printf '%s' "$recipe" | grep -qE '^\s*@?bash scripts/__security_stack.sh reconcile'; then
-  no "make admin invokes reconcile although its comparison is unproven"
+  ok "make admin reconciles the overlay"
 else
-  ok "make admin does not invoke reconcile"
+  no "make admin reconciles the overlay"
 fi
-if awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile" | grep -q "unproven"; then
-  ok "the recipe records why it is absent"
+if [[ "$(printf '%s' "$recipe" | grep -n "__security_stack.sh reconcile" | cut -d: -f1)" -lt \
+      "$(printf '%s' "$recipe" | grep -n 'DOMAIN_PROXY_RELOAD' | cut -d: -f1)" ]]; then
+  ok "reconcile runs before the front is reloaded"
 else
-  no "the recipe records why it is absent"
+  no "reconcile runs before the front reload"
 fi
 
 printf '\n== the verb is dispatched ==\n'
