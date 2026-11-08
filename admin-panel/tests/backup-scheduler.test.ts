@@ -760,7 +760,13 @@ describe('scheduler image', () => {
   it('ships the compiled output, the Prisma client and the Docker CLI', () => {
     expect(SCHEDULER_DOCKERFILE).toContain('COPY --from=build /app/dist ./dist');
     expect(SCHEDULER_DOCKERFILE).toContain('COPY --from=build /app/node_modules ./node_modules');
-    expect(SCHEDULER_DOCKERFILE).toContain('curl -fsSL https://get.docker.com | sh');
+    // The CLI is installed as a PINNED package, not floated in by Docker's convenience script: that
+    // script pulls whatever is current, which is how CVE-2026-78661 entered this image with no commit
+    // behind it. The assertion pins the replacement, so a future edit cannot quietly go back.
+    expect(SCHEDULER_DOCKERFILE).toContain('docker-ce-cli=');
+    // Matched as the COMMAND, not the hostname: the file's own WHY comment names `get.docker.com`,
+    // and a bare domain assertion reads that prose as the defect it is explaining.
+    expect(SCHEDULER_DOCKERFILE).not.toContain('get.docker.com | sh');
   });
 
   it('never bakes in the socket, only mounts it at run time', () => {
