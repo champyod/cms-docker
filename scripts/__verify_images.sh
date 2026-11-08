@@ -45,11 +45,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# WHY the source is strict: this script's whole job is to REFUSE a deploy, so it must not run on a
+# fallback logging shim whose exit codes and message shapes could differ from every other gate. A lib
+# that is missing is a reason to stop, not to improvise three local copies of its helpers.
 # shellcheck source=/dev/null
-source scripts/__lib/common.sh 2>/dev/null || true
-declare -F log_info >/dev/null || log_info() { printf '[INFO] %s\n' "$*"; }
-declare -F log_warn >/dev/null || log_warn() { printf '[WARN] %s\n' "$*" >&2; }
-declare -F log_die  >/dev/null || log_die()  { printf '[FAIL] %s\n' "${1:-fatal error}" >&2; exit "${2:-1}"; }
+source scripts/__lib/common.sh
 
 IMAGE_PREFIX="${CMS_SIGNED_IMAGE_PREFIX:-ghcr.io/champyod/cms-docker-}"
 IDENTITY_REGEXP="${CMS_COSIGN_IDENTITY_REGEXP:-^https://github\.com/champyod/cms-docker/\.github/workflows/ci\.yml@refs/heads/(main|major/admin-panel)\$}"

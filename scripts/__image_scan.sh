@@ -37,6 +37,13 @@
 set -uo pipefail
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 
+# WHY the shared lib instead of a local `die()`: this repo has one error-exit helper (`log_die`) and one
+# logging surface, and a second copy is how two scripts end up with different exit codes for the same
+# refusal. The lib is sourced strictly — if it is missing, this script cannot report anything reliably
+# and should fail rather than fall back to its own copy.
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/__lib/common.sh"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
@@ -49,13 +56,12 @@ TRIVY_IMAGE="${IMAGE_SCAN_TRIVY_IMAGE:-ghcr.io/aquasecurity/trivy:0.76.1@sha256:
 WAIVER_FILE="${IMAGE_SCAN_WAIVER_FILE:-${REPO_ROOT}/.trivyignore}"
 SEVERITY="CRITICAL,HIGH"
 
-die() { printf 'image-scan: %s\n' "$1" >&2; exit "${2:-2}"; }
 note() { printf 'image-scan: %s\n' "$1" >&2; }
 
 mode="${1:-}"
 case "$mode" in
   refs|scan|drift|report) ;;
-  *) die "usage: $0 refs|scan|drift|report [--refs <file>] [--out <dir>]" 2 ;;
+  *) log_die "image-scan: usage: $0 refs|scan|drift|report [--refs <file>] [--out <dir>]" 2 ;;
 esac
 shift
 
@@ -70,7 +76,7 @@ while [ "$#" -gt 0 ]; do
     --out=*) OUT_DIR="${1#*=}"; shift ;;
     --run-url) RUN_URL="${2:-}"; shift 2 ;;
     --run-url=*) RUN_URL="${1#*=}"; shift ;;
-    *) die "unknown argument: $1" 2 ;;
+    *) log_die "image-scan: unknown argument: $1" 2 ;;
   esac
 done
 
@@ -147,7 +153,7 @@ discover_refs() {
 
 load_refs() {
   if [ -n "$REFS_FILE" ]; then
-    [ -f "$REFS_FILE" ] || die "no refs file at ${REFS_FILE} — the discovery step wrote nothing" 2
+    [ -f "$REFS_FILE" ] || log_die "image-scan: no refs file at ${REFS_FILE} — the discovery step wrote nothing" 2
     grep -v -E '^[[:space:]]*$' "$REFS_FILE"
   else
     discover_refs
@@ -158,7 +164,7 @@ case "$mode" in
   refs)
     mapfile -t refs < <(load_refs)
     if [ "${#refs[@]}" -eq 0 ]; then
-      die "no third-party image references found in docker-compose*.yml — the scan, not the tree, is broken" 1
+      log_die "image-scan: no third-party image references found in docker-compose*.yml — the scan, not the tree, is broken" 1
     fi
     printf '%s\n' "${refs[@]}"
     note "${#refs[@]} third-party refs discovered"
@@ -167,15 +173,15 @@ case "$mode" in
   scan)
     mapfile -t refs < <(load_refs)
     if [ "${#refs[@]}" -eq 0 ]; then
-      die "refusing to report a scan of zero refs — an empty inventory is an error, not a pass" 1
+      log_die "image-scan: refusing to report a scan of zero refs — an empty inventory is an error, not a pass" 1
     fi
     # Waivers are rendered, never read from a tracked file: a scan that silently dropped them
     # would turn a live waiver into a failure, and one that read an old file would hide a lapse.
     if [ ! -f "$WAIVER_FILE" ]; then
-      die "missing ${WAIVER_FILE#"$REPO_ROOT"/} — render the waivers first: bash scripts/__security_waivers.sh render --trivy .trivyignore" 2
+      log_die "image-scan: missing ${WAIVER_FILE#" 2$REPO_ROOT"/} — render the waivers first: bash scripts/__security_waivers.sh render --trivy .trivyignore" 2
     fi
     if ! command -v jq >/dev/null 2>&1; then
-      die "jq is required to read trivy's report" 2
+      log_die "image-scan: jq is required to read trivy's report" 2
     fi
 
     mkdir -p "$OUT_DIR/cache" "$OUT_DIR/json"
@@ -262,7 +268,7 @@ case "$mode" in
     if [ "$incomplete" -ne 0 ] || [ "$scanned" -ne "${#refs[@]}" ]; then
       # No state file: `report` reads its absence as INCOMPLETE, so the issue cannot keep
       # showing yesterday's table as if it were tonight's.
-      die "scan incomplete — ${scanned}/${#refs[@]} refs produced a verdict" 2
+      log_die "image-scan: scan incomplete — ${scanned}/${#refs[@]} refs produced a verdict" 2
     fi
 
     printf '%s\n' "$fixable_total" > "$OUT_DIR/fixable-total"
@@ -278,7 +284,7 @@ case "$mode" in
   drift)
     mapfile -t refs < <(load_refs)
     if [ "${#refs[@]}" -eq 0 ]; then
-      die "no refs to check for drift — an empty inventory is an error, not a pass" 1
+      log_die "image-scan: no refs to check for drift — an empty inventory is an error, not a pass" 1
     fi
     mkdir -p "$OUT_DIR"
     : > "$OUT_DIR/drift.tsv"

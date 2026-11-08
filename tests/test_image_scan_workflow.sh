@@ -261,7 +261,7 @@ fi
 # scanner that could not reach an answer would be published as a result.
 if grep -qF -- 'trivy_run "${slug}.fixable.json" 1' "$SCAN" 2>/dev/null &&
    grep -qF -- '--exit-code "$exit_code"' "$SCAN" 2>/dev/null &&
-   grep -qE 'die "scan incomplete' "$SCAN" 2>/dev/null; then
+   grep -qE 'log_die "image-scan: scan incomplete' "$SCAN" 2>/dev/null; then
   ok "exit 1 = fixable findings, exit 2 = no verdict (they are not conflated)"
 else
   no "the scan does not separate 'fixable findings' from 'could not tell'"
