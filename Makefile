@@ -206,10 +206,11 @@ admin: expose
 	@# container, as the panel image's uid — a directory this deploy owns. Hand it over before the loop
 	@# starts, or every tick refuses with EACCES and the front keeps a config nobody refreshed.
 	@bash -c '. scripts/__lib/common.sh && ensure_generated_dir_perms "$$PWD"' || true
-	@# An overlay started by hand keeps the image it was created from, so a rebuilt scanner tag reaches
-	@# the tag and never the container: six nights of a fixed code path, failing silently. Reconcile the
-	@# running overlay here — it starts nothing that was off and recreates nothing whose image is unchanged.
-	@bash scripts/__security_stack.sh reconcile || true
+	@# NOT wired to reconcile: the verb is delivered but its comparison is unproven. Measured on the
+	@# production host, it recreated three healthy containers twice — the image id a container records and
+	@# the id `docker image inspect <tag>` reports disagree for the services built from our own registry
+	@# (digest-pinned refs). A deploy step that restarts healthy containers is worse than the drift it
+	@# targets, so the call stays out until that comparison is proven. See TODO-DEV.md, 2026-11-08.
 	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Admin profile started."
 

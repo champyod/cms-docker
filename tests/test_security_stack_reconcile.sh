@@ -122,18 +122,22 @@ else
   no "says how many of how many (saw: ${out:-nothing})"
 fi
 
-printf '\n== the deploy path calls it ==\n'
+printf '\n== the deploy path does NOT call it, and says why ==\n'
+# The verb shipped, the wiring did not: on the production host the comparison recreated three healthy
+# containers (the id a container records and the id `docker image inspect <tag>` reports disagree for the
+# refs built from our own registry). A deploy step that restarts healthy containers is worse than the
+# drift it targets, so the call is deliberately absent until that comparison is proven — and the recipe
+# carries the reason, so nobody re-adds it as an "obvious" one-liner.
 recipe="$(awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile")"
-if printf '%s' "$recipe" | grep -q "__security_stack.sh reconcile"; then
-  ok "make admin reconciles the overlay"
+if printf '%s' "$recipe" | grep -qE '^\s*@?bash scripts/__security_stack.sh reconcile'; then
+  no "make admin invokes reconcile although its comparison is unproven"
 else
-  no "make admin reconciles the overlay"
+  ok "make admin does not invoke reconcile"
 fi
-if [[ "$(printf '%s' "$recipe" | grep -n "__security_stack.sh reconcile" | cut -d: -f1)" -lt \
-      "$(printf '%s' "$recipe" | grep -n 'DOMAIN_PROXY_RELOAD' | cut -d: -f1)" ]]; then
-  ok "reconcile runs before the front is reloaded"
+if awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile" | grep -q "unproven"; then
+  ok "the recipe records why it is absent"
 else
-  no "reconcile runs before the front reload"
+  no "the recipe records why it is absent"
 fi
 
 printf '\n== the verb is dispatched ==\n'
