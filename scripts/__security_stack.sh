@@ -27,6 +27,7 @@
 #   bash scripts/__security_stack.sh dry-run [--feed-only] [--allow-idle]
 #   bash scripts/__security_stack.sh up      [--feed-only] [--allow-idle]
 #   bash scripts/__security_stack.sh verify  [--feed-only]
+#   bash scripts/__security_stack.sh reconcile
 #   bash scripts/__security_stack.sh off
 #   bash scripts/__security_stack.sh print
 #
@@ -570,6 +571,39 @@ NEXT
   return 0
 }
 
+# reconcile — bring the RUNNING overlay back in step with the images its tags now point at.
+#
+# WHY this exists: compose only recreates a container when a compose command names it, and the overlay
+# is started by hand. So a rebuild of an overlay image (a scanner fix, a new Trivy) changes the tag and
+# leaves the running container on the old layers — which is how the security scanner ran six nights of
+# a code path that had already been fixed, failing every push with nobody watching. This verb is the
+# missing half of `up`: it starts nothing that was off, and it recreates nothing whose image did not
+# change (compose compares the image ID itself).
+verb_reconcile() {
+  build_target_services
+  local running=()
+  local svc
+  for svc in "${TARGET_SERVICES[@]}"; do
+    if [ -n "$(compose_run ps -q "$svc" 2>/dev/null)" ]; then
+      running+=("$svc")
+    fi
+  done
+  if (( ${#running[@]} == 0 )); then
+    log_info "the security overlay is not running — nothing to reconcile (use 'make security-up' to start it)"
+    return 0
+  fi
+  local deploy_type
+  deploy_type="$(env_value DEPLOYMENT_TYPE)"
+  deploy_type="${deploy_type:-img}"
+  if [[ "$deploy_type" == "img" ]]; then
+    compose_run pull "${running[@]}" >/dev/null 2>&1 || log_warn "pull reported a failure; reconciling with the local images"
+    compose_run up -d --no-deps --no-build "${running[@]}"
+  else
+    compose_run up -d --no-deps "${running[@]}"
+  fi
+  log_info "reconciled ${#running[@]} running overlay service(s): ${running[*]}"
+}
+
 verb_off() {
   TARGET_SERVICES=("${MONITORING_SERVICES[@]}" "${FEED_SERVICES[@]}" "${SIGNAL_SERVICES[@]}")
   log_info "stopping the overlay containers only: ${TARGET_SERVICES[*]}"
@@ -593,6 +627,7 @@ case "$VERB" in
   check)   verb_check ;;
   dry-run) verb_dry_run ;;
   up)      verb_up ;;
+  reconcile) verb_reconcile ;;
   verify)  verb_verify ;;
   off)     verb_off ;;
   print)   verb_print ;;
