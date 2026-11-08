@@ -581,27 +581,52 @@ NEXT
 # change (compose compares the image ID itself).
 verb_reconcile() {
   build_target_services
-  local running=()
-  local svc
+  local deploy_type
+  deploy_type="$(env_value DEPLOYMENT_TYPE)"
+  deploy_type="${deploy_type:-img}"
+  # WHY pull first: the comparison below is against the image the TAG now points at, so a stale local
+  # tag would compare equal and hide the very drift this verb exists to catch.
+  if [[ "$deploy_type" == "img" ]]; then
+    local present=() svc
+    for svc in "${TARGET_SERVICES[@]}"; do
+      [ -n "$(compose_run ps -q "$svc" 2>/dev/null)" ] && present+=("$svc")
+    done
+    if (( ${#present[@]} == 0 )); then
+      log_info "the security overlay is not running — nothing to reconcile (use 'make security-up' to start it)"
+      return 0
+    fi
+    compose_run pull "${present[@]}" >/dev/null 2>&1 || log_warn "pull reported a failure; reconciling with the local images"
+  fi
+
+  # WHY an explicit image comparison and not a bare `up -d`: compose recreates when the composed CONFIG
+  # hash changes as well as when the image does, so `up -d` restarted three healthy overlay containers on
+  # a tree whose compose files had merely moved on. This verb's promise is narrower — bring a container
+  # onto the image its tag now names, and leave everything else alone — so it compares the two IDs itself
+  # and names with --force-recreate only the containers that disagree.
+  local stale=() running=() svc cid have want ref
   for svc in "${TARGET_SERVICES[@]}"; do
-    if [ -n "$(compose_run ps -q "$svc" 2>/dev/null)" ]; then
-      running+=("$svc")
+    cid="$(compose_run ps -q "$svc" 2>/dev/null)"
+    [ -n "$cid" ] || continue
+    running+=("$svc")
+    have="$(docker inspect --format '{{.Image}}' "$cid" 2>/dev/null || true)"
+    ref="$(compose_run config --format json 2>/dev/null | jq -r --arg s "$svc" '.services[$s].image // empty' 2>/dev/null || true)"
+    [ -n "$ref" ] || continue
+    want="$(docker image inspect --format '{{.Id}}' "$ref" 2>/dev/null || true)"
+    if [ -n "$have" ] && [ -n "$want" ] && [ "$have" != "$want" ]; then
+      stale+=("$svc")
     fi
   done
+
   if (( ${#running[@]} == 0 )); then
     log_info "the security overlay is not running — nothing to reconcile (use 'make security-up' to start it)"
     return 0
   fi
-  local deploy_type
-  deploy_type="$(env_value DEPLOYMENT_TYPE)"
-  deploy_type="${deploy_type:-img}"
-  if [[ "$deploy_type" == "img" ]]; then
-    compose_run pull "${running[@]}" >/dev/null 2>&1 || log_warn "pull reported a failure; reconciling with the local images"
-    compose_run up -d --no-deps --no-build "${running[@]}"
-  else
-    compose_run up -d --no-deps "${running[@]}"
+  if (( ${#stale[@]} == 0 )); then
+    log_info "reconcile: ${#running[@]} overlay container(s) already run the image their tag names — nothing recreated"
+    return 0
   fi
-  log_info "reconciled ${#running[@]} running overlay service(s): ${running[*]}"
+  compose_run up -d --no-deps --no-build --force-recreate "${stale[@]}"
+  log_info "reconcile: recreated ${#stale[@]} of ${#running[@]} running overlay service(s) whose image changed: ${stale[*]}"
 }
 
 verb_off() {
