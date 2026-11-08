@@ -63,26 +63,46 @@ FROM node:24-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054f
 # commands, and running `make env` (./cms config sync) from inside the container.
 # WHY --no-install-recommends would otherwise drop curl's ca-certificates recommend,
 # which the docker install below needs for HTTPS, so list it explicitly.
-# WHY the removals: the convenience script installs the whole plugin set, but this
-# image only ever runs `docker` and `docker compose` — the Makefile resolves
-# COMPOSE_CMD with `docker compose version` and nothing here calls buildx, the model
-# plugin or rootless docker. They are attack surface with no caller, and they are
-# what the image scan reports on, so they are removed rather than shipped.
 # WHY the upgrade: the Debian slim base lags the point releases that are
 # already published, and the image scan reads what ships — libcap2, libgnutls30 and
 # libpcre2-8-0 all had fixes available that the base image had not picked up. Taking
 # them here means the image carries today's security updates instead of waiting for
 # upstream to rebuild, and it runs before the docker install so only base-image
 # packages are in scope for it.
+#
+# WHY pinned package versions instead of `curl https://get.docker.com | sh`: the
+# convenience script installs whatever version the channel serves that day, so two
+# builds of the same commit can carry different clients — the same reasoning as the
+# bun pin above. Measured 2026-11-08: with no commit touching this file since
+# 2026-10-25, a rebuild moved the bundled Compose plugin from 5.6.0 (x/net 0.58.0,
+# the version the waiver export names) to 5.7.0 (x/net 0.60.0), and the image scan
+# went from three waivered findings to a fourth (CVE-2026-78661) nobody had waived.
+# The script also cannot pin its own plugins — it installs `docker-compose-plugin`
+# unversioned even when `--version` is passed — so the repo is addressed directly.
+# The apt key is pinned by digest for the same reason a base image is: a key that can
+# change silently is a signature nobody checked.
+#
+# WHY only the CLI, not the engine: this stage never runs a daemon — the panel drives
+# the host's dockerd over a mounted socket. `get.docker.com` brought dockerd (108 MB),
+# containerd (43 MB), runc and docker-proxy anyway, plus the buildx/model/rootless
+# plugins the previous version of this file deleted afterwards. Installing the CLI
+# alone leaves nothing to delete and no daemon to scan.
+ARG DOCKER_CLI_VERSION=5:29.9.3-1~debian.12~bookworm
+ARG COMPOSE_VERSION=5.7.0-1~debian.12~bookworm
+ARG DOCKER_GPG_DIGEST=1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570
 RUN apt-get update && \
     apt-get -y dist-upgrade && \
     apt-get install -y --no-install-recommends ca-certificates curl make python3 && \
-    curl -fsSL https://get.docker.com | sh && \
-    rm -f /usr/libexec/docker/cli-plugins/docker-buildx \
-          /usr/libexec/docker/cli-plugins/docker-model \
-          /usr/bin/rootlesskit \
-          /usr/bin/dockerd-rootless.sh \
-          /usr/bin/dockerd-rootless-setuptool.sh && \
+    install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    echo "${DOCKER_GPG_DIGEST}  /etc/apt/keyrings/docker.asc" | sha256sum -c - && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian bookworm stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      "docker-ce-cli=${DOCKER_CLI_VERSION}" \
+      "docker-compose-plugin=${COMPOSE_VERSION}" && \
     rm -rf /var/lib/apt/lists/*
 
 # WHY: the panel runs `make env` (./cms config sync) inside this container, and

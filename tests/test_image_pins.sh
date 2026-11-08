@@ -198,6 +198,109 @@ else
   no "no third-party FROM lines found — the exemption filter is swallowing everything"
 fi
 
+# ── the toolchain baked into our images is pinned too ───────────────────────────────────────
+# WHY this half exists: the FROM scan above pins the *base image*, but a build can also pull a
+# tool out of the network at build time. `curl https://get.docker.com | sh` does exactly that,
+# and it cannot pin everything it installs: measured 2026-11-08, its `--version` argument covers
+# `docker-ce`/`docker-ce-cli`/`containerd.io` but it installs `docker-compose-plugin`
+# unversioned (get.docker.com:656). So an unchanged commit rebuilt one day later carried Compose
+# 5.7.0 instead of 5.6.0, moved its `golang.org/x/net` from 0.58.0 to 0.60.0, and the image scan
+# gained CVE-2026-78661 — a finding no commit introduced. A pin that is only a comment is what
+# that was; these are the rules that make it a fact.
+#
+# WHAT it asserts, on Dockerfile *code* (comment lines blanked first, so a comment explaining
+# the rule cannot satisfy or violate it):
+#   1. no Dockerfile installs Docker from the convenience script or a `releases/latest` binary;
+#   2. a Dockerfile that installs `docker-ce-cli` / `docker-compose-plugin` names an exact
+#      version — a literal `=1.2.3…`, or `${NAME}` whose `ARG NAME=` default starts with a digit;
+#   3. a Dockerfile that fetches the Docker apt key verifies it against a pinned digest, for the
+#      same reason a base image is pinned;
+#   4. the scan covers at least one Dockerfile that installs the client, so a broken glob cannot
+#      pass as compliance.
+printf '\nthe toolchain installed into our images is pinned\n'
+
+# Comment lines blanked, line numbers kept: a rule about code must not be satisfiable by prose
+# (the failure mode that let a comment mentioning `withActor()` pass an entry-point gate).
+code_of() { grep -n '' "$1" | sed -E 's/^([0-9]+):[[:space:]]*#.*$/\1:/'; }
+
+# first_of <text> — the first line, without a pipe into an early-exiting reader: this suite runs
+# under `pipefail`, and a `| head -1` whose producer is killed by SIGPIPE returns 141 for the
+# whole pipeline, which turns a check into a coin flip. A gate that fails at random is worse
+# than no gate, because the next reader learns to re-run it.
+first_of() { local text="$1"; printf '%s\n' "${text%%$'\n'*}"; }
+
+# is_pinned <code-view> <package> -> "pinned", or the reason it is not
+is_pinned() {
+  local code="$1" pkg="$2" value name arg_line default
+  value="$(first_of "$(grep -oE "$pkg=[^[:space:]\"']+" <<<"$code")")"
+  value="${value#"$pkg="}"
+  if [ -z "$value" ]; then
+    printf 'names no version (install it as %s=<version>)' "$pkg"
+    return 0
+  fi
+  if [[ "$value" =~ ^[0-9] ]]; then
+    printf 'pinned'
+    return 0
+  fi
+  if [[ "$value" =~ ^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$ ]]; then
+    name="${BASH_REMATCH[1]}"
+    arg_line="$(first_of "$(grep -E "ARG[[:space:]]+${name}=" <<<"$code")")"
+    default="${arg_line#*"${name}="}"
+    if [[ "$default" =~ ^[0-9] ]]; then
+      printf 'pinned'
+      return 0
+    fi
+    printf "is \${%s} but ARG %s carries no version" "$name" "$name"
+    return 0
+  fi
+  printf 'names an unversioned value (%s)' "$value"
+}
+
+tool_files=0
+client_files=0
+for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' | sed 's|^\./||' | sort); do
+  tool_files=$((tool_files + 1))
+  code="$(code_of "$REPO_ROOT/$f")"
+
+  # 1. the floating installer, named by file:line from the code view.
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    no "${f}:${hit%%:*} installs Docker from the floating convenience script — pin the package versions"
+  done <<<"$(grep -E 'get\.docker\.com|compose/releases/latest' <<<"$code")"
+
+  # 2. every installed client package carries a version.
+  for pkg in docker-ce-cli docker-compose-plugin; do
+    if ! grep -qE "${pkg}[=[:space:]\"']" <<<"$code"; then
+      continue
+    fi
+    if [ "$pkg" = docker-ce-cli ]; then
+      client_files=$((client_files + 1))
+    fi
+    verdict="$(is_pinned "$code" "$pkg")"
+    if [ "$verdict" = pinned ]; then
+      ok "${f}: ${pkg} is pinned"
+    else
+      no "${f}: ${pkg} ${verdict}"
+    fi
+  done
+
+  # 3. the apt key the client is installed against is itself pinned by digest.
+  if grep -q 'download\.docker\.com/linux/debian/gpg' <<<"$code"; then
+    if grep -qE 'sha256sum[[:space:]]+-c' <<<"$code"; then
+      ok "${f}: the Docker apt key is verified against a pinned digest"
+    else
+      no "${f}: fetches the Docker apt key without checking its sha256 — the key can change silently"
+    fi
+  fi
+done
+if [ "$tool_files" -eq 0 ]; then
+  no "no Dockerfiles matched — the toolchain scan is broken, not the tree"
+fi
+if [ "$client_files" -eq 0 ]; then
+  no "no Dockerfile installs a pinned Docker client — the scan proves nothing"
+fi
+
 # ── the decision record ─────────────────────────────────────────────────────────────────────
 printf '\nthe decision lives in one place\n'
 if [ -f "$ADR" ]; then

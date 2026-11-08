@@ -122,8 +122,40 @@ Dockerfile bases (not compose, so outside the gate's scan):
 | `ghcr.io/aquasecurity/trivy:0.76.1` | `sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c` |
 | `ghcr.io/google/osv-scanner:v2.7.0` | `sha256:4f3b7e2c64b9d38a5febc5a7e4a3dfef1d1362f726dea7a2ef4762b46469fcd0` |
 
+## Tools installed into an image are pinned too (2026-11-08)
+
+A `FROM` digest pins the base image but not what a build fetches *into* it. `admin-panel/Dockerfile`
+and `docker/scheduler/Dockerfile` installed the Docker client with `curl https://get.docker.com | sh`,
+which resolves every package it installs at build time. Measured: with no commit touching the panel
+Dockerfile since 2026-10-25, a rebuild on 2026-11-08 carried Compose **5.7.0** (`golang.org/x/net`
+0.60.0) where the 2026-10-24 waiver export names **5.6.0** (0.58.0) — and the image scan gained
+`CVE-2026-78661`, a finding no commit introduced. The script cannot fix that from the outside: its
+`--version` argument pins `docker-ce`/`docker-ce-cli`/`containerd.io` and it installs
+`docker-compose-plugin` unversioned (`get.docker.com:656`).
+
+The rule, enforced by `tests/test_image_pins.sh`:
+
+| rule | why |
+|---|---|
+| no Dockerfile runs the convenience script or a `releases/latest` binary | its inputs resolve at build time, so two builds of one commit differ |
+| `docker-ce-cli` / `docker-compose-plugin` installs name an exact version (`pkg=<version>`, or `${ARG}` whose `ARG` carries one) | the version is then a fact in the tree, and a bump is a reviewable commit |
+| the Docker apt key is verified against a pinned `sha256` | a key that can change silently is a signature nobody checked |
+| only the client is installed where only the client is used | `get.docker.com` also brings `dockerd` (108 MB), `containerd` (43 MB), `runc` and `docker-proxy`; the panel and the scheduler drive the host's engine over a mounted socket and never start one |
+
+**Bumping the pin:** `docker run --rm node:24-bookworm-slim … apt-cache madison docker-ce-cli
+docker-compose-plugin` (or read `download.docker.com/linux/debian/dists/bookworm/pool/stable/amd64/`),
+pick the readable tag the operator wants, update the `ARG` default, set `DOCKER_KEY_SHA256` from
+`curl -fsSL https://download.docker.com/linux/debian/gpg | sha256sum` (check the fingerprint is still
+`9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88`), then rebuild and rescan the image. A Compose
+finding the upstream has not fixed is waived in the panel's `security_waivers` table with a
+review date — never by relaxing the scan.
+
 ## Consequences
 
+- **The tool pins are manual, unlike the image pins.** Renovate and Dependabot watch `FROM` lines and
+  compose `image:` references; neither rewrites an `ARG` default. A `docker-ce-cli` /
+  `docker-compose-plugin` bump is therefore a deliberate commit with its own rescan — the same reasoning
+  as the host engine's pinned bump window, and the reason the version lives beside the install it feeds.
 - **A pin freezes the image until Renovate moves it.** That is the point, but it means a
   security fix in a base image arrives only through a Renovate PR (or a manual bump), never
   through a re-pull. The `compose base images` / `docker base images` groups keep that review to
