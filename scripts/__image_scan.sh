@@ -392,7 +392,13 @@ case "$mode" in
     at="$(LC_ALL=C date -u +%Y-%m-%dT%H:%M:%SZ)"
     day="$(LC_ALL=C date -u +%Y-%m-%d)"
     refs_count=0
-    [ -f "$OUT_DIR/total.tsv" ] && refs_count="$(wc -l < "$OUT_DIR/total.tsv" | tr -d ' ')"
+    # WHY an `if` and not `[ -f … ] && assign`: under `set -e` that idiom exits the whole script with
+    # status 1 when the file is absent — silently, because the test's own output is nothing. Measured in
+    # the first scheduled run: the summary step failed with exit 1 and an empty log, which reads like a
+    # broken reporter rather than "this run produced no table".
+    if [ -f "$OUT_DIR/total.tsv" ]; then
+      refs_count="$(wc -l < "$OUT_DIR/total.tsv" | tr -d ' ')"
+    fi
     fixable_total="$(cat "$OUT_DIR/fixable-total" 2>/dev/null || printf '?')"
     state="$(cat "$OUT_DIR/state" 2>/dev/null | tr -d '[:space:]')"
     drift_drift=0; drift_unknown=0
