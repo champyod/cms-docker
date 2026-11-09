@@ -182,7 +182,11 @@ jobs:
             try {
               await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 1 });
             } catch (error) {
-              if (error.status !== 410) throw error;
+              // WHY both shapes: octokit surfaces a 410 as `status` on some paths and only on
+              // `response.status` on others, and a probe that misses it turns "Issues are off" into
+              // "the nightly scan is broken" — which is what the first scheduled run reported.
+              const status = error.status ?? error.response?.status;
+              if (status !== 410) throw error;
               issuesEnabled = false;
             }
             if (!issuesEnabled) {
