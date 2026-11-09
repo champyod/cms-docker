@@ -386,6 +386,7 @@ case "$mode" in
     ;;
 
   report)
+    set -x  # TEMPORARY diagnostic: the summary step exits 1 with an empty log in CI
     mkdir -p "$OUT_DIR"
     # LC_ALL=C: the default locale here is Thai Buddhist, so `%Y` would print 2569 for 2026 and
     # the issue would carry a year nobody can reconcile with the run it links to.
