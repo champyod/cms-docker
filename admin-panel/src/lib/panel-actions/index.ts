@@ -43,14 +43,14 @@ export {
   type WaiverInput,
   type WaiverWriteResult,
 } from './patching-waivers';
+export { waiveUnreachableFindings } from './patching-bulk-waive';
 export {
-  waiveUnreachableFindings,
   type BulkWaiveCounts,
   type BulkWaiveInput,
   type BulkWaivePlanEntry,
   type BulkWaiveRefusal,
   type BulkWaiveResult,
-} from './patching-bulk-waive';
+} from './patching-bulk-waive-plan';
 export { resolveRootActorId } from './root-actor';
 
 // WHY the input shapes are re-exported here and not only where they are declared: a caller outside
