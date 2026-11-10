@@ -11,13 +11,10 @@ import {
   type PatchingSource,
 } from '@/lib/security/patching';
 
-// Re-exported because it is part of this boundary's contract (key ≤ 200) and the write path
-// imports it from here; the number itself lives beside the vocabulary it belongs to.
+// Part of this boundary's contract; the number lives beside the vocabulary.
 export { MAX_FINDING_KEY_LENGTH };
 
-// The feed is an input boundary even though it is machine-to-machine: the caps below are
-// part of the contract (key ≤ 200, array ≤ 2000), and the body cap is what keeps one
-// producer's runaway scan from becoming a memory event in the panel process.
+// The feed is an input boundary: caps below are contract, the body cap bounds one runaway scan.
 export const MAX_FINDINGS_PER_PUSH = 2000;
 export const MAX_BODY_BYTES = 1_000_000;
 export const FEED_RATE_LIMIT_PER_MINUTE = 30;
@@ -78,8 +75,7 @@ export function feedTokenMatches(
   return timingSafeEqual(providedDigest, expectedDigest);
 }
 
-// One window per source, in-process. WHY per source: a noisy producer must not starve the
-// other two, and a shared bucket would make one scanner's retry loop look like a feed outage.
+// One in-process window per source, so a noisy producer cannot starve the other two.
 const feedWindows = new Map<string, { count: number; resetAt: number }>();
 
 export interface RateLimitVerdict {
@@ -186,10 +182,7 @@ export function parseFeedPush(body: unknown): FeedValidation {
   }
   const host = optionalText(record.host);
   if (host === undefined) return { ok: false, error: 'host must be a string or null' };
-  // WHY required and not defaulted: a default of "now" would silently resolve nothing on a
-  // single-push producer and silently resolve *everything* on a chunked one, because the run's
-  // earlier batches would all look older than the last batch. The producer knows when it started;
-  // the panel must not guess.
+  // Required, not defaulted: a default would resolve nothing on one producer and everything on a chunked one.
   const runStartedAtRaw = record.run_started_at;
   if (typeof runStartedAtRaw !== 'string') {
     return { ok: false, error: 'run_started_at must be an ISO-8601 string' };
@@ -247,15 +240,10 @@ function findingData(
     available: finding.available,
     title: finding.title,
     url: finding.url,
-    // WHY the envelope's host when the finding names none: not one of the three jq mappers emits
-    // a per-finding `host`, so a row written from `finding.host` alone always carried NULL. The
-    // complete-push resolution below scopes by the envelope host, which therefore matched nothing
-    // and left every row it should have closed open for good. A producer that fans out several
-    // boxes in one push can still name the box on the finding itself.
+    // No mapper emits a per-finding host, so the envelope's host is the row's only provenance.
     host: finding.host ?? envelopeHost,
     detail: finding.detail === null ? Prisma.DbNull : finding.detail,
-    // A re-report revives a row a previous complete push resolved: the producer is saying
-    // the thing is still there, so the row must stop reading as history.
+    // A re-report revives a row an earlier complete push resolved.
     resolved_at: null,
   };
 }
@@ -297,9 +285,7 @@ export async function applyFeedPush(
   push: FeedPush,
   now: Date = new Date(),
 ): Promise<FeedPushResult> {
-  // One statement per reported finding, then a single insert for the ones no row matched — the
-  // insert covers both "never seen before" and "closed by a newer run", and `skipDuplicates`
-  // makes the second case a no-op instead of a unique violation.
+  // One statement per finding, then one insert covering new and revived rows.
   const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
   for (const finding of push.findings) {
     const data = findingData(finding, push.host);
@@ -338,11 +324,7 @@ export async function applyFeedPush(
       ...(push.host === null
         ? {}
         : {
-            // WHY `host: null` belongs here: rows written before the envelope host reached the row
-            // carry NULL, and no producer ever said which box they came from — "last seen before
-            // this run" is the only evidence there is for them. Leaving them out is the defect
-            // that kept 52,441 open rows open forever: the write path stored `finding.host`, which
-            // no mapper emits, while this predicate compared against the envelope's host.
+            // Rows written before the envelope host reached them carry NULL, and no producer can say which box.
             OR: [{ host: push.host }, { host: null }],
           }),
       resolved_at: null,

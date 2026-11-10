@@ -1,83 +1,40 @@
 SHELL := /bin/bash
 
-# Generated from config.toml by `make env`; gitignored. Pull it into make's own
-# environment so a recipe reading $${VAR} sees the same value the stack runs
-# with. WHY -include and not include: a fresh checkout has no .env yet, and a
-# plain include would make every target fail with "No such file or directory"
-# before an operator ever ran `make env`. WHY export: without it the values are
-# make variables only, and a shell recipe expands $${VAR} from the environment
-# it inherited rather than from make's own tables.
+# Generated from config.toml by `make env`; gitignored.
 -include .env
 export
 
 # Detect Docker Compose version (keep fallback)
 COMPOSE_CMD := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
-# Explicit -f list (auto-merge of docker-compose.override.yml is disabled
-# whenever -f is passed, so the override must be included here when present)
-# WHY recursive (= not :=): the `expose` target writes or removes
-# docker-compose.expose.yml, so both lists must re-evaluate after it runs.
+# Explicit -f list (auto-merge of docker-compose.override.yml is disabled whenever -f is passed, so the override
 COMPOSE_FILES = $(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)
 COMPOSE_FLAGS = $(foreach f,$(COMPOSE_FILES),-f $(f))
-# Compose v5 does not auto-activate the profiles of depends_on targets, so
-# stack bring-up must request dependency profiles explicitly. Stop/clean
-# targets keep the stack's own profile so teardown never removes dependencies.
+# Compose v5 does not auto-activate dependency profiles; bring-up requests them explicitly.
 ADMIN_UP_PROFILES   := --profile core --profile admin
 CONTEST_UP_PROFILES := --profile core --profile contest
 # WHY monitor carries --profile core: the monitor profile is not just the monitor.
-# It also holds cms-scheduler, whose depends_on is `database: service_healthy`, and
-# database sits behind profiles: [core]. Compose validates the whole project before
-# starting anything and rejects a depends_on whose target is not in the enabled model,
-# so `--profile monitor` alone failed with `service "scheduler" depends on undefined
-# service "database": invalid compose project` and nothing in the profile ever started.
-# That left every monitor setting (BACKUP_MAX_*, thresholds, retention, webhook target)
-# frozen at whatever the container was first created with.
 MONITOR_UP_PROFILES := --profile core --profile monitor
-# The contest front door is its own profile so `make contest` never publishes host
-# 80/443. It depends on the contest services, so starting it activates those too.
-# WHY --profile admin: nginx-proxy's depends_on lists admin-panel-next and
-# ranking-web-server, both gated behind profiles: [admin], and Compose rejects a project
-# whose depends_on target is missing from the enabled model. Without admin enabled the
-# proxy target failed validation the same way `make infra` did.
+# The contest front door is its own profile so `make contest` never publishes host 80/443.
 PROXY_UP_PROFILES   := --profile core --profile contest --profile proxy --profile admin
 
-# Additive stacks that publish host ports the default COMPOSE_FILES must never
-# pull in implicitly. WHY separate: docker-compose.domain.yml and
-# docker-compose.waf.yml define services with no `profiles:` key (the
-# grader-nginx-proxy service binds host 80/443, grader-certbot and
-# grader-redis-rate-limit always start), so folding them into COMPOSE_FILES would
-# make `make core` issue certificates and bind 443 on a workstation. These targets
-# opt in per-stack.
+# Additive stacks that publish host ports the default COMPOSE_FILES must never pull in implicitly.
 DOMAIN_COMPOSE_FILES := docker-compose.yml docker-compose.domain.yml
 WAF_COMPOSE_FILES    := docker-compose.yml docker-compose.domain.yml docker-compose.waf.yml
 DOMAIN_COMPOSE_FLAGS := -f docker-compose.yml -f docker-compose.domain.yml
 WAF_COMPOSE_FLAGS    := -f docker-compose.yml -f docker-compose.domain.yml -f docker-compose.waf.yml
-# The composes ./cms config sync derives from the registry: one container per service
-# row and one tailscale container per exposed node. Pulled on their own -f set, never
-# merged with COMPOSE_FILES: a row may name the same container as a declared service,
-# and merging the two definitions would let the generated one override the declared one.
+# The composes ./cms config sync derives from the registry: one container per service row and one tailscale
 GENERATED_COMPOSE_FLAGS = $(foreach f,$(wildcard docker-compose.*.generated.yml),-f $(f))
 
-# WHY waf carries --profile core only: grader-waf's BACKEND is
-# http://grader-nginx-proxy:80, the domain stack's proxy, which has no profile.
-# --profile contest stays OUT because it would bring up the whole contest stack,
-# which WAF does not front.
+# WHY waf carries --profile core only: grader-waf's BACKEND is http://grader-nginx-proxy:80, the domain stack's
 WAF_UP_PROFILES      := --profile core --profile waf
 
 .PHONY: expose setup audit help verify-images env core admin contest worker infra domain waf cert-timer-install proxy proxy-stop proxy-clean core-stop admin-stop contest-stop contest-down worker-stop infra-stop domain-stop waf-stop core-clean admin-clean contest-clean worker-clean infra-clean domain-clean waf-clean security-agent security-state security-unban security-up security-off security-check security-dry-run security-verify security-print db-clean clean pull pull-core pull-admin pull-contest pull-worker pull-infra core-img admin-img contest-img worker-img infra-img admin-dev admin-dev-stop contest-down cms-init admin-create prisma-sync lint test smoke-test preflight backup db-reset icons icons-check
 
-# Regenerate the bind override from .env before a stack comes up. The base compose
-# file publishes front-door ports on 0.0.0.0 — except the contest nginx front, which
-# publishes none — and this override rebinds them to the configured *_BIND_IP
-# addresses, one entry per address, so a comma list expands.
+# Regenerate the bind override from .env before a stack comes up.
 expose:
 	@bash scripts/__render_expose.sh
 
-# ---------------------------------------------------------------------------
-# verify-images — run the signature gate by hand over every stack's images.
-# WHY separate: the deploy targets already call it themselves; this target exists so
-# an operator (or CI on a box) can check the images BEFORE deciding to deploy, and so
-# a refusal can be reproduced without pulling or recreating anything.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- verify-images — run the signature
 verify-images:
 	@bash scripts/__verify_images.sh $$($(COMPOSE_CMD) $(COMPOSE_FLAGS) \
 		--profile core --profile admin --profile contest --profile worker --profile monitor \
@@ -131,41 +88,16 @@ help:
 	@echo "  make pull-core, pull-admin, pull-contest, pull-worker, pull-infra (deprecated) use 'docker compose --profile <stack> pull'"
 	@echo "  make admin-dev, admin-dev-stop, contest-down                     (deprecated — contest-down now alias for down)"
 
-# ---------------------------------------------------------------------------
-# env — hardened merge flow
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- env — hardened merge flow
 env:
 	@echo "[deprecated] 'make env' is now an alias for './cms config sync'"
 	@echo "  Edit config.toml, then run: ./cms config sync"
 	@bash scripts/__config_sync.sh
 
-# WHY every recreate-capable deploy refreshes the domain proxy: `up -d` replaces
-# a container whenever its image or config changed, the replacement is a new
-# container on a new address, and grader-nginx-proxy resolved the old address
-# when it loaded its upstreams at startup. Without a reload the domain keeps
-# proxying a stale IP and 502s until someone runs './cms domain proxy --apply'.
-# WHY invoked plainly rather than with '|| true': the script always exits 0 and
-# only warns when nginx itself refuses the reload, so a failed reload cannot fail
-# the deploy. A script that cannot run at all still does fail the deploy, which
-# is what the Rust deploy path does too.
+# WHY: `up -d` replaces a container when its image or config moves, so the proxy reloads after.
 DOMAIN_PROXY_RELOAD := bash scripts/__domain_proxy_reload.sh
 
-# ---------------------------------------------------------------------------
-# Canonical profile targets — DEPLOYMENT_TYPE=img → verify + pull + up --no-build,
-# src → up --build.
-# DEPLOYMENT_TYPE_OVERRIDE env var (set by *-img aliases) takes precedence over files.
-#
-# WHY every img branch verifies before it pulls: img is the only path that replaces
-# running containers with images fetched from a registry, so it is the only path
-# where a moved tag, a foreign build or a tampered layer can reach a deployment.
-# scripts/__verify_images.sh checks the cosign signature of each image the stack is
-# about to pull against this repository's own release identity and aborts the target
-# (exit 1, so ./cms deploy reports the failed step) on anything that does not verify.
-# The src branch builds locally and has nothing to verify. `make pull` stays a bare
-# prefetch on purpose: it changes nothing that is running.
-# Ignore the gate ONLY with CMS_SKIP_IMAGE_VERIFY=1 — docs/IMAGE-VERIFICATION.md.
-# ---------------------------------------------------------------------------
-# One-stop orchestrator — see ./cms --help  (env -> core -> init -> admin -> contest -> worker -> monitor -> verify)
+# ---------------------------------------------------------------- canonical profile targets
 .PHONY: setup audit
 setup:
 	@./cms $(CMS_ARGS)
@@ -202,17 +134,9 @@ admin: expose
 		echo "DEPLOYMENT_TYPE=src → building admin images..."; \
 		$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(ADMIN_UP_PROFILES) up -d --build; \
 	fi
-	@# The reconciler in this profile writes the front's vhosts into config/generated from inside its
-	@# container, as the panel image's uid — a directory this deploy owns. Hand it over before the loop
-	@# starts, or every tick refuses with EACCES and the front keeps a config nobody refreshed.
+	@# The reconciler writes config/generated as the panel's uid; hand the directory over first.
 	@bash -c '. scripts/__lib/common.sh && ensure_generated_dir_perms "$$PWD"' || true
-	@# An overlay started by hand keeps the image it was created from, so a rebuilt scanner tag reaches the
-	@# tag and never the container: six nights of an already-fixed code path, failing silently. Reconcile
-	@# here — verified on the host: a current overlay is a no-op with every container's StartedAt unchanged,
-	@# and a moved tag recreates only the containers that actually drifted.
-	@# WHY no `|| true`: the verb exits 0 when the overlay is not running and when nothing drifted, so the
-	@# only failure left to report is a recreate that did not happen. Swallowing it would make this deploy
-	@# "succeed" while a container keeps running an image its tag no longer names.
+	@# A rebuilt tag never reaches a running overlay; reconcile moves it onto the image its tag names.
 	@bash scripts/__security_stack.sh reconcile
 	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Admin profile started."
@@ -270,21 +194,7 @@ infra: expose
 	fi
 	@echo "Infra (monitor) profile started."
 
-# ---------------------------------------------------------------------------
-# Additive stacks — domain + WAF
-#
-# WHY these are separate targets: both compose files define services with no
-# `profiles:` key, so merging them into COMPOSE_FILES (line 7) would make every
-# default target bind host 80/443 and start certbot. `./cms domain setup`
-# renders config/grader.nginx.conf and requests certificates; these targets are
-# what actually serve them.
-#
-# WHY waf depends on nothing but compose: grader-waf's BACKEND is
-# http://grader-nginx-proxy:80, the domain stack's proxy, so the domain stack must
-# already be up. The merged project now holds two distinct proxies — the domain
-# `grader-nginx-proxy` and the contest `nginx-proxy` (cms-nginx-contest, contest
-# profile) — instead of one key that merged two definitions into a single service.
-# ---------------------------------------------------------------------------
+# --------------------------------------------------------------------------- Additive stacks — domain + WAF WHY
 domain:
 	@if [ ! -f config/grader.nginx.conf ]; then \
 		echo "config/grader.nginx.conf is missing — run './cms domain setup --apply' first" >&2; \
@@ -294,11 +204,6 @@ domain:
 	@echo "Domain stack started (grader-nginx-proxy + certbot + redis-rate-limit)."
 
 # Install the certificate-renewal timer from THIS checkout.
-# WHY here and not in src/install.py: that installer substitutes @CMS_DIR@ to
-# ~/cms, a directory this fork does not have, and its `systemd` verb has no caller
-# on the host (the image runs only `install.py venv` and `install.py cms`). The
-# shipped pair therefore kept its literal placeholder, which systemd cannot parse,
-# so renewal never fired.
 cert-timer-install:
 	@bash scripts/__cert_timer.sh --apply
 
@@ -316,23 +221,16 @@ waf:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) up -d
 	@echo "WAF profile started. SecRuleEngine is DetectionOnly by default — see docs/waf-tuning.md."
 
-# ---------------------------------------------------------------------------
-# Stop / clean / down variants per stack
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- stop / clean / down variants per stack
 core-stop:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core down
 
 core-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core down -v
 
-# Teardown targets pass dependency profiles plus an explicit service list:
-# the core profile is required for project-graph validation, while the
-# service list keeps the operation scoped so dependencies are never touched.
+# Teardown passes dependency profiles plus an explicit service list; other profiles require core.
 ADMIN_SERVICES := admin-panel-next admin-web-server ranking-web-server
-# redis-rate-limit is here because `make contest` starts it (the login failure
-# counters are configured to use it), so stop/down has to take it with them or a
-# stale instance outlives the stack. It shares container_name and volume with the
-# domain stack's copy, but the two are mutually exclusive by profile.
+# redis-rate-limit is here because `make contest` starts it (the login failure counters are configured to use it)
 CONTEST_SERVICES := evaluation-service proxy-service contest-web-server nginx-proxy redis-rate-limit
 
 admin-stop:
@@ -352,8 +250,6 @@ contest-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile contest --profile proxy --profile admin down -v $(CONTEST_SERVICES)
 
 # The contest front door has its own target because it is not part of `make contest`.
-# It publishes nothing on the host until NGINX_BIND_IP is set: the expose override then
-# adds 80/443, and until then only the loopback funnel gateways are reachable.
 proxy: expose
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) $(PROXY_UP_PROFILES) up -d nginx-proxy
 	@echo "Contest nginx front started (set NGINX_BIND_IP + NGINX_HTTP_PORT to publish 80/443)."
@@ -370,10 +266,7 @@ worker-stop:
 worker-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile worker down -v
 
-# WHY the dependency profile and the service list both appear, as in admin-stop above:
-# --profile core is what makes the project graph validate, and the explicit service
-# list is what keeps the teardown from reaching into core now that core is enabled.
-# Without the list, `down` would act on every service the enabled profiles cover.
+# WHY the dependency profile and the service list both appear, as in admin-stop above: --profile core is what makes
 MONITOR_SERVICES := monitor scheduler
 
 infra-stop:
@@ -382,9 +275,7 @@ infra-stop:
 infra-clean:
 	$(COMPOSE_CMD) $(COMPOSE_FLAGS) --profile core --profile monitor down -v $(MONITOR_SERVICES)
 
-# Scoped by service name so a domain teardown never reaches into core/contest,
-# whose containers share the project. WHY an explicit list: the domain compose
-# file has no profiles, so an unscoped `down` would take every service it sees.
+# Scoped by service name so a domain teardown never reaches into core/contest, whose containers share the project.
 DOMAIN_SERVICES := grader-nginx-proxy certbot redis-rate-limit
 
 domain-stop:
@@ -396,8 +287,7 @@ domain-clean:
 waf-stop:
 	$(COMPOSE_CMD) $(WAF_COMPOSE_FLAGS) $(WAF_UP_PROFILES) rm -f -s grader-waf
 
-# The host-side half of the security surface: the panel validates a request and writes
-# it under .security-agent/queue; this agent applies it (unban, certificate renewal).
+# The host-side half of the security surface: the panel validates a request and writes it under
 security-agent:
 	@bash scripts/__security-agent.sh --install-timer
 
@@ -408,24 +298,7 @@ security-unban:
 	@[ -n "$(JAIL)" ] && [ -n "$(IP)" ] || { echo "usage: make security-unban JAIL=<jail> IP=<address>" >&2; exit 2; }
 	@bash scripts/__security-agent.sh --unban "$(JAIL)" "$(IP)"
 
-# ---------------------------------------------------------------------------
-# Security stack — the feed (Renovate + Diun + the scanners) and its signal.
-#
-# WHY make owns the verb and scripts/__security_stack.sh owns the argv: every other optional
-# overlay is brought up from here (infra, waf, domain, proxy), and `./cms <verb>` is dispatched
-# by the Rust cms-tui binary, so an operator verb there would mean a Rust change and a rebuilt
-# binary on each host. The script holds the prerequisite gate, the plan renderer and the
-# off-switch; these targets are the four words an operator types.
-#
-# WHY the compose files are NOT added to COMPOSE_FILES: this overlay is opt-in twice (profile +
-# SECURITY_ENABLED) and publishes loopback ports on a live contest box, so it must never come up
-# as a side effect of `make core`/`make admin`. The targets below pass their own -f set.
-#
-# The invariant these targets must keep: no container serving contestants is touched. The target
-# list is explicit and `--no-deps` is used, because docker-compose.security.yml adds Diun labels
-# to six base services and a label change makes an unscoped `up -d` recreate them.
-#
-# Flags ride through SECURITY_ARGS, e.g. `make security-up SECURITY_ARGS=--feed-only`.
+# ---------------------------------------------------------------- security stack — Renovate, Diun, scanner
 SECURITY_ARGS ?=
 
 security-check:
@@ -446,8 +319,7 @@ security-off:
 security-print:
 	@bash scripts/__security_stack.sh print $(SECURITY_ARGS)
 
-# Install the fail2ban jails (nginx-http-auth, nginx-limit-req) with the log path
-# resolved to the nginx Docker volumes. Needs sudo and fail2ban installed.
+# Install the fail2ban jails (nginx-http-auth, nginx-limit-req) with the log path resolved to the nginx Docker
 fail2ban:
 	@bash scripts/__fail2ban-setup.sh --apply
 
@@ -466,9 +338,7 @@ db-reset: db-clean
 	@echo "Database has been reset and services restarted."
 	@echo "Please wait ~10 seconds for DB to stabilize, then run: make cms-init"
 
-# ---------------------------------------------------------------------------
-# Pull — offline-tolerant but LOUD
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- pull — offline-tolerant but loud
 pull: expose
 	@echo "Pulling images for all profiles..."
 	@pull_failed=0; \
@@ -476,10 +346,7 @@ pull: expose
 	if [ -n "$(GENERATED_COMPOSE_FLAGS)" ]; then $(COMPOSE_CMD) $(GENERATED_COMPOSE_FLAGS) pull || { echo "[WARN] generated-compose pull failed — continuing with local images (may be stale)" >&2; pull_failed=1; }; fi; \
 	if [ "$$pull_failed" -eq 0 ]; then echo "Pull complete."; else echo "Pull finished WITH FAILURES (see above)" >&2; fi
 
-# The composes ./cms config sync derives from the registry: one container per service row
-# and one tailscale container per exposed node. Started on their own -f set, never merged
-# with COMPOSE_FILES, because a row may name the same container as a declared service and
-# merging the two definitions would let one override the other.
+# The composes ./cms config sync derives from the registry: one container per service row and one tailscale
 .PHONY: registry-up
 registry-up:
 	@if [ -n "$(GENERATED_COMPOSE_FLAGS)" ]; then \
@@ -489,10 +356,7 @@ registry-up:
 		echo "No generated compose to apply — run './cms config sync' first."; \
 	fi
 
-# ---------------------------------------------------------------------------
-# Deprecated aliases — each prints [deprecated] to stderr then delegates
-# *-img aliases FORCE image mode via DEPLOYMENT_TYPE_OVERRIDE
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- deprecated aliases
 core-img:
 	@echo "[deprecated] use 'make core' (DEPLOYMENT_TYPE controls img/src)" >&2
 	@$(MAKE) -e DEPLOYMENT_TYPE_OVERRIDE=img core
@@ -551,20 +415,13 @@ admin-dev-stop:
 	@echo "[deprecated] use 'make admin-stop'" >&2
 	@$(MAKE) admin-stop
 
-# ---------------------------------------------------------------------------
-# Infra / DB / admin helpers (unchanged contract)
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- infra / db / admin helpers
 cms-init:
 	@chmod +x scripts/__cms-db-init.sh && ./scripts/__cms-db-init.sh
 
 prisma-sync:
 	@echo "Synchronizing Admin Panel schema via Prisma Migrate (forcing Prisma v6)..."
-	@# WHY: schema sync is a migration operation that needs DDL, so it runs as the owner role — never the runtime DML role.
-	@# WHY: both tools are located by scripts/__resolve_tool.sh, which walks every plausible location on both sides of the container boundary — the image, the host bind-mount, a global install, and the package runners the image already carries — and accepts the first candidate that actually runs. A deployment host has no admin-panel/node_modules and an out-of-date image carries no bundled runner, so a miss inside the container must fall through to the host: an inline probe that stops at the first miss leaves the update unable to finish.
-	@# WHY: the resolver reports which side it found the tool on, because the database is reached by service name from the container and by loopback from the host.
-	@# WHY: a failed migration and a failed seed are both fatal — without the seed the administrators hold groups that grant nothing.
-	@# WHY: seeding is system initialisation, so it also runs as the owner; it must work before the runtime roles exist.
-	@# WHY: Prisma resolves the migration history from the schema's own directory, so the schema must be the repository bind mount — the image's /app copy is a build-time snapshot missing newer migrations.
+	@# Schema sync needs DDL, so it runs as the owner role, never the runtime role.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
 	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
@@ -607,9 +464,7 @@ prisma-sync:
 	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
-# Migrate the ACTIVE database and verify the result. Sequences cms-init then
-# prisma-sync — the same pair ./cms' no-arg lifecycle runs — so a database that
-# ./cms db create made empty ends up schema + roles + RLS ready in one step.
+# Migrate the ACTIVE database and verify the result.
 db-migrate:
 	@chmod +x scripts/__db_migrate.sh && ./scripts/__db_migrate.sh
 
@@ -619,23 +474,7 @@ admin-create:
 	stty -echo; printf "Password: "; read cmd_pass; stty echo; echo; \
 	docker exec -it cms-log-service cmsAddAdmin $$cmd_user -p $$cmd_pass
 
-# ---------------------------------------------------------------------------
-# New utility targets
-# ---------------------------------------------------------------------------
-# WHY the file lists below are built by globbing and filtered with [ -f ]/[ -e ]
-# rather than handed to the tool raw: `make lint` must stay green on a checkout
-# where one of the optional directories (src/tools/, src/docker/) is empty or
-# absent, and a tool handed a non-matching path fails before it lints anything.
-#
-# WHY overlay_base: an overlay stack references services defined in its base,
-# so `config -q` only succeeds for the pair. docker-compose.waf.yml declares
-# depends_on grader-nginx-proxy, the domain stack's proxy, so its base is
-# docker-compose.domain.yml; only docker-compose.tailscale.yml depends on
-# contest-web-server, so only its base is docker-compose.yml. A profile-gated
-# target also needs its profiles enabled (overlay_profiles) or compose reports
-# the gated service as undefined instead of validating it.
-# Validating an overlay standalone reports a false failure; this mirrors the
-# merge .github/workflows/ci.yml performs.
+# ---------------------------------------------------------------- new utility targets
 lint:
 	@echo "Running lint checks..."
 	@echo "→ spec parity"
@@ -727,7 +566,6 @@ lint:
 	fi
 
 # Developer/CI checks: they need a checkout, not a running stack (see preflight/smoke-test).
-# env -i: the suites stage their own .env, so make's exported .env vars must not leak in.
 test:
 	@status=0; \
 	suites_ran=0; \
@@ -792,13 +630,7 @@ backup:
 clean:
 	rm -f .env
 
-# ---------------------------------------------------------------------------
-# Audit-log durability — verify the chain, read the retention state, run a prune
-# ---------------------------------------------------------------------------
-# WHY these run the panel's own code and not SQL: the verifier recomputes every `entry_hash` with
-# admin-panel/src/lib/audit-chain.ts — the module recordAudit() writes with — so there is one recipe
-# and no psql re-statement of it. The container is where that code is pinned; a host bun is used
-# only when no panel container is up (a scratch database, a CI box).
+# --------------------------------------------------------------------------- Audit-log durability — verify the
 AUDIT_TSX := ./node_modules/.bin/tsx
 audit-run = { \
 	if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-audit-retention"; then \
@@ -811,14 +643,12 @@ audit-run = { \
 		echo "ERROR: no audit runner — start the panel (make admin) or install bun." >&2; exit 1; \
 	fi; }
 
-# Exits 1 when the chain is broken, 2 when it cannot be checked at all. Both are failures here:
-# "could not read the log" must never read as "the log is fine".
+# Exits 1 when the chain is broken, 2 when it cannot be checked at all.
 .PHONY: audit-verify
 audit-verify:
 	@$(call audit-run,verify)
 
-# What retention has actually done, and the backlog when it has not run. Non-zero when rows are
-# past the window, so a scheduled caller can alarm on it.
+# What retention has actually done, and the backlog when it has not run.
 .PHONY: audit-status
 audit-status:
 	@$(call audit-run,status)
@@ -828,22 +658,17 @@ audit-status:
 audit-retention:
 	@$(call audit-run,prune $(if $(filter 1 yes true,$(APPLY)),--apply,))
 
-# Prove a backup's audit archive restores and verifies: needs the dump path, and a scratch database
-# it may create and drop. Never points at the live database — see scripts/__audit_restore_proof.sh.
+# Prove a backup's audit archive restores and verifies: needs the dump path, and a scratch database it may create
 .PHONY: audit-restore-verify
 audit-restore-verify:
 	@bash scripts/__audit_restore_proof.sh $(if $(DUMP),--dump "$(DUMP)",)
 
-# The one-time owner separation (CREATE ROLE + ALTER TABLE OWNER). Needs a maintenance window: the
-# cluster has no superuser, so this is `postgres --single` with cms-database stopped.
+# The one-time owner separation (CREATE ROLE + ALTER TABLE OWNER).
 .PHONY: audit-owner-bootstrap
 audit-owner-bootstrap:
 	@bash scripts/__audit_owner_bootstrap.sh $(if $(filter 1 yes true,$(CONFIRM)),--yes,)
 
-# ---------------------------------------------------------------------------
-# Regression audit — catches stale paths, exec-bit loss, bind-mount perms,
-# invalid compose profile graphs, and CLI-contract drift (P1-P5 class bugs).
-# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------- regression audit — stale paths
 .PHONY: audit
 audit:
 	@python3 scripts/__regression_audit.py

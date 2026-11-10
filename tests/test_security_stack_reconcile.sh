@@ -1,17 +1,5 @@
 #!/usr/bin/env bash
 # tests/test_security_stack_reconcile.sh — a deploy brings the running overlay onto its current images.
-#
-# WHY: compose recreates a container only when a compose command names it, and the security overlay is
-# started by hand. A rebuilt overlay image therefore moves the TAG and leaves the running container on
-# its old layers — measured in production: the scanner ran six nights of a code path that had already
-# been fixed, failing every push, with nothing watching. `make security-up` would have fixed it, but no
-# deploy ran it.
-#
-# The verb's promise is narrow, and each half is pinned here:
-#   * it starts NOTHING that was off (an operator who stopped the overlay meant it), and
-#   * it recreates a container ONLY when the image its tag names differs from the image it runs. A bare
-#     `up -d` also recreates on a composed-CONFIG change — measured on the real host, it restarted three
-#     healthy containers on a tree whose compose files had merely moved on.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,10 +15,7 @@ SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 mkdir -p "${SB}/bin"
 
-# A docker stub driven by two space-separated lists the test sets per case:
-#   RUNNING  services whose container exists
-#   STALE    running services whose container image differs from the image their tag names
-# Every argv is logged, so "did it act, and on what" is answerable afterwards.
+# A docker stub driven by two space-separated service lists the test sets per case.
 cat > "${SB}/bin/docker" <<'STUB'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >> "$COMPOSE_LOG"
@@ -57,11 +42,7 @@ case "$*" in
     if in_list "$STALE" "$svc"; then echo "sha256:NEW-${svc}"; else echo "sha256:OLD-${svc}"; fi
     exit 0 ;;
   inspect\ --format*)
-    # The container's image is the OLD id of ITS OWN service, so a service in STALE (whose tag names the
-    # NEW id) is the only one that disagrees — a single shared string made every container look stale.
-    # WHY the leading-space-free pattern and the order: this argv starts with `inspect`, while the tag
-    # lookup contains ` image inspect `; a pattern anchored on " inspect " never matches the first, and an
-    # empty image id then reads as "cannot compare" and hides the drift.
+    # The container's image is the OLD id of ITS OWN service, so a service in STALE (whose tag names the NEW id) is the
     svc="${!#}"
     svc="${svc#cid-}"
     echo "sha256:OLD-${svc}"
@@ -123,10 +104,7 @@ else
 fi
 
 printf '\n== a scan that is running is not killed ==\n'
-# WHY this is a static check: `docker top` is a host call the stub cannot model faithfully enough to
-# prove the behaviour, and a test that fakes it would prove the fake. What is pinned here is that the
-# guard exists, that it is scoped to the scanner (the only overlay service that EXECUTES work in its
-# container), and that it reports why it skipped — the part a future edit would silently drop.
+# A static check: the stub cannot model `docker top` faithfully enough to prove the guard runs.
 guard="$(awk '/verb_reconcile\(\)/,/^}/' "${SCRIPT}")"
 if printf '%s' "$guard" | grep -q 'docker top'; then
   ok "the verb asks whether the scanner is executing"
@@ -140,11 +118,7 @@ else
 fi
 
 printf '\n== the deploy path calls it ==\n'
-# The verb shipped, the wiring did not: on the production host the comparison recreated three healthy
-# containers (the id a container records and the id `docker image inspect <tag>` reports disagree for the
-# refs built from our own registry). A deploy step that restarts healthy containers is worse than the
-# drift it targets, so the call is deliberately absent until that comparison is proven — and the recipe
-# carries the reason, so nobody re-adds it as an "obvious" one-liner.
+# The verb shipped, the wiring did not: on the production host the comparison recreated three healthy containers
 recipe="$(awk '/^admin:/{f=1;next} f&&/^[^\t#]/{f=0} f' "${REPO_ROOT}/Makefile")"
 if printf '%s' "$recipe" | grep -qE '^\s*@?bash scripts/__security_stack.sh reconcile'; then
   ok "make admin reconciles the overlay"
@@ -157,10 +131,7 @@ if [[ "$(printf '%s' "$recipe" | grep -n "__security_stack.sh reconcile" | cut -
 else
   no "reconcile runs before the front reload"
 fi
-# WHY no `|| true` here: the verb already exits 0 when the overlay is not running and when nothing
-# drifted, so the only failure it can still report is a recreate that did not happen — the exact
-# silent-failure shape the wiring exists to remove. Swallowing it makes a deploy "succeed" while a
-# container keeps running an image the tag no longer names.
+# WHY no `|| true` here: the verb already exits 0 when the overlay is not running and when nothing drifted, so the
 if printf '%s' "$recipe" | grep -qE 'reconcile[[:space:]]*\|\|[[:space:]]*true'; then
   no "a reconcile failure is not swallowed by the deploy"
 else
