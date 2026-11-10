@@ -120,6 +120,11 @@ evidence wins, and the push's response counts those reports as `held`.
   array ≤ 2000), 422 with the offending index, never a stack trace.
 - Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).
 - Rate limited per source, and the body size capped — a feed endpoint is still an input boundary.
+- The producer (`docker/security-scan/lib/feed.sh`) splits a large set into bodies of at most 250
+  records **and** at most 900,000 bytes, measured in UTF-8 bytes per record and cut only between
+  records: a body sliced at a byte offset cuts a finding and a multi-byte character in half, which
+  arrives as 422 "Body is not valid JSON" with nothing stored. A single record larger than the cap
+  is refused loudly instead of sent, because no batch can carry it.
 
 ### Surface
 

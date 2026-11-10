@@ -211,5 +211,99 @@ else
   [[ "${err:-0}" == "0" ]] && ok "the empty push was accepted" || no "the empty push failed"
 fi
 
+printf '\na batch is measured in bytes, and only ever cut between two records\n'
+if ! start_server 18804 0; then
+  no "the capture server did not start"
+else
+  # ~5.4 KB per record, so 250 of them is 1.35 MB — a body the panel refuses before it parses
+  # anything. Every record carries 3- and 4-byte characters: a chunker that cuts the serialized
+  # body at a byte offset cuts a character in half and sends bytes that are not JSON any more.
+  long_title="$(python3 - <<'PY'
+print("急救補丁" * 400 + " 🚑" * 100)
+PY
+)"
+  jq -n --arg t "$long_title" '[range(400) | {key: ("CVE-2026-" + (. | tostring)), kind: "os",
+        severity: "HIGH", subject: "pkg", installed: "1.0", available: "1.1", title: $t}]' \
+    > "$WORK/wide.json"
+  ( set +e
+    SECURITY_RUN_STARTED_AT="2026-10-25T10:00:00Z" \
+    PANEL_URL="http://127.0.0.1:18804" SECURITY_FEED_TOKEN="test-token" SECURITY_HOST="test-host" \
+      sh -c ". '$FEED_LIB'; feed_post rootfs '$WORK/wide.json' true" > "$WORK/run4.log" 2>&1
+    echo $? > "$WORK/run4.rc" )
+  kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+
+  rc="$(cat "$WORK/run4.rc")"
+  [[ "$rc" == "0" ]] && ok "2.2 MB of multi-byte findings is delivered (exit 0)" \
+                     || no "feed_post exited $rc on a set of large multi-byte findings"
+
+  bad_json=0
+  for f in "$WORK"/req-18804/req-*.json; do
+    jq -e . "$f" >/dev/null 2>&1 || bad_json=$((bad_json + 1))
+  done
+  [[ "$bad_json" == "0" ]] && ok "every body is valid JSON (0 parse failures)" \
+                           || no "$bad_json body/bodies were not valid JSON — a record was cut in half"
+
+  over=0
+  biggest=0
+  for f in "$WORK"/req-18804/req-*.json; do
+    size=$(wc -c < "$f" | tr -d ' ')
+    [[ "$size" -gt "$biggest" ]] && biggest="$size"
+    [[ "$size" -gt 1000000 ]] && over=$((over + 1))
+  done
+  [[ "$over" == "0" ]] && ok "no body exceeds the panel's 1 MB cap (largest ${biggest} bytes)" \
+                       || no "$over body/bodies are over 1,000,000 bytes (largest ${biggest}) — the chunker has no byte ceiling"
+
+  arrived=$(cat "$WORK"/req-18804/req-*.json | jq -s '[.[].findings[]] | length')
+  [[ "$arrived" == "400" ]] && ok "all 400 records arrived whole and exactly once" \
+                            || no "$arrived records arrived, expected 400 — a boundary lost or duplicated one"
+
+  in_order=$(cat "$WORK"/req-18804/req-*.json | jq -s '[.[].findings[].key]' | jq -r 'join(",")')
+  want=$(jq -r '[.[].key] | join(",")' "$WORK/wide.json")
+  [[ "$in_order" == "$want" ]] && ok "records stay in order across batches (none split or reordered)" \
+                               || no "the delivered keys are not the input keys in order"
+
+  # Byte-for-byte, not character-for-character: a cut multi-byte character would change this digest
+  # while leaving the JSON parseable in some encoders and not others.
+  sent=$(jq -j '.[].title' "$WORK/wide.json" | sha256sum | cut -d' ' -f1)
+  got=$(cat "$WORK"/req-18804/req-*.json | jq -j '.findings[].title' | sha256sum | cut -d' ' -f1)
+  [[ "$sent" == "$got" ]] && ok "multi-byte text arrives byte-identical (sha256 ${got:0:12}…)" \
+                          || no "the delivered text differs from what was sent — a character was cut at a batch boundary"
+
+  complete_true=$(cat "$WORK"/req-18804/req-*.json | jq -s '[.[] | select(.complete == true)] | length')
+  [[ "$complete_true" == "1" ]] && ok "exactly one of the large-set batches claims complete:true" \
+                               || no "$complete_true large-set batches claim complete:true"
+fi
+
+printf '\na record too large for any body is refused, not cut\n'
+if ! start_server 18805 0; then
+  no "the capture server did not start"
+else
+  # One finding is larger than the panel's whole body budget, so no arrangement of batches can
+  # carry it: the only honest outcomes are "refuse loudly" and "send bytes that are not JSON".
+  python3 - "$WORK/huge.json" <<'PY'
+import json, sys
+json.dump([{"key": "CVE-2026-huge", "kind": "os", "severity": "HIGH", "subject": "pkg",
+            "installed": "1.0", "available": "1.1", "title": "x" * 1000500}],
+          open(sys.argv[1], "w"))
+PY
+  ( set +e
+    PANEL_URL="http://127.0.0.1:18805" SECURITY_FEED_TOKEN="test-token" SECURITY_HOST="test-host" \
+      sh -c ". '$FEED_LIB'; feed_post rootfs '$WORK/huge.json' true" > "$WORK/run5.log" 2>&1
+    echo $? > "$WORK/run5.rc" )
+  kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
+
+  rc="$(cat "$WORK/run5.rc")"
+  [[ "$rc" != "0" ]] && ok "feed_post fails on a record it cannot fit (exit $rc)" \
+                     || no "feed_post exited 0 although one finding is larger than any legal body"
+  reqs=$(find "$WORK/req-18805" -name 'req-*.json' | wc -l | tr -d ' ')
+  [[ "$reqs" == "0" ]] && ok "nothing was sent — no truncated body reached the panel" \
+                       || no "$reqs request(s) were sent although no body can carry the record"
+  if grep -q "cannot be split" "$WORK/run5.log"; then
+    ok "the refusal names the reason (a record that cannot be split)"
+  else
+    no "the refusal did not say why: $(tail -2 "$WORK/run5.log" | tr '\n' ' ')"
+  fi
+fi
+
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
