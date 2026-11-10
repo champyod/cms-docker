@@ -110,6 +110,8 @@ evidence wins, and the push's response counts those reports as `held`.
   `run_started_at` is **required** — the instant the producing run began, sent with every push of that run.
   `complete: true` licenses the route to resolve this source's findings (`host`-scoped when the push names
   one) that were last seen **before `run_started_at`**; a partial push (`false`) must never resolve anything.
+  A row's `host` is the push's host unless the finding names its own; the mappers emit no per-finding host,
+  so this is what keeps host-scoped resolution matching the rows the same producer wrote.
   WHY resolution is run-scoped and not push-scoped: a host scan is delivered in batches (34,606 findings is
   139 of them), and "everything this body did not mention" would close the earlier batches' own rows — that
   happened once, on a live host, taking 34,500 findings with it. A row this run touched carries

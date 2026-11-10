@@ -25,14 +25,28 @@ interface Row {
   resolved_at: Date | null;
 }
 
+type WhereClause = {
+  host?: string | null;
+  resolved_at?: null | { lt: Date };
+};
+
 type UpdateWhere = {
   source: string;
   key?: string;
   host?: string;
   resolved_at?: null;
   last_seen?: { lt: Date };
-  OR?: ReadonlyArray<{ resolved_at: null | { lt: Date } }>;
+  OR?: ReadonlyArray<WhereClause>;
 };
+
+function clauseMatches(row: Row, clause: WhereClause): boolean {
+  if (clause.host !== undefined && row.host !== clause.host) return false;
+  if (clause.resolved_at === null && row.resolved_at !== null) return false;
+  if (clause.resolved_at !== undefined && clause.resolved_at !== null) {
+    if (row.resolved_at === null || !(row.resolved_at < clause.resolved_at.lt)) return false;
+  }
+  return true;
+}
 
 function rowMatches(row: Row, where: UpdateWhere): boolean {
   if (row.source !== where.source) return false;
@@ -40,14 +54,7 @@ function rowMatches(row: Row, where: UpdateWhere): boolean {
   if (where.host !== undefined && row.host !== where.host) return false;
   if (where.resolved_at === null && row.resolved_at !== null) return false;
   if (where.last_seen !== undefined && !(row.last_seen < where.last_seen.lt)) return false;
-  if (where.OR !== undefined) {
-    const any = where.OR.some((clause) =>
-      clause.resolved_at === null
-        ? row.resolved_at === null
-        : row.resolved_at !== null && row.resolved_at < clause.resolved_at.lt,
-    );
-    if (!any) return false;
-  }
+  if (where.OR !== undefined && !where.OR.some((clause) => clauseMatches(row, clause))) return false;
   return true;
 }
 
@@ -327,5 +334,74 @@ describe('two runs interleaved over one source', () => {
 
     expect(rows[0].resolved_at).toEqual(at('2026-10-25T10:20:00Z'));
     expect(tied.held).toBe(1);
+  });
+});
+
+/**
+ * Which host a row carries, and therefore which rows a complete push may close.
+ *
+ * WHY this is its own group: every case above writes and resolves rows whose `host` is already set,
+ * which is the one shape production never had. The three jq mappers emit no per-finding `host`, so
+ * every row was written with NULL while the resolve predicate compared the *envelope's* host
+ * against that column — 52,441 open rows on the live host, a direct count that matched all of them,
+ * and a complete push that resolved zero, every run, for as long as the feed has existed.
+ */
+describe('the host a row carries', () => {
+  const bare = (key: string): FeedPush['findings'][number] =>
+    ({
+      key,
+      kind: 'os',
+      severity: 'HIGH',
+      subject: key,
+      installed: '1.0.0',
+      available: '1.0.1',
+      title: null,
+      url: null,
+      host: null, // what every mapper in docker/security-scan/lib/*.jq actually emits
+      detail: null,
+    }) as FeedPush['findings'][number];
+
+  it('writes the push’s host on a finding that names none', async () => {
+    const rows: Row[] = [];
+    await applyFeedPush(
+      fakeClient(rows) as never,
+      push({ complete: false, host: 'box-a', findings: [bare('libssl')] }),
+      new Date('2026-10-25T10:00:05Z'),
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].host).toBe('box-a');
+  });
+
+  it('lets a finding name its own host when one push fans out several boxes', async () => {
+    const rows: Row[] = [];
+    await applyFeedPush(
+      fakeClient(rows) as never,
+      push({ complete: false, host: 'box-a', findings: [{ ...bare('libssl'), host: 'box-b' }] }),
+      new Date('2026-10-25T10:00:05Z'),
+    );
+
+    expect(rows[0].host).toBe('box-b');
+  });
+
+  it('resolves the rows an earlier run wrote without a host', async () => {
+    // The production shape: rows written before the envelope host reached the row carry NULL, and
+    // the only claim a complete push can make about them is "not seen by this run".
+    const rows: Row[] = [
+      { id: 1, source: 'rootfs', key: 'gone', host: null, last_seen: new Date('2026-10-20T00:00:00Z'), resolved_at: null },
+      { id: 2, source: 'rootfs', key: 'other-box', host: 'box-b', last_seen: new Date('2026-10-20T00:00:00Z'), resolved_at: null },
+    ];
+
+    const result = await applyFeedPush(
+      fakeClient(rows) as never,
+      push({ complete: true, host: 'box-a', findings: [bare('kept')] }),
+      new Date('2026-10-25T10:00:38Z'),
+    );
+
+    expect(result.resolved).toBe(1);
+    expect(rows.find((row) => row.key === 'gone')?.resolved_at).not.toBeNull();
+    // Another box's rows stay open: the hostless clause is a legacy shape, not a licence to
+    // resolve the whole source from one box's push.
+    expect(rows.find((row) => row.key === 'other-box')?.resolved_at).toBeNull();
   });
 });

@@ -257,6 +257,23 @@ describe('security feed ingest route', () => {
     expect(second.resolved_at).toBeNull();
   });
 
+  it('records the envelope host on a finding that does not name one', async () => {
+    // Not one mapper in docker/security-scan/lib/*.jq emits a per-finding host, so this is the only
+    // shape production ever sends. Storing `finding.host` verbatim meant NULL on every row, and the
+    // complete-push resolution — which scopes by the envelope's host — could never match one.
+    await call(
+      push({
+        source: 'rootfs',
+        host: 'box-a',
+        findings: [finding({ key: 'CVE-2026-2|openssl', host: null })],
+        complete: false,
+      }),
+    );
+
+    const [row] = [...mocks.rows.values()];
+    expect(row.host).toBe('box-a');
+  });
+
   it('refuses a push with no run start', async () => {
     // The contract needs the instant the producing run began; a body without it would leave the
     // panel unable to tell "not seen this run" from "sent in an earlier batch".

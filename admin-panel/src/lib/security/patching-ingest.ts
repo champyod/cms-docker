@@ -235,7 +235,10 @@ export interface FeedPushResult {
   readonly held: number;
 }
 
-function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUncheckedCreateInput, 'source' | 'key'> {
+function findingData(
+  finding: FeedFindingInput,
+  envelopeHost: string | null,
+): Omit<Prisma.security_findingsUncheckedCreateInput, 'source' | 'key'> {
   return {
     kind: finding.kind,
     severity: finding.severity,
@@ -244,7 +247,12 @@ function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUn
     available: finding.available,
     title: finding.title,
     url: finding.url,
-    host: finding.host,
+    // WHY the envelope's host when the finding names none: not one of the three jq mappers emits
+    // a per-finding `host`, so a row written from `finding.host` alone always carried NULL. The
+    // complete-push resolution below scopes by the envelope host, which therefore matched nothing
+    // and left every row it should have closed open for good. A producer that fans out several
+    // boxes in one push can still name the box on the finding itself.
+    host: finding.host ?? envelopeHost,
     detail: finding.detail === null ? Prisma.DbNull : finding.detail,
     // A re-report revives a row a previous complete push resolved: the producer is saying
     // the thing is still there, so the row must stop reading as history.
@@ -279,6 +287,10 @@ function findingData(finding: FeedFindingInput): Omit<Prisma.security_findingsUn
  * So resolution is scoped by the run, not by the push: on `complete`, every open row of this
  * source (and host, when named) whose `last_seen` predates the run start is resolved. Rows this
  * run touched carry a `last_seen` at or after that instant, wherever they arrived.
+ *
+ * The host on a row is the push's host unless the finding names its own: the mappers emit no
+ * per-finding host, so every row used to be written with NULL while this predicate compared the
+ * envelope's host against it — which is how a complete push resolved nothing, run after run.
  */
 export async function applyFeedPush(
   client: Prisma.TransactionClient,
@@ -290,7 +302,7 @@ export async function applyFeedPush(
   // makes the second case a no-op instead of a unique violation.
   const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
   for (const finding of push.findings) {
-    const data = findingData(finding);
+    const data = findingData(finding, push.host);
     const touched = await client.security_findings.updateMany({
       where: {
         source: push.source,
@@ -323,7 +335,16 @@ export async function applyFeedPush(
   const resolved = await client.security_findings.updateMany({
     where: {
       source: push.source,
-      ...(push.host === null ? {} : { host: push.host }),
+      ...(push.host === null
+        ? {}
+        : {
+            // WHY `host: null` belongs here: rows written before the envelope host reached the row
+            // carry NULL, and no producer ever said which box they came from — "last seen before
+            // this run" is the only evidence there is for them. Leaving them out is the defect
+            // that kept 52,441 open rows open forever: the write path stored `finding.host`, which
+            // no mapper emits, while this predicate compared against the envelope's host.
+            OR: [{ host: push.host }, { host: null }],
+          }),
       resolved_at: null,
       last_seen: { lt: push.runStartedAt },
     },
