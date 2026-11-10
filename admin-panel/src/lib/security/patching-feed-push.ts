@@ -46,6 +46,9 @@ export type FeedValidation =
   | { readonly ok: true; readonly value: FeedPush }
   | { readonly ok: false; readonly error: string; readonly index?: number };
 
+// A refusal carries its own reason and, inside a finding, the index that caused it.
+type Refusal = { readonly ok: false; readonly error: string; readonly index?: number };
+
 // Hashes both sides first: `timingSafeEqual` refuses unequal lengths, and that refusal would leak the length.
 export function feedTokenMatches(
   authorization: string | null,
@@ -98,7 +101,42 @@ function optionalText(value: unknown): string | null | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-function validateFinding(raw: unknown, index: number): FeedValidation | FeedFindingInput {
+function parseSeverity(record: Record<string, unknown>, index: number): Refusal | PatchingSeverity | null {
+  if (record.severity === undefined || record.severity === null) return null;
+  const normalised = asString(record.severity)?.trim().toUpperCase();
+  if (!isPatchingSeverity(normalised)) {
+    return { ok: false, error: `finding.severity must be one of ${PATCHING_SEVERITIES.join(', ')}`, index };
+  }
+  return normalised;
+}
+
+interface FindingText {
+  readonly installed: string | null;
+  readonly available: string | null;
+  readonly title: string | null;
+  readonly url: string | null;
+  readonly host: string | null;
+}
+
+function parseFindingText(record: Record<string, unknown>, index: number): Refusal | FindingText {
+  const installed = optionalText(record.installed);
+  const available = optionalText(record.available);
+  const title = optionalText(record.title);
+  const url = optionalText(record.url);
+  const host = optionalText(record.host);
+  if ([installed, available, title, url, host].includes(undefined)) {
+    return { ok: false, error: 'finding text fields must be strings or null', index };
+  }
+  return {
+    installed: installed ?? null,
+    available: available ?? null,
+    title: title ?? null,
+    url: url ?? null,
+    host: host ?? null,
+  };
+}
+
+function validateFinding(raw: unknown, index: number): Refusal | FeedFindingInput {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return { ok: false, error: 'finding must be an object', index };
   }
@@ -112,43 +150,60 @@ function validateFinding(raw: unknown, index: number): FeedValidation | FeedFind
   if (kind === '') return { ok: false, error: 'finding.kind is required', index };
   const subject = asString(record.subject)?.trim() ?? '';
   if (subject === '') return { ok: false, error: 'finding.subject is required', index };
-
-  let severity: PatchingSeverity | null = null;
-  if (record.severity !== undefined && record.severity !== null) {
-    const normalised = asString(record.severity)?.trim().toUpperCase();
-    if (!isPatchingSeverity(normalised)) {
-      return {
-        ok: false,
-        error: `finding.severity must be one of ${PATCHING_SEVERITIES.join(', ')}`,
-        index,
-      };
-    }
-    severity = normalised;
-  }
-
-  const installed = optionalText(record.installed);
-  const available = optionalText(record.available);
-  const title = optionalText(record.title);
-  const url = optionalText(record.url);
-  const host = optionalText(record.host);
-  if ([installed, available, title, url, host].includes(undefined)) {
-    return { ok: false, error: 'finding text fields must be strings or null', index };
-  }
-
+  const severity = parseSeverity(record, index);
+  if (severity !== null && typeof severity === 'object') return severity;
+  const text = parseFindingText(record, index);
+  if ('ok' in text) return text;
   return {
     key,
     kind,
     severity,
     subject,
-    installed: installed ?? null,
-    available: available ?? null,
-    title: title ?? null,
-    url: url ?? null,
-    host: host ?? null,
+    installed: text.installed,
+    available: text.available,
+    title: text.title,
+    url: text.url,
+    host: text.host,
     detail: record.detail === undefined || record.detail === null
       ? null
       : (record.detail as Prisma.InputJsonValue),
   };
+}
+
+function parseFindings(record: Record<string, unknown>): Refusal | FeedFindingInput[] {
+  if (!Array.isArray(record.findings)) return { ok: false, error: 'findings must be an array' };
+  if (record.findings.length > MAX_FINDINGS_PER_PUSH) {
+    return { ok: false, error: `findings exceeds ${MAX_FINDINGS_PER_PUSH} entries` };
+  }
+  const findings: FeedFindingInput[] = [];
+  for (const [index, raw] of record.findings.entries()) {
+    const checked = validateFinding(raw, index);
+    if ('ok' in checked) return checked;
+    findings.push(checked);
+  }
+  return findings;
+}
+
+function parseHostModules(
+  record: Record<string, unknown>,
+  host: string | null,
+): Refusal | HostModuleFacts | null {
+  if (record.host_modules === undefined || record.host_modules === null) return null;
+  // A named host is required: the row is keyed by host, and an unnamed list would overwrite whoever pushed last.
+  if (host === null || host.trim() === '') return { ok: false, error: 'host_modules requires host' };
+  const parsed = parseHostModuleFacts(record.host_modules);
+  return parsed.ok ? parsed.value : parsed;
+}
+
+function parseRunStartedAt(record: Record<string, unknown>): Refusal | Date {
+  // Required, not defaulted: a default would resolve nothing on one producer and everything on a chunked one.
+  const raw = record.run_started_at;
+  if (typeof raw !== 'string') {
+    return { ok: false, error: 'run_started_at must be an ISO-8601 string' };
+  }
+  const startedAt = new Date(raw);
+  if (Number.isNaN(startedAt.getTime())) return { ok: false, error: 'run_started_at is not a date' };
+  return startedAt;
 }
 
 // The index is part of every refusal: a 422 on a 2000-row scan is undebuggable without it.
@@ -165,39 +220,12 @@ export function parseFeedPush(body: unknown): FeedValidation {
   }
   const host = optionalText(record.host);
   if (host === undefined) return { ok: false, error: 'host must be a string or null' };
-  let hostModules: HostModuleFacts | null = null;
-  if (record.host_modules !== undefined && record.host_modules !== null) {
-    // A named host is required: the row is keyed by host, and an unnamed list would overwrite whoever pushed last.
-    if (host === null || host.trim() === '') {
-      return { ok: false, error: 'host_modules requires host' };
-    }
-    const parsedModules = parseHostModuleFacts(record.host_modules);
-    if (!parsedModules.ok) return parsedModules;
-    hostModules = parsedModules.value;
-  }
-  // Required, not defaulted: a default would resolve nothing on one producer and everything on a chunked one.
-  const runStartedAtRaw = record.run_started_at;
-  if (typeof runStartedAtRaw !== 'string') {
-    return { ok: false, error: 'run_started_at must be an ISO-8601 string' };
-  }
-  const runStartedAt = new Date(runStartedAtRaw);
-  if (Number.isNaN(runStartedAt.getTime())) {
-    return { ok: false, error: 'run_started_at is not a date' };
-  }
-  if (!Array.isArray(record.findings)) {
-    return { ok: false, error: 'findings must be an array' };
-  }
-  if (record.findings.length > MAX_FINDINGS_PER_PUSH) {
-    return { ok: false, error: `findings exceeds ${MAX_FINDINGS_PER_PUSH} entries` };
-  }
-
-  const findings: FeedFindingInput[] = [];
-  for (const [index, raw] of record.findings.entries()) {
-    const checked = validateFinding(raw, index);
-    if ('ok' in checked) return checked;
-    findings.push(checked);
-  }
-
+  const hostModules = parseHostModules(record, host);
+  if (hostModules !== null && 'ok' in hostModules) return hostModules;
+  const runStartedAt = parseRunStartedAt(record);
+  if ('ok' in runStartedAt) return runStartedAt;
+  const findings = parseFindings(record);
+  if ('ok' in findings) return findings;
   return {
     ok: true,
     value: {
