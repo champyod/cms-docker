@@ -133,6 +133,14 @@ const mocks = vi.hoisted(() => {
     security_findings,
     // Modelled as a map keyed by host, not as a spy: "replaced, not appended" is the contract.
     security_host_modules: {
+      findUnique: async (args: {
+        where: { host: string };
+        select?: unknown;
+      }): Promise<Omit<HostModulesWrite, 'recorded_at'> | null> => {
+        const row = hostRows.get(args.where.host);
+        if (row === undefined) return null;
+        return { kernel_release: row.kernel_release, loaded: row.loaded, blocked: row.blocked };
+      },
       upsert: async (args: {
         where: { host: string };
         create: { host: string } & HostModulesWrite;
@@ -224,7 +232,7 @@ describe('security feed ingest route', () => {
     mocks.recordAudit.mockClear();
     mocks.setRootAdmin({ id: 1 });
     process.env.SECURITY_FEED_TOKEN = TOKEN;
-    return import('@/lib/security/patching-ingest').then((module) => module.resetFeedRateLimits());
+    return import('@/lib/security/patching-feed-push').then((module) => module.resetFeedRateLimits());
   });
 
   afterEach(() => {

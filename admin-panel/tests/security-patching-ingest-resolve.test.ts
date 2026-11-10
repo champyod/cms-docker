@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyFeedPush, type FeedPush } from '@/lib/security/patching-ingest';
+import { applyFeedPush } from '@/lib/security/patching-ingest';
+import type { FeedPush } from '@/lib/security/patching-feed-push';
 
 /**
  * The resolution rule, tested where it lives.
@@ -107,6 +108,8 @@ function fakeClient(rows: Row[]) {
         return { count };
       },
     },
+    // No stored row: these tests are about which rows a complete push may resolve, not the classifier.
+    security_host_modules: { findUnique: async () => null },
   };
   return client;
 }

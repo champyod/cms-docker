@@ -4,13 +4,13 @@ import { recordAudit } from '@/lib/audit';
 import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { prisma } from '@/lib/prisma';
 import { resolveRootActorId } from '@/lib/panel-actions/root-actor';
+import { applyFeedPush } from '@/lib/security/patching-ingest';
 import {
-  applyFeedPush,
   consumeFeedRateLimit,
   feedTokenMatches,
   MAX_BODY_BYTES,
   parseFeedPush,
-} from '@/lib/security/patching-ingest';
+} from '@/lib/security/patching-feed-push';
 
 export const runtime = 'nodejs';
 

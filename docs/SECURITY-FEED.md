@@ -158,9 +158,13 @@ evidence wins, and the push's response counts those reports as `held`.
   same transaction as the findings, so one push can never record CVEs without recording what the
   kernel runs.
 - The same push stores each row's `reachability`, from `classifyReachability(title, host modules)`
-  — the one place that rule is decided. The page, its filter and its badge read that column; nothing
-  re-derives it in SQL or in the browser. A re-reported row is re-judged on every scan, and a row
-  that stops being reported keeps its last verdict.
+  — the one place that rule is decided. The module state is read **once per request** from the push
+  host's `security_host_modules` row, and only falls back to the body's own `host_modules` when that
+  host has no row yet: the scan sends its snapshot on one push and its findings in batches that carry
+  none, and judging those batches against an empty map stored `unknown` for 12,039 live rows. The
+  page, its filter and its badge read the stored column; nothing re-derives it in SQL or in the
+  browser. A re-reported row is re-judged on every scan, and a row that stops being reported keeps
+  its last verdict.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
   array ≤ 2000), 422 with the offending index, never a stack trace.
 - Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).

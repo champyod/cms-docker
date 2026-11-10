@@ -23,7 +23,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { applyFeedPush, type FeedPush } from '@/lib/security/patching-ingest';
+import { applyFeedPush } from '@/lib/security/patching-ingest';
+import type { FeedPush } from '@/lib/security/patching-feed-push';
 import { patchingSearchParams, readPatchingQuery } from '@/lib/security/patching';
 import { readPatchingPage } from '@/lib/security/patching-read';
 
@@ -109,7 +110,7 @@ async function ingestedVerdict(title: string): Promise<unknown> {
         return { count: data.length };
       },
     },
-    security_host_modules: { upsert: async () => ({}) },
+    security_host_modules: { findUnique: async () => null, upsert: async () => ({}) },
   } as unknown as Prisma.TransactionClient;
   await applyFeedPush(client, pushWith(title), NOW);
   return created[0].reachability;
@@ -215,7 +216,7 @@ describe('one rule, one implementation', () => {
         },
         createMany: async () => ({ count: 0 }),
       },
-      security_host_modules: { upsert: async () => ({}) },
+      security_host_modules: { findUnique: async () => null, upsert: async () => ({}) },
     } as unknown as Prisma.TransactionClient;
 
     await applyFeedPush(client, pushWith('kernel: ksmbd: use-after-free'), NOW);
