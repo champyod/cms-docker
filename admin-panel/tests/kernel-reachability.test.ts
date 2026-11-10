@@ -32,6 +32,12 @@ const HOST: HostModuleState = {
   ocfs2: 'absent',
   gcov: 'absent',
   enetc: 'absent',
+  btrfs: 'absent',
+  can: 'absent',
+  can_raw: 'absent',
+  media: 'absent',
+  videodev: 'absent',
+  spi_rockchip: 'absent',
   bpf: 'builtin',
   netfilter: 'builtin',
   sch_htb: 'builtin',
@@ -102,6 +108,12 @@ describe('classifyReachability', () => {
     { title: 'kernel: net/sched: use-after-free in qdisc_graft', expected: 'reachable' },
     { title: 'kernel: ipv4: NULL deref in tcp_ack', expected: 'reachable' },
     { title: 'kernel: af_unix: race in unix_gc', expected: 'reachable' },
+    { title: 'kernel: btrfs: double free in extent', expected: 'unreachable' },
+    { title: 'kernel: can: race in raw_sendmsg', expected: 'unreachable' },
+    { title: 'kernel: media: use-after-free in video_register', expected: 'unreachable' },
+    { title: 'kernel: spi-rockchip: NULL deref in transfer', expected: 'unreachable' },
+    { title: 'kernel: usb: use-after-free in usb_submit_urb', expected: 'reachable' },
+    { title: 'kernel: scsi: OOB write in scsi_report_opcode', expected: 'reachable' },
     { title: 'kernel: Linux kernel: multiple vulnerabilities', expected: 'unknown' },
     { title: 'kernel: zram: use-after-free in zram_write', expected: 'unknown' },
     { title: 'kernel: Null pointer dereference and use after free in net/a', expected: 'unknown' },
@@ -152,6 +164,7 @@ describe('SUBSYSTEM_MODULES', () => {
     const measured = [
       'ksmbd', 'wifi', 'bpf', 'smb', 'net', 'Bluetooth', 'netfilter', 'KVM', 'f2fs',
       'fs/ntfs3', 'drm/amdkfd', 'ALSA', 'net/sched', 'ocfs2',
+      'btrfs', 'can', 'usb', 'scsi', 'media', 'spi-rockchip',
     ];
     for (const token of measured) expect(SUBSYSTEM_MODULES[token.toLowerCase()]).toBeDefined();
   });

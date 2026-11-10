@@ -47,12 +47,19 @@ export const SUBSYSTEM_MODULES: Readonly<Record<string, SubsystemRule>> = {
   tipc: { modules: ['tipc'], builtIn: false },
   gcov: { modules: ['gcov'], builtIn: false },
   enetc: { modules: ['enetc'], builtIn: false },
+  btrfs: { modules: ['btrfs'], builtIn: false },
+  can: { modules: ['can', 'can_raw'], builtIn: false },
+  media: { modules: ['media', 'videodev'], builtIn: false },
+  'spi-rockchip': { modules: ['spi_rockchip'], builtIn: false },
   bpf: { modules: ['bpf'], builtIn: true },
   net: { modules: ['net'], builtIn: true },
   netfilter: { modules: ['netfilter'], builtIn: true },
   'net/sched': { modules: ['sch_htb'], builtIn: true },
   ipv4: { modules: ['ipv4'], builtIn: true },
   af_unix: { modules: ['af_unix'], builtIn: true },
+  // Built into the 5.15 generic kernel this fleet runs, so the code path exists whatever /proc/modules lists.
+  usb: { modules: ['usbcore'], builtIn: true },
+  scsi: { modules: ['scsi_mod', 'sd_mod'], builtIn: true },
 };
 
 // The subsystem token of "kernel: <subsystem>: <description>", or null when the title is not that shape.
