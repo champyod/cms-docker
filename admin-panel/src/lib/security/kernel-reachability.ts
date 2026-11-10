@@ -4,7 +4,15 @@ export type ModuleState = 'loaded' | 'builtin' | 'blacklisted' | 'absent';
 // A module the host never mentioned is unanswered, not absent.
 export type HostModuleState = Readonly<Record<string, ModuleState | undefined>>;
 
-export type Reachability = 'reachable' | 'unreachable' | 'unknown';
+// The verdicts as a runtime list too, so a URL filter validates against the same three words.
+export const REACHABILITY_VALUES = ['reachable', 'unreachable', 'unknown'] as const;
+
+export type Reachability = (typeof REACHABILITY_VALUES)[number];
+
+// A filter value is one of the three verdicts; anything else is a stale link, not a verdict.
+export function isReachability(value: unknown): value is Reachability {
+  return typeof value === 'string' && (REACHABILITY_VALUES as readonly string[]).includes(value);
+}
 
 export interface SubsystemRule {
   // Every module that carries the subsystem's code: one present module is enough.

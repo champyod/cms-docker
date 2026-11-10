@@ -1285,6 +1285,7 @@
       },
       "columns": {
         "severity": "Severity",
+        "reachability": "Reachability",
         "subject": "Subject",
         "installed": "Installed",
         "available": "Available",
@@ -1330,6 +1331,8 @@
       "filters": {
         "source": "Source",
         "severity": "Severity",
+        "reachability": "Reachability",
+        "allReachability": "All reachability",
         "sort": "Sort by",
         "direction": "Order",
         "allSources": "All sources",
@@ -1349,6 +1352,11 @@
       "pager": {
         "row": "findings",
         "range": "Showing {from}–{to} of {total}"
+      },
+      "reachability": {
+        "reachable": "reachable",
+        "unreachable": "not running",
+        "unknown": "unknown"
       }
     },
     "signal": {

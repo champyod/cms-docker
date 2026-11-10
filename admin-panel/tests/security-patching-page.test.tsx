@@ -54,6 +54,7 @@ const STATE: PatchingListState = {
           host: 'box-a',
           firstSeen: '2026-09-01T00:00:00.000Z',
           lastSeen: '2026-10-24T00:00:00.000Z',
+          reachability: 'reachable',
           waiver: { status: 'expired', reviewBy: EXPIRED_REVIEW },
         },
       ],
@@ -75,6 +76,7 @@ const STATE: PatchingListState = {
           host: 'box-b',
           firstSeen: '2026-10-20T00:00:00.000Z',
           lastSeen: '2026-10-24T00:00:00.000Z',
+          reachability: 'unknown',
           waiver: { status: 'active', reviewBy: ACTIVE_REVIEW },
         },
       ],
@@ -108,7 +110,14 @@ const STATE: PatchingListState = {
   ],
   cards: { staleImages: 1, unresolvedCves: 1, expiredWaivers: 1, hostOsUpdates: 1 },
   page: {
-    query: { page: 1, source: 'all', severity: 'all', sort: 'lastSeen', direction: 'desc' },
+    query: {
+      page: 1,
+      source: 'all',
+      severity: 'all',
+      reachability: 'all',
+      sort: 'lastSeen',
+      direction: 'desc',
+    },
     pageSize: PATCHING_PAGE_SIZE,
     total: TOTAL,
     pageCount: Math.ceil(TOTAL / PATCHING_PAGE_SIZE),
@@ -154,6 +163,33 @@ describe('security patching page', () => {
     expect(screen.getAllByText('box-a').length).toBeGreaterThan(0);
     expect(screen.getAllByText('2026-09-01').length).toBeGreaterThan(0);
     expect(screen.getAllByText('CRITICAL').length).toBeGreaterThan(0);
+  });
+
+  it('renders an unanswered kernel verdict as a warning, never as a safe state', async () => {
+    const [rootfsFinding] = STATE.groups[0].findings;
+    const withKernel: PatchingListState = {
+      ...STATE,
+      groups: [
+        {
+          source: 'rootfs',
+          findings: [
+            {
+              ...rootfsFinding,
+              title: 'kernel: ksmbd: ksmbd_write error',
+              reachability: 'unknown',
+            },
+          ],
+        },
+      ],
+    };
+    await renderPage(['security:read', 'patching:read'], {}, withKernel);
+
+    const [badge] = screen
+      .getAllByText('unknown')
+      .filter((element) => element.getAttribute('data-slot') === 'badge');
+    // Amber, not green and not grey: an unanswered question must not read as a safe one.
+    expect(badge.className).toContain('warning');
+    expect(badge.className).not.toContain('success');
   });
 
   it('surfaces an expired waiver distinctly and counts it, while an active one reads as active', async () => {
@@ -242,6 +278,11 @@ describe('security patching page', () => {
     fireEvent.change(screen.getByLabelText('Severity'), { target: { value: 'CRITICAL' } });
     expect(mocks.push).toHaveBeenLastCalledWith('/en/security/patching?severity=CRITICAL', { scroll: false });
 
+    fireEvent.change(screen.getByLabelText('Reachability'), { target: { value: 'unreachable' } });
+    expect(mocks.push).toHaveBeenLastCalledWith('/en/security/patching?reachability=unreachable', {
+      scroll: false,
+    });
+
     fireEvent.change(screen.getByLabelText('Sort by'), { target: { value: 'subject' } });
     expect(mocks.push).toHaveBeenLastCalledWith('/en/security/patching?sort=subject', { scroll: false });
   });
@@ -253,6 +294,7 @@ describe('query validation', () => {
       page: 1,
       source: 'all',
       severity: 'all',
+      reachability: 'all',
       sort: 'lastSeen',
       direction: 'desc',
     });
@@ -272,6 +314,7 @@ describe('query validation', () => {
       page: 1,
       source: 'rootfs',
       severity: 'HIGH',
+      reachability: 'all',
       sort: 'lastSeen',
       direction: 'desc',
     });

@@ -35,6 +35,7 @@ export function makeFinding(
     host: 'box-a',
     firstSeen: '2026-10-20T00:00:00.000Z',
     lastSeen: '2026-10-24T00:00:00.000Z',
+    reachability: 'unknown',
     waiver: { status: 'none' },
     ...overrides,
   };

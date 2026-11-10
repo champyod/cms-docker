@@ -32,6 +32,12 @@ import {
   type PatchingSignalFacts,
   type SecurityDigest,
 } from '@/lib/security/signal';
+import {
+  reachabilityFor,
+  reachabilityWhere,
+  readHostModuleStates,
+  type HostModuleStates,
+} from '@/lib/security/reachability-read';
 import { readStalenessSnapshotCached } from '@/lib/security/staleness';
 import {
   WAIVER_EXPORT_VERSION,
@@ -64,6 +70,9 @@ import {
 
 type FindingRow = security_findings;
 type WaiverRow = security_waivers;
+
+// No recorded state: a caller that never read the host modules reports 'unknown', which is honest.
+const NO_HOST_MODULE_STATE: HostModuleStates = new Map();
 
 /**
  * The unresolved rows the contract can place.
@@ -144,10 +153,15 @@ function pageOrderBy(query: PatchingQuery): Prisma.security_findingsOrderByWithR
 }
 
 /** The filters as SQL: an absent filter is the absence of a clause, not a wildcard. */
-function filteredWhere(query: PatchingQuery): Prisma.security_findingsWhereInput {
+function filteredWhere(
+  query: PatchingQuery,
+  states: HostModuleStates,
+): Prisma.security_findingsWhereInput {
+  const reachability = reachabilityWhere(query.reachability, states);
   return unresolvedWhere({
     ...(query.source === 'all' ? {} : { source: query.source }),
     ...(query.severity === 'all' ? {} : { severity: query.severity }),
+    ...(reachability === null ? {} : reachability),
   });
 }
 
@@ -166,6 +180,7 @@ export function mapPatchingFinding(
   row: FindingRow,
   waivers: readonly WaiverRow[],
   now: Date,
+  states: HostModuleStates = NO_HOST_MODULE_STATE,
 ): PatchingFinding | null {
   if (!isPatchingSource(row.source)) return null;
   return {
@@ -182,6 +197,7 @@ export function mapPatchingFinding(
     host: row.host,
     firstSeen: row.first_seen.toISOString(),
     lastSeen: row.last_seen.toISOString(),
+    reachability: reachabilityFor(row.title, row.host, states),
     waiver: waiverStateFor(row, waivers, now),
   };
 }
@@ -191,9 +207,10 @@ function mapPatchingFindings(
   rows: readonly FindingRow[],
   waivers: readonly WaiverRow[],
   now: Date,
+  states: HostModuleStates = NO_HOST_MODULE_STATE,
 ): PatchingFinding[] {
   return rows.flatMap((row) => {
-    const mapped = mapPatchingFinding(row, waivers, now);
+    const mapped = mapPatchingFinding(row, waivers, now, states);
     return mapped === null ? [] : [mapped];
   });
 }
@@ -265,37 +282,47 @@ async function readFindingCounts(): Promise<PatchingFindingCounts> {
   return { bySource, rootfsWithAvailable };
 }
 
+/** The page of rows for a query, or none when the filter matched nothing. */
+async function readPageRows(
+  query: PatchingQuery,
+  states: HostModuleStates,
+  total: number,
+): Promise<FindingRow[]> {
+  if (total === 0) return [];
+  return prisma.security_findings.findMany({
+    where: filteredWhere(query, states),
+    orderBy: pageOrderBy(query),
+    skip: (query.page - 1) * PATCHING_PAGE_SIZE,
+    take: PATCHING_PAGE_SIZE,
+  });
+}
+
 /** What the paged read hands back: one page of rows plus the numbers describing the whole set. */
 export async function readPatchingPage(
   input: PatchingQueryInput = {},
   now: Date = new Date(),
 ): Promise<PatchingListState> {
   const requested = readPatchingQuery(input);
+  // WHY state first and alone: the filter is a SQL predicate built from it, so the count cannot run
+  // until it is read. It is one query for the whole page — the row-level verdicts share the map.
+  const states = await readHostModuleStates();
   const [waivers, counts, total] = await Promise.all([
     liveWaiverRows(),
     readFindingCounts(),
-    prisma.security_findings.count({ where: filteredWhere(requested) }),
+    prisma.security_findings.count({ where: filteredWhere(requested, states) }),
   ]);
 
   // WHY the page is clamped after the count: `?page=999` on a feed that shrank would otherwise
   // render an empty table, which on this page is indistinguishable from "nothing is wrong".
   const page = clampPatchingPage(requested.page, total);
   const query: PatchingQuery = { ...requested, page };
-  const rows =
-    total === 0
-      ? []
-      : await prisma.security_findings.findMany({
-          where: filteredWhere(query),
-          orderBy: pageOrderBy(query),
-          skip: (page - 1) * PATCHING_PAGE_SIZE,
-          take: PATCHING_PAGE_SIZE,
-        });
+  const rows = await readPageRows(query, states, total);
 
   const owners = await waiverOwners(waivers);
   return {
     // The groups this page covers: `groupFindings` keeps the contract order and puts the worst
     // finding first inside a group, which is the presentation the page has always had.
-    groups: groupFindings(mapPatchingFindings(rows, waivers, now)),
+    groups: groupFindings(mapPatchingFindings(rows, waivers, now, states)),
     waivers: waivers.map((row) => mapPatchingWaiver(row, owners, now)),
     cards: buildPatchingCards(counts, waivers, now),
     page: {

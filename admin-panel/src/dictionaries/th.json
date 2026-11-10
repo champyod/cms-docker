@@ -1285,6 +1285,7 @@
       },
       "columns": {
         "severity": "ความรุนแรง",
+        "reachability": "การเข้าถึงได้ของเคอร์เนล",
         "subject": "รายการ",
         "installed": "ที่ติดตั้ง",
         "available": "ที่มีให้อัปเดต",
@@ -1330,6 +1331,8 @@
       "filters": {
         "source": "แหล่งที่มา",
         "severity": "ความรุนแรง",
+        "reachability": "การเข้าถึงได้ของเคอร์เนล",
+        "allReachability": "ทุกระดับการเข้าถึง",
         "sort": "เรียงตาม",
         "direction": "ลำดับ",
         "allSources": "ทุกแหล่งที่มา",
@@ -1349,6 +1352,11 @@
       "pager": {
         "row": "รายการ",
         "range": "แสดง {from}–{to} จาก {total}"
+      },
+      "reachability": {
+        "reachable": "ทำงานอยู่",
+        "unreachable": "ไม่ได้ทำงาน",
+        "unknown": "ไม่ทราบ"
       }
     },
     "signal": {

@@ -15,6 +15,7 @@ import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/Respon
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
+import { parseKernelSubsystem, REACHABILITY_VALUES, type Reachability } from '@/lib/security/kernel-reachability';
 import {
   defaultDirection,
   isPatchingSource,
@@ -26,6 +27,7 @@ import {
   type PatchingGroup,
   type PatchingListState,
   type PatchingQuery,
+  type PatchingReachabilityFilter,
   type PatchingSeverity,
   type PatchingSort,
   type PatchingWaiver,
@@ -71,6 +73,31 @@ const SEVERITY_VARIANT: Record<string, 'red' | 'amber' | 'cyan' | 'neutral'> = {
   UNKNOWN: 'neutral',
 };
 
+// WHY unknown is amber and never neutral: an unanswered question must not read as a safe one.
+const REACHABILITY_VARIANT: Record<Reachability, 'red' | 'amber' | 'neutral'> = {
+  reachable: 'red',
+  unreachable: 'neutral',
+  unknown: 'amber',
+};
+
+// The badge a row shows, or a dash for a row that carries no kernel subsystem at all.
+function ReachabilityCell({
+  finding,
+  copy,
+}: {
+  finding: PatchingFinding;
+  copy: PatchingCopy;
+}): React.JSX.Element {
+  if (parseKernelSubsystem(finding.title ?? '') === null) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  return (
+    <Badge variant={REACHABILITY_VARIANT[finding.reachability]}>
+      {copy.reachability[finding.reachability]}
+    </Badge>
+  );
+}
+
 /**
  * A waiver row's review state, in the same vocabulary a finding's waiver column renders.
  *
@@ -112,7 +139,8 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
   // pager both have to describe the set, or "page 1 of 1" would mean "the feed is clean" the moment
   // a filter matched nothing.
   const total = state.page.total;
-  const filtered = query.source !== 'all' || query.severity !== 'all';
+  const filtered =
+    query.source !== 'all' || query.severity !== 'all' || query.reachability !== 'all';
 
   /**
    * The URL for a view of this table.
@@ -187,6 +215,12 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
         ) : (
           <Badge variant={SEVERITY_VARIANT[finding.severity] ?? 'neutral'}>{finding.severity}</Badge>
         ),
+    },
+    {
+      key: 'reachability',
+      header: copy.columns.reachability,
+      mobileLabel: copy.columns.reachability,
+      render: (finding) => <ReachabilityCell finding={finding} copy={copy} />,
     },
     {
       key: 'subject',
@@ -353,6 +387,24 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
             {PATCHING_SEVERITIES.map((severity: PatchingSeverity) => (
               <option key={severity} value={severity}>
                 {severity}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            id="patching-reachability"
+            label={copy.filters.reachability}
+            value={query.reachability}
+            className="sm:w-48"
+            onChange={(event) =>
+              applyFilter({
+                reachability: event.target.value as PatchingReachabilityFilter,
+              })
+            }
+          >
+            <option value="all">{copy.filters.allReachability}</option>
+            {REACHABILITY_VALUES.map((value: Reachability) => (
+              <option key={value} value={value}>
+                {copy.reachability[value]}
               </option>
             ))}
           </SelectField>

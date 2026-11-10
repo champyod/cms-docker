@@ -1,6 +1,7 @@
 import type { security_findings, security_waivers } from '@prisma/client';
 
 import type { SortDirection } from '@/lib/list-sorting';
+import { isReachability, type Reachability } from '@/lib/security/kernel-reachability';
 
 // The security feed's vocabulary, in one place: the ingest boundary validates against
 // these constants and the page renders their order, so a new source or severity is one
@@ -59,6 +60,8 @@ export interface PatchingFinding {
   readonly host: string | null;
   readonly firstSeen: string;
   readonly lastSeen: string;
+  // Information, not a waiver: nothing below counts it, and the digest numbers are unchanged by it.
+  readonly reachability: Reachability;
   readonly waiver: WaiverState;
 }
 
@@ -142,12 +145,14 @@ export type PatchingSort = (typeof PATCHING_SORTS)[number];
 /** 'all' is the absence of a filter, not a missing value: the page renders it as "any". */
 export type PatchingSourceFilter = PatchingSource | 'all';
 export type PatchingSeverityFilter = PatchingSeverity | 'all';
+export type PatchingReachabilityFilter = Reachability | 'all';
 
 /** What the findings table is asked for. Every field is echoed into the query string. */
 export interface PatchingQuery {
   readonly page: number;
   readonly source: PatchingSourceFilter;
   readonly severity: PatchingSeverityFilter;
+  readonly reachability: PatchingReachabilityFilter;
   readonly sort: PatchingSort;
   readonly direction: SortDirection;
 }
@@ -157,6 +162,7 @@ export interface PatchingQueryInput {
   readonly page?: string;
   readonly source?: string;
   readonly severity?: string;
+  readonly reachability?: string;
   readonly sort?: string;
   readonly dir?: string;
 }
@@ -165,6 +171,7 @@ export const DEFAULT_PATCHING_QUERY: PatchingQuery = {
   page: 1,
   source: 'all',
   severity: 'all',
+  reachability: 'all',
   sort: 'lastSeen',
   direction: 'desc',
 };
@@ -221,10 +228,11 @@ function readPageNumber(value: string | undefined): number {
 export function readPatchingQuery(input: PatchingQueryInput = {}): PatchingQuery {
   const source = isPatchingSource(input.source) ? input.source : 'all';
   const severity = isPatchingSeverity(input.severity) ? input.severity : 'all';
+  const reachability = isReachability(input.reachability) ? input.reachability : 'all';
   const sort = isPatchingSort(input.sort) ? input.sort : DEFAULT_PATCHING_QUERY.sort;
   const direction: SortDirection =
     input.dir === 'asc' || input.dir === 'desc' ? input.dir : defaultDirection(sort);
-  return { page: readPageNumber(input.page), source, severity, sort, direction };
+  return { page: readPageNumber(input.page), source, severity, reachability, sort, direction };
 }
 
 /** How many pages the current filter needs; an empty set still has one page to stand on. */
@@ -254,6 +262,9 @@ export function patchingSearchParams(query: PatchingQuery): Record<string, strin
   const params: Record<string, string> = {};
   if (query.source !== DEFAULT_PATCHING_QUERY.source) params.source = query.source;
   if (query.severity !== DEFAULT_PATCHING_QUERY.severity) params.severity = query.severity;
+  if (query.reachability !== DEFAULT_PATCHING_QUERY.reachability) {
+    params.reachability = query.reachability;
+  }
   if (query.sort !== DEFAULT_PATCHING_QUERY.sort) params.sort = query.sort;
   if (query.direction !== defaultDirection(query.sort)) params.dir = query.direction;
   if (query.page > 1) params.page = String(query.page);
@@ -346,6 +357,7 @@ export function buildPatchingCards(
   waivers: readonly Pick<security_waivers, 'ended_at' | 'review_by'>[],
   now: Date,
 ): PatchingCards {
+  // Reachability is information, not a waiver: unresolvedCves counts every CVE row, reachable or not.
   return {
     staleImages: counts.bySource.diun,
     unresolvedCves: counts.bySource.rootfs + counts.bySource.osv,

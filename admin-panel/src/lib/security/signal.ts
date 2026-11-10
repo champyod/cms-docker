@@ -319,6 +319,7 @@ export function buildSecurityDigest(
 
   const counts: SignalCounts = {
     openFindings: facts.unrated + PATCHING_SEVERITIES.reduce((sum, severity) => sum + facts.bySeverity[severity], 0),
+    // Reachability is information, not a waiver: a CRITICAL counts here whether or not it is reachable.
     unwaivedCritical: facts.bySeverity.CRITICAL - activeWith('CRITICAL'),
     unwaivedHigh: facts.bySeverity.HIGH - activeWith('HIGH'),
     expiredWaivers: expiredWaivers.length,
