@@ -210,7 +210,10 @@ admin: expose
 	@# tag and never the container: six nights of an already-fixed code path, failing silently. Reconcile
 	@# here — verified on the host: a current overlay is a no-op with every container's StartedAt unchanged,
 	@# and a moved tag recreates only the containers that actually drifted.
-	@bash scripts/__security_stack.sh reconcile || true
+	@# WHY no `|| true`: the verb exits 0 when the overlay is not running and when nothing drifted, so the
+	@# only failure left to report is a recreate that did not happen. Swallowing it would make this deploy
+	@# "succeed" while a container keeps running an image its tag no longer names.
+	@bash scripts/__security_stack.sh reconcile
 	@$(DOMAIN_PROXY_RELOAD)
 	@echo "Admin profile started."
 

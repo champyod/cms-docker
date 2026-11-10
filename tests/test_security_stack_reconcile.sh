@@ -157,6 +157,15 @@ if [[ "$(printf '%s' "$recipe" | grep -n "__security_stack.sh reconcile" | cut -
 else
   no "reconcile runs before the front reload"
 fi
+# WHY no `|| true` here: the verb already exits 0 when the overlay is not running and when nothing
+# drifted, so the only failure it can still report is a recreate that did not happen — the exact
+# silent-failure shape the wiring exists to remove. Swallowing it makes a deploy "succeed" while a
+# container keeps running an image the tag no longer names.
+if printf '%s' "$recipe" | grep -qE 'reconcile[[:space:]]*\|\|[[:space:]]*true'; then
+  no "a reconcile failure is not swallowed by the deploy"
+else
+  ok "a reconcile failure fails the deploy"
+fi
 
 printf '\n== the verb is dispatched ==\n'
 if grep -qE '^\s+reconcile\)\s+verb_reconcile' "${SCRIPT}"; then
