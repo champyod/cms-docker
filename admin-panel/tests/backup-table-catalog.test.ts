@@ -42,6 +42,12 @@ const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prism
  * push rebuild it instead of replaying findings that may already be fixed. The waivers
  * that decide what those findings mean are NOT excluded — they exist nowhere else.
  *
+ * `security_host_modules` is excluded for the same reason as `security_findings`: it is what the
+ * rootfs scan last observed on a box, not panel state. A restore must let the next push rewrite
+ * it, because replaying a snapshot would make every kernel reachability verdict an assertion
+ * about a machine that has since rebooted — and in the safe-looking direction, since a module
+ * loaded after the snapshot would read `absent`.
+ *
  * `audit_log_retention` is excluded for the same reason as `audit_log`: it is the ledger of which
  * id boundaries retention pruned and where the chain re-anchored, so every row in it names a row in
  * the log and a sequence id that a partial restore has no reason to reproduce. Restored on its own
@@ -54,6 +60,7 @@ const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
   'audit_log_retention',
   'security_blocks',
   'security_findings',
+  'security_host_modules',
   'contest_usernames_history',
   'login_surfaces',
   'ranking_contests',

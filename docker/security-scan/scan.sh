@@ -7,6 +7,9 @@ SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 export SECURITY_RUN_STARTED_AT
 
 MODE="${1:-help}"
+# Set by the rootfs mode once it has read the host's module state; empty means "no claim".
+FEED_HOST_MODULES_FILE=""
+export FEED_HOST_MODULES_FILE
 LIB_DIR="${SECURITY_SCAN_LIB:-/usr/local/lib/security-feed}"
 SRC_DIR="${SRC_DIR:-/src}"
 ROOTFS_DIR="${ROOTFS_DIR:-/rootfs}"
@@ -16,6 +19,8 @@ WORK_DIR="${WORK_DIR:-/tmp/security-scan}"
 . "$LIB_DIR/feed.sh"
 # shellcheck source=/dev/null
 . "$LIB_DIR/dpkg-state.sh"
+# shellcheck source=/dev/null
+. "$LIB_DIR/host-modules.sh"
 
 log() { printf '%s security-scan[%s]: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$MODE" "$*" >&2; }
 
@@ -131,6 +136,14 @@ scan_rootfs() {
     dropped=$(dpkg_drop_not_installed "$findings" "$ROOTFS_DIR")
     if [ "$dropped" -gt 0 ]; then
         log "rootfs: $dropped finding(s) dropped — dpkg has the package removed (state rc/not-installed), not installed"
+    fi
+
+    # The host kernel's module state rides this same envelope: the panel cannot judge a kernel CVE
+    # without knowing whether its subsystem is present on this box, and a second feed source would
+    # be a second place for the body shape to drift.
+    modules="$WORK_DIR/host-modules.json"
+    if host_modules_write "$ROOTFS_DIR" "$modules"; then
+        FEED_HOST_MODULES_FILE="$modules"
     fi
 
     log "rootfs: $(jq 'length' "$findings") findings under $ROOTFS_DIR (complete=$complete)"

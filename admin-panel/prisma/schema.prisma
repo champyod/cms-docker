@@ -928,6 +928,25 @@ model security_waivers {
   @@map("security_waivers")
 }
 
+/// The kernel modules a host actually runs, as the rootfs scan reported them: one row
+/// per host, replaced on every accepted push. Both lists are kept rather than one
+/// verdict per module, because "blacklisted AND currently loaded" is a real state
+/// (ksmbd on the production hosts) and the reader is what applies loaded-wins.
+model security_host_modules {
+  /// The box that reported it — the whole identity of the row.
+  host           String   @id
+  /// The release the loaded list came from, e.g. 6.12.9-1-cachyos.
+  kernel_release String   @db.VarChar
+  /// Names in /proc/modules at scan time.
+  loaded         String[]
+  /// Names an /etc/modprobe.d rule blacklists or installs /bin/true.
+  blocked        String[]
+  /// When the panel recorded this state, not when the scan began.
+  recorded_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("security_host_modules")
+}
+
 /// The ranking projection the proxy pushes: one table per entity kind, so the
 /// wire shape and the consistency rules stay readable instead of hiding inside a
 /// jsonb blob.

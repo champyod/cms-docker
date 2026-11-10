@@ -18,6 +18,28 @@ if [ -z "${SECURITY_RUN_STARTED_AT:-}" ]; then
     SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 fi
 
+# host_modules: a path to one JSON object the rootfs mode wrote. Empty means this push makes no
+# claim about the host kernel, which is what every other producer and an older scanner send.
+FEED_HOST_MODULES_FILE="${FEED_HOST_MODULES_FILE:-}"
+
+# feed_body SOURCE HOST COMPLETE MODULES_FILE — one envelope on stdout, findings on stdin.
+#
+# WHY the findings come in on stdin and not as an argument: a 400-finding set is over the kernel's
+# per-argument limit, and the failure is `jq: Argument list too long` — the batch is lost before it
+# is even measured against the body cap. Stdin has no such ceiling.
+feed_body() {
+    _mods="$4"
+    if [ -z "$_mods" ] || [ ! -f "$_mods" ]; then _mods=/dev/null; fi
+    jq -c \
+        --arg source "$1" \
+        --arg host "$2" \
+        --argjson complete "$3" \
+        --arg run "$SECURITY_RUN_STARTED_AT" \
+        --slurpfile modules "$_mods" \
+        '{source: $source, host: $host, findings: ., complete: $complete, run_started_at: $run}
+         + (if $modules[0] == null then {} else {host_modules: $modules[0]} end)'
+}
+
 # feed_post SOURCE FINDINGS_FILE COMPLETE — one push, in batches that fit the route's body cap.
 feed_post() {
     _source="$1"
@@ -34,6 +56,14 @@ feed_post() {
 
     _count=$(jq 'length' "$_file")
 
+    # Validated once, so a malformed record costs the module facts and never the batch of findings
+    # that carries them: /dev/null slurps as [], which the envelope reads as "no claim".
+    _mods=""
+    if [ -n "$FEED_HOST_MODULES_FILE" ] && [ -f "$FEED_HOST_MODULES_FILE" ] \
+       && jq -e . "$FEED_HOST_MODULES_FILE" >/dev/null 2>&1; then
+        _mods="$FEED_HOST_MODULES_FILE"
+    fi
+
     # WHY chunking instead of a hard cap: the route's body limit is 1 MB, and one finding is roughly half a kilobyte 
     _batch=250
     _budget=${FEED_BATCH_BYTES:-900000}
@@ -41,9 +71,7 @@ feed_post() {
 
     # An empty set is still one push: a clean scan has to be visible in the panel, and a producer that sends nothing at
     if [ "$_count" -eq 0 ]; then
-        _body=$(jq -c --arg source "$_source" --arg host "$(feed_host)" --argjson complete "$_complete" \
-            --arg run "$SECURITY_RUN_STARTED_AT" \
-            '{source: $source, host: $host, findings: ., complete: $complete, run_started_at: $run}' "$_file")
+        _body=$(feed_body "$_source" "$(feed_host)" "$_complete" "$_mods" < "$_file")
         _code=$(printf '%s' "$_body" | curl -sS --max-time 60 --retry 3 --retry-connrefused \
             -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${_token}" -H 'Content-Type: application/json' \
@@ -88,13 +116,11 @@ feed_post() {
         if [ "$_n" -eq "$_batches" ]; then _claim="$_complete"; else _claim=false; fi
 
         _req=$(mktemp)
-        printf '%s' "$_chunk" | jq -c \
-            --arg source "$_source" \
-            --arg host "$(feed_host)" \
-            --argjson complete "$_claim" \
-            --arg run "$SECURITY_RUN_STARTED_AT" \
-            '{source: $source, host: $host, findings: ., complete: $complete, run_started_at: $run}' \
-            > "$_req"
+        # WHY only the last batch carries it: the record is one snapshot per run, it shares the body
+        # cap with the findings, and the last batch is the one that already speaks for the run.
+        _batch_modules=""
+        if [ "$_n" -eq "$_batches" ]; then _batch_modules="$_mods"; fi
+        printf '%s' "$_chunk" | feed_body "$_source" "$(feed_host)" "$_claim" "$_batch_modules" > "$_req"
         _size=$(wc -c < "$_req" | tr -d ' ')
 
         # WHY refuse instead of sending: one record larger than the panel's body cap cannot go in any body, and cutting it

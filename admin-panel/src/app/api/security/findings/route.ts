@@ -118,6 +118,9 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
         // Reported, not silent: a re-scan that raced a newer one needs to read back why its
         // findings did not reopen the rows it saw.
         held: result.held,
+        // Whether the envelope carried the host's module snapshot. Read back by whoever wonders
+        // why a kernel finding cannot be judged: no module row means the scanner did not send one.
+        host_modules: result.hostModulesRecorded,
         complete: push.complete,
       },
       result: 'success',
@@ -129,6 +132,7 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
         received: result.received,
         resolved: result.resolved,
         held: result.held,
+        host_modules: result.hostModulesRecorded,
         complete: push.complete,
       },
       201,

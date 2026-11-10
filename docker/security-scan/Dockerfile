@@ -25,7 +25,7 @@ COPY --from=osv /osv-scanner /usr/local/bin/osv-scanner
 RUN apk add --no-cache busybox-extras ca-certificates curl jq tzdata
 
 COPY scan.sh /usr/local/bin/security-scan
-COPY lib/feed.sh lib/dpkg-state.sh lib/osv.jq lib/trivy.jq lib/diun.jq /usr/local/lib/security-feed/
+COPY lib/feed.sh lib/dpkg-state.sh lib/host-modules.sh lib/osv.jq lib/trivy.jq lib/diun.jq /usr/local/lib/security-feed/
 # The CGI has to live under <httpd root>/cgi-bin to be executable by busybox httpd, so it
 # is a copy rather than a symlink: httpd resolves the path itself.
 COPY lib/diun-cgi.sh /usr/local/lib/security-feed/www/cgi-bin/diun

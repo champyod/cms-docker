@@ -22,8 +22,26 @@ interface FakeFinding {
   resolved_at: Date | null;
 }
 
+interface FakeHostModules {
+  host: string;
+  kernel_release: string;
+  loaded: string[];
+  blocked: string[];
+  recorded_at: Date;
+}
+
+type HostModulesWrite = Omit<FakeHostModules, 'host'>;
+
 const mocks = vi.hoisted(() => {
   const rows = new Map<string, FakeFinding>();
+  // Keyed by host, because that is the table's primary key: one row per box, replaced in place.
+  const hostRows = new Map<string, {
+    host: string;
+    kernel_release: string;
+    loaded: string[];
+    blocked: string[];
+    recorded_at: Date;
+  }>();
   let nextId = 1;
   // The seeded `root` admin the ingest route attributes every push to; `null` models a box
   // where that row is missing, which must refuse the push instead of filing it as NULL.
@@ -111,6 +129,23 @@ const mocks = vi.hoisted(() => {
 
   const fakePrisma = {
     security_findings,
+    // The host module snapshot. Modelled as a map keyed by host and not as a spy on the call:
+    // "one row per host, replaced" is the contract, and a recorder would pass whether the second
+    // push replaced the row or appended a second one.
+    security_host_modules: {
+      upsert: async (args: {
+        where: { host: string };
+        create: { host: string } & HostModulesWrite;
+        update: HostModulesWrite;
+      }): Promise<FakeHostModules> => {
+        const existing = hostRows.get(args.where.host);
+        const row: FakeHostModules = existing === undefined
+          ? { ...args.create }
+          : { ...existing, ...args.update };
+        hostRows.set(args.where.host, row);
+        return row;
+      },
+    },
     // The ingest route resolves the seeded `root` admin before it writes anything, so the fake
     // has to answer that lookup — and answer "no such admin" on demand, because that case is the
     // one that must refuse the push rather than file it as NULL.
@@ -122,6 +157,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     rows,
+    hostRows,
     rowKey,
     fakePrisma,
     recordAudit: vi.fn(),
@@ -184,6 +220,7 @@ async function call(request: Request): Promise<{ status: number; body: Record<st
 describe('security feed ingest route', () => {
   beforeEach(() => {
     mocks.rows.clear();
+    mocks.hostRows.clear();
     mocks.recordAudit.mockClear();
     mocks.setRootAdmin({ id: 1 });
     process.env.SECURITY_FEED_TOKEN = TOKEN;
@@ -333,6 +370,95 @@ describe('security feed ingest route', () => {
     const result = await call(push('x'.repeat(1_000_001)));
     expect(result.status).toBe(413);
     expect(mocks.rows.size).toBe(0);
+  });
+
+  it('records the host module snapshot as one row, replaced by the next push', async () => {
+    const first = await call(
+      push({
+        source: 'rootfs',
+        host: 'box-a',
+        findings: [],
+        complete: false,
+        host_modules: {
+          kernel_release: '6.12.9-1-cachyos',
+          loaded: ['ksmbd', 'cifs'],
+          blocked: ['ceph'],
+        },
+      }),
+    );
+    expect(first.status).toBe(201);
+    expect(first.body.host_modules).toBe(true);
+    expect(mocks.hostRows.size).toBe(1);
+    expect(mocks.hostRows.get('box-a')).toMatchObject({
+      host: 'box-a',
+      kernel_release: '6.12.9-1-cachyos',
+      loaded: ['cifs', 'ksmbd'],
+      blocked: ['ceph'],
+    });
+
+    // A second scan replaces the row rather than adding one: the table answers "what is this box
+    // running now", so a module that has since been unloaded must disappear from it.
+    await call(
+      push({
+        source: 'rootfs',
+        host: 'box-a',
+        findings: [],
+        complete: false,
+        host_modules: { kernel_release: '6.12.9-1-cachyos', loaded: ['cifs'], blocked: ['ceph'] },
+      }),
+    );
+    expect(mocks.hostRows.size).toBe(1);
+    expect(mocks.hostRows.get('box-a')?.loaded).toEqual(['cifs']);
+  });
+
+  it('accepts a push from a scanner that sends no host_modules', async () => {
+    // The field is newer than the producers: an image that has not been updated yet must keep
+    // landing findings, and must not erase the module state an earlier scan recorded.
+    await call(
+      push({
+        source: 'rootfs',
+        host: 'box-a',
+        findings: [],
+        complete: false,
+        host_modules: { kernel_release: '6.12.9-1-cachyos', loaded: ['ksmbd'], blocked: [] },
+      }),
+    );
+    const result = await call(push({ source: 'rootfs', host: 'box-a', findings: [finding()], complete: true }));
+
+    expect(result.status).toBe(201);
+    expect(result.body.host_modules).toBe(false);
+    expect(mocks.hostRows.size).toBe(1);
+    expect(mocks.hostRows.get('box-a')?.loaded).toEqual(['ksmbd']);
+  });
+
+  it('refuses host_modules that name no host, and names the reason', async () => {
+    const result = await call(
+      push({
+        source: 'rootfs',
+        findings: [],
+        host_modules: { kernel_release: '6.12.9-1-cachyos', loaded: [], blocked: [] },
+      }),
+    );
+
+    expect(result.status).toBe(422);
+    expect(String(result.body.error)).toContain('host_modules requires host');
+    expect(mocks.hostRows.size).toBe(0);
+  });
+
+  it('refuses a malformed host_modules body without storing the findings', async () => {
+    const result = await call(
+      push({
+        source: 'rootfs',
+        host: 'box-a',
+        findings: [finding()],
+        host_modules: { kernel_release: '6.12.9-1-cachyos', loaded: 'ksmbd', blocked: [] },
+      }),
+    );
+
+    expect(result.status).toBe(422);
+    expect(String(result.body.error)).toContain('host_modules.loaded');
+    expect(mocks.rows.size).toBe(0);
+    expect(mocks.hostRows.size).toBe(0);
   });
 
   it('rate-limits per source with 429 and a Retry-After header', async () => {

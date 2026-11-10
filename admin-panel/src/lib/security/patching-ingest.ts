@@ -3,6 +3,10 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 
 import {
+  parseHostModuleFacts,
+  type HostModuleFacts,
+} from '@/lib/security/host-module-state';
+import {
   isPatchingSeverity,
   isPatchingSource,
   MAX_FINDING_KEY_LENGTH,
@@ -44,6 +48,12 @@ export interface FeedPush {
    * instant it began. Anything with `last_seen` older than this was not seen by the run.
    */
   readonly runStartedAt: Date;
+  /**
+   * What this box's kernel is running, from the rootfs scan — the fact `classifyReachability`
+   * needs and no finding carries. Optional on purpose: an older scanner sends no such field and
+   * its push must still be accepted, because it simply makes no claim about the kernel.
+   */
+  readonly hostModules?: HostModuleFacts | null;
 }
 
 export type FeedValidation =
@@ -182,6 +192,17 @@ export function parseFeedPush(body: unknown): FeedValidation {
   }
   const host = optionalText(record.host);
   if (host === undefined) return { ok: false, error: 'host must be a string or null' };
+  let hostModules: HostModuleFacts | null = null;
+  if (record.host_modules !== undefined && record.host_modules !== null) {
+    // WHY a named host is required: the row is keyed by host, so a module list with no box to
+    // attach it to is either dropped silently or overwrites whichever host pushed last.
+    if (host === null || host.trim() === '') {
+      return { ok: false, error: 'host_modules requires host' };
+    }
+    const parsedModules = parseHostModuleFacts(record.host_modules);
+    if (!parsedModules.ok) return parsedModules;
+    hostModules = parsedModules.value;
+  }
   // Required, not defaulted: a default would resolve nothing on one producer and everything on a chunked one.
   const runStartedAtRaw = record.run_started_at;
   if (typeof runStartedAtRaw !== 'string') {
@@ -213,6 +234,7 @@ export function parseFeedPush(body: unknown): FeedValidation {
       findings,
       complete: record.complete === true,
       runStartedAt,
+      hostModules,
     },
   };
 }
@@ -226,6 +248,8 @@ export interface FeedPushResult {
    * scan is still running should be able to see that its evidence lost to newer evidence.
    */
   readonly held: number;
+  /** Whether this push carried a host module snapshot, and so replaced that host's row. */
+  readonly hostModulesRecorded: boolean;
 }
 
 function findingData(
@@ -246,6 +270,39 @@ function findingData(
     // A re-report revives a row an earlier complete push resolved.
     resolved_at: null,
   };
+}
+
+/**
+ * Replaces this host's recorded module state.
+ *
+ * WHY upsert on the host and not an insert per scan: the table answers "what is this box running
+ * now", which is one row; history belongs in the findings table and in the audit trail, not here.
+ * WHY the panel's clock and not the producer's: `recorded_at` says when the panel stored the state,
+ * and a producer that reported a skewed time would otherwise rewrite the ordering of two hosts.
+ */
+async function recordHostModules(
+  client: Prisma.TransactionClient,
+  host: string,
+  facts: HostModuleFacts,
+  now: Date,
+): Promise<void> {
+  await client.security_host_modules.upsert({
+    where: { host },
+    create: {
+      host,
+      kernel_release: facts.kernelRelease,
+      // Copied into mutable arrays because Prisma's list input is `string[]`, not `readonly string[]`.
+      loaded: [...facts.loaded],
+      blocked: [...facts.blocked],
+      recorded_at: now,
+    },
+    update: {
+      kernel_release: facts.kernelRelease,
+      loaded: [...facts.loaded],
+      blocked: [...facts.blocked],
+      recorded_at: now,
+    },
+  });
 }
 
 /**
@@ -316,7 +373,17 @@ export async function applyFeedPush(
       })).count;
   const held = unseen.size - created;
 
-  if (!push.complete) return { received: push.findings.length, resolved: 0, held };
+  // The module row rides the same transaction as the findings: a push that stored CVEs and then
+  // failed to store what the kernel runs would leave the page unable to judge any kernel finding.
+  const modules = push.hostModules ?? null;
+  const hostModulesRecorded = push.host !== null && modules !== null;
+  if (push.host !== null && modules !== null) {
+    await recordHostModules(client, push.host, modules, now);
+  }
+
+  if (!push.complete) {
+    return { received: push.findings.length, resolved: 0, held, hostModulesRecorded };
+  }
 
   const resolved = await client.security_findings.updateMany({
     where: {
@@ -332,5 +399,5 @@ export async function applyFeedPush(
     },
     data: { resolved_at: now },
   });
-  return { received: push.findings.length, resolved: resolved.count, held };
+  return { received: push.findings.length, resolved: resolved.count, held, hostModulesRecorded };
 }

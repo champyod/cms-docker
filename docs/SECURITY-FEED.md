@@ -57,6 +57,35 @@ host's package database instead of walking every file under `/home`.
   pushes nothing) whenever the package database was not read. The same rule binds the osv producer: `complete:
   true` only on exit 0 with a parsable report.
 
+## Host kernel module state (one optional field)
+
+The rootfs producer is the only one that can see the host kernel, so its envelope may carry one
+extra object:
+
+```
+{ "host_modules": { "kernel_release": "6.12.9-1-cachyos",
+                    "loaded": ["cifs", "ksmbd"], "blocked": ["ceph", "ksmbd"] } }
+```
+
+- **Two lists, never one verdict.** `loaded` is field 1 of the container's own `/proc/modules`
+  (modules are kernel state and are not namespaced, so the scan sees the host's set); `blocked` is
+  every `/etc/modprobe.d/*.conf` line that is `blacklist <name>` or `install <name> /bin/true`.
+  A module in **both** lists is `loaded`: ksmbd is blacklisted and running on both hosts, and
+  running code is reachable whatever the config file says. The reader applies that rule
+  (`src/lib/security/host-module-state.ts`); the producer never pre-judges it, because a record
+  that subtracted blocked names would make a live subsystem look absent — and would be
+  unreadable afterwards, with nothing left to notice the difference.
+- **Absence is derived, not sent.** A module under `/lib/modules/<release>` that is neither loaded
+  nor named by a rule is `absent`. Nothing is sent for it, and it is never recorded as
+  `blacklisted`: that verdict belongs to a rule the operator actually wrote.
+- **One row per host**, replaced by every accepted push (`security_host_modules`, keyed by host),
+  written in the same transaction as the findings.
+- **Optional.** An older scanner sends no such field; its findings still land, and the module
+  state an earlier scan recorded is left untouched. A field the route cannot parse is a 422 that
+  stores nothing, because a half-read module list is worse than none.
+- It rides the **last** body of a chunked run: one snapshot per run, carried by the body that
+  already claims `complete`.
+
 ## Consumer — the panel
 
 ### Tables (Prisma, one migration, generated-style naming as the repo does)
@@ -92,6 +121,14 @@ model security_waivers {
   created_at  DateTime @default(now())
   ended_at    DateTime?
 }
+
+model security_host_modules {
+  host           String   @id            // one row per box, replaced by the next scan
+  kernel_release String   @db.VarChar
+  loaded         String[]                // field 1 of /proc/modules at scan time
+  blocked        String[]                // a `blacklist`/`install … /bin/true` rule names it
+  recorded_at    DateTime @default(now()) @db.Timestamptz(6)
+}
 ```
 
 **Resolution is never a delete.** A finding that stops being reported gets `resolved_at` set by the ingest
@@ -116,6 +153,9 @@ evidence wins, and the push's response counts those reports as `held`.
   139 of them), and "everything this body did not mention" would close the earlier batches' own rows — that
   happened once, on a live host, taking 34,500 findings with it. A row this run touched carries
   `last_seen >= run_started_at`, wherever it arrived.
+- Optional `host_modules` on a rootfs push (see "Host kernel module state"). It is stored in the
+  same transaction as the findings, so one push can never record CVEs without recording what the
+  kernel runs.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
   array ≤ 2000), 422 with the offending index, never a stack trace.
 - Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).

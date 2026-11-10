@@ -126,6 +126,11 @@ count=$(wc -l < "$tmp_models" | tr -d ' ')
 PUBLIC_BOARD_READ=" admin_groups admin_permission_overrides admins group_permissions permissions ranking_config ranking_contests ranking_hidden ranking_overrides ranking_settings ranking_subchanges ranking_submissions ranking_tasks ranking_teams ranking_users services "
 AUTH_BOOTSTRAP=" admin_groups admin_permission_overrides admins group_permissions groups login_surfaces permissions "
 INGEST_WRITE=" security_findings "
+# HOST_MODULE_INGEST — the rootfs scan's record of what the host kernel actually runs. Read is
+#   staff (the patching page derives reachability from it) AND the feed; write is the feed ONLY,
+#   because a module list is an observation about a box and no admin types one. There is no DELETE
+#   policy: the next scan replaces the row, and a deleted one would read as "this box says nothing".
+HOST_MODULE_INGEST=" security_host_modules "
 # WHY admins is neither strict nor plain public-read: the ranking console stamps last_login_at on
 # its own login (store/admin.rs:93) with no identity, so UPDATE stays open there while INSERT and
 # DELETE (create/remove an admin) require staff. Column-level narrowing is not something RLS can
@@ -238,6 +243,28 @@ emit_policy_set() {
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
         "CREATE POLICY cms_actor_update ON public.$tbl FOR UPDATE TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest'])) WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
         "CREATE POLICY cms_actor_delete ON public.$tbl FOR DELETE TO cmsuser USING ($(read_predicate "$tbl"));"
+    elif in_list "$tbl" "$HOST_MODULE_INGEST"; then
+      printf '%s\n' \
+        '-- HOST_MODULE_INGEST: staff and the feed read the host module state, and only the feed' \
+        '-- writes it. WHY the write side is narrower than INGEST_WRITE: a finding is evidence a' \
+        '-- producer happened to send, while this row is a claim about what a box is running, so an' \
+        '-- admin who could write it could make a reachable subsystem look absent. WHY ingest keeps' \
+        '-- read: Prisma upserts with INSERT … RETURNING, refused 42501 without it. WHY no DELETE' \
+        '-- policy: the next scan replaces the row, and a removed one would read as "no report",' \
+        '-- which is the answer a fail-closed reader treats as unknown, not as safe.' \
+        "DROP POLICY IF EXISTS cmsuser_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cmsuser_select ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cmsuser_insert ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cmsuser_update ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cmsuser_delete ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_read ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_append ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_update ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_delete ON public.$tbl;" \
+        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']));" \
+        "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (public.cms_actor_any(ARRAY['system:ingest']));" \
+        "CREATE POLICY cms_actor_update ON public.$tbl FOR UPDATE TO cmsuser USING (public.cms_actor_any(ARRAY['system:ingest'])) WITH CHECK (public.cms_actor_any(ARRAY['system:ingest']));"
     elif [ "$tbl" = "audit_log" ]; then
       printf '%s\n' \
         '-- AUDIT_LOG: append-only. No UPDATE policy exists and UPDATE is refused by the guard trigger,' \
