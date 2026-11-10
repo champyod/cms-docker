@@ -23,6 +23,7 @@ import {
   type WaiverInput,
   type WiringInput,
   type WriteResult,
+  waiveUnreachableFindings,
 } from '@/lib/panel-actions';
 
 /**
@@ -115,6 +116,10 @@ The patching surface's decisions:
         already passed would be an approval that was never true.
   waiver end <waiver-id> --reason <text>
         End a waiver. The row keeps its reason and gains the ending time.
+  waiver bulk --review-by <date> [--dry-run]
+        File one waiver per kernel CVE no host can reach, from the stored reachability verdict.
+        Reachable and unknown CVEs are refused and counted rather than skipped. --dry-run prints
+        the same plan and writes nothing.
 
 Kinds, verbs, roles and targets are the panel's own lists (lib/ranking-override-verbs,
 lib/ranking-config, lib/service-wiring-contract, lib/security/patching): anything outside them is
@@ -154,7 +159,8 @@ export type PanelCommand =
       readonly reason: string;
     }
   | { readonly area: 'waiver'; readonly verb: 'create'; readonly waiver: WaiverInput }
-  | { readonly area: 'waiver'; readonly verb: 'end'; readonly waiverId: number; readonly reason: string };
+  | { readonly area: 'waiver'; readonly verb: 'end'; readonly waiverId: number; readonly reason: string }
+  | { readonly area: 'waiver'; readonly verb: 'bulk'; readonly reviewBy: string; readonly dryRun: boolean };
 
 /**
  * Which verb drives which write of the shared module.
@@ -192,6 +198,7 @@ export const PANEL_WRITE_VERBS: readonly PanelVerbWrite[] = [
   { write: 'rotateContestAccounts', verb: ['accounts', 'rotate'] },
   { write: 'createWaiver', verb: ['waiver', 'create'] },
   { write: 'endWaiver', verb: ['waiver', 'end'] },
+  { write: 'waiveUnreachableFindings', verb: ['waiver', 'bulk'] },
 ];
 
 /**
@@ -543,8 +550,14 @@ export function parsePanelCommand(argv: readonly string[]): PanelCommand {
       const flags = readFlags(argv.slice(3), { values: ['reason'] });
       return { area: 'waiver', verb, waiverId, reason: required(flags, 'reason') };
     }
+    if (verb === 'bulk') {
+      // WHY no positional argument: the subject is every row the feed already holds, so the verb
+      // names a decision about the whole set rather than one finding the caller types.
+      const flags = readFlags(argv.slice(2), { values: ['review-by'], switches: ['dry-run'] });
+      return { area: 'waiver', verb, reviewBy: required(flags, 'review-by'), dryRun: flags.switches.has('dry-run') };
+    }
     if (verb !== 'create') {
-      throw new PanelUsageError(`waiver takes create or end, not ${JSON.stringify(verb)}`);
+      throw new PanelUsageError(`waiver takes create, end or bulk, not ${JSON.stringify(verb)}`);
     }
     const flags = readFlags(argv.slice(2), { values: ['source', 'match', 'review-by', 'reason'] });
     return {
@@ -688,6 +701,17 @@ export async function runPanelCommand(command: PanelCommand): Promise<string> {
       requireWritten(result, `filing the waiver for ${command.waiver.source} ${command.waiver.match}`);
       const filed = result.id === undefined ? 'waiver filed' : `waiver ${result.id} filed`;
       return `${filed} for ${command.waiver.source} ${command.waiver.match}.`;
+    }
+    if (command.verb === 'bulk') {
+      const result = await waiveUnreachableFindings(actorId, { reviewBy: command.reviewBy, dryRun: command.dryRun });
+      requireWritten(result, `planning the bulk waiver for ${command.reviewBy}`);
+      const counts = result.counts;
+      const lead = result.dryRun
+        ? `dry run: ${counted(counts.planned, 'waiver')} planned for ${counted(counts.findingsWaived, 'finding')}`
+        : `filed ${counted(counts.waived, 'waiver')} for ${counted(counts.findingsWaived, 'finding')}`;
+      const refused = `${counts.refusedReachable} refused reachable, ${counts.refusedUnknown} refused unknown`;
+      const failures = result.failures.length === 0 ? '' : `; ${result.failures.join('; ')}`;
+      return `${lead}; ${refused}, ${counts.alreadyWaived} already waived${failures}.`;
     }
     const result = await endWaiver(actorId, command.waiverId, command.reason);
     requireWritten(result, `ending waiver ${command.waiverId}`);

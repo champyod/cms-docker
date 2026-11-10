@@ -1357,6 +1357,27 @@
         "reachable": "reachable",
         "unreachable": "not running",
         "unknown": "unknown"
+      },
+      "bulkWaive": {
+        "button": "Waive unreachable findings",
+        "title": "Waive every finding this host cannot reach",
+        "description": "One waiver per CVE, for findings stored as not running. Reachable and unknown findings are refused and listed — nothing is hidden.",
+        "reviewByLabel": "Review by",
+        "preview": "Preview",
+        "previewHint": "Preview first: nothing is written until you confirm the plan.",
+        "confirm": "Waive {count} CVEs",
+        "candidates": "Findings examined",
+        "planned": "Waivers to create",
+        "findingsWaived": "Findings covered",
+        "refusedReachable": "Refused — reachable",
+        "refusedUnknown": "Refused — unknown",
+        "alreadyWaived": "Already waived",
+        "refusalsTitle": "Refused findings",
+        "nothing": "No finding is left to waive.",
+        "applied": "{waived} waivers recorded; {refused} findings refused.",
+        "failed": "The bulk waiver could not be recorded.",
+        "previewFailed": "The plan could not be read.",
+        "reviewRequired": "Choose the review date first."
       }
     },
     "signal": {

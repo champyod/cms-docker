@@ -13,6 +13,7 @@ import { Input } from '@/components/core/Input';
 import { SelectField } from '@/components/core/FormField';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { RecordListPager } from '@/components/list/RecordListPager';
+import { BulkWaiveDialog } from '@/components/security/BulkWaiveDialog';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
 import { REACHABILITY_VALUES, type Reachability } from '@/lib/security/kernel-reachability';
@@ -126,6 +127,7 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
   const [reason, setReason] = useState('');
   const [reviewBy, setReviewBy] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useAppRouter();
   const pathname = usePathname();
@@ -435,9 +437,16 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
             <option value="desc">{copy.filters.descending}</option>
             <option value="asc">{copy.filters.ascending}</option>
           </SelectField>
-          <p className="ml-auto font-mono text-sm text-muted-foreground">
-            {counted(copy.filters.match, total)}
-          </p>
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <p className="font-mono text-sm text-muted-foreground">{counted(copy.filters.match, total)}</p>
+            {/* Why the bulk control lives with the filters: it acts on the whole feed, so a page
+                spot beside the counts is the honest place for it, not a row inside a page of rows. */}
+            {canWaive && (
+              <Button variant="secondary" onClick={() => setBulkOpen(true)}>
+                {copy.bulkWaive.button}
+              </Button>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -592,6 +601,13 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
       >
         <Input label={copy.reasonLabel} value={reason} onChange={(event) => setReason(event.target.value)} required />
       </Dialog>
+
+      <BulkWaiveDialog
+        open={bulkOpen}
+        copy={copy}
+        onClose={() => setBulkOpen(false)}
+        onRecorded={setFeedback}
+      />
     </div>
   );
 }

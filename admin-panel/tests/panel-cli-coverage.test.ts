@@ -49,6 +49,7 @@ const mocks = vi.hoisted(() => {
     'showConfigTarget',
     'validateExposure',
     'validateService',
+    'waiveUnreachableFindings',
     'writeContestUsername',
   ];
   const spies: Record<string, ReturnType<typeof vi.fn>> = {};
@@ -228,6 +229,12 @@ const SAMPLES: readonly Sample[] = [
     argv: ['waiver', 'end', '5', '--reason', 'patched'],
     args: [ACTOR, 5, 'patched'],
   },
+  {
+    verb: 'waiver bulk',
+    write: 'waiveUnreachableFindings',
+    argv: ['waiver', 'bulk', '--review-by', '2027-01-31', '--dry-run'],
+    args: [ACTOR, { reviewBy: '2027-01-31', dryRun: true }],
+  },
 ];
 
 const INDEX_SOURCE = readFileSync(PANEL_ACTIONS_INDEX, 'utf8');
@@ -253,6 +260,16 @@ function resetSpies(): void {
   mocks.rotateContestAccounts.mockResolvedValue({ rotated: 2, assigned: 2 });
   mocks.createWaiver.mockResolvedValue({ success: true, id: 5 });
   mocks.endWaiver.mockResolvedValue({ success: true, id: 5 });
+  mocks.waiveUnreachableFindings.mockResolvedValue({
+    success: true,
+    dryRun: true,
+    reviewBy: '2027-01-31',
+    counts: { candidates: 2, alreadyWaived: 0, refusedReachable: 1, refusedUnknown: 0, findingsWaived: 1, planned: 1, waived: 0 },
+    plan: [],
+    refusals: [],
+    waiverIds: [],
+    failures: [],
+  });
 }
 
 beforeEach(resetSpies);

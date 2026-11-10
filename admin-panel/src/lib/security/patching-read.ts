@@ -560,3 +560,52 @@ export async function readWaiverExport(now: Date = new Date()): Promise<WaiverEx
     waivers: rows.map((row) => toWaiverRecord(row, owners.get(row.created_by))),
   };
 }
+
+/**
+ * One unresolved row the bulk waiver judges: the columns the decision needs and nothing else.
+ *
+ * WHY so few: the bulk action only asks whether the CVE is reachable and what module state made it
+ * that way, so the row travels without its versions, URLs or detail blob.
+ */
+export interface BulkWaiveCandidate {
+  readonly id: number;
+  readonly key: string;
+  readonly title: string | null;
+  readonly host: string | null;
+  readonly reachability: string;
+}
+
+/** One live decision: what it covers and the source it covers it for. */
+export interface BulkWaiveWaiver {
+  readonly source: string;
+  readonly match: string;
+  readonly ended_at: Date | null;
+}
+
+/** The feed the bulk waiver plans over: every candidate row, and every decision already standing. */
+export interface BulkWaiveFeed {
+  readonly rows: readonly BulkWaiveCandidate[];
+  readonly waivers: readonly BulkWaiveWaiver[];
+}
+
+/**
+ * The rows a bulk waiver judges and the live decisions over them.
+ *
+ * WHY this lives here: this module is the only one allowed to query the two tables, so the bulk
+ * write asks it instead of opening a second read — which keeps "unresolved" and "live waiver"
+ * defined exactly once. The source is a parameter because the bulk action pins it to the host scan.
+ */
+export async function readBulkWaiveFeed(source: string): Promise<BulkWaiveFeed> {
+  const [rows, waivers] = await Promise.all([
+    prisma.security_findings.findMany({
+      where: { resolved_at: null, source },
+      select: { id: true, key: true, title: true, host: true, reachability: true },
+      orderBy: [{ id: 'asc' }],
+    }),
+    prisma.security_waivers.findMany({
+      where: { ended_at: null },
+      select: { source: true, match: true, ended_at: true },
+    }),
+  ]);
+  return { rows, waivers };
+}

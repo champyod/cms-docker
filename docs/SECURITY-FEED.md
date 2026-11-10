@@ -245,6 +245,17 @@ keeps failing until the lapsed row is ended (`cms panel waiver end <id> --reason
 re-render the export and commit it with the renewal — otherwise the next run reads the old file, and the
 30-day bound is the only thing forcing the refresh.
 
+**Waiving the unreachable set in bulk.** One action waives every unresolved `rootfs` finding whose
+stored `reachability` is `unreachable` — one waiver per CVE (`match` is `split_part(key,'|',1)`), with
+the reason composed from the subsystem and the module state that left the code path unreachable, and
+each waiver written through the same `createWaiver` path, so each has its own audit row. A CVE is
+**refused** — reported per row in the result, never skipped silently — when any finding carrying it is
+`reachable` or `unknown`, because a waiver for a CVE covers every finding that carries it. Rows already
+under a live waiver are counted as `alreadyWaived` and are not re-dated. `dryRun: true` returns the
+identical plan and writes nothing; the patching page previews the counts and the review date before it
+confirms the write, and the write refuses a plan whose count no longer matches what was previewed, so
+a scan landing mid-confirmation cannot widen the decision.
+
 
 ## Nightly image scan (CI, advisory)
 

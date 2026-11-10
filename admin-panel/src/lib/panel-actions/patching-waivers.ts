@@ -34,7 +34,13 @@ export interface WaiverWriteResult {
 
 const MATCH_LIMIT = MAX_FINDING_KEY_LENGTH;
 
-function reviewDate(raw: string, now: Date): Date | null {
+/**
+ * The one review-date rule both waiver paths read.
+ *
+ * WHY exported: the single waiver and the bulk action must refuse the same dates, and a second copy
+ * of "parseable and in the future" is how the bulk path would start accepting a lapsed date.
+ */
+export function parseReviewDate(raw: string, now: Date): Date | null {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   if (parsed.getTime() <= now.getTime()) return null;
@@ -57,7 +63,7 @@ export async function createWaiver(
   }
   const reason = input.reason.trim();
   if (reason === '') return { success: false, error: 'A reason is required to waive a finding' };
-  const reviewBy = reviewDate(input.reviewBy, now);
+  const reviewBy = parseReviewDate(input.reviewBy, now);
   if (reviewBy === null) {
     return { success: false, error: 'review_by must be a future date' };
   }

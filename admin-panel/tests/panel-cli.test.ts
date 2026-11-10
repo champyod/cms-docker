@@ -312,7 +312,7 @@ describe('cms panel parsing', () => {
     [['override', 'remove', '9', '--reason', 'x'], 'override takes add or end'],
     [['task', 'reorder', '9', '--task', '1'], 'task takes attach or detach'],
     [['accounts', 'reset', '9', '--user', '1'], 'accounts takes rotate'],
-    [['waiver', 'extend', '5', '--reason', 'x'], 'waiver takes create or end'],
+    [['waiver', 'extend', '5', '--reason', 'x'], 'waiver takes create, end or bulk'],
     [['ranking', 'show'], 'unknown area "ranking"'],
   ])('refuses the verb shape %j', (argv, message) => {
     expect(() => parsePanelCommand(argv)).toThrow(message);

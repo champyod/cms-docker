@@ -6,6 +6,12 @@ import { getCurrentUser } from '@/app/actions/auth';
 import { ensurePermission } from '@/lib/permissions';
 import { createWaiver, endWaiver, type WaiverInput, type WaiverWriteResult } from '@/lib/panel-actions/patching-waivers';
 import {
+  refusedBulkWaive,
+  waiveUnreachableFindings,
+  type BulkWaiveInput,
+  type BulkWaiveResult,
+} from '@/lib/panel-actions/patching-bulk-waive';
+import {
   readPatchingPage,
   readPatchingSnapshot,
   type PatchingSnapshot,
@@ -74,5 +80,27 @@ export async function endPatchingWaiver(waiverId: number, reason: string): Promi
   if (admin === null) return { success: false, error: 'No administrator session to attribute the waiver to' };
   const result = await endWaiver(admin.id, waiverId, reason);
   if (result.success) revalidatePath(PATCHING_PAGE_PATH, 'page');
+  return result;
+}
+
+/**
+ * Waives every kernel CVE no host can reach, one waiver per CVE, from one confirmed plan.
+ *
+ * WHY the same `patching:waive` key: this is the same decision the single waiver makes, only with a
+ * wider subject, so a reader who may waive one finding may waive the set and nobody else may.
+ *
+ * WHY a dry run crosses the same gate: the plan names the CVEs and their modules before anything is
+ * written, which is exactly the information the write key protects.
+ */
+export async function bulkWaiveUnreachable(input: BulkWaiveInput): Promise<BulkWaiveResult> {
+  await ensurePermission('security:read');
+  await ensurePermission('patching:waive');
+  const admin = await getCurrentUser();
+  const dryRun = input.dryRun === true;
+  if (admin === null) {
+    return refusedBulkWaive('No administrator session to attribute the waivers to', dryRun, input.reviewBy);
+  }
+  const result = await waiveUnreachableFindings(admin.id, input);
+  if (!result.dryRun && result.waiverIds.length > 0) revalidatePath(PATCHING_PAGE_PATH, 'page');
   return result;
 }
