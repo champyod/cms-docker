@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-10T13:10:10.374Z",
+  "generatedAt": "2026-11-10T13:56:35.850Z",
   "waivers": [
     {
       "id": 2,
@@ -9,6 +9,193 @@
       "reason": "the bundled Compose plugin (5.7.0-1, newest release) ships golang.org/x/net 0.60.0; the fix is 0.62.0 and no Compose release carries it — bump COMPOSE_VERSION in admin-panel/Dockerfile and drop this waiver when one does",
       "reviewBy": "2027-01-31T00:00:00.000Z",
       "createdAt": "2026-11-10T11:49:48.714Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 3,
+      "source": "rootfs",
+      "match": "CVE-2023-53867",
+      "reason": "ceph is blacklisted and install-blocked (modprobe -c); no ceph mounts exist, so the client has no reachable surface",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.855Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 4,
+      "source": "rootfs",
+      "match": "CVE-2024-50286",
+      "reason": "ksmbd is blacklisted and install-blocked; nothing on this host serves SMB (0 listeners on 445/139)",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.887Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 5,
+      "source": "rootfs",
+      "match": "CVE-2026-63825",
+      "reason": "gcov instrumentation: distro kernels are not built with CONFIG_GCOV_KERNEL, so no counter code exists to race",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.898Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 6,
+      "source": "rootfs",
+      "match": "CVE-2026-63940",
+      "reason": "KVM/SEV path: no kvm module is loaded and this host runs no virtual machines",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.908Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 7,
+      "source": "rootfs",
+      "match": "CVE-2026-68426",
+      "reason": "xfrm path: 0 IPsec states and 0 policies configured, so no SA ever segments a packet",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.918Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 8,
+      "source": "rootfs",
+      "match": "CVE-2026-72399",
+      "reason": "enetc driver: NXP hardware absent (NIC is VMware VMXNET3), so the driver never binds",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.930Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 9,
+      "source": "rootfs",
+      "match": "CVE-2026-74345",
+      "reason": "siw is blacklisted and install-blocked; no iWARP device or workload exists",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.940Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 10,
+      "source": "rootfs",
+      "match": "CVE-2026-89530",
+      "reason": "rpcrdma is blacklisted and install-blocked; NFS-over-RDMA is not served here",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.950Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 11,
+      "source": "rootfs",
+      "match": "CVE-2026-89652",
+      "reason": "ceph is blacklisted and install-blocked; no ceph MDS is reachable from this host",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.966Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 12,
+      "source": "rootfs",
+      "match": "CVE-2026-89659",
+      "reason": "nfsd is blacklisted and install-blocked; 0 nfsd threads and no exports, so no delegation exists",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.977Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 13,
+      "source": "rootfs",
+      "match": "CVE-2026-89708",
+      "reason": "nfsd is blacklisted and install-blocked; the server never runs, so no session can be destroyed",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.987Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 14,
+      "source": "rootfs",
+      "match": "CVE-2026-90037",
+      "reason": "nfsd is blacklisted and install-blocked; no client state means no close_lru entry to reap",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:53.996Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 15,
+      "source": "rootfs",
+      "match": "CVE-2026-90162",
+      "reason": "ksmbd is blacklisted and install-blocked; no SMB2 lock batch can reach the server",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:54.009Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 16,
+      "source": "rootfs",
+      "match": "CVE-2026-93221",
+      "reason": "nfsd is blacklisted and install-blocked; the grace-drain path never executes",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:54.019Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 17,
+      "source": "rootfs",
+      "match": "CVE-2026-98365",
+      "reason": "rdma_rxe is blacklisted and install-blocked; no software RDMA device can receive a crafted RETH",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:54.028Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 18,
+      "source": "rootfs",
+      "match": "CVE-2026-98805",
+      "reason": "tipc is blacklisted and install-blocked; no TIPC node or key exists, so no nonce is produced",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:54.037Z",
+      "createdBy": 2,
+      "createdByName": "CCYod",
+      "endedAt": null
+    },
+    {
+      "id": 19,
+      "source": "rootfs",
+      "match": "CVE-2025-37777",
+      "reason": "ksmbd is blacklisted and install-blocked; no SMB connection can be torn down under a lease break",
+      "reviewBy": "2027-01-31T00:00:00.000Z",
+      "createdAt": "2026-11-10T13:55:54.048Z",
       "createdBy": 2,
       "createdByName": "CCYod",
       "endedAt": null
