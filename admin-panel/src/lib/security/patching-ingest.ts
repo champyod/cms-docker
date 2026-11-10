@@ -3,9 +3,16 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 
 import {
+  moduleStateMap,
   parseHostModuleFacts,
   type HostModuleFacts,
 } from '@/lib/security/host-module-state';
+import {
+  classifyReachability,
+  SUBSYSTEM_MODULE_NAMES,
+  type HostModuleState,
+  type Reachability,
+} from '@/lib/security/kernel-reachability';
 import {
   isPatchingSeverity,
   isPatchingSource,
@@ -247,9 +254,25 @@ export interface FeedPushResult {
   readonly hostModulesRecorded: boolean;
 }
 
+// The push's snapshot as the classifier reads it; no snapshot leaves every module question open.
+function pushModuleState(modules: HostModuleFacts | null): HostModuleState {
+  return modules === null ? {} : moduleStateMap(SUBSYSTEM_MODULE_NAMES, modules);
+}
+
+// The verdict for one row: its own title, against the module state of its own host.
+function reachabilityOf(
+  finding: FeedFindingInput,
+  pushHost: string | null,
+  state: HostModuleState,
+): Reachability {
+  const host = finding.host ?? pushHost;
+  return classifyReachability(finding.title ?? '', host === pushHost ? state : {});
+}
+
 function findingData(
   finding: FeedFindingInput,
   envelopeHost: string | null,
+  reachability: Reachability,
 ): Omit<Prisma.security_findingsUncheckedCreateInput, 'source' | 'key'> {
   return {
     kind: finding.kind,
@@ -261,10 +284,42 @@ function findingData(
     url: finding.url,
     // No mapper emits a per-finding host, so the envelope's host is the row's only provenance.
     host: finding.host ?? envelopeHost,
+    // Stored here and never re-derived on read; a row no longer reported keeps its last verdict.
+    reachability,
     detail: finding.detail === null ? Prisma.DbNull : finding.detail,
     // A re-report revives a row an earlier complete push resolved.
     resolved_at: null,
   };
+}
+
+// One statement per finding; the returned map holds the keys that have no row yet.
+async function writeFindings(
+  client: Prisma.TransactionClient,
+  push: FeedPush,
+  now: Date,
+  state: HostModuleState,
+): Promise<Map<string, Prisma.security_findingsUncheckedCreateInput>> {
+  const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
+  for (const finding of push.findings) {
+    const data = findingData(finding, push.host, reachabilityOf(finding, push.host, state));
+    const touched = await client.security_findings.updateMany({
+      where: {
+        source: push.source,
+        key: finding.key,
+        OR: [{ resolved_at: null }, { resolved_at: { lt: push.runStartedAt } }],
+      },
+      data: { ...data, last_seen: now },
+    });
+    if (touched.count > 0) continue;
+    unseen.set(finding.key, {
+      source: push.source,
+      key: finding.key,
+      ...data,
+      first_seen: now,
+      last_seen: now,
+    });
+  }
+  return unseen;
 }
 
 // Replaces this host's row: the table answers "what is this box running now", and `recorded_at` is the panel's clock.
@@ -330,27 +385,9 @@ export async function applyFeedPush(
   push: FeedPush,
   now: Date = new Date(),
 ): Promise<FeedPushResult> {
-  // One statement per finding, then one insert covering new and revived rows.
-  const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
-  for (const finding of push.findings) {
-    const data = findingData(finding, push.host);
-    const touched = await client.security_findings.updateMany({
-      where: {
-        source: push.source,
-        key: finding.key,
-        OR: [{ resolved_at: null }, { resolved_at: { lt: push.runStartedAt } }],
-      },
-      data: { ...data, last_seen: now },
-    });
-    if (touched.count > 0) continue;
-    unseen.set(finding.key, {
-      source: push.source,
-      key: finding.key,
-      ...data,
-      first_seen: now,
-      last_seen: now,
-    });
-  }
+  // The snapshot this push carries is the only module state these verdicts may use.
+  const state = pushModuleState(push.hostModules ?? null);
+  const unseen = await writeFindings(client, push, now, state);
 
   // `unseen` is keyed by finding key, so a producer that repeats a key in one push counts once.
   const created = unseen.size === 0

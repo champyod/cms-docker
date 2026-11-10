@@ -10,7 +10,6 @@ const mocks = vi.hoisted(() => ({
   groupBy: vi.fn(),
   waivers: vi.fn(),
   admins: vi.fn(),
-  hostModules: vi.fn(),
   staleness: vi.fn(),
 }));
 
@@ -23,7 +22,6 @@ vi.mock('@/lib/prisma', () => ({
       groupBy: mocks.groupBy,
     },
     security_waivers: { findMany: mocks.waivers },
-    security_host_modules: { findMany: mocks.hostModules },
     admins: { findMany: mocks.admins },
   },
 }));
@@ -40,8 +38,6 @@ import { PATCHING_PAGE_SIZE } from '@/lib/security/patching';
 
 // The admin-name lookup is not what any of these tests is about: no account to resolve.
 mocks.admins.mockResolvedValue([]);
-// No host has reported its module state here: every kernel verdict is 'unknown' unless a test says so.
-mocks.hostModules.mockResolvedValue([]);
 
 const NOW = new Date('2026-10-25T12:00:00.000Z');
 const TOTAL = 34_610;
@@ -60,6 +56,7 @@ function findingRow(overrides: Record<string, unknown> = {}): Record<string, unk
     title: 'CVE-2026-1',
     url: null,
     host: 'box-a',
+    reachability: 'unknown',
     detail: null,
     first_seen: new Date('2026-09-01T00:00:00.000Z'),
     last_seen: new Date('2026-10-24T00:00:00.000Z'),

@@ -15,7 +15,7 @@ import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/Respon
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
-import { parseKernelSubsystem, REACHABILITY_VALUES, type Reachability } from '@/lib/security/kernel-reachability';
+import { REACHABILITY_VALUES, type Reachability } from '@/lib/security/kernel-reachability';
 import {
   defaultDirection,
   isPatchingSource,
@@ -80,7 +80,7 @@ const REACHABILITY_VARIANT: Record<Reachability, 'red' | 'amber' | 'neutral'> = 
   unknown: 'amber',
 };
 
-// The badge a row shows, or a dash for a row that carries no kernel subsystem at all.
+// The badge a row shows: the stored verdict, exactly the value the reachability filter selects on.
 function ReachabilityCell({
   finding,
   copy,
@@ -88,9 +88,6 @@ function ReachabilityCell({
   finding: PatchingFinding;
   copy: PatchingCopy;
 }): React.JSX.Element {
-  if (parseKernelSubsystem(finding.title ?? '') === null) {
-    return <span className="text-xs text-muted-foreground">—</span>;
-  }
   return (
     <Badge variant={REACHABILITY_VARIANT[finding.reachability]}>
       {copy.reachability[finding.reachability]}

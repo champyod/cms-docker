@@ -103,6 +103,7 @@ model security_findings {
   title        String?  @db.VarChar
   url          String?  @db.VarChar
   host         String?  @db.VarChar   // which box reported it, for diun/rootfs
+  reachability String   @default("unknown") @db.VarChar  // reachable | unreachable | unknown, judged at ingest
   detail       Json?
   first_seen   DateTime @default(now())
   last_seen    DateTime @updatedAt
@@ -156,6 +157,10 @@ evidence wins, and the push's response counts those reports as `held`.
 - Optional `host_modules` on a rootfs push (see "Host kernel module state"). It is stored in the
   same transaction as the findings, so one push can never record CVEs without recording what the
   kernel runs.
+- The same push stores each row's `reachability`, from `classifyReachability(title, host modules)`
+  — the one place that rule is decided. The page, its filter and its badge read that column; nothing
+  re-derives it in SQL or in the browser. A re-reported row is re-judged on every scan, and a row
+  that stops being reported keeps its last verdict.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
   array ≤ 2000), 422 with the offending index, never a stack trace.
 - Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).

@@ -16,6 +16,7 @@ interface FakeFinding {
   title: string | null;
   url: string | null;
   host: string | null;
+  reachability: string;
   detail: unknown;
   first_seen: Date;
   last_seen: Date;
@@ -116,6 +117,7 @@ const mocks = vi.hoisted(() => {
           title: (datum.title as string | null) ?? null,
           url: (datum.url as string | null) ?? null,
           host: (datum.host as string | null) ?? null,
+          reachability: String(datum.reachability),
           detail: datum.detail,
           first_seen: datum.first_seen as Date,
           last_seen: datum.last_seen as Date,

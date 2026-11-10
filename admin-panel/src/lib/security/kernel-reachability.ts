@@ -61,6 +61,11 @@ export function parseKernelSubsystem(title: string): string | null {
   return match === null ? null : match[1].trim();
 }
 
+// Every module any rule names, so `moduleStateMap` answers for all of them rather than leaving them undefined.
+export const SUBSYSTEM_MODULE_NAMES: readonly string[] = [
+  ...new Set(Object.values(SUBSYSTEM_MODULES).flatMap((rule) => rule.modules)),
+];
+
 // Any loaded module makes the subsystem reachable; an unmentioned one leaves the answer open.
 function classifyModules(modules: readonly string[], host: HostModuleState): Reachability {
   let unanswered = false;

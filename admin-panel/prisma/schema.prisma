@@ -896,6 +896,8 @@ model security_findings {
   url         String?   @db.VarChar
   /// Which box reported it, for diun and rootfs.
   host        String?   @db.VarChar
+  /// reachable | unreachable | unknown — the classifier's verdict, stored once at ingest.
+  reachability String   @default("unknown") @db.VarChar
   detail      Json?
   first_seen  DateTime  @default(now())
   last_seen   DateTime  @updatedAt
