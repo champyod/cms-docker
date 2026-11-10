@@ -50,3 +50,4 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 - 009.2 is the only wiring missing: repo `AGENTS.md` covers opencode and any AGENTS.md reader,
   hub `AGENTS.md` covers AutoClaw. Command Code reads `CLAUDE.md`, so it sees the protocol only
   after 009.2 lands.
+| H2 | expired/absent session on a protected page renders a 500 (`MissingDbActorError`, digest 1743905006) instead of redirecting — Next renders page+layout in parallel, so the layout's redirect cannot stop a child query | `.worktrees/session-gate` | `fix/session-gate` (cut from `807a5bd6`) | hermes-agent | `admin-panel/src/proxy.ts`, `admin-panel/tests/proxy-session-gate.test.ts`, `coordination/BOARD.md` | test-first → gate → push | in-flight |
