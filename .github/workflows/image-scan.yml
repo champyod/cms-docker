@@ -166,16 +166,17 @@ jobs:
             // signal must not die on a channel it cannot use, and it must not be silent either: the
             // job summary already carries the whole table, so the run says here where the data is and
             // returns success. Turning Issues back on needs no code change.
-            let issuesEnabled = true;
-            try {
-              await github.rest.issues.listForRepo({ owner, repo, state: 'all', per_page: 1 });
-            } catch (error) {
-              // WHY both shapes: octokit surfaces a 410 as `status` on some paths and only on
-              // `response.status` on others, and a probe that misses it turns "Issues are off" into
-              // "the nightly scan is broken" — which is what the first scheduled run reported.
-              const status = error.status ?? error.response?.status;
-              if (status !== 410) throw error;
-              issuesEnabled = false;
+            // WHY `has_issues` and not a probe of the issues endpoint: on a repository with Issues
+            // disabled, LISTING returns 200 with an empty list and only CREATING answers 410 — so a
+            // list-based probe passes and the create below dies. Measured twice in CI. The repository
+            // setting is the fact we actually want.
+            const { data: repoInfo } = await github.rest.repos.get({ owner, repo });
+            if (!repoInfo.has_issues) {
+              core.notice(
+                'Issues are disabled in this repository, so the tracking issue was not written. ' +
+                  'The full scan table is in this run\'s job summary.',
+              );
+              return;
             }
             if (!issuesEnabled) {
               core.notice(

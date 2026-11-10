@@ -144,7 +144,7 @@ discover_refs() {
       # Our own images: built by this repo's CI, selected by ${IMG_TAG}, scanned by ci.yml.
       case "$ref" in ghcr.io/champyod/*) continue ;; esac
       key="$(ref_key "$ref")"
-      [ -n "${seen[$key]:-}" ] && continue
+      if [ -n "${seen[$key]:-}" ]; then continue; fi
       seen["$key"]=1
       printf '%s\n' "$ref"
     done < <(grep -E '^[[:space:]]*image:[[:space:]]*' "$f")
@@ -341,7 +341,7 @@ case "$mode" in
             # give up as `unknown` — a rate limit is not evidence of being current.
             retry_after="$(tr -d '\r' < "$hdr" | awk -F': ' 'tolower($1)=="retry-after"{print $2; exit}')"
             case "$retry_after" in ''|*[!0-9]*) retry_after=5 ;; esac
-            [ "$retry_after" -gt 20 ] && retry_after=20
+            if [ "$retry_after" -gt 20 ]; then retry_after=20; fi
             if [ "$try" -ge 3 ]; then
               rm -f "$hdr"; printf 'unknown\t-\trate limited (429) after %d attempts\n' "$try"; return 0
             fi
@@ -386,7 +386,6 @@ case "$mode" in
     ;;
 
   report)
-    set -x  # TEMPORARY diagnostic: the summary step exits 1 with an empty log in CI
     mkdir -p "$OUT_DIR"
     # LC_ALL=C: the default locale here is Thai Buddhist, so `%Y` would print 2569 for 2026 and
     # the issue would carry a year nobody can reconcile with the run it links to.
@@ -401,7 +400,14 @@ case "$mode" in
       refs_count="$(wc -l < "$OUT_DIR/total.tsv" | tr -d ' ')"
     fi
     fixable_total="$(cat "$OUT_DIR/fixable-total" 2>/dev/null || printf '?')"
-    state="$(cat "$OUT_DIR/state" 2>/dev/null | tr -d '[:space:]')"
+    # WHY redirection instead of `cat … | tr`: `set -o pipefail` is on, so a MISSING state file makes the
+    # pipeline exit 1 and `set -e` then ends the script — silently, because the trace is the only place the
+    # failure ever appeared. Measured in CI: the summary step died 20 ms in with an empty log, right after
+    # this assignment. Reading through a redirect cannot fail that way.
+    state=""
+    if [ -f "$OUT_DIR/state" ]; then
+      state="$(tr -d '[:space:]' < "$OUT_DIR/state")"
+    fi
     drift_drift=0; drift_unknown=0
     if [ -f "$OUT_DIR/drift.tsv" ]; then
       drift_drift="$(awk -F'\t' '$4=="drift"' "$OUT_DIR/drift.tsv" | wc -l | tr -d ' ')"
@@ -450,7 +456,7 @@ case "$mode" in
         findings)
           printf '## Fixable CRITICAL/HIGH in pinned images\n\n'
           printf '**%s fixable findings across %s pinned third-party images** — scanned %s' "$fixable_total" "$refs_count" "$at"
-          [ -n "$RUN_URL" ] && printf ' ([run log](%s))' "$RUN_URL"
+          if [ -n "$RUN_URL" ]; then printf ' ([run log](%s))' "$RUN_URL"; fi
           printf '.\n\n'
           write_table
           printf '\n### Digest drift\n\n'
@@ -468,7 +474,7 @@ case "$mode" in
           printf '> **INCOMPLETE RUN — the result below is NOT current.**\n>\n'
           printf '> The scan did not finish at %s UTC, so this issue does not carry a fresh verdict. ' "${at%Z}Z"
           printf 'The previous table was replaced on purpose rather than left standing: a stale body reads as a current one.\n'
-          [ -n "$RUN_URL" ] && printf '> Run log: %s\n' "$RUN_URL"
+          if [ -n "$RUN_URL" ]; then printf '> Run log: %s\n' "$RUN_URL"; fi
           ;;
       esac
     } > "$OUT_DIR/issue.md"
