@@ -1,6 +1,6 @@
 #!/bin/sh
-# host-modules.sh — what this host's kernel actually runs; /proc/modules is the host's set because modules are not namespaced.
-# Two lists, never a verdict: ksmbd is blacklisted AND loaded on both hosts, and loaded-wins belongs to the panel's reader.
+# host-modules.sh — what this host's kernel runs; /proc/modules is the host's set because modules are not namespaced.
+# Two lists, never a verdict: loaded wins over blacklisted, and that call belongs to the panel's reader.
 set -eu
 
 # A module directory belongs to a release, and the running release is the one that matters.
