@@ -48,11 +48,7 @@ export interface FeedPush {
    * instant it began. Anything with `last_seen` older than this was not seen by the run.
    */
   readonly runStartedAt: Date;
-  /**
-   * What this box's kernel is running, from the rootfs scan — the fact `classifyReachability`
-   * needs and no finding carries. Optional on purpose: an older scanner sends no such field and
-   * its push must still be accepted, because it simply makes no claim about the kernel.
-   */
+  // What this box's kernel runs; optional so a scanner that predates the field keeps landing findings.
   readonly hostModules?: HostModuleFacts | null;
 }
 
@@ -194,8 +190,7 @@ export function parseFeedPush(body: unknown): FeedValidation {
   if (host === undefined) return { ok: false, error: 'host must be a string or null' };
   let hostModules: HostModuleFacts | null = null;
   if (record.host_modules !== undefined && record.host_modules !== null) {
-    // WHY a named host is required: the row is keyed by host, so a module list with no box to
-    // attach it to is either dropped silently or overwrites whichever host pushed last.
+    // A named host is required: the row is keyed by host, and an unnamed list would overwrite whoever pushed last.
     if (host === null || host.trim() === '') {
       return { ok: false, error: 'host_modules requires host' };
     }
@@ -272,14 +267,7 @@ function findingData(
   };
 }
 
-/**
- * Replaces this host's recorded module state.
- *
- * WHY upsert on the host and not an insert per scan: the table answers "what is this box running
- * now", which is one row; history belongs in the findings table and in the audit trail, not here.
- * WHY the panel's clock and not the producer's: `recorded_at` says when the panel stored the state,
- * and a producer that reported a skewed time would otherwise rewrite the ordering of two hosts.
- */
+// Replaces this host's row: the table answers "what is this box running now", and `recorded_at` is the panel's clock.
 async function recordHostModules(
   client: Prisma.TransactionClient,
   host: string,
@@ -373,8 +361,7 @@ export async function applyFeedPush(
       })).count;
   const held = unseen.size - created;
 
-  // The module row rides the same transaction as the findings: a push that stored CVEs and then
-  // failed to store what the kernel runs would leave the page unable to judge any kernel finding.
+  // Same transaction as the findings, so a push cannot record CVEs without recording what the kernel runs.
   const modules = push.hostModules ?? null;
   const hostModulesRecorded = push.host !== null && modules !== null;
   if (push.host !== null && modules !== null) {

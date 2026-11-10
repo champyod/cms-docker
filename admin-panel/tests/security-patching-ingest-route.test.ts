@@ -129,9 +129,7 @@ const mocks = vi.hoisted(() => {
 
   const fakePrisma = {
     security_findings,
-    // The host module snapshot. Modelled as a map keyed by host and not as a spy on the call:
-    // "one row per host, replaced" is the contract, and a recorder would pass whether the second
-    // push replaced the row or appended a second one.
+    // Modelled as a map keyed by host, not as a spy: "replaced, not appended" is the contract.
     security_host_modules: {
       upsert: async (args: {
         where: { host: string };
@@ -396,8 +394,7 @@ describe('security feed ingest route', () => {
       blocked: ['ceph'],
     });
 
-    // A second scan replaces the row rather than adding one: the table answers "what is this box
-    // running now", so a module that has since been unloaded must disappear from it.
+    // A second scan replaces the row, so a module unloaded since must disappear from it.
     await call(
       push({
         source: 'rootfs',
@@ -412,8 +409,7 @@ describe('security feed ingest route', () => {
   });
 
   it('accepts a push from a scanner that sends no host_modules', async () => {
-    // The field is newer than the producers: an image that has not been updated yet must keep
-    // landing findings, and must not erase the module state an earlier scan recorded.
+    // The field is newer than the producers: an un-updated image must still land findings and must not erase the state.
     await call(
       push({
         source: 'rootfs',

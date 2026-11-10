@@ -18,15 +18,10 @@ if [ -z "${SECURITY_RUN_STARTED_AT:-}" ]; then
     SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 fi
 
-# host_modules: a path to one JSON object the rootfs mode wrote. Empty means this push makes no
-# claim about the host kernel, which is what every other producer and an older scanner send.
+# host_modules: a path to the rootfs mode's record; empty means this push claims nothing about the kernel.
 FEED_HOST_MODULES_FILE="${FEED_HOST_MODULES_FILE:-}"
 
-# feed_body SOURCE HOST COMPLETE MODULES_FILE — one envelope on stdout, findings on stdin.
-#
-# WHY the findings come in on stdin and not as an argument: a 400-finding set is over the kernel's
-# per-argument limit, and the failure is `jq: Argument list too long` — the batch is lost before it
-# is even measured against the body cap. Stdin has no such ceiling.
+# feed_body SOURCE HOST COMPLETE MODULES_FILE — one envelope on stdout, findings on stdin, because 400 findings on argv die with "Argument list too long".
 feed_body() {
     _mods="$4"
     if [ -z "$_mods" ] || [ ! -f "$_mods" ]; then _mods=/dev/null; fi
@@ -56,8 +51,7 @@ feed_post() {
 
     _count=$(jq 'length' "$_file")
 
-    # Validated once, so a malformed record costs the module facts and never the batch of findings
-    # that carries them: /dev/null slurps as [], which the envelope reads as "no claim".
+    # Validated once, so a malformed record costs the module facts and never the batch: /dev/null slurps as [], read as "no claim".
     _mods=""
     if [ -n "$FEED_HOST_MODULES_FILE" ] && [ -f "$FEED_HOST_MODULES_FILE" ] \
        && jq -e . "$FEED_HOST_MODULES_FILE" >/dev/null 2>&1; then
@@ -116,8 +110,7 @@ feed_post() {
         if [ "$_n" -eq "$_batches" ]; then _claim="$_complete"; else _claim=false; fi
 
         _req=$(mktemp)
-        # WHY only the last batch carries it: the record is one snapshot per run, it shares the body
-        # cap with the findings, and the last batch is the one that already speaks for the run.
+        # Only the last batch carries it: one snapshot per run, and that batch already speaks for the run.
         _batch_modules=""
         if [ "$_n" -eq "$_batches" ]; then _batch_modules="$_mods"; fi
         printf '%s' "$_chunk" | feed_body "$_source" "$(feed_host)" "$_claim" "$_batch_modules" > "$_req"

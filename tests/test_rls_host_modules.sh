@@ -1,11 +1,5 @@
 #!/usr/bin/env bash
-# tests/test_rls_host_modules.sh — who may write what a box is running.
-#
-# WHY this is its own suite and not a row in test_rls_ingest_read.sh: that suite's tables grant the
-# feed identity staff-level writes, and this one must not. A host module row is a claim about a box,
-# so a staff identity that could write it could make a reachable subsystem read as absent — which is
-# the exact suppression the reachability work exists to avoid. Read stays open to staff and to the
-# feed (Prisma's upsert needs SELECT for RETURNING); write is the feed alone.
+# tests/test_rls_host_modules.sh — read is staff+feed (RETURNING needs SELECT), write is the feed alone, and no DELETE policy exists.
 
 set -uo pipefail
 
@@ -91,9 +85,7 @@ if printf '%s\n' "$GENERATED" | grep -q "^CREATE POLICY cms_actor_delete ON publ
 else
   ok "no DELETE policy exists for $TABLE"
 fi
-# The enable block the generator writes for an uncovered table creates cms_actor_all (staff, FOR
-# ALL). The policy set that follows it in the same migration must drop it, or that policy stays
-# alongside the per-verb ones and grants staff the write the classification refuses.
+# The enable block creates a staff FOR ALL policy; if the set that follows does not drop it, Postgres ORs it in.
 if printf '%s\n' "$GENERATED" | grep -q "^DROP POLICY IF EXISTS cms_actor_all ON public\.$TABLE;"; then
   ok "the set drops the staff FOR ALL policy the enable block created"
 else

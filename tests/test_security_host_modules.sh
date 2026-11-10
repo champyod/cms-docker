@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# tests/test_security_host_modules.sh — the host module state the rootfs scan reports.
-#
-# WHY this exists: the panel can only judge a kernel CVE's reachability from two facts about the
-# box — what is loaded and what a modprobe rule refuses. The expensive mistake is a scanner that
-# "helpfully" decides between them: on both production hosts ksmbd is blacklisted AND loaded, so a
-# producer that subtracts blacklisted names from the loaded list makes a running subsystem look
-# absent, and that suppression then has no owner. This suite pins the producer to reporting both
-# lists, unmodified, and pins the envelope that carries them.
+# tests/test_security_host_modules.sh — both hosts blacklist AND load ksmbd, so a producer that "decides" hides a running subsystem; this pins two unmodified lists and the envelope that carries them.
 
 set -uo pipefail
 
@@ -246,9 +239,7 @@ fi
 
 printf '\n  a full module list\n'
 if start_server 18814; then
-  # 4000 names is the route's per-list cap: passed on the command line it would exceed the kernel's
-  # per-argument limit and the batch would be lost with `jq: Argument list too long`, so the lib
-  # hands the record to jq as a file.
+  # 4000 names is the route's cap; on argv it would die with "Argument list too long", so it goes as a file.
   jq -n '{kernel_release: "6.12.9-1-cachyos",
           loaded: [range(4000) | "mod" + (. | tostring)],
           blocked: [range(200) | "blocked" + (. | tostring)]}' > "$WORK/big-modules.json"
@@ -279,8 +270,7 @@ fi
 
 printf '\n  several batches\n'
 if start_server 18813; then
-  # A one-byte budget makes every finding its own body, which is the only way to see which batch
-  # carries the record without inventing a 900 KB fixture.
+  # A one-byte budget makes every finding its own body, which is how the carrying batch becomes visible.
   run_feed 18813 "$out" 1
   kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null
   reqs=$(find "$WORK/req-18813" -name 'req-*.json' | wc -l | tr -d ' ')

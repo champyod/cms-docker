@@ -138,9 +138,7 @@ scan_rootfs() {
         log "rootfs: $dropped finding(s) dropped — dpkg has the package removed (state rc/not-installed), not installed"
     fi
 
-    # The host kernel's module state rides this same envelope: the panel cannot judge a kernel CVE
-    # without knowing whether its subsystem is present on this box, and a second feed source would
-    # be a second place for the body shape to drift.
+    # The host's module state rides this same envelope; a fourth feed source would be a second body shape to drift.
     modules="$WORK_DIR/host-modules.json"
     if host_modules_write "$ROOTFS_DIR" "$modules"; then
         FEED_HOST_MODULES_FILE="$modules"

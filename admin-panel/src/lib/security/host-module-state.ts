@@ -14,8 +14,7 @@ const FIELD_KERNEL_RELEASE = 'kernel_release';
 const FIELD_LOADED = 'loaded';
 const FIELD_BLOCKED = 'blocked';
 
-// The three verdicts a recorded host can support. 'builtin' is never one of them: a compiled-in
-// module leaves no trace in /proc/modules, so claiming it would be a guess.
+// The three verdicts a recorded host can support; 'builtin' is not one, since /proc/modules never lists it.
 const STATE_LOADED: ModuleState = 'loaded';
 const STATE_BLACKLISTED: ModuleState = 'blacklisted';
 const STATE_ABSENT: ModuleState = 'absent';
@@ -41,8 +40,7 @@ function parseNameList(raw: unknown, field: string): NameListResult {
   }
   const names = new Set<string>();
   for (const entry of raw) {
-    // Module names are lowercase in the kernel, but the comparison that matters is exact equality
-    // with what /proc/modules prints, so case is preserved rather than normalised here.
+    // Case is preserved: the comparison that matters is exact equality with what /proc/modules prints.
     if (typeof entry !== 'string') {
       return { ok: false, error: `host_modules.${field} entries must be strings` };
     }
@@ -62,13 +60,7 @@ function parseNameList(raw: unknown, field: string): NameListResult {
   return { ok: true, names: [...names].sort() };
 }
 
-/**
- * Schema-checks the optional `host_modules` field of a push.
- *
- * WHY the field is parsed here and not in the route: this is the input boundary's own vocabulary,
- * and a producer that gets it slightly wrong must be told which key is wrong (a 422 that says
- * "invalid host_modules" costs the same scan again).
- */
+// Schema-checks the optional `host_modules` field, naming the offending key so one 422 is enough.
 export function parseHostModuleFacts(raw: unknown): HostModuleFactsValidation {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
     return { ok: false, error: 'host_modules must be an object' };
@@ -89,19 +81,7 @@ export function parseHostModuleFacts(raw: unknown): HostModuleFactsValidation {
   return { ok: true, value: { kernelRelease, loaded: loaded.names, blocked: blocked.names } };
 }
 
-/**
- * The reachability facts for a set of module names, from a recorded host state.
- *
- * WHY loaded is tested first: the production hosts both blacklist ksmbd and have it loaded, and the
- * code that is running is reachable whatever /etc/modprobe.d says. Inverting these two branches is
- * the one mistake that would mark a live subsystem unreachable, so a module in both lists reads
- * 'loaded' — see tests/host-module-state.test.ts, which fails if the order is swapped.
- *
- * WHY an unmentioned module is 'absent' and not left out of the map: the caller asked about a
- * concrete module, and "not loaded, not blocked" is exactly the answer that makes its subsystem
- * unreachable. A module the producer never mentioned at all is the caller's problem to distinguish,
- * which is what the 'unknown' verdict in kernel-reachability.ts exists for.
- */
+// Loaded is tested first: ksmbd is blacklisted AND running on both hosts, and tests/host-module-state.test.ts fails on an inversion.
 export function moduleStateMap(
   modules: readonly string[],
   state: Pick<HostModuleFacts, 'loaded' | 'blocked'>,

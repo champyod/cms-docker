@@ -9,15 +9,7 @@ import {
   type HostModuleFacts,
 } from '@/lib/security/host-module-state';
 
-/**
- * What these pin: the one direction of the mapping that must never invert.
- *
- * The scanner reports two lists and the panel decides what they mean. `ksmbd` is blacklisted AND
- * loaded on both production hosts, so a module in both lists is REACHABLE — the code is running,
- * whatever /etc/modprobe.d says. A mapper that tested `blocked` first would call it unreachable,
- * turn a live kernel CVE into a suppressed one, and still look correct on every host where the two
- * lists do not overlap. The table below is built so that swap fails on the first row.
- */
+// What these pin: ksmbd is blacklisted AND loaded on both hosts, so testing `blocked` first would suppress a live CVE.
 
 const RELEASE = '6.12.9-1-cachyos';
 
@@ -71,9 +63,7 @@ describe('moduleStateMap', () => {
   }
 
   it('never calls a running module unreachable, however it is configured', () => {
-    // Stated separately from the table because this is the assertion that catches an inverted
-    // mapper: with `blocked` tested first the verdict is 'blacklisted' and classifyReachability
-    // answers 'unreachable' for a subsystem the host is running right now.
+    // Separate from the table: with `blocked` first the verdict is 'blacklisted' and a running subsystem reads unreachable.
     const state = facts({ loaded: ['ksmbd'], blocked: ['ksmbd'] });
     expect(moduleStateMap(['ksmbd'], state).ksmbd).toBe('loaded');
     expect(classifyReachability('kernel: ksmbd: use-after-free in smb2_query_info', moduleStateMap(['ksmbd'], state)))
