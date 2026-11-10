@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 import { slideSessionCookie } from "@/lib/auth";
+import { readSessionClaims, SESSION_COOKIE_NAME } from "@/lib/session-token";
 
 const BYPASSED_PATH_FRAGMENTS = ["_next", "api", "static", "."];
 
@@ -33,6 +34,27 @@ function isBypassedPath(pathname: string): boolean {
   return BYPASSED_PATH_FRAGMENTS.some((fragment) => pathname.includes(fragment));
 }
 
+/** The locale a path is already served under, so the gate sends a Thai user to the Thai login. */
+function localeOf(pathname: string): string | undefined {
+  return SUPPORTED_LOCALES.find(
+    (locale) => pathname === `/${locale}` || pathname.startsWith(`/${locale}/`)
+  );
+}
+
+/**
+ * Whether the request carries a session the server can verify.
+ *
+ * WHY the gate lives here and not in the layout: Next renders the layout and the page in
+ * parallel, so a layout redirect cannot stop the page's own query from running. Every table is
+ * row-level secured on `cms.actor`, so that query throws (`MissingDbActorError`) instead of
+ * returning nothing — which surfaces as a 500 error page where a login redirect belongs. Gating
+ * before the render removes the whole class, for every route, present and future.
+ */
+async function hasLiveSession(request: NextRequest): Promise<boolean> {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  return token === undefined ? false : (await readSessionClaims(token)) !== null;
+}
+
 function resolveLocaleRedirect(request: NextRequest): NextResponse | undefined {
   const { pathname, search } = request.nextUrl;
   const hasLocale = SUPPORTED_LOCALES.some(
@@ -60,6 +82,15 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const localeRedirect = resolveLocaleRedirect(request);
   if (localeRedirect) {
     return localeRedirect;
+  }
+
+  // Order matters: the locale is resolved first, the gate second, so a bare path still lands on its
+  // localised URL and the gate only ever judges a path that already names its locale.
+  const locale = localeOf(pathname);
+  if (locale !== undefined && !pathname.includes(SESSION_OWNED_PATH_FRAGMENT)) {
+    if (!(await hasLiveSession(request))) {
+      return NextResponse.redirect(new URL(withBasePath(`/${locale}/auth/login`), request.url));
+    }
   }
 
   const response = NextResponse.next();

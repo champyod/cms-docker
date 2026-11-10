@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { NextRequest } from 'next/server';
 
 import { DEFAULT_LOCALE } from '@/lib/locales';
@@ -8,10 +8,25 @@ const ORIGIN = 'http://localhost:3000';
 const BETA_BASE_PATH = '/beta';
 const ROOT_BASE_PATH = '';
 
+beforeAll(() => {
+  // Pinned so the minting helper and the proxy verify with the same secret; a random fallback
+  // generated in one module instance would not verify in another.
+  vi.stubEnv('AUTH_SECRET', 'base-path-suite-secret');
+});
+
 afterEach(() => {
   vi.doUnmock('@/lib/auth');
   vi.unstubAllEnvs();
+  vi.stubEnv('AUTH_SECRET', 'base-path-suite-secret');
 });
+
+/** A session cookie the proxy accepts, for the cases whose subject is routing rather than auth. */
+async function mintSessionCookie(): Promise<string> {
+  vi.resetModules();
+  const { encrypt, SESSION_COOKIE_NAME } = await import('@/lib/session-token');
+  const token = await encrypt({ userId: '2', username: 'CCYod', iat: Math.floor(Date.now() / 1000) });
+  return `${SESSION_COOKIE_NAME}=${token}`;
+}
 
 async function loadBasePath(basePath: string): Promise<typeof import('@/lib/base-path')> {
   vi.stubEnv('NEXT_PUBLIC_BASE_PATH', basePath);
@@ -21,12 +36,18 @@ async function loadBasePath(basePath: string): Promise<typeof import('@/lib/base
 
 /** A request as Next hands middleware: the URL still carries the prefix and reports it separately
  * on `nextUrl.basePath`, which is what leaves `nextUrl.pathname` with the prefix stripped. */
-async function buildRequest(pathname: string, basePath: string): Promise<NextRequest> {
+async function buildRequest(
+  pathname: string,
+  basePath: string,
+  cookie?: string,
+): Promise<NextRequest> {
   const { NextRequest: RequestCtor } = await import('next/server');
   const url = new URL(pathname, ORIGIN);
-  return basePath === ROOT_BASE_PATH
-    ? new RequestCtor(url)
-    : new RequestCtor(url, { nextConfig: { basePath } });
+  const init = {
+    ...(basePath === ROOT_BASE_PATH ? {} : { nextConfig: { basePath } }),
+    ...(cookie === undefined ? {} : { headers: { cookie } }),
+  };
+  return new RequestCtor(url, init);
 }
 
 async function loadProxy(basePath: string): Promise<typeof import('@/proxy')> {
@@ -126,7 +147,10 @@ describe('proxy locale redirect', () => {
   it('recognises the locale it redirects to, so the prefix is not applied twice', async () => {
     const { proxy } = await loadProxy(BETA_BASE_PATH);
 
-    const response = await proxy(await buildRequest('/beta/en/dashboard', BETA_BASE_PATH));
+    // A session, because this asserts the locale logic does not re-prefix — not that an
+    // unauthenticated request is served; the proxy gate now sends that to the login.
+    const cookie = await mintSessionCookie();
+    const response = await proxy(await buildRequest('/beta/en/dashboard', BETA_BASE_PATH, cookie));
 
     expect(response.status).toBe(200);
     expect(response.headers.get('location')).toBeNull();

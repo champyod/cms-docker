@@ -15,6 +15,14 @@ const PALETTE_SOURCE = readFileSync(
   join(__dirname, '..', 'src', 'components', 'palette', 'CommandPalette.tsx'),
   'utf8',
 );
+/** A session cookie signed with the suite's pinned secret, for cases whose subject is not auth. */
+async function mintSessionCookie(): Promise<string> {
+  vi.resetModules();
+  const { encrypt, SESSION_COOKIE_NAME } = await import('@/lib/session-token');
+  const token = await encrypt({ userId: '2', username: 'CCYod', iat: Math.floor(Date.now() / 1000) });
+  return `${SESSION_COOKIE_NAME}=${token}`;
+}
+
 const NAVIGATION_SURFACES: readonly NavigationSurface[] = [
   'sidebar', 'mobile-primary', 'mobile-more', 'palette',
   'search', 'shortcuts', 'tabs', 'breadcrumbs',
@@ -231,7 +239,12 @@ describe('proxy session sliding', () => {
     const { proxy } = await loadProxy(slide);
     const { NextRequest } = await import('next/server');
 
-    const response = await proxy(new NextRequest(new URL('/en/dashboard', ORIGIN)));
+    // Sliding only means something for a request that carries a session — and the proxy now sends
+    // a session-less page request to the login before this code is reached.
+    const cookie = await mintSessionCookie();
+    const response = await proxy(
+      new NextRequest(new URL('/en/dashboard', ORIGIN), { headers: { cookie } }),
+    );
 
     expect(slide).toHaveBeenCalledTimes(1);
     expect(response.status).toBe(200);
