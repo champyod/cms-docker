@@ -30,6 +30,8 @@ WORK_DIR="${WORK_DIR:-/tmp/security-scan}"
 
 # shellcheck source=/dev/null
 . "$LIB_DIR/feed.sh"
+# shellcheck source=/dev/null
+. "$LIB_DIR/dpkg-state.sh"
 
 log() { printf '%s security-scan[%s]: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$MODE" "$*" >&2; }
 
@@ -158,6 +160,16 @@ scan_rootfs() {
     else
         printf '[]\n' > "$findings"
         complete=false
+    fi
+
+    # WHY the filter runs before the push and after the mapper: dpkg keeps a stanza for a package it
+    # removed ("deinstall ok config-files", state `rc`), trivy still reports CVEs against that name,
+    # and nothing in the report says the package is gone. Reporting it puts a fix on the operator's
+    # list that cannot be applied — the package is not installed to update — so the host's own
+    # database decides. Only on a dpkg host: `[]` makes this a no-op everywhere else.
+    dropped=$(dpkg_drop_not_installed "$findings" "$ROOTFS_DIR")
+    if [ "$dropped" -gt 0 ]; then
+        log "rootfs: $dropped finding(s) dropped — dpkg has the package removed (state rc/not-installed), not installed"
     fi
 
     log "rootfs: $(jq 'length' "$findings") findings under $ROOTFS_DIR (complete=$complete)"

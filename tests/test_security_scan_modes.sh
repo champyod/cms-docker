@@ -63,5 +63,75 @@ else
   no "--pkg-types os is gone: the rootfs scan would report application dependencies as host CVEs"
 fi
 
+printf '\nrootfs mode does not report CVEs for packages dpkg has removed\n'
+DPKG_LIB="${REPO_ROOT}/docker/security-scan/lib/dpkg-state.sh"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$WORK/rootfs/var/lib/dpkg"
+# The shapes that matter: installed, removed-with-conffiles (`rc`, the state that produced
+# findings for packages the host does not have) and unpacked-but-not-configured (files are on disk,
+# so its findings must survive).
+cat > "$WORK/rootfs/var/lib/dpkg/status" <<'STATUS'
+Package: keep-me
+Status: install ok installed
+Version: 1.0
+
+Package: removed-rc
+Status: deinstall ok config-files
+Version: 2.1
+
+Package: half-there
+Status: install ok unpacked
+Version: 3.0
+
+Package: never-installed
+Status: purge ok not-installed
+Version: 4.0
+STATUS
+
+if [[ ! -f "$DPKG_LIB" ]]; then
+  no "docker/security-scan/lib/dpkg-state.sh is missing — nothing decides which packages are installed"
+else
+  absent=$(sh -c ". '$DPKG_LIB'; dpkg_not_installed '$WORK/rootfs'")
+  if [[ "$(printf '%s' "$absent" | jq -r 'sort | join(",")')" == "never-installed,removed-rc" ]]; then
+    ok "dpkg_not_installed names exactly the rc and purged packages"
+  else
+    no "dpkg_not_installed returned '$absent' — the state map is wrong"
+  fi
+
+  # A host with no dpkg database (apk, RPM, a mount that failed) must keep every finding: an empty
+  # answer here would look like "every package was removed" and clear the source.
+  empty=$(sh -c ". '$DPKG_LIB'; dpkg_not_installed '$WORK/nothing-here'")
+  [[ "$empty" == "[]" ]] && ok "a rootfs with no dpkg database yields [] (no filters)" \
+                        || no "a rootfs with no dpkg database yielded '$empty'"
+
+  jq -n '[
+    {key: "CVE-1|keep-me|1.0", subject: "keep-me"},
+    {key: "CVE-2|removed-rc|2.1", subject: "removed-rc"},
+    {key: "CVE-3|half-there|3.0", subject: "half-there"},
+    {key: "CVE-4|never-installed|4.0", subject: "never-installed"},
+    {key: "CVE-5|no-stanza|1.0", subject: "no-stanza"}
+  ]' > "$WORK/findings.json"
+
+  dropped=$(sh -c ". '$DPKG_LIB'; dpkg_drop_not_installed '$WORK/findings.json' '$WORK/rootfs'")
+  kept=$(jq -r '[.[].subject] | sort | join(",")' "$WORK/findings.json")
+  [[ "$dropped" == "2" ]] && ok "two findings for removed packages are dropped" \
+                          || no "the filter dropped $dropped findings, expected 2"
+  [[ "$kept" == "half-there,keep-me,no-stanza" ]] \
+    && ok "installed, unpacked and unknown packages keep their findings" \
+    || no "the filter left '$kept' — it removed more than dpkg said was gone"
+
+  if grep -v '^[[:space:]]*#' "$SCAN" | grep -q 'dpkg_drop_not_installed "\$findings" "\$ROOTFS_DIR"'; then
+    ok "rootfs mode applies the filter to the findings it is about to push"
+  else
+    no "scan.sh does not filter removed packages — their CVEs reach the panel"
+  fi
+  if grep -q 'dpkg-state.sh' "${REPO_ROOT}/docker/security-scan/Dockerfile"; then
+    ok "the image copies dpkg-state.sh to the lib directory scan.sh sources"
+  else
+    no "dpkg-state.sh is not in the image — the source line would fail at runtime"
+  fi
+fi
+
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
