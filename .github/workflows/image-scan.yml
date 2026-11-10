@@ -178,13 +178,6 @@ jobs:
               );
               return;
             }
-            if (!issuesEnabled) {
-              core.notice(
-                'Issues are disabled in this repository, so the tracking issue was not written. ' +
-                  'The full scan table is in this run\'s job summary.',
-              );
-              return;
-            }
 
             const issues = await github.paginate(github.rest.issues.listForRepo, {
               owner,
