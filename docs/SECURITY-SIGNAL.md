@@ -145,7 +145,35 @@ each produce `unknown` with the reason, and `unknown` pushes.
 | `security-signal-run.test.ts` | the tick: deliver-then-record, retry when delivery is refused (nothing recorded), unreadable → no send, the 15-minute read-failure floor |
 | `security-signal-staleness.test.ts` | the parser (current / stale / missing channel / dead publisher / malformed), the HTTP paths (unreachable, 503, one request for the five series), and the `BACKUP_STALE_HOURS` knob |
 | `security-signal-card.test.tsx` | the card's counts, the named items, the detail link, the all-clear sentence, and the "does not claim healthy" note |
+| `security-scan-announce.test.ts` | the poller: one message for a two-source run, a waived CVE never named, counts equal to the page's unwaived numbers, the quiet window, the newest run superseding an older one, a re-push staying silent while a new run speaks, and a refused delivery staying retryable |
+| `security-scan-report.test.ts` | the L1–L5 layout as text: title and colour, the standing lead, the named rows and their remainder, the fenced counts block, the footer, the clean-run short form, the run key without a source |
 
 The run proof (scratch Postgres with the real RLS policies, a stub scrape target, a stub webhook, the compiled
 entry point started the way the container starts it) is in the lane report: one delivered digest, a second
 process quiet because the record survived, and the fail-closed message when the scrape target disappeared.
+
+## 7. The per-run scan announcement
+
+Every finished scan of a box also speaks, once, on the same channel — a heartbeat that says the scanner ran.
+It is **composed by the poller**, never by the ingest:
+
+- **Why not the ingest.** A push must not wait on a webhook, and a 13 k-row rootfs scan arrives as ~50
+  batches over minutes, so no single request can see the run's numbers. The ingest only records the run each
+  batch belongs to (`run_started_at` in the `security.findings.ingest` audit row); the poller reads that
+  ledger back.
+- **When it speaks.** On its 60 s tick the poller takes the **newest run per box** (`run_started_at`) and
+  waits until that run has been silent for `SCAN_QUIET_WINDOW_MS` (120 s). A newer run supersedes an older
+  one that never spoke, so a message never describes a list the next run already replaced.
+- **One message per run, whatever the sources.** The key is `host|run_started_at` — never the producer —
+  because one run pushes `osv` and `rootfs` separately. `audit_log` (`security.scan.notified`) is the
+  dedupe ledger, written only after Discord accepted the message.
+- **Every count is unwaived.** The numbers come from the read path (`patching-read-scan.ts`) through the same
+  waiver predicate as the page: `unwaived = total - rows a live waiver covers`. An expired waiver suppresses
+  nothing and counts as unwaived; a covered CVE is never named in the message.
+
+The layout, in one embed: the title is `<n> unwaived CRITICAL · <box>` (red) or `nothing unwaived · <box>`
+(green); the first description line is `**<standing> standing** · <new> new · <n> need you`; at most five
+unwaived CRITICALs are named (reachable first, `**CVE** · subject · age`) with `…and N more`; the counts sit
+in a fenced block (`HIGH`/`MED`/`LOW`/`UNK`, then `waived N · next review <date>`); the embed footer carries
+the run's clock, its duration, the judged split and `/security/patching`. A clean run keeps the skeleton and
+drops L3.
