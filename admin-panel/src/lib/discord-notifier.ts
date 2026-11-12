@@ -3,6 +3,15 @@ export function isDiscordWebhookConfigured(): boolean {
     return Boolean(webhookUrl && webhookUrl.trim().length > 0);
 }
 
+/**
+ * How long a POST may hold its caller.
+ *
+ * WHY a timeout at all: callers on a request path (the security feed's ingest) await this, and a
+ * webhook that accepts the connection and never answers would otherwise keep the request open until
+ * the platform's own timeout. Discord answers in well under a second; eight is generous.
+ */
+const DISCORD_TIMEOUT_MS = 8_000;
+
 export async function getDiscordWebhookStatus(): Promise<{ configured: boolean }> {
     return { configured: isDiscordWebhookConfigured() };
 }
@@ -40,7 +49,8 @@ export async function logToDiscord(title: string, message: string, color: number
         const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(DISCORD_TIMEOUT_MS)
         });
         if (!response.ok) {
             console.error(`Failed to send discord log: HTTP ${String(response.status)}`);

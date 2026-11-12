@@ -5,6 +5,7 @@ import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { prisma } from '@/lib/prisma';
 import { resolveRootActorId } from '@/lib/panel-actions/root-actor';
 import { applyFeedPush } from '@/lib/security/patching-ingest';
+import { announceCompletedScan } from '@/lib/security/scan-notify';
 import {
   consumeFeedRateLimit,
   feedTokenMatches,
@@ -124,6 +125,18 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
       },
       result: 'success',
     });
+    // Every completed run speaks, once. WHY after the audit row and inside its own guard: the push
+    // is already stored, and a webhook that is slow or broken must not turn a stored scan into a 500.
+    if (push.complete) {
+      try {
+        await announceCompletedScan(
+          { source: push.source, host: push.host, runStartedAt: push.runStartedAt },
+          actorId,
+        );
+      } catch (error) {
+        console.error('security scan announcement failed:', error);
+      }
+    }
     return json(
       {
         success: true,

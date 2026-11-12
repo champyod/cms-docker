@@ -34,6 +34,8 @@ import {
 } from '@/lib/security/signal';
 import { isReachability, type Reachability } from '@/lib/security/kernel-reachability';
 import { readStalenessSnapshotCached } from '@/lib/security/staleness';
+import { SCAN_CRITICAL_LINES, type ScanCriticalRow, type ScanRunFacts } from '@/lib/security/scan-report';
+import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 import {
   WAIVER_EXPORT_VERSION,
   type WaiverExport,
@@ -96,32 +98,12 @@ function unratedWhere(
 }
 
 /**
- * The rows a waiver covers, as an SQL predicate, or null when no waiver could cover anything.
+ * Rows no live waiver touches at all: exactly the rows `waiverStateFor` reports as `none`.
  *
- * WHY it mirrors `waiverCovers` branch for branch: this predicate only narrows the CANDIDATE set in
- * the database, and every row it returns then gets its state from `waiverStateFor` — the same
- * function the page uses. A predicate that is too broad (Postgres `LIKE` treats `_` and `%` inside
- * the match string as wildcards, and Prisma does not escape them) costs rows and changes no answer;
- * one that is too narrow would quietly hide a covered row from a count. So all three branches of
- * `waiverCovers` are here — the key equals the match, the key contains it, the title contains it —
- * and the source has to agree.
+ * WHY the predicate itself lives in `waiver-cover.ts`: the scan announcement counts waived rows with
+ * it too, and a second copy of the three branches `waiverCovers` implements is how two surfaces
+ * would start disagreeing about which rows a decision covers.
  */
-function waiverCoverWhere(
-  waivers: readonly WaiverRow[],
-  keep: (waiver: WaiverRow) => boolean = () => true,
-): Prisma.security_findingsWhereInput | null {
-  const clauses = waivers.filter(keep).map((waiver) => ({
-    source: waiver.source,
-    OR: [
-      { key: waiver.match },
-      { key: { contains: waiver.match } },
-      { title: { contains: waiver.match } },
-    ],
-  }));
-  return clauses.length === 0 ? null : { OR: clauses };
-}
-
-/** Rows no live waiver touches at all: exactly the rows `waiverStateFor` reports as `none`. */
 function untouchedWhere(waivers: readonly WaiverRow[]): Prisma.security_findingsWhereInput {
   const cover = waiverCoverWhere(waivers);
   return cover === null ? {} : { NOT: cover };
@@ -345,11 +327,16 @@ interface FeedTotals {
  *
  * WHY one query and not two: the same rows answer both questions, and scanning the feed twice to
  * count it twice is the kind of cost this refactor exists to remove.
+ *
+ * WHY the predicate is a parameter: a completed scan reports numbers about the rows its own push
+ * settled, and those must come from the same aggregation as the page's — never a second count.
  */
-async function readFeedTotals(): Promise<FeedTotals> {
+async function readFeedTotals(
+  where: Prisma.security_findingsWhereInput = unresolvedWhere(),
+): Promise<FeedTotals> {
   const rows = await prisma.security_findings.groupBy({
     by: ['source', 'severity'],
-    where: unresolvedWhere(),
+    where,
     _count: { _all: true },
   });
   const bySeverity: Record<PatchingSeverity, number> = {
@@ -408,10 +395,11 @@ async function readWorstFinding(
 async function readWaivedFindings(
   waivers: readonly WaiverRow[],
   now: Date,
+  scope: readonly Prisma.security_findingsWhereInput[] = [],
 ): Promise<PatchingFinding[]> {
   const cover = waiverCoverWhere(waivers);
   if (cover === null) return [];
-  const where = unresolvedWhere(cover);
+  const where = unresolvedWhere({ AND: [...scope, cover] });
   const total = await prisma.security_findings.count({ where });
   if (total === 0) return [];
   const rows = await prisma.security_findings.findMany({
@@ -608,4 +596,81 @@ export async function readBulkWaiveFeed(source: string): Promise<BulkWaiveFeed> 
     }),
   ]);
   return { rows, waivers };
+}
+
+/** The slice of the feed a completed scan's message describes: who spoke, for which box, and when. */
+export interface ScanScope {
+  readonly source: string;
+  readonly host: string | null;
+  readonly runStartedAt: Date;
+}
+
+/**
+ * The rows a completed push settled, as filters.
+ *
+ * WHY the host clause mirrors the ingest's resolution predicate: a complete push settles its own
+ * host's rows AND the rows written before the envelope carried a host. Counting only
+ * `host = box-a` would report a smaller feed than the one the run just closed.
+ */
+function scanScopeFilters(scan: ScanScope): Prisma.security_findingsWhereInput[] {
+  const filters: Prisma.security_findingsWhereInput[] = [{ source: scan.source }];
+  if (scan.host !== null) filters.push({ OR: [{ host: scan.host }, { host: null }] });
+  return filters;
+}
+
+/** The CRITICAL rows a message can name, oldest first, each with the verdict the page would give. */
+async function readScanCriticals(
+  scan: ScanScope,
+  waivers: readonly WaiverRow[],
+  now: Date,
+): Promise<ScanCriticalRow[]> {
+  const rows = await prisma.security_findings.findMany({
+    where: unresolvedWhere({ AND: [...scanScopeFilters(scan), { severity: 'CRITICAL' }] }),
+    orderBy: [{ first_seen: 'asc' }, { id: 'asc' }],
+    take: SCAN_CRITICAL_LINES,
+  });
+  return mapPatchingFindings(rows, waivers, now).map((finding) => ({
+    key: finding.key,
+    subject: finding.subject,
+    waiver: finding.waiver.status,
+    reviewBy: finding.waiver.status === 'none' ? null : finding.waiver.reviewBy,
+  }));
+}
+
+/**
+ * One completed run, as its announcement reads it.
+ *
+ * WHY it lives here and not in the announcement module: this is the only module allowed to query
+ * the two tables (see the contract test), so the message asks the read path instead of opening a
+ * second definition of "unresolved" and "live waiver". Every number is scoped to the push, because
+ * the header names one host — a whole-feed count would be a different claim under the same words.
+ *
+ * WHY `added` compares against the run's start: `first_seen` is stamped once, by the panel, on
+ * insert, so the rows this run created are the ones first seen after it began.
+ */
+export async function readCompletedScanFacts(scan: ScanScope, now: Date = new Date()): Promise<ScanRunFacts> {
+  const waivers = await liveWaiverRows();
+  const scope = unresolvedWhere({ AND: scanScopeFilters(scan) });
+  const [totals, added, criticalRows, waivedRows] = await Promise.all([
+    readFeedTotals(scope),
+    prisma.security_findings.count({ where: { ...scope, first_seen: { gte: scan.runStartedAt } } }),
+    readScanCriticals(scan, waivers, now),
+    readWaivedFindings(waivers, now, scanScopeFilters(scan)),
+  ]);
+  return {
+    source: scan.source,
+    host: scan.host,
+    runStartedAt: scan.runStartedAt,
+    total: PATCHING_SEVERITIES.reduce((sum, severity) => sum + totals.bySeverity[severity], 0) + totals.unrated,
+    added,
+    criticals: totals.bySeverity.CRITICAL,
+    counts: {
+      high: totals.bySeverity.HIGH,
+      medium: totals.bySeverity.MEDIUM,
+      low: totals.bySeverity.LOW,
+      unrated: totals.unrated,
+    },
+    waived: waivedRows.filter((finding) => finding.waiver.status === 'active').length,
+    criticalRows,
+  };
 }
