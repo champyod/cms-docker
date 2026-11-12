@@ -107,3 +107,4 @@ ranking-web/tests/fixtures/parity/captured/*/
 # scripts/__image_scan.sh's working directory: trivy reports, the drift table and the issue body it
 # renders. Run output, not source — the nightly workflow writes it under $RUNNER_TEMP.
 /.image-scan/
+trivy-image.txt

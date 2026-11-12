@@ -565,6 +565,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name != 'workflow_dispatch'
+    # A red scan is only useful if the author can read why without opening the job: the comment
+    # below needs this one write, and nothing here needs contents beyond read.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -594,6 +599,49 @@ jobs:
           trivyignores: .trivyignore
           vuln-type: os,library
           exit-code: "1"
+          # The table is written before the action exits, so the comment step can quote what failed
+          # instead of pointing at a log.
+          format: table
+          output: trivy-image.txt
+
+      # WHY a comment: a failing check with no explanation sends the author into the job log to
+      # reconstruct what broke. Same facts, on the surface they are already looking at. Upserted by
+      # marker so a re-run replaces last night's numbers instead of stacking comments.
+      - name: Comment the finding on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          REPORT: trivy-image.txt
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- cms-container-scan -->';
+            const report = fs.existsSync(process.env.REPORT)
+              ? fs.readFileSync(process.env.REPORT, 'utf8').trim()
+              : '';
+            const head = [
+              marker,
+              '### Container scan: fixable CRITICAL/HIGH in the image this PR ships',
+              '',
+              'Fix or waive before merging — the waivers come from the panel table, so',
+              '`security/waivers.json` is the only place a suppression is written.',
+              '',
+            ].join('\n');
+            const trimmed = report.length > 55000
+              ? report.slice(0, 55000) + '\n… (trimmed; see the job log for the rest)'
+              : report;
+            const body = trimmed
+              ? `${head}\`\`\`\n${trimmed}\n\`\`\``
+              : `${head}_No table was produced — open the job log; the scan itself may have failed._`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.data.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
 
       # CRITICAL only: hadolint (lint job) already owns style-level Dockerfile
       # findings, and misconfig severity mappings are the noisiest part of
