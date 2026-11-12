@@ -5,7 +5,6 @@ import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { prisma } from '@/lib/prisma';
 import { resolveRootActorId } from '@/lib/panel-actions/root-actor';
 import { applyFeedPush } from '@/lib/security/patching-ingest';
-import { announceCompletedScan } from '@/lib/security/scan-notify';
 import {
   consumeFeedRateLimit,
   feedTokenMatches,
@@ -114,6 +113,8 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
         actor: push.source,
         source: push.source,
         host: push.host,
+        // The run this batch belongs to: the poller keys one message per (host, run_started_at).
+        run_started_at: push.runStartedAt.toISOString(),
         received: result.received,
         resolved: result.resolved,
         // Reported, not silent: a re-scan that raced a newer one needs to read back why its
@@ -125,18 +126,8 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
       },
       result: 'success',
     });
-    // Every completed run speaks, once. WHY after the audit row and inside its own guard: the push
-    // is already stored, and a webhook that is slow or broken must not turn a stored scan into a 500.
-    if (push.complete) {
-      try {
-        await announceCompletedScan(
-          { source: push.source, host: push.host, runStartedAt: push.runStartedAt },
-          actorId,
-        );
-      } catch (error) {
-        console.error('security scan announcement failed:', error);
-      }
-    }
+    // Nothing is sent from here: the message is composed by the poller once this run falls quiet,
+    // so a slow or refused webhook cannot hold a producer's push open.
     return json(
       {
         success: true,

@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 import { PATCHING_SEVERITIES, PATCHING_SOURCES, type PatchingQuery } from '@/lib/security/patching';
-import type { ScanScope, WaiverRow } from '@/lib/security/patching-read-types';
+import type { WaiverRow } from '@/lib/security/patching-read-types';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 
 /** Unresolved rows the contract can place: ingest resolves instead of deleting, so history survives. */
@@ -60,9 +60,7 @@ export function pageOrderBy(
   return [primaryOrderBy(query), { id: 'asc' }];
 }
 
-/** The filters one finished push scopes to, host-null rows included as the ingest resolves them. */
-export function scanScopeFilters(scan: ScanScope): Prisma.security_findingsWhereInput[] {
-  const filters: Prisma.security_findingsWhereInput[] = [{ source: scan.source }];
-  if (scan.host !== null) filters.push({ OR: [{ host: scan.host }, { host: null }] });
-  return filters;
+/** The rows one run speaks for: the box's own rows, or the un-hosted ones when no box was named. */
+export function runScopeWhere(host: string | null): Prisma.security_findingsWhereInput {
+  return unresolvedWhere({ host });
 }

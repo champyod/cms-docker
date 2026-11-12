@@ -2,6 +2,7 @@ import { logToDiscord } from '@/lib/discord-notifier';
 import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { prisma } from '@/lib/prisma';
 import { readPatchingSnapshot } from '@/lib/security/patching-read';
+import { announceFinishedScans } from '@/lib/security/scan-notify';
 import { readLastPage, recordPage } from '@/lib/security/signal-ledger';
 import {
   runSignalTick,
@@ -69,6 +70,18 @@ const sinks: SignalSinks = {
   log: (line) => console.log(line),
 };
 
+// The scan announcements of this tick, in their own guard: a refused webhook must not silence the digest.
+async function announceScans(now: Date): Promise<void> {
+  try {
+    const results = await announceFinishedScans(now);
+    for (const result of results) {
+      if (result.status !== 'already-sent') console.log(`security scan ${result.key}: ${result.status}`);
+    }
+  } catch (error) {
+    console.error('security scan announcement tick failed:', error);
+  }
+}
+
 /**
  * One tick, exposed so an operator (or a test) can drive a single run without a loop.
  *
@@ -77,6 +90,7 @@ const sinks: SignalSinks = {
  * outage would page on every tick, which is the fastest way to make the channel worthless.
  */
 export async function runSecuritySignalTick(now: Date = new Date()): Promise<SignalOutcome> {
+  await announceScans(now);
   const outcome = await runSignalTick(sinks);
   if (outcome.status !== 'unreadable') return outcome;
   if (Date.now() - STARTED_AT < READ_FAILURE_GRACE_MS) return outcome;

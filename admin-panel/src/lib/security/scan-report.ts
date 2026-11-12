@@ -1,138 +1,180 @@
-/**
- * What one completed scan says on the channel.
- *
- * WHY every completed run speaks, changed or not: a scan is a promise that something was checked.
- * The digest in `signal.ts` is a state channel — it stays quiet while nothing changes — and that
- * silence is indistinguishable from a scanner that stopped running. A per-run message is the
- * heartbeat: "this ran at 03:00, it saw 42 things, 3 of them were new".
- *
- * WHY the CRITICAL list is bounded and the rest is counted: a scan can report hundreds of rows, and
- * Discord drops anything over 2000 characters. Ten named CRITICALs plus an honest "…and N more"
- * keeps the message inside the cap without ever cutting a line in half — a truncated CVE id reads
- * as a different CVE.
- */
+// What one finished scan says on the channel: one embed, five levels, composed from facts only.
+// WHY facts and not a store read: the poller counts first and renders second, so the layout is
+// testable without a database and cannot disagree with the numbers it prints.
 
 /** Discord's cap on an embed description; the builder trims, so the receiver never has to. */
 export const DISCORD_BODY_LIMIT = 2000;
-/** CRITICAL rows named one by one; the rest become the counted remainder line. */
-export const SCAN_CRITICAL_LINES = 10;
-const SUBJECT_LIMIT = 110;
+/** L3 names this many rows; the rest become one counted remainder line. */
+export const SCAN_CRITICAL_LINES = 5;
+/** Where the message sends a reader who wants the rows: the page that owns them. */
+export const PATCHING_PATH = '/security/patching';
+
+const SUBJECT_LIMIT = 90;
 const ID_LIMIT = 40;
+const FOOTER_LIMIT = 400;
 
-/** Red when something unwaived is critical, blue when the run is only a report. */
+/** Red bar while something unwaived is critical; green bar when the box has nothing unwaived. */
 export const SCAN_ALERT_COLOR = 15_158_332;
-export const SCAN_REPORT_COLOR = 3_447_003;
+export const SCAN_REPORT_COLOR = 5_763_719;
 
-/** One CRITICAL as the message names it: what it is, and whether a live decision covers it. */
-export interface ScanCriticalRow {
-  readonly key: string;
-  readonly subject: string;
-  readonly waiver: 'active' | 'expired' | 'none';
-  readonly reviewBy: string | null;
+export type ScanReachability = 'reachable' | 'unreachable' | 'unknown';
+
+/** One run as the ledger identifies it: the box, the instant the run began, and its last batch. */
+export interface ScanRun {
+  readonly host: string | null;
+  readonly runStartedAt: Date;
+  readonly lastPushAt: Date;
 }
 
-/** The counts the tail line prints. `unrated` is every row no severity in the contract covers. */
-export interface ScanCounts {
+/** Unwaived counts: a live waiver takes its row out, an expired one leaves it in. */
+export interface ScanRunCounts {
   readonly high: number;
   readonly medium: number;
   readonly low: number;
+  /** Rows no contract severity ranks: UNKNOWN and the producers that report none. */
   readonly unrated: number;
 }
 
-/** A completed run, as the message reads it. Numbers are the whole scope's, not the message's. */
+/** One unwaived CRITICAL the message names, with the two facts that order it. */
+export interface ScanCriticalRow {
+  readonly key: string;
+  readonly subject: string;
+  readonly reachability: ScanReachability;
+  readonly ageDays: number;
+}
+
+/** The classifier's verdict over the run's rows: the L5 split. */
+export interface ScanJudged {
+  readonly reachable: number;
+  readonly unreachable: number;
+  readonly unknown: number;
+}
+
+/** A finished run as the message reads it; every number is unwaived, over the box's whole list. */
 export interface ScanRunFacts {
-  readonly source: string;
   readonly host: string | null;
   readonly runStartedAt: Date;
-  readonly total: number;
+  readonly lastPushAt: Date;
+  /** Unwaived open rows: the standing list, which leads because a finding found again is still there. */
+  readonly standing: number;
+  /** Rows first seen at or after the run's start: the delta, never the total. */
   readonly added: number;
+  /** Unwaived CRITICALs: the number the title, the bar and the ping all follow. */
   readonly criticals: number;
-  readonly counts: ScanCounts;
+  readonly counts: ScanRunCounts;
+  /** Rows a live waiver covers, in the same scope. */
   readonly waived: number;
-  /** At most `SCAN_CRITICAL_LINES` rows, so the pure builder never depends on the feed's size. */
+  /** The soonest review date among those waivers, as `YYYY-MM-DD`, or null when none covers a row. */
+  readonly nextReview: string | null;
+  /** At most {@link SCAN_CRITICAL_LINES} rows, reachable first, so the builder stays bounded. */
   readonly criticalRows: readonly ScanCriticalRow[];
+  readonly judged: ScanJudged;
 }
 
 export interface ScanAnnouncement {
   readonly title: string;
   readonly body: string;
+  /** L5: the run's clock, its duration, the judged split and the page — the embed's subtext. */
+  readonly footer: string;
   readonly mention: boolean;
   readonly color: number;
 }
 
-/**
- * The identity of one run, and the dedupe key of its message.
- *
- * WHY the run's own start and not its content: a re-push of the same run must be silent, and its
- * findings may well be identical — a content key could not tell "the same run twice" from "a second
- * run that saw the same thing", and only the second one deserves a message.
- */
-export function scanRunKey(source: string, host: string | null, runStartedAt: Date): string {
-  return `${source}|${host ?? '-'}|${runStartedAt.toISOString()}`;
+/** One run's identity, and its message's dedupe key: box and start, never the source. */
+// WHY no source: one run pushes osv and rootfs separately, and a key naming the source split it in two.
+export function scanRunKey(host: string | null, runStartedAt: Date): string {
+  return `${host ?? '-'}|${runStartedAt.toISOString()}`;
 }
 
 function clip(text: string, limit: number): string {
   return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`;
 }
 
-/** The run's clock, in UTC and to the minute: the panel renders local time, Discord does not. */
+/** Thousands separators, so 13357 reads as a number and not as a serial. */
+function grouped(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+/** The run's clock, in UTC to the minute: the panel renders local time, Discord does not. */
 function runTime(at: Date): string {
   return `${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-function waiverNote(row: ScanCriticalRow): string {
-  const due = row.reviewBy === null ? 'unknown' : row.reviewBy.slice(0, 10);
-  if (row.waiver === 'active') return `waived until ${due}`;
-  // An expired waiver suppresses nothing, so saying only "waived" would be a false reassurance.
-  if (row.waiver === 'expired') return `waiver expired ${due}`;
-  return 'no waiver';
+/** How long the run took, from its start to its last batch: a run that crawled is a fact. */
+function duration(from: Date, to: Date): string {
+  const seconds = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 1) return `${String(seconds)}s`;
+  if (minutes < 60) return `${String(minutes)}m${String(seconds % 60).padStart(2, '0')}s`;
+  return `${String(Math.floor(minutes / 60))}h${String(minutes % 60).padStart(2, '0')}m`;
 }
 
-/** The CVE the row is about: producers prefix the key with it, and the subject alone hides it. */
-function criticalLine(row: ScanCriticalRow): string {
+function ageLabel(days: number): string {
+  return days <= 0 ? 'today' : `${String(days)}d`;
+}
+
+function where(facts: ScanRunFacts): string {
+  return facts.host ?? 'all hosts';
+}
+
+/** L1: the number that decides whether this message is an alarm. */
+function titleLine(facts: ScanRunFacts): string {
+  if (facts.criticals === 0) return `nothing unwaived · ${where(facts)}`;
+  return `${String(facts.criticals)} unwaived CRITICAL · ${where(facts)}`;
+}
+
+/** L2: standing leads, new is the delta, and the last term is what a human has to do. */
+function leadLine(facts: ScanRunFacts): string {
+  const need =
+    facts.criticals === 0
+      ? 'nothing needs you'
+      : `${String(facts.criticals)} need${facts.criticals === 1 ? 's' : ''} you`;
+  return `**${grouped(facts.standing)} standing** · ${grouped(facts.added)} new · ${need}`;
+}
+
+/** L3: the CVE leads because it is the string an operator pastes into a tracker. */
+function namedLine(row: ScanCriticalRow): string {
   const id = clip(row.key.split('|')[0], ID_LIMIT);
-  const name = row.subject.includes(id) ? row.subject : `${row.subject} (${id})`;
-  return `• ${clip(name, SUBJECT_LIMIT)} — ${waiverNote(row)}`;
+  return `**${id}** · ${clip(row.subject, SUBJECT_LIMIT)} · ${ageLabel(row.ageDays)}`;
 }
 
-function headerLine(facts: ScanRunFacts): string {
-  const where = facts.host ?? facts.source;
-  return `${where} · ${runTime(facts.runStartedAt)} · ${String(facts.total)} findings, ${String(facts.added)} new this run`;
-}
-
-function tailLine(facts: ScanRunFacts): string {
-  const parts = [
-    `HIGH ${String(facts.counts.high)}`,
-    `MEDIUM ${String(facts.counts.medium)}`,
-    `LOW ${String(facts.counts.low)}`,
+/** L4: a fenced block, because prose numbers in a proportional font do not line up. */
+function countsBlock(facts: ScanRunFacts): string {
+  const rows: [string, number][] = [
+    ['HIGH', facts.counts.high],
+    ['MED', facts.counts.medium],
+    ['LOW', facts.counts.low],
   ];
-  if (facts.counts.unrated > 0) parts.push(`UNKNOWN ${String(facts.counts.unrated)}`);
-  parts.push(`${String(facts.waived)} waived`);
-  return parts.join(' · ');
+  if (facts.counts.unrated > 0) rows.push(['UNK', facts.counts.unrated]);
+  const width = Math.max(...rows.map(([, count]) => grouped(count).length));
+  const lines = rows.map(([label, count]) => `${label.padEnd(5)}${grouped(count).padStart(width)}`);
+  const review = facts.nextReview === null ? '' : ` · next review ${facts.nextReview}`;
+  lines.push(`waived ${grouped(facts.waived)}${review}`);
+  return ['```', ...lines, '```'].join('\n');
 }
 
-/**
- * The body for a given number of named CRITICALs.
- *
- * WHY `shown` is a parameter: the trim loop and the final render have to agree exactly, and a
- * render that decided its own length would let a re-render after trimming disagree with itself.
- */
+/** L5: when it ran, how long it took, what the classifier could judge, and where to look. */
+function footerLine(facts: ScanRunFacts): string {
+  const split = [
+    `${grouped(facts.judged.reachable)} reachable`,
+    `${grouped(facts.judged.unreachable)} unreachable`,
+    `${grouped(facts.judged.unknown)} unknown`,
+  ].join(' · ');
+  const line = `run ${runTime(facts.runStartedAt)} · ${duration(facts.runStartedAt, facts.lastPushAt)} · ${split} · ${PATCHING_PATH}`;
+  return clip(line, FOOTER_LIMIT);
+}
+
+/** The body for a given number of named rows; `shown` is explicit so the trim and the render agree. */
 function renderBody(facts: ScanRunFacts, shown: number): string {
-  const lines = [headerLine(facts)];
-  for (const row of facts.criticalRows.slice(0, shown)) lines.push(criticalLine(row));
+  const lines = [leadLine(facts)];
+  for (const row of facts.criticalRows.slice(0, shown)) lines.push(namedLine(row));
   const hidden = facts.criticals - shown;
-  if (hidden > 0) lines.push(`• …and ${String(hidden)} more CRITICAL on the patching page`);
-  else if (facts.criticals === 0) lines.push('• No CRITICAL findings.');
-  lines.push(tailLine(facts));
+  if (hidden > 0) lines.push(`…and ${String(hidden)} more`);
+  lines.push(countsBlock(facts));
   return lines.join('\n');
 }
 
-/** Whether the message reads as an alert: any named CRITICAL nobody has decided about. */
-function isAlert(facts: ScanRunFacts, shown: number): boolean {
-  return facts.criticalRows.slice(0, shown).some((row) => row.waiver !== 'active');
-}
-
-/** Builds the one message a completed run sends, trimmed to what Discord will accept. */
+/** Builds the one message a finished run sends, trimmed to what Discord will accept. */
 export function buildScanAnnouncement(facts: ScanRunFacts): ScanAnnouncement {
   let shown = Math.min(facts.criticalRows.length, SCAN_CRITICAL_LINES);
   let body = renderBody(facts, shown);
@@ -140,10 +182,11 @@ export function buildScanAnnouncement(facts: ScanRunFacts): ScanAnnouncement {
     shown -= 1;
     body = renderBody(facts, shown);
   }
-  const alert = facts.criticals > 0 && isAlert(facts, shown);
+  const alert = facts.criticals > 0;
   return {
-    title: `Security scan complete: ${facts.host ?? facts.source}`,
+    title: titleLine(facts),
     body,
+    footer: footerLine(facts),
     mention: alert,
     color: alert ? SCAN_ALERT_COLOR : SCAN_REPORT_COLOR,
   };

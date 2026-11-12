@@ -37,10 +37,3 @@ export interface BulkWaiveFeed {
   readonly rows: readonly BulkWaiveCandidate[];
   readonly waivers: readonly BulkWaiveWaiver[];
 }
-
-/** The slice of the feed a completed scan's message describes: who spoke, for which box, and when. */
-export interface ScanScope {
-  readonly source: string;
-  readonly host: string | null;
-  readonly runStartedAt: Date;
-}

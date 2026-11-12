@@ -28,19 +28,29 @@ export async function getDiscordWebhookStatus(): Promise<{ configured: boolean }
  *
  * WHY `response.ok` and not just "fetch resolved": a 404 on a rotated webhook resolves with an error
  * body, and treating that as delivered is how a channel goes quiet without anyone noticing.
+ *
+ * WHY `footer` is optional and last: the scan announcement puts the run's clock and its destination
+ * in the embed's subtext, where a reader's eye goes last; every existing caller keeps its signature.
  */
-export async function logToDiscord(title: string, message: string, color: number = 3447003, mention: boolean = false): Promise<boolean> {
+export async function logToDiscord(
+    title: string,
+    message: string,
+    color: number = 3447003,
+    mention: boolean = false,
+    footer?: string,
+): Promise<boolean> {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
     if (!webhookUrl) return false;
 
     try {
         const roleId = process.env.DISCORD_ROLE_ID;
-        const payload: { embeds: Array<{ title: string; description: string; color: number; timestamp: string }>; content?: string } = {
+        const payload: { embeds: Array<{ title: string; description: string; color: number; timestamp: string; footer?: { text: string } }>; content?: string } = {
             embeds: [{
                 title,
                 description: message,
                 color,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                ...(footer === undefined ? {} : { footer: { text: footer } }),
             }]
         };
         if (mention && roleId) {

@@ -169,7 +169,6 @@ const mocks = vi.hoisted(() => {
     rowKey,
     fakePrisma,
     recordAudit: vi.fn(),
-    announceScan: vi.fn(async (): Promise<string> => 'sent'),
     setRootAdmin: (value: { id: number } | null): void => {
       rootAdmin = value;
     },
@@ -178,7 +177,6 @@ const mocks = vi.hoisted(() => {
 
 vi.mock('@/lib/prisma', () => ({ prisma: mocks.fakePrisma }));
 vi.mock('@/lib/audit', () => ({ recordAudit: mocks.recordAudit }));
-vi.mock('@/lib/security/scan-notify', () => ({ announceCompletedScan: mocks.announceScan }));
 
 const TOKEN = 'test-feed-token';
 const RUN_STARTED_AT = '2026-10-25T00:00:00.000Z';
@@ -232,8 +230,6 @@ describe('security feed ingest route', () => {
     mocks.rows.clear();
     mocks.hostRows.clear();
     mocks.recordAudit.mockClear();
-    mocks.announceScan.mockClear();
-    mocks.announceScan.mockResolvedValue('sent');
     mocks.setRootAdmin({ id: 1 });
     process.env.SECURITY_FEED_TOKEN = TOKEN;
     return import('@/lib/security/patching-feed-push').then((module) => module.resetFeedRateLimits());
@@ -486,34 +482,25 @@ describe('security feed ingest route', () => {
     expect(other.status).toBe(201);
   });
 
-  it('announces a completed run once, with the identity the producer sent', async () => {
+  it('records the run every push belongs to, so the poller can announce it once', async () => {
     const result = await call(push({ source: 'rootfs', host: 'box-a', findings: [finding()], complete: true }));
 
     expect(result.status).toBe(201);
-    expect(mocks.announceScan).toHaveBeenCalledTimes(1);
-    expect(mocks.announceScan).toHaveBeenCalledWith(
-      { source: 'rootfs', host: 'box-a', runStartedAt: new Date(RUN_STARTED_AT) },
-      // The same actor the ingest row is filed under, so the message's ledger row reads as one push.
-      1,
-    );
+    // The ingest's only job in the announcement is this row: one message per (host, run_started_at).
+    const entry = mocks.recordAudit.mock.calls.at(-1)?.[0] as { afterValues?: Record<string, unknown> };
+    expect(entry.afterValues).toMatchObject({
+      source: 'rootfs',
+      host: 'box-a',
+      run_started_at: RUN_STARTED_AT,
+      complete: true,
+    });
   });
 
-  it('says nothing for a partial push, which is not a finished scan', async () => {
-    await call(push({ source: 'rootfs', host: 'box-a', findings: [finding()], complete: false }));
-
-    expect(mocks.announceScan).not.toHaveBeenCalled();
-  });
-
-  it('answers 201 even when the announcement itself fails', async () => {
-    // The findings are already stored; a webhook must never turn a stored scan into an error its
-    // producer would retry — and the retry would then be deduped against a run that never spoke.
-    mocks.announceScan.mockRejectedValue(new Error('webhook is on fire'));
-
-    const result = await call(push({ source: 'rootfs', host: 'box-a', findings: [finding()], complete: true }));
+  it('records the run on a partial push too, because a run is announced when it falls quiet', async () => {
+    const result = await call(push({ source: 'rootfs', host: 'box-a', findings: [finding()], complete: false }));
 
     expect(result.status).toBe(201);
-    expect(result.body).toMatchObject({ success: true, received: 1, complete: true });
-    expect(mocks.rows.size).toBe(1);
-    expect(mocks.announceScan).toHaveBeenCalledTimes(1);
+    const entry = mocks.recordAudit.mock.calls.at(-1)?.[0] as { afterValues?: Record<string, unknown> };
+    expect(entry.afterValues).toMatchObject({ host: 'box-a', run_started_at: RUN_STARTED_AT, complete: false });
   });
 });

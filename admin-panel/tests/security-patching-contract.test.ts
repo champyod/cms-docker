@@ -126,9 +126,11 @@ describe('security.patching permission gate', () => {
 });
 
 describe('one read path', () => {
-  it('is the only module querying the two tables', () => {
+  it('is the only path querying the two tables', () => {
+    // The family, not one file: the scan announcement's arm lives beside the page's, and both use
+    // the same helpers and the same waiver predicate. A query anywhere else is still an offender.
     const offenders = sourceFiles(SRC).filter((file) => {
-      if (file.endsWith('patching-read.ts')) return false;
+      if (/patching-read(-[a-z]+)?\.ts$/.test(file)) return false;
       const source = readFileSync(file, 'utf8');
       return /security_findings\.(findMany|findFirst|findUnique|count)|security_waivers\.(findMany|findFirst|findUnique|count)/.test(source);
     });

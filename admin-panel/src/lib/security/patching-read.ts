@@ -11,12 +11,11 @@ import {
 } from '@/lib/security/patching-read-rows';
 import { tallyFeedTotals, tallyFindingCounts, type FeedTotals } from '@/lib/security/patching-read-totals';
 import type {
-  BulkWaiveFeed, FindingRow, PatchingSnapshot, ScanScope, WaiverRow,
+  BulkWaiveFeed, FindingRow, PatchingSnapshot, WaiverRow,
 } from '@/lib/security/patching-read-types';
 import {
-  filteredWhere, pageOrderBy, scanScopeFilters, unresolvedWhere, unratedWhere, untouchedWhere,
+  filteredWhere, pageOrderBy, unresolvedWhere, unratedWhere, untouchedWhere,
 } from '@/lib/security/patching-read-where';
-import { SCAN_CRITICAL_LINES, type ScanCriticalRow, type ScanRunFacts } from '@/lib/security/scan-report';
 import { agedCutoff, buildSecurityDigest, SIGNAL_RULES, type PatchingSignalFacts } from '@/lib/security/signal';
 import { readStalenessSnapshotCached } from '@/lib/security/staleness';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
@@ -24,13 +23,14 @@ import { WAIVER_EXPORT_VERSION, type WaiverExport } from '@/lib/security/waiver-
 
 export { mapPatchingFinding } from '@/lib/security/patching-read-rows';
 export type {
-  BulkWaiveCandidate, BulkWaiveFeed, BulkWaiveWaiver, PatchingSnapshot, ScanScope,
+  BulkWaiveCandidate, BulkWaiveFeed, BulkWaiveWaiver, PatchingSnapshot,
 } from '@/lib/security/patching-read-types';
 
-// The one read path: the only module that queries security_findings or security_waivers.
+// The page's read path: where the page, the card and the digest query these two tables.
+// The scan announcement reuses the helpers below, so it counts exactly the rows this module counts.
 
 /** The live waivers: the decisions that currently suppress something, soonest review date first. */
-function liveWaiverRows(): Promise<WaiverRow[]> {
+export function liveWaiverRows(): Promise<WaiverRow[]> {
   return prisma.security_waivers.findMany({ where: { ended_at: null }, orderBy: [{ review_by: 'asc' }] });
 }
 
@@ -77,7 +77,7 @@ export async function readPatchingPage(
 }
 
 /** One `groupBy(source, severity)` answers both totals the digest needs. */
-async function readFeedTotals(
+export async function readFeedTotals(
   where: Prisma.security_findingsWhereInput = unresolvedWhere(),
 ): Promise<FeedTotals> {
   const rows = await prisma.security_findings.groupBy({
@@ -108,7 +108,7 @@ async function readWorstFinding(
 }
 
 /** Every row a live waiver touches, mapped: a bounded set, counted first so the fetch stays `take`-bound. */
-async function readWaivedFindings(
+export async function readWaivedFindings(
   waivers: readonly WaiverRow[], now: Date, scope: readonly Prisma.security_findingsWhereInput[] = [],
 ): Promise<PatchingFinding[]> {
   const cover = waiverCoverWhere(waivers);
@@ -201,45 +201,4 @@ export async function readBulkWaiveFeed(source: string): Promise<BulkWaiveFeed> 
     }),
   ]);
   return { rows, waivers };
-}
-
-/** The CRITICAL rows a message can name, oldest first, each with the verdict the page would give. */
-async function readScanCriticals(
-  scan: ScanScope, waivers: readonly WaiverRow[], now: Date,
-): Promise<ScanCriticalRow[]> {
-  const rows = await prisma.security_findings.findMany({
-    where: unresolvedWhere({ AND: [...scanScopeFilters(scan), { severity: 'CRITICAL' }] }),
-    orderBy: [{ first_seen: 'asc' }, { id: 'asc' }],
-    take: SCAN_CRITICAL_LINES,
-  });
-  return mapPatchingFindings(rows, waivers, now).map((finding) => ({
-    key: finding.key, subject: finding.subject, waiver: finding.waiver.status,
-    reviewBy: finding.waiver.status === 'none' ? null : finding.waiver.reviewBy,
-  }));
-}
-
-/** One completed run as its announcement reads it; every number is scoped to the push. */
-export async function readCompletedScanFacts(scan: ScanScope, now: Date = new Date()): Promise<ScanRunFacts> {
-  const waivers = await liveWaiverRows();
-  const scope = unresolvedWhere({ AND: scanScopeFilters(scan) });
-  const [totals, added, criticalRows, waivedRows] = await Promise.all([
-    readFeedTotals(scope),
-    prisma.security_findings.count({ where: { ...scope, first_seen: { gte: scan.runStartedAt } } }),
-    readScanCriticals(scan, waivers, now),
-    readWaivedFindings(waivers, now, scanScopeFilters(scan)),
-  ]);
-  return {
-    source: scan.source,
-    host: scan.host,
-    runStartedAt: scan.runStartedAt,
-    total: PATCHING_SEVERITIES.reduce((sum, severity) => sum + totals.bySeverity[severity], 0) + totals.unrated,
-    added,
-    criticals: totals.bySeverity.CRITICAL,
-    counts: {
-      high: totals.bySeverity.HIGH, medium: totals.bySeverity.MEDIUM,
-      low: totals.bySeverity.LOW, unrated: totals.unrated,
-    },
-    waived: waivedRows.filter((finding) => finding.waiver.status === 'active').length,
-    criticalRows,
-  };
 }

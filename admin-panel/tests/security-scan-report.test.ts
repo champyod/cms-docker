@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScanAnnouncement,
   DISCORD_BODY_LIMIT,
+  PATCHING_PATH,
   SCAN_ALERT_COLOR,
   SCAN_CRITICAL_LINES,
   SCAN_REPORT_COLOR,
@@ -11,145 +12,140 @@ import {
   type ScanRunFacts,
 } from '@/lib/security/scan-report';
 
-const RUN_AT = new Date('2026-11-12T03:00:00.000Z');
+// The five levels the operator asked for, asserted as text: the message is the product here.
 
-function critical(overrides: Partial<ScanCriticalRow> = {}): ScanCriticalRow {
+const RUN_AT = new Date('2026-11-12T03:00:00.000Z');
+const LAST_PUSH_AT = new Date('2026-11-12T03:04:12.000Z');
+
+function row(overrides: Partial<ScanCriticalRow> = {}): ScanCriticalRow {
   return {
-    key: 'CVE-2026-1187|openssl',
-    subject: 'openssl',
-    waiver: 'none',
-    reviewBy: null,
+    key: 'CVE-2023-53867|libxml2',
+    subject: 'libxml2',
+    reachability: 'reachable',
+    ageDays: 412,
     ...overrides,
   };
 }
 
 function facts(overrides: Partial<ScanRunFacts> = {}): ScanRunFacts {
   return {
-    source: 'rootfs',
     host: 'box-a',
     runStartedAt: RUN_AT,
-    total: 42,
-    added: 3,
-    criticals: 1,
-    counts: { high: 4, medium: 7, low: 12, unrated: 0 },
-    waived: 5,
-    criticalRows: [critical()],
+    lastPushAt: LAST_PUSH_AT,
+    standing: 13_357,
+    added: 34,
+    criticals: 3,
+    counts: { high: 1_415, medium: 612, low: 233, unrated: 0 },
+    waived: 881,
+    nextReview: '2027-01-31',
+    criticalRows: [row()],
+    judged: { reachable: 900, unreachable: 12, unknown: 6 },
     ...overrides,
   };
 }
 
-/** Every bullet that names a CRITICAL, without the counted remainder or the "none" line. */
-function namedCriticalLines(body: string): string[] {
-  return body
-    .split('\n')
-    .filter((line) => line.startsWith('• ') && !line.startsWith('• …and') && !line.startsWith('• No CRITICAL'));
+/** The fenced L4 block, as the lines a reader sees. */
+function countBlock(body: string): string[] {
+  return body.split('```')[1].split('\n').slice(1, -1);
 }
 
-describe('security scan announcement', () => {
-  it('opens with the host, the run time, the total and how many were new', () => {
-    const header = buildScanAnnouncement(facts()).body.split('\n')[0];
+function namedRows(body: string): string[] {
+  return body.split('\n').filter((line) => line.startsWith('**CVE'));
+}
 
-    expect(header).toContain('box-a');
-    expect(header).toContain('2026-11-12 03:00 UTC');
-    expect(header).toContain('42 findings');
-    expect(header).toContain('3 new this run');
+describe('the scan announcement layout', () => {
+  it('L1 names the unwaived CRITICALs and the box, and turns the bar red', () => {
+    const { title, color, mention } = buildScanAnnouncement(facts());
+
+    expect(title).toBe('3 unwaived CRITICAL · box-a');
+    expect(color).toBe(SCAN_ALERT_COLOR);
+    expect(mention).toBe(true);
   });
 
-  it('names one CRITICAL by its CVE and leaves the other severities as counts', () => {
-    // The shape the operator asked for: the one thing that pages, by name; everything else summed.
+  it('L2 leads with the standing total, then the delta, then what needs a human', () => {
+    expect(buildScanAnnouncement(facts()).body.split('\n')[0]).toBe(
+      '**13,357 standing** · 34 new · 3 need you',
+    );
+  });
+
+  it('L3 names a row as CVE, subject and age, and counts the ones it did not name', () => {
     const { body } = buildScanAnnouncement(facts());
 
-    expect(namedCriticalLines(body)).toEqual(['• openssl (CVE-2026-1187) — no waiver']);
-    expect(body).not.toContain('CVE-2026-2201');
-    expect(body.split('\n').at(-1)).toBe('HIGH 4 · MEDIUM 7 · LOW 12 · 5 waived');
+    expect(namedRows(body)).toEqual(['**CVE-2023-53867** · libxml2 · 412d']);
+    expect(body).toContain('…and 2 more');
   });
 
-  it('says when a live waiver covers the named CRITICAL, and when one has lapsed', () => {
-    const live = buildScanAnnouncement(
-      facts({ criticalRows: [critical({ waiver: 'active', reviewBy: '2026-12-01T00:00:00.000Z' })] }),
-    ).body;
-    const lapsed = buildScanAnnouncement(
-      facts({ criticalRows: [critical({ waiver: 'expired', reviewBy: '2026-10-01T00:00:00.000Z' })] }),
-    ).body;
+  it('L3 keeps the order it was given — reachable first is the read path’s job', () => {
+    const rows = [
+      row({ key: 'CVE-2026-0001|openssl', subject: 'openssl', reachability: 'reachable' }),
+      row({ key: 'CVE-2026-0002|glibc', subject: 'glibc', reachability: 'unreachable' }),
+    ];
+    const { body } = buildScanAnnouncement(facts({ criticals: 2, criticalRows: rows }));
 
-    expect(live).toContain('waived until 2026-12-01');
-    expect(lapsed).toContain('waiver expired 2026-10-01');
+    expect(namedRows(body).map((line) => line.split(' · ')[0])).toEqual(['**CVE-2026-0001**', '**CVE-2026-0002**']);
   });
 
-  it('trims thirty CRITICALs to ten names plus one counted remainder line', () => {
-    const rows = Array.from({ length: SCAN_CRITICAL_LINES }, (_, index) =>
-      critical({ key: `CVE-2026-${String(1000 + index)}|pkg-${String(index)}`, subject: `pkg-${String(index)}` }),
+  it('L4 puts the unwaived counts in a fenced block, with the waiver state beneath them', () => {
+    expect(countBlock(buildScanAnnouncement(facts()).body)).toEqual([
+      'HIGH 1,415',
+      'MED    612',
+      'LOW    233',
+      'waived 881 · next review 2027-01-31',
+    ]);
+  });
+
+  it('L4 adds the UNKNOWN bucket only when rows carry no rank', () => {
+    const { body } = buildScanAnnouncement(facts({ counts: { high: 1, medium: 0, low: 0, unrated: 6 } }));
+
+    expect(countBlock(body)).toEqual(['HIGH 1', 'MED  0', 'LOW  0', 'UNK  6', 'waived 881 · next review 2027-01-31']);
+  });
+
+  it('L5 carries the run clock, its duration, the judged split and the page', () => {
+    expect(buildScanAnnouncement(facts()).footer).toBe(
+      `run 2026-11-12 03:00 UTC · 4m12s · 900 reachable · 12 unreachable · 6 unknown · ${PATCHING_PATH}`,
     );
-    const { body } = buildScanAnnouncement(facts({ criticals: 30, criticalRows: rows }));
-
-    expect(namedCriticalLines(body)).toHaveLength(SCAN_CRITICAL_LINES);
-    expect(namedCriticalLines(body)[0]).toContain('CVE-2026-1000');
-    expect(body).toContain('• …and 20 more CRITICAL on the patching page');
-    // The tail survives: trimming names, not sentences.
-    expect(body.split('\n').at(-1)).toBe('HIGH 4 · MEDIUM 7 · LOW 12 · 5 waived');
   });
 
-  it('drops named CRITICALs — never characters — to stay inside the 2000-char cap', () => {
-    const rows = Array.from({ length: SCAN_CRITICAL_LINES }, (_, index) =>
-      critical({ key: `CVE-2026-${String(2000 + index)}|pkg-${String(index)}`, subject: `pkg-${String(index)}` }),
-    );
-    const { body } = buildScanAnnouncement(
-      facts({ host: 'h'.repeat(1700), criticals: 30, criticalRows: rows }),
-    );
-    const named = namedCriticalLines(body);
-
-    expect(body.length).toBeLessThanOrEqual(DISCORD_BODY_LIMIT);
-    expect(named.length).toBeLessThan(SCAN_CRITICAL_LINES);
-    expect(body).toContain(`• …and ${String(30 - named.length)} more CRITICAL on the patching page`);
-    // Every surviving line is whole: id, subject and verdict, never a fragment of one.
-    for (const line of named) expect(line).toMatch(/ — (no waiver|waived until \d{4}-\d{2}-\d{2}|waiver expired \d{4}-\d{2}-\d{2})$/);
-    expect(body.split('\n').at(-1)).toBe('HIGH 4 · MEDIUM 7 · LOW 12 · 5 waived');
-  });
-
-  it('still speaks on a run that found nothing, and says so plainly', () => {
-    const { body, mention, color } = buildScanAnnouncement(
+  it('renders a clean run as the same skeleton, short: green bar, no named rows', () => {
+    const { title, body, color, mention } = buildScanAnnouncement(
       facts({
-        total: 0,
+        standing: 0,
         added: 0,
         criticals: 0,
         criticalRows: [],
         counts: { high: 0, medium: 0, low: 0, unrated: 0 },
-        waived: 0,
+        waived: 881,
       }),
     );
 
-    expect(body).toContain('0 findings, 0 new this run');
-    expect(body).toContain('• No CRITICAL findings.');
+    expect(title).toBe('nothing unwaived · box-a');
+    expect({ color, mention }).toEqual({ color: SCAN_REPORT_COLOR, mention: false });
+    expect(body.split('\n')[0]).toBe('**0 standing** · 0 new · nothing needs you');
     expect(body).not.toContain('…and');
-    expect(body.split('\n').at(-1)).toBe('HIGH 0 · MEDIUM 0 · LOW 0 · 0 waived');
-    expect({ mention, color }).toEqual({ mention: false, color: SCAN_REPORT_COLOR });
+    expect(namedRows(body)).toEqual([]);
+    expect(countBlock(body)).toEqual(['HIGH 0', 'MED  0', 'LOW  0', 'waived 881 · next review 2027-01-31']);
   });
 
-  it('mentions the role only when a named CRITICAL has no live decision', () => {
-    const lapsed = buildScanAnnouncement(facts({ criticalRows: [critical({ waiver: 'expired' })] }));
-    const waived = buildScanAnnouncement(
-      facts({ criticalRows: [critical({ waiver: 'active', reviewBy: '2026-12-01T00:00:00.000Z' })] }),
+  it('says "needs you" for one unwaived CRITICAL, and never for none', () => {
+    expect(buildScanAnnouncement(facts({ criticals: 1 })).body).toContain('1 needs you');
+    expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain('nothing needs you');
+  });
+
+  it('names at most SCAN_CRITICAL_LINES rows and stays inside the Discord cap', () => {
+    const rows = Array.from({ length: SCAN_CRITICAL_LINES + 3 }, (_, index) =>
+      row({ key: `CVE-2026-${String(1000 + index)}|pkg-${'x'.repeat(60)}`, subject: 'pkg-'.repeat(12) }),
     );
+    const { body } = buildScanAnnouncement(facts({ criticals: 40, criticalRows: rows }));
 
-    expect(lapsed.mention).toBe(true);
-    expect(lapsed.color).toBe(SCAN_ALERT_COLOR);
-    expect(waived.mention).toBe(false);
-    expect(waived.color).toBe(SCAN_REPORT_COLOR);
+    expect(namedRows(body)).toHaveLength(SCAN_CRITICAL_LINES);
+    expect(body).toContain(`…and ${String(40 - SCAN_CRITICAL_LINES)} more`);
+    expect(body.length).toBeLessThanOrEqual(DISCORD_BODY_LIMIT);
   });
 
-  it('counts unrated rows in the tail rather than folding them into a severity', () => {
-    const { body } = buildScanAnnouncement(facts({ counts: { high: 1, medium: 0, low: 0, unrated: 6 } }));
-
-    expect(body).toContain('UNKNOWN 6');
-  });
-
-  it('keys a run by its source, host and start, so a re-push cannot read as a new run', () => {
-    expect(scanRunKey('rootfs', 'box-a', RUN_AT)).toBe('rootfs|box-a|2026-11-12T03:00:00.000Z');
-    expect(scanRunKey('rootfs', 'box-a', RUN_AT)).toBe(scanRunKey('rootfs', 'box-a', RUN_AT));
-    expect(scanRunKey('rootfs', 'box-b', RUN_AT)).not.toBe(scanRunKey('rootfs', 'box-a', RUN_AT));
-    expect(scanRunKey('rootfs', 'box-a', new Date(RUN_AT.getTime() + 1))).not.toBe(
-      scanRunKey('rootfs', 'box-a', RUN_AT),
-    );
-    expect(scanRunKey('osv', null, RUN_AT)).toBe('osv|-|2026-11-12T03:00:00.000Z');
+  it('keys a run by box and start alone, so one run’s two sources cannot split it', () => {
+    expect(scanRunKey('box-a', RUN_AT)).toBe('box-a|2026-11-12T03:00:00.000Z');
+    expect(scanRunKey('box-a', RUN_AT)).toBe(scanRunKey('box-a', RUN_AT));
+    expect(scanRunKey('box-b', RUN_AT)).not.toBe(scanRunKey('box-a', RUN_AT));
+    expect(scanRunKey(null, RUN_AT)).toBe('-|2026-11-12T03:00:00.000Z');
   });
 });
