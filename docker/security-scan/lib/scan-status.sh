@@ -12,6 +12,8 @@ SCAN_STATUS_ROWS="${SCAN_STATUS_ROWS:-${WORK_DIR:-/tmp/security-scan}/scan-statu
 # Start a run: counting a previous run's rows would invent batches that never happened.
 scan_status_reset() {
     mkdir -p "$(dirname "$SCAN_STATUS_FILE")" 2>/dev/null || true
+    # The rows dir is WORK_DIR, which the container does not have until a mode creates it.
+    mkdir -p "$(dirname "$SCAN_STATUS_ROWS")" 2>/dev/null || true
     : > "$SCAN_STATUS_ROWS"
 }
 

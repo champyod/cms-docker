@@ -95,7 +95,7 @@ mkdir -p "$WORK/rootfs" "$WORK/status" "$WORK/calls"
 
 # run_scan LOGNAME OUTCODE FAIL_AT STATUS_FILE MODE — the real scan.sh against the stubs.
 run_scan() {
-  local code="${2:-201}" fail_at="${3:-}" status_file="${4:-$WORK/status/scan-status.json}" mode="${5:-rootfs}"
+  local code="${2:-201}" fail_at="${3:-}" status_file="${4:-$WORK/status/scan-status.json}" mode="${5:-rootfs}" rows="${6:-$WORK/status/rows.jsonl}"
   rm -f "$WORK/calls/calls"
   ( set +e
     env PATH="$WORK/bin:$PATH" \
@@ -104,7 +104,7 @@ run_scan() {
       SECURITY_HOST="test-host" SECURITY_FEED_TOKEN="test-token" \
       PANEL_URL="http://127.0.0.1:9" \
       ROOTFS_DIR="$WORK/rootfs" WORK_DIR="$WORK/work" \
-      SCAN_STATUS_FILE="$status_file" SCAN_STATUS_ROWS="$WORK/status/rows.jsonl" \
+      SCAN_STATUS_FILE="$status_file" SCAN_STATUS_ROWS="$rows" \
       TRIVY_REPORT="$WORK/trivy-report.json" CURL_STUB_DIR="$WORK/calls" \
       CURL_STUB_CODE="$code" CURL_STUB_FAIL_AT="$fail_at" \
       SRC_DIR="$WORK/src" \
@@ -225,6 +225,19 @@ if grep -q 'scan status:' "$WORK/scan4.log"; then
   ok "the failure is logged, not swallowed"
 else
   no "the status write failed silently"
+fi
+
+printf '\na run with no rows directory of its own still publishes\n'
+# The container starts with no WORK_DIR: the reset must create it, not assume a mode did.
+rm -rf "$WORK/cold"
+run_scan scan6 201 "" "$WORK/cold/status/scan-status.json" rootfs "$WORK/cold/work/rows.jsonl"
+rc="$(cat "$WORK/scan6.rc")"
+[[ "$rc" == "0" ]] && ok "the scan survives a cold rows directory (0)" \
+                  || no "the scan exited $rc because the rows directory did not exist"
+if jq -e '.findings >= 0' "$WORK/cold/status/scan-status.json" >/dev/null 2>&1; then
+  ok "the fact is published to a directory this run had to create"
+else
+  no "no fact published when the rows directory was cold"
 fi
 
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
