@@ -240,11 +240,24 @@ function at(minutes: number, seconds = 0): Date {
 }
 
 /** One line of the fenced block, as a number: the message's own rendering, not the facts behind it. */
-function blockValue(body: string, label: string): number {
-  const block = body.split('```')[1].split('\n').slice(1, -1);
-  const line = block.find((entry) => entry.startsWith(label));
+function blockLines(body: string): string[] {
+  return body.split('```')[1].split('\n').slice(1, -1);
+}
+
+/** Reads the action bucket the message groups a severity under. */
+function actionValue(body: string, label: 'act now' | 'decide' | 'noted' | 'accepted'): number {
+  const line = blockLines(body).find((entry) => entry.startsWith(label));
   if (line === undefined) throw new Error(`no ${label} line in ${body}`);
-  return Number(line.slice(5).replace(/,/g, '').trim());
+  return Number(line.slice(label.length).trim().split(/\s+/)[0].replace(/,/g, ''));
+}
+
+/** Reads one severity inside the "noted" line's breakdown. */
+function notedDetail(body: string, name: 'MEDIUM' | 'LOW' | 'unknown'): number {
+  const line = blockLines(body).find((entry) => entry.startsWith('noted'));
+  if (line === undefined) throw new Error(`no noted line in ${body}`);
+  const match = line.match(new RegExp(`${name} ([\\d,]+)`));
+  if (match === null) throw new Error(`no ${name} in ${line}`);
+  return Number(match[1].replace(/,/g, ''));
 }
 
 function seedSingleRun(host = 'box-a'): void {
@@ -269,9 +282,9 @@ describe('the scan announcement is composed by the poller, one message per run',
     expect(store.messages).toHaveLength(1);
     expect(results).toEqual([{ key: `box-a|${RUN_AT.toISOString()}`, status: 'sent' }]);
     // Both sources are in the one message: the run's list, not a producer's slice of it.
-    expect(store.messages[0].body).toContain('**2 standing**');
-    expect(blockValue(store.messages[0].body, 'HIGH')).toBe(1);
-    expect(blockValue(store.messages[0].body, 'MED')).toBe(1);
+    expect(store.messages[0].body).toContain('**2 open**');
+    expect(actionValue(store.messages[0].body, 'decide')).toBe(1);
+    expect(notedDetail(store.messages[0].body, 'MEDIUM')).toBe(1);
   });
 
   it('(b) never names a waived CVE, and still counts the waivers it stands on', async () => {
@@ -287,10 +300,10 @@ describe('the scan announcement is composed by the poller, one message per run',
     await announceFinishedScans(TICK);
 
     const [message] = store.messages;
-    expect(message.title).toBe('1 unwaived CRITICAL · box-a');
+    expect(message.title).toBe('1 CRITICAL finding needs action now · box-a');
     expect(message.body).not.toContain('53867');
     expect(message.body).toContain('**CVE-2024-0001** · glibc');
-    expect(message.body).toContain('waived 1 · next review 2027-01-31');
+    expect(message.body).toContain('re-check 2027-01-31');
   });
 
   it('(c) prints the page’s unwaived numbers, not the raw open rows', async () => {
@@ -322,19 +335,19 @@ describe('the scan announcement is composed by the poller, one message per run',
     const pageCount = (severity: string): number =>
       unwaived.filter((finding) => finding.severity === severity).length;
 
-    expect(blockValue(message.body, 'HIGH')).toBe(pageCount('HIGH'));
-    expect(blockValue(message.body, 'HIGH')).toBe(snapshot.signal.counts.unwaivedHigh);
+    expect(actionValue(message.body, 'decide')).toBe(pageCount('HIGH'));
+    expect(actionValue(message.body, 'decide')).toBe(snapshot.signal.counts.unwaivedHigh);
     // One of the four HIGH rows is covered, so the message says 3 — the raw count would be 4.
-    expect(blockValue(message.body, 'HIGH')).toBe(3);
-    expect(blockValue(message.body, 'MED')).toBe(pageCount('MEDIUM'));
-    expect(blockValue(message.body, 'LOW')).toBe(pageCount('LOW'));
-    expect(blockValue(message.body, 'UNK')).toBe(unwaived.length - pageCount('CRITICAL') - pageCount('HIGH')
+    expect(actionValue(message.body, 'decide')).toBe(3);
+    expect(notedDetail(message.body, 'MEDIUM')).toBe(pageCount('MEDIUM'));
+    expect(notedDetail(message.body, 'LOW')).toBe(pageCount('LOW'));
+    expect(notedDetail(message.body, 'unknown')).toBe(unwaived.length - pageCount('CRITICAL') - pageCount('HIGH')
       - pageCount('MEDIUM') - pageCount('LOW'));
     // The standing total is every unwaived row the page lists, criticals included.
-    expect(message.body).toContain(`**${String(unwaived.length)} standing**`);
+    expect(message.body).toContain(`**${String(unwaived.length)} open**`);
     // One of the two CRITICALs is covered, so the title names the other and not both.
     expect(pageCount('CRITICAL')).toBe(1);
-    expect(message.title).toBe('1 unwaived CRITICAL · box-a');
+    expect(message.title).toBe('1 CRITICAL finding needs action now · box-a');
   });
 
   it('(d) renders a clean run as the short form, with no named rows', async () => {
@@ -347,15 +360,15 @@ describe('the scan announcement is composed by the poller, one message per run',
     await announceFinishedScans(TICK);
 
     const [message] = store.messages;
-    expect(message.title).toBe('nothing unwaived · box-b');
+    expect(message.title).toBe('Nothing needs action · box-b');
     expect(message.color).toBe(SCAN_REPORT_COLOR);
     expect(message.mention).toBe(false);
-    expect(message.body.split('\n')[0]).toBe('**0 standing** · 0 new · nothing needs you');
+    expect(message.body.split('\n')[0]).toBe('**0 open** · 0 new · all MEDIUM/LOW or accepted');
     // Two levels only: the lead and the counts block — L3 has nothing to name and says nothing.
     expect(message.body.split('\n')[1]).toBe('```');
     expect(message.body).not.toContain('…and');
-    expect(blockValue(message.body, 'HIGH')).toBe(0);
-    expect(message.body).toContain('waived 2');
+    expect(actionValue(message.body, 'decide')).toBe(0);
+    expect(actionValue(message.body, 'accepted')).toBe(2);
   });
 
   it('(e) stays silent for a re-push of the same run, and speaks again for a new one', async () => {

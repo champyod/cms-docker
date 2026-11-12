@@ -54,17 +54,19 @@ function namedRows(body: string): string[] {
 }
 
 describe('the scan announcement layout', () => {
-  it('L1 names the unwaived CRITICALs and the box, and turns the bar red', () => {
+  const tokens = (lines: readonly string[]): string[][] => lines.map((line) => line.trim().split(/\s+/));
+
+  it('L1 says what to do, in plain words, and turns the bar red', () => {
     const { title, color, mention } = buildScanAnnouncement(facts());
 
-    expect(title).toBe('3 unwaived CRITICAL · box-a');
+    expect(title).toBe('3 CRITICAL findings need action now · box-a');
     expect(color).toBe(SCAN_ALERT_COLOR);
     expect(mention).toBe(true);
   });
 
-  it('L2 leads with the standing total, then the delta, then what needs a human', () => {
+  it('L2 leads with the open total, then the delta, then how urgent it is', () => {
     expect(buildScanAnnouncement(facts()).body.split('\n')[0]).toBe(
-      '**13,357 standing** · 34 new · 3 need you',
+      '**13,357 open** · 34 new · fix these today',
     );
   });
 
@@ -85,19 +87,24 @@ describe('the scan announcement layout', () => {
     expect(namedRows(body).map((line) => line.split(' · ')[0])).toEqual(['**CVE-2026-0001**', '**CVE-2026-0002**']);
   });
 
-  it('L4 puts the unwaived counts in a fenced block, with the waiver state beneath them', () => {
-    expect(countBlock(buildScanAnnouncement(facts()).body)).toEqual([
-      'HIGH 1,415',
-      'MED    612',
-      'LOW    233',
-      'waived 881 · next review 2027-01-31',
+  it('L4 groups the count by what the reader should do with it', () => {
+    expect(tokens(countBlock(buildScanAnnouncement(facts()).body))).toEqual([
+      ['act', 'now', '3', 'CRITICAL'],
+      ['decide', '1,415', 'HIGH'],
+      ['noted', '845', 'MEDIUM', '612', '·', 'LOW', '233'],
+      ['accepted', '881', 're-check', '2027-01-31'],
     ]);
   });
 
-  it('L4 adds the UNKNOWN bucket only when rows carry no rank', () => {
+  it('L4 names the unranked rows as unknown instead of inventing a rank', () => {
     const { body } = buildScanAnnouncement(facts({ counts: { high: 1, medium: 0, low: 0, unrated: 6 } }));
 
-    expect(countBlock(body)).toEqual(['HIGH 1', 'MED  0', 'LOW  0', 'UNK  6', 'waived 881 · next review 2027-01-31']);
+    expect(tokens(countBlock(body))).toEqual([
+      ['act', 'now', '3', 'CRITICAL'],
+      ['decide', '1', 'HIGH'],
+      ['noted', '6', 'MEDIUM', '0', '·', 'LOW', '0', '·', 'unknown', '6'],
+      ['accepted', '881', 're-check', '2027-01-31'],
+    ]);
   });
 
   it('L5 carries the run clock, its duration, the judged split and the page', () => {
@@ -118,22 +125,27 @@ describe('the scan announcement layout', () => {
       }),
     );
 
-    expect(title).toBe('nothing unwaived · box-a');
+    expect(title).toBe('Nothing needs action · box-a');
     expect({ color, mention }).toEqual({ color: SCAN_REPORT_COLOR, mention: false });
-    expect(body.split('\n')[0]).toBe('**0 standing** · 0 new · nothing needs you');
+    expect(body.split('\n')[0]).toBe('**0 open** · 0 new · all MEDIUM/LOW or accepted');
     expect(body).not.toContain('…and');
     expect(namedRows(body)).toEqual([]);
-    expect(countBlock(body)).toEqual(['HIGH 0', 'MED  0', 'LOW  0', 'waived 881 · next review 2027-01-31']);
+    expect(tokens(countBlock(body))).toEqual([
+      ['act', 'now', '0', 'CRITICAL'],
+      ['decide', '0', 'HIGH'],
+      ['noted', '0', 'MEDIUM', '0', '·', 'LOW', '0'],
+      ['accepted', '881', 're-check', '2027-01-31'],
+    ]);
   });
 
   it('asks for a decision while unwaived HIGH stands, and only calms below it', () => {
-    expect(buildScanAnnouncement(facts({ criticals: 1 })).body).toContain('1 needs you');
+    expect(buildScanAnnouncement(facts({ criticals: 1 })).body).toContain('fix these today');
     const calm = { high: 0, medium: 612, low: 233, unrated: 0 };
     expect(buildScanAnnouncement(facts({ criticals: 0, counts: calm, criticalRows: [] })).body).toContain(
-      'nothing needs you',
+      'all MEDIUM/LOW or accepted',
     );
     expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain(
-      '1,415 need a decision',
+      'not urgent, but unfixed — patch or accept',
     );
   });
 

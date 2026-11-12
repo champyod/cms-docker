@@ -34,31 +34,31 @@ function facts(over: Partial<ScanRunFacts> & { high?: number } = {}): ScanRunFac
 describe('the announcement changes tier with what is actually unwaived', () => {
   it('calls standing unwaived HIGH a decision, amber, never "nothing needs you"', () => {
     const message = buildScanAnnouncement(facts({ high: 1415 }));
-    expect(message.title).toBe('1,415 unwaived HIGH · box-a');
+    expect(message.title).toBe('1,415 HIGH findings need a decision · box-a');
     expect(message.color).toBe(SCAN_WARN_COLOR);
     expect(message.mention).toBe(false);
-    expect(message.body.split('\n')[0]).toContain('1,415 need a decision');
-    expect(message.body).not.toContain('nothing needs you');
+    expect(message.body.split('\n')[0]).toContain('not urgent, but unfixed — patch or accept');
+    expect(message.body).not.toContain('all MEDIUM/LOW or accepted');
   });
 
   it('keeps the singular readable', () => {
     const message = buildScanAnnouncement(facts({ high: 1 }));
-    expect(message.title).toBe('1 unwaived HIGH · box-a');
-    expect(message.body.split('\n')[0]).toContain('1 need a decision');
+    expect(message.title).toBe('1 HIGH finding needs a decision · box-a');
+    expect(message.body.split('\n')[0]).toContain('not urgent, but unfixed — patch or accept');
   });
 
   it('reds and pings when an unwaived CRITICAL outranks the HIGH list', () => {
     const message = buildScanAnnouncement(facts({ high: 900, criticals: 3 }));
-    expect(message.title).toBe('3 unwaived CRITICAL · box-a');
+    expect(message.title).toBe('3 CRITICAL findings need action now · box-a');
     expect(message.color).toBe(SCAN_ALERT_COLOR);
     expect(message.mention).toBe(true);
-    expect(message.body.split('\n')[0]).toContain('3 need you');
+    expect(message.body.split('\n')[0]).toContain('fix these today');
   });
 
   it('earns the calm green line only below HIGH', () => {
     const message = buildScanAnnouncement(facts({ high: 0 }));
-    expect(message.title).toBe('nothing unwaived · box-a');
+    expect(message.title).toBe('Nothing needs action · box-a');
     expect(message.color).toBe(SCAN_REPORT_COLOR);
-    expect(message.body.split('\n')[0]).toContain('nothing needs you');
+    expect(message.body.split('\n')[0]).toContain('all MEDIUM/LOW or accepted');
   });
 });

@@ -118,22 +118,30 @@ function where(facts: ScanRunFacts): string {
   return facts.host ?? 'all hosts';
 }
 
-/** L1: the number that decides whether this message is an alarm, a watch, or a receipt. */
+/** L1: what to do, said plainly — a reader who has never seen this must get it in one line. */
 function titleLine(facts: ScanRunFacts): string {
-  if (facts.criticals === 0 && facts.counts.high === 0) return `nothing unwaived · ${where(facts)}`;
-  if (facts.criticals === 0) return `${grouped(facts.counts.high)} unwaived HIGH · ${where(facts)}`;
-  return `${String(facts.criticals)} unwaived CRITICAL · ${where(facts)}`;
+  if (facts.criticals > 0) {
+    const verb = facts.criticals === 1 ? 'needs' : 'need';
+    const noun = facts.criticals === 1 ? 'finding' : 'findings';
+    return `${String(facts.criticals)} CRITICAL ${noun} ${verb} action now · ${where(facts)}`;
+  }
+  if (facts.counts.high > 0) {
+    const verb = facts.counts.high === 1 ? 'needs' : 'need';
+    const noun = facts.counts.high === 1 ? 'finding' : 'findings';
+    return `${grouped(facts.counts.high)} HIGH ${noun} ${verb} a decision · ${where(facts)}`;
+  }
+  return `Nothing needs action · ${where(facts)}`;
 }
 
-/** L2: standing leads, new is the delta, and the last term is what a human has to do. */
+/** L2: the total a reader cares about, the delta, and one plain sentence on how urgent it is. */
 function leadLine(facts: ScanRunFacts): string {
-  const need =
+  const urgency =
     facts.criticals > 0
-      ? `${String(facts.criticals)} need${facts.criticals === 1 ? 's' : ''} you`
+      ? 'fix these today'
       : facts.counts.high > 0
-        ? `${grouped(facts.counts.high)} need a decision`
-        : 'nothing needs you';
-  return `**${grouped(facts.standing)} standing** · ${grouped(facts.added)} new · ${need}`;
+        ? 'not urgent, but unfixed — patch or accept'
+        : 'all MEDIUM/LOW or accepted';
+  return `**${grouped(facts.standing)} open** · ${grouped(facts.added)} new · ${urgency}`;
 }
 
 /** L3: the CVE leads because it is the string an operator pastes into a tracker. */
@@ -142,18 +150,28 @@ function namedLine(row: ScanCriticalRow): string {
   return `**${id}** · ${clip(row.subject, SUBJECT_LIMIT)} · ${ageLabel(row.ageDays)}`;
 }
 
-/** L4: a fenced block, because prose numbers in a proportional font do not line up. */
+/** L4: grouped by what the reader should do with them, in a fence so the columns line up. */
 function countsBlock(facts: ScanRunFacts): string {
-  const rows: [string, number][] = [
-    ['HIGH', facts.counts.high],
-    ['MED', facts.counts.medium],
-    ['LOW', facts.counts.low],
+  const noted = facts.counts.medium + facts.counts.low + facts.counts.unrated;
+  const detail = [
+    `MEDIUM ${grouped(facts.counts.medium)}`,
+    `LOW ${grouped(facts.counts.low)}`,
+    facts.counts.unrated > 0 ? `unknown ${grouped(facts.counts.unrated)}` : '',
+  ]
+    .filter((part) => part.length > 0)
+    .join(' · ');
+  const acceptedNote = facts.nextReview === null ? 'no re-check date' : `re-check ${facts.nextReview}`;
+  const rows: [string, number, string][] = [
+    ['act now', facts.criticals, 'CRITICAL'],
+    ['decide', facts.counts.high, 'HIGH'],
+    ['noted', noted, detail],
+    ['accepted', facts.waived, acceptedNote],
   ];
-  if (facts.counts.unrated > 0) rows.push(['UNK', facts.counts.unrated]);
   const width = Math.max(...rows.map(([, count]) => grouped(count).length));
-  const lines = rows.map(([label, count]) => `${label.padEnd(5)}${grouped(count).padStart(width)}`);
-  const review = facts.nextReview === null ? '' : ` · next review ${facts.nextReview}`;
-  lines.push(`waived ${grouped(facts.waived)}${review}`);
+  const lines = rows.map(([label, count, note]) => {
+    const tail = note.length > 0 ? `  ${note}` : '';
+    return `${label.padEnd(9)}${grouped(count).padStart(width)}${tail}`;
+  });
   return ['```', ...lines, '```'].join('\n');
 }
 
