@@ -349,16 +349,15 @@ describe('the scheduler signal path does not read the feed', () => {
 
 describe('one row mapper', () => {
   it('is the only place a row becomes a PatchingFinding', () => {
-    const source = readFileSync(
-      join(__dirname, '..', 'src', 'lib', 'security', 'patching-read.ts'),
-      'utf8',
-    );
+    const boundary = ['patching-read.ts', 'patching-read-rows.ts']
+      .map((file) => readFileSync(join(__dirname, '..', 'src', 'lib', 'security', file), 'utf8'))
+      .join('\n');
     // The paged read and the digest read must go through the same function: a second place that
     // formats `first_seen` is how the table and the card start describing one row differently.
-    const mappings = source.split('firstSeen: row.first_seen.toISOString()').length - 1;
+    const mappings = boundary.split('firstSeen: row.first_seen.toISOString()').length - 1;
     expect(mappings).toBe(1);
-    expect(source.match(/function mapPatchingFinding\(/g)).toHaveLength(1);
-    expect(source.match(/function mapPatchingFindings\(/g)).toHaveLength(1);
+    expect(boundary.match(/function mapPatchingFinding\(/g)).toHaveLength(1);
+    expect(boundary.match(/function mapPatchingFindings\(/g)).toHaveLength(1);
   });
 
   it('refuses a source the contract cannot place instead of labelling it', () => {
