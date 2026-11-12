@@ -2,8 +2,9 @@
 # security-scan — every findings producer of the CMS security feed, one entry point.
 set -eu
 
-# The instant this invocation began, shared by every mode it runs.
-SECURITY_RUN_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# The instant this invocation began, shared by every mode it runs. LC_ALL=C: a host locale with a
+# non-Gregorian calendar must not turn the fact's year into a number no reader can parse.
+SECURITY_RUN_STARTED_AT="$(LC_ALL=C date -u +%Y-%m-%dT%H:%M:%SZ)"
 export SECURITY_RUN_STARTED_AT
 
 MODE="${1:-help}"
@@ -17,6 +18,8 @@ WORK_DIR="${WORK_DIR:-/tmp/security-scan}"
 
 # shellcheck source=/dev/null
 . "$LIB_DIR/feed.sh"
+# shellcheck source=/dev/null
+. "$LIB_DIR/scan-status.sh"
 # shellcheck source=/dev/null
 . "$LIB_DIR/dpkg-state.sh"
 # shellcheck source=/dev/null
@@ -50,6 +53,7 @@ scan_osv() {
         log "osv: no lockfile found under $SRC_DIR — complete:false, nothing is resolved"
         printf '[]\n' > "$findings"
         feed_post osv "$findings" false || true
+        scan_status_record osv 0
         return 1
     fi
 
@@ -79,8 +83,11 @@ scan_osv() {
         complete=false
     fi
 
-    log "osv: $(jq 'length' "$findings") findings under $SRC_DIR (complete=$complete)"
+    count=$(jq 'length' "$findings")
+    log "osv: $count findings under $SRC_DIR (complete=$complete)"
     feed_post osv "$findings" "$complete"
+    # Recorded even when the push failed: the digest's fact is the run that happened, not the one intended.
+    scan_status_record osv "$count"
     # A push that could not claim completeness still happened, but a manual run must exit non-zero: an operator who
     [ "$complete" = "true" ]
 }
@@ -144,16 +151,31 @@ scan_rootfs() {
         FEED_HOST_MODULES_FILE="$modules"
     fi
 
-    log "rootfs: $(jq 'length' "$findings") findings under $ROOTFS_DIR (complete=$complete)"
+    count=$(jq 'length' "$findings")
+    log "rootfs: $count findings under $ROOTFS_DIR (complete=$complete)"
     feed_post rootfs "$findings" "$complete"
+    # Same rule as osv: a run whose push failed is still the run the digest has to see.
+    scan_status_record rootfs "$count"
     # Same rule as osv: complete:false was pushed so nothing resolves, and the exit code says the scan is not
     [ "$complete" = "true" ]
 }
 
 scan_all() {
+    scan_status_reset
     rc=0
     scan_osv || rc=1
     scan_rootfs || rc=1
+    # One fact per run, covering both sources; a status write that fails never changes the scan's verdict.
+    scan_status_publish || true
+    return "$rc"
+}
+
+# One mode and the fact it produced; the status is published even when the mode reported a problem.
+scan_one() {
+    scan_status_reset
+    rc=0
+    "scan_$1" || rc=$?
+    scan_status_publish || true
     return "$rc"
 }
 
@@ -187,8 +209,8 @@ run_bridge() {
 }
 
 case "$MODE" in
-    osv) scan_osv ;;
-    rootfs) scan_rootfs ;;
+    osv) scan_one osv ;;
+    rootfs) scan_one rootfs ;;
     all) scan_all ;;
     schedule) run_schedule ;;
     diun-bridge) run_bridge ;;

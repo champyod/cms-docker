@@ -36,12 +36,20 @@ feed_body() {
 }
 
 # feed_post SOURCE FINDINGS_FILE COMPLETE — one push, in batches that fit the route's body cap.
+# FEED_LAST_* carries the tally out: accepted findings, bodies sent, bodies planned, bodies the panel refused.
 feed_post() {
     _source="$1"
     _file="$2"
     _complete="$3"
     _url="${PANEL_URL:-http://admin-panel-next:3000}/api/security/findings"
     _token="${SECURITY_FEED_TOKEN:-}"
+
+    # Reset here, not at the caller: a source that inherits the previous one's tally reports batches it never sent.
+    FEED_LAST_ACCEPTED=0
+    FEED_LAST_BATCHES_SENT=0
+    FEED_LAST_BATCHES_TOTAL=0
+    FEED_LAST_BATCHES_REJECTED=0
+    FEED_LAST_COMPLETE=false
 
     # WHY refuse instead of sending: the route answers 401, and a silent 401 in a nightly container looks exactly like
     if [ -z "$_token" ]; then
@@ -70,9 +78,15 @@ feed_post() {
             -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: Bearer ${_token}" -H 'Content-Type: application/json' \
             --data-binary @- "$_url") || _code=000
+        FEED_LAST_BATCHES_TOTAL=1
         case "$_code" in
-            2*) feed_log "POST $_url accepted 0 findings (source=$_source, complete=$_complete) → HTTP $_code"; return 0 ;;
-            *)  feed_log "POST $_url FAILED → HTTP $_code"; return 1 ;;
+            2*) FEED_LAST_BATCHES_SENT=1
+                FEED_LAST_COMPLETE="$_complete"
+                feed_log "POST $_url accepted 0 findings (source=$_source, complete=$_complete) → HTTP $_code"
+                return 0 ;;
+            *)  FEED_LAST_BATCHES_REJECTED=1
+                feed_log "POST $_url FAILED → HTTP $_code"
+                return 1 ;;
         esac
     fi
 
@@ -119,6 +133,9 @@ feed_post() {
         # WHY refuse instead of sending: one record larger than the panel's body cap cannot go in any body, and cutting it
         if [ "$_size" -gt "$_limit" ]; then
             feed_log "$_source: one finding serializes to $_size bytes, over the panel's $_limit-byte body limit and cannot be split — nothing more is sent"
+            # Sent-vs-planned is the shortfall; nothing was refused, so rejected stays 0.
+            FEED_LAST_BATCHES_TOTAL="$_batches"
+            FEED_LAST_BATCHES_SENT=$((_n - 1))
             rm -f "$_req" "$_plan"
             return 1
         fi
@@ -140,6 +157,10 @@ feed_post() {
             *)
                 feed_log "POST $_url FAILED on batch $_n/$_batches → HTTP $_code: $(head -c 400 "$_resp" 2>/dev/null || true)"
                 feed_log "$_source: $_seen of $_total findings were accepted before the failure; the run claims nothing"
+                FEED_LAST_ACCEPTED="$_seen"
+                FEED_LAST_BATCHES_TOTAL="$_batches"
+                FEED_LAST_BATCHES_SENT=$((_n - 1))
+                FEED_LAST_BATCHES_REJECTED=1
                 rm -f "$_resp" "$_plan"
                 return 1
                 ;;
@@ -149,6 +170,10 @@ feed_post() {
     done < "$_plan"
 
     rm -f "$_plan"
+    FEED_LAST_ACCEPTED="$_total"
+    FEED_LAST_BATCHES_TOTAL="$_batches"
+    FEED_LAST_BATCHES_SENT="$_batches"
+    FEED_LAST_COMPLETE="$_complete"
     feed_log "$_source: all $_total findings accepted in $_batches batch(es), complete=$_complete"
     return 0
 }
