@@ -8,6 +8,7 @@
 
 pub mod feeds;
 pub mod fleet_state;
+pub mod deliver;
 pub mod http;
 pub mod inventory;
 pub mod llm;

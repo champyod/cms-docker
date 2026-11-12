@@ -1,6 +1,6 @@
 //! `sec-digest --no-llm --print-brief`: collect, rank, render, print.
 //!
-//! No delivery and no model in this build. Feed failures are printed on stderr and
+//! Delivery is `deliver`; the model stage is `llm` and may be skipped with --no-llm. Feed failures are printed on stderr and
 //! carried inside the brief, because a quiet day must not look like a broken feed.
 
 use std::path::PathBuf;
@@ -10,7 +10,7 @@ use clap::Parser;
 
 use sec_digest::fleet_state::{self, FleetState};
 use sec_digest::record::RunRecord;
-use sec_digest::{feeds, http, inventory, llm, rank, render, seen, timeutil};
+use sec_digest::{deliver, feeds, http, inventory, llm, rank, render, seen, timeutil};
 
 #[derive(Debug, Parser)]
 #[command(name = "sec-digest", about = "Daily security digest for the CMS fleet")]
@@ -27,6 +27,9 @@ struct Cli {
     /// Print the brief to stdout.
     #[arg(long)]
     print_brief: bool,
+    /// Render and print, but never call the webhook.
+    #[arg(long)]
+    no_deliver: bool,
     /// Inventory root; defaults to CMS_HUB_ROOT or the hub checkout.
     #[arg(long)]
     hub: Option<PathBuf>,
@@ -115,6 +118,15 @@ fn run(cli: &Cli) -> Result<(), String> {
             model
         );
     }
+    if cli.no_deliver {
+        eprintln!("[digest] --no-deliver; nothing sent");
+        return Ok(());
+    }
+    let sent = deliver::deliver(&text)?;
+    eprintln!(
+        "[digest] {} delivered {} chars (cut={}) at HTTP {}",
+        record.run_id, sent.chars, sent.cut, sent.status
+    );
     Ok(())
 }
 
