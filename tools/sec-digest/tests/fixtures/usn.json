@@ -1,0 +1,56 @@
+{
+  "notices": [
+    {
+      "id": "USN-9001-1",
+      "title": "OpenSSL vulnerability",
+      "summary": "It was discovered that OpenSSL incorrectly handled certain malformed certificates.",
+      "published": "2026-11-09T18:00:00Z",
+      "cves": ["CVE-2026-7001"],
+      "release_packages": {
+        "jammy": [
+          {"name": "libssl3", "version": "3.0.2-0ubuntu1.19"},
+          {"name": "openssl", "version": "3.0.2-0ubuntu1.19"}
+        ],
+        "noble": [
+          {"name": "openssl", "version": "3.0.13-0ubuntu3.5"}
+        ]
+      }
+    },
+    {
+      "id": "USN-9002-1",
+      "title": "nginx vulnerability",
+      "summary": "It was discovered that nginx incorrectly handled HTTP/2 requests.",
+      "published": "2026-11-10T08:00:00Z",
+      "cves": ["CVE-2026-7003"],
+      "release_packages": {
+        "jammy": [
+          {"name": "nginx", "version": "1.18.0-0ubuntu1.7"}
+        ]
+      }
+    },
+    {
+      "id": "USN-9003-1",
+      "title": "yodl vulnerability",
+      "summary": "A package this fleet does not run.",
+      "published": "2026-11-10T08:00:00Z",
+      "cves": [],
+      "release_packages": {
+        "jammy": [
+          {"name": "yodl", "version": "4.03.02-1"}
+        ]
+      }
+    },
+    {
+      "id": "USN-8999-1",
+      "title": "linux vulnerability",
+      "summary": "Outside the window.",
+      "published": "2026-10-01T00:00:00Z",
+      "cves": ["CVE-2026-6999"],
+      "release_packages": {
+        "jammy": [
+          {"name": "linux", "version": "5.15.0-200.210"}
+        ]
+      }
+    }
+  ]
+}

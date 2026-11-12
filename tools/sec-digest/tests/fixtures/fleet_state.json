@@ -1,0 +1,40 @@
+{
+  "repos": [
+    {
+      "repo": "cms-docker",
+      "branch": "major/admin-panel",
+      "head": "a57f0856",
+      "age": "2 days ago",
+      "subject": "Sync constraints",
+      "dirty": 3,
+      "ci": "success (CI)",
+      "prs": 1,
+      "pr_title": "Sync constraints"
+    },
+    {
+      "repo": "cms-learn",
+      "error": "checkout not found"
+    }
+  ],
+  "servers": [
+    {
+      "host": "como-main",
+      "kernel": "5.15.0-203-generic",
+      "reboot": "required",
+      "secupdates": "4",
+      "disk": "38",
+      "containers": "36",
+      "unhealthy": "1",
+      "restarting": "0",
+      "lastscan": "2026-11-12T03:00:20Z|13357",
+      "cms_backup_stale": "1"
+    },
+    {
+      "host": "admin",
+      "error": "TimeoutExpired: 25s"
+    }
+  ],
+  "waivers": {"count": 18, "next": "2027-01-31", "expired": 1},
+  "errors": [],
+  "uncovered": ["cms", "ranking"]
+}

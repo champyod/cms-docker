@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+<title>Fixture newsroom</title>
+<link>https://example.invalid/feed/</link>
+<item><title>Hackers exploit critical OpenSSL flaw in the wild</title><link>https://example.invalid/openssl</link><pubDate>Tue, 10 Nov 2026 06:00:00 +0000</pubDate></item>
+<item><title>Weekly roundup: nothing much happened</title><link>https://example.invalid/roundup</link><pubDate>Tue, 10 Nov 2026 05:00:00 +0000</pubDate></item>
+<item><title>Ransomware group claims breach of a cloud provider</title><link>https://example.invalid/breach</link><pubDate>Tue, 10 Nov 2026 04:00:00 +0000</pubDate></item>
+<item><title>Old exploited-in-the-wild story from last month</title><link>https://example.invalid/old</link><pubDate>Thu, 01 Oct 2026 00:00:00 +0000</pubDate></item>
+</channel>
+</rss>
