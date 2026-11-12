@@ -147,12 +147,20 @@ export type PatchingSourceFilter = PatchingSource | 'all';
 export type PatchingSeverityFilter = PatchingSeverity | 'all';
 export type PatchingReachabilityFilter = Reachability | 'all';
 
+/**
+ * `waived` is the defect's own filter: rows a live waiver still covers whose stored verdict is
+ * 'reachable' after having been something else — a decision taken about a host state that ended.
+ */
+export const PATCHING_FLIP_FILTERS = ['all', 'waived'] as const;
+export type PatchingFlipFilter = (typeof PATCHING_FLIP_FILTERS)[number];
+
 /** What the findings table is asked for. Every field is echoed into the query string. */
 export interface PatchingQuery {
   readonly page: number;
   readonly source: PatchingSourceFilter;
   readonly severity: PatchingSeverityFilter;
   readonly reachability: PatchingReachabilityFilter;
+  readonly flip: PatchingFlipFilter;
   readonly sort: PatchingSort;
   readonly direction: SortDirection;
 }
@@ -163,6 +171,7 @@ export interface PatchingQueryInput {
   readonly source?: string;
   readonly severity?: string;
   readonly reachability?: string;
+  readonly flip?: string;
   readonly sort?: string;
   readonly dir?: string;
 }
@@ -172,6 +181,7 @@ export const DEFAULT_PATCHING_QUERY: PatchingQuery = {
   source: 'all',
   severity: 'all',
   reachability: 'all',
+  flip: 'all',
   sort: 'lastSeen',
   direction: 'desc',
 };
@@ -229,10 +239,11 @@ export function readPatchingQuery(input: PatchingQueryInput = {}): PatchingQuery
   const source = isPatchingSource(input.source) ? input.source : 'all';
   const severity = isPatchingSeverity(input.severity) ? input.severity : 'all';
   const reachability = isReachability(input.reachability) ? input.reachability : 'all';
+  const flip = input.flip === 'waived' ? 'waived' : 'all';
   const sort = isPatchingSort(input.sort) ? input.sort : DEFAULT_PATCHING_QUERY.sort;
   const direction: SortDirection =
     input.dir === 'asc' || input.dir === 'desc' ? input.dir : defaultDirection(sort);
-  return { page: readPageNumber(input.page), source, severity, reachability, sort, direction };
+  return { page: readPageNumber(input.page), source, severity, reachability, flip, sort, direction };
 }
 
 /** How many pages the current filter needs; an empty set still has one page to stand on. */
@@ -265,6 +276,7 @@ export function patchingSearchParams(query: PatchingQuery): Record<string, strin
   if (query.reachability !== DEFAULT_PATCHING_QUERY.reachability) {
     params.reachability = query.reachability;
   }
+  if (query.flip !== DEFAULT_PATCHING_QUERY.flip) params.flip = query.flip;
   if (query.sort !== DEFAULT_PATCHING_QUERY.sort) params.sort = query.sort;
   if (query.direction !== defaultDirection(query.sort)) params.dir = query.direction;
   if (query.page > 1) params.page = String(query.page);
@@ -286,6 +298,11 @@ export interface PatchingState {
  */
 export interface PatchingListState extends PatchingState {
   readonly page: PatchingPageInfo;
+  /**
+   * Rows whose verdict became 'reachable' while a live waiver still covers them: the number the
+   * banner states, counted in SQL by the one flip predicate the filter also uses.
+   */
+  readonly waivedReachable: number;
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   type PatchingSource,
   type PatchingWaiver,
 } from '@/lib/security/patching';
+import type { WaivedReachable } from '@/lib/security/verdict-flip';
 
 /**
  * What deserves to reach a human, and how loudly.
@@ -26,6 +27,9 @@ import {
  *     bump it" is not a plan. HIGH rides along in the same message but never starts one: HIGH is
  *     the ordinary state of an unpatched distro image between two daily bumps, so paging on it is
  *     how a channel becomes unreadable in a week.
+ *   · **A waiver that no longer fits its host** — a row whose verdict flipped to `reachable` while
+ *     a live waiver still covers it. The decision was taken about a host state that ended, so what
+ *     it silences is reachable and nothing else would ever say so: no count moves, no date lapses.
  *   · **A backup or offsite copy that is stale, or that cannot be evaluated** — the only fact here
  *     that cannot be repaired after the fact. Silence is not reassurance: a monitoring stack that
  *     cannot be reached is reported as `cannot evaluate`, never as healthy.
@@ -49,7 +53,7 @@ import {
 /** How loud the current state is, worst first. The card's colour and the channel both read it. */
 export type SignalTone = 'act' | 'unevaluable' | 'watch' | 'clear';
 
-export type SignalFactKind = 'waiver-expired' | 'finding-critical' | 'staleness';
+export type SignalFactKind = 'waiver-expired' | 'waiver-flip' | 'finding-critical' | 'staleness';
 
 /**
  * One thing worth saying, with a key that is stable for as long as the fact is.
@@ -150,6 +154,11 @@ export interface PatchingSignalFacts {
   readonly aged: number;
   /** Every row a live waiver touches, already mapped: their state is `active` or `expired`. */
   readonly waived: readonly PatchingFinding[];
+  /**
+   * Rows a waiver covers although their verdict is `reachable` now, after having been something
+   * else. The one fact in this digest about a DECISION that no longer fits the host it was made for.
+   */
+  readonly flips: WaivedReachable;
   /** Unwaived CRITICAL rows, bounded to what a message can name. */
   readonly criticals: readonly PatchingFinding[];
   readonly worst: PatchingFinding | null;
@@ -229,6 +238,33 @@ export function expiredWaiverKey(waiverId: number): string {
   return `waiver:${String(waiverId)}:expired`;
 }
 
+/**
+ * The push key for the flipped set.
+ *
+ * WHY the count and the key are in it: this fact stands for a SET, so the thing worth saying again
+ * is that the set changed — one more row hidden, or a worse CVE among them. A constant key would
+ * make the second flip silent, which is the failure this fact exists to prevent.
+ */
+export function waiverFlipKey(count: number, worstKey: string | null): string {
+  return `waiver-flip:${String(count)}:${worstKey ?? ''}`;
+}
+
+/** One fact for the whole set: how many rows, and the worst of them named. */
+function waiverFlipFact(flips: WaivedReachable): SignalFact | null {
+  if (flips.count === 0) return null;
+  const worst = flips.worst;
+  const named =
+    worst === null
+      ? 'not named'
+      : `${worst.severity ?? 'unrated'} ${worst.title ?? worst.key}${worst.host === null ? '' : ` on ${worst.host}`}`;
+  return {
+    key: waiverFlipKey(flips.count, worst?.key ?? null),
+    kind: 'waiver-flip',
+    detail: `${String(flips.count)} waived finding(s) reachable now — worst ${named}`,
+    since: worst?.flippedAt ?? null,
+  };
+}
+
 /** The instant a first sighting becomes "aged": exactly `ageDays(since) > findingAgeDays`. */
 export function agedCutoff(now: Date): Date {
   return new Date(now.getTime() - (SIGNAL_RULES.findingAgeDays + 1) * DAY_MS);
@@ -265,6 +301,11 @@ export function buildSecurityDigest(
       since: waiver.reviewBy,
     });
   }
+
+  // A flip is the one fact here about a decision that no longer fits: something reachable is
+  // silenced by a waiver written when it was not, so it is named before the unwaived criticals.
+  const flipFact = waiverFlipFact(facts.flips);
+  if (flipFact !== null) triggers.push(flipFact);
 
   // WHY the rows arrive already filtered to "no waiver at all": a CRITICAL whose waiver lapsed is
   // already pushed as the lapsed decision, and one item producing two lines is how a digest starts
@@ -338,7 +379,11 @@ export function buildSecurityDigest(
     worst: worstFinding(facts.worst),
     oldest: oldestUnowned(facts.oldest, expiredWaivers, now),
     triggers: sortFacts(triggers),
-    triggerCount: expiredWaivers.length + (pushedTotal - pushedTouched) + stalenessTriggers,
+    triggerCount:
+      expiredWaivers.length +
+      (pushedTotal - pushedTouched) +
+      (facts.flips.count > 0 ? 1 : 0) +
+      stalenessTriggers,
     // Diun's drift is a rider, never a trigger; it carries no severity, so it is named by subject.
     riderCounts: {
       unwaivedHigh: counts.unwaivedHigh,
@@ -371,8 +416,9 @@ function toneFor(triggers: readonly SignalFact[], counts: SignalCounts): SignalT
  */
 const KIND_ORDER: Record<SignalFactKind, number> = {
   'waiver-expired': 0,
-  'finding-critical': 1,
-  staleness: 2,
+  'waiver-flip': 1,
+  'finding-critical': 2,
+  staleness: 3,
 };
 
 function sortFacts(facts: readonly SignalFact[]): readonly SignalFact[] {
@@ -515,7 +561,9 @@ export function planNotification(
     facts,
     fresh,
     overflowKey,
-    mention: facts.some((fact) => fact.kind === 'staleness' || fact.kind === 'finding-critical'),
+    mention: facts.some(
+      (fact) => fact.kind === 'staleness' || fact.kind === 'finding-critical' || fact.kind === 'waiver-flip',
+    ),
     title,
     body: renderMessage(digest, fresh),
   };

@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import { PATCHING_SEVERITIES, PATCHING_SOURCES, type PatchingQuery } from '@/lib/security/patching';
 import type { WaiverRow } from '@/lib/security/patching-read-types';
+import { flippedUnderWaiverWhere } from '@/lib/security/verdict-flip';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 
 /** Unresolved rows the contract can place: ingest resolves instead of deleting, so history survives. */
@@ -27,13 +28,25 @@ export function untouchedWhere(waivers: readonly WaiverRow[]): Prisma.security_f
   return cover === null ? {} : { NOT: cover };
 }
 
+/** The flipped rows as SQL: the waiver predicate widened by "reachable now" and an open flip. */
+export function flippedRowsWhere(waivers: readonly WaiverRow[]): Prisma.security_findingsWhereInput {
+  const flipped = flippedUnderWaiverWhere(waivers);
+  // WHY an impossible set and not `{}`: with no live waiver nothing is hidden by one, so this
+  // filter selects nothing — the opposite of leaving the clause out.
+  return flipped === null ? { id: { in: [] } } : flipped;
+}
+
 /** The filters as SQL: an absent filter is the absence of a clause, not a wildcard. */
-export function filteredWhere(query: PatchingQuery): Prisma.security_findingsWhereInput {
+export function filteredWhere(
+  query: PatchingQuery,
+  waivers: readonly WaiverRow[],
+): Prisma.security_findingsWhereInput {
   return unresolvedWhere({
     ...(query.source === 'all' ? {} : { source: query.source }),
     ...(query.severity === 'all' ? {} : { severity: query.severity }),
     // One stored verdict, so the count and the page select exactly the rows the badge names.
     ...(query.reachability === 'all' ? {} : { reachability: query.reachability }),
+    ...(query.flip === 'all' ? {} : flippedRowsWhere(waivers)),
   });
 }
 

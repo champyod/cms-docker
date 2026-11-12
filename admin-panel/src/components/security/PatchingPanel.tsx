@@ -14,6 +14,7 @@ import { SelectField } from '@/components/core/FormField';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { RecordListPager } from '@/components/list/RecordListPager';
 import { BulkWaiveDialog } from '@/components/security/BulkWaiveDialog';
+import { PatchingFlipBanner } from '@/components/security/PatchingFlipBanner';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
 import { REACHABILITY_VALUES, type Reachability } from '@/lib/security/kernel-reachability';
@@ -139,7 +140,7 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
   // a filter matched nothing.
   const total = state.page.total;
   const filtered =
-    query.source !== 'all' || query.severity !== 'all' || query.reachability !== 'all';
+    query.source !== 'all' || query.severity !== 'all' || query.reachability !== 'all' || query.flip !== 'all';
 
   /**
    * The URL for a view of this table.
@@ -408,6 +409,18 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
             ))}
           </SelectField>
           <SelectField
+            id="patching-flip"
+            label={copy.filters.flip}
+            value={query.flip}
+            className="sm:w-56"
+            onChange={(event) =>
+              applyFilter({ flip: event.target.value === 'waived' ? 'waived' : 'all' })
+            }
+          >
+            <option value="all">{copy.filters.flipAll}</option>
+            <option value="waived">{copy.filters.flipWaived}</option>
+          </SelectField>
+          <SelectField
             id="patching-sort"
             label={copy.filters.sort}
             value={query.sort}
@@ -449,6 +462,14 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
           </div>
         </div>
       </Card>
+
+      {/* Why above the cards: the count is the one number on this page that names a decision that
+          no longer fits its host, and it must lead to the rows rather than sit among inventories. */}
+      <PatchingFlipBanner
+        count={state.waivedReachable}
+        href={hrefFor({ flip: 'waived', page: 1 })}
+        copy={copy}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {(

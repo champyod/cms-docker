@@ -54,10 +54,17 @@ function fakeClient(hostRows: Map<string, StoredModules>): {
     security_findings: {
       // Every finding here is new, so the create path is the one that carries the verdict.
       updateMany: async (): Promise<{ count: number }> => ({ count: 0 }),
+      findMany: async (): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> => [],
       createMany: async (args: { data: WrittenFinding[] }): Promise<{ count: number }> => {
         written.push(...args.data);
         return { count: args.data.length };
       },
+    },
+    // A flip needs a stored verdict to change FROM; with none, the waiver read is never reached.
+    security_waivers: { findMany: async (): Promise<ReadonlyArray<unknown>> => [] },
+    security_finding_flips: {
+      upsert: async (): Promise<Record<string, never>> => ({}),
+      updateMany: async (): Promise<{ count: number }> => ({ count: 0 }),
     },
   };
   return {

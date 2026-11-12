@@ -105,10 +105,16 @@ async function ingestedVerdict(title: string): Promise<unknown> {
   const client = {
     security_findings: {
       updateMany: async () => ({ count: 0 }),
+      findMany: async (): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> => [],
       createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
         created.push(...data);
         return { count: data.length };
       },
+    },
+    security_waivers: { findMany: async (): Promise<ReadonlyArray<unknown>> => [] },
+    security_finding_flips: {
+      upsert: async () => ({}),
+      updateMany: async () => ({ count: 0 }),
     },
     security_host_modules: { findUnique: async () => null, upsert: async () => ({}) },
   } as unknown as Prisma.TransactionClient;

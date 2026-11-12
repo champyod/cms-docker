@@ -35,6 +35,14 @@ type HostModulesWrite = Omit<FakeHostModules, 'host'>;
 
 const mocks = vi.hoisted(() => {
   const rows = new Map<string, FakeFinding>();
+  // Waivers and flips are keyed by id/finding_id, exactly as their tables are.
+  const waiverRows = new Map<number, {
+    id: number;
+    source: string;
+    match: string;
+    ended_at: Date | null;
+  }>();
+  const flipRows = new Map<number, Record<string, unknown>>();
   // Keyed by host, because that is the table's primary key: one row per box, replaced in place.
   const hostRows = new Map<string, {
     host: string;
@@ -127,10 +135,61 @@ const mocks = vi.hoisted(() => {
       }
       return { count };
     },
+    // The stored verdict for each key the push carries: the flip rule compares against this.
+    findMany: async (args: {
+      where: { source: string; key: { in: string[] } };
+    }): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> =>
+      [...rows.values()]
+        .filter((row) => row.source === args.where.source && args.where.key.in.includes(row.key))
+        .map((row) => ({ id: row.id, key: row.key, reachability: row.reachability })),
+  };
+
+  const fakeWaivers = {
+    // Live decisions over this source; a route test that needs one seeds it.
+    findMany: async (args: { where: { source: string } }): Promise<ReadonlyArray<{
+      id: number;
+      source: string;
+      match: string;
+      ended_at: Date | null;
+    }>> => [...waiverRows.values()].filter(
+      (waiver) => waiver.source === args.where.source && waiver.ended_at === null,
+    ),
+  };
+
+  const fakeFlips = {
+    // One row per finding, re-opened in place: the fake models the unique `finding_id`.
+    upsert: async (args: {
+      where: { finding_id: number };
+      create: Record<string, unknown>;
+      update: Record<string, unknown>;
+    }): Promise<Record<string, unknown>> => {
+      const row = { ...(flipRows.get(args.where.finding_id) ?? args.create), ...args.update };
+      flipRows.set(args.where.finding_id, row);
+      return row;
+    },
+    updateMany: async (args: {
+      where: { finding_id?: number; finding?: { source: string; resolved_at: { not: null } } };
+      data: { cleared_at: Date };
+    }): Promise<{ count: number }> => {
+      let count = 0;
+      for (const [findingId, row] of flipRows) {
+        if (row.cleared_at !== null) continue;
+        if (args.where.finding_id !== undefined && findingId !== args.where.finding_id) continue;
+        if (args.where.finding !== undefined) {
+          const finding = rows.get(`${args.where.finding.source}\u0000${String(row.finding_key)}`);
+          if (finding === undefined || finding.resolved_at === null) continue;
+        }
+        flipRows.set(findingId, { ...row, cleared_at: args.data.cleared_at });
+        count += 1;
+      }
+      return { count };
+    },
   };
 
   const fakePrisma = {
     security_findings,
+    security_waivers: fakeWaivers,
+    security_finding_flips: fakeFlips,
     // Modelled as a map keyed by host, not as a spy: "replaced, not appended" is the contract.
     security_host_modules: {
       findUnique: async (args: {
@@ -166,6 +225,8 @@ const mocks = vi.hoisted(() => {
   return {
     rows,
     hostRows,
+    waiverRows,
+    flipRows,
     rowKey,
     fakePrisma,
     recordAudit: vi.fn(),
@@ -229,6 +290,8 @@ describe('security feed ingest route', () => {
   beforeEach(() => {
     mocks.rows.clear();
     mocks.hostRows.clear();
+    mocks.waiverRows.clear();
+    mocks.flipRows.clear();
     mocks.recordAudit.mockClear();
     mocks.setRootAdmin({ id: 1 });
     process.env.SECURITY_FEED_TOKEN = TOKEN;

@@ -9,6 +9,7 @@ import {
 import {
   mapPatchingFinding, mapPatchingFindings, mapPatchingWaiver, toWaiverRecord, waiverOwners,
 } from '@/lib/security/patching-read-rows';
+import { countWaivedReachable, readWaivedReachable } from '@/lib/security/patching-read-flips';
 import { tallyFeedTotals, tallyFindingCounts, type FeedTotals } from '@/lib/security/patching-read-totals';
 import type {
   BulkWaiveFeed, FindingRow, PatchingSnapshot, WaiverRow,
@@ -44,10 +45,12 @@ async function readFindingCounts(): Promise<PatchingFindingCounts> {
 }
 
 /** The page of rows for a query, or none when the filter matched nothing. */
-async function readPageRows(query: PatchingQuery, total: number): Promise<FindingRow[]> {
+async function readPageRows(
+  query: PatchingQuery, total: number, waivers: readonly WaiverRow[],
+): Promise<FindingRow[]> {
   if (total === 0) return [];
   return prisma.security_findings.findMany({
-    where: filteredWhere(query),
+    where: filteredWhere(query, waivers),
     orderBy: pageOrderBy(query),
     skip: (query.page - 1) * PATCHING_PAGE_SIZE,
     take: PATCHING_PAGE_SIZE,
@@ -59,20 +62,24 @@ export async function readPatchingPage(
   input: PatchingQueryInput = {}, now: Date = new Date(),
 ): Promise<PatchingListState> {
   const requested = readPatchingQuery(input);
-  const [waivers, counts, total] = await Promise.all([
-    liveWaiverRows(),
+  // Read first: the flip filter is a clause over the live waivers, so the rows it selects depend
+  // on them, and the page must count and page with one set of decisions.
+  const waivers = await liveWaiverRows();
+  const [counts, total, waivedReachable] = await Promise.all([
     readFindingCounts(),
-    prisma.security_findings.count({ where: filteredWhere(requested) }),
+    prisma.security_findings.count({ where: filteredWhere(requested, waivers) }),
+    countWaivedReachable(waivers),
   ]);
   // Clamped after the count: `?page=999` on a shrunken feed must not render an empty table.
   const query: PatchingQuery = { ...requested, page: clampPatchingPage(requested.page, total) };
-  const rows = await readPageRows(query, total);
+  const rows = await readPageRows(query, total, waivers);
   const owners = await waiverOwners(waivers);
   return {
     groups: groupFindings(mapPatchingFindings(rows, waivers, now)),
     waivers: waivers.map((row) => mapPatchingWaiver(row, owners, now)),
     cards: buildPatchingCards(counts, waivers, now),
     page: { query, pageSize: PATCHING_PAGE_SIZE, total, pageCount: patchingPageCount(total) },
+    waivedReachable,
   };
 }
 
@@ -146,10 +153,11 @@ async function readSignalFacts(
   counts: PatchingFindingCounts, now: Date,
 ): Promise<PatchingSignalFacts> {
   const totals = await readFeedTotals();
-  const [aged, waived, rows] = await Promise.all([
+  const [aged, waived, rows, flips] = await Promise.all([
     prisma.security_findings.count({ where: unresolvedWhere({ first_seen: { lte: agedCutoff(now) } }) }),
     readWaivedFindings(waivers, now),
     readSignalRows(totals, waivers, now),
+    readWaivedReachable(waivers),
   ]);
   return {
     cards: buildPatchingCards(counts, waivers, now),
@@ -159,6 +167,7 @@ async function readSignalFacts(
     unrated: totals.unrated,
     aged,
     waived,
+    flips,
     ...rows,
   };
 }

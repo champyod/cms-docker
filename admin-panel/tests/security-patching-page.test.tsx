@@ -115,6 +115,7 @@ const STATE: PatchingListState = {
       source: 'all',
       severity: 'all',
       reachability: 'all',
+      flip: 'all',
       sort: 'lastSeen',
       direction: 'desc',
     },
@@ -122,6 +123,7 @@ const STATE: PatchingListState = {
     total: TOTAL,
     pageCount: Math.ceil(TOTAL / PATCHING_PAGE_SIZE),
   },
+  waivedReachable: 0,
 };
 
 async function renderPage(
