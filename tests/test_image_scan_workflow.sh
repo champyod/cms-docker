@@ -86,17 +86,34 @@ fi
 
 printf '\n== least privilege, and NOT a merge gate ==\n'
 
-if grep -qE '^  contents: read$' "$WF" 2>/dev/null && grep -qE '^  issues: write$' "$WF" 2>/dev/null; then
-  ok "permissions are contents: read + issues: write"
+# An auto-fix PR needs a branch and a pull request, so the write set is an allowlist of exactly
+# three — and the two properties that matter stay asserted: no write-all, and no PAT.
+if [ "$(grep -vE '^[[:space:]]*#' "$WF" 2>/dev/null | grep -cE ': write')" = "3" ] &&
+   grep -qE '^  contents: write$' "$WF" && grep -qE '^  issues: write$' "$WF" &&
+   grep -qE '^  pull-requests: write$' "$WF"; then
+  ok "write scope is the allowlist: contents, issues, pull-requests"
 else
-  no "permissions are not exactly contents: read + issues: write"
+  no "the write scopes are not exactly contents + issues + pull-requests"
 fi
 
-if [ "$(grep -vE '^[[:space:]]*#' "$WF" 2>/dev/null | grep -cE ': write')" = "1" ] &&
-   ! grep -q 'write-all' "$WF" 2>/dev/null; then
-  ok "no write scope beyond issues"
+if ! grep -q 'write-all' "$WF" 2>/dev/null; then
+  ok "no write-all"
 else
-  no "an extra write scope (or write-all) is granted"
+  no "write-all is granted"
+fi
+
+# The fix must propose through a branch: a workflow that can push the landing branch can bypass review.
+if grep -q 'branch="fix/image-digests"' "$WF" 2>/dev/null &&
+   grep -qE 'git push .*\$branch' "$WF" 2>/dev/null; then
+  ok "the pin bump pushes only its own fix/ branch"
+else
+  no "the pin bump may push somewhere other than its fix/ branch"
+fi
+
+if grep -q 'scripts/__image_scan_fix.sh' "$WF" 2>/dev/null; then
+  ok "the workflow rewrites pins through the tested fix script"
+else
+  no "the workflow bumps pins some other way than scripts/__image_scan_fix.sh"
 fi
 
 if grep -qiE 'secrets\.|PERSONAL_ACCESS_TOKEN|\bPAT\b' "$WF" 2>/dev/null; then

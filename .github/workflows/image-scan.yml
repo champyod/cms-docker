@@ -15,7 +15,7 @@
 # ci.yml references this file; tests/test_image_scan_workflow.sh fails if that changes.
 #
 # WHY it costs nothing: the repository is public, so scheduled runs are unmetered. It touches no
-# host, holds no credential beyond the default token (contents: read, issues: write), and pulls
+# host, holds no credential beyond the default token (the three writes below), and pulls
 # only public images from public registries.
 name: Nightly image scan
 
@@ -35,11 +35,13 @@ on:
   # the first run after this lands is not a day away.
   workflow_dispatch:
 
-# Read the tree; write one issue. No packages, no registry login, no deploy token — the scan reads
-# public images anonymously and the notification needs nothing but the default GITHUB_TOKEN.
+# Read the tree; write one issue, and one branch when a pin is stale. No packages, no registry
+# login, no deploy token — the scan reads public images anonymously and the fix needs nothing
+# beyond the default GITHUB_TOKEN, scoped to the three writes below.
 permissions:
-  contents: read
+  contents: write
   issues: write
+  pull-requests: write
 
 # WHY serialised: two runs would both replace the same issue body, and the slower one would win
 # with older data. Interleaving two nightly scans has no upside, so they queue.
@@ -122,6 +124,58 @@ jobs:
           bash scripts/__image_scan.sh report --out "$out" \
             --run-url "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" \
             >> "$GITHUB_STEP_SUMMARY"
+
+      # The fix half: a drifted pin becomes a branch and a pull request, never a silent bump on the
+      # landing branch. `apply` rewrites only digests the drift pass resolved, so an unanswered
+      # registry read can not move a pin.
+      - name: Rewrite the drifted pins
+        id: bump
+        if: always()
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          set +e
+          bash scripts/__image_scan_fix.sh apply --out "$out"
+          rc=$?
+          set -e
+          case "$rc" in
+            0) echo "changed=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "changed=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+
+      # WHY a fixed branch name: tonight's bump replaces last night's, so the PR is one reviewable
+      # diff rather than one PR per night. WHY it never targets the landing branch directly: the
+      # scan is evidence, and a merge is a decision.
+      - name: Open the pin-bump pull request
+        if: steps.bump.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_REF: ${{ github.ref_name }}
+        run: |
+          set -eu
+          branch="fix/image-digests"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add -- 'docker-compose*.yml'
+          if git diff --cached --quiet; then
+            echo "::notice::no compose change staged — nothing to propose"
+            exit 0
+          fi
+          git commit -m "fix(images): bump the pinned digests the nightly scan found stale"
+          git push --force-with-lease origin "$branch"
+
+          body="$(printf '%s\n' \
+            'Bumped the digest pins whose tags now serve a different image.' \
+            '' \
+            'Proposed by the nightly image scan because a drifted pin means the stack is still' \
+            'starting the digest we chose earlier. Review the diff, then merge if the newer digest' \
+            'is the one you want to run.' \
+            '' \
+            'Nothing here was applied to a running host: the change lands only when this PR is merged.' )"
+          gh pr create --base "$BASE_REF" --head "$branch" \
+            --title "fix(images): bump stale pinned digests" --body "$body" \
+            || gh pr edit "$branch" --body "$body"
 
       # Notification is one UPSERTED issue, not one per run: a nightly workflow that opens a new
       # issue every night trains its reader to ignore the title. A stable title, the body replaced

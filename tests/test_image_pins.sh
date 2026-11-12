@@ -161,8 +161,10 @@ dfrom_ours=0
 # `find`, not `git ls-files`: the gate has to answer the same way from an exported tree as from a
 # checkout, and a scan that silently covers nothing because git is absent is the failure mode this
 # whole section exists to prevent. Build artifacts are pruned by path, not by trusting .gitignore.
+# `target/` is cargo build output (and its test fixtures), never a reviewed source.
 for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
-             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' | sed 's|^\./||'); do
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' \
+             -not -path '*/target/*' | sed 's|^\./||'); do
   while IFS= read -r line; do
     ref="$(printf '%s' "$line" | awk '{print $2}')"
     # `FROM base AS build` style references a previous stage, not a registry image.
@@ -259,7 +261,8 @@ is_pinned() {
 tool_files=0
 client_files=0
 for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
-             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' | sed 's|^\./||' | sort); do
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' \
+             -not -path '*/target/*' | sed 's|^\./||' | sort); do
   tool_files=$((tool_files + 1))
   code="$(code_of "$REPO_ROOT/$f")"
 
