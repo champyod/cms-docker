@@ -167,7 +167,10 @@ evidence wins, and the push's response counts those reports as `held`.
   its last verdict.
 - Validation: schema-checked at the boundary (source enum, key ≤ 200 chars, severity in the allowlist,
   array ≤ 2000), 422 with the offending index, never a stack trace.
-- Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source).
+- Each accepted push writes one `audit_log` row (`security.findings.ingest`, actor = the source), whose
+  `after_values` carry the run it belongs to (`host`, `run_started_at`, `complete`, `received`,
+  `resolved`, `held`, `host_modules`). The security signal reads those rows back to announce one
+  message per finished run — see `docs/SECURITY-SIGNAL.md` §7.
 - Rate limited per source, and the body size capped — a feed endpoint is still an input boundary.
 - The producer (`docker/security-scan/lib/feed.sh`) splits a large set into bodies of at most 250
   records **and** at most 900,000 bytes, measured in UTF-8 bytes per record and cut only between
