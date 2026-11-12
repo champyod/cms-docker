@@ -18,6 +18,7 @@ const store = vi.hoisted(() => {
   let nextFindingId = 1;
   let nextPushId = 1;
   let deliver: () => Promise<boolean> = async () => true;
+  let webhook = true;
 
   interface Query {
     where?: Row;
@@ -196,6 +197,10 @@ const store = vi.hoisted(() => {
     setDelivery: (next: () => Promise<boolean>): void => {
       deliver = next;
     },
+    webhookConfigured: (): boolean => webhook,
+    setWebhook: (next: boolean): void => {
+      webhook = next;
+    },
     reset: (): void => {
       findings.length = 0;
       waivers.length = 0;
@@ -205,13 +210,17 @@ const store = vi.hoisted(() => {
       nextFindingId = 1;
       nextPushId = 1;
       deliver = async () => true;
+      webhook = true;
     },
   };
 });
 
 vi.mock('@/lib/prisma', () => ({ prisma: store.prisma }));
 vi.mock('@/lib/audit', () => ({ recordAudit: store.recordAudit }));
-vi.mock('@/lib/discord-notifier', () => ({ logToDiscord: store.logToDiscord }));
+vi.mock('@/lib/discord-notifier', () => ({
+  logToDiscord: store.logToDiscord,
+  isDiscordWebhookConfigured: (): boolean => store.webhookConfigured(),
+}));
 vi.mock('@/lib/security/staleness', () => ({
   readStalenessSnapshotCached: async (): Promise<{ readings: never[]; source: null }> => ({ readings: [], source: null }),
 }));
@@ -402,6 +411,10 @@ describe('the scan announcement is composed by the poller, one message per run',
     expect(await announceFinishedScans(TICK)).toEqual([
       { key: `box-a|${RUN_AT.toISOString()}`, status: 'failed' },
     ]);
+    // The next tick retries, and one broken run leaves one failure row, not one per minute.
+    expect(await announceFinishedScans(new Date(TICK.getTime() + MINUTE))).toEqual([
+      { key: `box-a|${RUN_AT.toISOString()}`, status: 'failed' },
+    ]);
     expect(store.audits).toEqual([
       expect.objectContaining({ verb: SCAN_NOTIFY_FAILED_VERB, entity_id: `box-a|${RUN_AT.toISOString()}` }),
     ]);
@@ -413,5 +426,15 @@ describe('the scan announcement is composed by the poller, one message per run',
     expect(store.audits.filter((row) => row.verb === SCAN_NOTIFIED_VERB)).toEqual([
       expect.objectContaining({ result: 'success' }),
     ]);
+  });
+
+  it('says nothing at all when no webhook is configured — the page is the only surface', async () => {
+    store.seedFinding({ key: 'CVE-2026-0001|openssl', severity: 'HIGH', subject: 'openssl' });
+    seedSingleRun();
+    store.setWebhook(false);
+
+    expect(await announceFinishedScans(TICK)).toEqual([]);
+    expect(store.messages).toHaveLength(0);
+    expect(store.audits).toHaveLength(0);
   });
 });

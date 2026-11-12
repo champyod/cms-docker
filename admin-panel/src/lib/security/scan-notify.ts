@@ -1,5 +1,5 @@
 import { recordAudit } from '@/lib/audit';
-import { logToDiscord } from '@/lib/discord-notifier';
+import { isDiscordWebhookConfigured, logToDiscord } from '@/lib/discord-notifier';
 import { prisma } from '@/lib/prisma';
 import { readScanRunFacts } from '@/lib/security/patching-read-scan';
 import { readFinishedScanRuns } from '@/lib/security/scan-runs';
@@ -21,13 +21,18 @@ export interface ScanAnnounceResult {
   readonly status: ScanAnnounceStatus;
 }
 
-/** Whether this run's message already left, from the durable ledger (never from memory). */
-async function alreadySent(key: string): Promise<boolean> {
+/** Whether a row for this run already exists under `verb`, from the durable ledger. */
+async function ledgerHas(verb: string, key: string): Promise<boolean> {
   const row = await prisma.audit_log.findFirst({
-    where: { entity: SCAN_ENTITY, verb: SCAN_NOTIFIED_VERB, entity_id: key },
+    where: { entity: SCAN_ENTITY, verb, entity_id: key },
     select: { id: true },
   });
   return row !== null;
+}
+
+/** Whether this run's message already left, from the durable ledger (never from memory). */
+async function alreadySent(key: string): Promise<boolean> {
+  return ledgerHas(SCAN_NOTIFIED_VERB, key);
 }
 
 /** The run's slot, written only after the receiver accepted the message. */
@@ -53,11 +58,15 @@ async function recordSent(run: ScanRun, facts: ScanRunFacts): Promise<void> {
 
 /** The visible trace of a message nobody received; it catches its own failure so the tick never throws. */
 async function recordFailure(run: ScanRun, reason: string): Promise<void> {
+  const key = scanRunKey(run.host, run.runStartedAt);
   try {
+    // WHY once per run: the tick retries every minute, and a row per attempt would bury the one that
+    // says when the channel broke. The first failure is the trace; the retries are in the console.
+    if (await ledgerHas(SCAN_NOTIFY_FAILED_VERB, key)) return;
     await recordAudit({
       verb: SCAN_NOTIFY_FAILED_VERB,
       entity: SCAN_ENTITY,
-      entityId: scanRunKey(run.host, run.runStartedAt),
+      entityId: key,
       afterValues: { host: run.host, runStartedAt: run.runStartedAt.toISOString() },
       reason,
       result: 'failure',
@@ -100,6 +109,9 @@ async function announceRun(run: ScanRun, now: Date): Promise<ScanAnnounceStatus>
 
 /** One tick of the scan channel: every finished run that has not spoken yet says its piece. */
 export async function announceFinishedScans(now: Date = new Date()): Promise<readonly ScanAnnounceResult[]> {
+  // WHY nothing happens without a webhook: every send would fail, and the ledger would fill with
+  // failures nobody can act on. The boot warning already says the page is the only surface then.
+  if (!isDiscordWebhookConfigured()) return [];
   const runs = await readFinishedScanRuns(now);
   const results: ScanAnnounceResult[] = [];
   for (const run of runs) {
