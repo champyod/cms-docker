@@ -13,8 +13,9 @@ const SUBJECT_LIMIT = 90;
 const ID_LIMIT = 40;
 const FOOTER_LIMIT = 400;
 
-/** Red bar while something unwaived is critical; green bar when the box has nothing unwaived. */
+/** Red while something unwaived is critical, amber while unwaived HIGH stands, green below that. */
 export const SCAN_ALERT_COLOR = 15_158_332;
+export const SCAN_WARN_COLOR = 15_105_570;
 export const SCAN_REPORT_COLOR = 5_763_719;
 
 export type ScanReachability = 'reachable' | 'unreachable' | 'unknown';
@@ -117,18 +118,21 @@ function where(facts: ScanRunFacts): string {
   return facts.host ?? 'all hosts';
 }
 
-/** L1: the number that decides whether this message is an alarm. */
+/** L1: the number that decides whether this message is an alarm, a watch, or a receipt. */
 function titleLine(facts: ScanRunFacts): string {
-  if (facts.criticals === 0) return `nothing unwaived · ${where(facts)}`;
+  if (facts.criticals === 0 && facts.counts.high === 0) return `nothing unwaived · ${where(facts)}`;
+  if (facts.criticals === 0) return `${grouped(facts.counts.high)} unwaived HIGH · ${where(facts)}`;
   return `${String(facts.criticals)} unwaived CRITICAL · ${where(facts)}`;
 }
 
 /** L2: standing leads, new is the delta, and the last term is what a human has to do. */
 function leadLine(facts: ScanRunFacts): string {
   const need =
-    facts.criticals === 0
-      ? 'nothing needs you'
-      : `${String(facts.criticals)} need${facts.criticals === 1 ? 's' : ''} you`;
+    facts.criticals > 0
+      ? `${String(facts.criticals)} need${facts.criticals === 1 ? 's' : ''} you`
+      : facts.counts.high > 0
+        ? `${grouped(facts.counts.high)} need a decision`
+        : 'nothing needs you';
   return `**${grouped(facts.standing)} standing** · ${grouped(facts.added)} new · ${need}`;
 }
 
@@ -183,11 +187,12 @@ export function buildScanAnnouncement(facts: ScanRunFacts): ScanAnnouncement {
     body = renderBody(facts, shown);
   }
   const alert = facts.criticals > 0;
+  const warn = !alert && facts.counts.high > 0;
   return {
     title: titleLine(facts),
     body,
     footer: footerLine(facts),
     mention: alert,
-    color: alert ? SCAN_ALERT_COLOR : SCAN_REPORT_COLOR,
+    color: alert ? SCAN_ALERT_COLOR : warn ? SCAN_WARN_COLOR : SCAN_REPORT_COLOR,
   };
 }

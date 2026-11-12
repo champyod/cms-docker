@@ -126,9 +126,15 @@ describe('the scan announcement layout', () => {
     expect(countBlock(body)).toEqual(['HIGH 0', 'MED  0', 'LOW  0', 'waived 881 · next review 2027-01-31']);
   });
 
-  it('says "needs you" for one unwaived CRITICAL, and never for none', () => {
+  it('asks for a decision while unwaived HIGH stands, and only calms below it', () => {
     expect(buildScanAnnouncement(facts({ criticals: 1 })).body).toContain('1 needs you');
-    expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain('nothing needs you');
+    const calm = { high: 0, medium: 612, low: 233, unrated: 0 };
+    expect(buildScanAnnouncement(facts({ criticals: 0, counts: calm, criticalRows: [] })).body).toContain(
+      'nothing needs you',
+    );
+    expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain(
+      '1,415 need a decision',
+    );
   });
 
   it('names at most SCAN_CRITICAL_LINES rows and stays inside the Discord cap', () => {
