@@ -403,6 +403,23 @@ describe('the scan announcement is composed by the poller, one message per run',
     expect(store.messages[0].footer).toContain('run 2026-11-12 03:03 UTC');
   });
 
+  it('names a reachable CRITICAL before an older one the classifier ruled out', async () => {
+    store.seedFinding({
+      key: 'CVE-2026-0001|openssl', severity: 'CRITICAL', subject: 'openssl',
+      reachability: 'unreachable', first_seen: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    store.seedFinding({
+      key: 'CVE-2026-0002|glibc', severity: 'CRITICAL', subject: 'glibc',
+      reachability: 'reachable', first_seen: new Date('2026-11-01T00:00:00.000Z'),
+    });
+    seedSingleRun();
+
+    await announceFinishedScans(TICK);
+
+    const { body } = store.messages[0];
+    expect(body.indexOf('CVE-2026-0002')).toBeLessThan(body.indexOf('CVE-2026-0001'));
+  });
+
   it('records a swallowed message as a failure and keeps the run retryable', async () => {
     store.seedFinding({ key: 'CVE-2026-0001|openssl', severity: 'HIGH', subject: 'openssl' });
     seedSingleRun();
