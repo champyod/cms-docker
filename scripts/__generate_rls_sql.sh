@@ -125,7 +125,8 @@ count=$(wc -l < "$tmp_models" | tr -d ' ')
 #   and UPDATE here.
 PUBLIC_BOARD_READ=" admin_groups admin_permission_overrides admins group_permissions permissions ranking_config ranking_contests ranking_hidden ranking_overrides ranking_settings ranking_subchanges ranking_submissions ranking_tasks ranking_teams ranking_users services "
 AUTH_BOOTSTRAP=" admin_groups admin_permission_overrides admins group_permissions groups login_surfaces permissions "
-INGEST_WRITE=" security_findings "
+# The flip row is written by the same push that judges a finding, so it needs the same reach.
+INGEST_WRITE=" security_findings security_finding_flips "
 # HOST_MODULE_INGEST — the rootfs scan's record of what the host kernel actually runs. Read is
 #   staff (the patching page derives reachability from it) AND the feed; write is the feed ONLY,
 #   because a module list is an observation about a box and no admin types one. There is no DELETE
