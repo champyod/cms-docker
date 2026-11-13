@@ -256,6 +256,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -269,8 +272,24 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
+      # `pipefail` keeps make's exit status through the tee; the tee is what lets the comment below
+      # quote this run instead of paying 12 minutes to repeat it.
       - name: Run the repo suites
-        run: make test
+        run: |
+          set -o pipefail
+          make test 2>&1 | tee "${RUNNER_TEMP}/suites.txt"
+
+      # The last gate that only failed: the suite that broke was named only inside the job log.
+      - name: Comment the failing suite on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__pr_comment.sh \
+            --marker cms-suites \
+            --title "Repo suites: one or more failed" \
+            --body-file "${RUNNER_TEMP}/suites.txt"
 
   # WHY a job of its own: every table is row-level secured on `cms.actor`, so a core process that
   # does not stamp its transactions reads nothing and writes nothing — an empty result set, not an
