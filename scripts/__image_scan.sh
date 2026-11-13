@@ -481,8 +481,33 @@ case "$mode" in
 
     # The job summary always lists every ref with its counts, whatever the verdict — that is how
     # the unfixed tail stays visible without a red run. On an incomplete run it says so instead.
+    # The verdict leads because a reader wants "do I have to do anything" before a table: the same
+    # three-tier wording the scan announcement uses, so both surfaces are read the same way.
+    verdict_block() {
+      local fixable="${fixable_total:-0}" drifted="${drift_drift:-0}" unknown="${drift_unknown:-0}"
+      local facts=""
+      facts="$(printf '%s fixable CRITICAL/HIGH · %s drifted · %s unreadable' "$fixable" "$drifted" "$unknown")"
+      if [ ! -f "$OUT_DIR/total.tsv" ]; then
+        printf '**Verdict: could not judge** — the scan did not produce a table.\n\n'
+        printf 'What to do: open the run log; nothing below is a claim that the images are current.\n\n'
+        return 0
+      fi
+      if [ "$fixable" -gt 0 ] || [ "$drifted" -gt 0 ]; then
+        printf '**Verdict: act now** — %s\n\n' "$facts"
+        printf 'What to do: merge `fix/image-digests` for the drifted tags (the run proposes it), then patch or waive the fixable packages below.\n\n'
+        return 0
+      fi
+      if [ "$unknown" -gt 0 ]; then
+        printf '**Verdict: not fully judged** — %s\n\n' "$facts"
+        printf 'What to do: the unreadable registries are listed below; a rate limit is not an all-clear.\n\n'
+        return 0
+      fi
+      printf '**Verdict: nothing to do** — %s\n\n' "$facts"
+    }
+
     {
       printf '## Nightly image scan — %s UTC\n\n' "${at%Z}Z"
+      verdict_block
       if [ -f "$OUT_DIR/total.tsv" ]; then
         printf '**%s pinned third-party refs scanned**, %s fixable CRITICAL/HIGH (waivers applied).\n\n' "$refs_count" "$fixable_total"
         write_table
