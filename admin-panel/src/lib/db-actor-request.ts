@@ -46,10 +46,8 @@ export async function requireDbActor(): Promise<DbActor> {
     return fromRequest;
   }
 
-  // WHY the throw is translated here: this is the one place every query passes through on its way
-  // to Postgres, so it is the one place an actorless request can be answered — the login for a
-  // page or an action, the untouched error for /api (where apiError turns it into 401). Outside a
-  // request (scheduler, CLI) the module rethrows, so those processes see the same failure as today.
+  // Translated here because every query passes through here. Dynamic on purpose: the surface module
+  // loads next/headers, which the CLI and scheduler processes must never pull in.
   const { surfaceActorlessFailure } = await import('@/lib/actor-error-surface');
   return await surfaceActorlessFailure(
     new MissingDbActorError('no withActor() scope and no session cookie on this request'),

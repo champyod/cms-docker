@@ -7,18 +7,11 @@ import { DEFAULT_LOCALE, localeFromPath } from '@/lib/locales';
 import { REQUEST_PATH_HEADER } from '@/lib/request-path';
 
 /**
- * What an actorless query looks like to the caller, decided once for every surface.
+ * How an actorless query is presented, decided once for all three surfaces.
  *
- * WHY a translator instead of a try/catch per call site: `MissingDbActorError` is thrown from the
- * one client every query goes through (src/lib/prisma.ts), which means it is raised in a page
- * render, a server action and a route handler alike. Left alone it reaches Next as an unhandled
- * error and the caller gets the framework's error page with a digest — the surface the operator
- * saw. The three callers want three different answers, and the request itself is what says which
- * one this is, so the decision belongs here rather than repeated 300 times.
- *
- * WHY NOT weaken the throw: every table is row-level secured on `cms.actor`; a query without an
- * identity is a bug, and this module only chooses how its failure is presented. It never supplies
- * an actor and it never swallows an error it does not recognise.
+ * The throw is raised wherever a query runs — page, action, route handler — and left alone it
+ * reaches Next as an unhandled error with a digest. This module only chooses the presentation; it
+ * never supplies an actor and never swallows an error it does not recognise.
  */
 
 /** Next's own header on a server-action POST: present means an action, not a page render. */
