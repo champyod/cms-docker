@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
-# tests/test_security_scan_status.sh — a run publishes what it did, and the file a digest reads is one atomic fact.
-#
-# WHY this exists: the digest could see a count from the log line and nothing else, so a scan whose
-# last batch the panel refused read exactly like a clean nightly run. These checks drive the real
-# scan.sh with a stub trivy and a stub curl, so the fact is asserted end to end and not from its parts.
+# tests/test_security_scan_status.sh — a run publishes what it did; the digest reads one atomic fact.
+# WHY end to end: a log count cannot show a scan whose last batch the panel refused.
 
 set -uo pipefail
 
@@ -146,10 +143,10 @@ if [[ -f "$status" ]]; then
     && ok "at is a UTC ISO instant" || no ".at is $(jq -r '.at' "$status")"
   [[ "$(jq -r '.findings' "$status")" == "2" ]] \
     && ok "findings is what was accepted (2)" || no ".findings is $(jq -r '.findings' "$status")"
-  [[ "$(jq -r '.batches_sent' "$status")/$(jq -r '.batches_total' "$status")" == "1/1" ]] \
-    && ok "batches reads 1/1" || no "batches read $(jq -c '[.batches_sent,.batches_total]' "$status")"
-  [[ "$(jq -r '.batches_rejected' "$status")" == "0" ]] \
-    && ok "0 batches rejected" || no ".batches_rejected is $(jq -r '.batches_rejected' "$status")"
+  [[ "$(jq -r '.fixable' "$status")" == "1" ]] \
+    && ok "fixable is the 1 accepted finding with a fixed version" || no ".fixable is $(jq -r '.fixable' "$status")"
+  [[ "$(jq -r '.batches_sent' "$status")/$(jq -r '.batches_total' "$status")/$(jq -r '.batches_rejected' "$status")" == "1/1/0" ]] \
+    && ok "batches reads 1/1 and 0 rejected" || no "batches read $(jq -c '[.batches_sent,.batches_total,.batches_rejected]' "$status")"
   [[ "$(jq -r '.complete' "$status")" == "true" ]] \
     && ok "the run is complete" || no "the run is not complete"
   [[ "$(jq -r '.sources | length' "$status")" == "1" && "$(jq -r '.sources[0].source' "$status")" == "rootfs" ]] \
@@ -188,6 +185,8 @@ landed=$(jq -r '.findings' "$status3")
 [[ "$landed" -gt 0 && "$landed" -lt 900 ]] \
   && ok "findings is the $landed that landed, not the 900 that were found" || no ".findings is $landed of 900 produced"
 [[ "$(jq -r '.complete' "$status3")" == "false" ]] && ok "a short run is not complete" || no "a short run claimed complete"
+[[ "$(jq -r '.fixable' "$status3")" == "$landed" ]] \
+  && ok "fixable counts only what landed ($landed), not all 900" || no ".fixable is $(jq -r '.fixable' "$status3") against $landed landed"
 
 printf '\nboth sources land in one fact\n'
 two_findings
@@ -210,6 +209,8 @@ run_scan scan5 201 "" "$WORK/status/scan-all.json" all
   && ok "both sources have a row in the one fact" || no "sources are $(jq -c '.sources' "$WORK/status/scan-all.json")"
 [[ "$(jq -r '.findings' "$WORK/status/scan-all.json")" == "2" ]] \
   && ok "findings adds both sources (2)" || no ".findings is $(jq -r '.findings' "$WORK/status/scan-all.json")"
+[[ "$(jq -r '.fixable' "$WORK/status/scan-all.json")" == "1" ]] \
+  && ok "fixable adds both sources, an osv 0 included (1)" || no ".fixable is $(jq -r '.fixable' "$WORK/status/scan-all.json")"
 [[ "$(jq -r '.batches_sent' "$WORK/status/scan-all.json")" == "$(jq -r '.batches_total' "$WORK/status/scan-all.json")" ]] \
   && ok "every body was accepted" || no "batches read $(jq -c '[.batches_sent,.batches_total]' "$WORK/status/scan-all.json")"
 [[ "$(jq -r '.complete' "$WORK/status/scan-all.json")" == "true" ]] \
@@ -240,5 +241,10 @@ else
   no "no fact published when the rows directory was cold"
 fi
 
+printf '\nrows that never counted fixable publish no fixable key\n'
+printf '%s\n' '{"source":"osv","findings":4,"batches_sent":1,"batches_total":1,"complete":true}' '{"source":"rootfs","findings":6,"fixable":2,"batches_sent":1,"batches_total":1,"complete":true}' > "$WORK/status/mixed.rows"
+env SCAN_STATUS_ROWS="$WORK/status/mixed.rows" SCAN_STATUS_FILE="$WORK/status/mixed.json" sh -c 'feed_log() { :; }; feed_host() { printf test-host; }; . "$1"; scan_status_publish' _ "$STATUS_LIB" >/dev/null 2>&1
+[[ "$(jq -r 'has("fixable")' "$WORK/status/mixed.json")" == "false" ]] && ok "a row that cannot say leaves the key out, never a 0" \
+  || no "a partial fixable total was published: $(jq -c '.fixable' "$WORK/status/mixed.json")"
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]

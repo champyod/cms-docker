@@ -46,6 +46,8 @@ feed_post() {
 
     # Reset here, not at the caller: a source that inherits the previous one's tally reports batches it never sent.
     FEED_LAST_ACCEPTED=0
+    # Rows the panel took that name a fixed version; only accepted batches count, exactly like findings.
+    FEED_LAST_FIXABLE=0
     FEED_LAST_BATCHES_SENT=0
     FEED_LAST_BATCHES_TOTAL=0
     FEED_LAST_BATCHES_REJECTED=0
@@ -167,6 +169,10 @@ feed_post() {
         esac
 
         _seen=$((_seen + $(printf '%s' "$_chunk" | jq 'length')))
+        # `available` is the panel's own "a fix exists" field; a row without one is not fixable.
+        _fixed=$(printf '%s' "$_chunk" | jq '[.[] | select(.available != null)] | length') || _fixed=0
+        case "$_fixed" in '' | *[!0-9]*) _fixed=0 ;; esac
+        FEED_LAST_FIXABLE=$((FEED_LAST_FIXABLE + _fixed))
     done < "$_plan"
 
     rm -f "$_plan"
