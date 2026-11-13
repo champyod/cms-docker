@@ -225,27 +225,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: VAR_SPEC parity
-        run: bash scripts/__check_spec_parity.sh
+      # One runner for all six: the comment step re-runs this exact script, so the list of gates
+      # exists once and the comment can never talk about a gate the job did not run.
+      - name: Run the repository gates
+        run: bash scripts/__gates.sh
 
-      - name: Variable coverage
-        run: bash scripts/__check_var_coverage.sh
-
-      - name: Audit coverage
-        run: bash scripts/__check_audit_coverage.sh
-
-      - name: Permission parity
-        run: bash scripts/__check_permission_parity.sh
-
-      - name: RLS coverage
-        run: bash scripts/__check_rls_coverage.sh
-
-      - name: RLS SQL freshness
-        run: bash scripts/__generate_rls_sql.sh --check
+      # A red gate that only says "failed" sends the author to the log to find which of six broke.
+      - name: Comment the failing gate on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__gates.sh > "${RUNNER_TEMP}/gates.txt" 2>&1
+          bash scripts/__pr_comment.sh \
+            --marker cms-gates \
+            --title "Repository gates: one or more failed" \
+            --body-file "${RUNNER_TEMP}/gates.txt"
 
   # Runs the repo suites, which nothing else does; they need a checkout, not a stack.
   suites:
