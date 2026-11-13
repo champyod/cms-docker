@@ -40,7 +40,8 @@ new_sandbox() {
   cp -r "${REPO_ROOT}/scripts/__lib/." "${SB}/scripts/__lib/"
   # The sync sources the route table for the front's own vhosts, so the sandbox needs the
   # table and the SSE definition that table sources in turn.
-  cp "${REPO_ROOT}/scripts/__domain_routes.sh" "${REPO_ROOT}/scripts/__nginx_sse.sh" "${SB}/scripts/"
+  cp "${REPO_ROOT}/scripts/__domain_routes.sh" "${REPO_ROOT}/scripts/__nginx_sse.sh" \
+    "${REPO_ROOT}/scripts/__admin_panel_target.sh" "${SB}/scripts/"
   # The renderer is dependency-free, so the real modules run without node_modules.
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring.ts" "${SB}/admin-panel/src/lib/"
   cp "${REPO_ROOT}/admin-panel/src/lib/service-wiring-render.ts" "${SB}/admin-panel/src/lib/"

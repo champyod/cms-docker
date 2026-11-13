@@ -98,5 +98,51 @@ else
   fi
 fi
 
+printf '\n== --strict is the swap'"'"'s contract: it fails where the deploy path warns ==\n'
+# WHY a sandbox with its own __domain.sh: the strict branch must be proved without a real
+# render, and the script picks the domain tool from its own directory.
+STRICT_SB="$(mktemp -d)"
+trap 'rm -rf "$SANDBOX" "$STRICT_SB"' EXIT
+mkdir -p "${STRICT_SB}/scripts"
+cp "$SCRIPT" "${STRICT_SB}/scripts/"
+cat > "${STRICT_SB}/scripts/__domain.sh" <<'STUB'
+#!/usr/bin/env bash
+[[ -f "$(dirname "$0")/../render-fails" ]] && exit 1
+exit 0
+STUB
+chmod +x "${STRICT_SB}/scripts/__domain.sh"
+strict() { bash "${STRICT_SB}/scripts/__domain_proxy_reload.sh" --strict; }
+
+if PROXY_RUNNING="" strict >/dev/null 2>&1; then
+  no "--strict fails when there is no front to re-render"
+else
+  ok "--strict fails when there is no front to re-render"
+fi
+
+before_lines="$(wc -l < "$DOCKER_LOG" 2>/dev/null || printf '0')"
+: > "${STRICT_SB}/render-fails"
+if PROXY_RUNNING=1 strict >/dev/null 2>&1; then
+  no "--strict fails when the render is rejected"
+else
+  ok "--strict fails when the render is rejected"
+fi
+if [[ "$(wc -l < "$DOCKER_LOG" 2>/dev/null || printf '0')" == "$before_lines" ]]; then
+  ok "--strict does not fall back to reloading the config in place"
+else
+  no "--strict does not fall back to reloading the config in place"
+fi
+rm -f "${STRICT_SB}/render-fails"
+
+if PROXY_RUNNING=1 EXEC_FAILS=1 strict >/dev/null 2>&1; then
+  no "--strict fails when the reload fails"
+else
+  ok "--strict fails when the reload fails"
+fi
+if PROXY_RUNNING=1 strict >/dev/null 2>&1; then
+  ok "--strict succeeds on a clean render and reload"
+else
+  no "--strict succeeds on a clean render and reload"
+fi
+
 printf '\n%d passed, %d failed\n' "$pass" "$fail"
 [[ "$fail" -eq 0 ]]

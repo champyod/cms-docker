@@ -18,13 +18,24 @@ domain_sandbox() {
   SANDBOXES+=("${dir}")
   mkdir -p "${dir}/scripts" "${dir}/config" "${dir}/bin"
   cp "${DOMAIN}" "${dir}/scripts/"
+  # WHY recursive and both spellings: a sourced file may be sourced by `.` rather than
+  # `source`, and may itself source another (the route table pulls in the SSE and
+  # panel-colour snippets). One level with one spelling left those off the copy, and the
+  # script then died reading a file the sandbox never had.
+  _domain_sandbox_copy_sources "${DOMAIN}" "${dir}"
+  cp "${REPO_ROOT}/config.toml.example" "${dir}/config.toml"
+  printf '%s' "${dir}"
+}
+
+_domain_sandbox_copy_sources() {
+  local script="$1" dir="$2" sourced
   while read -r sourced; do
+    [[ -e "${dir}/scripts/${sourced}" ]] && continue
     [[ -e "${REPO_ROOT}/scripts/${sourced}" ]] || continue
     mkdir -p "${dir}/scripts/$(dirname "${sourced}")"
     cp -r "${REPO_ROOT}/scripts/${sourced}" "${dir}/scripts/${sourced}"
-  done < <(grep -oE 'source "[^"]+"' "${DOMAIN}" | cut -d/ -f2- | tr -d '"' | sort -u)
-  cp "${REPO_ROOT}/config.toml.example" "${dir}/config.toml"
-  printf '%s' "${dir}"
+    _domain_sandbox_copy_sources "${REPO_ROOT}/scripts/${sourced}" "${dir}"
+  done < <(grep -oE 'source "[^"]+"|\. "[^"]+"' "${script}" | cut -d/ -f2- | tr -d '"' | sort -u)
 }
 
 # Removes every sandbox this run created. Safe with none created.

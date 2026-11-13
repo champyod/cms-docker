@@ -574,13 +574,6 @@ services:
     container_name: cms-admin-panel-next
     profiles:
       - admin
-    # WHY an alias as well as a container name: every renderer dials the panel by its
-    # colour (cms-admin-panel-<colour>), and colour a keeps the name the rest of the stack
-    # already knows — the prometheus scrape target, the security overlay, the smoke test.
-    networks:
-      cms-network:
-        aliases:
-          - cms-admin-panel-a
     ports:
       # WHY loopback, not the 0.0.0.0 the other front-door UIs publish on: the panel
       # names the caller from a header only a proxy asserts (x-real-ip, or the rightmost

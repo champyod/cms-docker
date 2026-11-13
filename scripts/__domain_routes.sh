@@ -183,6 +183,10 @@ _routes_assert_unused_path() {
 _routes_collect() {
   local label domain_var path_var upstream_var port_var primary_path_var
   local path upstream port mirror claimed="" seen="" mirrors=""
+  # The admin row's target is the recorded colour, not a literal in the table. Resolved here
+  # because every reader of the table comes through this function — the domain renderer and
+  # the config sync alike — and a second call site would be a second chance to forget it.
+  _admin_panel_resolve_upstream
   ROUTE_LABEL=() ROUTE_DOMAIN_VAR=() ROUTE_PATH_VAR=()
   ROUTE_UPSTREAM_VAR=() ROUTE_PORT_VAR=() ROUTE_OWNER=() ROUTE_PATH=() ROUTE_PRIMARY_PATH=() ROUTE_PRIMARY_PATH_VAR=()
   while IFS='|' read -r label domain_var path_var upstream_var port_var primary_path_var; do
@@ -484,7 +488,6 @@ _admin_panel_resolve_upstream() {
 # sets it folds are the ones the render function had just computed.
 _domain_routes_build() {
   _routes_expand_default_directives
-  _admin_panel_resolve_upstream
   _routes_collect
   _routes_build
 }

@@ -25,6 +25,18 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
+# Copies every file $1 sources into $2/scripts, then what those source in turn.
+copy_sources_of() {
+  local script="$1" dir="$2" sourced
+  while read -r sourced; do
+    [[ -e "${dir}/scripts/${sourced}" ]] && continue
+    [[ -e "${REPO_ROOT}/scripts/${sourced}" ]] || continue
+    mkdir -p "${dir}/scripts/$(dirname "${sourced}")"
+    cp -r "${REPO_ROOT}/scripts/${sourced}" "${dir}/scripts/${sourced}"
+    copy_sources_of "${REPO_ROOT}/scripts/${sourced}" "${dir}"
+  done < <(grep -oE 'source "[^"]+"|\. "[^"]+"' "${script}" | cut -d/ -f2- | tr -d '"' | sort -u)
+}
+
 # Copies only what the script actually reaches for, so a run can never write to the real
 # repo while staying small enough to run anywhere.
 # WHY a copy at all: the script resolves REPO_ROOT from its own location, so exercising
@@ -44,15 +56,10 @@ sandbox() {
   # WHY `..` is excluded rather than filtered afterwards: it only ever appears in the
   # script's own location calculation, never in a `source` target, so requiring a real
   # file inside scripts/ is what keeps the copy from pulling in the whole repository.
-  while read -r sourced; do
-    [[ -e "${REPO_ROOT}/scripts/${sourced}" ]] || continue
-    # WHY the parent directory is created first: a sourced path can carry its own
-    # subdirectory (`__lib/common.sh`), and `cp -r scripts/__lib sandbox/scripts/` would
-    # land it as `sandbox/scripts/common.sh` — present, but not where the script looks.
-    mkdir -p "${dir}/scripts/$(dirname "${sourced}")"
-    cp -r "${REPO_ROOT}/scripts/${sourced}" "${dir}/scripts/${sourced}"
-  done < <(grep -oE 'source "[^"]+"' "${DOMAIN}" \
-    | cut -d/ -f2- | tr -d '"' | sort -u)
+  # WHY recursive and both spellings: a sourced file may be sourced by `.` rather than
+  # `source`, and may itself source another — one level with one spelling dropped the
+  # snippets the route table pulls in, and every case failed on a missing file.
+  copy_sources_of "${DOMAIN}" "${dir}"
   cp "${REPO_ROOT}/config.toml.example" "${dir}/config.toml"
   printf '#!/bin/bash\nexit 0\n' > "${dir}/bin/certbot"
   printf '#!/bin/bash\nexit 0\n' > "${dir}/bin/docker"

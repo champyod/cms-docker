@@ -6,12 +6,11 @@
 # cms-admin-panel-next before this; a colour change then meant four edits, and one missed
 # edit is a 502 that only shows under traffic.
 #
-# The rule is one string: the container is cms-admin-panel-<colour>, colour a|b. Colour a
-# keeps its historical container name in compose and answers to cms-admin-panel-a as a
-# network alias, so every existing consumer of the old name keeps working.
+# The rule is one table: the container is looked up from the colour, and that container name
+# is also the name nginx dials (a container's name is its DNS name on the compose network).
+# Colour a keeps its historical name so every existing consumer of it keeps working.
 
 ADMIN_PANEL_COLOUR_DEFAULT=a
-ADMIN_PANEL_CONTAINER_PREFIX=cms-admin-panel-
 # Written by scripts/__admin_panel_swap.sh, relative to the repository root.
 ADMIN_PANEL_STATE_FILE=config/admin-panel-colour
 
@@ -22,8 +21,26 @@ admin_panel_colour_valid() {
   esac
 }
 
+# The container that answers for a colour, and therefore the name nginx dials: a container's
+# own name is its DNS name on the compose network. Colour a keeps the name the rest of the
+# stack already knows (prometheus target, security overlay, smoke test), which is why this is
+# a table and not a prefix.
 admin_panel_container() {
-  printf '%s%s' "$ADMIN_PANEL_CONTAINER_PREFIX" "$1"
+  case "${1:-}" in
+    a) printf 'cms-admin-panel-next' ;;
+    b) printf 'cms-admin-panel-b' ;;
+    *) return 1 ;;
+  esac
+}
+
+# The compose service that owns each colour. It differs from the container name for colour a,
+# whose service name predates the colours and is named by the rest of the stack.
+admin_panel_service() {
+  case "${1:-}" in
+    a) printf 'admin-panel-next' ;;
+    b) printf 'admin-panel-next-b' ;;
+    *) return 1 ;;
+  esac
 }
 
 # The colour the front should dial: the recorded colour, else the configured value, else a.
