@@ -58,8 +58,8 @@ RANKING_ROUTE_PATH="${RANKING_ROUTE_PATH:-/ranking}"
 OJ_ROUTE_PATH="${OJ_ROUTE_PATH:-}"
 
 CONTEST_UPSTREAM="${CONTEST_UPSTREAM:-cms-contest-web-server}"
-# WHY empty: the panel's target is not a free-form upstream, it is the colour the swap
-# recorded — resolved in _domain_routes_build, where .env has already been loaded.
+# WHY empty and not a config key: the panel's target is not a free-form upstream, it is the
+# colour the swap recorded — resolved in _routes_collect, after .env is loaded.
 ADMIN_UPSTREAM=""
 ADMIN_CLASSIC_UPSTREAM="${ADMIN_CLASSIC_UPSTREAM:-cms-admin-web-server}"
 RANKING_UPSTREAM="${RANKING_UPSTREAM:-cms-ranking-web-server}"
