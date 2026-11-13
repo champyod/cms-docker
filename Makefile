@@ -120,6 +120,9 @@ core: expose
 	@echo "Core profile started."
 
 admin: expose
+	@# Migrations before the panel, not after: deploying code whose schema is absent broke ingest once
+	@# (security_finding_flips, 2026-11-13) and the panel answered 500 to every push until it was applied.
+	@$(MAKE) -s prisma-sync || { echo "REFUSED: schema sync failed — the panel would run against a schema it cannot serve." >&2; exit 1; }
 	@DEPLOY_TYPE="$${DEPLOYMENT_TYPE_OVERRIDE:-}"; \
 	if [ -z "$$DEPLOY_TYPE" ]; then DEPLOY_TYPE=$$(grep "^DEPLOYMENT_TYPE=" .env 2>/dev/null | cut -d '=' -f2- | cut -d '#' -f1 | tr -d ' \r'); fi; \
 	DEPLOY_TYPE=$${DEPLOY_TYPE:-img}; \
