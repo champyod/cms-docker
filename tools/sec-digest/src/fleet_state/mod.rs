@@ -71,6 +71,10 @@ pub struct ServerProbe {
     pub backup_stale: Option<String>,
     #[serde(default, rename = "cms_offsite_stale")]
     pub offsite_stale: Option<String>,
+    #[serde(default, rename = "cms_backup_dump_age_days")]
+    pub backup_dump_age_days: Option<String>,
+    #[serde(default, rename = "cms_backup_not_reported")]
+    pub backup_not_reported: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
     #[serde(default)]
@@ -114,6 +118,8 @@ fn set_field(probe: &mut ServerProbe, key: &str, value: &str) {
         "lastscan" => &mut probe.lastscan,
         "cms_backup_stale" => &mut probe.backup_stale,
         "cms_offsite_stale" => &mut probe.offsite_stale,
+        "cms_backup_dump_age_days" => &mut probe.backup_dump_age_days,
+        "cms_backup_not_reported" => &mut probe.backup_not_reported,
         _ => {
             probe.extra.insert(key.to_string(), value.to_string());
             return;

@@ -27,8 +27,15 @@ echo "restarting=$(docker ps --filter status=restarting -q 2>/dev/null | wc -l)"
 echo "uptime=$(cut -d. -f1 /proc/uptime)"
 _scan=$(docker exec cms-security-scan cat /var/cache/security-scan/scan-status.json 2>/dev/null) || _scan=$(docker logs --tail 800 cms-security-scan 2>&1 | grep 'security-scan\[all\]: rootfs:' | tail -1 | sed 's/ security-scan\[all\]: rootfs: /|/; s/ findings under .*//')
 printf 'lastscan=%s\n' "$_scan"
-if [ -f /srv/cms/backups/metrics/cms_backup.prom ]; then
-  grep -E '^cms_(backup|offsite)_(stale|last_success_timestamp_seconds)' /srv/cms/backups/metrics/cms_backup.prom | head -4
+_bkf=$(ls /srv/cms/backups/metrics/cms_backup.prom "$HOME"/cms-docker/backups/metrics/cms_backup.prom 2>/dev/null | head -1)
+if [ -n "$_bkf" ]; then
+  grep -E '^cms_(backup|offsite)_(stale|last_success_timestamp_seconds)' "$_bkf" | head -4
+fi
+_dump=$(ls -t "$HOME"/cms-docker/backups/db/*.dump 2>/dev/null | head -1)
+if [ -n "$_dump" ]; then
+  echo "cms_backup_dump_age_days=$(( ( $(date +%s) - $(stat -c %Y "$_dump") ) / 86400 ))"
+else
+  echo "cms_backup_not_reported=1"
 fi
 "#;
 
@@ -114,6 +121,10 @@ mod tests {
     fn the_probe_script_reads_its_facts_without_writing_any() {
         assert!(PROBE.starts_with("\nset -u\necho \"kernel=$(uname -r)\""));
         assert!(PROBE.contains("cms_backup.prom"));
+        // A host whose metrics file lives elsewhere still answers: dump age, or NOT REPORTED.
+        // Silent was the bug — a path that does not exist on this host read as "nothing wrong".
+        assert!(PROBE.contains("cms_backup_dump_age_days"));
+        assert!(PROBE.contains("cms_backup_not_reported=1"));
         assert!(!PROBE.contains("sudo"));
         // The result file first, the log line only as the fallback: a container that is gone
         // must still read as NOT REPORTED rather than as a clean run.

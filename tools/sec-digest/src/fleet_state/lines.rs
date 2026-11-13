@@ -103,6 +103,18 @@ fn server_bits(server: &ServerProbe, now: DateTime<Utc>) -> Vec<String> {
     if server.offsite_stale.as_deref() == Some("1") {
         bits.push("offsite copy STALE".to_string());
     }
+    // Ground truth from the dump set: a stale dump is stale whether or not a metrics file exists.
+    if let Some(days) = server
+        .backup_dump_age_days
+        .as_deref()
+        .and_then(|days| days.parse::<u64>().ok())
+        .filter(|days| *days > 1)
+    {
+        bits.push(format!("backup {days}d old"));
+    }
+    if server.backup_not_reported.as_deref() == Some("1") {
+        bits.push("backup NOT REPORTED".to_string());
+    }
     bits.push(scan_line(server.lastscan.as_deref().unwrap_or(""), now));
     bits
 }

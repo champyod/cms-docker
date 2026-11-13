@@ -47,6 +47,42 @@ fn repo_and_server_lines_are_exact() {
 }
 
 #[test]
+fn a_stale_dump_set_renders_its_age() {
+    let mut state = fixtures();
+    state.servers[0].backup_stale = None;
+    state.servers[0].backup_dump_age_days = Some("19".into());
+    let (_, servers) = as_lines_at(&state, clock());
+    assert!(
+        servers[0].contains("backup 19d old"),
+        "a 19-day-old dump must say so: {}",
+        servers[0]
+    );
+}
+
+#[test]
+fn a_host_with_no_backup_fact_says_not_reported() {
+    let mut state = fixtures();
+    state.servers[0].backup_stale = None;
+    state.servers[0].backup_dump_age_days = None;
+    state.servers[0].backup_not_reported = Some("1".into());
+    let (_, servers) = as_lines_at(&state, clock());
+    assert!(
+        servers[0].contains("backup NOT REPORTED"),
+        "silence was the bug; this host must name it: {}",
+        servers[0]
+    );
+}
+
+#[test]
+fn a_fresh_dump_adds_nothing() {
+    let mut state = fixtures();
+    state.servers[0].backup_stale = None;
+    state.servers[0].backup_dump_age_days = Some("0".into());
+    let (_, servers) = as_lines_at(&state, clock());
+    assert!(!servers[0].contains("backup"), "{}", servers[0]);
+}
+
+#[test]
 fn unreachable_host_is_not_healthy() {
     let state = FleetState {
         repos: Vec::new(),
