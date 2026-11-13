@@ -15,7 +15,7 @@
 
 services:
   grader-nginx-proxy:
-    image: nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+    image: nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
     container_name: grader-nginx-proxy
     restart: unless-stopped
     depends_on: []
@@ -223,7 +223,7 @@ services:
       while :; do certbot renew $$CHALLENGE; sleep 12h & wait $${!}; done;'
 
   redis-rate-limit:
-    image: redis:7-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: grader-redis-rate-limit
     restart: unless-stopped
     # WHY the same service is declared in docker-compose.yml under the `contest`
