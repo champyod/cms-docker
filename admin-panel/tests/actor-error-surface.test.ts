@@ -10,8 +10,6 @@ import { MissingDbActorError } from '@/lib/db-actor';
  * or an action, the untouched error for an /api caller, and never a rewrite of anything else.
  */
 
-const BETA_BASE_PATH = '/beta';
-
 /** The redirect Next itself throws, read the way the framework reads it. */
 async function isRedirect(error: unknown): Promise<boolean> {
   const { isRedirectError } = await import('next/dist/client/components/redirect-error');
@@ -42,58 +40,41 @@ const ACTION_FACTS = { path: '/en/people/users', isAction: true } as const;
 const API_FACTS = { path: '/api/teams', isAction: false } as const;
 
 describe('actorSurfaceOf', () => {
-  it('names a page render, an action and an api route apart', async () => {
+  it('names a page render, an action and an api route apart, api winning over the header', async () => {
     const { actorSurfaceOf } = await import('@/lib/actor-error-surface');
 
     expect(actorSurfaceOf(PAGE_FACTS)).toBe('page');
     expect(actorSurfaceOf(ACTION_FACTS)).toBe('action');
     expect(actorSurfaceOf(API_FACTS)).toBe('api');
-  });
-
-  it('keeps an api route an api route even if it carries the action header', async () => {
-    const { actorSurfaceOf } = await import('@/lib/actor-error-surface');
-
     expect(actorSurfaceOf({ path: '/api/teams', isAction: true })).toBe('api');
   });
 });
 
 describe('loginTargetFor', () => {
-  it('takes the locale from the path it was given', async () => {
+  it('takes the locale from the path, defaulting when the path names none', async () => {
     const { loginTargetFor } = await import('@/lib/actor-error-surface');
 
     expect(loginTargetFor('/th/people/users')).toBe('/th/auth/login');
     expect(loginTargetFor('/en')).toBe('/en/auth/login');
-  });
-
-  it('falls back to the default locale for a path with no locale at all', async () => {
-    const { loginTargetFor } = await import('@/lib/actor-error-surface');
-
     expect(loginTargetFor('/people/users')).toBe('/en/auth/login');
     expect(loginTargetFor('/xx/people/users')).toBe('/en/auth/login');
   });
 });
 
 describe('surfaceActorlessFailure — page render', () => {
-  it('throws the login redirect for the locale of the path', async () => {
-    const { surfaceActorlessFailure } = await import('@/lib/actor-error-surface');
-
-    const thrown = await thrownBy(() => surfaceActorlessFailure(actorless(), PAGE_FACTS));
-
-    expect(await isRedirect(thrown)).toBe(true);
-    expect(await redirectTarget(thrown)).toBe('/th/auth/login');
-  });
-
-  it('leaves the base path to the framework, which prefixes a rendered redirect', async () => {
+  it('throws the login redirect for the locale of the path, leaving the base path to Next', async () => {
     const { surfaceActorlessFailure } = await import('@/lib/actor-error-surface');
     const { addPathPrefix } = await import('next/dist/shared/lib/router/utils/add-path-prefix');
 
     const thrown = await thrownBy(() => surfaceActorlessFailure(actorless(), PAGE_FACTS));
     const target = await redirectTarget(thrown);
 
+    expect(await isRedirect(thrown)).toBe(true);
+    expect(target).toBe('/th/auth/login');
     // Why: a redirect thrown while rendering gets `basePath` added by Next (pinned in
     // base-path.test.ts). Prefixing here would land the prefix twice.
-    expect(target.startsWith(BETA_BASE_PATH)).toBe(false);
-    expect(addPathPrefix(target, BETA_BASE_PATH)).toBe('/beta/th/auth/login');
+    expect(target.startsWith('/beta')).toBe(false);
+    expect(addPathPrefix(target, '/beta')).toBe('/beta/th/auth/login');
   });
 });
 
@@ -118,21 +99,15 @@ describe('surfaceActorlessFailure — route handler', () => {
 });
 
 describe('actorlessApiResponse', () => {
-  it('answers 401 with a small JSON body', async () => {
+  it('answers 401 with a small JSON body that leaks neither digest nor actor wording', async () => {
     const { actorlessApiResponse } = await import('@/lib/actor-error-surface');
 
     const response = actorlessApiResponse(actorless());
+    const body = JSON.stringify(await response?.json());
 
     expect(response?.status).toBe(401);
     expect(response?.headers.get('content-type')).toContain('application/json');
-    expect(await response?.json()).toEqual({ error: 'Unauthorized' });
-  });
-
-  it('leaks neither the digest nor the actor wording', async () => {
-    const { actorlessApiResponse } = await import('@/lib/actor-error-surface');
-
-    const body = JSON.stringify(await actorlessApiResponse(actorless())?.json());
-
+    expect(JSON.parse(body)).toEqual({ error: 'Unauthorized' });
     expect(body).not.toContain('digest');
     expect(body).not.toContain('MissingDbActor');
     expect(body).not.toContain('cms.actor');
@@ -141,43 +116,39 @@ describe('actorlessApiResponse', () => {
 });
 
 describe('any other error', () => {
-  it('passes through the translator unchanged', async () => {
-    const { surfaceActorlessFailure } = await import('@/lib/actor-error-surface');
+  it('passes through the translator and the response builder unchanged', async () => {
+    const { surfaceActorlessFailure, actorlessApiResponse } = await import('@/lib/actor-error-surface');
     const fault = new Error('a real fault');
 
     await expect(surfaceActorlessFailure(fault, PAGE_FACTS)).rejects.toBe(fault);
     await expect(surfaceActorlessFailure(fault, API_FACTS)).rejects.toBe(fault);
-  });
-
-  it('is not turned into a 401 by the api response builder', async () => {
-    const { actorlessApiResponse } = await import('@/lib/actor-error-surface');
-
-    expect(actorlessApiResponse(new Error('a real fault'))).toBeUndefined();
+    expect(actorlessApiResponse(fault)).toBeUndefined();
   });
 });
 
 describe('a redirect already in flight', () => {
-  it('survives the translator as a redirect, never converted to 401 or a fault', async () => {
+  it('survives the translator and the api funnel as a redirect, never converted', async () => {
     const { surfaceActorlessFailure, actorlessApiResponse } = await import('@/lib/actor-error-surface');
+    const { apiError } = await import('@/lib/api-utils');
     const { redirect } = await import('next/navigation');
 
     const inFlight = await thrownBy(async () => redirect('/en/contests'));
+    const throughTranslator = await thrownBy(() => surfaceActorlessFailure(inFlight, API_FACTS));
+    const throughApiError = await thrownBy(async () => apiError(inFlight));
 
-    const passed = await thrownBy(() => surfaceActorlessFailure(inFlight, API_FACTS));
-
-    expect(passed).toBe(inFlight);
-    expect(await isRedirect(passed)).toBe(true);
-    expect(await redirectTarget(passed)).toBe('/en/contests');
+    expect(throughTranslator).toBe(inFlight);
+    expect(await redirectTarget(throughTranslator)).toBe('/en/contests');
+    expect(throughApiError).toBe(inFlight);
+    expect(await isRedirect(throughApiError)).toBe(true);
     expect(actorlessApiResponse(inFlight)).toBeUndefined();
   });
 });
 
-describe('outside a request', () => {
+describe('the request it reads', () => {
   beforeEach(() => {
     vi.resetModules();
   });
-
-  it('rethrows the actor error rather than inventing a destination', async () => {
+  it('rethrows the actor error outside a request rather than inventing a destination', async () => {
     vi.doMock('next/headers', () => ({
       headers: async (): Promise<Headers> => {
         throw new Error('headers() is only available inside a request');
@@ -187,12 +158,6 @@ describe('outside a request', () => {
     const error = actorless();
 
     await expect(surfaceActorlessFailure(error)).rejects.toBe(error);
-  });
-});
-
-describe('the request it reads', () => {
-  beforeEach(() => {
-    vi.resetModules();
   });
 
   it('takes the action header for an action and the stamped path for the locale', async () => {
@@ -249,6 +214,21 @@ describe('the query funnel', () => {
     const thrown = await thrownBy(() => requireDbActor());
 
     expect((thrown as Error).name).toBe('MissingDbActorError');
+  });
+});
+
+describe('the proxy stamp', () => {
+  it('puts the path on the request and does not gate /api on a session', async () => {
+    const { proxy } = await import('@/proxy');
+    const { NextRequest } = await import('next/server');
+
+    const response = await proxy(new NextRequest('http://localhost/api/teams'));
+
+    // Next carries a request-header override as `x-middleware-request-<name>` on the response it
+    // hands the route; this is the contract the surface reads the path through.
+    expect(response.headers.get('x-middleware-request-x-cms-path')).toBe('/api/teams');
+    expect(response.status).toBe(200);
+    expect(response.headers.get('location')).toBeNull();
   });
 });
 

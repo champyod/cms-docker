@@ -46,7 +46,14 @@ export async function requireDbActor(): Promise<DbActor> {
     return fromRequest;
   }
 
-  throw new MissingDbActorError('no withActor() scope and no session cookie on this request');
+  // WHY the throw is translated here: this is the one place every query passes through on its way
+  // to Postgres, so it is the one place an actorless request can be answered — the login for a
+  // page or an action, the untouched error for /api (where apiError turns it into 401). Outside a
+  // request (scheduler, CLI) the module rethrows, so those processes see the same failure as today.
+  const { surfaceActorlessFailure } = await import('@/lib/actor-error-surface');
+  return await surfaceActorlessFailure(
+    new MissingDbActorError('no withActor() scope and no session cookie on this request'),
+  );
 }
 
 /** True when `cookies()` is usable — i.e. we are inside a request. Used only for diagnostics. */

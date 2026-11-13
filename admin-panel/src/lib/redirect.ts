@@ -2,7 +2,7 @@
 
 import { headers } from 'next/headers';
 import { redirect as nextRedirect } from 'next/navigation';
-import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
+import { DEFAULT_LOCALE, localeFromPath } from '@/lib/locales';
 
 /**
  * Wraps Next.js's raw `redirect()` to always preserve locale in the URL.
@@ -12,16 +12,7 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type Locale } from '@/lib/locales';
 export async function redirect(path: string): Promise<never> {
   const headersList = await headers();
 
-  let locale: Locale = DEFAULT_LOCALE;
-  try {
-    const referer = headersList.get('referer') ?? '';
-    const match = referer.match(new RegExp(`/(${SUPPORTED_LOCALES.join('|')})(/|$)`));
-    if (match?.[1] && SUPPORTED_LOCALES.includes(match[1] as Locale)) {
-      locale = match[1] as Locale;
-    }
-  } catch {
-    locale = DEFAULT_LOCALE;
-  }
+  const locale = localeFromPath(headersList.get('referer') ?? '') ?? DEFAULT_LOCALE;
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   nextRedirect(`/${locale}${normalizedPath}`);
