@@ -110,9 +110,17 @@ jobs:
           set +e
           bash scripts/__image_scan.sh scan --refs "$out/refs.txt" --out "$out"
           rc=$?
+          # 1 is the policy verdict only when a verdict was produced. Without a state file the run
+          # reached none — that is a failure, and calling it "fixable findings" is how a one-image
+          # scan stayed green for two nights.
           case "$rc" in
             0) echo "::notice::no fixable findings" ;;
-            1) echo "::notice::fixable findings present — published in the summary and the tracking issue" ;;
+            1) if [ -f "$out/state" ]; then
+                 echo "::notice::fixable findings present — published in the summary and the tracking issue"
+               else
+                 echo "::error::the scan produced no verdict — at least one image could not be scanned"
+                 exit 1
+               fi ;;
             *) exit "$rc" ;;
           esac
 
