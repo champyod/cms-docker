@@ -147,6 +147,7 @@ jobs:
       # diff rather than one PR per night. WHY it never targets the landing branch directly: the
       # scan is evidence, and a merge is a decision.
       - name: Open the pin-bump pull request
+        id: pr
         if: steps.bump.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -173,9 +174,32 @@ jobs:
             'is the one you want to run.' \
             '' \
             'Nothing here was applied to a running host: the change lands only when this PR is merged.' )"
-          gh pr create --base "$BASE_REF" --head "$branch" \
+          number="$(gh pr create --base "$BASE_REF" --head "$branch" \
             --title "fix(images): bump stale pinned digests" --body "$body" \
-            || gh pr edit "$branch" --body "$body"
+            --json number --jq .number 2>/dev/null \
+            || gh pr view "$branch" --json number --jq .number)"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+
+      # The digest reads this: Issues are disabled on this repository, so the human-readable
+      # summary has no reader and the artifact is the only durable half of the run.
+      - name: Write the machine-readable verdict
+        if: always()
+        run: |
+          out="${RUNNER_TEMP}/image-scan"
+          mkdir -p "$out"
+          BUMPED="${{ steps.bump.outputs.changed || 'false' }}" \
+            PR_NUMBER="${{ steps.pr.outputs.number }}" \
+            bash scripts/__image_scan.sh verdict --out "$out" > "$out/verdict.json"
+          cat "$out/verdict.json"
+
+      - name: Upload the verdict
+        if: always()
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: image-scan-verdict
+          path: ${{ runner.temp }}/image-scan/verdict.json
+          retention-days: 14
+          if-no-files-found: warn
 
       # Notification is one UPSERTED issue, not one per run: a nightly workflow that opens a new
       # issue every night trains its reader to ignore the title. A stable title, the body replaced

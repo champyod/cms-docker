@@ -60,8 +60,8 @@ note() { printf 'image-scan: %s\n' "$1" >&2; }
 
 mode="${1:-}"
 case "$mode" in
-  refs|scan|drift|report) ;;
-  *) log_die "image-scan: usage: $0 refs|scan|drift|report [--refs <file>] [--out <dir>]" 2 ;;
+  refs|scan|drift|report|verdict) ;;
+  *) log_die "image-scan: usage: $0 refs|scan|drift|report|verdict [--refs <file>] [--out <dir>]" 2 ;;
 esac
 shift
 
@@ -383,6 +383,33 @@ case "$mode" in
       "${#refs[@]}" "$use_ok" "$use_drift" "$use_unknown" >&2
     # Drift is advisory: it never fails the run. A tag that moved is a prompt to look, not a
     # build break — the failure signal for this workflow is a fixable CVE.
+    ;;
+
+  # The machine-readable half of the report: one small JSON the digest can render without
+  # scraping a job summary. Counts come from the same files the report reads, so the two cannot
+  # disagree about the same run.
+  verdict)
+    at="$(LC_ALL=C date -u +%Y-%m-%dT%H:%M:%SZ)"
+    refs_count=0
+    if [ -f "$OUT_DIR/total.tsv" ]; then refs_count="$(wc -l < "$OUT_DIR/total.tsv" | tr -d ' ')"; fi
+    fixable="$(cat "$OUT_DIR/fixable-total" 2>/dev/null || printf '?')"
+    drift_n=0; unknown_n=0
+    if [ -f "$OUT_DIR/drift.tsv" ]; then
+      drift_n="$(awk -F'\t' '$4=="drift"' "$OUT_DIR/drift.tsv" | wc -l | tr -d ' ')"
+      unknown_n="$(awk -F'\t' '$4=="unknown"' "$OUT_DIR/drift.tsv" | wc -l | tr -d ' ')"
+    fi
+    state="incomplete"
+    if [ -f "$OUT_DIR/state" ]; then state="$(tr -d '[:space:]' < "$OUT_DIR/state")"; fi
+    bumped="${BUMPED:-false}"
+    pr="${PR_NUMBER:-}"
+    jq -cn \
+      --arg at "$at" --arg state "$state" --argjson refs "${refs_count:-0}" \
+      --arg fixable "$fixable" --argjson drift "$drift_n" --argjson unknown "$unknown_n" \
+      --argjson bumped "$bumped" --arg pr "$pr" \
+      '{at: $at, state: $state, refs: $refs,
+        fixable: (if $fixable == "?" then null else ($fixable | tonumber) end),
+        drift: $drift, unknown: $unknown, bumped: $bumped,
+        pr: (if $pr == "" then null else ($pr | tonumber) end)}'
     ;;
 
   report)

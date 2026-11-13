@@ -10,7 +10,7 @@ use clap::Parser;
 
 use sec_digest::fleet_state::{self, FleetState};
 use sec_digest::record::RunRecord;
-use sec_digest::{deliver, feeds, http, inventory, llm, rank, render, seen, timeutil};
+use sec_digest::{deliver, feeds, http, images, inventory, llm, rank, render, seen, timeutil};
 
 #[derive(Debug, Parser)]
 #[command(name = "sec-digest", about = "Daily security digest for the CMS fleet")]
@@ -101,9 +101,23 @@ fn run(cli: &Cli) -> Result<(), String> {
     let fleet = read_fleet(cli, now);
     let (body, model) = brief_body(cli, &record);
     record.model = Some(model.clone());
-    let text = format!("{}\n\n{}", body.trim_end(), render::fleet_block_at(&fleet, now))
-        .trim()
-        .to_string();
+    // The nightly image scan has no human surface of its own (the tracking issue cannot exist on a
+    // repository with Issues disabled), so its verdict rides here — beside the hosts it reports on.
+    let images_line = match images::fetch(&http::state_dir()) {
+        Ok(verdict) => images::line(&verdict, now),
+        Err(error) => {
+            eprintln!("[images] {error}");
+            "images: NOT REPORTED — the nightly scan's artifact could not be read".to_string()
+        }
+    };
+    let text = format!(
+        "{}\n\n{}\n- {}",
+        body.trim_end(),
+        render::fleet_block_at(&fleet, now).trim_end(),
+        images_line
+    )
+    .trim()
+    .to_string();
 
     if cli.dry_run {
         eprintln!("[digest] dry run; not delivering");
