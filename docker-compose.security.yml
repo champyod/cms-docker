@@ -40,13 +40,6 @@ x-security-scan: &security-scan
   # `No such image` on the first host it ran on.
   image: ghcr.io/champyod/cms-docker-security-scan:${IMG_TAG:-major-admin-panel}
 
-# Diun watches containers that opt in with a label, not every container on the socket: an
-# image nobody runs on purpose (a one-off debug container) is not a finding. Add
-# `diun.enable=true` to any other service to include it; `diun.watch_repo=true` additionally
-# watches for new tags, `diun.notify_on=new` narrows notifications.
-x-diun-watch: &diun-watch
-  - "diun.enable=true"
-
 services:
 
   # Renovate opens the version PRs. It has no findings webhook upstream and this file does not
@@ -104,7 +97,10 @@ services:
       # (`DIUN_PROVIDERS_DOCKER` enables it, sub-options configure it).
       DIUN_PROVIDERS_DOCKER: "true"
       DIUN_PROVIDERS_DOCKER_ENDPOINT: "unix:///var/run/docker.sock"
-      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: "false"
+      # Watch every running container: no service here carries a `diun.enable` label, so the old
+      # false made Diun inspect nothing while logging a healthy "Jobs completed" every 6h.
+      # A service that must stay unwatched opts out with `diun.enable: "false"`.
+      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: "true"
       DIUN_WATCH_SCHEDULE: "${DIUN_WATCH_SCHEDULE:-0 */6 * * *}"
       DIUN_WATCH_FIRSTCHECKNOTIF: "true"
       DIUN_WATCH_WORKERS: "4"
@@ -250,21 +246,6 @@ services:
     networks:
       - cms-network
     command: ["node", "bootstrap.mjs", "security-signal"]
-
-  # Diun's opt-in labels, applied here rather than in docker-compose.yml: the base stack must
-  # stay usable without the feed, and an overlay is where an optional feature's labels belong.
-  admin-panel-next:
-    labels: *diun-watch
-  nginx-proxy:
-    labels: *diun-watch
-  database:
-    labels: *diun-watch
-  redis-rate-limit:
-    labels: *diun-watch
-  monitor:
-    labels: *diun-watch
-  worker:
-    labels: *diun-watch
 
 networks:
   cms-network:
