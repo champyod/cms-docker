@@ -13,7 +13,7 @@ fn lines_for(probe: ServerProbe) -> String {
         servers: vec![probe],
         ..FleetState::default()
     };
-    // Pinned to the instant regen_fleet_parity.py records: a wall clock turns a fresh fact STALE 30h later.
+    // Pinned to the fixture's recorded instant: a wall clock turns a fresh fact STALE 30h later.
     let now = parse_dt("2026-11-12T09:00:00Z").expect("fixed clock");
     as_lines_at(&state, now).1[0].clone()
 }
