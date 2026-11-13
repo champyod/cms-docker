@@ -547,6 +547,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     permissions:
       contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -556,6 +557,20 @@ jobs:
 
       - name: Fail on a waiver past its review date
         run: bash scripts/__security_waivers.sh check
+
+      # A review date is a promise with a name on it; the comment carries it to the PR rather than
+      # leaving the author to read a job log. Rendered by the same upsert the container scan uses.
+      - name: Comment the expired waiver on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__security_waivers.sh check > "${RUNNER_TEMP}/waiver-gate.txt" 2>&1
+          bash scripts/__pr_comment.sh \
+            --marker cms-waiver-gate \
+            --title "Waiver gate: a waiver is past its review date" \
+            --body-file "${RUNNER_TEMP}/waiver-gate.txt"
 
   # WHY: the image jobs build and push but never inspect what ships — OS package
   # CVEs in the base image and Dockerfile misconfigurations (root user, secrets
