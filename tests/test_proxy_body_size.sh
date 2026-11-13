@@ -415,7 +415,13 @@ done
 # WHY BACKUP_DIR is checked for the volume, not just the env: the panel reading a path it
 # cannot resolve reports an empty archive tree rather than an error, so a missing mount is
 # indistinguishable from a machine with no backups.
-panel_block="$(awk '/^  admin-panel-next:/,/^  admin-web-server:/' "${REPO_ROOT}/docker-compose.yml")"
+# WHY the anchor block as well as the service block: the panel's environment lives in the
+# shared `x-admin-panel` anchor so both colours get one definition, and a range that read
+# only the service key would report every variable as missing from a service that has them.
+panel_block="$(
+  awk '/^x-admin-panel:/,/^services:$/' "${REPO_ROOT}/docker-compose.yml"
+  awk '/^  admin-panel-next:/,/^  admin-web-server:/' "${REPO_ROOT}/docker-compose.yml"
+)"
 for var in BACKUP_DIR MAX_TESTCASE_UPLOAD_BYTES; do
   # WHY the block is captured once rather than piped per variable: grep -q closes the pipe
   # on its first match, which kills awk with SIGPIPE, and the pipeline status then reflects

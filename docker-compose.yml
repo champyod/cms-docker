@@ -9,6 +9,122 @@
 # pushed, so pinning a digest would freeze the whole stack to one commit — the tag IS the
 # selector and the digest lives in the registry manifest it resolves to.
 
+x-admin-panel: &admin-panel
+  build:
+    context: ./admin-panel
+    dockerfile: Dockerfile
+  image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+  restart: unless-stopped
+  depends_on:
+    database:
+      condition: service_healthy
+  environment:
+    PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
+    # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
+    DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+    # The console counts login failures in Redis; the panel reads and clears those keys.
+    REDIS_URL: redis://${REDIS_HOST:-redis-rate-limit}:${REDIS_PORT:-6379}
+    AUTH_SECRET: ${AUTH_SECRET}
+    # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
+    RPC_SECRET: ${RPC_SECRET}
+    COOKIE_SECURE: ${COOKIE_SECURE:-false}
+
+    # Adaptive login CAPTCHA
+    CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
+    CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
+    CAPTCHA_PROVIDERS: ${CAPTCHA_PROVIDERS:-}
+    CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+    CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
+    CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
+    CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
+
+    # WHY this is here and not only in config.toml: the panel reads its limits from
+    # process.env, and compose is what puts them in the container. Without this line
+    # the value reaches .env and stops there, and the panel keeps its built-in
+    # default no matter what the operator configures.
+    MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
+    # The per-file half of the testcase cap, plus the cap for every other upload the
+    # panel accepts. All of them are read from process.env, so compose is what puts
+    # them in the container — without these lines the value reaches .env and stops.
+    MAX_TESTCASE_FILE_BYTES: ${MAX_TESTCASE_FILE_BYTES:-2097152}
+    MAX_LOGO_UPLOAD_BYTES: ${MAX_LOGO_UPLOAD_BYTES:-5242880}
+    MAX_AVATAR_UPLOAD_BYTES: ${MAX_AVATAR_UPLOAD_BYTES:-2097152}
+    MAX_STATEMENT_UPLOAD_BYTES: ${MAX_STATEMENT_UPLOAD_BYTES:-10485760}
+    MAX_ATTACHMENT_UPLOAD_BYTES: ${MAX_ATTACHMENT_UPLOAD_BYTES:-10485760}
+
+    # WHY the feed token lives on the panel and not only in the security overlay: the panel is
+    # the endpoint the producers authenticate to (docs/SECURITY-FEED.md), so the secret has to
+    # reach the container that verifies it. Left empty the route refuses every push, which is
+    # the correct default — the overlay that produces them is profile-gated and off.
+    SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+    # WHY: the digest renders a backup/offsite reading on every patching page. The reading costs a
+    # scrape with a timeout, so the panel caches it for this window; a value compose never passed
+    # would make the config.toml key an advertisement rather than a setting.
+    SECURITY_STALENESS_CACHE_MS: ${SECURITY_STALENESS_CACHE_MS:-15000}
+
+    # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
+    BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
+
+    # WHY the panel receives these: discord-webhook.ts reads them for the alerts the
+    # panel sends itself, and compose was the only thing that could have delivered them.
+    # They are already [infra] keys, so this needs no new configuration surface.
+    DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
+
+    MONITOR_ENHANCED: ${MONITOR_ENHANCED:-0}
+
+    # WHY: the panel reads these from process.env (its evaluation RPC target, its
+    # public base path and its session cookie name), so compose is what puts them in
+    # the container. Without them the value reaches .env and stops there.
+    EVALUATION_RPC_TARGET: ${EVALUATION_RPC_TARGET:-}
+    NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
+    SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
+
+    # WHY the panel receives this: it writes every ranking asset into this directory and its
+    # host mirror, and both hang off the [admin] CMS_RANKING_LIB_DIR key. Without this line the
+    # value reaches .env and stops there, and the route keeps a literal that drifts from the
+    # directory the volume and the ranking service are built from.
+    CMS_RANKING_LIB_DIR: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}
+
+    REPO_ROOT: /repo-root
+    DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
+    IS_DOCKER: "true"
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ./:/repo-root
+    # WHY read-only: server-stats.ts prefers /host/proc for the CPU, RAM and uptime figures.
+    - /proc:/host/proc:ro
+    # WHY a distinct bind: /host/proc/net follows the panel's own netns, so host aggregate counters need docker to resolve /proc/1/net/dev on the host.
+    - /proc/1/net/dev:/host/proc-net/dev:ro
+    # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the
+    # archive tree at /app/backups and the panel reads the same BACKUP_DIR. Without the
+    # panel holding it too, the value resolves to a directory that is not there and every
+    # archive lookup reports an empty tree rather than failing.
+    - ./backups:/app/backups
+    - cms-logs:/var/local/log/cms
+    - cms-ranking-data:/var/local/lib/cms/ranking:rw
+    # Read-only: the security surface parses grader-waf's ModSecurity audit log
+    # from this shared volume (docker-compose.waf.yml mounts the same one at
+    # /var/log inside the WAF). Never mounted read-write, so the panel cannot
+    # rewrite the evidence it reports.
+    - waf-logs:/var/log/waf:ro
+  networks:
+    - cms-network
+  # WHY: the image runs as the unprivileged node user; this supplementary
+  # group (host docker socket gid) is what keeps docker CLI access working.
+  group_add:
+    - "${DOCKER_GID:-999}"
+  labels:
+    - "traefik.enable=true"
+    - "traefik.http.routers.cms-admin-next.rule=Host(`${ADMIN_NEXT_DOMAIN:-admin-next.cms.local}`)"
+    - "traefik.http.services.cms-admin-next.loadbalancer.server.port=3000"
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
+
 services:
 
   # PostgreSQL Database
@@ -447,113 +563,17 @@ services:
 
 
   admin-panel-next:
-    build:
-      context: ./admin-panel
-      dockerfile: Dockerfile
-    image: ghcr.io/champyod/cms-docker-admin-panel:${IMG_TAG:-major-admin-panel}
+    <<: *admin-panel
     container_name: cms-admin-panel-next
-    restart: unless-stopped
     profiles:
       - admin
-    depends_on:
-      database:
-        condition: service_healthy
-    environment:
-      PUBLIC_IP: ${PUBLIC_IP:-0.0.0.0}
-      # WHY: single owner role cmsuser owns large objects, so admin panel connects as owner (PostgreSQL restricts large-object access to owner).
-      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
-      # The console counts login failures in Redis; the panel reads and clears those keys.
-      REDIS_URL: redis://${REDIS_HOST:-redis-rate-limit}:${REDIS_PORT:-6379}
-      AUTH_SECRET: ${AUTH_SECRET}
-      # WHY: the panel speaks the authenticated CMS RPC protocol (cms/io/rpc.py fails closed without it)
-      RPC_SECRET: ${RPC_SECRET}
-      COOKIE_SECURE: ${COOKIE_SECURE:-false}
-
-      # Adaptive login CAPTCHA
-      CAPTCHA_ENABLED: ${CAPTCHA_ENABLED:-0}
-      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-turnstile}
-      CAPTCHA_PROVIDERS: ${CAPTCHA_PROVIDERS:-}
-      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
-      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
-      CAPTCHA_THRESHOLD: ${CAPTCHA_THRESHOLD:-3}
-      CAPTCHA_BAN_THRESHOLD: ${CAPTCHA_BAN_THRESHOLD:-5}
-
-      # WHY this is here and not only in config.toml: the panel reads its limits from
-      # process.env, and compose is what puts them in the container. Without this line
-      # the value reaches .env and stops there, and the panel keeps its built-in
-      # default no matter what the operator configures.
-      MAX_TESTCASE_UPLOAD_BYTES: ${MAX_TESTCASE_UPLOAD_BYTES:-52428800}
-      # The per-file half of the testcase cap, plus the cap for every other upload the
-      # panel accepts. All of them are read from process.env, so compose is what puts
-      # them in the container — without these lines the value reaches .env and stops.
-      MAX_TESTCASE_FILE_BYTES: ${MAX_TESTCASE_FILE_BYTES:-2097152}
-      MAX_LOGO_UPLOAD_BYTES: ${MAX_LOGO_UPLOAD_BYTES:-5242880}
-      MAX_AVATAR_UPLOAD_BYTES: ${MAX_AVATAR_UPLOAD_BYTES:-2097152}
-      MAX_STATEMENT_UPLOAD_BYTES: ${MAX_STATEMENT_UPLOAD_BYTES:-10485760}
-      MAX_ATTACHMENT_UPLOAD_BYTES: ${MAX_ATTACHMENT_UPLOAD_BYTES:-10485760}
-
-      # WHY the feed token lives on the panel and not only in the security overlay: the panel is
-      # the endpoint the producers authenticate to (docs/SECURITY-FEED.md), so the secret has to
-      # reach the container that verifies it. Left empty the route refuses every push, which is
-      # the correct default — the overlay that produces them is profile-gated and off.
-      SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
-      # WHY: the digest renders a backup/offsite reading on every patching page. The reading costs a
-      # scrape with a timeout, so the panel caches it for this window; a value compose never passed
-      # would make the config.toml key an advertisement rather than a setting.
-      SECURITY_STALENESS_CACHE_MS: ${SECURITY_STALENESS_CACHE_MS:-15000}
-
-      # WHY: the panel reads BACKUP_DIR as the archive root and gets the monitor's identical mount, so one path means one directory in both containers, not two spellings that drift.
-      BACKUP_DIR: ${BACKUP_DIR:-/app/backups}
-
-      # WHY the panel receives these: discord-webhook.ts reads them for the alerts the
-      # panel sends itself, and compose was the only thing that could have delivered them.
-      # They are already [infra] keys, so this needs no new configuration surface.
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
-      DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
-
-      MONITOR_ENHANCED: ${MONITOR_ENHANCED:-0}
-
-      # WHY: the panel reads these from process.env (its evaluation RPC target, its
-      # public base path and its session cookie name), so compose is what puts them in
-      # the container. Without them the value reaches .env and stops there.
-      EVALUATION_RPC_TARGET: ${EVALUATION_RPC_TARGET:-}
-      NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
-      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-session}
-
-      # WHY the panel receives this: it writes every ranking asset into this directory and its
-      # host mirror, and both hang off the [admin] CMS_RANKING_LIB_DIR key. Without this line the
-      # value reaches .env and stops there, and the route keeps a literal that drifts from the
-      # directory the volume and the ranking service are built from.
-      CMS_RANKING_LIB_DIR: ${CMS_RANKING_LIB_DIR:-/var/local/lib/cms/ranking}
-
-      REPO_ROOT: /repo-root
-      DEPLOYMENT_TYPE: ${DEPLOYMENT_TYPE:-img}
-      IS_DOCKER: "true"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/repo-root
-      # WHY read-only: server-stats.ts prefers /host/proc for the CPU, RAM and uptime figures.
-      - /proc:/host/proc:ro
-      # WHY a distinct bind: /host/proc/net follows the panel's own netns, so host aggregate counters need docker to resolve /proc/1/net/dev on the host.
-      - /proc/1/net/dev:/host/proc-net/dev:ro
-      # WHY this mount exists for BACKUP_DIR to mean one thing: the monitor mounts the
-      # archive tree at /app/backups and the panel reads the same BACKUP_DIR. Without the
-      # panel holding it too, the value resolves to a directory that is not there and every
-      # archive lookup reports an empty tree rather than failing.
-      - ./backups:/app/backups
-      - cms-logs:/var/local/log/cms
-      - cms-ranking-data:/var/local/lib/cms/ranking:rw
-      # Read-only: the security surface parses grader-waf's ModSecurity audit log
-      # from this shared volume (docker-compose.waf.yml mounts the same one at
-      # /var/log inside the WAF). Never mounted read-write, so the panel cannot
-      # rewrite the evidence it reports.
-      - waf-logs:/var/log/waf:ro
+    # WHY an alias as well as a container name: every renderer dials the panel by its
+    # colour (cms-admin-panel-<colour>), and colour a keeps the name the rest of the stack
+    # already knows — the prometheus scrape target, the security overlay, the smoke test.
     networks:
-      - cms-network
-    # WHY: the image runs as the unprivileged node user; this supplementary
-    # group (host docker socket gid) is what keeps docker CLI access working.
-    group_add:
-      - "${DOCKER_GID:-999}"
+      cms-network:
+        aliases:
+          - cms-admin-panel-a
     ports:
       # WHY loopback, not the 0.0.0.0 the other front-door UIs publish on: the panel
       # names the caller from a header only a proxy asserts (x-real-ip, or the rightmost
@@ -565,16 +585,18 @@ services:
       # `tailscale serve`, both of which are on the box. ADMIN_NEXT_BIND_IP widens this
       # through the generated expose override, one published entry per address.
       - "127.0.0.1:${ADMIN_NEXT_PORT_EXTERNAL:-8891}:3000"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.cms-admin-next.rule=Host(`${ADMIN_NEXT_DOMAIN:-admin-next.cms.local}`)"
-      - "traefik.http.services.cms-admin-next.loadbalancer.server.port=3000"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+
+  # The standby colour. Same image, environment and healthcheck as the active one (one
+  # anchor, not a copy), so a swap proves the build it is about to route to.
+  admin-panel-next-b:
+    <<: *admin-panel
+    container_name: cms-admin-panel-b
+    # WHY its own profile: a routine `--profile admin` deploy must never start the standby,
+    # or the box runs two panels for no reason. The swap enables this profile explicitly.
+    profiles:
+      - admin-standby
+    # WHY no ports: the standby answers on cms-network only. Nothing outside the compose
+    # network may reach it before the swap routes traffic there.
 
   # CMS Admin Web Server (Legacy Python Version)
   admin-web-server:
