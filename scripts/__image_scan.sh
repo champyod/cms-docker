@@ -227,9 +227,11 @@ case "$mode" in
       all_json="$OUT_DIR/json/${slug}.all.json"
       note "scanning ${ref}"
 
+      # `|| rc=$?` rather than the bare call: under `set -e` a non-zero trivy ended the whole
+      # script mid-loop, so one failing image aborted the run and left no verdict behind.
+      rc=0
       trivy_run "${slug}.fixable.json" 1 "$ref" \
-        --ignore-unfixed --ignorefile "/waivers/${waiver_name}"
-      rc=$?
+        --ignore-unfixed --ignorefile "/waivers/${waiver_name}" || rc=$?
       # 0 = nothing fixable, 1 = fixable findings (the policy verdict). Anything else is the
       # scanner failing to reach a verdict, and that must not be published as a result.
       if [ "$rc" -ne 0 ] && [ "$rc" -ne 1 ]; then
@@ -238,16 +240,16 @@ case "$mode" in
         continue
       fi
 
-      trivy_run "${slug}.all.json" 0 "$ref"
-      rc=$?
+      rc=0
+      trivy_run "${slug}.all.json" 0 "$ref" || rc=$?
       if [ "$rc" -ne 0 ]; then
         note "trivy visibility pass exited ${rc} on ${ref} — this run cannot claim a total"
         incomplete=1
         continue
       fi
 
-      fixable="$(jq -r '[.Results[]?.Vulnerabilities[]?] | length' "$fix_json" 2>/dev/null)"
-      total="$(jq -r '[.Results[]?.Vulnerabilities[]?] | length' "$all_json" 2>/dev/null)"
+      fixable="$(jq -r '[.Results[]?.Vulnerabilities[]?] | length' "$fix_json" 2>/dev/null || true)"
+      total="$(jq -r '[.Results[]?.Vulnerabilities[]?] | length' "$all_json" 2>/dev/null || true)"
       top="$(jq -r '
         [.Results[]?.Vulnerabilities[]?] as $v
         | ($v | group_by(.PkgName) | map({ pkg: .[0].PkgName, n: length })
