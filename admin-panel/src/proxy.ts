@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { withBasePath } from "@/lib/base-path";
 import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
+import { REQUEST_PATH_HEADER } from "@/lib/request-path";
 import { slideSessionCookie } from "@/lib/auth";
 import { readSessionClaims, SESSION_COOKIE_NAME } from "@/lib/session-token";
 
@@ -32,6 +33,20 @@ function aliasAuthPath(pathname: string): string | undefined {
 
 function isBypassedPath(pathname: string): boolean {
   return BYPASSED_PATH_FRAGMENTS.some((fragment) => pathname.includes(fragment));
+}
+
+/**
+ * Continue with the request's own path stamped on it.
+ *
+ * WHY every path is stamped, /api included: a server action and a route handler are handed no URL,
+ * and the actorless surface has to tell an /api call (answer 401) from a page or an action (send to
+ * the login). This is the last place that knows the path, and the value it writes wins over one the
+ * caller sent.
+ */
+function forward(request: NextRequest): NextResponse {
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_PATH_HEADER, request.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
 }
 
 /** The locale a path is already served under, so the gate sends a Thai user to the Thai login. */
@@ -76,7 +91,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
   if (isBypassedPath(pathname)) {
-    return NextResponse.next();
+    return forward(request);
   }
 
   const localeRedirect = resolveLocaleRedirect(request);
@@ -93,7 +108,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const response = NextResponse.next();
+  const response = forward(request);
   if (!pathname.includes(SESSION_OWNED_PATH_FRAGMENT)) {
     await slideSessionCookie(request, response);
   }
@@ -102,6 +117,6 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
 export const config = {
   matcher: [
-    "/((?!_next|api|favicon.ico).*)",
+    "/((?!_next|favicon.ico).*)",
   ],
 };

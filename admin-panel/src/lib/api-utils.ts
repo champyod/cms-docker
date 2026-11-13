@@ -1,7 +1,9 @@
 import { getSession, type SessionPayload } from './auth';
 import { getFreshPermissions, type PermissionKey } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { actorlessApiResponse } from '@/lib/actor-error-surface';
 import { NextResponse } from 'next/server';
+import { unstable_rethrow } from 'next/navigation';
 
 // Why: `?: undefined` on the absent branch mirrors TypeScript's inferred shape for the old
 // return values, so existing destructuring call sites (`{ authorized, response }`) keep compiling.
@@ -71,6 +73,15 @@ function describeFilesystemFailure(err: KnownApiError): string {
 }
 
 export function apiError(error: unknown): NextResponse {
+  // WHY first: a redirect or notFound a handler threw is control flow, not a fault. Without this
+  // the catch-all below turns a legitimate redirect into a 500 with a digest.
+  unstable_rethrow(error);
+
+  // WHY before the log line: an actorless request is an unauthenticated caller, not a fault. It
+  // leaves a 401 with no digest and nothing to log; every other error keeps the path below.
+  const actorless = actorlessApiResponse(error);
+  if (actorless !== undefined) return actorless;
+
   console.error('API Error:', error);
   const err = error as KnownApiError;
   const code = err.code;
