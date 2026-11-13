@@ -1,7 +1,15 @@
 use std::io::Write;
 use std::net::TcpListener;
+use std::sync::{Mutex, MutexGuard};
 
 use sec_digest::deliver::{body, fit, webhook_from_env, CONTENT_LIMIT};
+
+/// The webhook vars are process-wide while tests run in parallel, so each test takes them alone.
+static ENV: Mutex<()> = Mutex::new(());
+
+fn env_lock() -> MutexGuard<'static, ()> {
+    ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 /// A listener that answers one request and hands back what it received.
 fn one_shot(reply: &'static str) -> (String, std::thread::JoinHandle<String>) {
@@ -53,6 +61,7 @@ fn the_body_is_json_with_mentions_disabled() {
 
 #[test]
 fn delivery_reports_the_status_the_webhook_answered() {
+    let _env = env_lock();
     let (url, handle) = one_shot("HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n");
     std::env::set_var("DIGEST_WEBHOOK_URL", &url);
     let sent = sec_digest::deliver::deliver("a brief").expect("delivered");
@@ -66,6 +75,7 @@ fn delivery_reports_the_status_the_webhook_answered() {
 
 #[test]
 fn a_missing_webhook_is_an_error_not_a_silent_skip() {
+    let _env = env_lock();
     std::env::remove_var("DIGEST_WEBHOOK_URL");
     std::env::remove_var("DISCORD_WEBHOOK_URL");
     assert!(webhook_from_env().is_none());
@@ -75,6 +85,7 @@ fn a_missing_webhook_is_an_error_not_a_silent_skip() {
 
 #[test]
 fn an_empty_brief_is_refused_before_any_request() {
+    let _env = env_lock();
     std::env::set_var("DIGEST_WEBHOOK_URL", "http://127.0.0.1:9/hook");
     let error = sec_digest::deliver::deliver("   \n ").expect_err("must refuse");
     assert!(error.contains("empty brief"), "got {error}");
