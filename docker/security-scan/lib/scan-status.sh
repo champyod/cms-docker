@@ -48,15 +48,17 @@ scan_status_publish() {
     _at="${SECURITY_RUN_STARTED_AT:-$(LC_ALL=C date -u +%Y-%m-%dT%H:%M:%SZ)}"
     _tmp="${SCAN_STATUS_FILE}.tmp.$$"
     # fixable is published only when every row counted it: a partial sum would read as the run's total.
+    # Last row per source wins: a run that skipped the reset used to double every total it published.
     if ! jq -cs --arg at "$_at" --arg host "$(feed_host)" '
-        (map(.fixable) | if length > 0 and all(. != null) then add else null end) as $fixable
-        | {at: $at, host: $host, findings: (map(.findings) | add // 0)}
+        group_by(.source) | (map(.[-1])) as $rows
+        | ($rows | map(.fixable) | if length > 0 and all(. != null) then add else null end) as $fixable
+        | {at: $at, host: $host, findings: ($rows | map(.findings) | add // 0)}
           + (if $fixable == null then {} else {fixable: $fixable} end)
-          + {batches_sent: (map(.batches_sent) | add // 0),
-             batches_total: (map(.batches_total) | add // 0),
-             batches_rejected: (map(.batches_rejected) | add // 0),
-             complete: (length > 0 and all(.complete)),
-             sources: .}' "$SCAN_STATUS_ROWS" > "$_tmp" 2>/dev/null; then
+          + {batches_sent: ($rows | map(.batches_sent) | add // 0),
+             batches_total: ($rows | map(.batches_total) | add // 0),
+             batches_rejected: ($rows | map(.batches_rejected) | add // 0),
+             complete: ($rows | length > 0 and all(.complete)),
+             sources: $rows}' "$SCAN_STATUS_ROWS" > "$_tmp" 2>/dev/null; then
         rm -f "$_tmp"
         feed_log "scan status: could not render $SCAN_STATUS_FILE"
         return 1

@@ -246,5 +246,16 @@ printf '%s\n' '{"source":"osv","findings":4,"batches_sent":1,"batches_total":1,"
 env SCAN_STATUS_ROWS="$WORK/status/mixed.rows" SCAN_STATUS_FILE="$WORK/status/mixed.json" sh -c 'feed_log() { :; }; feed_host() { printf test-host; }; . "$1"; scan_status_publish' _ "$STATUS_LIB" >/dev/null 2>&1
 [[ "$(jq -r 'has("fixable")' "$WORK/status/mixed.json")" == "false" ]] && ok "a row that cannot say leaves the key out, never a 0" \
   || no "a partial fixable total was published: $(jq -c '.fixable' "$WORK/status/mixed.json")"
+printf '\nrows from a run that skipped the reset must not double the fact\n'
+printf '%s\n' '{"source":"rootfs","findings":10,"fixable":1,"batches_sent":1,"batches_total":1,"complete":true}' \
+               '{"source":"rootfs","findings":10,"fixable":1,"batches_sent":1,"batches_total":1,"complete":true}' \
+               '{"source":"osv","findings":4,"fixable":0,"batches_sent":1,"batches_total":1,"complete":true}' > "$WORK/status/dup.rows"
+env SCAN_STATUS_ROWS="$WORK/status/dup.rows" SCAN_STATUS_FILE="$WORK/status/dup.json" sh -c 'feed_log() { :; }; feed_host() { printf test-host; }; . "$1"; scan_status_publish' _ "$STATUS_LIB" >/dev/null 2>&1
+[[ "$(jq -r '.findings' "$WORK/status/dup.json")" == "14" ]] && ok "a repeated source row is counted once (14, not 24)" \
+  || no "the fact doubled a source: $(jq -r '.findings' "$WORK/status/dup.json") findings"
+[[ "$(jq -r '.sources | length' "$WORK/status/dup.json")" == "2" ]] && ok "the sources list names each source once" \
+  || no "the sources list kept duplicates: $(jq -c '.sources | length' "$WORK/status/dup.json")"
+[[ "$(jq -r '.fixable' "$WORK/status/dup.json")" == "1" ]] && ok "the fixable total follows the deduplicated rows" \
+  || no "fixable did not follow the dedup: $(jq -c '.fixable' "$WORK/status/dup.json")"
 printf '\nPASS: %d  FAIL: %d\n' "$pass" "$fail"
 [[ $fail -eq 0 ]]
