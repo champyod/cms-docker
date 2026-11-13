@@ -33,6 +33,9 @@
 _NGINX_ROUTES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 . "${_NGINX_ROUTES_DIR}/__nginx_sse.sh"
+# The panel's colour naming rule, shared with the contest-proxy renderer and the swap script.
+# shellcheck source=/dev/null
+. "${_NGINX_ROUTES_DIR}/__admin_panel_target.sh"
 
 # label|domain_var|path_var|upstream_var|listen_port_var|primary_path_var
 # WHY the sixth column: a route answers at its own path on its own vhost, and reaches the primary
@@ -55,7 +58,9 @@ RANKING_ROUTE_PATH="${RANKING_ROUTE_PATH:-/ranking}"
 OJ_ROUTE_PATH="${OJ_ROUTE_PATH:-}"
 
 CONTEST_UPSTREAM="${CONTEST_UPSTREAM:-cms-contest-web-server}"
-ADMIN_UPSTREAM="${ADMIN_UPSTREAM:-cms-admin-panel-next}"
+# WHY empty: the panel's target is not a free-form upstream, it is the colour the swap
+# recorded — resolved in _domain_routes_build, where .env has already been loaded.
+ADMIN_UPSTREAM=""
 ADMIN_CLASSIC_UPSTREAM="${ADMIN_CLASSIC_UPSTREAM:-cms-admin-web-server}"
 RANKING_UPSTREAM="${RANKING_UPSTREAM:-cms-ranking-web-server}"
 OJ_UPSTREAM="${OJ_UPSTREAM:-host.docker.internal}"
@@ -461,10 +466,25 @@ _routes_build() {
   export PRIMARY_UPSTREAM PRIMARY_UPSTREAM_SET
 }
 
+# The panel's upstream is the colour the swap recorded, not an operator string: the front
+# and the swap must never disagree about which container is live.
+#
+# WHY here and not at source time: __domain.sh sources this file before it loads .env, so a
+# value read at source time would be the one from before the file was read.
+_admin_panel_resolve_upstream() {
+  local repo_root colour
+  repo_root="$(cd -- "${_NGINX_ROUTES_DIR}/.." && pwd)"
+  colour="$(admin_panel_colour_resolve "$repo_root")" \
+    || log_die "the admin panel colour must be a|b — fix ${repo_root}/${ADMIN_PANEL_STATE_FILE} or ADMIN_PANEL_COLOUR" 1
+  ADMIN_PANEL_COLOUR="$colour"
+  ADMIN_UPSTREAM="$(admin_panel_container "$colour")"
+}
+
 # The single entrypoint the caller invokes. Split from sourcing so the directive
 # sets it folds are the ones the render function had just computed.
 _domain_routes_build() {
   _routes_expand_default_directives
+  _admin_panel_resolve_upstream
   _routes_collect
   _routes_build
 }

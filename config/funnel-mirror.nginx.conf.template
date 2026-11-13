@@ -1,7 +1,9 @@
 # Funnel mirror nginx config — envsubst template
 # Mirrors grader layout on Tailscale funnel ports with basic_auth wrappers.
 # Rendered by __domain.sh → config/funnel-mirror.nginx.conf
-# Render with: envsubst '$DOMAIN_NAME $CONTEST_LISTEN_PORT ...' < template > output
+# Render with: envsubst '$DOMAIN_NAME $CONTEST_LISTEN_PORT $ADMIN_LISTEN_PORT
+#   $RANKING_LISTEN_PORT $FUNNEL_* $PROXY_MAX_BODY_SIZE $ADMIN_PANEL_CONTAINER
+#   $ADMIN_NEXT_LISTEN_PORT' < template > output
 
 # Rate limit zones
 limit_req_zone $binary_remote_addr zone=funnel_login:10m rate=5r/s;
@@ -14,7 +16,10 @@ upstream funnel_cms_contest {
 }
 
 upstream funnel_cms_admin_panel {
-    server cms-admin-panel-next:3000;
+    # WHY no literal container: the panel runs as one of two colours and the swap records
+    # which is live. scripts/__admin_panel_target.sh is the one naming rule, and a render
+    # supplies both names from it.
+    server ${ADMIN_PANEL_CONTAINER}:${ADMIN_NEXT_LISTEN_PORT};
 }
 
 upstream funnel_cms_classic_admin {

@@ -10,6 +10,20 @@ set -eu
 # shellcheck source=/dev/null
 . "${SSE_SNIPPET:-/usr/local/bin/nginx-sse.sh}"
 
+# WHY sourced: the panel's colour naming rule is one definition shared with the domain route
+# table and the swap script; compose mounts this file read-only beside the SSE snippet.
+# shellcheck source=/dev/null
+. "${ADMIN_PANEL_SNIPPET:-/usr/local/bin/admin-panel-target.sh}"
+
+# The colour this proxy dials. It comes from compose (.env), so a restart of this proxy lands
+# on the colour the box is configured for; the live flip is the domain front's job, which can
+# re-render and reload without restarting.
+ADMIN_PANEL_COLOUR="${ADMIN_PANEL_COLOUR:-a}"
+admin_panel_colour_valid "$ADMIN_PANEL_COLOUR" \
+  || { echo "ADMIN_PANEL_COLOUR='${ADMIN_PANEL_COLOUR}' is not a colour (a|b)" >&2; exit 1; }
+ADMIN_PANEL_CONTAINER="$(admin_panel_container "$ADMIN_PANEL_COLOUR")"
+ADMIN_NEXT_LISTEN_PORT="${ADMIN_NEXT_LISTEN_PORT:-3000}"
+
 PROXY_COMMON='
     client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
@@ -185,6 +199,7 @@ fi
 # accepted it, so the limit would move with which proxy fronts the request.
 PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 export PROXY_COMMON HTTP_SERVER FUNNEL_SERVERS
+export ADMIN_PANEL_CONTAINER ADMIN_NEXT_LISTEN_PORT
 REALM="${FUNNEL_REALM:-CMS restricted}"
 REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
 # WHY @PROXY_MAX_BODY_SIZE@ is a sentinel and not ${PROXY_MAX_BODY_SIZE}: the two blocks
@@ -193,5 +208,5 @@ REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
 # looks at it again — one pass, no recursion. nginx would then be handed a literal
 # ${PROXY_MAX_BODY_SIZE} as its body size and refuse to start. The same substitution pass
 # that already resolves @FUNNEL_REALM@ resolves this one.
-envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" > /etc/nginx/conf.d/default.conf
+envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS} ${ADMIN_PANEL_CONTAINER} ${ADMIN_NEXT_LISTEN_PORT}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'

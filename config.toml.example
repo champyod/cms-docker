@@ -159,7 +159,7 @@ RANKING_ROUTE_PATH = "/ranking" # str; sub-path the ranking board answers on the
 OJ_ROUTE_PATH = ""              # str; sub-path the external judge answers on the primary vhost; empty=served on the oj vhost only
 OJ_UPSTREAM = ""                # str; external judge upstream; empty=host.docker.internal with OJ_BACKEND_PORT (the judge runs on the host, the proxy in a container)
 CONTEST_UPSTREAM = "cms-contest-web-server" # str; container the contest route proxies to
-ADMIN_UPSTREAM = "cms-admin-panel-next"     # str; container the admin route proxies to
+ADMIN_PANEL_COLOUR = "a"        # enum a|b; colour of the panel container the admin route dials — the swap script records the live colour in config/admin-panel-colour
 ADMIN_CLASSIC_UPSTREAM = "cms-admin-web-server" # str; container the classic admin route proxies to
 RANKING_UPSTREAM = "cms-ranking-web-server" # str; container the ranking route proxies to
 ADMIN_NEXT_LISTEN_PORT = 3000   # port; container port the Next.js panel answers on

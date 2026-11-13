@@ -684,7 +684,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|OJ_ROUTE_PATH|str||"
   "Admin Panel|[admin]|OJ_UPSTREAM|str||"
   "Admin Panel|[admin]|CONTEST_UPSTREAM|str||cms-contest-web-server"
-  "Admin Panel|[admin]|ADMIN_UPSTREAM|str||cms-admin-panel-next"
+  "Admin Panel|[admin]|ADMIN_PANEL_COLOUR|enum:a,b||a"
   "Admin Panel|[admin]|ADMIN_CLASSIC_UPSTREAM|str||cms-admin-web-server"
   "Admin Panel|[admin]|RANKING_UPSTREAM|str||cms-ranking-web-server"
   "Admin Panel|[admin]|ADMIN_NEXT_LISTEN_PORT|port||3000"

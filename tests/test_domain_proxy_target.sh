@@ -22,18 +22,30 @@ SANDBOXES=()
 cleanup() { rm -rf "${SANDBOXES[@]+"${SANDBOXES[@]}"}"; }
 trap cleanup EXIT
 
+# Copies every file $1 sources into the sandbox, then what those source in turn.
+copy_sources_of() {
+  local script="$1" sourced
+  while read -r sourced; do
+    [[ -e "${SANDBOX_DIR}/scripts/${sourced}" ]] && continue
+    [[ -e "${REPO_ROOT}/scripts/${sourced}" ]] || continue
+    mkdir -p "${SANDBOX_DIR}/scripts/$(dirname "${sourced}")"
+    cp -r "${REPO_ROOT}/scripts/${sourced}" "${SANDBOX_DIR}/scripts/${sourced}"
+    copy_sources_of "${REPO_ROOT}/scripts/${sourced}"
+  done < <(grep -oE 'source "[^"]+"|\. "[^"]+"' "$script" | cut -d/ -f2- | tr -d '"' | sort -u)
+}
+
 # A copy of the script with only what it sources, so a run can never write to the repo.
+# WHY recursive: a sourced file may source another (the route table pulls in the SSE and
+# panel-colour snippets), and a sandbox that stopped at the first level ran the domain
+# script without the files its own sources need.
 sandbox() {
   local dir
   dir="$(mktemp -d)"
   SANDBOXES+=("${dir}")
   mkdir -p "${dir}/scripts" "${dir}/bin"
+  SANDBOX_DIR="$dir"
   cp "${DOMAIN}" "${dir}/scripts/"
-  while read -r sourced; do
-    [[ -e "${REPO_ROOT}/scripts/${sourced}" ]] || continue
-    mkdir -p "${dir}/scripts/$(dirname "${sourced}")"
-    cp -r "${REPO_ROOT}/scripts/${sourced}" "${dir}/scripts/${sourced}"
-  done < <(grep -oE 'source "[^"]+"' "${DOMAIN}" | cut -d/ -f2- | tr -d '"' | sort -u)
+  copy_sources_of "${DOMAIN}"
   cp "${REPO_ROOT}/config.toml.example" "${dir}/config.toml"
   # Logs every call; `ps` lists the contest front door first, the order that used to win.
   cat > "${dir}/bin/docker" <<'STUB'

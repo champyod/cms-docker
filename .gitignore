@@ -108,3 +108,7 @@ ranking-web/tests/fixtures/parity/captured/*/
 # renders. Run output, not source — the nightly workflow writes it under $RUNNER_TEMP.
 /.image-scan/
 trivy-image.txt
+
+# Which admin-panel colour is live. Written by scripts/__admin_panel_swap.sh and read by the
+# route renderer: it is this box's state, not a source file.
+/config/admin-panel-colour

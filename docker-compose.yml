@@ -541,11 +541,18 @@ services:
       ENABLE_TLS: ${ENABLE_TLS:-false}
       FUNNEL_ENABLED: ${FUNNEL_ENABLED:-false}
       FUNNEL_REALM: ${FUNNEL_REALM:-CMS restricted}
+      # WHY the colour reaches this renderer: the contest and funnel vhosts dial the panel by
+      # colour, and this proxy renders its config from that one value at start.
+      ADMIN_PANEL_COLOUR: ${ADMIN_PANEL_COLOUR:-a}
+      ADMIN_NEXT_LISTEN_PORT: ${ADMIN_NEXT_LISTEN_PORT:-3000}
     volumes:
       - ./config/nginx-contest.conf:/etc/nginx/templates/default.conf.template:ro
       - ./scripts/__nginx-proxy-render.sh:/usr/local/bin/render.sh:ro
       # WHY: render.sh sources this for the panel's SSE location, one definition shared with the domain proxy.
       - ./scripts/__nginx_sse.sh:/usr/local/bin/nginx-sse.sh:ro
+      # WHY: render.sh sources this for the panel's container name, one naming rule shared
+      # with the domain route table and the swap script.
+      - ./scripts/__admin_panel_target.sh:/usr/local/bin/admin-panel-target.sh:ro
       - ./config/funnel.htpasswd:/etc/nginx/funnel.htpasswd:ro
       # Shared webroot so this proxy can answer the HTTP-01 challenge when it owns :80.
       - ./config/letsencrypt/www:/var/www/certbot:ro

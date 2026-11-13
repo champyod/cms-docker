@@ -30,6 +30,7 @@ render() {
       RANKING_AUTH_DIRECTIVES="" \
       FUNNEL_ENABLED="false" \
       SSE_SNIPPET="${REPO_ROOT}/scripts/__nginx_sse.sh" \
+      ADMIN_PANEL_SNIPPET="${REPO_ROOT}/scripts/__admin_panel_target.sh" \
       bash -c "${body}
 printf '%s' \"\$HTTP_SERVER\""
 }
@@ -45,6 +46,7 @@ render_funnel() {
       RANKING_LISTEN_PORT="8890" \
       RANKING_AUTH_DIRECTIVES="" \
       SSE_SNIPPET="${REPO_ROOT}/scripts/__nginx_sse.sh" \
+      ADMIN_PANEL_SNIPPET="${REPO_ROOT}/scripts/__admin_panel_target.sh" \
       bash -c "${body}
 printf '%s' \"\$FUNNEL_SERVERS\""
 }
