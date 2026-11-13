@@ -147,7 +147,7 @@ export function makeSignalFacts(
     aged: findings.filter(isAged).length,
     waived: findings.filter((finding) => finding.waiver.status !== 'none'),
     // A test that does not care about the flipped set states zero, which is the absence of the fact.
-    flips: { count: 0, worst: null },
+    flips,
     criticals: pushed
       .sort((left, right) => left.firstSeen.localeCompare(right.firstSeen))
       .slice(0, SIGNAL_RULES.maxLines),

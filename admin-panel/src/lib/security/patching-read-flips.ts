@@ -1,8 +1,10 @@
+import type { Prisma } from '@prisma/client';
+
 import { prisma } from '@/lib/prisma';
 import { isPatchingSeverity, PATCHING_SEVERITIES, type PatchingSeverity } from '@/lib/security/patching';
 import type { WaiverRow } from '@/lib/security/patching-read-types';
 import { flippedRowsWhere } from '@/lib/security/patching-read-where';
-import type { FlipLead, WaivedReachable } from '@/lib/security/verdict-flip';
+import type { FlipLead, LiveWaiver, StoredVerdict, WaivedReachable } from '@/lib/security/verdict-flip';
 
 /** The row shape the lead is chosen from; `flip` is the open episode, which the predicate guarantees. */
 interface FlipRow {
@@ -56,6 +58,33 @@ function worstOf(rows: readonly FlipRow[]): FlipLead | null {
 /** The number the page banner states; the same clause the filter selects with. */
 export function countWaivedReachable(waivers: readonly WaiverRow[]): Promise<number> {
   return prisma.security_findings.count({ where: flippedRowsWhere(waivers) });
+}
+
+/**
+ * The verdicts already stored for the keys one push names, keyed by the producer's identity.
+ *
+ * WHY it takes the caller's client: ingest runs this inside the transaction that judges the write,
+ * so the verdict a flip is measured against cannot be replaced between the read and the record.
+ */
+export async function readStoredVerdicts(
+  client: Prisma.TransactionClient,
+  source: string,
+  keys: readonly string[],
+): Promise<Map<string, StoredVerdict>> {
+  if (keys.length === 0) return new Map();
+  const rows = await client.security_findings.findMany({
+    where: { source, key: { in: [...keys] } },
+    select: { id: true, key: true, reachability: true },
+  });
+  return new Map(rows.map((row) => [row.key, row]));
+}
+
+/** The live decisions over one producer's rows, read in the transaction that records a flip. */
+export function readLiveWaivers(client: Prisma.TransactionClient, source: string): Promise<LiveWaiver[]> {
+  return client.security_waivers.findMany({
+    where: { ended_at: null, source },
+    select: { id: true, source: true, match: true, ended_at: true },
+  });
 }
 
 /**

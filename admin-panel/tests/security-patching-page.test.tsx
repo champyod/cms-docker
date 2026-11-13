@@ -297,6 +297,7 @@ describe('query validation', () => {
       source: 'all',
       severity: 'all',
       reachability: 'all',
+      flip: 'all',
       sort: 'lastSeen',
       direction: 'desc',
     });
@@ -317,6 +318,7 @@ describe('query validation', () => {
       source: 'rootfs',
       severity: 'HIGH',
       reachability: 'all',
+      flip: 'all',
       sort: 'lastSeen',
       direction: 'desc',
     });

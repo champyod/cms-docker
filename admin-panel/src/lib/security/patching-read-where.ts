@@ -2,7 +2,6 @@ import type { Prisma } from '@prisma/client';
 
 import { PATCHING_SEVERITIES, PATCHING_SOURCES, type PatchingQuery } from '@/lib/security/patching';
 import type { WaiverRow } from '@/lib/security/patching-read-types';
-import { flippedUnderWaiverWhere } from '@/lib/security/verdict-flip';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 
 /** Unresolved rows the contract can place: ingest resolves instead of deleting, so history survives. */
@@ -28,12 +27,24 @@ export function untouchedWhere(waivers: readonly WaiverRow[]): Prisma.security_f
   return cover === null ? {} : { NOT: cover };
 }
 
-/** The flipped rows as SQL: the waiver predicate widened by "reachable now" and an open flip. */
+/**
+ * The flipped rows as SQL: a live waiver covers them, their stored verdict is 'reachable' now, and
+ * the episode is still open.
+ *
+ * WHY `resolved_at: null` is in here: a resolved row is not reachable in any sense a reader acts
+ * on, and the count must stop the moment it resolves even if the clearing write never ran (an
+ * operator can resolve a feed, a restore can bring a row back). The stored fact says what happened;
+ * this clause says whether it still holds.
+ *
+ * WHY an impossible set and not `{}` with no live waiver: "no waiver covers anything" means no row
+ * can be hidden by one — an empty set, not an unrestricted one.
+ */
 export function flippedRowsWhere(waivers: readonly WaiverRow[]): Prisma.security_findingsWhereInput {
-  const flipped = flippedUnderWaiverWhere(waivers);
-  // WHY an impossible set and not `{}`: with no live waiver nothing is hidden by one, so this
-  // filter selects nothing — the opposite of leaving the clause out.
-  return flipped === null ? { id: { in: [] } } : flipped;
+  const cover = waiverCoverWhere(waivers);
+  if (cover === null) return { id: { in: [] } };
+  return {
+    AND: [cover, { reachability: 'reachable' }, { resolved_at: null }, { flip: { is: { cleared_at: null } } }],
+  };
 }
 
 /** The filters as SQL: an absent filter is the absence of a clause, not a wildcard. */

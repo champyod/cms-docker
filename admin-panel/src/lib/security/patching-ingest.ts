@@ -9,12 +9,12 @@ import {
 } from '@/lib/security/kernel-reachability';
 import { MAX_FINDING_KEY_LENGTH } from '@/lib/security/patching';
 import type { FeedFindingInput, FeedPush } from '@/lib/security/patching-feed-push';
+import { readStoredVerdicts } from '@/lib/security/patching-read-flips';
 import {
   clearFlip,
   clearResolvedFlips,
   flipCandidate,
   isVerdictFlip,
-  readStoredVerdicts,
   recordFlips,
   type FlipCandidate,
   type StoredVerdict,
@@ -101,11 +101,10 @@ async function writeFinding(
   client: Prisma.TransactionClient,
   push: FeedPush,
   now: Date,
-  state: HostModuleState,
   finding: FeedFindingInput,
+  verdict: Reachability,
   prior: StoredVerdict | undefined,
 ): Promise<WrittenFinding> {
-  const verdict = reachabilityOf(finding, push.host, state);
   const data = findingData(finding, push.host, verdict);
   // Causal, not last-writer-wins: a row moves only when this run is at least as new as its resolution.
   const touched = await client.security_findings.updateMany({
@@ -141,10 +140,15 @@ async function writeFindings(
 ): Promise<Map<string, Prisma.security_findingsUncheckedCreateInput>> {
   const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
   const flips: FlipCandidate[] = [];
+  // Classified once per finding: the write and the flip rule must judge the same verdict.
+  const judged = push.findings.map((finding) => ({
+    finding,
+    verdict: reachabilityOf(finding, push.host, state),
+  }));
   // One read for the push: a flip is a change from the stored verdict, never a second classification.
-  const stored = await readStoredVerdicts(client, push.source, push.findings.map((finding) => finding.key));
-  for (const finding of push.findings) {
-    const written = await writeFinding(client, push, now, state, finding, stored.get(finding.key));
+  const stored = await readStoredVerdicts(client, push.source, judged.map((entry) => entry.finding.key));
+  for (const { finding, verdict } of judged) {
+    const written = await writeFinding(client, push, now, finding, verdict, stored.get(finding.key));
     if (written.unseen) {
       unseen.set(finding.key, {
         source: push.source,

@@ -2,7 +2,7 @@ import type { Prisma, security_waivers } from '@prisma/client';
 
 import type { Reachability } from '@/lib/security/kernel-reachability';
 import { waiverCovers, type PatchingSeverity } from '@/lib/security/patching';
-import { waiverCoverWhere } from '@/lib/security/waiver-cover';
+import { readLiveWaivers } from '@/lib/security/patching-read-flips';
 
 /**
  * The flip a waiver cannot follow.
@@ -53,21 +53,7 @@ export interface WaivedReachable {
 }
 
 /** A waiver as the one shared predicate needs it. */
-type LiveWaiver = Pick<security_waivers, 'id' | 'source' | 'match' | 'ended_at'>;
-
-/** The verdict of the row this push is about to write, keyed by the producer's identity. */
-export async function readStoredVerdicts(
-  client: Prisma.TransactionClient,
-  source: string,
-  keys: readonly string[],
-): Promise<Map<string, StoredVerdict>> {
-  if (keys.length === 0) return new Map();
-  const rows = await client.security_findings.findMany({
-    where: { source, key: { in: [...keys] } },
-    select: { id: true, key: true, reachability: true },
-  });
-  return new Map(rows.map((row) => [row.key, row]));
-}
+export type LiveWaiver = Pick<security_waivers, 'id' | 'source' | 'match' | 'ended_at'>;
 
 /** The one definition of a flip: the row was NOT reachable, and now it is. */
 export function isVerdictFlip(prior: string, verdict: Reachability): boolean {
@@ -110,10 +96,7 @@ export async function recordFlips(
   now: Date,
 ): Promise<number> {
   if (candidates.length === 0) return 0;
-  const waivers = await client.security_waivers.findMany({
-    where: { ended_at: null, source },
-    select: { id: true, source: true, match: true, ended_at: true },
-  });
+  const waivers = await readLiveWaivers(client, source);
   let recorded = 0;
   for (const candidate of candidates) {
     const waiver = coveringWaiver(waivers, candidate, source);
@@ -160,30 +143,4 @@ export async function clearResolvedFlips(
     where: { cleared_at: null, finding: { source, resolved_at: { not: null } } },
     data: { cleared_at: now },
   });
-}
-
-/**
- * The findings a live waiver hides although their stored verdict is 'reachable' and a flip is open.
- *
- * WHY `resolved_at: null` is in here: a resolved row is not reachable in any sense a reader acts
- * on, and the count must stop the moment it resolves even if the clearing write never ran (an
- * operator can resolve a feed, a restore can bring a row back). The stored fact says what happened;
- * this clause says whether it still holds.
- *
- * WHY `null`: "no live waiver covers anything" means no row can be hidden by one — an empty set,
- * not an unrestricted one. The caller must turn it into "nothing matches", never into "no filter".
- */
-export function flippedUnderWaiverWhere(
-  waivers: readonly LiveWaiver[],
-): Prisma.security_findingsWhereInput | null {
-  const cover = waiverCoverWhere(waivers);
-  if (cover === null) return null;
-  return {
-    AND: [
-      cover,
-      { reachability: 'reachable' },
-      { resolved_at: null },
-      { flip: { is: { cleared_at: null } } },
-    ],
-  };
 }

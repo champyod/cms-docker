@@ -19,6 +19,7 @@ import {
 } from '@/lib/security/patching-read-where';
 import { agedCutoff, buildSecurityDigest, SIGNAL_RULES, type PatchingSignalFacts } from '@/lib/security/signal';
 import { readStalenessSnapshotCached } from '@/lib/security/staleness';
+import type { WaivedReachable } from '@/lib/security/verdict-flip';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 import { WAIVER_EXPORT_VERSION, type WaiverExport } from '@/lib/security/waiver-gate';
 
@@ -29,6 +30,9 @@ export type {
 
 // The page's read path: where the page, the card and the digest query these two tables.
 // The scan announcement reuses the helpers below, so it counts exactly the rows this module counts.
+
+/** The absence of the fact: no row a live waiver hides is reachable now. */
+const EMPTY_FLIPS: WaivedReachable = { count: 0, worst: null };
 
 /** The live waivers: the decisions that currently suppress something, soonest review date first. */
 export function liveWaiverRows(): Promise<WaiverRow[]> {
@@ -65,10 +69,11 @@ export async function readPatchingPage(
   // Read first: the flip filter is a clause over the live waivers, so the rows it selects depend
   // on them, and the page must count and page with one set of decisions.
   const waivers = await liveWaiverRows();
-  const [counts, total, waivedReachable] = await Promise.all([
+  const [counts, waivedReachable, total] = await Promise.all([
     readFindingCounts(),
-    prisma.security_findings.count({ where: filteredWhere(requested, waivers) }),
+    // The banner's number, from the flip clause, so `total` below stays the count of the rows read.
     countWaivedReachable(waivers),
+    prisma.security_findings.count({ where: filteredWhere(requested, waivers) }),
   ]);
   // Clamped after the count: `?page=999` on a shrunken feed must not render an empty table.
   const query: PatchingQuery = { ...requested, page: clampPatchingPage(requested.page, total) };
@@ -153,12 +158,13 @@ async function readSignalFacts(
   counts: PatchingFindingCounts, now: Date,
 ): Promise<PatchingSignalFacts> {
   const totals = await readFeedTotals();
-  const [aged, waived, rows, flips] = await Promise.all([
+  const [aged, waived, rows] = await Promise.all([
     prisma.security_findings.count({ where: unresolvedWhere({ first_seen: { lte: agedCutoff(now) } }) }),
     readWaivedFindings(waivers, now),
     readSignalRows(totals, waivers, now),
-    readWaivedReachable(waivers),
   ]);
+  // A flip is a row a live waiver covers and the read above returned every one: with none, none flipped.
+  const flips = waived.length === 0 ? EMPTY_FLIPS : await readWaivedReachable(waivers);
   return {
     cards: buildPatchingCards(counts, waivers, now),
     waivers: mappedWaivers,
