@@ -37,6 +37,18 @@ fn a_full_result_names_findings_batches_and_rejections() {
 }
 
 #[test]
+fn a_run_that_counts_its_fixable_findings_says_so() {
+    let line = server_line(&format!(
+        "{KERNEL}\nlastscan={{\"at\":\"2026-11-12T03:00:20Z\",\"findings\":13377,\"fixable\":1415,\
+         \"batches_sent\":55,\"batches_total\":55,\"batches_rejected\":0,\"complete\":true}}"
+    ));
+    assert!(
+        line.ends_with("scan 2026-11-12 03:00 · 13,377 findings · 1,415 fixable · 55/55 batches · 0 rejected"),
+        "{line}"
+    );
+}
+
+#[test]
 fn an_incomplete_run_is_named_incomplete() {
     let line = server_line(&format!(
         "{KERNEL}\nlastscan={{\"at\":\"2026-11-12T03:00:20Z\",\"findings\":13357,\

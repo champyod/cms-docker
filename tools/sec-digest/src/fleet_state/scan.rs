@@ -23,6 +23,9 @@ pub struct ScanResult {
     pub at: String,
     #[serde(default)]
     pub findings: Option<u64>,
+    /// Findings carrying a published fix — the panel's own `available`, absent from an older file.
+    #[serde(default)]
+    pub fixable: Option<u64>,
     #[serde(default)]
     pub batches_sent: Option<u64>,
     #[serde(default)]
@@ -63,6 +66,9 @@ fn scan_result_line(result: &ScanResult, now: DateTime<Utc>) -> String {
             .map(group)
             .unwrap_or_else(|| "?".to_string())
     ));
+    if let Some(fixable) = result.fixable {
+        bits.push(format!("{} fixable", group(fixable)));
+    }
     if let Some(total) = result.batches_total {
         bits.push(format!(
             "{}/{} batches",
@@ -150,6 +156,29 @@ mod tests {
         assert_eq!(
             scan_line(&serde_json::to_string(&fact).expect("round trip"), clock()),
             "scan 2026-11-12 03:00 · 13,357 findings · 54/54 batches · 0 rejected"
+        );
+    }
+
+    #[test]
+    fn a_file_that_omits_fixable_keeps_the_line_it_always_printed() {
+        // An old scanner publishes no fixable count; claiming "0 fixable" would be a fact it never sent.
+        assert_eq!(
+            scan_line(
+                r#"{"at":"2026-11-12T03:00:20Z","findings":13357,"batches_sent":54,"batches_total":54,"batches_rejected":0,"complete":true}"#,
+                clock()
+            ),
+            "scan 2026-11-12 03:00 · 13,357 findings · 54/54 batches · 0 rejected"
+        );
+    }
+
+    #[test]
+    fn an_explicit_zero_fixable_is_printed_not_dropped() {
+        let fact = result(
+            r#"{"at":"2026-11-12T03:00:20Z","findings":13377,"fixable":0,"batches_sent":55,"batches_total":55,"batches_rejected":0}"#,
+        );
+        assert_eq!(
+            scan_result_line(&fact, clock()),
+            "scan 2026-11-12 03:00 · 13,377 findings · 0 fixable · 55/55 batches · 0 rejected"
         );
     }
 
