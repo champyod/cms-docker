@@ -13,7 +13,7 @@ services:
 
   # PostgreSQL Database
   database:
-    image: postgres:15@sha256:baa22e6286bf832cb147b8bb5aa9d8bc999846d69c21d11bf63f58fbeed1fa48
+    image: postgres:15@sha256:5a407822929c3789ff5154d3d35bd7e2090318149344c8a3d4ca942b035822ed
     container_name: cms-database
     restart: unless-stopped
     profiles:
@@ -375,7 +375,7 @@ services:
   # its own copy and starts exactly one container.
   # WHY `contest` and not every profile: `make core` must not start it.
   redis-rate-limit:
-    image: redis:7-alpine@sha256:57e4255cc971b1c8d6f8a6ca283ac01bc3ecdd914273ef6bfaede87aaecd6541
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: grader-redis-rate-limit
     restart: unless-stopped
     profiles:
@@ -400,7 +400,7 @@ services:
   # `grader-nginx-proxy` (docker-compose.domain.yml) would merge the two blocks
   # and drop one proxy from the project.
   nginx-proxy:
-    image: nginx:alpine@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417
+    image: nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
     container_name: cms-nginx-contest
     restart: unless-stopped
     profiles:
