@@ -1,33 +1,9 @@
 -- 20261112120000_security_finding_flips/migration.sql
 --
--- WHY this table exists: a waiver is keyed on the CVE and carries no host. It therefore cannot
--- follow a verdict — and on production twelve open CRITICALs sat `reachable` under a live waiver
--- written when their module was unloaded, with nothing to re-open or report the decision. A
--- waiver that suppresses a finding it was never written for is the failure mode this row records.
---
--- WHY one row per finding and not one per flip event: the finding is the subject, and the question
--- the page and the channel ask is "which rows are reachable NOW under a decision taken when they
--- were not". A later flip re-opens this row with a new `flipped_at`; `cleared_at` is the moment it
--- stopped being true. Both are written at ingest, so neither has to be re-derived from current
--- state later — which is exactly the derivation that cannot be made once the module state moves on.
---
--- WHY `host`, `severity` and `finding_key` are copied here: the page filters this set by host and
--- by severity, and the signal names the worst CVE from a single bounded read. A join would answer
--- the same question with a second predicate to keep in step; these are the values the flip was
--- detected with, and they are what the decision was taken against.
---
--- ADDITIVE: one new table, one new nullable relation, no column changed on a populated table. Every
--- row that exists before this migration keeps its verdict and gains no flip, which is the honest
--- reading — the panel cannot know which past flips it did not see.
---
--- GENERATED — do not hand-edit the statements below.
---   Table, indexes, foreign key: prisma migrate diff
---     bunx prisma migrate diff \
---       --from-schema-datamodel <pre-change schema.prisma> \
---       --to-schema-datamodel admin-panel/prisma/schema.prisma \
---       --script
---   Row-level security guards: scripts/__generate_rls_sql.sh --emit-policies
---     (security_finding_flips is in its INGEST_WRITE list: the page reads it, the feed writes it)
+-- A waiver is keyed on the CVE with no host column, so it cannot follow a verdict: one row per
+-- finding records "reachable now under a decision taken when it was not".
+-- Additive: one table, one nullable relation, no column changed on a populated table.
+-- Statements below are generated (prisma migrate diff / __generate_rls_sql.sh --emit-policies).
 
 -- CreateTable
 CREATE TABLE "security_finding_flips" (
