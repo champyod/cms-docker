@@ -35,8 +35,13 @@ function unwaivedCounts(totals: FeedTotals, active: readonly PatchingFinding[]):
   const live = (severity: PatchingSeverity): number =>
     active.filter((row) => row.severity === severity).length;
   const unratedRows = active.filter((row) => row.severity === null).length;
+  const highWithFix = Math.max(
+    0,
+    totals.highWithFix - active.filter((row) => row.severity === 'HIGH' && row.available !== null).length,
+  );
   return {
     high: totals.bySeverity.HIGH - live('HIGH'),
+    highWithFix,
     medium: totals.bySeverity.MEDIUM - live('MEDIUM'),
     low: totals.bySeverity.LOW - live('LOW'),
     unrated: totals.unrated + totals.bySeverity.UNKNOWN - live('UNKNOWN') - unratedRows,

@@ -30,6 +30,8 @@ export interface ScanRun {
 /** Unwaived counts: a live waiver takes its row out, an expired one leaves it in. */
 export interface ScanRunCounts {
   readonly high: number;
+  /** Of {@link high}, the rows with a published fixed version: the only ones a patch can close. */
+  readonly highWithFix: number;
   readonly medium: number;
   readonly low: number;
   /** Rows no contract severity ranks: UNKNOWN and the producers that report none. */
@@ -126,9 +128,10 @@ function titleLine(facts: ScanRunFacts): string {
     return `${String(facts.criticals)} CRITICAL ${noun} ${verb} action now · ${where(facts)}`;
   }
   if (facts.counts.high > 0) {
-    const verb = facts.counts.high === 1 ? 'needs' : 'need';
-    const noun = facts.counts.high === 1 ? 'finding' : 'findings';
-    return `${grouped(facts.counts.high)} HIGH ${noun} ${verb} a decision · ${where(facts)}`;
+    // Nothing to patch is a different message from work waiting: state which one this is.
+    const awaiting =
+      facts.counts.highWithFix === 0 ? 'await an upstream fix' : 'need a decision';
+    return `${grouped(facts.counts.high)} HIGH findings ${awaiting} · ${where(facts)}`;
   }
   return `Nothing needs action · ${where(facts)}`;
 }
@@ -138,9 +141,11 @@ function leadLine(facts: ScanRunFacts): string {
   const urgency =
     facts.criticals > 0
       ? 'fix these today'
-      : facts.counts.high > 0
-        ? 'not urgent, but unfixed — patch or accept'
-        : 'all MEDIUM/LOW or accepted';
+      : facts.counts.high > 0 && facts.counts.highWithFix === 0
+        ? 'no patch exists yet — nothing to apply today'
+        : facts.counts.high > 0
+          ? `${grouped(facts.counts.highWithFix)} can be patched — patch or accept`
+          : 'all MEDIUM/LOW or accepted';
   return `**${grouped(facts.standing)} open** · ${grouped(facts.added)} new · ${urgency}`;
 }
 
@@ -163,7 +168,7 @@ function countsBlock(facts: ScanRunFacts): string {
   const acceptedNote = facts.nextReview === null ? 'no re-check date' : `re-check ${facts.nextReview}`;
   const rows: [string, number, string][] = [
     ['act now', facts.criticals, 'CRITICAL'],
-    ['decide', facts.counts.high, 'HIGH'],
+    ['decide', facts.counts.high, `HIGH · ${grouped(facts.counts.highWithFix)} with a fix`],
     ['noted', noted, detail],
     ['accepted', facts.waived, acceptedNote],
   ];

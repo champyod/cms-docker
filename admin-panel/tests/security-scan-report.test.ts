@@ -35,7 +35,7 @@ function facts(overrides: Partial<ScanRunFacts> = {}): ScanRunFacts {
     standing: 13_357,
     added: 34,
     criticals: 3,
-    counts: { high: 1_415, medium: 612, low: 233, unrated: 0 },
+    counts: { high: 1_415, highWithFix: 40, medium: 612, low: 233, unrated: 0 },
     waived: 881,
     nextReview: '2027-01-31',
     criticalRows: [row()],
@@ -90,18 +90,18 @@ describe('the scan announcement layout', () => {
   it('L4 groups the count by what the reader should do with it', () => {
     expect(tokens(countBlock(buildScanAnnouncement(facts()).body))).toEqual([
       ['act', 'now', '3', 'CRITICAL'],
-      ['decide', '1,415', 'HIGH'],
+      ['decide', '1,415', 'HIGH', '·', '40', 'with', 'a', 'fix'],
       ['noted', '845', 'MEDIUM', '612', '·', 'LOW', '233'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
   });
 
   it('L4 names the unranked rows as unknown instead of inventing a rank', () => {
-    const { body } = buildScanAnnouncement(facts({ counts: { high: 1, medium: 0, low: 0, unrated: 6 } }));
+    const { body } = buildScanAnnouncement(facts({ counts: { high: 1, highWithFix: 1, medium: 0, low: 0, unrated: 6 } }));
 
     expect(tokens(countBlock(body))).toEqual([
       ['act', 'now', '3', 'CRITICAL'],
-      ['decide', '1', 'HIGH'],
+      ['decide', '1', 'HIGH', '·', '1', 'with', 'a', 'fix'],
       ['noted', '6', 'MEDIUM', '0', '·', 'LOW', '0', '·', 'unknown', '6'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
@@ -120,7 +120,7 @@ describe('the scan announcement layout', () => {
         added: 0,
         criticals: 0,
         criticalRows: [],
-        counts: { high: 0, medium: 0, low: 0, unrated: 0 },
+        counts: { high: 0, highWithFix: 0, medium: 0, low: 0, unrated: 0 },
         waived: 881,
       }),
     );
@@ -132,7 +132,7 @@ describe('the scan announcement layout', () => {
     expect(namedRows(body)).toEqual([]);
     expect(tokens(countBlock(body))).toEqual([
       ['act', 'now', '0', 'CRITICAL'],
-      ['decide', '0', 'HIGH'],
+      ['decide', '0', 'HIGH', '·', '0', 'with', 'a', 'fix'],
       ['noted', '0', 'MEDIUM', '0', '·', 'LOW', '0'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
@@ -140,13 +140,17 @@ describe('the scan announcement layout', () => {
 
   it('asks for a decision while unwaived HIGH stands, and only calms below it', () => {
     expect(buildScanAnnouncement(facts({ criticals: 1 })).body).toContain('fix these today');
-    const calm = { high: 0, medium: 612, low: 233, unrated: 0 };
+    const calm = { high: 0, highWithFix: 0, medium: 612, low: 233, unrated: 0 };
     expect(buildScanAnnouncement(facts({ criticals: 0, counts: calm, criticalRows: [] })).body).toContain(
       'all MEDIUM/LOW or accepted',
     );
     expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain(
-      'not urgent, but unfixed — patch or accept',
+      '40 can be patched — patch or accept',
     );
+    const noFix = { high: 1_415, highWithFix: 0, medium: 612, low: 233, unrated: 0 };
+    expect(
+      buildScanAnnouncement(facts({ criticals: 0, counts: noFix, criticalRows: [] })).body,
+    ).toContain('no patch exists yet — nothing to apply today');
   });
 
   it('names at most SCAN_CRITICAL_LINES rows and stays inside the Discord cap', () => {

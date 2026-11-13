@@ -22,6 +22,8 @@ export interface FeedTotals {
   readonly bySeverity: Record<PatchingSeverity, number>;
   readonly bySource: Record<PatchingSource, number>;
   readonly unrated: number;
+  /** Unresolved HIGH rows carrying an `available` version: the ones a patch can actually close. */
+  readonly highWithFix: number;
 }
 
 /** The per-family counts the four cards read; a family outside the enum is not counted into a card. */
@@ -50,7 +52,7 @@ export function tallyFeedTotals(rows: readonly SeverityTallyRow[]): FeedTotals {
     if (isPatchingSeverity(row.severity)) bySeverity[row.severity] += row._count._all;
     else unrated += row._count._all;
   }
-  return { bySeverity, bySource, unrated };
+  return { bySeverity, bySource, unrated, highWithFix: 0 };
 }
 
 /** The card counts, formed from the aggregates SQL produced rather than from a row list. */

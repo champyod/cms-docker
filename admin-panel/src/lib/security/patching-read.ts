@@ -92,12 +92,12 @@ export async function readPatchingPage(
 export async function readFeedTotals(
   where: Prisma.security_findingsWhereInput = unresolvedWhere(),
 ): Promise<FeedTotals> {
-  const rows = await prisma.security_findings.groupBy({
-    by: ['source', 'severity'],
-    where,
-    _count: { _all: true },
-  });
-  return tallyFeedTotals(rows);
+  const [rows, highWithFix] = await Promise.all([
+    prisma.security_findings.groupBy({ by: ['source', 'severity'], where, _count: { _all: true } }),
+    // "Needs a decision" and "a patch exists" are different questions; the message states both.
+    prisma.security_findings.count({ where: { ...where, severity: 'HIGH', available: { not: null } } }),
+  ]);
+  return { ...tallyFeedTotals(rows), highWithFix };
 }
 
 /** The most severe unresolved row, ties to the earliest sighting; an unrated row only wins alone. */
