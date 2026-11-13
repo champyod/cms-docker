@@ -147,6 +147,22 @@ colour applies again.
 The old `--no-deps up` line is gone from this step on purpose: it is the ~22 s of 502, not a
 deploy.
 
+> **Before the first swap — the funnel dials colour A directly.** `tailscale serve` maps
+> `https://como-main.hawk-logarithm.ts.net:8443` to `http://127.0.0.1:8891`, and `8891` is the
+> published port of **colour A only** (`scripts/__render_expose.sh:54` renders one published entry,
+> for `admin-panel-next`; the standby declares no ports on purpose). So the public front keeps
+> working across a swap, and that funnel path does **not**: once colour A is stopped, `8443`
+> answers nothing. Three ways to settle it, and the operator picks one:
+>
+> | Option | Change | What it costs |
+> |---|---|---|
+> | **F1 funnel → the front** | point `tailscale serve` at the nginx vhost that already renders the colour, instead of at the panel's published port | needs an nginx `server_name` for the funnel host, or a `Host` rewrite; the panel's port stops mattering at all (which also satisfies H5) |
+> | **F2 publish the active colour** | render the `8891` entry for whichever colour is current, and let the swap recreate that binding | a port cannot be bound twice, so the two colours cannot overlap on `8891`: that path blips for the recreate it takes |
+> | **F3 accept it** | use `https://admin.cms.mwit.ac.th` for the panel, and treat `8443` as serving colour A only | nothing to build; the funnel is stale after any swap |
+>
+> Until one is chosen, swap with F3's assumption in mind: verify the panel on its public host, not
+> on `8443`.
+
 **5 · Verify the two fixes this deploy carries**
 
 ```bash
