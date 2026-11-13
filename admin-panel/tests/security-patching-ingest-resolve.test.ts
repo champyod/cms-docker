@@ -82,6 +82,8 @@ function fakeClient(rows: Row[]) {
         }
         return { count };
       },
+      // No stored verdict: these rows are about which ones a complete push may resolve.
+      findMany: async (): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> => [],
       createMany: async ({ data, skipDuplicates }: {
         data: ReadonlyArray<Record<string, unknown>>;
         skipDuplicates?: boolean;
@@ -110,6 +112,11 @@ function fakeClient(rows: Row[]) {
     },
     // No stored row: these tests are about which rows a complete push may resolve, not the classifier.
     security_host_modules: { findUnique: async () => null },
+    security_waivers: { findMany: async (): Promise<ReadonlyArray<unknown>> => [] },
+    security_finding_flips: {
+      upsert: async () => ({}),
+      updateMany: async () => ({ count: 0 }),
+    },
   };
   return client;
 }

@@ -904,9 +904,41 @@ model security_findings {
   /// Set by a `complete: true` push that no longer mentions the row. Never a delete.
   resolved_at DateTime?
 
+  /// Open while this row's verdict is 'reachable' under a waiver written when it was not.
+  flip security_finding_flips?
+
   @@unique([source, key])
   @@index([resolved_at, severity])
   @@map("security_findings")
+}
+
+/// The waiver a flipped verdict defeats: one row per finding whose reachability became
+/// 'reachable' while a live waiver still covered it. A waiver is keyed on the CVE and
+/// carries no host, so it cannot follow a verdict — this row is the only place that
+/// remembers the decision was taken when the code path was NOT running.
+model security_finding_flips {
+  id           Int       @id @default(autoincrement())
+  /// One episode per finding: a later flip re-opens this row instead of piling up history.
+  finding_id   Int       @unique
+  /// Copied at detection, so a filter by host or by severity never joins the feed.
+  host         String?   @db.VarChar
+  severity     String?   @db.VarChar
+  /// The producer's key at the moment of the flip: what a message names without a second read.
+  finding_key  String    @db.VarChar
+  /// The verdict it held before: unreachable | unknown, never reachable.
+  from_verdict String    @db.VarChar
+  /// The live decision that covers it; a waiver that ends stops the flip counting.
+  waiver_id    Int
+  /// When the verdict became reachable under that decision.
+  flipped_at   DateTime  @default(now())
+  /// Set when the verdict leaves 'reachable' or the row resolves; open while both hold.
+  cleared_at   DateTime?
+
+  finding      security_findings @relation(fields: [finding_id], references: [id], onDelete: Cascade)
+
+  @@index([cleared_at, severity])
+  @@index([cleared_at, host])
+  @@map("security_finding_flips")
 }
 
 /// A decision with a date: this finding (or this CVE a finding carries) is accepted

@@ -1347,7 +1347,12 @@
         "ascending": "Ascending",
         "descending": "Descending",
         "match": "{count} findings match the filter",
-        "noMatch": "No finding matches this filter. The feed may still hold unresolved rows under other filters."
+        "noMatch": "No finding matches this filter. The feed may still hold unresolved rows under other filters.",
+        "flip": "Waiver fit",
+        "flipAll": "Any finding",
+        "flipWaived": "Waived but reachable now",
+        "flipNotice": "{count} findings are reachable now under a waiver written when they were not.",
+        "flipLink": "Show them"
       },
       "pager": {
         "row": "findings",

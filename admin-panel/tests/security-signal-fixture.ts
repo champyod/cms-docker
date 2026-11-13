@@ -11,6 +11,7 @@ import {
   type PatchingSignalFacts,
   type StalenessSnapshot,
 } from '@/lib/security/signal';
+import type { WaivedReachable } from '@/lib/security/verdict-flip';
 
 /** A fixed clock for every signal test, so an age is a number and not a race. */
 export const NOW = new Date('2026-10-25T12:00:00.000Z');
@@ -89,6 +90,7 @@ function isAged(finding: PatchingFinding): boolean {
 export function makeSignalFacts(
   findings: readonly PatchingFinding[],
   waivers: readonly PatchingWaiver[] = [],
+  flips: WaivedReachable = { count: 0, worst: null },
 ): PatchingSignalFacts {
   const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0 };
   const bySeverity: Record<PatchingSeverity, number> = {
@@ -144,6 +146,8 @@ export function makeSignalFacts(
     unrated,
     aged: findings.filter(isAged).length,
     waived: findings.filter((finding) => finding.waiver.status !== 'none'),
+    // A test that does not care about the flipped set states zero, which is the absence of the fact.
+    flips,
     criticals: pushed
       .sort((left, right) => left.firstSeen.localeCompare(right.firstSeen))
       .slice(0, SIGNAL_RULES.maxLines),

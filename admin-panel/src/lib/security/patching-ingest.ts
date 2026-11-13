@@ -9,6 +9,16 @@ import {
 } from '@/lib/security/kernel-reachability';
 import { MAX_FINDING_KEY_LENGTH } from '@/lib/security/patching';
 import type { FeedFindingInput, FeedPush } from '@/lib/security/patching-feed-push';
+import { readStoredVerdicts } from '@/lib/security/patching-read-flips';
+import {
+  clearFlip,
+  clearResolvedFlips,
+  flipCandidate,
+  isVerdictFlip,
+  recordFlips,
+  type FlipCandidate,
+  type StoredVerdict,
+} from '@/lib/security/verdict-flip';
 
 // Part of this boundary's contract; the number lives beside the vocabulary.
 export { MAX_FINDING_KEY_LENGTH };
@@ -78,6 +88,49 @@ function findingData(
   };
 }
 
+/** What one finding's write did: whether it created a row, the data for that row, and any flip. */
+interface WrittenFinding {
+  readonly unseen: boolean;
+  readonly data: Omit<Prisma.security_findingsUncheckedCreateInput, 'source' | 'key'>;
+  readonly flip: FlipCandidate | null;
+}
+
+// One finding: write the verdict, then say whether it changed shape. A row this run did not win is
+// not a flip — a late report from an older run is held, and holding changes nothing.
+async function writeFinding(
+  client: Prisma.TransactionClient,
+  push: FeedPush,
+  now: Date,
+  finding: FeedFindingInput,
+  verdict: Reachability,
+  prior: StoredVerdict | undefined,
+): Promise<WrittenFinding> {
+  const data = findingData(finding, push.host, verdict);
+  // Causal, not last-writer-wins: a row moves only when this run is at least as new as its resolution.
+  const touched = await client.security_findings.updateMany({
+    where: {
+      source: push.source,
+      key: finding.key,
+      OR: [{ resolved_at: null }, { resolved_at: { lt: push.runStartedAt } }],
+    },
+    data: { ...data, last_seen: now },
+  });
+  if (touched.count === 0) return { unseen: true, data, flip: null };
+  if (prior === undefined) return { unseen: false, data, flip: null };
+  if (isVerdictFlip(prior.reachability, verdict)) {
+    return {
+      unseen: false,
+      data,
+      flip: flipCandidate(prior, finding, data.host ?? null, data.severity ?? null),
+    };
+  }
+  // The row stopped being reachable: whatever a waiver hid a moment ago is no longer true.
+  if (prior.reachability === 'reachable' && verdict !== 'reachable') {
+    await clearFlip(client, prior.id, now);
+  }
+  return { unseen: false, data, flip: null };
+}
+
 // One statement per finding; the returned map holds the keys that have no row yet.
 async function writeFindings(
   client: Prisma.TransactionClient,
@@ -86,26 +139,29 @@ async function writeFindings(
   state: HostModuleState,
 ): Promise<Map<string, Prisma.security_findingsUncheckedCreateInput>> {
   const unseen = new Map<string, Prisma.security_findingsUncheckedCreateInput>();
-  for (const finding of push.findings) {
-    const data = findingData(finding, push.host, reachabilityOf(finding, push.host, state));
-    // Causal, not last-writer-wins: a row moves only when this run is at least as new as its resolution.
-    const touched = await client.security_findings.updateMany({
-      where: {
+  const flips: FlipCandidate[] = [];
+  // Classified once per finding: the write and the flip rule must judge the same verdict.
+  const judged = push.findings.map((finding) => ({
+    finding,
+    verdict: reachabilityOf(finding, push.host, state),
+  }));
+  // One read for the push: a flip is a change from the stored verdict, never a second classification.
+  const stored = await readStoredVerdicts(client, push.source, judged.map((entry) => entry.finding.key));
+  for (const { finding, verdict } of judged) {
+    const written = await writeFinding(client, push, now, finding, verdict, stored.get(finding.key));
+    if (written.unseen) {
+      unseen.set(finding.key, {
         source: push.source,
         key: finding.key,
-        OR: [{ resolved_at: null }, { resolved_at: { lt: push.runStartedAt } }],
-      },
-      data: { ...data, last_seen: now },
-    });
-    if (touched.count > 0) continue;
-    unseen.set(finding.key, {
-      source: push.source,
-      key: finding.key,
-      ...data,
-      first_seen: now,
-      last_seen: now,
-    });
+        ...written.data,
+        first_seen: now,
+        last_seen: now,
+      });
+    }
+    if (written.flip !== null) flips.push(written.flip);
   }
+  // Same transaction as the verdict: a flip this push caused cannot outlive a rollback, or land without it.
+  await recordFlips(client, push.source, flips, now);
   return unseen;
 }
 
@@ -180,5 +236,7 @@ export async function applyFeedPush(
     },
     data: { resolved_at: now },
   });
+  // A resolved row is not reachable in any sense a reader acts on, so its flip closes here too.
+  if (resolved.count > 0) await clearResolvedFlips(client, push.source, now);
   return { received: push.findings.length, resolved: resolved.count, held, hostModulesRecorded };
 }

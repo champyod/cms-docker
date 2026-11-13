@@ -162,6 +162,7 @@ describe('the page read is bounded by SQL', () => {
       source: 'rootfs',
       severity: 'HIGH',
       reachability: 'all',
+      flip: 'all',
       sort: 'subject',
       direction: 'asc',
     });

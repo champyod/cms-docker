@@ -9,6 +9,7 @@ import {
 import {
   mapPatchingFinding, mapPatchingFindings, mapPatchingWaiver, toWaiverRecord, waiverOwners,
 } from '@/lib/security/patching-read-rows';
+import { countWaivedReachable, readWaivedReachable } from '@/lib/security/patching-read-flips';
 import { tallyFeedTotals, tallyFindingCounts, type FeedTotals } from '@/lib/security/patching-read-totals';
 import type {
   BulkWaiveFeed, FindingRow, PatchingSnapshot, WaiverRow,
@@ -18,6 +19,7 @@ import {
 } from '@/lib/security/patching-read-where';
 import { agedCutoff, buildSecurityDigest, SIGNAL_RULES, type PatchingSignalFacts } from '@/lib/security/signal';
 import { readStalenessSnapshotCached } from '@/lib/security/staleness';
+import type { WaivedReachable } from '@/lib/security/verdict-flip';
 import { waiverCoverWhere } from '@/lib/security/waiver-cover';
 import { WAIVER_EXPORT_VERSION, type WaiverExport } from '@/lib/security/waiver-gate';
 
@@ -28,6 +30,9 @@ export type {
 
 // The page's read path: where the page, the card and the digest query these two tables.
 // The scan announcement reuses the helpers below, so it counts exactly the rows this module counts.
+
+/** The absence of the fact: no row a live waiver hides is reachable now. */
+const EMPTY_FLIPS: WaivedReachable = { count: 0, worst: null };
 
 /** The live waivers: the decisions that currently suppress something, soonest review date first. */
 export function liveWaiverRows(): Promise<WaiverRow[]> {
@@ -44,10 +49,12 @@ async function readFindingCounts(): Promise<PatchingFindingCounts> {
 }
 
 /** The page of rows for a query, or none when the filter matched nothing. */
-async function readPageRows(query: PatchingQuery, total: number): Promise<FindingRow[]> {
+async function readPageRows(
+  query: PatchingQuery, total: number, waivers: readonly WaiverRow[],
+): Promise<FindingRow[]> {
   if (total === 0) return [];
   return prisma.security_findings.findMany({
-    where: filteredWhere(query),
+    where: filteredWhere(query, waivers),
     orderBy: pageOrderBy(query),
     skip: (query.page - 1) * PATCHING_PAGE_SIZE,
     take: PATCHING_PAGE_SIZE,
@@ -59,20 +66,25 @@ export async function readPatchingPage(
   input: PatchingQueryInput = {}, now: Date = new Date(),
 ): Promise<PatchingListState> {
   const requested = readPatchingQuery(input);
-  const [waivers, counts, total] = await Promise.all([
-    liveWaiverRows(),
+  // Read first: the flip filter is a clause over the live waivers, so the rows it selects depend
+  // on them, and the page must count and page with one set of decisions.
+  const waivers = await liveWaiverRows();
+  const [counts, waivedReachable, total] = await Promise.all([
     readFindingCounts(),
-    prisma.security_findings.count({ where: filteredWhere(requested) }),
+    // The banner's number, from the flip clause, so `total` below stays the count of the rows read.
+    countWaivedReachable(waivers),
+    prisma.security_findings.count({ where: filteredWhere(requested, waivers) }),
   ]);
   // Clamped after the count: `?page=999` on a shrunken feed must not render an empty table.
   const query: PatchingQuery = { ...requested, page: clampPatchingPage(requested.page, total) };
-  const rows = await readPageRows(query, total);
+  const rows = await readPageRows(query, total, waivers);
   const owners = await waiverOwners(waivers);
   return {
     groups: groupFindings(mapPatchingFindings(rows, waivers, now)),
     waivers: waivers.map((row) => mapPatchingWaiver(row, owners, now)),
     cards: buildPatchingCards(counts, waivers, now),
     page: { query, pageSize: PATCHING_PAGE_SIZE, total, pageCount: patchingPageCount(total) },
+    waivedReachable,
   };
 }
 
@@ -151,6 +163,8 @@ async function readSignalFacts(
     readWaivedFindings(waivers, now),
     readSignalRows(totals, waivers, now),
   ]);
+  // A flip is a row a live waiver covers and the read above returned every one: with none, none flipped.
+  const flips = waived.length === 0 ? EMPTY_FLIPS : await readWaivedReachable(waivers);
   return {
     cards: buildPatchingCards(counts, waivers, now),
     waivers: mappedWaivers,
@@ -159,6 +173,7 @@ async function readSignalFacts(
     unrated: totals.unrated,
     aged,
     waived,
+    flips,
     ...rows,
   };
 }

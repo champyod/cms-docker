@@ -105,10 +105,16 @@ async function ingestedVerdict(title: string): Promise<unknown> {
   const client = {
     security_findings: {
       updateMany: async () => ({ count: 0 }),
+      findMany: async (): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> => [],
       createMany: async ({ data }: { data: Record<string, unknown>[] }) => {
         created.push(...data);
         return { count: data.length };
       },
+    },
+    security_waivers: { findMany: async (): Promise<ReadonlyArray<unknown>> => [] },
+    security_finding_flips: {
+      upsert: async () => ({}),
+      updateMany: async () => ({ count: 0 }),
     },
     security_host_modules: { findUnique: async () => null, upsert: async () => ({}) },
   } as unknown as Prisma.TransactionClient;
@@ -214,7 +220,16 @@ describe('one rule, one implementation', () => {
           updates.push(data);
           return { count: 1 };
         },
+        // The row this push judges already exists; its stored verdict is what the flip rule compares.
+        findMany: async (): Promise<ReadonlyArray<{ id: number; key: string; reachability: string }>> => [
+          { id: 1, key: 'CVE-2026-9|linux', reachability: 'unreachable' },
+        ],
         createMany: async () => ({ count: 0 }),
+      },
+      security_waivers: { findMany: async (): Promise<ReadonlyArray<unknown>> => [] },
+      security_finding_flips: {
+        upsert: async () => ({}),
+        updateMany: async () => ({ count: 0 }),
       },
       security_host_modules: { findUnique: async () => null, upsert: async () => ({}) },
     } as unknown as Prisma.TransactionClient;

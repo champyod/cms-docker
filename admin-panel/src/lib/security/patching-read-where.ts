@@ -27,13 +27,37 @@ export function untouchedWhere(waivers: readonly WaiverRow[]): Prisma.security_f
   return cover === null ? {} : { NOT: cover };
 }
 
+/**
+ * The flipped rows as SQL: a live waiver covers them, their stored verdict is 'reachable' now, and
+ * the episode is still open.
+ *
+ * WHY `resolved_at: null` is in here: a resolved row is not reachable in any sense a reader acts
+ * on, and the count must stop the moment it resolves even if the clearing write never ran (an
+ * operator can resolve a feed, a restore can bring a row back). The stored fact says what happened;
+ * this clause says whether it still holds.
+ *
+ * WHY an impossible set and not `{}` with no live waiver: "no waiver covers anything" means no row
+ * can be hidden by one — an empty set, not an unrestricted one.
+ */
+export function flippedRowsWhere(waivers: readonly WaiverRow[]): Prisma.security_findingsWhereInput {
+  const cover = waiverCoverWhere(waivers);
+  if (cover === null) return { id: { in: [] } };
+  return {
+    AND: [cover, { reachability: 'reachable' }, { resolved_at: null }, { flip: { is: { cleared_at: null } } }],
+  };
+}
+
 /** The filters as SQL: an absent filter is the absence of a clause, not a wildcard. */
-export function filteredWhere(query: PatchingQuery): Prisma.security_findingsWhereInput {
+export function filteredWhere(
+  query: PatchingQuery,
+  waivers: readonly WaiverRow[],
+): Prisma.security_findingsWhereInput {
   return unresolvedWhere({
     ...(query.source === 'all' ? {} : { source: query.source }),
     ...(query.severity === 'all' ? {} : { severity: query.severity }),
     // One stored verdict, so the count and the page select exactly the rows the badge names.
     ...(query.reachability === 'all' ? {} : { reachability: query.reachability }),
+    ...(query.flip === 'all' ? {} : flippedRowsWhere(waivers)),
   });
 }
 

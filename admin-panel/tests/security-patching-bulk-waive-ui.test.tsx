@@ -34,12 +34,17 @@ const STATE: PatchingListState = {
   groups: [],
   waivers: [],
   cards: { staleImages: 0, unresolvedCves: 0, expiredWaivers: 0, hostOsUpdates: 0 },
+  // The resolved query shape: `readPatchingQuery` fills `flip` from the URL, defaulting to 'all'.
   page: {
-    query: { source: 'all', severity: 'all', reachability: 'all', sort: 'lastSeen', direction: 'desc', page: 1 },
+    query: {
+      source: 'all', severity: 'all', reachability: 'all', flip: 'all',
+      sort: 'lastSeen', direction: 'desc', page: 1,
+    },
     pageSize: 25,
     total: 0,
     pageCount: 1,
   },
+  waivedReachable: 0,
 };
 
 // WHY a generous window: a React transition under a loaded suite can take longer than the 1s default,
