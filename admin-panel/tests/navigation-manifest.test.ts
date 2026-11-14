@@ -72,6 +72,13 @@ describe('every route the manifest names has a page behind it', () => {
   });
 });
 
+/** Removes block and line comments, keeping line numbers stable for the report. */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, (match) => match.replace(/[^\n]/g, ' '))
+    .replace(/^\s*\/\/.*$/gm, '');
+}
+
 /**
  * True when the file defines nothing — it only forwards another module's exports.
  *
@@ -91,6 +98,28 @@ function isPureReExport(file: string): boolean {
     /=>|return\s*\(|<[A-Z]/.test(code);
   return forwards && !defines;
 }
+
+describe('no utility class is built by interpolation', () => {
+  it('keeps every Tailwind utility literal in the source', () => {
+    // WHY: Tailwind generates a class it can SEE. `gap-${n}` is invisible to it, so the utility
+    // exists only while some unrelated file contains the same literal — a style that works today
+    // and vanishes silently tomorrow. `Layout.tsx` shipped exactly this for gap, align and justify
+    // across 124 call sites; this rule is what keeps it from coming back anywhere else.
+    const pattern =
+      /\b(?:gap|p[xytblr]?|m[xytblr]?|space-[xy]|text|bg|border|w|h|grid-cols|items|justify|rounded)-\$\{/;
+    const offenders: string[] = [];
+    for (const file of walk(path.join(PANEL_ROOT, 'src'))) {
+      if (!file.endsWith('.tsx') && !file.endsWith('.ts')) continue;
+      // Comments are stripped first: they are where the bug gets explained, and the explanation
+      // must be allowed to quote the very pattern the rule forbids.
+      const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n');
+      lines.forEach((line, index) => {
+        if (pattern.test(line)) offenders.push(`${path.relative(PANEL_ROOT, file)}:${index + 1}`);
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
 
 describe('no component is defined twice', () => {
   it('keeps every component basename unique under src/components', () => {
