@@ -9,7 +9,12 @@ export interface RestrictedFieldProps extends FieldAccess {
   lockHint?: string;
 }
 
-/** Conditionally renders a field based on read/write access — omitted from DOM entirely when unreadable. */
+/**
+ * Conditionally renders a field based on read/write access — omitted from DOM entirely when unreadable.
+ *
+ * The lock hint is de-emphasised by its muted colour, not by a size of its own: it was the panel's only
+ * 11px string against 444 uses of text-xs, so it read as a scale step that did not exist.
+ */
 export function RestrictedField({ canRead, canUpdate, label, children, lockHint }: RestrictedFieldProps) {
   if (!canRead) return null;
 
@@ -23,7 +28,7 @@ export function RestrictedField({ canRead, canUpdate, label, children, lockHint 
         {children}
       </div>
       {canRead && !canUpdate && lockHint && (
-        <p className="text-[0.6875rem] text-muted-foreground/70">{lockHint}</p>
+        <p className="text-xs text-muted-foreground/70">{lockHint}</p>
       )}
     </div>
   );

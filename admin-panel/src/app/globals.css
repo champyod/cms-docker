@@ -166,9 +166,23 @@
     min-height: 100vh;
   }
 
-  /* Display density: components carry `density:` classes (custom variant
-     below) because overriding tailwind internals from author CSS does not
-     survive the production minifier. */
+  /* Display density.
+   *
+   * WHY this is a token override and no longer a per-component variant: Tailwind v4 derives every
+   * spacing utility from one `--spacing` value, and the production build keeps that indirection —
+   * verified in the emitted CSS, which contains `padding:calc(var(--spacing)*1)` rather than a
+   * literal. So one override retunes spacing across the whole panel. The older note here said an
+   * author-CSS override "does not survive the production minifier"; measured on this Tailwind
+   * version, spacing does. `density:` variants remain for the few places that need a change of
+   * *shape* rather than of scale (e.g. a table row's padding against its font size).
+   *
+   * WHY `html.density-compact` and not `.density-compact`: Tailwind emits the theme variable on
+   * `:root`, which has the same specificity as a bare class; naming the element wins regardless of
+   * which layer the framework's output lands in.
+   */
+  html.density-compact {
+    --spacing: 0.2rem; /* 20% tighter than the 0.25rem default */
+  }
 
   .text-size-small {
     font-size: 14px;

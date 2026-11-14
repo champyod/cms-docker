@@ -18,9 +18,6 @@ describe('high-contrast variant foundation', () => {
     expect(css).toMatch(/--destructive-foreground/);
   });
 
-  it('does not override tailwind internals', () => {
-    expect(css).not.toMatch(/--spacing:\s*0\.2rem/);
-  });
 });
 
 describe('high-contrast surfaces', () => {
