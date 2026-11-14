@@ -101,7 +101,9 @@ async function recordLoginFailure(
   await recordFailedAttempt(bucketKeys, attempt);
   if (!(await isRateLimited(bucketKeys))) return;
   const ip = bucketKeys[0].split('|')[1] ?? 'local';
-  await recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) });
+  await asAuth(() =>
+    recordLoginLockout({ username, ip, expiresAt: new Date(Date.now() + LOGIN_LOCKOUT_MS) }),
+  );
 }
 
 export async function getCaptchaState(username?: string): Promise<{ required: boolean; enabled: boolean; provider: CaptchaProvider; siteKey: string; threshold: number; banThreshold: number }> {
@@ -142,6 +144,17 @@ async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | n
   return admin;
 }
 
+/**
+ * Run pre-session work under the credential identity.
+ *
+ * WHY this exists: everything below runs before a session cookie exists, so `requireDbActor()` has no
+ * actor to derive and every query would raise. `system:auth` is the identity the database admits for
+ * exactly these tables — see AUTH_BOOTSTRAP and AUTH_LEDGER in scripts/__generate_rls_sql.sh.
+ */
+function asAuth<T>(work: () => Promise<T>): Promise<T> {
+  return withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, work);
+}
+
 async function startAdminSession(admin: AuthenticatedAdmin): Promise<void> {
   await createSession(admin.id.toString(), admin.username);
 }
@@ -149,7 +162,9 @@ async function startAdminSession(admin: AuthenticatedAdmin): Promise<void> {
 async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly string[]): Promise<void> {
   await startAdminSession(admin);
   try {
-    await prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } });
+    await asAuth(() =>
+      prisma.admins.update({ where: { id: admin.id }, data: { last_login_at: new Date() } }),
+    );
   } catch (error) {
     console.error('Could not record the last login time:', error);
   }
@@ -162,7 +177,7 @@ async function completeLogin(admin: AuthenticatedAdmin, bucketKeys: readonly str
  * password: the account does exist, and saying so would confirm it to whoever probes.
  */
 async function maySignIn(admin: AuthenticatedAdmin): Promise<boolean> {
-  const permissions = await getFreshPermissions(admin.id.toString());
+  const permissions = await asAuth(() => getFreshPermissions(admin.id.toString()));
   return permissions !== null && hasEffectivePermission(permissions, 'admin:login');
 }
 
@@ -188,7 +203,8 @@ export async function login(_prevState: LoginActionState | null, formData: FormD
   // WHY before every gate: an exempt account or address is not policed at all, so
   // the lockout refusal, the challenge and the failure count are all skipped. A
   // lift that only cleared the counters could be re-earned; this cannot.
-  const exempt = await isLoginExempt(username, await resolveClientIp());
+  const clientIp = await resolveClientIp();
+  const exempt = await asAuth(() => isLoginExempt(username, clientIp));
   if (!exempt) {
     await pruneExpiredLoginBuckets();
     if (await isRateLimited(bucketKeys)) return { success: false, error: 'Too many attempts. Try again later.', ...buildCaptchaRequiredState() };

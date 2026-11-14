@@ -179,6 +179,43 @@ describe('every database path is accounted for', () => {
     }
   });
 
+  it('runs every pre-session query under the credential identity', () => {
+    // WHY: the login path reaches the database BEFORE a session exists, so `requireDbActor()` has no
+    // actor to derive and raises instead of reading. That raise is what broke sign-in: the exemption
+    // read sits outside the action's try/catch, so it surfaced as Next's error page (digest
+    // 1743905006) rather than a refused login. Each pre-session call must therefore name
+    // `system:auth` itself — and one of them missing is invisible until someone tries to sign in.
+    const auth = fs.readFileSync(path.join(SRC, 'app/actions/auth.ts'), 'utf8');
+    for (const call of [
+      'isLoginExempt(',
+      'recordLoginLockout(',
+      'getFreshPermissions(',
+      'prisma.admins.update(',
+    ]) {
+      const wrapped = new RegExp(`asAuth\\(\\(\\)\\s*=>\\s*[^)]*${call.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 's');
+      expect(auth, `${call} runs without the credential identity`).toMatch(wrapped);
+    }
+    // and the helper itself names the one identity, not a literal
+    expect(auth).toMatch(/function asAuth<T>[\s\S]*SYSTEM_IDENTITIES\.AUTH/);
+  });
+
+  it('admits that identity to the security ledger, and no further', () => {
+    // The policy half of the same bug: the app scoping is useless if the row-level policy refuses
+    // system:auth. DELETE staying staff is the point — a credential check may read an exemption and
+    // record a lockout, never erase a block.
+    const policies = walk(path.join(PANEL_ROOT, 'prisma/migrations'))
+      .filter((f) => f.endsWith('migration.sql'))
+      .map((f) => fs.readFileSync(f, 'utf8'))
+      .join('\n');
+    const block = policies.split('\n').filter((line) => line.includes('security_blocks'));
+    expect(block.some((l) => /CREATE POLICY cms_actor_read ON public\.security_blocks/.test(l) && l.includes("system:auth"))).toBe(true);
+    expect(block.some((l) => /CREATE POLICY cms_actor_append ON public\.security_blocks/.test(l) && l.includes("system:auth"))).toBe(true);
+    expect(block.some((l) => /CREATE POLICY cms_actor_update ON public\.security_blocks/.test(l) && l.includes("system:auth"))).toBe(true);
+    const deletes = block.filter((l) => /CREATE POLICY cms_actor_delete ON public\.security_blocks/.test(l));
+    expect(deletes.length).toBeGreaterThan(0);
+    for (const line of deletes) expect(line).not.toContain('system:auth');
+  });
+
   it('routes every server action and route handler through the one client', () => {
     // A cheap completeness check on the app tree: anything that talks to the database by name must
     // import the wrapper. The import is what makes the actor non-optional.
