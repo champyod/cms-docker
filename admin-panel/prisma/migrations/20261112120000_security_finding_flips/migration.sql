@@ -493,14 +493,21 @@ CREATE POLICY cms_public_read ON public.ranking_users FOR SELECT TO cmsuser USIN
 CREATE POLICY cms_actor_write ON public.ranking_users FOR ALL TO cmsuser USING (public.cms_actor_is_staff()) WITH CHECK (public.cms_actor_is_staff());
 
 -- security_blocks
--- STRICT: every verb requires an identified actor.
+-- AUTH_LEDGER: staff own this table, and the pre-session login path appends to it under
+-- system:auth — an exemption it must read before a session exists, and a lockout it must
+-- record when a credential is refused. WHY three policies rather than the AUTH_BOOTSTRAP
+-- predicate: that one also admits DELETE, so it would let a credential check erase a block.
+-- A login path may read, append and extend the ledger; retiring a row stays a staff act.
 DROP POLICY IF EXISTS cmsuser_all ON public.security_blocks;
-DROP POLICY IF EXISTS cmsuser_select ON public.security_blocks;
-DROP POLICY IF EXISTS cmsuser_insert ON public.security_blocks;
-DROP POLICY IF EXISTS cmsuser_update ON public.security_blocks;
-DROP POLICY IF EXISTS cmsuser_delete ON public.security_blocks;
 DROP POLICY IF EXISTS cms_actor_all ON public.security_blocks;
-CREATE POLICY cms_actor_all ON public.security_blocks FOR ALL TO cmsuser USING (public.cms_actor_is_staff()) WITH CHECK (public.cms_actor_is_staff());
+DROP POLICY IF EXISTS cms_actor_read ON public.security_blocks;
+DROP POLICY IF EXISTS cms_actor_append ON public.security_blocks;
+DROP POLICY IF EXISTS cms_actor_update ON public.security_blocks;
+DROP POLICY IF EXISTS cms_actor_delete ON public.security_blocks;
+CREATE POLICY cms_actor_read ON public.security_blocks FOR SELECT TO cmsuser USING (public.cms_actor_is_staff() OR public.cms_actor_any(ARRAY['system:auth']));
+CREATE POLICY cms_actor_append ON public.security_blocks FOR INSERT TO cmsuser WITH CHECK (public.cms_actor_is_staff() OR public.cms_actor_any(ARRAY['system:auth']));
+CREATE POLICY cms_actor_update ON public.security_blocks FOR UPDATE TO cmsuser USING (public.cms_actor_is_staff() OR public.cms_actor_any(ARRAY['system:auth'])) WITH CHECK (public.cms_actor_is_staff() OR public.cms_actor_any(ARRAY['system:auth']));
+CREATE POLICY cms_actor_delete ON public.security_blocks FOR DELETE TO cmsuser USING (public.cms_actor_is_staff());
 
 -- security_finding_flips
 -- INGEST_WRITE: readable by staff AND the security-feed container, appended and updated by

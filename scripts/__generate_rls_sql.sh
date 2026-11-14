@@ -125,8 +125,13 @@ count=$(wc -l < "$tmp_models" | tr -d ' ')
 #   and UPDATE here.
 PUBLIC_BOARD_READ=" admin_groups admin_permission_overrides admins group_permissions permissions ranking_config ranking_contests ranking_hidden ranking_overrides ranking_settings ranking_subchanges ranking_submissions ranking_tasks ranking_teams ranking_users services "
 AUTH_BOOTSTRAP=" admin_groups admin_permission_overrides admins group_permissions groups login_surfaces permissions "
+AUTH_LEDGER=" security_blocks "
 # The flip row is written by the same push that judges a finding, so it needs the same reach.
 INGEST_WRITE=" security_findings security_finding_flips "
+# AUTH_LEDGER — the security ledger the *login* path maintains before any session exists: it reads a
+#   standing login exemption and records a lockout, both as system:auth. WHY not AUTH_BOOTSTRAP: that
+#   predicate also admits DELETE, and nothing in a credential check may erase a block. Read, append
+#   and update are the ledger's needs; DELETE stays staff.
 # HOST_MODULE_INGEST — the rootfs scan's record of what the host kernel actually runs. Read is
 #   staff (the patching page derives reachability from it) AND the feed; write is the feed ONLY,
 #   because a module list is an observation about a box and no admin types one. There is no DELETE
@@ -312,6 +317,23 @@ emit_policy_set() {
         "  $(read_predicate "$tbl")" \
         "  OR public.cms_actor_any(ARRAY['$AUDIT_RETENTION'])" \
         ");"
+    elif in_list "$tbl" "$AUTH_LEDGER"; then
+      printf '%s\n' \
+        '-- AUTH_LEDGER: staff own this table, and the pre-session login path appends to it under' \
+        '-- system:auth — an exemption it must read before a session exists, and a lockout it must' \
+        '-- record when a credential is refused. WHY three policies rather than the AUTH_BOOTSTRAP' \
+        '-- predicate: that one also admits DELETE, so it would let a credential check erase a block.' \
+        '-- A login path may read, append and extend the ledger; retiring a row stays a staff act.' \
+        "DROP POLICY IF EXISTS cmsuser_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_all ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_read ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_append ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_update ON public.$tbl;" \
+        "DROP POLICY IF EXISTS cms_actor_delete ON public.$tbl;" \
+        "CREATE POLICY cms_actor_read ON public.$tbl FOR SELECT TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:auth']));" \
+        "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:auth']));" \
+        "CREATE POLICY cms_actor_update ON public.$tbl FOR UPDATE TO cmsuser USING ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:auth'])) WITH CHECK ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:auth']));" \
+        "CREATE POLICY cms_actor_delete ON public.$tbl FOR DELETE TO cmsuser USING ($(read_predicate "$tbl"));"
     else
       printf '%s\n' \
         '-- STRICT: every verb requires an identified actor.' \
