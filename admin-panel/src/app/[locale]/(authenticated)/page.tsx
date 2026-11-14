@@ -1,7 +1,5 @@
-import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
-import { notFound } from 'next/navigation';
 import { Card } from '@/components/core/Card';
 import {
   Users,
@@ -97,12 +95,10 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all:all', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
-  }
+  // WHY no guard here: this is the page login redirects to, and the route registry declares it open
+  // to every signed-in admin. A guard narrower than the registry puts a 404 on the default
+  // destination for every admin without the wildcard grant — while the sidebar still shows the link.
+  // The reads below are row-scoped by the actor's policy, so there is nothing here to conceal.
 
   const [stats, serviceStatus, recentActivity] = await Promise.all([
     getStats(),

@@ -152,12 +152,17 @@ describe('direct page concealment', () => {
     ).rejects.toThrow('NEXT_NOT_FOUND');
   });
 
-  it('conceals the dashboard from a reader without all:all', async () => {
+  it('renders the dashboard for a reader without all:all', async () => {
+    // WHY this reversed: the dashboard is where login sends everyone, and the route registry
+    // declares `home` open to every signed-in admin (the sidebar renders Home from it). Concealing
+    // it put a 404 on the default destination for every admin without the wildcard grant — the
+    // defect the operator reported. Concealment still applies to the entity pages below, where
+    // "this record does not exist" is a legitimate denial.
     vi.mocked(checkPermission).mockResolvedValue(false);
 
-    await expect(DashboardPage({ params: Promise.resolve({ locale: 'en' }) })).rejects.toThrow(
-      'NEXT_NOT_FOUND',
-    );
+    const element = await DashboardPage({ params: Promise.resolve({ locale: 'en' }) });
+
+    expect(element).toBeTruthy();
   });
 
   it('reads no contest row for a concealed reader', async () => {
