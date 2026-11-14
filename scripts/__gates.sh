@@ -20,6 +20,7 @@ GATES=(
   "Permission parity|__check_permission_parity.sh|"
   "RLS coverage|__check_rls_coverage.sh|"
   "RLS SQL freshness|__generate_rls_sql.sh|--check"
+  "Design law|__check_design_law.sh|"
 )
 
 failed=0
