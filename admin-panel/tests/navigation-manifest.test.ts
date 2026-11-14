@@ -121,6 +121,26 @@ describe('no utility class is built by interpolation', () => {
   });
 });
 
+describe('every confirmation goes through the panel dialog', () => {
+  it('never calls the browser confirm() from a component', () => {
+    // WHY: `confirm()` cannot be translated — the panel ships TH and EN — cannot be styled, and
+    // blocks the tab. One call site survived the migration (a backup-archive deletion), so the
+    // destructive path spoke English inside a Thai panel. The shared dialog is `await confirm(...)`
+    // from `useConfirm()`, which this rule deliberately still allows.
+    const offenders: string[] = [];
+    for (const file of walk(path.join(PANEL_ROOT, 'src'))) {
+      if (!file.endsWith('.tsx')) continue;
+      const lines = stripComments(fs.readFileSync(file, 'utf8')).split('\n');
+      lines.forEach((line, index) => {
+        if (/window\.confirm\(/.test(line) || /if\s*\(\s*!\s*confirm\(/.test(line)) {
+          offenders.push(`${path.relative(PANEL_ROOT, file)}:${index + 1}`);
+        }
+      });
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('no component is defined twice', () => {
   it('keeps every component basename unique under src/components', () => {
     const byName = new Map<string, string[]>();

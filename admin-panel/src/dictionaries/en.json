@@ -1072,6 +1072,11 @@
       "title": "Discard unsaved changes?",
       "description": "The edits on this form have not been saved yet and will be lost.",
       "confirmLabel": "Discard changes"
+    },
+    "deleteArchive": {
+      "title": "Delete this backup archive?",
+      "description": "Permanently removes {name} from backup storage. This cannot be undone.",
+      "confirmLabel": "Delete archive"
     }
   },
   "sidePanel": {

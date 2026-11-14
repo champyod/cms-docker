@@ -10,6 +10,8 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
 import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
 import { Text } from '@/components/core/Typography';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
 import { useDictionary } from '@/hooks/useDictionary';
 import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 import { withBasePath } from '@/lib/base-path';
@@ -43,6 +45,8 @@ const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, s
 
 export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrowserSectionProps) {
     const dict = useDictionary();
+    const confirm = useConfirm();
+    const { deleteArchiveConfirm } = useConfirmationCopy();
     const [archives, setArchives] = useState<readonly BackupArchive[]>([]);
     const [notice, setNotice] = useState<string | null>(null);
     const [deletingName, setDeletingName] = useState<string | null>(null);
@@ -123,7 +127,11 @@ export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrows
     }, [refreshToken, reload, pollForNewArchive, stopPolling]);
 
     const handleDelete = async (name: string) => {
-        if (!confirm(`Delete backup archive ${name}? This cannot be undone.`)) return;
+        // WHY the shared dialog and not the browser's: `confirm()` cannot be translated (the panel
+        // ships TH and EN), cannot be styled, and blocks the whole tab. It was the only call site
+        // left in the panel still using it — every other destructive action already asks through
+        // this provider.
+        if (!(await confirm(deleteArchiveConfirm(name)))) return;
         setDeletingName(name);
         setNotice(null);
         try {

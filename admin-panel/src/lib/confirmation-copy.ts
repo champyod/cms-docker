@@ -55,6 +55,7 @@ export interface ConfirmationCopy {
   manualBackupConfirm: () => ConfirmationRequest;
   toggleOfficialConfirm: () => ConfirmationRequest;
   discardUnsavedChangesConfirm: () => ConfirmationRequest;
+  deleteArchiveConfirm: (name: string) => ConfirmationRequest;
 }
 
 function request(
@@ -113,5 +114,11 @@ export function buildConfirmationCopy(copy: ConfirmationDictionary): Confirmatio
      * the sense the caption uses: the reader can type the changes again.
      */
     discardUnsavedChangesConfirm: () => request('recoverable', copy.discardUnsavedChanges),
+
+    /**
+     * A backup archive is a file on the host, not a row: naming it in the sentence is the only way
+     * the operator can tell which one is about to disappear, because several share a page.
+     */
+    deleteArchiveConfirm: (name) => request('destructive', copy.deleteArchive, { name }),
   };
 }
