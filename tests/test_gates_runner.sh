@@ -8,6 +8,19 @@ RUNNER="${REPO_ROOT}/scripts/__gates.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# WHY derived and not listed: the gate list lives in the runner. A second copy here is a copy that
+# goes stale the moment a gate is added — the seventh gate (design law) failed this test for exactly
+# that reason, and the fix is to read the runner rather than to add the name again.
+GATE_SCRIPTS=()
+while IFS= read -r s; do GATE_SCRIPTS+=("$s"); done < <(
+  sed -n '/^GATES=(/,/^)/p' "$RUNNER" | grep -oE '[A-Za-z0-9_]+\.sh' | awk '!seen[$0]++'
+)
+GATE_NAMES=()
+while IFS= read -r n; do GATE_NAMES+=("$n"); done < <(
+  sed -n '/^GATES=(/,/^)/p' "$RUNNER" | sed -n 's/^  "\([^|]*\)|.*/\1/p'
+)
+[[ ${#GATE_SCRIPTS[@]} -gt 0 ]] || { echo "FAIL could not read the gate list from $RUNNER" >&2; exit 1; }
+
 pass=0 fail=0
 ok() { printf '  ok   %s\n' "$1"; pass=$((pass + 1)); }
 no() { printf '  FAIL %s\n' "$1"; fail=$((fail + 1)); }
@@ -16,8 +29,7 @@ no() { printf '  FAIL %s\n' "$1"; fail=$((fail + 1)); }
 stub_gates() {
   rm -rf "$WORK/gates"; mkdir -p "$WORK/gates"
   local verdict="$1" breaker="${2:-}"
-  for s in __check_spec_parity.sh __check_var_coverage.sh __check_audit_coverage.sh \
-           __check_permission_parity.sh __check_rls_coverage.sh __generate_rls_sql.sh; do
+  for s in "${GATE_SCRIPTS[@]}"; do
     if [[ "$s" == "$breaker" ]]; then
       printf '#!/usr/bin/env bash\necho "%s says no"; exit 1\n' "$s" > "$WORK/gates/$s"
     else
@@ -31,7 +43,7 @@ printf '\nall green exits 0 and names every gate\n'
 stub_gates pass
 out="$(GATES_DIR="$WORK/gates" bash "$RUNNER" 2>&1)"; rc=$?
 [[ $rc -eq 0 ]] && ok "exits 0 when every gate passes" || no "exit was $rc"
-for n in "VAR_SPEC parity" "Variable coverage" "Audit coverage" "Permission parity" "RLS coverage" "RLS SQL freshness"; do
+for n in "${GATE_NAMES[@]}"; do
   grep -q "== ${n} ==" <<< "$out" && ok "ran: ${n}" || no "skipped: ${n}"
 done
 
@@ -46,8 +58,8 @@ grep -q '== RLS SQL freshness ==' <<< "$out" && ok "keeps going after a failure"
 printf '\nthe freshness gate receives its flag\n'
 rm -rf "$WORK/flag"; mkdir -p "$WORK/flag"
 printf '#!/usr/bin/env bash\nprintf "args:%%s\\n" "$*"\n' > "$WORK/flag/__generate_rls_sql.sh"
-for s in __check_spec_parity.sh __check_var_coverage.sh __check_audit_coverage.sh \
-         __check_permission_parity.sh __check_rls_coverage.sh; do
+for s in "${GATE_SCRIPTS[@]}"; do
+  [[ "$s" == "__generate_rls_sql.sh" ]] && continue
   printf '#!/usr/bin/env bash\nexit 0\n' > "$WORK/flag/$s"
 done
 chmod +x "$WORK/flag"/*.sh
@@ -55,8 +67,7 @@ out="$(GATES_DIR="$WORK/flag" bash "$RUNNER" 2>&1)"
 grep -q 'args:--check' <<< "$out" && ok "passes --check to the generator" || no "the flag never arrived"
 
 printf '\nthe real gates are the ones the job used to run\n'
-for s in __check_spec_parity.sh __check_var_coverage.sh __check_audit_coverage.sh \
-         __check_permission_parity.sh __check_rls_coverage.sh __generate_rls_sql.sh; do
+for s in "${GATE_SCRIPTS[@]}"; do
   [[ -f "${REPO_ROOT}/scripts/${s}" ]] && ok "exists: ${s}" || no "missing: ${s}"
 done
 
