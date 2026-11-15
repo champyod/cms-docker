@@ -19,7 +19,10 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
-CONTAINER="${CMS_ADMIN_CONTAINER:-cms-admin-panel-next}"
+# WHY asked, not assumed: this used to be a hardcoded colour A. Blue-green stops colour A before a
+# swap, so the container path was unavailable exactly when it was needed and the host path took over
+# — with a URL that could not connect. One source for the answer: __admin_container.sh.
+CONTAINER="$(bash "${SCRIPT_DIR}/__admin_container.sh")"
 
 # WHY two budgets: a probe against something already on disk answers in well
 # under a second, but `npx`/`pnpm dlx`/`bun x` fetch the package first, so they

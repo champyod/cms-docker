@@ -426,12 +426,12 @@ prisma-sync:
 	@# Schema sync needs DDL, so it runs as the owner role, never the runtime role.
 	@bash scripts/__apply_sql.sh --bootstrap-roles || echo "WARN: role bootstrap failed — retry after restart" >&2;
 	@set -a; [ -f .env ] && . ./.env; set +a; \
-	OWNER_URL_NET="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@database:5432/$${POSTGRES_DB:-cmsdb}"; \
-	OWNER_URL_LOCAL="postgresql://$${POSTGRES_USER:-cmsuser}:$${POSTGRES_PASSWORD}@localhost:5432/$${POSTGRES_DB:-cmsdb}"; \
+	OWNER_URL_NET="$$(bash scripts/__owner_url.sh container)"; \
+	OWNER_URL_LOCAL="$$(bash scripts/__owner_url.sh host)"; \
 	export PATH="$$HOME/.bun/bin:$$PATH"; \
 	run_tool() { \
 		if [ "$$1" = "container" ]; then \
-			docker exec -e DATABASE_URL="$$OWNER_URL_NET" cms-admin-panel-next sh -lc "cd $$2 && $$3"; \
+			docker exec -e DATABASE_URL="$$OWNER_URL_NET" "$$(bash scripts/__admin_container.sh)" sh -lc "cd $$2 && $$3"; \
 		else \
 			( cd "$$2" && DATABASE_URL="$$OWNER_URL_LOCAL" $$3 ); \
 		fi; \
