@@ -1,9 +1,5 @@
 #!/usr/bin/env bash
-# The migration path must be able to reach the database from whichever side it runs on.
-#
-# WHY this test exists: `make prisma-sync` could not reach the DB from the host at all — the URL
-# was hardcoded to `localhost:5432` while compose publishes the port on ${DB_BIND_IP}. Nothing
-# caught it because the container path normally wins; the bug only surfaced during a deploy.
+# The migration path must reach the database from either side; the host URL was localhost-only.
 set -uo pipefail
 
 SCRIPT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/__owner_url.sh"

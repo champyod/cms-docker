@@ -3,14 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { TrendChart } from '@/components/core/charts/TrendChart';
 
-/**
- * The first chart primitive of the dashboard rebuild (epic 015.6). It is server-rendered SVG, so
- * every rule the design law cares about is assertable from markup: one colour source, one geometry
- * rule, one accessible name per point. The accessible name matters most — a tooltip that only
- * appears on hover leaves the value unreachable by keyboard and by a screen reader, so each point
- * carries its own <title> and the tooltip becomes an enhancement rather than the only route to the
- * data.
- */
+/** Pins the chart's contract: one colour source, one geometry rule, an accessible value per point. */
 
 const POINTS = [4, 6, 9, 12, 10, 14, 18, 23] as const;
 
@@ -51,12 +44,7 @@ describe('TrendChart', () => {
   });
 });
 
-/**
- * Adversarial pass: the happy path is a smooth series of positive counts. Real series are worse —
- * an empty range before a contest opens, a single sample, a flat zero line, a missing bucket that
- * arrives as NaN, and a delta series that goes negative. A chart that draws off-canvas or emits
- * "NaN" in a path attribute breaks the SVG rather than showing nothing, so each case is pinned.
- */
+/** Real series are not smooth: empty, single, flat, gappy and negative all have to stay in the box. */
 describe('TrendChart edge cases', () => {
   const pathY = (markup: string): number[] =>
     [...markup.matchAll(/[ML]([\d.]+),(-?[\d.]+)/g)].map((m) => Number(m[2]));

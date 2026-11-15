@@ -10,27 +10,17 @@ export interface TrendChartProps {
   readonly height?: number;
 }
 
-/** Internal coordinate width. The chart scales horizontally, so a bucket boundary never depends on
- *  the container's pixel width; `non-scaling-stroke` keeps the line 2px at any size. */
+/** Internal width; `non-scaling-stroke` keeps the line 2px at any container size. */
 const VIEW_W = 1000;
 
-/**
- * Server-rendered trend line with one accessible value per bucket.
- *
- * WHY a `<title>` per band and not only a hover tooltip: a tooltip exists for a mouse. A keyboard
- * user and a screen reader get nothing from it, so the value of every point is in the markup and
- * the styled tooltip is an enhancement layered on top rather than the only route to the data.
- * The band is also the hover target, which makes the whole chart height hittable instead of a 2px
- * line.
- */
+/** Trend line with a value per bucket in the markup — a tooltip alone excludes keyboard and screen readers. */
 export function TrendChart({
   label,
   points,
   formatValue = String,
   height = 120,
 }: TrendChartProps): React.JSX.Element {
-  // The domain always includes zero and is computed from finite samples only: a delta series goes
-  // negative, and a missing bucket arrives as NaN. Scaling from max alone drew those off-canvas.
+  // Include zero and ignore non-finite samples: deltas go negative, gaps arrive as NaN.
   const finite = points.filter((value) => Number.isFinite(value));
   const low = Math.min(0, ...finite);
   const high = Math.max(0, ...finite);
@@ -39,8 +29,7 @@ export function TrendChart({
   const stepX = points.length > 1 ? VIEW_W / (points.length - 1) : 0;
   const yOf = (value: number): number => height - ((value - low) / span) * height;
 
-  // A gap breaks the line instead of joining across it: a straight segment over missing hours is a
-  // claim about data we do not have.
+  // A gap breaks the line; joining across missing hours claims data we do not have.
   let line = '';
   let pen = false;
   points.forEach((value, index) => {

@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
-# Design-law ratchet (epic 016). Three statically checkable rules from the law, counted per file and
-# compared with a committed baseline: a page may improve, never regress. A count-based allowlist rather
-# than a pass/fail sweep because 120 legacy sites cannot be fixed in the commit that adopts the law, and
-# a law nobody enforces is a preference.
-#
-# Usage: __check_design_law.sh            fail when any file's count rose above the baseline
-#        __check_design_law.sh --update   rewrite the baseline from the current tree
-#        __check_design_law.sh --report   print the current counts, exit 0
+# Design-law ratchet (epic 016): three rules counted per file against a committed baseline.
+# Usage: no args (check) · --update (rewrite baseline) · --report (print counts)
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,14 +19,10 @@ tmp_prev=$(mktemp)
 trap 'rm -f "$tmp_now" "$tmp_prev"' EXIT
 
 # R1 spacing ladder · R2 type floor · R3 one spacing mechanism.
-# grep -E, never ripgrep: a gate that needs a tool the CI runner does not have fails silently, and
-# the first version of this file did exactly that (rg absent → set -e killed it before it printed).
-# Tailwind's scale is fixed, so a class name maps to exactly one pixel value: the ladder check is a
-# lookup, not an opinion. The ladder is the law's, not Tailwind's - 1.5 (6px), 2.5 (10px), 5, 7, 9,
-# 11 and 14 are all expressible in Tailwind and all outside the closed set.
+# grep -E, never rg: the CI runner has no ripgrep and set -e killed the first version silently.
 scan() { grep -rEo --include='*.ts' --include='*.tsx' "$1" "$SRC" 2>/dev/null || true; }
 
-# The leading guard matters: without it "line-clamp-2" contains "p-2" and inflates the count.
+# The guard matters: without it "line-clamp-2" contains "p-2".
 scan '(^|[^A-Za-z0-9_-])(-)?(p|px|py|pt|pb|pl|pr|m|mx|my|mt|mb|ml|mr|gap|gap-x|gap-y)-[0-9]+(\.[0-9]+)?' \
 | awk -F: '
   BEGIN {

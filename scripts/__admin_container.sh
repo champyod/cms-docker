@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# Which admin-panel container is the migration path allowed to exec into?
-#
-# WHY: the path hardcoded `cms-admin-panel-next` (colour A). Blue-green runs with colour B serving
-# and colour A stopped, so before a swap the container was always down — and the host fallback it
-# then used could not reach the database either. Asking this script makes the answer follow the
-# deployment instead of assuming one colour.
-#
-# Order: an explicit CMS_ADMIN_CONTAINER wins, then whichever colour is actually running, then the
-# default name (so callers still produce a sensible message when nothing is up).
+# Which admin-panel container may the migration path exec into: CMS_ADMIN_CONTAINER, else the
+# running colour, else colour A — blue-green stops A before a swap, so assuming A was always wrong.
 set -euo pipefail
 
 if [[ -n "${CMS_ADMIN_CONTAINER:-}" ]]; then

@@ -8,9 +8,7 @@ RUNNER="${REPO_ROOT}/scripts/__gates.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# WHY derived and not listed: the gate list lives in the runner. A second copy here is a copy that
-# goes stale the moment a gate is added — the seventh gate (design law) failed this test for exactly
-# that reason, and the fix is to read the runner rather than to add the name again.
+# Derived, not listed: a second copy of the gate list went stale on the seventh gate.
 GATE_SCRIPTS=()
 while IFS= read -r s; do GATE_SCRIPTS+=("$s"); done < <(
   sed -n '/^GATES=(/,/^)/p' "$RUNNER" | grep -oE '[A-Za-z0-9_]+\.sh' | awk '!seen[$0]++'
