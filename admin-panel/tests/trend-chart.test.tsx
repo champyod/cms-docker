@@ -50,3 +50,46 @@ describe('TrendChart', () => {
     expect(markup).toContain('<title>4 min</title>');
   });
 });
+
+/**
+ * Adversarial pass: the happy path is a smooth series of positive counts. Real series are worse —
+ * an empty range before a contest opens, a single sample, a flat zero line, a missing bucket that
+ * arrives as NaN, and a delta series that goes negative. A chart that draws off-canvas or emits
+ * "NaN" in a path attribute breaks the SVG rather than showing nothing, so each case is pinned.
+ */
+describe('TrendChart edge cases', () => {
+  const pathY = (markup: string): number[] =>
+    [...markup.matchAll(/[ML]([\d.]+),(-?[\d.]+)/g)].map((m) => Number(m[2]));
+
+  it('renders nothing pathological for an empty series', () => {
+    const markup = renderToStaticMarkup(<TrendChart label="No data yet" points={[]} />);
+    expect(markup).toContain('aria-label="No data yet"');
+    expect(markup).not.toMatch(/NaN|Infinity/);
+    expect(markup.match(/<title>/g) ?? []).toHaveLength(0);
+  });
+
+  it('handles a single sample without dividing by zero', () => {
+    const markup = renderToStaticMarkup(<TrendChart label="One sample" points={[7]} />);
+    expect(markup).not.toMatch(/NaN|Infinity/);
+    expect(markup.match(/<title>/g) ?? []).toHaveLength(1);
+  });
+
+  it('keeps a flat zero series on the floor instead of dividing by zero', () => {
+    const markup = renderToStaticMarkup(<TrendChart label="Quiet" points={[0, 0, 0]} height={100} />);
+    expect(markup).not.toMatch(/NaN|Infinity/);
+    expect(pathY(markup).every((y) => y >= 0 && y <= 100)).toBe(true);
+  });
+
+  it('never draws outside the box for a negative series', () => {
+    const markup = renderToStaticMarkup(<TrendChart label="Delta" points={[-5, -2, 0, 3]} height={100} />);
+    expect(markup).not.toMatch(/NaN|Infinity/);
+    const ys = pathY(markup);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(100);
+  });
+
+  it('refuses to emit NaN into a path when a bucket is missing', () => {
+    const markup = renderToStaticMarkup(<TrendChart label="Gappy" points={[1, Number.NaN, 3]} />);
+    expect(markup).not.toMatch(/NaN/);
+  });
+});

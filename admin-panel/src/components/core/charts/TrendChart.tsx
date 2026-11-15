@@ -29,14 +29,28 @@ export function TrendChart({
   formatValue = String,
   height = 120,
 }: TrendChartProps): React.JSX.Element {
-  const max = Math.max(...points, 1);
+  // The domain always includes zero and is computed from finite samples only: a delta series goes
+  // negative, and a missing bucket arrives as NaN. Scaling from max alone drew those off-canvas.
+  const finite = points.filter((value) => Number.isFinite(value));
+  const low = Math.min(0, ...finite);
+  const high = Math.max(0, ...finite);
+  const span = high - low || 1;
   const bandWidth = points.length > 0 ? VIEW_W / points.length : VIEW_W;
   const stepX = points.length > 1 ? VIEW_W / (points.length - 1) : 0;
-  const yOf = (value: number): number => height - (value / max) * height;
+  const yOf = (value: number): number => height - ((value - low) / span) * height;
 
-  const line = points
-    .map((value, index) => `${index === 0 ? 'M' : 'L'}${(index * stepX).toFixed(2)},${yOf(value).toFixed(2)}`)
-    .join(' ');
+  // A gap breaks the line instead of joining across it: a straight segment over missing hours is a
+  // claim about data we do not have.
+  let line = '';
+  let pen = false;
+  points.forEach((value, index) => {
+    if (!Number.isFinite(value)) {
+      pen = false;
+      return;
+    }
+    line += `${pen ? 'L' : 'M'}${(index * stepX).toFixed(2)},${yOf(value).toFixed(2)} `;
+    pen = true;
+  });
 
   return (
     <svg
@@ -64,7 +78,7 @@ export function TrendChart({
           height={height}
           fill="transparent"
         >
-          <title>{formatValue(value)}</title>
+          <title>{Number.isFinite(value) ? formatValue(value) : '—'}</title>
         </rect>
       ))}
     </svg>
