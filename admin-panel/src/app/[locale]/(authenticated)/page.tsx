@@ -6,7 +6,6 @@ import {
   Trophy,
   FileCode,
   Activity,
-  ArrowUpRight,
   Clock,
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
@@ -21,12 +20,14 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { formatInZone } from '@/lib/timezone';
 
 async function getStats() {
+  const now = new Date();
   const [
     usersCount,
     contestsCount,
     activeContestsCount,
     submissionsCount,
-    pendingSubmissions
+    pendingSubmissions,
+    activeContesters
   ] = await Promise.all([
     prisma.users.count(),
     prisma.contests.count(),
@@ -47,6 +48,15 @@ async function getStats() {
           }
         }
       }
+    }),
+    // Replaces a hard-coded green arrow: a trend nobody computed.
+    prisma.participations.count({
+      where: {
+        contests: {
+          start: { lte: now },
+          stop: { gte: now }
+        }
+      }
     })
   ]);
 
@@ -55,7 +65,8 @@ async function getStats() {
     contestsCount,
     activeContestsCount,
     submissionsCount,
-    pendingSubmissions
+    pendingSubmissions,
+    activeContesters
   };
 }
 
@@ -126,9 +137,10 @@ export default async function DashboardPage({
               <Users className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-success">
-            <ArrowUpRight className="w-4 h-4" />
-            <Text variant="small" color="text-success">Active Contesters</Text>
+          <Stack direction="row" align="center" gap={2} className="z-10">
+            <Text variant="small" color="text-muted-foreground">
+              {stats.activeContesters} enrolled in running contests
+            </Text>
           </Stack>
         </Card>
 
