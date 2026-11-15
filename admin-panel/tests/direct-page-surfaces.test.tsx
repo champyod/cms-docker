@@ -42,6 +42,7 @@ vi.mock('@/lib/prisma', () => ({
     users: { count: vi.fn(async () => 3) },
     contests: { count: vi.fn(async () => 2) },
     submissions: { count: vi.fn(async () => 5), findMany: vi.fn(async () => []) },
+    participations: { count: vi.fn(async () => 1) },
   },
 }));
 
