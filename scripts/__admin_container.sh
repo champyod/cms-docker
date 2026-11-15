@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Which admin-panel container may the migration path exec into: CMS_ADMIN_CONTAINER, else the
-# running colour, else colour A — blue-green stops A before a swap, so assuming A was always wrong.
+# Which admin-panel container the migration path may exec into.
 set -euo pipefail
 
 if [[ -n "${CMS_ADMIN_CONTAINER:-}" ]]; then

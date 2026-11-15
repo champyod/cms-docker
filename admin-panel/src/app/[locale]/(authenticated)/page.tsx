@@ -49,7 +49,6 @@ async function getStats() {
         }
       }
     }),
-    // Replaces a hard-coded green arrow: a trend nobody computed.
     prisma.participations.count({
       where: {
         contests: {
@@ -106,10 +105,7 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  // WHY no guard here: this is the page login redirects to, and the route registry declares it open
-  // to every signed-in admin. A guard narrower than the registry puts a 404 on the default
-  // destination for every admin without the wildcard grant — while the sidebar still shows the link.
-  // The reads below are row-scoped by the actor's policy, so there is nothing here to conceal.
+  // No guard: the registry declares this route open to every signed-in admin.
 
   const [stats, serviceStatus, recentActivity] = await Promise.all([
     getStats(),

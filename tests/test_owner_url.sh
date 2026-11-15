@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# The migration path must reach the database from either side; the host URL was localhost-only.
 set -uo pipefail
 
 SCRIPT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)/scripts/__owner_url.sh"

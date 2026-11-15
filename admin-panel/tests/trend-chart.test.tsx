@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 
 import { TrendChart } from '@/components/core/charts/TrendChart';
 
-/** Pins the chart's contract: one colour source, one geometry rule, an accessible value per point. */
 
 const POINTS = [4, 6, 9, 12, 10, 14, 18, 23] as const;
 
@@ -44,7 +43,6 @@ describe('TrendChart', () => {
   });
 });
 
-/** Real series are not smooth: empty, single, flat, gappy and negative all have to stay in the box. */
 describe('TrendChart edge cases', () => {
   const pathY = (markup: string): number[] =>
     [...markup.matchAll(/[ML]([\d.]+),(-?[\d.]+)/g)].map((m) => Number(m[2]));

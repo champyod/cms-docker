@@ -8,7 +8,6 @@ RUNNER="${REPO_ROOT}/scripts/__gates.sh"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Derived, not listed: a second copy of the gate list went stale on the seventh gate.
 GATE_SCRIPTS=()
 while IFS= read -r s; do GATE_SCRIPTS+=("$s"); done < <(
   sed -n '/^GATES=(/,/^)/p' "$RUNNER" | grep -oE '[A-Za-z0-9_]+\.sh' | awk '!seen[$0]++'

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Design-law ratchet (epic 016): three rules counted per file against a committed baseline.
-# Usage: no args (check) · --update (rewrite baseline) · --report (print counts)
+# Design-law ratchet (epic 016). Usage: none (check) · --update · --report
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +18,6 @@ tmp_prev=$(mktemp)
 trap 'rm -f "$tmp_now" "$tmp_prev"' EXIT
 
 # R1 spacing ladder · R2 type floor · R3 one spacing mechanism.
-# grep -E, never rg: the CI runner has no ripgrep and set -e killed the first version silently.
 scan() { grep -rEo --include='*.ts' --include='*.tsx' "$1" "$SRC" 2>/dev/null || true; }
 
 # The guard matters: without it "line-clamp-2" contains "p-2".

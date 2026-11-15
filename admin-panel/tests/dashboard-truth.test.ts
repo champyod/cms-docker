@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-/** Reads the source, not the render: the defect was a hard-coded claim that renders perfectly. */
 const PAGE = resolve(__dirname, '../src/app/[locale]/(authenticated)/page.tsx');
 
 describe('the overview states only measured facts', () => {
