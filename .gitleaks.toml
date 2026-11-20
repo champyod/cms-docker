@@ -2,4 +2,25 @@
 # fixtures trip the default secret scan. Exempt that one file only.
 [allowlist]
 description = "deliberate canary fixtures for audit leak assertions"
-paths = ['''admin-panel/tests/audit-payload-harness\.ts''']
+paths = [
+  '''admin-panel/tests/audit-payload-harness\.ts''',
+  '''(?:^|/)target/''',
+]
+
+# WHY an address rule at all: a tailnet address is not a secret, so no secret scanner reports it,
+# yet it names the machine. The operator's hosts live in that range, so the repo refuses to carry
+# one — the deployment inventory stays on the operator's disk.
+[[rules]]
+id = "tailnet-address"
+description = "CGNAT/tailnet address in the repo (deployment inventory)"
+regex = '''\b100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.\d{1,3}\.\d{1,3}\b'''
+
+  [rules.allowlist]
+  description = "the range's own boundaries, used to document and to test the range, name no host"
+  regexes = [
+    '''\b100\.64\.0\.(?:0|1)\b''',
+    '''\b100\.127\.255\.255\b''',
+    # A synthetic in-range address a test uses to prove "in range but not this node".
+    '''\b100\.99\.99\.99\b''',
+  ]
+
