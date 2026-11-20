@@ -415,7 +415,7 @@ mod tests {
     use crate::core::expose::{Mode, UiSpec};
 
     fn view(domain_active: bool) -> ExposureView {
-        ExposureView::new(domain_active, true, Some("100.75.203.112".to_string()))
+        ExposureView::new(domain_active, true, Some("100.64.0.1".to_string()))
     }
 
     #[test]
@@ -535,7 +535,7 @@ mod tests {
             view.next_mode();
         }
         assert!(
-            view.url_preview().contains("100.75.203.112"),
+            view.url_preview().contains("100.64.0.1"),
             "{}",
             view.url_preview()
         );

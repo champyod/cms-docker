@@ -98,7 +98,7 @@ Audited secrets:
   - htpasswd_rws (config/htpasswd_rws)
 
 Warning: --apply checks remote worker reference (WORKER / CORE_SERVICES_HOST)
-and warns if rotation would break RPC to 100.75.203.112.
+and warns if rotation would break RPC to the worker node.
 EOF
 }
 

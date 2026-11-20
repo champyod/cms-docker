@@ -1745,7 +1745,7 @@ _check_tailscale() {
 
 _check_worker_rpc() {
   printf '  %-30s' "Remote worker RPC:"
-  local worker_host="${WORKER_HOST:-100.75.203.112}"
+  local worker_host="${WORKER_HOST:?set WORKER_HOST to the worker node address}"
   local worker_port="${WORKER_RPC_PORT:-26000}"
   if nc -zw3 "$worker_host" "$worker_port" 2>/dev/null; then
     printf 'PASS (%s:%s)\n' "$worker_host" "$worker_port"

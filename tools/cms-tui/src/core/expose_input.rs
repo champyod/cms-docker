@@ -169,8 +169,8 @@ mod tests {
 
     #[test]
     fn accepts_an_address_inside_the_tailnet_range() {
-        let address = parse_tailscale_ip("100.75.203.112").unwrap();
-        assert_eq!(address.to_string(), "100.75.203.112");
+        let address = parse_tailscale_ip("100.64.0.1").unwrap();
+        assert_eq!(address.to_string(), "100.64.0.1");
         assert_eq!(parse_tailscale_ip("100.64.0.1").unwrap().octets()[1], 64);
         assert_eq!(
             parse_tailscale_ip("100.127.255.255").unwrap().octets()[1],

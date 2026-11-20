@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn bind_address_matches_the_documented_wiring() {
-        let ts = Some("100.75.203.112");
+        let ts = Some("100.64.0.1");
         assert_eq!(
             bind_address_for(Mode::Local, ts).as_deref(),
             Some("127.0.0.1")
@@ -375,7 +375,7 @@ mod tests {
         );
         assert_eq!(
             bind_address_for(Mode::TsHttp, ts).as_deref(),
-            Some("100.75.203.112")
+            Some("100.64.0.1")
         );
     }
 
@@ -401,8 +401,8 @@ mod tests {
 
     #[test]
     fn a_tailnet_address_is_recognised_and_a_stale_one_is_not() {
-        let ts = Some("100.75.203.112");
-        assert_eq!(mode_from_bind("100.75.203.112", ts, false), Mode::TsHttp);
+        let ts = Some("100.64.0.1");
+        assert_eq!(mode_from_bind("100.64.0.1", ts, false), Mode::TsHttp);
         assert_eq!(mode_from_bind("100.99.99.99", ts, false), Mode::Public);
     }
 }

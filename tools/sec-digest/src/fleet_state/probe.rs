@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 
 /// `name=user@addr[:key],…`; only the hosts listed here are probed.
 pub const HOSTS_ENV: &str = "SEC_DIGEST_HOSTS";
-pub const DEFAULT_HOSTS: &str = "como-main=com-o@100.114.35.41:~/.ssh/cms_deploy";
+pub const DEFAULT_HOSTS: &str = "como-main=com-o@203.0.113.10:~/.ssh/cms_deploy";
 /// Hosts the inventory knows about; one with no route is named, never assumed healthy.
 pub const KNOWN_HOSTS: [&str; 3] = ["cms", "admin", "ranking"];
 pub const PROBE_TIMEOUT_SECS: u64 = 25;
@@ -92,10 +92,10 @@ mod tests {
     #[test]
     fn reads_name_target_and_key() {
         let hosts =
-            parse_hosts("como-main=com-o@100.114.35.41:~/.ssh/cms_deploy, admin=root@10.0.0.9");
+            parse_hosts("como-main=com-o@203.0.113.10:~/.ssh/cms_deploy, admin=root@10.0.0.9");
         assert_eq!(hosts.len(), 2);
         assert_eq!(hosts[0].name, "como-main");
-        assert_eq!(hosts[0].target, "com-o@100.114.35.41");
+        assert_eq!(hosts[0].target, "com-o@203.0.113.10");
         assert!(hosts[0]
             .key
             .as_deref()
@@ -108,7 +108,7 @@ mod tests {
     fn the_default_host_is_the_production_one() {
         let hosts = parse_hosts(DEFAULT_HOSTS);
         assert_eq!(hosts[0].name, "como-main");
-        assert_eq!(hosts[0].target, "com-o@100.114.35.41");
+        assert_eq!(hosts[0].target, "com-o@203.0.113.10");
     }
 
     #[test]

@@ -78,7 +78,7 @@ mod tests {
     fn spec() -> HostSpec {
         HostSpec {
             name: "como-main".to_string(),
-            target: "com-o@100.114.35.41".to_string(),
+            target: "com-o@203.0.113.10".to_string(),
             key: Some(PathBuf::from("/home/op/.ssh/cms_deploy")),
         }
     }
@@ -90,7 +90,7 @@ mod tests {
         assert!(argv
             .windows(2)
             .any(|w| w == ["-i", "/home/op/.ssh/cms_deploy"]));
-        assert_eq!(argv[argv.len() - 2], "com-o@100.114.35.41");
+        assert_eq!(argv[argv.len() - 2], "com-o@203.0.113.10");
         assert!(argv[argv.len() - 1].contains("uname -r"));
     }
 
