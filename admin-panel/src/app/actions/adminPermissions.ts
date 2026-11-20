@@ -105,11 +105,25 @@ async function assertOverrideAllowed(
   effect: OverrideEffect,
 ): Promise<string | null> {
   if (effect !== 'allow') return null;
+  return assertResultIsGrantable(adminId, permissionKey, effect, 'Cannot grant permissions you do not hold');
+}
+
+// Removing a deny re-grants what it held back, so the same "you cannot grant what you do not hold"
+// test applies; the read is treated as a refusal when it cannot be verified, never as a pass.
+async function assertClearAllowed(adminId: number, permissionKey: string): Promise<string | null> {
+  return assertResultIsGrantable(adminId, permissionKey, 'clear', 'Cannot restore permissions you do not hold');
+}
+
+async function assertResultIsGrantable(
+  adminId: number,
+  permissionKey: string,
+  effect: 'allow' | 'clear',
+  refusal: string,
+): Promise<string | null> {
   const callerEffective = await getPermissions();
   const resultingEffective = await effectiveAfterOverride(adminId, permissionKey, effect);
-  if (resultingEffective && !canCallerGrantResult(callerEffective, resultingEffective)) {
-    return 'Cannot grant permissions you do not hold';
-  }
+  if (resultingEffective === null) return 'Cannot verify the permissions this change would grant';
+  if (!canCallerGrantResult(callerEffective, resultingEffective)) return refusal;
   return null;
 }
 
@@ -174,6 +188,9 @@ export async function clearAdminOverride(
 ): Promise<ActionResult<{ adminId: number; permissionKey: string }>> {
   try {
     await ensurePermission('override:set');
+    const blocked = await assertClearAllowed(adminId, permissionKey);
+    if (blocked) return { success: false, error: blocked };
+
     const permission = await prisma.permissions.findUnique({
       where: { key: permissionKey },
       select: { id: true },

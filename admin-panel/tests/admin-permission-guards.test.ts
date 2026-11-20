@@ -277,3 +277,28 @@ describe('runtime — mocked server actions enforce guards', () => {
     if (!res.success) expect(res.error).toMatch(/Cannot grant/);
   });
 });
+
+describe('removing an override re-grants, so it is grant-checked like an allow', () => {
+  it('a deny hides a held permission, and removing it restores the group grant', () => {
+    const groupKeys = ['contest:delete'];
+    const withDeny = resolveEffectivePermissions(groupKeys, [
+      { permissionKey: 'contest:delete', effect: 'deny' },
+    ]);
+    expect(withDeny.has('contest:delete')).toBe(false);
+    // This is exactly what clearing the deny does, which is why the caller must hold the result.
+    expect(resolveEffectivePermissions(groupKeys, []).has('contest:delete')).toBe(true);
+  });
+
+  it('clearAdminOverride verifies the resulting set before it deletes the row', () => {
+    const src = readSource('src/app/actions/adminPermissions.ts');
+    const body = src.slice(src.indexOf('export async function clearAdminOverride'));
+    expect(body).toContain('assertClearAllowed');
+    // A guard that runs after the delete would be decoration.
+    expect(body.indexOf('assertClearAllowed')).toBeLessThan(body.indexOf('.delete('));
+  });
+
+  it('an unverifiable resulting set is refused rather than treated as grantable', () => {
+    const src = readSource('src/app/actions/adminPermissions.ts');
+    expect(src).toContain('resultingEffective === null');
+  });
+});
