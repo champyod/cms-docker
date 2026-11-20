@@ -399,10 +399,10 @@ optional-profile bring-up already lives in the Makefile beside `infra`, `waf`, `
 make security-dry-run    # 1. what would happen — reads only, changes nothing
 make security-check      # 2. the prerequisites, each failure naming what breaks
 make security-up         # 3. the same plan, then the up, then the cross-checks
-make security-off        # off-switch: stops ONLY the eight overlay containers
+make security-off        # off-switch: stops ONLY the nine overlay containers
 ```
 
-The invocation underneath is exactly this — the eight names and `--no-deps` are the whole safety
+The invocation underneath is exactly this — the nine names and `--no-deps` are the whole safety
 property, so they are visible here rather than hidden in a script:
 
 ```bash
@@ -410,7 +410,7 @@ docker compose --env-file .env --env-file .env.security \
   -f docker-compose.yml -f docker-compose.monitoring.yml -f docker-compose.security.yml \
   --profile monitoring --profile security --profile security-signal \
   up -d --no-deps \
-  prometheus grafana node-exporter renovate diun diun-bridge security-scan security-signal
+  prometheus grafana node-exporter renovate diun diun-bridge security-scan zap security-signal
 ```
 
 `make security-print` prints it resolved for the host it runs on. Both env files are passed because
@@ -496,7 +496,7 @@ as *unverified*, never as passed, and `make security-verify` repeats it once the
 
 **Off-switch — and what survives it**
 
-`make security-off` stops exactly the eight overlay containers (`stop`, not `down`, not `rm`). Nothing is
+`make security-off` stops exactly the nine overlay containers (`stop`, not `down`, not `rm`). Nothing is
 deleted, so `make security-up` starts them again with no pull and no rebuild.
 
 - **Findings and waivers survive**: they are rows in the panel's database (`security_findings`,
