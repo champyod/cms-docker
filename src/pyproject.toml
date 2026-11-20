@@ -33,7 +33,7 @@ dependencies = [
     "pyxdg>=0.26,<0.29",      # https://freedesktop.org/wiki/Software/pyxdg/
     "Jinja2==3.1.6",          # https://jinja.palletsprojects.com/en/stable/changes/
     "markdown-it-py==3.0.0",  # https://github.com/executablebooks/markdown-it-py/blob/master/CHANGELOG.md
-    "MarkupSafe==3.0.3",      # https://markupsafe.palletsprojects.com/en/stable/changes/
+    "MarkupSafe==3.0.4",      # https://markupsafe.palletsprojects.com/en/stable/changes/
 
     # Only for some importers:
     "pyyaml>=5.3,<6.1",       # http://pyyaml.org/wiki/PyYAML
