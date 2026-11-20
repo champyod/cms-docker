@@ -60,7 +60,7 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 
 ## 3. DNSSEC + CAA — DNS integrity + CA restriction (DNS only)
 
-- **Why:** DNSSEC signs the zone (spoof/BGP hijack resistance); CAA says “only `letsencrypt.org` may issue for `grader.mwit.ac.th`”.
+- **Why:** DNSSEC signs the zone (spoof/BGP hijack resistance); CAA says “only `letsencrypt.org` may issue for `grader.example.com`”.
 - **Price:** `$0` at registry/DNS, but needs DNS control + computer center coordination for `DS` at parent (`.ac.th`).
 - **Pros:** resolver-validated DNS; CAA blocks rogue CA issuance.
 - **Cons:** KSK/ZSK rollovers; DS mismatch or clock skew → `SERVFAIL` for all clients.
@@ -71,10 +71,10 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
   echo 'DNSSEC_ENABLED=1' >> .env.local
   echo 'CAA_ENABLED=1' >> .env.local
   echo 'CAA_ISSUER=letsencrypt.org' >> .env.local
-  # then publish CAA:  grader.mwit.ac.th. IN CAA 0 issue "letsencrypt.org"
+  # then publish CAA:  grader.example.com. IN CAA 0 issue "letsencrypt.org"
   # and DS from `dnssec-dsfromkey` at parent
-  dig CAA grader.mwit.ac.th +short  # verify
-  dig +dnssec grader.mwit.ac.th @1.1.1.1  # verify AD flag
+  dig CAA grader.example.com +short  # verify
+  dig +dnssec grader.example.com @1.1.1.1  # verify AD flag
   ```
   No compose change. `__domain.sh status` logs `DNSSEC=… CAA=…`.
 
