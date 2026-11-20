@@ -1,5 +1,3 @@
-use subtle::ConstantTimeEq;
-
 /// The prefixes the panel writes into `admins.authentication`, reused for the console
 /// accounts so one convention covers both surfaces.
 pub const BCRYPT_PREFIX: &str = "bcrypt:";
@@ -11,6 +9,8 @@ pub enum PasswordError {
     UnknownFormat,
     #[error("the stored bcrypt hash could not be parsed")]
     InvalidHash,
+    #[error("the stored password is plaintext; the console refuses to authenticate it")]
+    PlaintextRefused,
 }
 
 /// Verifies a candidate against a stored password. A failure to parse is an error,
@@ -22,15 +22,11 @@ pub fn verify(stored: &str, candidate: &str) -> Result<bool, PasswordError> {
     };
     match prefix {
         "bcrypt" => bcrypt::verify(candidate, value).map_err(|_| PasswordError::InvalidHash),
-        "plaintext" => Ok(constant_time_eq(value, candidate)),
+        // The core refuses these rows for the reason it states: honouring one hands the account
+        // to anyone who can read the database, so the console fails closed with it.
+        "plaintext" => Err(PasswordError::PlaintextRefused),
         _ => Err(PasswordError::UnknownFormat),
     }
-}
-
-/// The panel compares plaintext with timingSafeEqual for the same reason: a length
-/// mismatch must not be observable from the outside.
-fn constant_time_eq(left: &str, right: &str) -> bool {
-    left.as_bytes().ct_eq(right.as_bytes()).into()
 }
 
 #[cfg(test)]
@@ -46,10 +42,12 @@ mod tests {
     }
 
     #[test]
-    fn a_plaintext_row_compares_exactly() {
-        assert_eq!(verify("plaintext:admin", "admin"), Ok(true));
-        assert_eq!(verify("plaintext:admin", "admin "), Ok(false));
-        assert_eq!(verify("plaintext:admin", ""), Ok(false));
+    fn a_plaintext_row_is_refused_rather_than_compared() {
+        // The panel used to accept this row, which re-created the hole the core closed.
+        assert_eq!(
+            verify("plaintext:admin", "admin"),
+            Err(PasswordError::PlaintextRefused)
+        );
     }
 
     #[test]
