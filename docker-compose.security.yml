@@ -253,7 +253,7 @@ services:
           # becomes /zap/wrk/zap/wrk/… and ZAP writes no report at all (measured on the pinned image).
           name="zap-baseline-$$(date -u +%Y%m%dT%H%M%SZ).json"
           zap-baseline.py -t "$$DAST_TARGET" -J "$$name" -T "$$DAST_MINUTES" -I \
-            || echo "zap: baseline exited $$? — the previous report stays the newest complete one"
+            || echo "zap: baseline exited $$? — the report may be partial, and the scanner will not resolve on it"
           find /zap/wrk -name 'zap-baseline-*.json' -mtime +14 -delete 2>/dev/null || true
         done
 
