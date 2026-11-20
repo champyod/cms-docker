@@ -89,6 +89,11 @@ many_findings() {
 
 two_findings
 mkdir -p "$WORK/rootfs" "$WORK/status" "$WORK/calls"
+# The all-mode's third producer: a report that maps to nothing, so the arm proves the source is
+# carried in the one fact without needing a second fixture vocabulary here.
+mkdir -p "$WORK/dast"
+printf '{"@version":"2.15.0","site":[{"@host":"contest.example.com","alerts":[]}]}\n' \
+  > "$WORK/dast/zap-baseline-1.json"
 
 # run_scan LOGNAME OUTCODE FAIL_AT STATUS_FILE MODE — the real scan.sh against the stubs.
 run_scan() {
@@ -105,6 +110,7 @@ run_scan() {
       TRIVY_REPORT="$WORK/trivy-report.json" CURL_STUB_DIR="$WORK/calls" \
       CURL_STUB_CODE="$code" CURL_STUB_FAIL_AT="$fail_at" \
       SRC_DIR="$WORK/src" \
+      DAST_REPORT_DIR="$WORK/dast" \
       sh "$SCAN" "$mode" > "$WORK/$1.log" 2>&1
     echo $? > "$WORK/$1.rc" )
 }
@@ -205,8 +211,8 @@ printf '{"results":[]}\n' > "$out"
 STUB
 chmod +x "$WORK/bin/osv-scanner"
 run_scan scan5 201 "" "$WORK/status/scan-all.json" all
-[[ "$(jq -r '.sources | map(.source) | join(",")' "$WORK/status/scan-all.json")" == "osv,rootfs" ]] \
-  && ok "both sources have a row in the one fact" || no "sources are $(jq -c '.sources' "$WORK/status/scan-all.json")"
+[[ "$(jq -r '.sources | map(.source) | join(",")' "$WORK/status/scan-all.json")" == "dast,osv,rootfs" ]] \
+  && ok "all three sources have a row in the one fact" || no "sources are $(jq -c '.sources' "$WORK/status/scan-all.json")"
 [[ "$(jq -r '.findings' "$WORK/status/scan-all.json")" == "2" ]] \
   && ok "findings adds both sources (2)" || no ".findings is $(jq -r '.findings' "$WORK/status/scan-all.json")"
 [[ "$(jq -r '.fixable' "$WORK/status/scan-all.json")" == "1" ]] \

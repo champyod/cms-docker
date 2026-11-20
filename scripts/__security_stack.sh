@@ -10,7 +10,7 @@
 #
 # THE INVARIANT: enabling these overlays must not touch anything serving contestants.
 #
-#   * the target set is an explicit service list (the eight overlay services), never "every service the
+#   * the target set is an explicit service list (the nine overlay services), never "every service the
 #     enabled profiles cover";
 #   * `--no-deps`, so a named service never drags a base service in behind it;
 #   * `up -d` only — no `down`, no `--force-recreate`, no `--build` when DEPLOYMENT_TYPE=img.
@@ -43,7 +43,7 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 # The overlay services, grouped by the profile that gates them. WHY grouped: the on-switch starts the
 # feed and its monitoring, and `--feed-only` has to be able to drop exactly the signal and nothing else.
 readonly MONITORING_SERVICES=(prometheus grafana node-exporter)
-readonly FEED_SERVICES=(renovate diun diun-bridge security-scan)
+readonly FEED_SERVICES=(renovate diun diun-bridge security-scan zap)
 readonly SIGNAL_SERVICES=(security-signal)
 readonly OVERLAY_PROFILES=(monitoring security security-signal)
 # The panel is the reader of PROMETHEUS_URL and the consumer of every push, so it is the container the
@@ -469,7 +469,7 @@ scripts/__security_stack.sh — turn the security stack on/off without touching 
 
   check      run the prerequisite gate and stop there (nothing is started)
   dry-run    print the resolved container set, ports, volumes and image digests; no side effects
-  up         check, then `up -d --no-deps` on the eight overlay services, then verify
+  up         check, then `up -d --no-deps` on the nine overlay services, then verify
   verify     post-start: overlay container states + 'prometheus' resolving from the panel
   off        stop the overlay containers only (findings and waivers survive in the panel database)
   print      print the exact docker compose invocation and exit

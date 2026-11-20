@@ -31,7 +31,7 @@ MAKEFILE=Makefile
 OVERLAY_SECURITY=docker-compose.security.yml
 OVERLAY_MONITORING=docker-compose.monitoring.yml
 
-TARGETS=(prometheus grafana node-exporter renovate diun diun-bridge security-scan security-signal)
+TARGETS=(prometheus grafana node-exporter renovate diun diun-bridge security-scan zap security-signal)
 BASE_SERVICES=(database admin-panel-next nginx-proxy worker monitor redis-rate-limit scheduler
   contest-web-server log-service resource-service scoring-service checker-service evaluation-service
   proxy-service admin-web-server ranking-web-server audit-retention)

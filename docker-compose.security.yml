@@ -12,7 +12,7 @@
 # redis-rate-limit, monitor and worker; a label is part of a container's config hash, so an unscoped
 # `--profile security up -d` RECREATES every one of them — a full restart of the panel, the proxy and
 # the database, on a box mid-contest, to turn on an optional feed. The supported command names the
-# eight overlay services explicitly and passes --no-deps.
+# nine overlay services explicitly and passes --no-deps.
 #
 # Disabled by default twice over: nothing here starts without its profile, and the long-running
 # containers do no work until SECURITY_ENABLED=1 — documented in config.toml.example [infra] beside
@@ -178,6 +178,9 @@ services:
       # The one writable mount: trivy's vulnerability DB cache, so a nightly run does not
       # re-download ~100 MB and a scan cannot touch anything else.
       - security-scan-cache:/var/cache/security-scan
+      # ZAP's reports, owned by the container that writes them. Read-only here: the dast mode
+      # reads the newest file and posts it, and has no business rewriting a report.
+      - dast-reports:/var/cache/security-scan/dast:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -194,6 +197,65 @@ services:
     networks:
       - cms-network
     command: ["schedule"]
+
+  # The passive DAST producer: ZAP's baseline scan of the public site. Passive ONLY — no
+  # zap-full-scan.py, no payloads, no authenticated crawl — because the target is a live contest
+  # site and an active scan there would be an attack on it, run nightly, by us.
+  #
+  # It writes a report and nothing else. The scanner reads that file and posts it through
+  # feed.sh like every other producer, so the feed keeps one HTTP path and one mapper per source.
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
+    container_name: cms-zap-baseline
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      # The public site the base stack serves; a deployment with a real domain sets this in
+      # .env.security. It has to resolve from inside the container — DAST is a view from outside.
+      DAST_TARGET: ${DAST_TARGET:-https://${CONTEST_DOMAIN:-contest.cms.local}}
+      # UTC start, ahead of the scanner's 03:00 run so that run reads tonight's report and not
+      # yesterday's. Off-peak: the spider is visible to contestants, so it runs at the quietest hour.
+      DAST_AT_UTC: ${DAST_AT_UTC:-02:20}
+      # -T: a hard ceiling on ZAP's start plus the passive scan, so a hung target cannot hold
+      # the report volume forever.
+      DAST_MINUTES: ${DAST_MINUTES:-20}
+    volumes:
+      # The only writable mount this service has, and the only file it leaves behind.
+      - dast-reports:/zap/wrk
+    # WHY root: the image runs as uid 1000 and Docker creates a named volume root-owned, so the
+    # report directory would not be writable. All capabilities are dropped and no host path is
+    # mounted; the container's only write target is the volume above.
+    user: "0"
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    entrypoint: ["/bin/sh", "-c"]
+    # WHY a loop and not cron: the image ships no crond, and zap-baseline.py exits when the scan
+    # ends, so the period has to come from the container — the same shape as renovate above.
+    command:
+      - |
+        if [ "$$SECURITY_ENABLED" != "1" ]; then
+          echo "zap: SECURITY_ENABLED=0 — idle"; exec sleep infinity
+        fi
+        while :; do
+          now=$$(date -u +%s)
+          at=$$(date -u -d "today $$DAST_AT_UTC" +%s 2>/dev/null || true)
+          if [ -z "$$at" ]; then at=$$((now + 86400)); fi
+          if [ "$$at" -le "$$now" ]; then at=$$((at + 86400)); fi
+          echo "zap: next passive scan $$(date -u -d @$$at +%Y-%m-%dT%H:%M:%SZ)"
+          sleep $$((at - now))
+          # WHY a bare filename: zap-baseline.py resolves -J inside /zap/wrk, so an absolute path
+          # becomes /zap/wrk/zap/wrk/… and ZAP writes no report at all (measured on the pinned image).
+          name="zap-baseline-$$(date -u +%Y%m%dT%H%M%SZ).json"
+          zap-baseline.py -t "$$DAST_TARGET" -J "$$name" -T "$$DAST_MINUTES" -I \
+            || echo "zap: baseline exited $$? — the previous report stays the newest complete one"
+          find /zap/wrk -name 'zap-baseline-*.json' -mtime +14 -delete 2>/dev/null || true
+        done
 
   # The security signal: the one external channel for the facts that must not wait (a lapsed waiver,
   # an unwaived CRITICAL, a stale or unreadable backup), deduplicated and rate-limited by the panel's
@@ -255,6 +317,8 @@ networks:
 volumes:
   diun-data:
     name: cms-diun-data
+  dast-reports:
+    name: cms-dast-reports
   renovate-cache:
     name: cms-renovate-cache
   security-scan-cache:

@@ -19,6 +19,8 @@ WORK_DIR="${WORK_DIR:-/tmp/security-scan}"
 # shellcheck source=/dev/null
 . "$LIB_DIR/feed.sh"
 # shellcheck source=/dev/null
+. "$LIB_DIR/dast-report.sh"
+# shellcheck source=/dev/null
 . "$LIB_DIR/scan-status.sh"
 # shellcheck source=/dev/null
 . "$LIB_DIR/dpkg-state.sh"
@@ -160,12 +162,43 @@ scan_rootfs() {
     [ "$complete" = "true" ]
 }
 
+# --------------------------------------------------------------------------- dast
+# The passive half of the scan: ZAP writes a report in its own container, this maps the newest one
+# and posts it. Nothing here speaks HTTP — feed_post is the one POST path.
+scan_dast() {
+    mkdir -p "$WORK_DIR"
+    findings="$WORK_DIR/dast-findings.json"
+    report=$(dast_newest_report "$DAST_REPORT_DIR")
+    complete=$(dast_complete "$report" "${DAST_MAX_AGE_HOURS:-26}")
+    if [ -z "$report" ] || ! jq -f "$LIB_DIR/zap.jq" "$report" > "$findings" 2>/dev/null; then
+        printf '[]\n' > "$findings"
+        complete=false
+    fi
+    count=$(jq 'length' "$findings")
+
+    # The scanned site, not this box: resolution is host-scoped, so a push labelled with the
+    # scanner's own name could never close the rows its findings carry. Restored before the status
+    # write, so the digest still names the box that ran it.
+    dast_host=$(dast_site_host "$report")
+    prev_host="${SECURITY_HOST:-}"
+    log "dast: $count findings from ${report:-no report} (complete=$complete, site=${dast_host:-unknown})"
+    [ -z "$dast_host" ] || SECURITY_HOST="$dast_host"
+    push_rc=0
+    feed_post dast "$findings" "$complete" || push_rc=$?
+    SECURITY_HOST="$prev_host"
+    scan_status_record dast "$count"
+    if [ "$push_rc" -ne 0 ]; then return "$push_rc"; fi
+    # complete:false resolved nothing, so a manual run exits non-zero, exactly as osv and rootfs do.
+    [ "$complete" = "true" ]
+}
+
 scan_all() {
     scan_status_reset
     rc=0
     scan_osv || rc=1
     scan_rootfs || rc=1
-    # One fact per run, covering both sources; a status write that fails never changes the scan's verdict.
+    scan_dast || rc=1
+    # One fact per run, covering every source; a status write that fails never changes the scan's verdict.
     scan_status_publish || true
     return "$rc"
 }
@@ -211,6 +244,7 @@ run_bridge() {
 case "$MODE" in
     osv) scan_one osv ;;
     rootfs) scan_one rootfs ;;
+    dast) scan_one dast ;;
     all) scan_all ;;
     schedule) run_schedule ;;
     diun-bridge) run_bridge ;;

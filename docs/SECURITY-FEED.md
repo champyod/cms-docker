@@ -13,7 +13,7 @@ The other standing rule: **one source of truth per fact.** The feed has exactly 
 **one** ingest endpoint, **one** findings table, and **one** waiver table. A producer never writes the
 database directly and never keeps its own copy of what it reported.
 
-## Producers (four, all containers)
+## Producers (five, all containers)
 
 | producer | answers | cadence | what it emits |
 |---|---|---|---|
@@ -21,6 +21,7 @@ database directly and never keeps its own copy of what it reported.
 | **osv-scan** (`ghcr.io/google/osv-scanner`) | "**our own dependencies** have a known advisory" — `osv-scanner scan source -r` over the checked-out tree (bun.lock, constraints.txt, Cargo.lock) against the OSV database | nightly + on demand | JSON → `POST` (this is the half Renovate cannot deliver: an advisory without a version bump) |
 | **Diun** (`crazymax/diun`) | "the image I am **running** is not the digest the registry now serves" — Docker provider, local socket | `DIUN_WATCH_SCHEDULE`, default every 6 h | webhook POST on `new`/`update` |
 | **rootfs-scan** (`ghcr.io/aquasecurity/trivy`, same binary as `aquasec/trivy`) | "the **host's own** OS packages have CVEs" — without installing anything on it | nightly + on demand | JSON from `trivy rootfs` POSTed to the panel |
+| **dast** (`ghcr.io/zaproxy/zaproxy`) | "the **running web app** is missing a hardening header / cookie flag" — `zap-baseline.py` against the public site, **passive only** | nightly, `DAST_AT_UTC` | JSON report on a volume → the scanner's `dast` mode POSTs it |
 
 Verified while writing this, not recalled:
 
@@ -56,6 +57,29 @@ host's package database instead of walking every file under `/home`.
   silently clear the box's CVE list. The rootfs producer therefore pushes `complete: false` (or exits non-zero and
   pushes nothing) whenever the package database was not read. The same rule binds the osv producer: `complete:
   true` only on exit 0 with a parsable report.
+
+## Passive DAST — the one producer that talks to a live site
+
+`zap-baseline.py` only. **No** `zap-full-scan.py`, no attack payloads, no authenticated crawl: the
+target is the contest site, and an active scan there would be an attack on it, run nightly, by us.
+The compose service pins the image by digest, runs `-I` (a warning is a finding, not a failed
+container) and `-T` (a hard ceiling on ZAP start plus the passive pass), drops every capability and
+mounts exactly one volume.
+
+- **It writes, it does not post.** The report lands on `cms-dast-reports`, which the scanner mounts
+  read-only; `security-scan dast` maps the newest file (`lib/zap.jq`) and posts it through the same
+  `feed_post` as every other producer. One HTTP path, one mapper per source.
+- **The key is `pluginid|normalised url`** — scheme and host lowercased, query string, fragment and
+  trailing slash dropped. That is what makes a rescan of the same site rewrite rows instead of
+  minting new ones.
+- **Severity:** ZAP's High/Medium/Low/Informational map to HIGH/MEDIUM/LOW/LOW, and a word the
+  mapper does not know becomes UNKNOWN — never dropped, never promoted.
+- **`complete: true` needs evidence:** a report that is missing, older than `DAST_MAX_AGE_HOURS`
+  (default 26) or names no site is pushed as `complete: false`, so an unreachable target cannot
+  mark every web finding resolved.
+- **The envelope, not the box, names the site** (`contest.example.com`): resolution is host-scoped,
+  so a push labelled with the scanner's hostname would never close the rows its own findings carry.
+  The scan-status fact still names the box the run happened on.
 
 ## Host kernel module state (one optional field)
 
@@ -139,11 +163,11 @@ evidence wins, and the push's response counts those reports as `held`.
 
 ### Ingest
 
-`POST /api/security/findings` — one endpoint, all three producers.
+`POST /api/security/findings` — one endpoint, every producer that pushes.
 
 - Auth: `Authorization: Bearer ${SECURITY_FEED_TOKEN}`; the route rejects with 401 otherwise, and the token
   is compared in constant time. No cookie/session path — this is machine-to-machine inside the tailnet.
-- Body: `{ "source": "diun|rootfs|osv", "host": "<name>", "findings": [ … ], "complete": true,
+- Body: `{ "source": "diun|rootfs|osv|dast", "host": "<name>", "findings": [ … ], "complete": true,
   "run_started_at": "2026-10-25T10:00:00Z" }`.
   `run_started_at` is **required** — the instant the producing run began, sent with every push of that run.
   `complete: true` licenses the route to resolve this source's findings (`host`-scoped when the push names
