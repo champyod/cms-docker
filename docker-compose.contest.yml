@@ -129,7 +129,7 @@ services:
 
   # Optional: Nginx reverse proxy for contest web server
   nginx-proxy:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
     container_name: cms-nginx-contest
     restart: on-failure:5
     depends_on:

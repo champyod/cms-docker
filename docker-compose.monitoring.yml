@@ -8,7 +8,7 @@
 
 services:
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v2.55.1@sha256:2659f4c2ebb718e7695cb9b25ffa7d6be64db013daba13e05c875451cf51b0d3
     container_name: grader-prometheus
     restart: on-failure:5
     profiles:
@@ -34,7 +34,7 @@ services:
       start_period: 15s
 
   grafana:
-    image: grafana/grafana:11.2.2
+    image: grafana/grafana:11.6.16@sha256:d67af92050b8d93b393dc741864752a69c9da1ffa39c1bb9af49ad5d9e47d2c3
     container_name: grader-grafana
     restart: on-failure:5
     profiles:
@@ -67,7 +67,7 @@ services:
       start_period: 20s
 
   node-exporter:
-    image: prom/node-exporter:v1.8.2
+    image: prom/node-exporter:v1.13.1@sha256:7296504d4ada44b7d7ab4431e27e9f9900d8488f8d55842f4b12ae2704e16dfe
     container_name: grader-node-exporter
     restart: on-failure:5
     profiles:

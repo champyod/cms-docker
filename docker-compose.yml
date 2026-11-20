@@ -8,7 +8,7 @@ services:
 
   # PostgreSQL Database
   database:
-    image: postgres:15
+    image: postgres:15@sha256:10f9e886f772e9d6484350b043bcf990ead67ae5d9988ddce265d72a299055d5
     container_name: cms-database
     restart: on-failure:5
     profiles:
@@ -358,7 +358,7 @@ services:
 
   # Optional: Nginx reverse proxy for contest web server (TLS via ENABLE_TLS=true)
   nginx-proxy:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
     container_name: cms-nginx-contest
     restart: on-failure:5
     profiles:

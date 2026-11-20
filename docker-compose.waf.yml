@@ -30,7 +30,7 @@
 
 services:
   grader-waf:
-    image: owasp/modsecurity-crs:nginx-alpine
+    image: owasp/modsecurity-crs:nginx-alpine@sha256:f7b4ec036553aa65e65fe792394099f597d6130465e63ff58d84f087617f5412
     container_name: grader-waf
     restart: on-failure:5
     profiles:

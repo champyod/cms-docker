@@ -1,6 +1,6 @@
 services:
   testdb:
-    image: docker.io/postgres:15
+    image: docker.io/postgres:15@sha256:10f9e886f772e9d6484350b043bcf990ead67ae5d9988ddce265d72a299055d5
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
 
