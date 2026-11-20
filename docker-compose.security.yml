@@ -228,6 +228,10 @@ services:
     # report directory would not be writable. All capabilities are dropped and no host path is
     # mounted; the container's only write target is the volume above.
     user: "0"
+    # The image's healthcheck probes a ZAP daemon this service never starts: it is a batch loop,
+    # so an inherited probe reports a healthy wait as unhealthy and wakes the operator for nothing.
+    healthcheck:
+      disable: true
     cap_drop:
       - ALL
     security_opt:
