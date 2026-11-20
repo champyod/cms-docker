@@ -22,6 +22,28 @@ function json(body: Record<string, unknown>, status: number): NextResponse {
   return NextResponse.json(body, { status });
 }
 
+// WHY a bounded reader instead of request.text(): text() buffers the whole body before any
+// length check runs, so a chunked request with no content-length could exhaust the panel's heap
+// and take the admin surface down mid-contest. This refuses as soon as the cap is crossed.
+async function readBoundedBody(request: NextRequest, limit: number): Promise<string | null> {
+  const stream = request.body;
+  if (stream === null) return '';
+  const reader = stream.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > limit) {
+      await reader.cancel().catch(() => undefined);
+      return null;
+    }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 function declaredTooLarge(request: NextRequest): boolean {
   const declared = request.headers.get('content-length');
   if (declared === null) return false;
@@ -47,15 +69,15 @@ async function handlePush(request: NextRequest): Promise<NextResponse> {
     return json({ success: false, error: `Body exceeds ${MAX_BODY_BYTES} bytes` }, 413);
   }
 
-  let raw: string;
+  let raw: string | null;
   try {
-    raw = await request.text();
+    raw = await readBoundedBody(request, MAX_BODY_BYTES);
   } catch {
     return json({ success: false, error: 'Body could not be read' }, 422);
   }
-  // Why the byte length and not `raw.length`: a multi-byte character counts once in JS but
-  // occupies more than one byte on the wire, so the cap has to measure what was sent.
-  if (Buffer.byteLength(raw, 'utf8') > MAX_BODY_BYTES) {
+  // WHY the cap counts bytes read rather than `raw.length`: a multi-byte character counts once
+  // in JS but occupies more than one byte on the wire, so the limit has to measure what was sent.
+  if (raw === null) {
     return json({ success: false, error: `Body exceeds ${MAX_BODY_BYTES} bytes` }, 413);
   }
 

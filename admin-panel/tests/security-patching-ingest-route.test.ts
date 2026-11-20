@@ -566,4 +566,30 @@ describe('security feed ingest route', () => {
     const entry = mocks.recordAudit.mock.calls.at(-1)?.[0] as { afterValues?: Record<string, unknown> };
     expect(entry.afterValues).toMatchObject({ host: 'box-a', run_started_at: RUN_STARTED_AT, complete: false });
   });
+
+  it('refuses an oversized chunked body while reading it, not after buffering it', async () => {
+    // No content-length, so the declared-size fast path cannot fire: only the bounded reader can.
+    // A body that keeps coming must be cut near the cap rather than read to the end and dropped.
+    const { MAX_BODY_BYTES } = await import('@/lib/security/patching-feed-push');
+    const chunk = new Uint8Array(64 * 1024);
+    let served = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        served += 1;
+        controller.enqueue(chunk);
+      },
+    });
+    const request = new Request('http://localhost/api/security/findings', {
+      method: 'POST',
+      headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit);
+
+    const result = await call(request);
+
+    expect(result.status).toBe(413);
+    // The cap is crossed somewhere in the teens of 64 KiB chunks; serving hundreds proves buffering.
+    expect(served).toBeLessThan(40);
+  });
 });
