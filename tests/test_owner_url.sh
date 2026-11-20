@@ -16,8 +16,8 @@ out="$(url container POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d)"
 [[ "$out" == "postgresql://u:p@database:5432/d" ]] && ok "container URL" || no "container URL was: $out"
 
 printf '\nthe host side addresses the published interface, never localhost\n'
-out="$(url host POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d DB_BIND_IP=100.114.35.41 POSTGRES_PORT_EXTERNAL=5432)"
-[[ "$out" == "postgresql://u:p@100.114.35.41:5432/d" ]] && ok "uses DB_BIND_IP" || no "host URL was: $out"
+out="$(url host POSTGRES_USER=u POSTGRES_PASSWORD=p POSTGRES_DB=d DB_BIND_IP=203.0.113.10 POSTGRES_PORT_EXTERNAL=5432)"
+[[ "$out" == "postgresql://u:p@203.0.113.10:5432/d" ]] && ok "uses DB_BIND_IP" || no "host URL was: $out"
 [[ "$out" != *localhost* ]] && ok "never says localhost" || no "still says localhost"
 
 printf '\nand falls back to loopback only when nothing binds elsewhere\n'

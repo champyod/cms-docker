@@ -23,8 +23,8 @@ afterEach(async () => {
 
 describe('readFrontVhosts', () => {
   it('reads the labelled entries and the bare hostnames the sync published', async () => {
-    const root = await repoWith('primary|cms.mwit.ac.th|/ /admin\nadmin.cms.mwit.ac.th\n');
-    expect(await readFrontVhosts(root)).toEqual(['primary|cms.mwit.ac.th|/ /admin', 'admin.cms.mwit.ac.th']);
+    const root = await repoWith('primary|cms.example.com|/ /admin\nadmin.example.com\n');
+    expect(await readFrontVhosts(root)).toEqual(['primary|cms.example.com|/ /admin', 'admin.example.com']);
   });
 
   it('reads nothing when the sync has never written the file', async () => {

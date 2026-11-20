@@ -35,16 +35,16 @@ describe('mapEmitterRowsToNodes', () => {
 
   it('reads an absent-but-reachable remote shard as connected', () => {
     const [node] = mapEmitterRowsToNodes(
-      [{ shard: 4, endpoint: '100.75.203.112:26004', state: 'absent', health: 'none', activity: 'unknown', reachable: true }],
+      [{ shard: 4, endpoint: '203.0.113.11:26004', state: 'absent', health: 'none', activity: 'unknown', reachable: true }],
       {}
     );
-    expect(node).toMatchObject({ connection: 'connected', reachable: true, host: '100.75.203.112', port: 26004 });
+    expect(node).toMatchObject({ connection: 'connected', reachable: true, host: '203.0.113.11', port: 26004 });
   });
 
   it('keeps absent-unreachable and exited shards disconnected', () => {
     const nodes = mapEmitterRowsToNodes(
       [
-        { shard: 5, endpoint: '100.75.203.112:26005', state: 'absent', health: 'none', activity: 'unknown', reachable: false },
+        { shard: 5, endpoint: '203.0.113.11:26005', state: 'absent', health: 'none', activity: 'unknown', reachable: false },
         { shard: 0, endpoint: 'cms-worker-0:26000', state: 'exited', health: 'none', activity: 'erroring', reachable: false },
       ],
       {}

@@ -136,7 +136,7 @@ Check it, and read the same facts the script acted on:
 cat config/admin-panel-colour                                            # the colour serving now
 docker ps --format '{{.Names}}' | grep '^cms-admin-panel'                # exactly one running
 docker inspect --format '{{.State.Health.Status}}' "cms-admin-panel-$(cat config/admin-panel-colour)"
-curl -fsS -o /dev/null -w 'admin: %{http_code}\n' https://admin.cms.mwit.ac.th/en/auth/login   # 200
+curl -fsS -o /dev/null -w 'admin: %{http_code}\n' https://admin.example.com/en/auth/login   # 200
 ```
 
 `config/admin-panel-colour` is the front's source of truth and outranks `ADMIN_PANEL_COLOUR`
@@ -158,7 +158,7 @@ deploy.
 > |---|---|---|
 > | **F1 funnel → the front** | point `tailscale serve` at the nginx vhost that already renders the colour, instead of at the panel's published port | needs an nginx `server_name` for the funnel host, or a `Host` rewrite; the panel's port stops mattering at all (which also satisfies H5) |
 > | **F2 publish the active colour** | render the `8891` entry for whichever colour is current, and let the swap recreate that binding | a port cannot be bound twice, so the two colours cannot overlap on `8891`: that path blips for the recreate it takes |
-> | **F3 accept it** | use `https://admin.cms.mwit.ac.th` for the panel, and treat `8443` as serving colour A only | nothing to build; the funnel is stale after any swap |
+> | **F3 accept it** | use `https://admin.example.com` for the panel, and treat `8443` as serving colour A only | nothing to build; the funnel is stale after any swap |
 >
 > Until one is chosen, swap with F3's assumption in mind: verify the panel on its public host, not
 > on `8443`.
@@ -166,8 +166,8 @@ deploy.
 **5 · Verify the two fixes this deploy carries**
 
 ```bash
-curl -sk -o /dev/null -w 'login page: %{http_code}\n' https://admin.cms.mwit.ac.th/en/auth/login   # 200
-curl -sk -o /dev/null -D - https://admin.cms.mwit.ac.th/login | grep -i '^location'               # /en/auth/login
+curl -sk -o /dev/null -w 'login page: %{http_code}\n' https://admin.example.com/en/auth/login   # 200
+curl -sk -o /dev/null -D - https://admin.example.com/login | grep -i '^location'               # /en/auth/login
 ```
 
 The second line is the `/login` dead-end fix (`32082e3e`): before it, `/login` → `/en/login` → 404; after
@@ -216,7 +216,7 @@ Roll back the panel by pointing the service at the old digest in an override fil
 - **CI is green on the current tip.** Trivy's `CVE-2026-78661` was cleared by the waiver that landed after
   this runbook was first written; the last run on `a6c73203` reported every job successful.
 - nginx listens on `10.40.50.120:80/443` only and the session cookie is `Secure`, so the panel is used over
-  **https://admin.cms.mwit.ac.th**. `http://100.114.35.41:8891` can never hold a login.
+  **https://admin.example.com**. `http://203.0.113.10:8891` can never hold a login.
 - `cms-admin-panel-next` (colour a) is the only colour that publishes a host port, so `:8891`
   follows colour a and not the live colour. The admin URL above goes through
   `grader-nginx-proxy`, which the swap re-renders and reloads live; the contest/funnel proxy
