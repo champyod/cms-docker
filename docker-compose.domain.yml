@@ -5,7 +5,7 @@
 
 services:
   nginx-proxy:
-    image: nginx:alpine
+    image: nginx:alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
     container_name: grader-nginx-proxy
     restart: on-failure:5
     depends_on: []
@@ -39,7 +39,7 @@ services:
       - "${DOMAIN_NGINX_HTTPS_PORT:-443}:443"
 
   certbot:
-    image: certbot/certbot
+    image: certbot/certbot@sha256:c5698da859429ccee0fcc299a8000368198222d1f9e789ab6e388b491e8ce06d
     container_name: grader-certbot
     restart: on-failure:5
     volumes:
@@ -48,7 +48,7 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
 
   redis-rate-limit:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     container_name: grader-redis-rate-limit
     restart: on-failure:5
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
@@ -98,7 +98,7 @@ services:
   # Single source of truth is docker-compose.vault.yml — this inline entry mirrors it for convenience.
   # Secrets at VAULT_PATH (secret/cms); token at VAULT_TOKEN — both gitignored via .env.local
   vault-inline:
-    image: hashicorp/vault:1.15
+    image: hashicorp/vault:1.21@sha256:4e33b126a59c0c333b76fb4e894722462659a6bec7c48c9ee8cea56fccfd2569
     container_name: grader-vault-inline
     restart: on-failure:5
     profiles:

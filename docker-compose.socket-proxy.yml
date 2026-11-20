@@ -5,7 +5,7 @@
 
 services:
   socket-proxy:
-    image: tecnativa/docker-socket-proxy
+    image: tecnativa/docker-socket-proxy@sha256:be1ac64f33bd82043beb504822a17ba6b71668ea1ad7cf51a9a01d27bb7ab047
     container_name: cms-socket-proxy
     restart: on-failure:5
     volumes:

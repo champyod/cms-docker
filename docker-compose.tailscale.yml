@@ -7,7 +7,7 @@ version: '3.8'
 services:
   # Tailscale container with Funnel enabled
   tailscale:
-    image: tailscale/tailscale:latest
+    image: tailscale/tailscale:latest@sha256:72c1e19e0aedca96b8533bbb0b4368564410ff20b17e53b804eb6c1f04a31be4
     container_name: cms-tailscale
     hostname: ${TAILSCALE_HOSTNAME:-cms-contest}
     restart: unless-stopped
