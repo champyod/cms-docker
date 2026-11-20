@@ -92,7 +92,7 @@ export function makeSignalFacts(
   waivers: readonly PatchingWaiver[] = [],
   flips: WaivedReachable = { count: 0, worst: null },
 ): PatchingSignalFacts {
-  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0 };
+  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0, dast: 0 };
   const bySeverity: Record<PatchingSeverity, number> = {
     CRITICAL: 0,
     HIGH: 0,

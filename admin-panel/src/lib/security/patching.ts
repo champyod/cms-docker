@@ -7,7 +7,7 @@ import { isReachability, type Reachability } from '@/lib/security/kernel-reachab
 // these constants and the page renders their order, so a new source or severity is one
 // edit rather than a second list that drifts. The contract (docs/SECURITY-FEED.md) fixes
 // the source enum; extending it is a contract change, not a panel decision.
-export const PATCHING_SOURCES = ['diun', 'rootfs', 'osv'] as const;
+export const PATCHING_SOURCES = ['diun', 'rootfs', 'osv', 'dast'] as const;
 export type PatchingSource = (typeof PATCHING_SOURCES)[number];
 
 export const PATCHING_SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'] as const;
@@ -117,7 +117,7 @@ export interface PatchingFindingCounts {
 
 /** The four card numbers for a feed in which nothing is unresolved and nothing is waived. */
 export const EMPTY_PATCHING_COUNTS: PatchingFindingCounts = {
-  bySource: { diun: 0, rootfs: 0, osv: 0 },
+  bySource: { diun: 0, rootfs: 0, osv: 0, dast: 0 },
   rootfsWithAvailable: 0,
 };
 

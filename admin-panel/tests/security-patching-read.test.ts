@@ -230,7 +230,7 @@ describe('query validation and the clamp', () => {
     expect(state.page.query.source).toBe('all');
     expect(state.page.query.severity).toBe('all');
     const where = lastFindingQuery().where ?? {};
-    expect(where.source).toEqual({ in: ['diun', 'rootfs', 'osv'] });
+    expect(where.source).toEqual({ in: ['diun', 'rootfs', 'osv', 'dast'] });
     expect(where.severity).toBeUndefined();
   });
 

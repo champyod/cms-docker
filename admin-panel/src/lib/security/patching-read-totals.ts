@@ -28,7 +28,7 @@ export interface FeedTotals {
 
 /** The per-family counts the four cards read; a family outside the enum is not counted into a card. */
 export function tallyBySource(rows: readonly SourceTallyRow[]): Record<PatchingSource, number> {
-  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0 };
+  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0, dast: 0 };
   for (const row of rows) {
     if (isPatchingSource(row.source)) bySource[row.source] = row._count._all;
   }
@@ -44,7 +44,7 @@ export function tallyFeedTotals(rows: readonly SeverityTallyRow[]): FeedTotals {
     LOW: 0,
     UNKNOWN: 0,
   };
-  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0 };
+  const bySource: Record<PatchingSource, number> = { diun: 0, rootfs: 0, osv: 0, dast: 0 };
   let unrated = 0;
   for (const row of rows) {
     if (!isPatchingSource(row.source)) continue;

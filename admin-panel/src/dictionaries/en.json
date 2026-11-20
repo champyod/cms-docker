@@ -1286,7 +1286,8 @@
       "sources": {
         "diun": "Container images",
         "rootfs": "Host OS packages",
-        "osv": "Project dependencies"
+        "osv": "Project dependencies",
+        "dast": "Running web app"
       },
       "columns": {
         "severity": "Severity",
