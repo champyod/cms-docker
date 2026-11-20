@@ -8,7 +8,7 @@ import { RankingScoreboard } from './RankingScoreboard';
 import { useRankingRows, type RankingSnapshot } from './useRankingRows';
 
 export function RankingClient() {
-  const [baseUrl, setBaseUrl] = useState('http://100.114.35.41:8890');
+  const [baseUrl, setBaseUrl] = useState('http://203.0.113.10:8890');
   const [username, setUsername] = useState('rank');
   const [password, setPassword] = useState('');
   const [connected, setConnected] = useState(false);

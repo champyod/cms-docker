@@ -56,7 +56,7 @@ Commands:
   funnel setup|passwd|remove|status
                             public ts.net access behind basic auth (no tailnet)
   domain setup|status|renew|preflight
-                            grader.mwit.ac.th HTTPS domain lifecycle (TLS+Nginx+certs)
+                            grader.example.com HTTPS domain lifecycle (TLS+Nginx+certs)
   contest create            create contests from YAML
   update-server             shard-aware server update flow
 
