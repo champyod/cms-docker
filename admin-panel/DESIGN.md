@@ -143,7 +143,50 @@ QoL is not "small tweaks": it is friction removed, and the unit is time, keystro
 | Filters, sort and selection survive a reload | state that dies on refresh is not a feature |
 | Measure it: time-to-task, keystrokes, clicks, errors — before and after, with the command that measured it | otherwise QoL is an opinion |
 
-## 12. How this law is checked — instruments, not adjectives
+## 13. Space is allocated by importance, not left over
+
+- The content column has a **maximum width** (1180px here). A full-bleed row on a 1440 screen
+  produces a hole between its groups, and a hole reads as an unfinished page.
+- The **largest area holds the decision**, not the prettiest picture: eye-tracking on dashboard
+  layouts shows the first fixations land top-left and follow the block order, so the block with the
+  action comes first and the block with context second (TVCG 2025; MDPI *Sensors* 2024).
+- A row with three groups (facts · cause · actions) distributes with **equal gaps**; two groups with
+  a `1fr` track leaves the slack as dead space in the middle.
+- Vertical rhythm: the gap **above** a section is larger than the gap **inside** it — proximity is
+  what makes the grouping legible (NN/g, Gestalt proximity).
+
+## 14. Every fact appears once
+
+Write the page's facts down before building it, then check each one's occurrence count. A second
+mention is a **link**, not a repetition: the same queue number stated in a KPI strip and again in a
+row asserts two facts where there is one. If a value has to appear twice, the second appearance is a
+navigational reference with a label, not a number.
+
+## 15. A label sits with what it names
+
+- Label **above** its value, unit in the label, one noun per label ("Median grading time", not "Median
+  grade time"; "Backlog growth", not "Growth").
+- The distance from a label to its own value must be **smaller than to any other value** — proximity
+  beats colour and shape as a grouping cue (NN/g).
+- **One word may not carry two meanings on a page**: a column called `Waiting` for age and a field
+  called `Waiting` for queue depth are two different facts wearing one label.
+- A time belongs to the event it times: `since 13:42` goes with the thing that has been down, not
+  with the number beside it.
+
+## 16. No sentence where a pair will do
+
+Information is **label + value**. A sentence is allowed only for a cause that a pair cannot express,
+one clause long, and never underneath a number: `normal 0 · since 13:42` is two pairs pretending to
+be a sentence; `Scoring is down` + `contest 9 · since 13:42` is a pair and a fact.
+
+## 17. One colour channel per region
+
+Severity is carried by **one** colour channel plus the word: a row tint **or** a dot, never both.
+A dot is legitimate where it is the only colour channel (a status strip with no tint), and the word
+still has to be there — colour alone is never the carrier (WCAG 1.4.1). Carbon's status indicators
+change shape *and* colour for the same reason.
+
+## 18. How this law is checked — instruments, not adjectives
 
 | Check | Instrument | Fails when |
 |---|---|---|
@@ -157,6 +200,11 @@ QoL is not "small tweaks": it is friction removed, and the unit is time, keystro
 | re-entry | the flow walked twice | any value asked for twice (WCAG 3.3.7) |
 | undo | the destructive action performed | no undo path, or undo lost after navigation |
 | freshness | the surface read | no timestamp of when the data was read |
+| fact count | the fact list written before the build, then counted on the page | any fact appearing twice |
+| label meaning | every label read aloud without its value | a label that cannot be named, or one word used for two facts |
+| prose under a number | the block read | a sentence where a label/value pair would say it |
+| colour channels per state | counted per region | a tint and a dot carrying the same state |
+| content width | measured `getBoundingClientRect` of the content column | full-bleed groups with a gap wider than 15% of the row |
 | colour | `grep -rn '#[0-9a-fA-F]\{6\}' src --include=*.tsx` outside the token block | one literal |
 | colour meaning | the same element type sampled across pages | the same kind varies in colour |
 | density | content height ÷ viewport, lines counted | a page over ~40 content lines with no chart |

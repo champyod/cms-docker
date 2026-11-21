@@ -94,6 +94,19 @@ nobody chose, in marketing surfaces. A deliberate token used with one role is no
 | §11 quality of life: bulk (selection/preview/undo), shortcuts shown, no redundant entry, drag alternatives | APA, WCAG, Linear/Gmail cases, expert-pathway |
 | §8 numeric checks (24 px targets, 3:1 focus, overflow, contrast, freshness) | WCAG 2.2 |
 
+## 5. Space, labels, and the status dot
+
+| Source | The example or number | Rule |
+|---|---|---|
+| Tufts, *Dashboard Vision* (IEEE TVCG 2025) — eye-tracking, 16 dashboards, all participants | first fixations land top-left and follow the block order the layout implies; layout design changes what is seen at all | §13 the decision block is largest and first |
+| MDPI *Sensors* 2024, "Effects of Layout Order on Interface Complexity" | four eye-movement measures over layouts of different order and complexity: layout order changes search time | §13 order before decoration |
+| IBM Carbon, Data Visualization / dashboards | most important data gets the highest contrast and the largest area | §13 |
+| NN/g, *Proximity Principle in Visual Design* | items near each other are perceived as one group; proximity **overpowers** colour and shape similarity | §13 rhythm, §15 label-to-value distance |
+| NN/g, *Group Form Elements Effectively Using White Space* | a label must sit closer to its own field than to any other; top-aligned labels scan better than right-aligned | §15 |
+| NN/g, *Text Scanning Patterns* / *F-Shaped Pattern* | people scan, they do not read: first words of a line carry the recognition | §16 label/value over sentences |
+| IBM Carbon, Status indicator pattern | severity is communicated by distinct **shapes** and colours, not a dot alone | §17 |
+| W3C WCAG 1.4.1 Use of Color | colour may not be the only visual means of conveying information | §17 the word is mandatory, and only one colour channel per region |
+
 ## What is still open
 
 - **Density has no measured ceiling.** Tufte and Few both stop at "within reason"; the 40-content-line
