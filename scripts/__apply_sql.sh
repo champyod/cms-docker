@@ -65,6 +65,36 @@ if [[ -z "$CMS_BACKUP_PASSWORD" ]]; then
   log_warn "POSTGRES_BACKUP_PASSWORD empty — run './cms config sync' to generate it; continuing with available values"
 fi
 
+# The three admin-role credentials. Empty is tolerated: the password SQL only sets a role whose
+# setting is non-empty, so an ungenerated secret leaves that role's credential untouched.
+ADMIN_LOGIN_PASSWORD="$(get_env_val "ADMIN_LOGIN_PASSWORD" "$ENV_FILE")"
+ADMIN_READ_PASSWORD="$(get_env_val "ADMIN_READ_PASSWORD" "$ENV_FILE")"
+ADMIN_SECURITY_PASSWORD="$(get_env_val "ADMIN_SECURITY_PASSWORD" "$ENV_FILE")"
+if [[ -z "$ADMIN_LOGIN_PASSWORD" || -z "$ADMIN_READ_PASSWORD" || -z "$ADMIN_SECURITY_PASSWORD" ]]; then
+  log_warn "ADMIN_*_PASSWORD empty — run './cms config sync' to generate them; those roles keep PASSWORD NULL"
+fi
+
+# WHY: production cmsuser is NOCREATEROLE, so role DDL and ALTER ROLE ... PASSWORD cannot run as
+# it. The postgres image trusts local socket connections, so the superuser phase needs no password.
+docker_exec_db_superuser() {
+  docker exec -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" "$@"
+}
+
+# WHY the fallback: a fresh install's image makes POSTGRES_USER (cmsuser) the only superuser and
+# creates no postgres role, and that cmsuser can still create roles until the hardening migration.
+bootstrap_psql() {
+  if [[ "${BOOTSTRAP_AS_POSTGRES:-0}" -eq 1 ]]; then
+    docker_exec_db_superuser "$@"
+  else
+    docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" "$@"
+  fi
+}
+
+# A file whose header carries the marker needs the superuser phase; the normal apply skips it.
+superuser_only_file() {
+  grep -qE '^--[[:space:]]*superuser-only([[:space:]]|$)' "$1"
+}
+
 # Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
   if [[ "$PRE_PUSH" -eq 1 ]]; then
@@ -93,6 +123,9 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
   if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+    -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+    -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+    -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
     log_warn "failed to apply $CAPTURE_FILE — continuing (prisma db push must still run)"
   else
@@ -110,6 +143,10 @@ fi
 # future file that might mention CREATE ROLE in a comment while being RLS-related.
 # Comment lines are stripped for the RLS check to avoid false positives from
 # explanatory comments (e.g., backup_role mentions RLS in its header comment).
+# WHY the superuser phase: the application role is NOCREATEROLE in production, so no
+# CREATE ROLE / ALTER ROLE ... PASSWORD it runs can succeed. Files marked
+# `-- superuser-only` are selected here as well as the role-definition files.
+# A deployment with no postgres role (fresh install) falls back to POSTGRES_USER.
 if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
   if [[ ! -d "$SQL_DIR" ]]; then
     log_info "no $SQL_DIR directory — nothing to apply"
@@ -123,7 +160,7 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
   fi
   SQL_FILES=()
   for _f in "${_ALL_SQL[@]}"; do
-    if ! grep -q "CREATE ROLE" "$_f"; then
+    if ! grep -q "CREATE ROLE" "$_f" && ! superuser_only_file "$_f"; then
       log_info "skipping non-role file $_f"
       continue
     fi
@@ -139,12 +176,22 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
     log_info "no role SQL files in $SQL_DIR — nothing to apply"
     exit 0
   fi
-  log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER (bootstrap)..."
+  BOOTSTRAP_AS_POSTGRES=0
+  if docker exec -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" -tAc 'SELECT 1' >/dev/null 2>&1; then
+    BOOTSTRAP_AS_POSTGRES=1
+  else
+    log_warn "no local postgres superuser in $DB_CONTAINER — applying role files as $DB_USER (fresh install: it is still superuser)"
+  fi
+  BOOTSTRAP_USER="postgres"
+  [[ "$BOOTSTRAP_AS_POSTGRES" -eq 1 ]] || BOOTSTRAP_USER="$DB_USER"
+  log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER as ${BOOTSTRAP_USER} (bootstrap)..."
   for sql_file in "${SQL_FILES[@]}"; do
     log_info "→ $sql_file"
-    if ! docker_exec_db "$DB_PASS" -i \
-      "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
+    if ! bootstrap_psql -v ON_ERROR_STOP=1 \
       -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+      -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+      -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+      -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
       -f - < "$sql_file"; then
       log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
     fi
@@ -159,7 +206,17 @@ if [[ ! -d "$SQL_DIR" ]]; then
 fi
 
 # shellcheck disable=SC2207
-mapfile -t SQL_FILES < <(find "$SQL_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+mapfile -t _NORMAL_SQL < <(find "$SQL_DIR" -maxdepth 1 -type f -name '*.sql' | sort)
+# WHY skip marker files: the normal apply runs as the application role, which is NOCREATEROLE in
+# production, so a superuser-only file would only fail here; --bootstrap-roles applied it already.
+SQL_FILES=()
+for _f in "${_NORMAL_SQL[@]}"; do
+  if superuser_only_file "$_f"; then
+    log_info "skipping superuser-only file $_f (applied by --bootstrap-roles as postgres)"
+    continue
+  fi
+  SQL_FILES+=("$_f")
+done
 if [[ ${#SQL_FILES[@]} -eq 0 ]]; then
   log_info "no .sql files in $SQL_DIR — nothing to apply"
   exit 0
@@ -172,6 +229,9 @@ for sql_file in "${SQL_FILES[@]}"; do
   if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
+    -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
+    -v "admin_read_password=$ADMIN_READ_PASSWORD" \
+    -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
     -f - < "$sql_file"; then
     log_die "failed to apply $sql_file" 1
   fi

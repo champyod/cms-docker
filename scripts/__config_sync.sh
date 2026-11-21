@@ -252,6 +252,11 @@ generate_secret_for() {
     # to invent and only has to be unpredictable, whereas the CAPTCHA secret is issued
     # by a provider and random hex can never authenticate against its API.
     RANKING_SESSION_SECRET) gen_hex32 ;;
+    # WHY generated here: each admin role connects with its own credential, so the secret has to
+    # exist in .env before the SQL apply can set that role's password.
+    ADMIN_LOGIN_PASSWORD) gen_hex32 ;;
+    ADMIN_READ_PASSWORD) gen_hex32 ;;
+    ADMIN_SECURITY_PASSWORD) gen_hex32 ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
     VAULT_TOKEN)         gen_hex32 ;;
