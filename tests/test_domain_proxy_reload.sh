@@ -71,6 +71,14 @@ else
   no "the domain render is non-interactive"
 fi
 
+# A compose-file change (a mount) is applied only on recreate; a restart keeps
+# the old container and the front stays broken.
+if grep -q 'up -d --no-deps --force-recreate nginx-proxy' "${REPO_ROOT}/scripts/__contest_dns_refresh.sh"; then
+  ok "the contest front is recreated, not restarted"
+else
+  no "the contest front is recreated, not restarted"
+fi
+
 # `make -n` rather than grepping the Makefile: a grep would still pass on a
 # commented-out line, and it would not follow the DOMAIN_PROXY_RELOAD variable
 # to the command it expands to. The dry run asks make itself what it would
