@@ -47,7 +47,6 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P11 | **Update workflow correctness** — superuser bootstrap uses the postgres OS user; no demoted-cmsuser fallback; permission seed runs in the admin image when host deps are absent; backup manifest replace is non-interactive and marked before delete. | base checkout | `fix/update-workflow` (from `34bad6c7`) | hermes-agent | `scripts/__apply_sql.sh`, `scripts/__backup.sh`, `scripts/__seed_permissions.sh`, `Makefile`, `tests/test_admin_role_credentials.sh`, `tests/test_seed_permissions_image.sh`, `coordination/BOARD.md` | planning | in-flight |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
