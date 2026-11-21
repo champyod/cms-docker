@@ -99,3 +99,23 @@ cipher only; CBC and the padding are written out in `crypto.rs` so they can be r
 `crypto.py` line by line), `bcrypt` 0.17, and `base64` 0.22, which is already in `Cargo.lock` as a
 transitive dependency so the direct edge compiles no new crate. Refusing them is one revert, and
 leaves `cms-db` uncompilable until `crypto.rs` goes with them.
+
+## Parent's independent verification
+
+Re-run rather than trusted, because "byte-compatible" is the one claim in this slice a summary cannot
+prove. Scratch harness built, run, and deleted in the same turn; nothing of it is in the tree.
+
+| Claim | The run |
+|---|---|
+| Python → Rust | The Python implementation emitted 13 payloads (lengths 0, 1, 2, 3, 15, 16, 17, 32, 33, 1000, and three with embedded `NUL`s) plus 4 ints (`0`, `123`, `-123`, `2^63-1`). Rust's `decrypt_binary` returned the identical hex for all 13, and `decrypt_number` the identical 4. |
+| Rust → Python | Rust's `encrypt_binary`/`encrypt_number` output was then fed to the Python `decrypt_binary`/`decrypt_number`: 16/16 accepted, exit 0. |
+| The check can fail | One base64 character of a Python-made ciphertext flipped by hand changed the decrypted plaintext, so the comparison is not decorative. |
+| Gates, re-run by the parent | `cargo fmt --check` 0 · `cargo clippy --all-targets -- -D warnings` 0 with 0 errors · `cargo test` 0 with 64 targets ok and 0 failed. |
+
+**One gap this slice did not close, confirmed by reading both sides:** `auth.rs`'s
+`PlaintextPassword::matches` will authenticate a `plaintext:` row, while `crypto.py:213` deliberately
+refuses one — its own comment says a `plaintext:` row *is* the password, so honouring it hands the
+account to anyone who can read the database. Nothing in the Rust tree calls `matches` on a login path
+yet, so nothing is exploitable today, but the refusal has to be carried before the admin login moves,
+and this slice leaves it open. Exact parity for `build_password`/`hash_password` is unaffected: the
+`bcrypt:` prefix is accepted and a real stored row verifies.
