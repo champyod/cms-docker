@@ -11,7 +11,7 @@ import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
 import { getFreshPermissions } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { getCaptchaEnv, resolveActiveProvider, verifyCaptcha, type CaptchaProvider } from '@/lib/captcha';
-import { prisma } from '@/lib/prisma';
+import { getAdminLoginClient, prisma } from '@/lib/prisma';
 import { safeAdminSelect, type SafeAdmin } from '@/lib/prisma-selects';
 import { redirect } from '@/lib/redirect';
 import {
@@ -134,11 +134,19 @@ async function verifyStoredPassword(password: string, stored: string): Promise<b
 }
 
 async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | null> {
+  // WHY the role client and not `prisma`: `authentication` is the column this split takes away from
+  // the application-wide connection, so the credential read runs over the role granted exactly this
+  // row's four columns. The factory raises when ADMIN_LOGIN_DATABASE_URL is absent; there is no
+  // fallback to the application connection.
+  const client = getAdminLoginClient();
   // WHY system:auth: this is credential verification, which by definition runs before a session
   // exists. It is the only code in the app allowed to use that identity, and `admins` is the only
   // table whose policy admits it.
   const admin = await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, () =>
-    prisma.admins.findUnique({ where: { username } }),
+    client.admins.findUnique({
+      where: { username },
+      select: { id: true, username: true, authentication: true, enabled: true },
+    }),
   );
   if (!admin || !admin.enabled) return null;
   return admin;

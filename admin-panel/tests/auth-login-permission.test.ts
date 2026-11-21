@@ -12,21 +12,28 @@ type LoginAction = typeof import('@/app/actions/auth').login;
 interface Harness {
   login: LoginAction;
   createSession: ReturnType<typeof vi.fn>;
+  findCredential: ReturnType<typeof vi.fn>;
+  findViaApplicationClient: ReturnType<typeof vi.fn>;
 }
 
 async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Harness> {
   vi.resetModules();
   const createSession = vi.fn(async () => undefined);
+  const findCredential = vi.fn(async () => ({
+    id: ADMIN_ID,
+    username: USERNAME,
+    enabled: true,
+    authentication: STORED_AUTHENTICATION,
+  }));
+  // The credential read runs over cms_admin_login's own client; `prisma` keeps the last_login_at
+  // write. Holding both here is what lets a test prove which one the lookup used.
+  const findViaApplicationClient = vi.fn(async () => null);
   vi.doMock('@/lib/auth', () => ({ createSession, deleteSession: vi.fn(), getSession: vi.fn() }));
   vi.doMock('@/lib/prisma', () => ({
+    getAdminLoginClient: () => ({ admins: { findUnique: findCredential } }),
     prisma: {
       admins: {
-        findUnique: vi.fn(async () => ({
-          id: ADMIN_ID,
-          username: USERNAME,
-          enabled: true,
-          authentication: STORED_AUTHENTICATION,
-        })),
+        findUnique: findViaApplicationClient,
         update: vi.fn(async () => undefined),
       },
     },
@@ -58,7 +65,12 @@ async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Har
       throw Object.assign(new Error('NEXT_REDIRECT'), { redirectedTo: path });
     },
   }));
-  return { login: (await import('@/app/actions/auth')).login, createSession };
+  return {
+    login: (await import('@/app/actions/auth')).login,
+    createSession,
+    findCredential,
+    findViaApplicationClient,
+  };
 }
 
 function credentials(username: string = USERNAME, password: string = PASSWORD): FormData {
@@ -99,12 +111,22 @@ describe('signing in requires admin:login', () => {
   });
 
   it('opens a session for an admin whose group carries admin:login', async () => {
-    const { login, createSession } = await loadLoginWith(['admin:login', 'ranking:read']);
+    const { login, createSession, findCredential, findViaApplicationClient } = await loadLoginWith([
+      'admin:login',
+      'ranking:read',
+    ]);
 
     const state = await attemptLogin(login);
 
     expect(state.error).toBeUndefined();
     expect(createSession).toHaveBeenCalledTimes(1);
+    // The credential read runs over cms_admin_login's client and asks for the four admitted columns;
+    // the application connection is never consulted for it.
+    expect(findCredential).toHaveBeenCalledWith({
+      where: { username: USERNAME },
+      select: { id: true, username: true, authentication: true, enabled: true },
+    });
+    expect(findViaApplicationClient).not.toHaveBeenCalled();
   });
 
   it('refuses a ranking operator, whose group carries no admin:login', async () => {
