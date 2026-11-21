@@ -257,7 +257,7 @@ cp "${REPO_ROOT}/config/"*.sample.toml "$TEST_ROOT/sync/config/" 2>/dev/null || 
 run_sync() { # <tag>
   (
     cd "$TEST_ROOT/sync" || exit 1
-    PATH="$NODOCKER:$PATH" CMS_DOCKER_ROOT="$TEST_ROOT/sync" bash "$SYNC"
+    DOCKER_UID="$(id -u)" PATH="$NODOCKER:$PATH" CMS_DOCKER_ROOT="$TEST_ROOT/sync" bash "$SYNC"
   ) > "$TEST_ROOT/sync-$1.log" 2>&1
 }
 env_val() { awk -F= -v k="$1" '$1==k { sub(/^[^=]*=/, ""); print; exit }' "$2" 2>/dev/null; }
