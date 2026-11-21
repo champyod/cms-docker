@@ -111,6 +111,19 @@ for pair in \
 done
 check_grep "the existing DATABASE_URL is kept" "^[[:space:]]*DATABASE_URL: postgresql://" "$TEST_ROOT/panel-anchor.yml"
 
+printf '\n== the classic admin carries the same security URL ==\n'
+awk '/^  admin-web-server:/{f=1; next} /^  [a-z][a-z0-9-]*:/{f=0} f' "$COMPOSE" > "$TEST_ROOT/classic-admin.yml"
+if grep -qE '^[[:space:]]*ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:\$\{ADMIN_SECURITY_PASSWORD\}@database:' "$TEST_ROOT/classic-admin.yml"; then
+  ok "admin-web-server sets ADMIN_SECURITY_DATABASE_URL as cms_admin_account_security with the generated secret"
+else
+  no "admin-web-server does not set ADMIN_SECURITY_DATABASE_URL as cms_admin_account_security"
+fi
+if grep -qE '^[[:space:]]*ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_[a-z_]+:[^$]' "$TEST_ROOT/classic-admin.yml"; then
+  no "the classic admin's ADMIN_SECURITY_DATABASE_URL holds a literal password"
+else
+  ok "the classic admin's ADMIN_SECURITY_DATABASE_URL holds no literal password"
+fi
+
 # ── 5. apply script: static contract ───────────────────────────────────────────────────────
 printf '\n== __apply_sql.sh hands the three secrets in and selects the superuser phase ==\n'
 for var in ADMIN_LOGIN_PASSWORD ADMIN_READ_PASSWORD ADMIN_SECURITY_PASSWORD; do
@@ -143,8 +156,7 @@ ENV
 chmod 600 "$TEST_ROOT/apply/.env"
 cat > "$STUB_DIR/docker" <<'STUB'
 #!/usr/bin/env bash
-
-# Fake docker: records every exec call and the SQL on stdin, never touching a daemon.
+# Fake docker: records every exec and the SQL on stdin; never touches a daemon.
 if [[ "${1:-}" == "ps" ]]; then
   printf '%s\n' "${STUB_PS_OUT-cms-database}"
   exit 0

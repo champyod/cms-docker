@@ -64,19 +64,15 @@ def default_path(name):
     return os.path.join(sys.prefix, name)
 
 
-# WHY declared before the section dataclasses: a field default is evaluated when
-# its class body runs, so any dataclass below referencing it needs it in place.
+# WHY declared before the section dataclasses: a field default is evaluated when its class body runs.
 field_helper = lambda T: dataclasses.field(default_factory=T)
 
 
 @dataclass()
 class GlobalConfig:
-    # WHY configurable rather than fixed in source: AGPL-13 requires the offer
-    # of the Corresponding Source to name the running deployment's own source,
-    # so a self-hosted fork must be able to point at its own repository.
+    # WHY configurable rather than fixed: AGPL-13 requires a fork to point at its own source repository.
     source_url: str = "https://github.com/champyod/cms-docker"
     # Optional public address of the ranking scoreboard the contest sign-in links to.
-    # Empty leaves the link out rather than pointing anywhere.
     ranking_url: str = ""
     temp_dir: str = "/tmp"
     backdoor: bool = False
@@ -91,6 +87,8 @@ class GlobalConfig:
 @dataclass()
 class DatabaseConfig:
     url: str
+    # WHY optional with no fallback: an absent URL must fail the write, not silently run as the owner.
+    admin_security_url: str | None = None
     debug: bool = False
     twophase_commit: bool = False
 
@@ -117,8 +115,7 @@ class SandboxConfig:
 
 @dataclass()
 class WebServerConfig:
-    # This doesn't have a type hint, so @dataclass (and thus the config parser)
-    # ignore it.
+    # This doesn't have a type hint, so @dataclass (and thus the config parser) ignore it.
     DEFAULT_SECRET_KEY = "8e045a51e4b102ea803c06f92841a1fb"
     secret_key: str = DEFAULT_SECRET_KEY
     tornado_debug: bool = False
@@ -126,8 +123,7 @@ class WebServerConfig:
 
 @dataclass()
 class CaptchaKeys:
-    # One provider's public site key and server-side secret. The site key travels
-    # to the browser; the secret never leaves the server.
+    # One provider's public site key and server-side secret.
     site_key: str = ""
     secret_key: str = ""
 
@@ -135,37 +131,19 @@ class CaptchaKeys:
 @dataclass()
 class CaptchaConfig:
     # Adaptive login CAPTCHA, mirroring the Next.js admin panel (captcha.ts).
-    # WHY a shared dataclass rather than one field set per server: both web
-    # servers verify against the same provider with the same keys and the same
-    # threshold, so the values must stay in lockstep across them. Duplicating
-    # them into AWSConfig and CWSConfig would let the two servers drift.
-    # WHY defaults are off/empty: an existing deployment that sets nothing keeps
-    # logging in without a captcha, so enabling this cannot break an upgrade.
     enabled: bool = False
-    # WHY a priority list rather than a scalar: one service may name several
-    # providers so the challenge falls through to the next when the first is
-    # misconfigured or unhealthy. Each entry is looked up in `keys`. Empty means
-    # "use the legacy scalar `provider` as a one-element chain".
+    # WHY a priority list: the challenge falls through to the next provider when one is unhealthy.
     providers: list[str] = dataclasses.field(default_factory=list)
     keys: dict[str, CaptchaKeys] = dataclasses.field(default_factory=dict)
-    # WHY these scalars remain: the generated config/cms.toml still carries the
-    # legacy CAPTCHA_PROVIDER/SITE_KEY/SECRET_KEY, and an existing deployment
-    # must keep working. They stand in for a one-element chain when `keys` is
-    # empty; captcha.py folds the two forms together.
+    # WHY these scalars remain: generated configs still carry the legacy single-provider form.
     provider: str = "turnstile"
     site_key: str = ""
     secret_key: str = ""
     # Failed logins before the captcha becomes mandatory on this account/IP.
     threshold: int = 3
-    # Failures after which the account/address is refused outright, mirroring
-    # the panel's MAX_LOGIN_ATTEMPTS lockout (5). The count is retained while
-    # the refusal holds, so the lockout cannot be re-armed by trying again.
+    # Failures after which the account/address is refused outright, mirroring the panel's MAX_LOGIN_ATTEMPTS lockout (5).
     ban_threshold: int = 5
-    # Shared Redis holding the login counters, so a lockout survives a web
-    # server restart and spans every process behind the proxy.
-    # WHY off by default: a deployment that sets nothing keeps the in-process
-    # counters, which are per process and lost on restart, so nothing about an
-    # upgrade changes until an operator opts in.
+    # Shared Redis holding the login counters, so a lockout survives a web server restart and spans every process behind the proxy.
     redis_enabled: bool = False
     redis_host: str = "127.0.0.1"
     redis_port: int = 6379
@@ -231,11 +209,7 @@ class TelegramBotConfig:
 
 @dataclass(kw_only=True)
 class Config:
-    # Ideally these would all look like
-    #   global_: GlobalConfig = GlobalConfig()
-    # but dataclasses doesn't like it, because these are all mutable default
-    # values. We could make the individual config sections frozen, but then we
-    # can't easily patch them for unit tests.
+    # Ideally these would be default instances, but dataclasses reject mutable defaults.
     global_: GlobalConfig = field_helper(GlobalConfig)
     database: DatabaseConfig
     worker: WorkerConfig = field_helper(WorkerConfig)
@@ -259,8 +233,7 @@ class Config:
                 coord = ServiceCoord(service_name, shard_number)
                 self.services[coord] = Address(*shard)
 
-        # If the configuration says to print detailed log on stdout,
-        # change the log configuration.
+        # If the configuration says to print detailed log on stdout, change the log configuration.
         set_detailed_logs(self.global_.stream_log_detailed)
 
         # WHY: refuse to run with publicly-known default cookie secret.
@@ -273,8 +246,7 @@ class Config:
 
 
 def make_config():
-    # Default config file path can be overridden using environment
-    # variable 'CMS_CONFIG'.
+    # Default config file path can be overridden using environment variable 'CMS_CONFIG'.
     default_config_file = default_path("etc/cms.toml")
     config_file = os.environ.get("CMS_CONFIG", default_config_file)
 

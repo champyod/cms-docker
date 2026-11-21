@@ -1,18 +1,6 @@
 #!/usr/bin/env bash
+
 # tests/test_role_catalog.sh — the committed role SQL is current, complete, and additive.
-#
-# WHY each assertion is separate: they are different ways the same change can go wrong, and none of
-# them shows up as an error at apply time.
-#   * stale  — the SQL still describes yesterday's catalog, so an application gets yesterday's grants;
-#   * short  — one role is missing from the render, and the only symptom is a login that fails;
-#   * wrong  — a role holds a privilege the tested matrix never gave it (a table-level UPDATE hands
-#              out `authentication`, which is the whole point of the column grants);
-#   * loud   — the file contains a statement that reassigns or removes something, which on a live
-#              database takes the running application down.
-# The suite therefore reads the two TSVs, the generated SQL, and re-runs the generator in a
-# throwaway copy of the tree so `--check` is proven able to fail.
-#
-# No database is needed, and none is contacted.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,9 +33,7 @@ trap cleanup EXIT
 
 catalog_roles() { awk -F'\t' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {print $1}' "$CATALOG"; }
 
-# ── 1. Freshness ────────────────────────────────────────────────────────────────────────────
-# WHY first: every assertion below reads the committed file, so a stale file would make the rest of
-# the suite describe something the generator does not produce.
+# ── 1.
 printf '== the committed SQL is what the generator renders today ==\n'
 if check_out=$(bash "$GEN" --check 2>&1); then
   ok "--check: the generated SQL matches catalog.tsv and grants.tsv"
@@ -100,6 +86,11 @@ expected_grants=(
   "GRANT INSERT (username, authentication, enabled, name) ON public.admins TO cms_admin_account_security"
   "GRANT USAGE ON SEQUENCE public.admins_id_seq TO cms_admin_account_security"
   "GRANT DELETE ON public.admins TO cms_admin_account_security"
+  "GRANT SELECT (id, admin_id, group_id) ON public.admin_groups TO cms_admin_account_security"
+  "GRANT INSERT (admin_id, group_id) ON public.admin_groups TO cms_admin_account_security"
+  "GRANT USAGE ON SEQUENCE public.admin_groups_id_seq TO cms_admin_account_security"
+  "GRANT DELETE ON public.admin_groups TO cms_admin_account_security"
+  "GRANT SELECT (id, name, description, is_seeded, created_at) ON public.groups TO cms_admin_account_security"
 )
 actual_grants=$(grep -oE "GRANT [A-Z]+( \([^)]*\))? ON (SEQUENCE )?public\.[a-z0-9_.]+ TO [a-z0-9_]+" "$OUT" | LC_ALL=C sort)
 expected_grants_sorted=$(printf '%s\n' "${expected_grants[@]}" | LC_ALL=C sort)
@@ -121,8 +112,7 @@ else
 fi
 
 printf '\n== the writer roles cannot cross their columns ==\n'
-# WHY stated as absences: the rehearsal's failures were all a privilege a role should NOT have had,
-# and a missing check on an absence is how "it looked fine" happens.
+# WHY stated as absences: the rehearsal's failures were all a privilege a role should NOT have had, and a missing check on an absence is how "it looked fine" happens.
 if grep -qE "GRANT UPDATE ON public\." "$OUT"; then
   no "a table-level UPDATE is granted — that hands over every column, including authentication"
 else
@@ -150,13 +140,17 @@ cms_admin_account_security_select|admins|SELECT|cms_admin_account_security
 cms_admin_account_security_update|admins|UPDATE|cms_admin_account_security
 cms_admin_account_security_insert|admins|INSERT|cms_admin_account_security
 cms_admin_account_security_delete|admins|DELETE|cms_admin_account_security
+cms_admin_account_security_select|admin_groups|SELECT|cms_admin_account_security
+cms_admin_account_security_insert|admin_groups|INSERT|cms_admin_account_security
+cms_admin_account_security_delete|admin_groups|DELETE|cms_admin_account_security
+cms_admin_account_security_select|groups|SELECT|cms_admin_account_security
 EOF
 )
 actual_policies=$(grep -oE "CREATE POLICY [a-z0-9_]+ ON public\.[a-z0-9_]+ FOR [A-Z]+ TO [a-z0-9_]+" "$OUT" \
   | sed -E 's/^CREATE POLICY ([a-z0-9_]+) ON public\.([a-z0-9_]+) FOR ([A-Z]+) TO ([a-z0-9_]+)$/\1|\2|\3|\4/' \
   | LC_ALL=C sort)
 if [[ "$actual_policies" == "$expected_policies" ]]; then
-  ok "the policy set is exactly the matrix: SELECT for readers, SELECT+UPDATE for the profile writer, four verbs for account security"
+  ok "the policy set is exactly the matrix: SELECT for readers, SELECT+UPDATE for the profile writer, admins/admin_groups/groups for account security"
 else
   no "the policy set differs from the matrix"
   diff <(printf '%s\n' "$expected_policies") <(printf '%s\n' "$actual_policies") | sed 's/^/        /'
@@ -235,9 +229,7 @@ else
   no "the render creates role(s) not in catalog.tsv: ${invented}"
 fi
 
-# ── 7. The gate itself can fail ─────────────────────────────────────────────────────────────
-# WHY: a --check that cannot fail is decoration. Each case mutates a throwaway copy of the tree and
-# asserts the generator's verdict, so the real tree is never touched.
+# ── 7.
 printf '\n== --check is falsifiable ==\n'
 new_sandbox() {
   SB="$(mktemp -d)"

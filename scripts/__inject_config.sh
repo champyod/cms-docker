@@ -24,12 +24,7 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
   exit 1
 fi
 
-# Parse state of the config as it arrived, recorded before any writer runs so the
-# gate below can tell a file this run broke from one that arrived broken.
-#
-# WHY the state is a three-valued answer rather than a boolean: "did not parse" and
-# "no TOML parser is installed" are different facts, and conflating them would let an
-# unvalidatable run pass as a clean one.
+# Parse state before any writer runs, so the gate can tell this run's breakage from an already-broken file.
 CONFIG_PARSED_BEFORE=false
 CONFIG_VALIDATION_AVAILABLE=false
 toml_parse_state() {
@@ -54,8 +49,7 @@ try:
     with path.open("rb") as handle:
         tomllib.load(handle)
 except tomllib.TOMLDecodeError as exc:
-    # The loader's own wording, which names the line it refused: an operator handed a
-    # 400-line file needs the position, not merely the fact that it is broken.
+    # The loader's own wording, which names the line it refused
     print("invalid: {}".format(exc))
     sys.exit(0)
 print("valid")
@@ -69,8 +63,7 @@ case "$CONFIG_STATE_BEFORE" in
     CONFIG_VALIDATION_AVAILABLE=true
     ;;
   unavailable)
-    # Loud rather than silent: a run that cannot check its own output must not read as
-    # a run that checked it and found nothing wrong.
+    # Loud rather than silent: a run that cannot check its own output must not read as a run that checked it and found nothing wrong.
     log_warn "no TOML parser available (needs python3 >= 3.11 or tomli) — $CONFIG_FILE cannot be validated after injection"
     ;;
   invalid*)
@@ -78,10 +71,7 @@ case "$CONFIG_STATE_BEFORE" in
     ;;
 esac
 
-# Exact key match via awk -F= (avoids regex metachars in key). Values are passed
-# through env_unquote because __config_sync quotes any value containing whitespace or
-# a shell metacharacter — without it a quoted password would be injected into
-# cms.toml (and a quoted RPC secret into [rpc]) with its quotes still attached.
+# Exact key match via awk -F= (avoids regex metachars in key).
 get_env_val() {
   local key="$1"
   local file="$ENV_FILE"
@@ -103,6 +93,9 @@ DB_PASS="$(get_env_val "POSTGRES_PASSWORD")"
 DB_NAME="$(get_env_val "POSTGRES_DB")"
 DB_HOST="$(get_env_val "POSTGRES_HOST")"
 DB_PORT="$(get_env_val "POSTGRES_PORT")"
+# WHY: the classic admin writes as cms_admin_account_security; the URL is taken whole or built from its generated password.
+ADMIN_SECURITY_PASSWORD="$(get_env_val "ADMIN_SECURITY_PASSWORD")"
+ADMIN_SECURITY_DATABASE_URL="${ADMIN_SECURITY_DATABASE_URL:-$(get_env_val "ADMIN_SECURITY_DATABASE_URL")}"
 CMS_SECRET="$(get_env_val "CMS_SECRET_KEY")"
 RPC_SECRET="$(get_env_val "RPC_SECRET")"
 RPC_ALLOW_BACKDOOR="$(get_env_val "RPC_ALLOW_BACKDOOR")"
@@ -115,17 +108,12 @@ DB_NAME="${DB_NAME:-$(get_worker_env_val "POSTGRES_DB")}"
 DB_HOST="${DB_HOST:-$(get_worker_env_val "POSTGRES_HOST")}"
 DB_PORT="${DB_PORT:-$(get_worker_env_val "POSTGRES_PORT")}"
 
-# WHY: Python services run as the owner role cmsuser — they need full DML and
-# large-object lifecycle; no additional DML role exists.
+# WHY: Python services run as the owner role cmsuser — they need full DML and large-object lifecycle; no additional DML role exists.
 
 DB_USER="${DB_USER:-cmsuser}"
 DB_PASS="${DB_PASS:-your_password_here}"
 DB_NAME="${DB_NAME:-cmsdb}"
-# cms.toml on the MAIN server is consumed only by this host's containers, which
-# reach Postgres through the compose network service name ("database") — never a
-# routable IP, which is unreachable from inside the docker bridge and breaks RPC.
-# REMOTE workers have no such container: set WORKER_DB_HOST (+ WORKER_DB_PORT)
-# in .env so cms.toml points at the main server's routable address instead.
+# cms.toml on the MAIN server targets the compose service name; remote workers set WORKER_DB_HOST and WORKER_DB_PORT.
 if [[ -n "$(get_worker_env_val "WORKER_DB_HOST")" ]]; then
   DB_HOST="$(get_worker_env_val "WORKER_DB_HOST")"
   _W_DB_PORT="$(get_worker_env_val "WORKER_DB_PORT")"
@@ -141,6 +129,7 @@ echo "  - DB User: $DB_USER"
 echo "  - DB Name: $DB_NAME"
 
 export DB_USER DB_PASS DB_NAME DB_HOST DB_PORT CMS_SECRET RPC_SECRET RPC_ALLOW_BACKDOOR INNER_IP CORE_SERVICES_IP
+export ADMIN_SECURITY_PASSWORD ADMIN_SECURITY_DATABASE_URL
 
 # Perform replacements using Python for robustness — secrets via env, never argv.
 python3 - << 'PY'
@@ -203,12 +192,23 @@ if re.search(db_url_pattern, text, re.MULTILINE):
 else:
     text = text.replace('url = "postgresql+psycopg2://cmsuser:your_password_here@database:5432/cmsdb"', new_url)
 
+# WHY a separate key: admin writes use cms_admin_account_security; absent input writes nothing, never db_url.
+security_url = os.environ.get("ADMIN_SECURITY_DATABASE_URL", "").strip()
+if not security_url:
+    security_pw = os.environ.get("ADMIN_SECURITY_PASSWORD", "").strip()
+    if security_pw:
+        security_url = (
+            "postgresql+psycopg2://cms_admin_account_security:%s@%s:%s/%s"
+            % (_up.quote(security_pw, safe=''), host_e, port, db_e))
+if security_url:
+    text = set_section_key(text, 'database', 'admin_security_url',
+                           f'"{toml_escape(security_url)}"')
+
 cms_secret = os.environ.get("CMS_SECRET", "")
 if cms_secret:
     text = re.sub(r'^secret_key = ".*"', lambda m: f'secret_key = "{toml_escape(cms_secret)}"', text, flags=re.MULTILINE)
 
-# config.toml [contest] -> cms.toml [contest_web_server] (previously never synced,
-# so config.toml edits like NUM_PROXIES_USED never reached the CMS).
+# config.toml [contest] -> cms.toml [contest_web_server]; previously never synced, so edits like NUM_PROXIES_USED never reached the CMS.
 def _set_contest(key, env_var):
     global text
     raw = os.environ.get(env_var, "").strip()
@@ -220,13 +220,10 @@ _set_contest('cookie_duration', 'COOKIE_DURATION')
 _set_contest('max_submission_length', 'MAX_SUBMISSION_LENGTH')
 _set_contest('max_input_length', 'MAX_INPUT_LENGTH')
 _set_contest('submit_local_copy', 'SUBMIT_LOCAL_COPY')
-# WHY registered beside the one above: workflow.py stores testcase copies under the
-# same switch idea as submissions, and reading tests_local_copy while no config key
-# could set it left the operator with no way to turn that copy off.
+# WHY registered beside the one above: tests_local_copy had no config key, leaving no way to turn the copy off.
 _set_contest('tests_local_copy', 'TESTS_LOCAL_COPY')
 
-# config.toml [core] CMS_RANKING_URL -> cms.toml [global] ranking_url. The contest
-# sign-in links to it; an empty value leaves the link out of the page.
+# config.toml [core] CMS_RANKING_URL -> cms.toml [global] ranking_url.
 def _set_global(key, env_var):
     global text
     raw = os.environ.get(env_var, "").strip()
@@ -235,11 +232,7 @@ def _set_global(key, env_var):
 
 _set_global('ranking_url', 'CMS_RANKING_URL')
 
-# config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha]. WHY both servers
-# get the same table: they verify against the same provider with the same keys,
-# and two copies of these values would be free to drift. An empty or absent
-# value leaves the shipped default, which is off — so a deployment that sets
-# nothing keeps logging in exactly as before.
+# config.toml [admin] CAPTCHA_* -> cms.toml [<server>.captcha].
 def _set_captcha(section):
     global text
     # Strings are quoted: a bare value is not TOML and makes the loader refuse the file.
@@ -252,11 +245,7 @@ def _set_captcha(section):
             text = set_section_key(text, section, key,
                                    f'"{toml_escape(value)}"' if quoted else value)
 
-    # WHY a chain: CAPTCHA_PROVIDERS names providers in priority order and each
-    # gets its own CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY pair, written as the
-    # nested keys table captcha.py reads. CAPTCHA_PROVIDER/SITE_KEY/SECRET_KEY
-    # still write the legacy scalar form when no chain is set, so a deployment
-    # that predates the chain keeps working.
+    # WHY a chain: CAPTCHA_PROVIDERS lets the challenge fall through to the next provider when the first is unhealthy.
     chain = [p.strip().lower() for p in
              os.environ.get("CAPTCHA_PROVIDERS", "").split(",") if p.strip()]
     if chain:
@@ -284,20 +273,6 @@ _set_captcha('admin_web_server.captcha')
 _set_captcha('contest_web_server.captcha')
 
 # config.toml [admin] LOGIN_RATE_LIMIT_REDIS_* -> cms.toml [<server>.captcha].
-# WHY these land in the captcha table rather than a new one: CaptchaConfig is the
-# single dataclass both web servers share (conf.py), so the login counters' backend
-# has to be carried on the same object the login handlers already receive. A Redis
-# that cannot be reached degrades to in-process counting and a captcha demanded on
-# every attempt, so an operator pointing this at a stopped instance taxes the
-# attacker rather than lifting the lockout — the default stays off and nothing about
-# an existing deployment changes until it is set.
-#
-# WHY redis_host is written quoted while the other two are bare: the global
-# '"127.0.0.1"' -> '"0.0.0.0"' substitution further down rewrites any quoted
-# loopback address in the file, and this one is a host to dial rather than an
-# address to bind. Quoting it keeps the substitution finding it and moving the
-# value on to 0.0.0.0, which is then plainly wrong rather than silently
-# dialing nothing.
 def _set_login_rate_limit(section):
     global text
     for key, env_var, quoted in (('redis_enabled', 'LOGIN_RATE_LIMIT_REDIS_ENABLED', False),
@@ -525,15 +500,7 @@ else
   echo "No workers configured. Existing Worker block removed if present."
 fi
 
-# ---------------------------------------------------------------------------
-# Validate what was written. This is the last writer above, so the answer describes
-# the file the services will actually read.
-#
-# WHY this gate exists: every writer here is a regex substitution into someone else's
-# TOML, and a substitution that produces a bare value writes a file every service
-# refuses to load — they then crash-loop on "Invalid value (at line N)" and a deploy
-# fails on whichever dependency restarts first. Nothing here warned about that.
-# ---------------------------------------------------------------------------
+# Validate what was written.
 CONFIG_STATE_AFTER="$(toml_parse_state "$CONFIG_FILE")"
 case "$CONFIG_STATE_AFTER" in
   absent)
@@ -550,9 +517,7 @@ case "$CONFIG_STATE_AFTER" in
     if [[ "$CONFIG_PARSED_BEFORE" == true ]]; then
       log_die "$CONFIG_FILE did not parse before this run and does not now — this run broke it. ${CONFIG_STATE_AFTER#invalid: }"
     fi
-    # WHY a warning and not a failure here: the file arrived unreadable, so this run
-    # did not break it, and refusing to finish would block every later run against the
-    # same tree with no way to make progress. The break still has to be named.
+    # WHY a warning and not a failure here: the file arrived unreadable, so this run did not break it and must not block later runs.
     log_warn "$CONFIG_FILE did not parse after injection, but it already did not parse before this run: ${CONFIG_STATE_AFTER#invalid: }"
     ;;
 esac

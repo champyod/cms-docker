@@ -30,6 +30,10 @@ below. That is the single place identity enters the core's SQL: no query, no
 DAO and no console script has to remember it, and a transaction that begins
 after a ``commit()`` is stamped again because the hook fires per transaction.
 
+Two engines exist: the main one and the admin-security one, which the classic
+admin uses to write admin accounts as ``cms_admin_account_security``; both share
+one session class, so the actor stamp cannot be lost.
+
 """
 
 import logging
@@ -42,19 +46,30 @@ from sqlalchemy.engine.url import URL, make_url
 from sqlalchemy.orm import sessionmaker, scoped_session
 
 from cms.conf import config
-from . import engine, actor as db_actor
+from . import engine, admin_security_engine, actor as db_actor
 
 
 logger = logging.getLogger(__name__)
 
 _session = sessionmaker(engine, twophase=config.database.twophase_commit)
 if typing.TYPE_CHECKING:
-    # the type checker doesn't understand sessionmaker, so for type hints
-    # define Session as the sqlalchemy class directly.
+    # the type checker doesn't understand sessionmaker, so for type hints define Session as the sqlalchemy class directly.
     Session = sqlalchemy.orm.Session
 else:
     Session = _session
 ScopedSession = scoped_session(Session)
+
+# WHY the same class_: sharing it shares the after_begin listener, so the stamp is never duplicated.
+if admin_security_engine is not None:
+    _admin_security_sessionmaker = sessionmaker(
+        admin_security_engine, class_=_session.class_,
+        twophase=config.database.twophase_commit)
+else:
+    _admin_security_sessionmaker = None
+
+
+class AdminSecurityDatabaseNotConfigured(RuntimeError):
+    """An admin write ran with no database.admin_security_url."""
 
 
 @event.listens_for(_session.class_, "after_begin")
@@ -108,6 +123,25 @@ class SessionGen:
         self.session.close()
 
 
+def AdminSecuritySession() -> sqlalchemy.orm.Session:
+    """Return a session on the admin-security engine; raise if its URL is unset."""
+    if _admin_security_sessionmaker is None:
+        raise AdminSecurityDatabaseNotConfigured(
+            "database.admin_security_url is not set: the classic admin cannot "
+            "write admin accounts as cms_admin_account_security. Set "
+            "database.admin_security_url in cms.toml (ADMIN_SECURITY_DATABASE_URL); "
+            "there is deliberately no fallback to database.url.")
+    return _admin_security_sessionmaker()
+
+
+class AdminSecuritySessionGen(SessionGen):
+    """SessionGen over AdminSecuritySession: same explicit-commit contract."""
+
+    def __enter__(self) -> sqlalchemy.orm.Session:
+        self.session = AdminSecuritySession()
+        return self.session
+
+
 def custom_psycopg2_connection(**kwargs: dict[str, str]):
     """Establish a new psycopg2.connection to the database.
 
@@ -133,8 +167,7 @@ def custom_psycopg2_connection(**kwargs: dict[str, str]):
         logger.warning("Using default port 5432 for Postgres DB")
         database_url.port = 5432
 
-    # Unix-domain socket have the host in a query argument, so we build the
-    # arguments dict first to avoid duplicate arguments when calling connect().
+    # Unix-domain sockets carry the host as a query argument, so build the args dict first.
     args = {
         "host": database_url.host,
         "port": database_url.port,
@@ -146,9 +179,6 @@ def custom_psycopg2_connection(**kwargs: dict[str, str]):
     args.update(kwargs)
 
     connection = psycopg2.connect(**args)
-    # Stamped at session scope, not transaction scope: this connection is
-    # outside the pool and closed by its owner (see the docstring above), but
-    # large-object traffic commits mid-stream, which would drop a
-    # transaction-local setting and leave the rest of the stream unidentified.
+    # Stamped at session scope: large-object traffic commits mid-stream and would drop a transaction-local setting.
     db_actor.apply_actor_session(connection)
     return connection
