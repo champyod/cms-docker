@@ -1,7 +1,10 @@
-use crate::store::Appearance;
+use std::path::Path;
 
-/// Used when no appearance row exists yet: the AGPL source offer must still name
-/// a deployment someone can reach.
+use crate::store::Appearance;
+use crate::surface::credits_from_file;
+
+/// The offer a deployment with no readable credits file still has to make, because
+/// section 13 of the licence binds the running service and not the file on disk.
 pub const DEFAULT_SOURCE_URL: &str = "https://github.com/champyod/cms-docker";
 
 /// The public configuration the vendored page reads before it draws anything.
@@ -17,10 +20,32 @@ pub struct PublicConfig {
     pub source_url: String,
 }
 
-pub fn public_config(appearance: Option<Appearance>) -> PublicConfig {
+/// The offer names the repository the credits file names, so a fork states its own
+/// repository once: two spellings of it drift, and an offer naming another repository
+/// than the credits page beside it contradicts itself.
+///
+/// WHY a fallback and never an error: a deployment with no readable credits file has
+/// already lost the asset list, and losing the source offer with it would turn a
+/// cosmetic fault into a licence breach.
+pub fn source_url_from_credits(path: Option<&Path>) -> String {
+    let named = path
+        .and_then(|path| credits_from_file(path, None).ok())
+        .and_then(|credits| {
+            credits
+                .project
+                .get("url")
+                .and_then(|url| url.as_str())
+                .map(str::to_string)
+        })
+        .map(|url| url.trim().to_string())
+        .filter(|url| !url.is_empty());
+    named.unwrap_or_else(|| DEFAULT_SOURCE_URL.to_string())
+}
+
+pub fn public_config(appearance: Option<Appearance>, source_url: &str) -> PublicConfig {
     PublicConfig {
         show_id_column: appearance.as_ref().is_some_and(Appearance::show_id_column),
-        source_url: DEFAULT_SOURCE_URL.to_string(),
+        source_url: source_url.to_string(),
     }
 }
 
@@ -47,12 +72,29 @@ mod tests {
         }
     }
 
+    /// A credits file of the test's own, named per case so parallel runs never share one.
+    fn scratch_credits(name: &str, body: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "cms-ranking-credits-{name}-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("the clock is after the epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&path, body).expect("the fixture is written");
+        path
+    }
+
     /// The captured body is the contract: exactly two keys, and no more.
     #[test]
     fn the_body_is_the_two_captured_keys() {
-        let body = crate::json::to_bytes(&public_config(Some(appearance(Some(
-            serde_json::json!({ "show_id_column": true }),
-        )))))
+        let body = crate::json::to_bytes(&public_config(
+            Some(appearance(Some(
+                serde_json::json!({ "show_id_column": true }),
+            ))),
+            DEFAULT_SOURCE_URL,
+        ))
         .expect("the config serialises");
         assert_eq!(
             String::from_utf8(body).expect("utf-8"),
@@ -64,8 +106,9 @@ mod tests {
     /// here would tell an anonymous reader the console is protected.
     #[test]
     fn the_protected_mode_setting_never_leaks() {
-        let body = crate::json::to_bytes(&public_config(Some(appearance(None))))
-            .expect("the config serialises");
+        let body =
+            crate::json::to_bytes(&public_config(Some(appearance(None)), DEFAULT_SOURCE_URL))
+                .expect("the config serialises");
         let text = String::from_utf8(body).expect("utf-8");
         assert!(!text.contains("access_mode"), "{text}");
         assert!(!text.contains("protected"), "{text}");
@@ -76,7 +119,7 @@ mod tests {
     /// nothing: the page falls back to its own behaviour only if it can read them.
     #[test]
     fn a_missing_row_publishes_the_defaults() {
-        let published = public_config(None);
+        let published = public_config(None, DEFAULT_SOURCE_URL);
         assert!(!published.show_id_column);
         assert_eq!(published.source_url, DEFAULT_SOURCE_URL);
     }
@@ -90,11 +133,60 @@ mod tests {
             serde_json::json!({ "show_id_column": 1 }),
             serde_json::json!({}),
         ] {
-            let published = public_config(Some(appearance(Some(columns))));
+            let published = public_config(Some(appearance(Some(columns))), DEFAULT_SOURCE_URL);
             assert!(
                 !published.show_id_column,
                 "a mistyped value must not show ids"
             );
         }
+    }
+
+    /// The handler serves the URL it is given, so a fork's own repository can reach the
+    /// page instead of the one compiled into this crate.
+    #[test]
+    fn a_configured_offer_is_served_verbatim() {
+        let own = "https://git.example.invalid/own/cms";
+        let body = crate::json::to_bytes(&public_config(None, own)).expect("the config serialises");
+        assert_eq!(
+            String::from_utf8(body).expect("utf-8"),
+            format!(r#"{{"show_id_column": false, "source_url": "{own}"}}"#)
+        );
+    }
+
+    /// The offer and the credits page are two renderings of one deployment's own
+    /// repository, so /config takes its URL from the file /credits reads.
+    #[test]
+    fn the_offer_comes_from_the_credits_file() {
+        let own = "https://git.example.invalid/own/cms";
+        let path = scratch_credits(
+            "own",
+            &format!(
+                r#"{{ "project": {{ "name": "Own", "url": "{own}" }}, "license": {{ "spdx_id": "AGPL-3.0" }}, "surfaces": {{ "ranking": {{ "title": "Ranking" }} }} }}"#
+            ),
+        );
+        assert_eq!(source_url_from_credits(Some(&path)), own);
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A file that cannot supply a URL must not blank the offer: the section 13 offer is
+    /// the one thing that has to survive a broken deployment.
+    #[test]
+    fn an_unusable_credits_file_leaves_the_shipped_offer() {
+        let nameless = scratch_credits(
+            "nameless",
+            r#"{ "project": { "name": "Own" }, "license": { "spdx_id": "AGPL-3.0" } }"#,
+        );
+        assert_eq!(source_url_from_credits(Some(&nameless)), DEFAULT_SOURCE_URL);
+        std::fs::remove_file(&nameless).ok();
+        let absent = std::env::temp_dir().join(format!(
+            "cms-ranking-credits-absent-{}-{}.json",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("the clock is after the epoch")
+                .as_nanos()
+        ));
+        assert_eq!(source_url_from_credits(Some(&absent)), DEFAULT_SOURCE_URL);
+        assert_eq!(source_url_from_credits(None), DEFAULT_SOURCE_URL);
     }
 }

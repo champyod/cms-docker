@@ -8,7 +8,7 @@ use tower_http::services::ServeDir;
 
 use crate::board;
 use crate::json::{json_response, stamped_json};
-use crate::public_config::public_config;
+use crate::public_config::{public_config, source_url_from_credits};
 use crate::store::{
     load_appearance, load_contest, load_shown_set, Appearance, RankingContest, ShownSet,
 };
@@ -204,7 +204,8 @@ async fn config(State(state): State<AppState>) -> Response {
         Ok(appearance) => appearance,
         Err(refusal) => return refusal.response(),
     };
-    json_response(&public_config(appearance))
+    let source_url = source_url_from_credits(state.config().credits_file.as_deref());
+    json_response(&public_config(appearance, &source_url))
 }
 
 async fn logo(State(state): State<AppState>) -> Response {

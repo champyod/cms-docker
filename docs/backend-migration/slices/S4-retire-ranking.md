@@ -55,6 +55,30 @@ the coverage loss this slice must not cause.
 - Do not delete `ranking-web/tests/fixtures/parity/**` — its `PROVENANCE.md` is the record that the
   Python handlers were the source.
 
+## Landing record
+
+- **The source offer comes from `credits.json`, not from a constant** (Tier B). The Python handler
+  took `source_url` from `cms_ranking.toml` (`src/cmsranking/Config.py:41-51`) and the retired test
+  asserted a fork could point the offer at its own repository; the Rust `public_config` served one
+  compiled-in URL, so a fork could not, and `/config` and `/credits` carried two spellings of the
+  same repository. `/config` now reads `project.url` from the file `/credits` serves, and falls back
+  to the constant only when that file cannot supply it. Rejected: a `CMS_SOURCE_URL` environment
+  variable — it is how the contest and admin pages read it (`src/cms/conf.py:77`), but the ranking
+  container is never passed it (`docker-compose.yml:658-673`) and this brief forbids editing
+  compose, so the knob would be unreachable in the image this lane ships.
+- **The entry point and the units that ran it go with the package** (Tier B).
+  `src/scripts/cmsRankingWebServer` is installed into the image's `bin/` by `src/setup.py:130` and
+  does nothing but import `cmsranking`; both `config/systemd/cms-ranking.service` copies exec that
+  script. Leaving them behind would ship a command that imports nothing, so they are deleted with
+  the package and `src/install.py:77-81` loses the unit from its install list.
+- **Blocked, not fixed in this lane:** `admin-panel/scripts/generate-icons.mts:128-130` still writes
+  `src/cmsranking/static/img/{favicon.ico,logo.png}` and `src/cmsranking/images/logo.svg`, and CI's
+  `bun run icons:check` (`.github/workflows/ci.yml:523`) fails once those commits are gone. The fix
+  is three lines in an `admin-panel/**` file this lane may not edit.
+- The rest of the `cmsranking` mentions in prose (`src/docs/Running CMS.rst:127`,
+  `src/docs/Troubleshooting.rst:45,49`, `src/docs/Configuring a contest.rst:109`, `CLAUDE.md:1042`,
+  `docs/RANKING-RUST-CUTOVER.md`) describe the retired service and are left for a docs pass.
+
 ## Report
 
 Evidence table per criterion (command | exit code | count), then what landed as a SHA, what is
