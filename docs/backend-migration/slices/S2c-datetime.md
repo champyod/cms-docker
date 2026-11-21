@@ -74,3 +74,30 @@ it does, **propose it in the handback, do not add it** — a new dependency is t
 
 Evidence table, one row per criterion (command | exit code | count), then what landed (SHA), what is
 blocked (named), what is next.
+
+## What the run showed
+
+Measured, not read: `src/cmscommon/datetime.py` executed in the
+`cms-docker-core:major-admin-panel` image (Python 3.12.3, babel 2.12.1) with `src/` mounted at
+`/opt/src` and prepended to `sys.path`.
+
+| input (wall clock) | `make_timestamp` | aware `.timestamp()` | gap |
+|---|---|---|---|
+| `2020-01-01 00:00:00` naive | 1577836800.0 | — | — |
+| same wall clock, `+05:00` | 1577836800.0 | 1577818800.0 | 18000 |
+| same wall clock, `-08:00` | 1577836800.0 | 1577865600.0 | 28800 |
+| `Europe/Rome` 2021-07-01 12:00 (DST, +02:00) | 1625140800.0 | 1625133600.0 | 7200 |
+| `2020-01-01 00:00:00.123456` | 1577836800.123456 | — | — |
+
+One correction to the brief above: `make_timestamp` on an **aware** datetime does not return a
+number — CPython raises `TypeError: can't subtract offset-naive and offset-aware datetimes`. The gap
+in the last column is therefore between the naive wall clock the function reads and the true POSIX
+of the offset-bearing spelling of that same clock. That is why the Rust signature takes
+`NaiveDateTime`: an offset-bearing type would have to invent an answer for an input the original
+refuses.
+
+Deferred, with the reason: `get_timezone` and `get_system_timezone`. Their only callers are
+`src/cms/server/contest/handlers/contest.py:263` and `src/cmstestsuite/testrunner.py:132`, which land
+in S-7/S-8 and S-12; both name a zone out of babel's database, which needs a timezone database crate
+and is therefore a dependency decision for the operator. `local_tz` (the zone value) is ported; the
+lookup is not stubbed with a default.
