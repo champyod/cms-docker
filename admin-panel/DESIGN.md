@@ -128,7 +128,22 @@ An alert is not a paragraph. Fixed shape:
 primary button, an icon in a tinted square beside the text, or a sentence that describes the system
 instead of the state.
 
-## 8. How this law is checked — instruments, not adjectives
+## 11. Quality of life — friction is measured, not felt
+
+QoL is not "small tweaks": it is friction removed, and the unit is time, keystrokes, clicks or errors.
+
+| Rule | Why (evidence in `DESIGN-RESEARCH.md` §3) |
+|---|---|
+| A bulk action is three parts, never one: **persistent visible selection** (count + selection that survives scroll and reload), **a preview of what will change**, **undo that still works after you navigate** | Linear and Gmail's cases; 100 items at 10s each is 17 minutes |
+| The same shortcut acts on the selection as on one row — one action vocabulary | Linear's model; branching verbs confuse |
+| Show every shortcut beside its action; never require it | shortcuts beat menus by ~50% only after practice (APA) |
+| Never ask twice for the same fact | WCAG 3.3.7 Redundant Entry |
+| Every drag has a click alternative | WCAG 2.5.7 Dragging Movements |
+| Destructive action → **undo**, not a confirmation dialog | undo is the cheaper safety net; confirmations are skipped by reflex |
+| Filters, sort and selection survive a reload | state that dies on refresh is not a feature |
+| Measure it: time-to-task, keystrokes, clicks, errors — before and after, with the command that measured it | otherwise QoL is an opinion |
+
+## 12. How this law is checked — instruments, not adjectives
 
 | Check | Instrument | Fails when |
 |---|---|---|
@@ -137,6 +152,11 @@ instead of the state.
 | headline number count | counted on the page | more than 7 |
 | alert anatomy | counted: actions, lines, title repetition | two primary buttons, or a body that restates the title |
 | decorative structure | the diff adds a stripe, tinted icon square or border with no data behind it | one instance |
+| pointer targets | measured bounding boxes | any interactive target under 24×24 CSS px (WCAG 2.5.8) |
+| focus visibility | keyboard walk, computed styles | focus indicator under 2px perimeter or under 3:1 contrast (WCAG 2.4.13) |
+| re-entry | the flow walked twice | any value asked for twice (WCAG 3.3.7) |
+| undo | the destructive action performed | no undo path, or undo lost after navigation |
+| freshness | the surface read | no timestamp of when the data was read |
 | colour | `grep -rn '#[0-9a-fA-F]\{6\}' src --include=*.tsx` outside the token block | one literal |
 | colour meaning | the same element type sampled across pages | the same kind varies in colour |
 | density | content height ÷ viewport, lines counted | a page over ~40 content lines with no chart |
@@ -156,7 +176,9 @@ written in its place.
 
 ## 10. Sources — what each one settles
 
-Read 2026-11-21. Cited so a later session can verify rather than trust this file.
+Read 2026-11-21. **The full evidence note, with the example or number behind each rule and the five
+conflicts and their adjudications, is `admin-panel/DESIGN-RESEARCH.md`.** This table is the index;
+that file is the evidence, and a rule may only cite a source that appears there.
 
 | Source | What it settles here |
 |---|---|
