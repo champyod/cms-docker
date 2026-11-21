@@ -641,6 +641,12 @@ jobs:
           format: table
           output: trivy-image.txt
 
+      # WHY on failure: the table is the finding, and without this step it exists only in the
+      # runner workspace — the job log would say "exit code 1" and nothing else.
+      - name: Publish the image scan finding
+        if: failure()
+        run: cat trivy-image.txt 2>/dev/null || true
+
       # WHY a comment: a failing check with no explanation sends the author into the job log to
       # reconstruct what broke. Same facts, on the surface they are already looking at. Upserted by
       # marker so a re-run replaces last night's numbers instead of stacking comments.
