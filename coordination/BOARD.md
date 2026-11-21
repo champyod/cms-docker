@@ -42,6 +42,8 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
+| P6 | **Admin role credentials + superuser bootstrap** — auto-generate three admin role passwords in config sync, pass them to a superuser-only SQL phase in `__apply_sql.sh --bootstrap-roles`, and construct the panel URLs in compose. Production will only use `./cms`. No production run in this lane. | `.worktrees/admin-role-credentials` | `fix/admin-role-credentials` (from `51d41cc5`) | hermes-agent | `config.toml.example`, `scripts/__config_sync.sh`, `scripts/__apply_sql.sh`, `scripts/__lib/common.sh`, `docker-compose.yml`, `admin-panel/prisma/sql/20260820119000_admin_role_passwords.sql`, `tests/**`, `coordination/BOARD.md` | planning | in-flight |
+
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
 | # | Item | Files (likely) | Waiting on |
