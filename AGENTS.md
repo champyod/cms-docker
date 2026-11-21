@@ -69,6 +69,11 @@ directory, never in the repository, and is deleted in the turn that stops needin
 is the finding, written into the epic or the doc. A script that a gate or CI runs is permanent by
 definition: it lives in `scripts/`, carries a test and a negative control, and is reviewed like code.
 
+**Research.** A claim earns a place in a document only when at least three *independent* sources
+support it — different authors, different method, ideally different field — and the disagreements
+between them are recorded with the adjudication. One source that happens to agree is a coincidence,
+not a finding, and the first source that matches is the failure mode this rule exists to stop.
+
 **Reading a comment.** A remark is evidence of a sighting, never a specification. Before changing
 anything, name what the artefact must achieve, say in one sentence what the remark is evidence of,
 then do what follows from that — which is often not the literal wording. If two readings lead to
