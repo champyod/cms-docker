@@ -170,15 +170,14 @@ describe('runtime — mocked server actions enforce guards', () => {
         effective: new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
       })),
     }));
-    vi.doMock('@/lib/prisma', () => ({
-      prisma: {
-        admins: {
-          findUnique: vi.fn(async () => ({ id: 2, enabled: true, admin_groups: [{ groups: { name: 'Superadmin', id: 1 } }] })),
-          update: vi.fn(async () => ({})),
-          count: vi.fn(async () => 1),
-        },
-      },
-    }));
+    vi.doMock('@/lib/prisma', () => {
+      const admins = {
+        findUnique: vi.fn(async () => ({ id: 2, enabled: true, admin_groups: [{ groups: { name: 'Superadmin', id: 1 } }] })),
+        update: vi.fn(async () => ({})),
+        count: vi.fn(async () => 1),
+      };
+      return { getAdminSecurityClient: () => ({ admins }), prisma: { admins } };
+    });
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));
     vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
     vi.doMock('@/lib/field-permissions', async () => {

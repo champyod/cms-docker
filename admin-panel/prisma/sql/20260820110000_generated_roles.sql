@@ -158,8 +158,8 @@ BEGIN
     RAISE NOTICE 'cms_admin_account_security is missing: no grants applied for it';
     RETURN;
   END IF;
-  EXECUTE 'GRANT SELECT (id, username) ON public.admins TO cms_admin_account_security';
-  EXECUTE 'GRANT UPDATE (authentication, enabled) ON public.admins TO cms_admin_account_security';
+  EXECUTE 'GRANT SELECT (id, username, name, enabled, authentication) ON public.admins TO cms_admin_account_security';
+  EXECUTE 'GRANT UPDATE (name, username, authentication, enabled) ON public.admins TO cms_admin_account_security';
   EXECUTE 'GRANT INSERT (username, authentication, enabled, name) ON public.admins TO cms_admin_account_security';
   IF to_regclass('public.admins_id_seq') IS NOT NULL THEN
     EXECUTE 'GRANT USAGE ON SEQUENCE public.admins_id_seq TO cms_admin_account_security';
