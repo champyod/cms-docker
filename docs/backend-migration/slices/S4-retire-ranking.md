@@ -83,3 +83,40 @@ the coverage loss this slice must not cause.
 
 Evidence table per criterion (command | exit code | count), then what landed as a SHA, what is
 blocked (named), what is next.
+
+---
+
+## Parent's verification, and one correction to itself
+
+Checked by the parent, not taken from the handback:
+
+| Check | Result |
+|---|---|
+| Order of work | tests ported to Rust **first** (`0f50c8df`), then `git rm -r src/cmsranking` (`17dab504`) — correct order, so no assertion was deleted with its subject |
+| Deletion is complete | `grep -rn cmsranking src/` → **0 lines**; every real module compiles (**0 syntax errors**); `ranking-web/tests/fixtures/parity` untouched |
+| `Dockerfile` | `git diff <base>..HEAD -- Dockerfile` empty, `grep -c cmsranking Dockerfile` → **0**; `:201` still copies the Rust `cms-ranking` |
+| Gates | `cargo fmt --check` 0 · `cargo clippy --all-targets -- -D warnings` 0, 0 errors · `cargo test` 0 — 25 targets, 0 failed |
+| The ported tests bite | breaking `public_config.rs:42`'s fallback makes `an_unusable_credits_file_leaves_the_shipped_offer` **FAIL at src/public_config.rs:179**; restored → 7/7 pass |
+
+**The parent was wrong once and is recording it.** A first negative control ran `cargo test --test
+surface`, saw 33 pass with the licence fallback broken, and concluded the branch was untested. It is
+tested — in the **lib** unit tests, which `--test surface` does not run. Re-run with `--lib`, the same
+break fails `an_unusable_credits_file_leaves_the_shipped_offer` exactly as it should. The lesson is the
+scope of the gate, not the child's work: a negative control is only evidence about the tests the
+command actually runs.
+
+**Criterion 3 was mis-specified by the parent.** `src/cmstestsuite/code/compile-fail.py` is a
+*deliberate* syntax-error grading fixture (referenced by `src/cmstestsuite/Tests.py:188`), so a bare
+`compileall` over `src/` can never exit 0 — it fails identically on the base commit. The property that
+was wanted is "every real module still compiles", which holds: 394 files, 0 failed.
+
+**Two things are not green, and they are not this slice's to fix:**
+
+1. **CI `icons:check` will fail.** `admin-panel/scripts/generate-icons.mts:128-130` still lists
+   `src/cmsranking/static/img/favicon.ico`, `…/logo.png` and `src/cmsranking/images/logo.svg`, and
+   `.github/workflows/ci.yml:523` runs `bun run icons:check` unconditionally; a missing input reads as
+   drift. The fix is to delete those three entries — `admin-panel/**` belongs to the frontend session.
+2. **Pre-existing reds in `credits_test.py`** (3): the ranking surface's `first_party` lacks the 15
+   `Perspectives.*` assets `Ranking.html:7-43` loads, plus panel deps `highlight.js`/`redis`, and
+   `test_credited_paths_exist` needs `node_modules`, absent here. Reported with their lines, not
+   repaired.
