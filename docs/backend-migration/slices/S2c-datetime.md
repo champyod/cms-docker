@@ -101,3 +101,27 @@ Deferred, with the reason: `get_timezone` and `get_system_timezone`. Their only 
 in S-7/S-8 and S-12; both name a zone out of babel's database, which needs a timezone database crate
 and is therefore a dependency decision for the operator. `local_tz` (the zone value) is ported; the
 lookup is not stubbed with a default.
+
+## Parent's independent verification
+
+| Check | The run |
+|---|---|
+| The brief's correction is real | `make_timestamp(datetime(2020,1,1,tzinfo=+05:00))` in the Python image → **`TypeError: can't subtract offset-naive and offset-aware datetimes`**, while the naive spelling returns `1577836800.0`. The child was right; the brief was wrong. |
+| Signature follows the original | `make_timestamp(Option<NaiveDateTime>)` and `EPOCH: NaiveDateTime` — the type Python's own function forces. |
+| Host zone cannot leak | `TZ=Asia/Bangkok` and `TZ=America/New_York` both run the suite green (7 passed), so no result depends on the machine's clock zone. |
+| The guard bites | Adding the local offset inside `make_timestamp` — the mistake the slice exists to prevent — fails **three** tests: `an_offset_is_not_part_of_the_arithmetic` (`-43200.0 != -18000.0`), `the_four_python_values_come_back_unchanged` and `the_answer_does_not_move_with_the_host_zone`. Restored → 7/7. |
+| Gates | `cargo fmt --check` 0 · `cargo clippy --all-targets -- -D warnings` 0, 0 errors · `cargo test -p cms-db` green. |
+
+The guard is stronger than a one-sided assertion: it pins the correct value *and* the value the wrong
+port would return, then asserts their difference equals the zone offset — so it fails whether the
+implementation drifts to local time or the test's own assumption does.
+
+**Two lessons for the parent's own briefs**, both found here:
+
+1. A claim about a function's behaviour is worth nothing until the function has been *run* on the input
+   in question. The brief asserted "aware input differs by the offset"; the truth is that Python
+   raises, and the whole cross-language table had to be re-derived around the naive wall clock.
+2. A backup taken while a plant is in the file is a contaminated backup. Restoring from the wrong
+   snapshot left the planted line in place and produced a compile error that briefly read as "the
+   guard does not bite". Verify the restored content against the expected line, not against the fact
+   that a copy command exited 0.
