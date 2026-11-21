@@ -131,7 +131,12 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
       toasts: { discord: { noWebhookUrl: 'no webhook', testAlertTitle: 't', testAlertDescription: 'd', deliveryFailed: 'failed' } },
     })),
   }));
-  vi.doMock('@/lib/prisma', () => ({ prisma: { users, admins } }));
+  vi.doMock('@/lib/prisma', () => ({
+    // The admin reveal runs over cms_admin_account_security's client; `admins` is the same delegate
+    // the suite mutates, so a rejected read is observed on whichever connection the action chose.
+    getAdminSecurityClient: () => ({ admins }),
+    prisma: { users, admins },
+  }));
 
   return { entries, users, admins };
 }

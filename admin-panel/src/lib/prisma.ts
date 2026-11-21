@@ -335,3 +335,55 @@ export function getAdminReadClient(): PrismaClient {
   );
   return adminReadClient;
 }
+
+/** The variable carrying the `cms_admin_account_security` connection string. Distinct from the
+ * login and read variables because those roles hold different columns: one may read a credential,
+ * one may list people, and only this one may write an account. */
+const ADMIN_SECURITY_DATABASE_URL_ENV = 'ADMIN_SECURITY_DATABASE_URL';
+
+/** The role that variable connects as; restated in the failure so an operator can search for it. */
+const ADMIN_SECURITY_ROLE = 'cms_admin_account_security';
+
+let adminSecurityClient: PrismaClient | undefined;
+
+/**
+ * The client that creates, updates, deletes and reveals admin accounts, over the
+ * `cms_admin_account_security` role's own connection.
+ *
+ * WHY a third client and not a write on {@link prisma}: the account role is the only one whose
+ * grants reach `admins.authentication` for writing, and the application-wide role must not keep
+ * that reach merely because a mutation happens to run in the same process. A separate connection
+ * makes "only the account-security path can change a credential" a property of the process, not a
+ * convention the next module may forget; the column grants are enforced in the database, so an
+ * UPDATE that grew a column outside the grant fails there rather than quietly widening the
+ * application's reach.
+ *
+ * WHY lazy: every page, the scheduler, the CLI and the seed import this module, while only the
+ * admin mutations have a reason to hold this connection. Building it at import time would make
+ * every one of those processes fail to start until the role is provisioned, and would open a pool
+ * nobody uses. The first mutation creates it; every later mutation in this process reuses it.
+ *
+ * WHY no fallback: `DATABASE_URL` names the application-wide role, which still holds every column.
+ * Falling back to it when this variable is absent would keep the mutations working while silently
+ * restoring the access the split removes. So an absent variable raises, naming it, and the mutation
+ * fails loudly instead of writing with the wrong identity.
+ */
+export function getAdminSecurityClient(): PrismaClient {
+  if (adminSecurityClient !== undefined) return adminSecurityClient;
+
+  const url = process.env[ADMIN_SECURITY_DATABASE_URL_ENV]?.trim();
+  if (!url) {
+    throw new Error(
+      `${ADMIN_SECURITY_DATABASE_URL_ENV} is not set: the ${ADMIN_SECURITY_ROLE} role is not provisioned, ` +
+        'so the panel cannot mutate admin accounts. Set it to that role\'s connection string; ' +
+        'there is deliberately no fallback to the application-wide connection.',
+    );
+  }
+
+  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
+  // cms.actor, and the signed-in admin's request is what supplies it.
+  adminSecurityClient = buildActorAwareClient(
+    new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
+  );
+  return adminSecurityClient;
+}

@@ -1,7 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { recordAudit } from '@/lib/audit';
 import { invalidateAccessCache } from '@/lib/permissions';
-import { prisma } from '@/lib/prisma';
+import { getAdminSecurityClient } from '@/lib/prisma';
 import { buildAdminUpdateData, type UpdateAdminInput } from '@/lib/admin-helpers';
 
 async function recordPasswordChangeAudit(adminId: number): Promise<void> {
@@ -20,12 +20,15 @@ export async function handleAdminUpdateWrite(
   adminId: number,
   allowed: Record<string, unknown>,
 ): Promise<void> {
-  const beforeAdmin = await prisma.admins.findUnique({
+  const security = getAdminSecurityClient();
+  const beforeAdmin = await security.admins.findUnique({
     where: { id: adminId },
     select: { name: true, enabled: true, username: true },
   });
   const updateData = await buildAdminUpdateData(allowed as unknown as UpdateAdminInput);
-  await prisma.admins.update({ where: { id: adminId }, data: updateData });
+  // WHY the explicit select: the role's SELECT does not include `last_login_at`, so a bare update
+  // would ask PostgreSQL for every column in its RETURNING clause and be refused.
+  await security.admins.update({ where: { id: adminId }, data: updateData, select: { id: true } });
   await recordAudit({
     verb: 'admin:update',
     entity: 'admin',

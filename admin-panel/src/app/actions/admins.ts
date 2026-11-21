@@ -15,7 +15,7 @@ import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { type ListSortInput } from '@/lib/list-sorting';
 import { adminSortOrderBy } from '@/lib/admin-sorting';
-import { getAdminReadClient, prisma } from '@/lib/prisma';
+import { getAdminReadClient, getAdminSecurityClient } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
   findAdminTarget,
@@ -93,7 +93,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
   await ensurePermission(ACTION_PERMISSIONS.createAdmin);
   // WHY: creation is gated by `admin:create`; stripDisallowedFields models the UPDATE contract (per-field `update` keys) and must not be applied to create payloads
   try {
-    const created = await prisma.admins.create({
+    const created = await getAdminSecurityClient().admins.create({
       data: {
         name: data.name,
         username: data.username,
@@ -199,8 +199,12 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   }
 
   try {
-    const beforeDelete = await prisma.admins.findUnique({ where: { id: adminId }, select: { username: true, name: true, enabled: true } });
-    await prisma.admins.delete({ where: { id: adminId } });
+    const security = getAdminSecurityClient();
+    const beforeDelete = await security.admins.findUnique({ where: { id: adminId }, select: { username: true, name: true, enabled: true } });
+    // WHY the explicit select: the role's SELECT is column-scoped and does not include
+    // `last_login_at`; a bare delete would ask PostgreSQL for the whole row in its RETURNING
+    // clause and be refused before the audit guard is ever reached.
+    await security.admins.delete({ where: { id: adminId }, select: { id: true } });
     await recordAudit({
       verb: 'admin:delete',
       entity: 'admin',
@@ -221,7 +225,7 @@ export async function revealAdminPassword(id: number): Promise<
 > {
   await ensurePermission('password:reveal');
   try {
-    const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
+    const row = await getAdminSecurityClient().admins.findUnique({ where: { id }, select: { authentication: true } });
     if (!row) {
       await recordAudit({
         verb: 'password:reveal',

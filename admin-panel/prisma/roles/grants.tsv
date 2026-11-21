@@ -28,7 +28,7 @@ cms_admin_login	admins	SELECT	id,username,authentication,enabled	-
 cms_admin_read_people	admins	SELECT	id,username,name,enabled,last_login_at	-
 cms_admin_write_people	admins	SELECT	id,username	-
 cms_admin_write_people	admins	UPDATE	name,username	-
-cms_admin_account_security	admins	SELECT	id,username	-
-cms_admin_account_security	admins	UPDATE	authentication,enabled	-
+cms_admin_account_security	admins	SELECT	id,username,name,enabled,authentication	-
+cms_admin_account_security	admins	UPDATE	name,username,authentication,enabled	-
 cms_admin_account_security	admins	INSERT	username,authentication,enabled,name	admins_id_seq
 cms_admin_account_security	admins	DELETE	-	-

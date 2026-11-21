@@ -187,13 +187,13 @@ describe('the admin list read', () => {
     expect(ADMINS_SOURCE).toMatch(/import \{[^}]*getAdminReadClient[^}]*\} from '@\/lib\/prisma'/);
   });
 
-  it('leaves the admin writes and the password reveal on the application connection', () => {
-    // The read role holds SELECT on five columns and no write, so an UPDATE or a reveal through it
-    // would be refused. Those paths must stay where the grant exists.
+  it('leaves the admin mutations off the read client', () => {
+    // The read role holds SELECT on five columns and no write, so an INSERT, UPDATE, DELETE or
+    // reveal through it would be refused — and `authentication` is not in its grant at all.
     for (const name of ['createAdmin', 'updateAdmin', 'deleteAdmin', 'revealAdminPassword']) {
       const body = functionSource(name);
       expect(body, `${name}() moved to the read client`).not.toContain('getAdminReadClient');
     }
-    expect(functionSource('revealAdminPassword')).toContain('prisma.admins');
+    expect(functionSource('revealAdminPassword')).toContain('getAdminSecurityClient');
   });
 });

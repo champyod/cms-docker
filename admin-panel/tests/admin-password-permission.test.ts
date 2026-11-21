@@ -36,18 +36,23 @@ async function loadUpdateAdmin(
       effective: new Set<string>(targetPermissions),
     })),
   }));
-  vi.doMock('@/lib/prisma', () => ({
-    prisma: {
-      admins: {
-        findUnique: vi.fn(async () => TARGET_ROW),
-        update: vi.fn(async (args: { data: Record<string, unknown> }) => {
-          writtenData.push(args.data);
-          return {};
-        }),
-        count: vi.fn(async () => 1),
-      },
-    },
-  }));
+  vi.doMock('@/lib/prisma', () => {
+    // The before-read and the update run over cms_admin_account_security's client; the target-row
+    // read in admin-helpers still uses the application client. Both point at the same delegates so
+    // this suite observes the write itself rather than which connection carried it.
+    const admins = {
+      findUnique: vi.fn(async () => TARGET_ROW),
+      update: vi.fn(async (args: { data: Record<string, unknown> }) => {
+        writtenData.push(args.data);
+        return {};
+      }),
+      count: vi.fn(async () => 1),
+    };
+    return {
+      getAdminSecurityClient: () => ({ admins }),
+      prisma: { admins },
+    };
+  });
   vi.doMock('@/lib/audit', () => ({
     recordAudit: vi.fn(async (entry: AuditCall) => {
       auditEntries.push(entry);
