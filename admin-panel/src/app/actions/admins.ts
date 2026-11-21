@@ -15,7 +15,7 @@ import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { type ListSortInput } from '@/lib/list-sorting';
 import { adminSortOrderBy } from '@/lib/admin-sorting';
-import { prisma } from '@/lib/prisma';
+import { getAdminReadClient, prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
   findAdminTarget,
@@ -79,7 +79,11 @@ async function guardAdminMutation(
 
 export async function getAdmins(sort?: ListSortInput): Promise<AdminWithLogin[]> {
   await ensurePermission('admin:read');
-  return prisma.admins.findMany({
+  // WHY the read role's client: this is the only admin read that every `admin:read` holder runs, so
+  // it is the one that decides whether the list path can reach a credential column at all. The
+  // role's SELECT is column-scoped to exactly the five below, and a select that grew a sixth would
+  // fail there rather than quietly widen what the page can see.
+  return getAdminReadClient().admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
     orderBy: adminSortOrderBy(sort ?? null)
   });
