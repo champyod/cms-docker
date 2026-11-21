@@ -9,8 +9,7 @@ import {
   isEffectiveSuperset,
   ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
-// WHY from the server module: resolving another admin's grants needs Prisma, and
-// permission-engine.ts is imported by client components (action buttons read their key from it).
+// Server module: resolving another admin's grants needs Prisma, and permission-engine is client-imported.
 import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { type ListSortInput } from '@/lib/list-sorting';
@@ -79,10 +78,7 @@ async function guardAdminMutation(
 
 export async function getAdmins(sort?: ListSortInput): Promise<AdminWithLogin[]> {
   await ensurePermission('admin:read');
-  // WHY the read role's client: this is the only admin read that every `admin:read` holder runs, so
-  // it is the one that decides whether the list path can reach a credential column at all. The
-  // role's SELECT is column-scoped to exactly the five below, and a select that grew a sixth would
-  // fail there rather than quietly widen what the page can see.
+  // Read role: the one admin read every admin:read holder runs, so its column-scoped SELECT is what keeps credentials unreachable.
   return getAdminReadClient().admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
     orderBy: adminSortOrderBy(sort ?? null)
@@ -121,8 +117,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
 }
 
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  // Why: the write is gated per field rather than by one blanket key, so a caller holding only
-  // admin:password:update can still reset a credential while every other field is stripped below.
+  // Per-field gating: a caller with only admin:password:update can reset a credential while other fields are stripped.
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
 
@@ -148,9 +143,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
     return { success: false, error: 'Cannot demote your own superadmin account' };
   }
 
-  // Why: the system actor's enabled flag is what keeps the passwordless row
-  // unloginnable. Re-enabling it would hand a root login attempt to the
-  // verifier, and the attribution identity has no operator-controlled state.
+  // Keep the system actor disabled: it is passwordless, so re-enabling it hands a root login to the verifier.
   if (target?.username === ROOT_ACTOR_USERNAME && allowed.enabled !== undefined) {
     return { success: false, error: 'Cannot change the enabled flag of the system actor' };
   }
@@ -192,8 +185,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
     return { success: false, error: 'Cannot remove the last superadmin' };
   }
 
-  // Why: the system actor is attribution infrastructure — every script-side
-  // action logs under its id, so the row is insert-only and no delete path exists.
+  // The system actor is insert-only attribution infrastructure: no delete path exists.
   if (target?.username === ROOT_ACTOR_USERNAME) {
     return { success: false, error: 'Cannot delete the system actor — script-side action attribution resolves through it' };
   }
@@ -201,9 +193,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   try {
     const security = getAdminSecurityClient();
     const beforeDelete = await security.admins.findUnique({ where: { id: adminId }, select: { username: true, name: true, enabled: true } });
-    // WHY the explicit select: the role's SELECT is column-scoped and does not include
-    // `last_login_at`; a bare delete would ask PostgreSQL for the whole row in its RETURNING
-    // clause and be refused before the audit guard is ever reached.
+    // Explicit select: the role cannot read last_login_at, so a bare delete's RETURNING would be refused.
     await security.admins.delete({ where: { id: adminId }, select: { id: true } });
     await recordAudit({
       verb: 'admin:delete',
@@ -232,17 +222,14 @@ export async function revealAdminPassword(id: number): Promise<
         entity: 'admin',
         entityId: String(id),
         beforeValues: { adminId: id },
-        // A named reason, not a message: this failed before any secret was read, and the reason
-        // belongs in the log while whatever the driver said does not.
+        // A named reason, not a message: this failed before any secret was read.
         afterValues: { error: 'NotFound' },
         result: 'failure',
       });
       return { success: false, error: 'Admin not found' };
     }
     const parsed = parseStoredPassword(row.authentication);
-    // Why kind only: the row records that this admin's secret was disclosed, never the secret.
-    // An admin credential is the one that re-grants every permission below it, so leaving this
-    // read unlogged made it the single sensitive read on the panel with no trail.
+    // Kind only, never the secret: a credential that re-grants every permission must leave a trail.
     await recordAudit({
       verb: 'password:reveal',
       entity: 'admin',
@@ -254,9 +241,7 @@ export async function revealAdminPassword(id: number): Promise<
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
   } catch (error) {
-    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
-    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
-    // payload — a message here can carry the query that was refused.
+    // The error name is the whole payload: a message here can carry the refused query.
     await recordAudit({
       verb: 'password:reveal',
       entity: 'admin',

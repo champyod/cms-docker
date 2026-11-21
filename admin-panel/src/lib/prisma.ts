@@ -5,27 +5,7 @@ import { actorClaim } from '@/lib/db-actor';
 /** See {@link buildActorAwareClient}. */
 export { buildActorAwareClient };
 
-/**
- * The one database connection the panel uses, wrapped so that every statement carries an identity.
- *
- * WHY a wrapper and not a helper every caller must remember: 141 modules import this client, and
- * the fail-closed policies mean the module that forgets does not "see too much" — it sees nothing,
- * silently, and the page it powers draws empty. A missing actor would then be indistinguishable
- * from an empty database. So the identity is made structural: nothing reaches Postgres except
- * through a transaction that stamps `cms.actor` first, and a call with no identity raises
- * `MissingDbActorError` at the call site instead of returning [].
- *
- * HOW the stamp survives a pooled connection: `set_config('cms.actor', $1, true)` is
- * transaction-local. Each model call runs inside its own `$transaction`, so the setting is applied
- * after BEGIN and discarded at COMMIT (or ROLLBACK) — the next borrower of that connection cannot
- * inherit the previous request's identity. A session-scoped `SET` would have been one line and one
- * cross-request authorization bug, which is why it is not used anywhere in this file.
- *
- * WHAT IT COSTS: a read is now BEGIN / set_config / SELECT / COMMIT instead of SELECT — two extra
- * round trips per statement. That is the price of moving enforcement into the database while the
- * connection is shared; it is recorded as an open risk, with a per-request connection role as the
- * structural fix.
- */
+// Identity is structural: nothing reaches Postgres without a stamped transaction, and a call with no identity throws.
 
 type AnyDelegate = Record<string, unknown>;
 type AnyClient = Record<string, unknown>;
@@ -52,18 +32,7 @@ const RAW_VERBS = new Set([
   '$executeRawUnsafe',
 ]);
 
-/**
- * The statement that stamps a transaction. Parameterised: the claim is never interpolated.
- *
- * WHY $queryRaw and not $executeRaw: `set_config` returns the value it set, so the statement has a
- * result set. `$executeRaw` is for statements that only report an affected-row count.
- *
- * WHY bound to its client: a template tag is called as a plain function, so an unbound method loses
- * its receiver and Prisma's implementation then dereferences `this` (`_createPrismaPromise`) as
- * undefined. Bun happens to keep the receiver; node — which is what the poller image runs — does not,
- * and the failure appeared the first time this path was exercised outside a request (the security
- * signal's first run). Binding is exactly the receiver a direct call would have had.
- */
+// $queryRaw because set_config returns a row; bound to its client because node drops the receiver on an unbound call.
 function stamp(client: AnyClient, claim: string): Promise<unknown> {
   const queryRaw = (client['$queryRaw'] as (
     strings: TemplateStringsArray,
@@ -72,16 +41,7 @@ function stamp(client: AnyClient, claim: string): Promise<unknown> {
   return queryRaw`SELECT set_config('cms.actor', ${claim}, true)`;
 }
 
-/**
- * A query the caller has not awaited yet, tagged with how to run it.
- *
- * WHY not just return the promise: `prisma.$transaction([a, b])` is used by four modules in this
- * codebase, and Prisma rejects an array whose elements are not its own PrismaPromises. A promise
- * that has already started also cannot be moved into somebody else's transaction — atomicity would
- * be lost while looking correct. So the call is deferred: awaiting it runs the statement in its own
- * stamped transaction, and handing it to `$transaction` runs it, with its siblings, in ONE stamped
- * transaction.
- */
+// Deferred so a call can join $transaction([...]): a started promise cannot move into another transaction.
 type Deferred<T> = Promise<T> & { readonly [DEFERRED]: (tx: AnyClient) => Promise<T> };
 
 const DEFERRED = Symbol('cms.deferredQuery');
@@ -95,21 +55,11 @@ function isDeferred(value: unknown): value is Deferred<unknown> {
 }
 
 function buildActorAwareClient(base: PrismaClient): PrismaClient {
-  /**
-   * Run `operation` in a transaction stamped with the resolved actor.
-   *
-   * WHY every call opens a transaction even for a single read: `SET LOCAL` needs a transaction to
-   * be scoped to, and there is no other per-request scope on a shared pool. The alternative —
-   * setting the GUC once per request on a checked-out connection — requires holding a connection
-   * for the whole request, which Prisma's pool does not offer.
-   */
+  // Every call opens a transaction because SET LOCAL needs one, and a shared pool has no per-request scope.
   async function inActorTransaction<T>(
     operation: (tx: AnyClient, claim: string) => Promise<T>,
   ): Promise<T> {
-    // WHY the import is dynamic: the request actor is resolved from the session cookie, which lives
-    // in `next/headers` and only exists inside a request. A static import would make every
-    // non-request process that loads this client — the backup scheduler, the CLI, the waiver export,
-    // the image's own `tsx -e 'require("@/lib/prisma")'` smoke check — fail at import time.
+    // Dynamic import: next/headers only exists inside a request, and a static one would break every non-request process.
     const { requireDbActor } = await import('@/lib/db-actor-request');
     const claim = actorClaim(await requireDbActor());
     return base.$transaction(async (tx) => {
@@ -123,9 +73,7 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
   function defer<T>(run: (tx: AnyClient) => Promise<T>): Deferred<T> {
     let started: Promise<T> | undefined;
     const start = (): Promise<T> => (started ??= inActorTransaction(run));
-    // The three Promise methods a caller may reach for before awaiting. `then` is what `await`
-    // uses; `catch` and `finally` are provided so a call site that chains them keeps working
-    // (a bare `PromiseLike` would not).
+    // The three Promise methods a chained call site may use; a bare PromiseLike would break it.
     const deferred = {
       [DEFERRED]: run,
       then: (onFulfilled?: never, onRejected?: never) => start().then(onFulfilled, onRejected),
@@ -154,10 +102,7 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
   return new Proxy(base, {
     get(target, prop, receiver) {
       if (typeof prop === 'string' && RAW_VERBS.has(prop)) {
-        // WHY `apply(tx, args)`: Prisma's raw verbs are *methods* on the transaction client — they
-        // read `this._createPrismaPromise`, so calling the extracted function unbound throws
-        // "undefined is not an object". Passing the receiver through is what makes a top-level
-        // `prisma.$queryRaw` work at all (the statement still runs inside the stamped transaction).
+        // apply(tx, args): Prisma's raw verbs are methods that read `this`, so an unbound call throws.
         return (...args: unknown[]) =>
           defer(async (tx) => {
             const fn = tx[prop] as unknown as (...a: unknown[]) => Promise<unknown>;
@@ -165,8 +110,7 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
           });
       }
 
-      // $transaction is special: the caller is asking for atomicity across statements, so the
-      // actor is stamped once at the top of THEIR transaction rather than around each statement.
+      // $transaction stamps the actor once at the top of the caller's transaction, not around each statement.
       if (prop === '$transaction') {
         return (arg: unknown) => {
           if (typeof arg === 'function') {
@@ -176,9 +120,7 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
           }
           const items = arg as unknown[];
           if (!items.every(isDeferred)) {
-            // WHY refuse rather than fall through: passing a foreign promise into Prisma's batch
-            // would run it OUTSIDE the stamped transaction, so the caller would get atomicity it
-            // did not actually have. A loud error is the only honest answer.
+            // Refuse a foreign promise: it would run outside the stamped transaction, so the caller would get atomicity it never had.
             return Promise.reject(
               new Error(
                 'cms: every element of $transaction([...]) must come from the actor-aware client; ' +
@@ -208,37 +150,22 @@ function buildActorAwareClient(base: PrismaClient): PrismaClient {
 }
 
 const baseClient = new PrismaClient({
-  // Why: query-level logging buries the surrounding deploy output (the permission
-  // seed alone prints hundreds of statements); errors and warnings stay enabled so
-  // a failed seed still reports its cause.
+  // Query logging buries deploy output; errors and warnings stay on so a failed seed reports its cause.
   log: ['error', 'warn'],
 });
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-/**
- * The module's client. Typed as `PrismaClient` because it is one, verb for verb — the wrapper adds
- * the actor transaction around each call and changes no signature.
- */
+/** Typed as PrismaClient because it is one: the wrapper adds a transaction and changes no signature. */
 export const prisma: PrismaClient =
   process.env.NODE_ENV !== 'production'
     ? (globalForPrisma.prisma ??= buildActorAwareClient(baseClient))
     : buildActorAwareClient(baseClient);
 
-/**
- * The unwrapped client, for the entry points that must ESTABLISH an identity rather than inherit
- * one: `withActor(…)` needs a client to run its first statement on, and the seed/CLI wrappers are
- * outside any request.
- *
- * WHY exported at all: hiding it would push those entry points to construct a second
- * `PrismaClient` — a second pool, its own connection limits, and a client that bypasses this file
- * entirely. It is not a bypass: statements through it are still row-level secured, so using it
- * without an actor reads nothing.
- */
+// Entry points that establish an identity need an unwrapped client; hiding it would make them open a second pool.
 export const prismaUnscoped: PrismaClient = baseClient;
 
-/** The variable carrying the `cms_admin_login` connection string. Named once, so the read and the
- * error message cannot drift. */
+/** Read once so the variable name and the error message cannot drift. */
 const ADMIN_LOGIN_DATABASE_URL_ENV = 'ADMIN_LOGIN_DATABASE_URL';
 
 /** The role that variable connects as; restated in the failure so an operator can search for it. */
@@ -246,26 +173,7 @@ const ADMIN_LOGIN_ROLE = 'cms_admin_login';
 
 let adminLoginClient: PrismaClient | undefined;
 
-/**
- * The client that reads admin credentials, over the `cms_admin_login` role's own connection.
- *
- * WHY a second client and not a select on {@link prisma}: `admins.authentication` is the column the
- * role split exists to take away from the application-wide connection. Reading it through `prisma`
- * would leave the password hash reachable from any module that imports the client, and the grant
- * that makes this role safe is enforced in the database, not in this file. A separate connection is
- * what makes "only the login path can read a credential" true of the process rather than a
- * convention that the next module may forget.
- *
- * WHY lazy: this module is imported by the scheduler, the CLI, the seed and every page, while only
- * the login action has a reason to hold this connection. Building it at import time would make
- * every one of those processes fail to start until the role is provisioned, and would open a pool
- * nobody uses. The first credential read creates it; every later read in this process reuses it.
- *
- * WHY no fallback: `DATABASE_URL` names the application-wide role. Falling back to it when this
- * variable is absent would silently restore exactly the access this split removes — the panel would
- * keep working while the guarantee was gone. So an absent variable raises, naming it, and login
- * fails loudly instead of verifying a credential with the wrong identity.
- */
+// Login-only connection to admins.authentication: lazy, and no fallback to DATABASE_URL, which would silently restore that reach.
 export function getAdminLoginClient(): PrismaClient {
   if (adminLoginClient !== undefined) return adminLoginClient;
 
@@ -278,17 +186,14 @@ export function getAdminLoginClient(): PrismaClient {
     );
   }
 
-  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
-  // cms.actor, and the calling scope (system:auth) is what admits the row.
+  // Actor-aware: admins is row-level secured on cms.actor, supplied by the system:auth scope.
   adminLoginClient = buildActorAwareClient(
     new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
   );
   return adminLoginClient;
 }
 
-/** The variable carrying the `cms_admin_read_people` connection string. Distinct from the login
- * variable on purpose: the two roles hold different columns, and one name collapsing into the other
- * would give the list the login's grant or the login the list's. */
+/** Distinct from the login variable: the two roles hold different columns. */
 const ADMIN_READ_DATABASE_URL_ENV = 'ADMIN_READ_DATABASE_URL';
 
 /** The role that variable connects as; restated in the failure so an operator can search for it. */
@@ -296,26 +201,7 @@ const ADMIN_READ_ROLE = 'cms_admin_read_people';
 
 let adminReadClient: PrismaClient | undefined;
 
-/**
- * The client that lists admins, over the `cms_admin_read_people` role's own connection.
- *
- * WHY a second client and not a select on {@link prisma}: the list is the one admin read that every
- * holder of `admin:read` triggers, and it needs five columns of a table whose sixth column is the
- * credential. Reading it through `prisma` would leave the hash reachable from the list path forever,
- * because the application role keeps that grant; the read role's SELECT is column-scoped to exactly
- * `(id, username, name, enabled, last_login_at)`, so the hash is not merely unselected — it is
- * unreadable over this connection. The grant is enforced in the database, which is what makes the
- * narrowing true of the process rather than a convention the next module may forget.
- *
- * WHY lazy: every page, the scheduler, the CLI and the seed import this module, while only the
- * admins list has a reason to hold this connection. Building it at import time would fail every
- * one of those processes until the role is provisioned, and would open a pool nobody uses.
- *
- * WHY no fallback: `DATABASE_URL` names the application-wide role, which still holds the whole
- * table. Falling back to it when this variable is absent would keep the list working while silently
- * restoring the access the split removes. So an absent variable raises, naming it, and the list
- * fails loudly instead of being served by the wrong identity.
- */
+// Column-scoped read connection for the admins list: lazy, and no fallback to DATABASE_URL, which still holds the hash.
 export function getAdminReadClient(): PrismaClient {
   if (adminReadClient !== undefined) return adminReadClient;
 
@@ -328,17 +214,14 @@ export function getAdminReadClient(): PrismaClient {
     );
   }
 
-  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
-  // cms.actor, and the signed-in admin's request is what supplies it.
+  // Actor-aware: admins is row-level secured on cms.actor, supplied by the signed-in admin's request.
   adminReadClient = buildActorAwareClient(
     new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
   );
   return adminReadClient;
 }
 
-/** The variable carrying the `cms_admin_account_security` connection string. Distinct from the
- * login and read variables because those roles hold different columns: one may read a credential,
- * one may list people, and only this one may write an account. */
+/** Distinct from login and read: only this role may write an account. */
 const ADMIN_SECURITY_DATABASE_URL_ENV = 'ADMIN_SECURITY_DATABASE_URL';
 
 /** The role that variable connects as; restated in the failure so an operator can search for it. */
@@ -346,28 +229,7 @@ const ADMIN_SECURITY_ROLE = 'cms_admin_account_security';
 
 let adminSecurityClient: PrismaClient | undefined;
 
-/**
- * The client that creates, updates, deletes and reveals admin accounts, over the
- * `cms_admin_account_security` role's own connection.
- *
- * WHY a third client and not a write on {@link prisma}: the account role is the only one whose
- * grants reach `admins.authentication` for writing, and the application-wide role must not keep
- * that reach merely because a mutation happens to run in the same process. A separate connection
- * makes "only the account-security path can change a credential" a property of the process, not a
- * convention the next module may forget; the column grants are enforced in the database, so an
- * UPDATE that grew a column outside the grant fails there rather than quietly widening the
- * application's reach.
- *
- * WHY lazy: every page, the scheduler, the CLI and the seed import this module, while only the
- * admin mutations have a reason to hold this connection. Building it at import time would make
- * every one of those processes fail to start until the role is provisioned, and would open a pool
- * nobody uses. The first mutation creates it; every later mutation in this process reuses it.
- *
- * WHY no fallback: `DATABASE_URL` names the application-wide role, which still holds every column.
- * Falling back to it when this variable is absent would keep the mutations working while silently
- * restoring the access the split removes. So an absent variable raises, naming it, and the mutation
- * fails loudly instead of writing with the wrong identity.
- */
+// Write connection for admin accounts: lazy, and no fallback to DATABASE_URL, which still holds every column.
 export function getAdminSecurityClient(): PrismaClient {
   if (adminSecurityClient !== undefined) return adminSecurityClient;
 
@@ -380,8 +242,7 @@ export function getAdminSecurityClient(): PrismaClient {
     );
   }
 
-  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
-  // cms.actor, and the signed-in admin's request is what supplies it.
+  // Actor-aware: admins is row-level secured on cms.actor, supplied by the signed-in admin's request.
   adminSecurityClient = buildActorAwareClient(
     new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
   );

@@ -1,14 +1,6 @@
--- 20260820119000_admin_role_passwords.sql — set the credentials of the three admin roles.
 -- superuser-only
---
--- WHY superuser: 20260820110000_generated_roles.sql creates every LOGIN role with PASSWORD NULL,
--- and only a superuser may set a password on a role it does not own. Production's cmsuser is
--- NOCREATEROLE, so scripts/__apply_sql.sh applies this file in the --bootstrap-roles superuser
--- phase and the normal (application-role) apply skips it.
--- WHY a psql variable: the repository never holds the secret; __apply_sql.sh hands each value in
--- the same way 20260820125000_backup_role.sql receives cms_backup_password.
--- WHY idempotent: ALTER ROLE ... PASSWORD is a set, and an empty or absent variable leaves the
--- existing credential alone rather than clearing it on a re-apply.
+
+-- 20260820119000_admin_role_passwords.sql: 20260820110000_generated_roles.sql leaves these roles PASSWORD NULL, so only a superuser can set them.
 
 SELECT set_config('my.admin_login_password', :'admin_login_password', false);
 SELECT set_config('my.admin_read_password', :'admin_read_password', false);
