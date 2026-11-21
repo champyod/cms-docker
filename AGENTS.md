@@ -69,6 +69,13 @@ directory, never in the repository, and is deleted in the turn that stops needin
 is the finding, written into the epic or the doc. A script that a gate or CI runs is permanent by
 definition: it lives in `scripts/`, carries a test and a negative control, and is reviewed like code.
 
+**Reading a comment.** A remark is evidence of a sighting, never a specification. Before changing
+anything, name what the artefact must achieve, say in one sentence what the remark is evidence of,
+then do what follows from that — which is often not the literal wording. If two readings lead to
+different work, ask one question that names both. Never implement the literal wording when the job
+behind it is stated, and never obey a remark that contradicts a rule the evidence supports without
+saying so.
+
 **Never.** Edit another writer's lane, branch, stash or uncommitted file; `git add .` or `git add
 -A` on a dirty tree; weaken a gate to reach green; present a result you did not obtain; repair a
 pre-existing failure you did not cause — report it with the failing line.

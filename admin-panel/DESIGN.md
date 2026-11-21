@@ -67,6 +67,13 @@ change cue   the ONE coloured element on the surface
 **Cap the count.** 3–7 headline numbers per screen; a wall of big numbers is no big number at all.
 Beyond that they stop being headline and become a table — so make it a table.
 
+**Direction, not decoration.** A bullet strip is readable only when the reader can tell which end is
+good without reading the number. So: the target tick is labelled once per strip, the "good" side is
+named in the label (`lower is better` / `higher is better`), and a strip that has no target is not
+in that group — a today-vs-yesterday comparison is a different object and belongs elsewhere.
+Every surface carries a **freshness timestamp**; a dashboard that cannot say when it was last read is
+not trustworthy during an incident.
+
 ## 4. Colour is a system, never a decision made at the point of use
 
 - **Zero colour literals outside the token block.** No `#rrggbb`, no `bg-blue-500`. Every colour
