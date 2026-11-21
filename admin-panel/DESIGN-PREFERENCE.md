@@ -38,6 +38,29 @@ by surviving repeated application, not by being cited once.
 | 60-30-10 as a check | the measured shape is already 90/5/5; whether to enforce a ratio or just an accent ceiling is unresolved |
 | A bar for a single count against zero | the "waiting 214" bar was invented and removed; the honest form is a number plus its reference |
 
+## Design language: Material 3 — topic log
+
+The operator chose Material 3 on 2026-11-21 and asked for the preference to be decided **one topic at a
+time**, never as a bundle: the answer to one topic changes which candidates survive in the next.
+
+| # | Topic | Status | Decision |
+|---|---|---|---|
+| 1 | Colour architecture (where roles come from) | **decided** | **V2 — M3 baseline palette.** Roles come from the official M3 baseline; the brand colour lives in the logo and is not a role. Chosen over V1 (dynamic from a brand seed), V3 (hand-assigned brand ramp) and V4 (own semantic tokens) after a rendered four-way comparison: V1–V3 all collapse success/info/warning into brand/hue variations, because M3 defines exactly one semantic status (`error`) — so every architecture needs a status palette bolted on anyway, and V2 buys the same structure without depending on a palette generator that trails the spec. |
+| 2 | Type scale | **decided** | **G — base 12 × 1.2, six steps: 12 · 14.4 · 17.28 · 20.74 · 24.88 · 29.86.** Jobs mapped: label/table-header 12 · body and table cell 14.4 · card title 17.28 · section heading 20.74 · page title 24.88 · display 29.86. Chosen over base 11 (forces the label to a sub-pixel 11), base 13 (no step below body, so a table header has nowhere to go) and 1.125 (steps of 1.5px at the bottom, indistinguishable without weight). The chain is computed, not rounded per step: an earlier table of mine claimed "each step ×1.2" while showing 13→16, which is ×1.23 and was wrong — 13 × 1.2 = 15.6. Two design systems hand-pick their ladder instead of generating it (M3's 15 styles, Carbon's productive set with "fixed headings"), so the ratio here is chosen for a dense admin, not because a ratio is the field's default. |
+| 3 | Shape / radius | **decided** | **Carbon product radius: 0 for containers and controls, 2px and 4px are the only small steps, `full` for tags and status pills.** Chosen over M3's full shape scale (0·4·8·12·16·28 — read as a consumer app on the same fragment, and a rounded card gives an action nearly the same weight as the surface), Fluent 2 (2–24, safe but says nothing) and flat-0 everywhere (a secondary button and a tag became indistinguishable: same fill, same shape, no radius to separate action from label). The rule that comes with it: a nested surface's radius is the parent's minus the inset, and a control never shares both fill and shape with a label. |
+| 4 | Elevation | **decided** | **Carbon layers: each layer is a neutral tone with a 1px border; a shadow appears only on an overflow menu or a tooltip.** Chosen over M3 tonal elevation (a page of tinted surfaces turns the whole panel lavender-grey within one shift, and a card inside a table separates from its row only by tone), Fluent shadows (thirty cards means thirty shadows — noise in a dense table) and borders-only (no hierarchy at all once a dialog opens over a card over a table). |
+| 5 | Density | **decided** | **32px row as the default, with a 40px comfortable mode the operator can switch to.** 32px fits 19 rows in a 620px table area against 15 at 40px and 12 at Material's 48 (+27% data per screen at the default, with the comfortable mode as the escape hatch). 28px was rejected: it adds only three rows over 32 while every icon control then has to carry a 24px hit area (WCAG 2.5.8) inside a row where it nearly fills the height. The switch is a display setting, so the gate has to measure both modes. |
+| 6 | State layer and focus | **decided** | **Carbon's state set: hover and pressed change the real surface colour, focus is a 2px ring outside the shape, selected adds a 3px leading bar.** M3's state layers were rejected on evidence: focus is a 12% tint with no ring, and WCAG 2.4.13 (Focus Appearance, AA in 2.2) asks for an indicator of at least 2px at 3:1 — a 12% tint on a light surface measures about 1.1–1.3:1, so M3 would need a ring bolted on anyway; and its hover (8%) and pressed (12%) differ by 4%, which a dense table cannot show. |
+| 7 | Component map | **decided** | **We write our own primitives; the existing eleven and the M3/Carbon catalogues are a checklist, never source code.** Measured: 11 primitives in 833 lines, 12 files importing them, against 68 raw `<button>`, 155 raw `<input>`, 44 raw `<select>`, 41 raw checkboxes and 18 native `confirm()` calls in 14 files — the primitives are not the path of least resistance, and swapping the library would move those raw controls rather than fix them. `admin-panel/PRIMITIVES.md` holds the manifest: per control, its states, its accessibility contract and where the code stands today; it is checked in both directions — every raw control must have a home, and every catalogue component must be mapped or refused with a reason. |
+| 8 | Accent and status palette | open | — |
+| 9 | Data-viz palette | open | — |
+| 10 | Motion | open | — |
+| 11 | Dark mode | open | — |
+| 12 | What we do not take from M3 | open | — |
+
+Topic 1 fixes only *where the roles come from*. The accent colour, the status palette and dark mode are
+topics of their own (8, 11); deciding topic 1 did not decide them and must not be read as doing so.
+
 ## Decided 2026-11-21 (Tier B — decided by the agent, recorded for overrule)
 
 | # | Decision | Reasoning |
