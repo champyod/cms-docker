@@ -8,7 +8,8 @@
 //! - `make_timestamp` subtracts the **naive** epoch, so the wall clock is read
 //!   as UTC. It is not `datetime.timestamp()`, which reads a naive datetime in
 //!   the machine's own zone: the same datetime is 25 200 s apart between a
-//!   Bangkok host and a UTC one, and the rows were written on both.
+//!   Bangkok host and a UTC one, which would make a read depend on where the
+//!   service happens to run rather than on what the row says.
 //! - `make_datetime(None)` is `datetime.utcnow()`, not `datetime.now()`, so a
 //!   default fills the column with the instant rather than with local time.
 //!
@@ -100,12 +101,10 @@ pub fn make_datetime(timestamp: Option<f64>) -> Result<NaiveDateTime, DateTimeEr
 
 /// The microsecond count of `timestamp`, rounded half to even.
 ///
-/// # Why the split
-///
 /// `utcfromtimestamp` splits the double at the second, then rounds only the
 /// fractional part to the microsecond, ties to even. Multiplying the whole
-/// timestamp by 1e6 first rounds twice and moves `1.9999995` from 1 999 999 µs
-/// to 2 000 000, which is one microsecond the original does not produce.
+/// timestamp by 1e6 first rounds twice and moves `1.9999995` from `1_999_999`
+/// µs to `2_000_000`, which is one microsecond the original does not produce.
 fn micros_at(timestamp: f64) -> Option<i64> {
     let whole = timestamp.trunc();
     // WHY: `as` saturates, so a timestamp past `i64` becomes `None` here rather
