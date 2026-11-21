@@ -236,3 +236,52 @@ export const prisma: PrismaClient =
  * without an actor reads nothing.
  */
 export const prismaUnscoped: PrismaClient = baseClient;
+
+/** The variable carrying the `cms_admin_login` connection string. Named once, so the read and the
+ * error message cannot drift. */
+const ADMIN_LOGIN_DATABASE_URL_ENV = 'ADMIN_LOGIN_DATABASE_URL';
+
+/** The role that variable connects as; restated in the failure so an operator can search for it. */
+const ADMIN_LOGIN_ROLE = 'cms_admin_login';
+
+let adminLoginClient: PrismaClient | undefined;
+
+/**
+ * The client that reads admin credentials, over the `cms_admin_login` role's own connection.
+ *
+ * WHY a second client and not a select on {@link prisma}: `admins.authentication` is the column the
+ * role split exists to take away from the application-wide connection. Reading it through `prisma`
+ * would leave the password hash reachable from any module that imports the client, and the grant
+ * that makes this role safe is enforced in the database, not in this file. A separate connection is
+ * what makes "only the login path can read a credential" true of the process rather than a
+ * convention that the next module may forget.
+ *
+ * WHY lazy: this module is imported by the scheduler, the CLI, the seed and every page, while only
+ * the login action has a reason to hold this connection. Building it at import time would make
+ * every one of those processes fail to start until the role is provisioned, and would open a pool
+ * nobody uses. The first credential read creates it; every later read in this process reuses it.
+ *
+ * WHY no fallback: `DATABASE_URL` names the application-wide role. Falling back to it when this
+ * variable is absent would silently restore exactly the access this split removes — the panel would
+ * keep working while the guarantee was gone. So an absent variable raises, naming it, and login
+ * fails loudly instead of verifying a credential with the wrong identity.
+ */
+export function getAdminLoginClient(): PrismaClient {
+  if (adminLoginClient !== undefined) return adminLoginClient;
+
+  const url = process.env[ADMIN_LOGIN_DATABASE_URL_ENV]?.trim();
+  if (!url) {
+    throw new Error(
+      `${ADMIN_LOGIN_DATABASE_URL_ENV} is not set: the ${ADMIN_LOGIN_ROLE} role is not provisioned, ` +
+        'so the panel cannot verify admin credentials. Set it to that role\'s connection string; ' +
+        'there is deliberately no fallback to the application-wide connection.',
+    );
+  }
+
+  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
+  // cms.actor, and the calling scope (system:auth) is what admits the row.
+  adminLoginClient = buildActorAwareClient(
+    new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
+  );
+  return adminLoginClient;
+}

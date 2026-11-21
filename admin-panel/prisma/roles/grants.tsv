@@ -24,7 +24,7 @@
 # whose matrix was actually exercised against a database. The other domains follow in their own
 # slices, where their columns are proven the same way.
 # role	table	privilege	columns	sequence
-cms_admin_login	admins	SELECT	username,authentication,enabled	-
+cms_admin_login	admins	SELECT	id,username,authentication,enabled	-
 cms_admin_read_people	admins	SELECT	id,username,name,enabled,last_login_at	-
 cms_admin_write_people	admins	SELECT	id,username	-
 cms_admin_write_people	admins	UPDATE	name,username	-

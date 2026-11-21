@@ -91,7 +91,7 @@ fi
 # ── 3. The admins grant matrix, exactly as the rehearsal proved it ───────────────────────────
 printf '\n== the admins grants are exactly the tested matrix ==\n'
 expected_grants=(
-  "GRANT SELECT (username, authentication, enabled) ON public.admins TO cms_admin_login"
+  "GRANT SELECT (id, username, authentication, enabled) ON public.admins TO cms_admin_login"
   "GRANT SELECT (id, username, name, enabled, last_login_at) ON public.admins TO cms_admin_read_people"
   "GRANT SELECT (id, username) ON public.admins TO cms_admin_write_people"
   "GRANT UPDATE (name, username) ON public.admins TO cms_admin_write_people"

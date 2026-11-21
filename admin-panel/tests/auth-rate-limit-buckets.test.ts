@@ -124,6 +124,7 @@ describe('bucket key selection by client address', () => {
     vi.doMock('server-only', () => ({}));
     vi.doMock('@/lib/security/exemptions', () => ({ isLoginExempt: vi.fn(async () => false) }));
     vi.doMock('@/lib/prisma', () => ({
+      getAdminLoginClient: () => ({ admins: { findUnique: vi.fn(async () => null) } }),
       prisma: { admins: { findUnique: vi.fn(async () => null), update: vi.fn(async () => undefined) } },
     }));
     vi.doMock('next/headers', () => ({
