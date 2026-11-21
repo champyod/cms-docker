@@ -463,7 +463,11 @@ prisma-sync:
 	run_tool "$$PRISMA_WHERE" "$$PRISMA_DIR" "$$PRISMA_CMD migrate deploy --schema=$$PRISMA_SCHEMA"; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Migration deploy failed — check logs above" >&2; exit $$st; fi; \
 	echo "Seeding permission groups and permissions..."; \
-	run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
+	if [ "$$SEED_WHERE" = "host" ] && [ ! -x admin-panel/node_modules/.bin/tsx ]; then \
+		bash scripts/__seed_permissions.sh "$$OWNER_URL_LOCAL"; \
+	else \
+		run_tool "$$SEED_WHERE" "$$SEED_DIR" "$$SEED_CMD prisma/seed-permissions.ts"; \
+	fi; \
 	st=$$?; if [ $$st -ne 0 ]; then echo "Permission seed failed — admins have no effective permissions until seeding succeeds; check logs above and rerun make prisma-sync." >&2; exit $$st; fi
 
 # Migrate the ACTIVE database and verify the result.

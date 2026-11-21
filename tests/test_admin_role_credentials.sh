@@ -172,6 +172,10 @@ if [[ "${1:-}" == "exec" ]]; then
   if [[ " $* " == *" psql -U postgres "* && "${STUB_POSTGRES_FAIL:-0}" == "1" ]]; then
     exit 1
   fi
+  if [[ " $* " == *"SELECT rolsuper"* ]]; then
+    printf '%s\n' "${STUB_APP_SUPER:-f}"
+    exit 0
+  fi
   if [[ " $* " == *" -f - "* ]]; then
     printf '<<<SQL %s\n' "$*" >> "$STUB_STDIN"
     cat >> "$STUB_STDIN"
@@ -183,14 +187,14 @@ exit 0
 STUB
 chmod +x "$STUB_DIR/docker"
 
-run_apply() { # <mode|-> <calls> <stdin> <log> [ps_out] [postgres_fail]
-  local mode="$1" calls="$2" stdin_log="$3" log="$4" ps_out="${5-cms-database}" pg_fail="${6:-0}"
+run_apply() { # <mode|-> <calls> <stdin> <log> [ps_out] [postgres_fail] [app_super]
+  local mode="$1" calls="$2" stdin_log="$3" log="$4" ps_out="${5-cms-database}" pg_fail="${6:-0}" app_super="${7:-f}"
   : > "$calls"; : > "$stdin_log"
   (
     cd "$TEST_ROOT/apply" || exit 1
     env -u PGPASSWORD PATH="$STUB_DIR:$PATH" \
       STUB_CALLS="$calls" STUB_STDIN="$stdin_log" STUB_PS_OUT="$ps_out" \
-      STUB_POSTGRES_FAIL="$pg_fail" \
+      STUB_POSTGRES_FAIL="$pg_fail" STUB_APP_SUPER="$app_super" \
       bash "$TEST_ROOT/apply/scripts/__apply_sql.sh" ${mode:+$mode}
   ) > "$log" 2>&1
 }
@@ -199,7 +203,7 @@ BOOT_CALLS="$TEST_ROOT/boot.calls"; BOOT_STDIN="$TEST_ROOT/boot.stdin"
 boot_rc=0
 run_apply --bootstrap-roles "$BOOT_CALLS" "$BOOT_STDIN" "$TEST_ROOT/boot.log" || boot_rc=$?
 if [[ "$boot_rc" -eq 0 ]]; then ok "bootstrap exits 0"; else no "bootstrap exits 0 (got ${boot_rc})"; fi
-check_grep "bootstrap connects as the local postgres superuser" "CALL exec -i cms-database psql -U postgres -d cmsdb" "$BOOT_CALLS"
+check_grep "bootstrap connects as the local postgres superuser" "CALL exec -u postgres -i cms-database psql -U postgres -d cmsdb" "$BOOT_CALLS"
 check_not_grep "bootstrap never connects as the application role" "psql -U cmsuser" "$BOOT_CALLS"
 check_grep "bootstrap applies the marker-only credential file" "admin_role_passwords.sql" "$BOOT_STDIN"
 check_grep "bootstrap still applies the generated role file" "generated_roles.sql" "$BOOT_STDIN"
@@ -229,14 +233,11 @@ run_apply --bootstrap-roles "$ABSENT_CALLS" "$ABSENT_STDIN" "$TEST_ROOT/absent.l
 if [[ "$absent_rc" -eq 0 ]]; then ok "bootstrap tolerates an absent container"; else no "bootstrap tolerates an absent container (got ${absent_rc})"; fi
 check_grep "the absent container is reported, not fatal" "is not running" "$TEST_ROOT/absent.log"
 
-FALLBACK_CALLS="$TEST_ROOT/fallback.calls"; FALLBACK_STDIN="$TEST_ROOT/fallback.stdin"
-fallback_rc=0
-run_apply --bootstrap-roles "$FALLBACK_CALLS" "$FALLBACK_STDIN" "$TEST_ROOT/fallback.log" "cms-database" 1 || fallback_rc=$?
-if [[ "$fallback_rc" -eq 0 ]]; then ok "bootstrap tolerates a missing postgres role"; else no "bootstrap tolerates a missing postgres role (got ${fallback_rc})"; fi
-check_grep "the missing postgres role is reported" "no local postgres superuser" "$TEST_ROOT/fallback.log"
-check_grep "the fallback applies as the application role" "psql -U cmsuser -d cmsdb" "$FALLBACK_CALLS"
-check_grep "the fallback still applies the credential SQL" "admin_role_passwords.sql" "$FALLBACK_STDIN"
-check_grep "the fallback uses the PGPASSWORD handover" "^ENV PGPASSWORD=set$" "$FALLBACK_CALLS"
+DEMOTED_CALLS="$TEST_ROOT/demoted.calls"; DEMOTED_STDIN="$TEST_ROOT/demoted.stdin"
+demoted_rc=0
+run_apply --bootstrap-roles "$DEMOTED_CALLS" "$DEMOTED_STDIN" "$TEST_ROOT/demoted.log" "cms-database" 1 0 || demoted_rc=$?
+[[ "$demoted_rc" -ne 0 ]] && ok "a demoted cmsuser refuses role bootstrap" || no "a demoted cmsuser was allowed to bootstrap"
+check_grep "the refusal names NOCREATEROLE" "NOCREATEROLE" "$TEST_ROOT/demoted.log"
 
 # ── 7. config sync generates the secrets and keeps them on a re-run ───────────────────────
 printf '\n== config sync generates the credentials once and is idempotent ==\n'

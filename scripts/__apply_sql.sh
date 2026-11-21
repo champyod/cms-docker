@@ -63,9 +63,9 @@ if [[ -z "$ADMIN_LOGIN_PASSWORD" || -z "$ADMIN_READ_PASSWORD" || -z "$ADMIN_SECU
   log_warn "ADMIN_*_PASSWORD empty — run './cms config sync' to generate them; those roles keep PASSWORD NULL"
 fi
 
-# Production cmsuser is NOCREATEROLE, so role DDL runs as the socket-trusted postgres superuser.
+# Production cmsuser is NOCREATEROLE, so role DDL runs as the socket-trusted postgres OS user.
 docker_exec_db_superuser() {
-  docker exec -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" "$@"
+  docker exec -u postgres -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" "$@"
 }
 
 # Fallback: a fresh install has no postgres role, and POSTGRES_USER is still superuser until hardening.
@@ -149,10 +149,13 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
     exit 0
   fi
   BOOTSTRAP_AS_POSTGRES=0
-  if docker exec -i "$DB_CONTAINER" psql -U postgres -d "$DB_NAME" -tAc 'SELECT 1' >/dev/null 2>&1; then
+  if docker_exec_db_superuser -tAc 'SELECT 1' >/dev/null 2>&1; then
     BOOTSTRAP_AS_POSTGRES=1
+  elif docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -tAc \
+       "SELECT rolsuper FROM pg_roles WHERE rolname = current_user" 2>/dev/null | grep -qx 't'; then
+    log_warn "no local postgres superuser in $DB_CONTAINER — $DB_USER is still superuser; applying role files as $DB_USER"
   else
-    log_warn "no local postgres superuser in $DB_CONTAINER — applying role files as $DB_USER (fresh install: it is still superuser)"
+    log_die "no local postgres superuser in $DB_CONTAINER and $DB_USER is NOCREATEROLE; refusing role bootstrap (start cms-database with its postgres OS user or restore a superuser)." 1
   fi
   BOOTSTRAP_USER="postgres"
   [[ "$BOOTSTRAP_AS_POSTGRES" -eq 1 ]] || BOOTSTRAP_USER="$DB_USER"
