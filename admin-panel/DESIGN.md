@@ -49,6 +49,24 @@ Remove them. Report what went. **If nothing could be removed, the surface is not
   glance.
 - One fact, one place. A countdown stated twice is not emphasis, it is noise.
 
+## 3b. A number without a comparison is not information
+
+Every headline number carries what makes it decidable: a target, a baseline, or a previous period.
+`214 waiting` says nothing; `0 → 214 in 18 min` says whether to move. `71% accepted` is a value;
+`71% against a 75% target` is a decision.
+
+The shape of a headline number (Big Aggregate Number), and nothing more:
+
+```
+label        what is measured, 11px muted, above
+number       the indicator, by far the largest element
+comparison   target · baseline · previous period
+change cue   the ONE coloured element on the surface
+```
+
+**Cap the count.** 3–7 headline numbers per screen; a wall of big numbers is no big number at all.
+Beyond that they stop being headline and become a table — so make it a table.
+
 ## 4. Colour is a system, never a decision made at the point of use
 
 - **Zero colour literals outside the token block.** No `#rrggbb`, no `bg-blue-500`. Every colour
@@ -85,11 +103,33 @@ count is the only filled element, touch targets ≥ 44px).
 A denied capability is 403-with-a-reason; 404 is only for object existence across a privacy boundary.
 Never an empty page where the truth is "you may not see this".
 
+## 7b. Notification anatomy
+
+An alert is not a paragraph. Fixed shape:
+
+| Part | Rule | Source |
+|---|---|---|
+| label | what is affected, 11px muted, above the number | BAN anatomy |
+| number | the quantity that makes it urgent, largest element | BAN anatomy |
+| comparison | `0 → 214 in 18 min` — not an adjective, not a story | Plotly 2026: a summary must keep the part that changes the decision |
+| actions | **one** primary button + at most one inline link | Carbon: an actionable notification allows one action; label 1–2 words |
+| length | title short, no full stop; body ≤ 2 lines; the body never restates the title | Carbon, Atlassian |
+| severity | word + surface tint, never colour alone | Atlassian, Material: colour must never be the only channel |
+| overflow | a link to the detail, never a longer sentence | Carbon: "View more" |
+
+**Never:** a coloured stripe down the left edge (it encodes nothing the tint does not), a second
+primary button, an icon in a tinted square beside the text, or a sentence that describes the system
+instead of the state.
+
 ## 8. How this law is checked — instruments, not adjectives
 
 | Check | Instrument | Fails when |
 |---|---|---|
 | delete test | the removal list, written down | nothing could be removed |
+| headline number comparison | every big number read against its target/baseline | a number with no target, baseline or previous period |
+| headline number count | counted on the page | more than 7 |
+| alert anatomy | counted: actions, lines, title repetition | two primary buttons, or a body that restates the title |
+| decorative structure | the diff adds a stripe, tinted icon square or border with no data behind it | one instance |
 | colour | `grep -rn '#[0-9a-fA-F]\{6\}' src --include=*.tsx` outside the token block | one literal |
 | colour meaning | the same element type sampled across pages | the same kind varies in colour |
 | density | content height ÷ viewport, lines counted | a page over ~40 content lines with no chart |
@@ -106,3 +146,22 @@ A scan is not an audit: hand-check three hits before any number reaches a report
 
 A rule is added here, never in a pull request comment. Removing a rule needs the reason it was wrong
 written in its place.
+
+## 10. Sources — what each one settles
+
+Read 2026-11-21. Cited so a later session can verify rather than trust this file.
+
+| Source | What it settles here |
+|---|---|
+| Tufte, *The Visual Display of Quantitative Information* (1983) — data-ink ratio, "chartjunk", "erase redundant data-ink" | §1, §2: content-free decoration competes for attention and buys nothing |
+| Stephen Few, *Information Dashboard Design* (2006/2009) and "Sometimes We Must Raise Our Voices" (perceptualedge.com) | §3: data pixels vs non-data pixels; non-data ink that supports reading stays but is de-emphasised; *some* redundancy aids comparison — so the ban is on decoration, not on a second encoding that speeds reading |
+| NN/g, "Dashboards: Making Charts and Graphs Easier to Understand" (nngroup.com/articles/dashboards-preattentive) | a dashboard is one task — communicating critical information; pre-attentive attributes (position, length, colour) are what the eye reads first |
+| Plotly, "Dashboard Design Mistakes That Mislead Decision Makers" (2026-10-16) | §3b, §5: define the decision first; primary / supporting / diagnostic zones; a metric without a named comparison is misleading; one job per colour |
+| NCDPI Data Visualization Style Guide, "KPIs & big numbers" (Vautier's BAN framework) | §3b: label · number · comparison · one coloured change cue · micro-chart; cap the count — "a wall of big numbers is no big number" |
+| datawirefra.me, "How Many KPIs on a Dashboard?" | §3b cap: 3–5 executive, 5–7 management, 10+ is a monitoring wall, not a decision page; KPI row holds 3–6 |
+| IBM Carbon — Notification guidelines and Data Visualization/dashboards | §7b: short title with no full stop, body ≤ 2 lines that never restates the title, **one** action, 1–2 word labels, colour+icon+word, overflow via a link; §5: F-pattern hierarchy, most important = highest contrast and largest area |
+| Atlassian Design — Banner usage | §7b: banners are sparse, concise, severity never by colour alone, truncation is a failure |
+| Material Design — Banners; MUI Alert | §7b: one banner at a time, a single message with specific actions, colour alone is not a channel, essential alerts never auto-dismiss |
+| "unslopped UI" tell catalogue (3.2M posts, 47 subreddits) and mowgli.ai's 15 tells | §2: the AI tells — big-number stats strip, icon in a tinted square on every card, ALL-CAPS eyebrow, identical rounded cards, emoji as icons; "a tell is just a default that nobody overrode" |
+| dev.to, "The Purple Gradient Problem" (2026), incl. Adam Wathan's `bg-indigo-500` apology | §4: distributional convergence; the root cause of slop is *no decision*; fix by committing to one direction and holding a banned list |
+
