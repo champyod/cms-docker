@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# tests/test_admin_role_credentials.sh — the three admin roles get generated credentials, the
-# credential SQL stays superuser-only, and the bootstrap phase applies it as postgres.
-#
-# WHY every assertion is static or stubbed: the real path runs against a production database, so
-# this suite reads the files and drives scripts/__apply_sql.sh with a fake `docker` on PATH. No
-# database is contacted and no container is started.
-#
-# What can go wrong without an error message, and is therefore asserted:
-#   * a role keeps PASSWORD NULL because config sync never generated its secret;
-#   * a regenerated secret silently rotates a live credential on the second sync;
-#   * the credential SQL is applied by the application role (NOCREATEROLE) and fails the update;
-#   * the normal apply runs as superuser, which would widen every later statement's rights;
-#   * a password lands in the repository or in compose instead of .env.
+
+# tests/test_admin_role_credentials.sh — the three admin roles get generated credentials, the credential SQL stays superuser-only, and the bootstrap phase applies it as postgres.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -122,6 +111,19 @@ for pair in \
 done
 check_grep "the existing DATABASE_URL is kept" "^[[:space:]]*DATABASE_URL: postgresql://" "$TEST_ROOT/panel-anchor.yml"
 
+printf '\n== the classic admin carries the same security URL ==\n'
+awk '/^  admin-web-server:/{f=1; next} /^  [a-z][a-z0-9-]*:/{f=0} f' "$COMPOSE" > "$TEST_ROOT/classic-admin.yml"
+if grep -qE '^[[:space:]]*ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:\$\{ADMIN_SECURITY_PASSWORD\}@database:' "$TEST_ROOT/classic-admin.yml"; then
+  ok "admin-web-server sets ADMIN_SECURITY_DATABASE_URL as cms_admin_account_security with the generated secret"
+else
+  no "admin-web-server does not set ADMIN_SECURITY_DATABASE_URL as cms_admin_account_security"
+fi
+if grep -qE '^[[:space:]]*ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_[a-z_]+:[^$]' "$TEST_ROOT/classic-admin.yml"; then
+  no "the classic admin's ADMIN_SECURITY_DATABASE_URL holds a literal password"
+else
+  ok "the classic admin's ADMIN_SECURITY_DATABASE_URL holds no literal password"
+fi
+
 # ── 5. apply script: static contract ───────────────────────────────────────────────────────
 printf '\n== __apply_sql.sh hands the three secrets in and selects the superuser phase ==\n'
 for var in ADMIN_LOGIN_PASSWORD ADMIN_READ_PASSWORD ADMIN_SECURITY_PASSWORD; do
@@ -154,8 +156,7 @@ ENV
 chmod 600 "$TEST_ROOT/apply/.env"
 cat > "$STUB_DIR/docker" <<'STUB'
 #!/usr/bin/env bash
-# Fake docker: advertises the database container, records every exec call and the SQL handed to
-# psql on stdin, and never touches a real daemon.
+# Fake docker: advertises the database container, records every exec call and the SQL handed to psql on stdin, and never touches a real daemon.
 if [[ "${1:-}" == "ps" ]]; then
   printf '%s\n' "${STUB_PS_OUT-cms-database}"
   exit 0

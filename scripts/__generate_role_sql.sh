@@ -1,35 +1,6 @@
 #!/usr/bin/env bash
-# scripts/__generate_role_sql.sh — render the WS-75 role catalog into one idempotent SQL file.
-#
-# WHY a generator: the role list, the column grants and the RLS policies must agree with each
-# other, and the deployed file must be reproducible from the repository so a gate can prove the
-# commit is current. Three hand-maintained copies would drift, and the failure mode of that drift is
-# silent — a role with a grant but no policy reads zero rows and reports a missing record instead of
-# a permission error.
-#
-# INPUT  admin-panel/prisma/roles/catalog.tsv   role, login, bypassrls, comment
-#        admin-panel/prisma/roles/grants.tsv    role, table, privilege, columns, sequence
-# OUTPUT admin-panel/prisma/sql/20260820110000_generated_roles.sql
-#
-# USAGE
-#   bash scripts/__generate_role_sql.sh            print the SQL to stdout, write nothing
-#   bash scripts/__generate_role_sql.sh --write    write (or rewrite) the committed file
-#   bash scripts/__generate_role_sql.sh --check    render to a temp file and diff the committed one;
-#                                                  exit 1 on drift, naming the regenerate command
-#
-# WHAT THE OUTPUT MAY NOT CONTAIN, and why (enforced by the validation below and pinned by
-# tests/test_role_catalog.sh): no ownership change, no subtraction of an existing privilege, no
-# literal password, no table drop, and no redefinition of the roles that already serve the running
-# app. This file is applied by `make prisma-sync` to a LIVE database whose application is up, so its
-# only safe shape is additive. Ownership transfer and the privilege subtraction are a separate,
-# rehearsed step; the panel's per-role connections are another.
-#
-# ROLE-NAME CONTRACT (a name outside it is fatal, not a warning): the catalog is the only place a
-# role name is written, and an unchecked typo there becomes a role that nothing grants to — which
-# reads exactly like a broken application.
-#   cms_platform_<capability>
-#   cms_admin_login                 the one admin role without a domain: it runs before a session
-#   cms_admin_<capability>_<domain> capability is read | write | operate | account
+
+# Render the WS-75 role catalog into one idempotent, additive SQL file.
 set -eu
 if (set -o pipefail 2>/dev/null); then set -o pipefail; fi
 
@@ -44,15 +15,17 @@ GRANTS="${ROLES_DIR}/grants.tsv"
 OUT="${REPO_ROOT}/admin-panel/prisma/sql/20260820110000_generated_roles.sql"
 
 REGEN_CMD="bash scripts/__generate_role_sql.sh --write"
-CHECK_CMD="bash scripts/__generate_role_sql.sh --check"
 
 usage() {
   cat <<'EOF'
 Usage: bash scripts/__generate_role_sql.sh [--check | --write]
 
   (no flag)   print the generated SQL to stdout; the file is not touched
+
   --write     write admin-panel/prisma/sql/20260820110000_generated_roles.sql
+
   --check     render to a temporary file and diff the committed SQL; exit 1 on drift
+
   --help      this text
 
 Inputs:  admin-panel/prisma/roles/catalog.tsv, admin-panel/prisma/roles/grants.tsv
@@ -77,9 +50,7 @@ tmpdir=$(mktemp -d)
 trap 'rm -rf "$tmpdir"' EXIT
 trap 'rm -rf "$tmpdir"' HUP INT TERM
 
-# ── Validation ───────────────────────────────────────────────────────────────────────────────
-# WHY the contract lives in awk and not in a grep per call site: one definition, one exit path, and
-# the offending file:line reaches the operator instead of a bare "invalid input".
+# ── Validation WHY the contract lives in awk and not in a grep per call site: one definition, one exit path, and the offending file:line reaches the operator instead of a bare "invalid input".
 validate_catalog() {
   awk -F'\t' '
     function valid_role(name) {
@@ -203,60 +174,19 @@ validate_catalog
 validate_grants
 
 role_count=$(awk -F'\t' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {c++} END {print c+0}' "$CATALOG")
-platform_count=$(awk -F'\t' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ && $1 ~ /^cms_platform_/ {c++} END {print c+0}' "$CATALOG")
 grant_count=$(awk -F'\t' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ {c++} END {print c+0}' "$GRANTS")
-sequence_count=$(awk -F'\t' '!/^[[:space:]]*#/ && !/^[[:space:]]*$/ && $5 != "-" {c++} END {print c+0}' "$GRANTS")
 
-# ── Rendering ────────────────────────────────────────────────────────────────────────────────
-# Header first: the operator who finds this file in psql needs the two commands that reproduce it
-# and the list of things it deliberately leaves undone, in the file itself.
+# ── Rendering Header first: the operator who finds this file in psql needs the two commands that reproduce it and the list of things it deliberately leaves undone, in the file itself.
 emit_header() {
   printf '%s\n' \
-    '-- 20260820110000_generated_roles.sql — GENERATED — do not hand-edit' \
-    '-- Source: admin-panel/prisma/roles/catalog.tsv + admin-panel/prisma/roles/grants.tsv' \
-    '-- Generator: scripts/__generate_role_sql.sh' \
-    "-- To regenerate: ${REGEN_CMD}" \
-    "-- To verify freshness (CI): ${CHECK_CMD}" \
-    "-- Scope: ${role_count} roles (${platform_count} platform, $((role_count - platform_count)) admin) · ${grant_count} table grants · ${sequence_count} sequence grant · ${grant_count} policies on public.admins" \
-    '--' \
-    '-- WHY this file exists: WS-75 gives each capability its own database identity instead of every' \
-    '-- module sharing one, so a bug in one module stops being a grant on the whole database. This is' \
-    '-- the foundation slice: the role catalog, plus the column grants and RLS policies for `admins`,' \
-    '-- the table whose matrix was exercised against a real database before it was written down.' \
-    '--' \
-    '-- WHAT IT DELIBERATELY LEAVES UNDONE, because each omission is what makes it safe to apply to a' \
-    '-- production schema with the application running:' \
-    '--   * table ownership is untouched and nothing is taken away from the role the app uses today,' \
-    '--     so the running services keep working exactly as they do now;' \
-    '--   * no password: every LOGIN role is created with PASSWORD NULL, so no secret enters the' \
-    '--     repository, and the secret step is the only thing that sets a credential;' \
-    '--   * no BYPASSRLS: catalog.tsv records that cms_platform_backup wants it, but creating a' \
-    '--     bypassing role needs superuser, and the running backup path is still cms_backup;' \
-    '--   * no grants outside `admins`: every other domain follows in the slice that proves its' \
-    '--     columns against the same rehearsal.' \
-    '--' \
-    '-- SAFETY: a policy is scoped `TO` one role, so these cannot widen what any other role reads.' \
-    '-- For a cms_admin_* role the column grants are the boundary; the policy only admits rows it may' \
-    '-- already see. No process connects as these roles until the panel holds one connection per role,' \
-    '-- so applying this changes no current behavior.' \
-    '--' \
-    '-- WHY role creation tolerates insufficient_privilege but grants do not: `make prisma-sync`' \
-    '-- re-applies this directory as the application role, which is NOCREATEROLE once the hardening' \
-    '-- migration has run, and a re-apply must never abort a restart. If a role is absent for that' \
-    '-- reason each grant block says so and does nothing, because a role that does not exist cannot be' \
-    '-- granted to. A privilege error on a role that DOES exist aborts the apply: a role without its' \
-    '-- policy reads zero rows, and zero rows reads as a missing record, not as a permission error.'
+    '-- 20260820110000_generated_roles.sql — GENERATED by scripts/__generate_role_sql.sh — do not hand-edit.'
 }
 
-# Roles as one VALUES list, in catalog order. WHY a loop and not one DO block per role: the file then
-# reads as the catalog it came from, and a reviewer can diff the two by eye.
+# Roles as one VALUES list, in catalog order.
 emit_roles() {
   printf '\n'
   printf '%s\n' \
-    '-- ── Roles ────────────────────────────────────────────────────────────────────────────────' \
-    '-- One row per catalog.tsv entry, in catalog order. The trailing note is the catalog comment,' \
-    '-- so the file still says why each role exists. An existing role is left alone: its attributes' \
-    '-- belong to whoever created it, and changing them here could lock a live connection out.'
+    '-- One row per catalog.tsv entry; an existing role is left untouched.'
   printf 'DO $$\nDECLARE\n  r record;\nBEGIN\n  FOR r IN\n    SELECT * FROM (VALUES\n'
   awk -F'\t' '
     /^[[:space:]]*#/ { next }
@@ -288,8 +218,7 @@ emit_roles() {
     'END $$;'
 }
 
-# Distinct (role, table) pairs in first-appearance order: one block each, so a future slice that
-# adds a second table to a role needs no change here.
+# Distinct (role, table) pairs in first-appearance order: one block each, so a future slice that adds a second table to a role needs no change here.
 grant_groups() {
   awk -F'\t' '
     /^[[:space:]]*#/ { next }
@@ -298,8 +227,7 @@ grant_groups() {
   ' "$GRANTS"
 }
 
-# Rows of one group, privileges in the order PostgreSQL applies them. SELECT first is deliberate:
-# it is the verb every writer also needs, so reading the block top-down shows the dependency.
+# Rows of one group, privileges in the order PostgreSQL applies them.
 group_rows() {
   awk -F'\t' -v role="$1" -v tbl="$2" '
     BEGIN { rank["SELECT"] = 1; rank["UPDATE"] = 2; rank["INSERT"] = 3; rank["DELETE"] = 4 }
@@ -309,8 +237,7 @@ group_rows() {
   ' "$GRANTS" | LC_ALL=C sort -t "$(printf '\t')" -k1,1n | cut -f2-
 }
 
-# `a,b` -> `a, b`: the rendered GRANT is read far more often than it is written, and a comma with no
-# space after a column name reads as a typo in every SQL style this repository uses.
+# `a,b` -> `a, b`: the rendered GRANT is read far more often than it is written, and a comma with no space after a column name reads as a typo in every SQL style this repository uses.
 spaced_columns() {
   printf '%s\n' "$1" | awk -F',' 'BEGIN { OFS = ", " } { $1 = $1; print }'
 }
@@ -318,22 +245,7 @@ spaced_columns() {
 emit_grants() {
   printf '\n'
   printf '%s\n' \
-    '-- ── Column grants and RLS policies: public.admins ────────────────────────────────────────' \
-    '-- One block per role. Each block applies its grants and then the policies for exactly those' \
-    '-- verbs, so a grant can never exist without the policy that makes it visible.' \
-    '--' \
-    '-- WHY every writer also carries SELECT: `UPDATE ... WHERE username = ...` looks the row up' \
-    '-- under the SELECT policy, and Prisma writes with INSERT ... RETURNING, which PostgreSQL' \
-    '-- refuses when the new row is not visible to the writer. A role granted UPDATE alone updates' \
-    '-- zero rows and reports success — the failure this catalog exists to make impossible.' \
-    '--' \
-    '-- WHY USING (true): the reach of each role is its column list, not a row predicate. Row-level' \
-    '-- narrowing per admin arrives with the panel wiring, when the panel can announce an actor.' \
-    '-- A bare `true` here therefore grants nothing a column grant has not already granted.' \
-    '--' \
-    '-- WHY the INSERT role also gets USAGE on the sequence behind admins.id: PostgreSQL checks' \
-    '-- nextval() against the sequence, not the table, so a table grant alone leaves the create path' \
-    '-- failing with a privilege error that names a different object than the one being written.'
+    '-- One block per role: grants emit policies for their own verbs, so a grant cannot exist without one.' \
   local role tbl verbs verb policy row_role
   while IFS=$'\t' read -r role tbl; do
     [ -n "$role" ] || continue
@@ -381,10 +293,7 @@ render() {
   emit_grants
 }
 
-# ── Verdict ──────────────────────────────────────────────────────────────────────────────────
-# A duplicate here would mean two policies share a (table, name) pair, which PostgreSQL rejects at
-# apply time — far too late to discover in a restart. Checked on the rendered text so a future
-# naming scheme cannot collide silently.
+# ── Verdict A duplicate here would mean two policies share a (table, name) pair, which PostgreSQL rejects at apply time — far too late to discover in a restart.
 check_duplicate_policies() {
   local rendered="$1" dups
   dups=$(grep -oE "CREATE POLICY [a-z0-9_]+ ON public\.[a-z0-9_]+" "$rendered" \
