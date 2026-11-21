@@ -249,9 +249,10 @@ fn a_hash_written_here_is_tagged_the_way_the_column_expects() {
 }
 
 #[test]
-fn a_plaintext_row_still_parses_and_never_verifies() {
-    // `validate_password` refuses the method itself, so the mapping must hand
-    // back the payload without pretending it is a hash.
+fn a_plaintext_row_parses_to_a_payload_no_bcrypt_check_can_use() {
+    // The refusal of the method itself lives in `validate_password`
+    // (`crypto.py:213`), not in the mapping; `cms-db`'s `PasswordForm` still
+    // hands back the payload, so this only proves it is not taken for a hash.
     let form = PasswordForm::parse("plaintext:hunter2").expect("the row parses");
     assert!(form.plaintext().is_some());
     assert!(form.bcrypt().is_none());
