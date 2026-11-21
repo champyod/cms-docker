@@ -77,7 +77,6 @@ INSTALL_CONFIGS = [
 INSTALL_SYSTEMD_SERVICES = [
     'cms@.service',
     'cms-logging.service',
-    'cms-ranking.service',
 ]
 
 

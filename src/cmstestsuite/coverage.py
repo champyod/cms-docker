@@ -36,7 +36,6 @@ _COVERAGE_DIRECTORIES = [
     "cms",
     "cmscommon",
     "cmscontrib",
-    "cmsranking",
     "cmstaskenv",
 ]
 _COVERAGE_CMDLINE = [
