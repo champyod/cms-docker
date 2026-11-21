@@ -13,6 +13,13 @@ no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
 SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 
+# The update invokes the script directly; a non-executable checkout fails before env.
+if [[ -x "${REPO_ROOT}/scripts/__apply_sql.sh" ]]; then
+  ok "the checked-out role bootstrap is executable"
+else
+  no "the checked-out role bootstrap is executable"
+fi
+
 mkdir -p "${SB}/bin" "${SB}/scripts/__lib" "${SB}/backups"
 cp "${REPO_ROOT}/scripts/__update-server.sh" "${SB}/scripts/"
 cp "${REPO_ROOT}/scripts/__lib/common.sh" "${SB}/scripts/__lib/"
