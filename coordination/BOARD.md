@@ -45,7 +45,6 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P9 | **Deploy fail-closed** — `__update-server.sh` must abort before env/restart when `scripts/__apply_sql.sh` is missing or the role bootstrap fails; add regression coverage. | base checkout | `fix/deploy-role-gate` (from `8586d318`) | hermes-agent | `scripts/__update-server.sh`, `tests/test_update_server_ordering.sh`, `tests/test_update_server_role_gate.sh`, `coordination/BOARD.md` | planning | in-flight |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
