@@ -239,6 +239,14 @@ run_apply --bootstrap-roles "$DEMOTED_CALLS" "$DEMOTED_STDIN" "$TEST_ROOT/demote
 [[ "$demoted_rc" -ne 0 ]] && ok "a demoted cmsuser refuses role bootstrap" || no "a demoted cmsuser was allowed to bootstrap"
 check_grep "the refusal names NOCREATEROLE" "NOCREATEROLE" "$TEST_ROOT/demoted.log"
 
+# First install: the app role is superuser, so it can create the socket-trusted role future updates need.
+FALLBACK_STDIN="$TEST_ROOT/fallback.stdin"; FALLBACK_CALLS="$TEST_ROOT/fallback.calls"
+fallback_rc=0
+run_apply --bootstrap-roles "$FALLBACK_CALLS" "$FALLBACK_STDIN" "$TEST_ROOT/fallback.log" "cms-database" 1 t || fallback_rc=$?
+[[ "$fallback_rc" -eq 0 ]] && ok "a first install bootstraps as its superuser" || no "a first install bootstraps as its superuser (got ${fallback_rc})"
+check_literal "the postgres bootstrap file creates the role" "CREATE ROLE postgres WITH SUPERUSER LOGIN" "${REPO_ROOT}/admin-panel/prisma/sql/20260820105000_postgres_superuser.sql"
+check_grep "the first install still applies the credential SQL" "admin_role_passwords.sql" "$TEST_ROOT/fallback.stdin"
+
 # ── 7. config sync generates the secrets and keeps them on a re-run ───────────────────────
 printf '\n== config sync generates the credentials once and is idempotent ==\n'
 NODOCKER="$TEST_ROOT/nodocker"
