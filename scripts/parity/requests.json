@@ -1,0 +1,151 @@
+{
+ "_why": [
+  "The surfaces every later slice must not change, in the order they are sent.",
+  "A login entry performs GET <login.get> for the xsrf token, then POST <login.post>, and the recorded response is that POST; the session cookie it sets is then used by every later entry on the same stack, so order matters.",
+  "expect is not decoration: it is what stops a stack that redirects everything to /login from comparing equal to another stack that does the same. A surface that does not answer what its expect block names fails the harness with exit 3."
+ ],
+ "requests": [
+  {
+   "id": "cws.landing.anonymous",
+   "surface": "contest-landing",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "cws.tasklist.denied",
+   "surface": "permission-denied",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/api/task_list",
+   "expect": {"status": 403}
+  },
+  {
+   "id": "cws.login.form",
+   "surface": "login",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/login",
+   "expect": {"status": 405}
+  },
+  {
+   "id": "cws.login",
+   "surface": "login",
+   "stack": "cws",
+   "login": {
+    "get": "/",
+    "post": "/login",
+    "fields": {"username": "parity_user", "password": "parity-user-pw"}
+   },
+   "expect": {"status": 302, "location_not_contains": ["login_error"]}
+  },
+  {
+   "id": "cws.landing",
+   "surface": "contest-landing",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "cws.tasklist",
+   "surface": "task-list",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/api/task_list",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "cws.tasks.description",
+   "surface": "task-description",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/tasks/parity_task/description",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "cws.tasks.submissions",
+   "surface": "submission-list",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/tasks/parity_task/submissions",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "cws.credits",
+   "surface": "credits",
+   "stack": "cws",
+   "method": "GET",
+   "path": "/credits",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.login.form",
+   "surface": "login",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/login",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.login",
+   "surface": "login",
+   "stack": "aws",
+   "login": {
+    "get": "/login",
+    "post": "/login",
+    "fields": {"username": "parity_admin", "password": "parity-admin-pw"}
+   },
+   "expect": {"status": 302, "location_not_contains": ["login_error"]}
+  },
+  {
+   "id": "aws.home",
+   "surface": "admin-home",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.contests",
+   "surface": "admin-contests",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/contests",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.contest.overview",
+   "surface": "admin-contest",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/contest/1/overview",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.contest.submissions",
+   "surface": "admin-submissions",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/contest/1/submissions",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.tasks",
+   "surface": "admin-task-list",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/tasks",
+   "expect": {"status": 200}
+  },
+  {
+   "id": "aws.users.add.denied",
+   "surface": "permission-denied",
+   "stack": "aws",
+   "method": "GET",
+   "path": "/users/add",
+   "expect": {"status": 403}
+  }
+ ]
+}
