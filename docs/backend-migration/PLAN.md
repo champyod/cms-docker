@@ -113,7 +113,7 @@ residual: 76,561 + 146 + 736 = 77,443, checked against `find src -name '*.py' -e
 |---|---|---|---|---|
 | S-0 | **Reconciliation** (this lane) | — | — | All four gates exit 0 on one tree; the merge is accounted for. **Done at `937c06e3`.** |
 | S-1 | **Equivalence harness + render parity** | — | S-0 | A Rust test that starts both stacks against one seeded DB and diffs every HTTP response body and status on the contest + admin surfaces. Exits 0 with a recorded diff of 0, and **fails on a planted one-line behaviour change** (negative control). **Done at `58a6c24b`, branch `feat/rust-S1-equivalence-oracle`: 17 requests over 12 surfaces, 20 unit tests, and falsified both ways by the parent's own run — planted change → exit 1 / `diff=1`; restored → exit 0 / `diff=0`.** |
-| S-2 | **`cmscommon` + `cms.io` transport** (+ `conf`, `log`, `util`, `locale`) | 5,950 | S-0 | `cms-proto` covers every `<type>; value` / `@`-annotation and framing case in `src/cmscommon/*.py`, with the Python file deleted per module only when its Rust port's tests pass. Gate: `cargo test -p cms-proto`. |
+| S-2 | **`cmscommon` + `cms.io` transport** (+ `conf`, `log`, `util`, `locale`) | 5,950 | S-0 | `cms-proto` covers every `<type>; value` / `@`-annotation and framing case in `src/cmscommon/*.py`, with the Python file deleted per module only when its Rust port's tests pass. Gate: `cargo test -p cms-proto`. **Split: S-2a = `crypto`+`binary`+`digest` (449 lines, `cms-db`); S-2b = `archive`+`conf_parser`+`mimetypes`+`terminal` (739 lines) — `eventsource` (400) leaves the slice entirely (see below).** |
 | S-3 | **`cms.db`** | 6,816 | S-2 | Every query in `src/cms/db/*.py` (21 modules) has a Rust equivalent against the same schema, verified by S-1's harness returning 0 diffs on the admin + contest read paths while the Python service is stopped. |
 | S-4 | **Ranking reconciliation** (delete) | 2,441 | S-2 | `src/cmsranking` deleted; `ranking_credits_test.py` ported to `ranking-web/tests`; `Dockerfile:201` unchanged and `bun`/`cargo` gates green. |
 | S-5 | **`cms.grading`** (43 files, 8,452) | 8,452 | S-3 | `Job.py`, `Sandbox.py`, `languagemanager.py`, `scoretypes/`, `tasktypes/` each ported with its `unit_tests/` counterpart green; the worker executes one real submission end to end through the Rust path. |
@@ -166,3 +166,12 @@ Read:       docs/agent-protocol.md §1 (binding), docs/backend-migration/INVENTO
 
 Q5 is the one that can still cancel the plan, and `MIGRATION-OPTIONS.md:OPT-4` already flags it.
 It is recorded here rather than assumed.
+
+## 6. Blockers and findings, kept current
+
+| # | What | State |
+|---|---|---|
+| B1 | **Two crates for S-2a**: `aes` 0.8 and `bcrypt` 0.17 (verified: 0 occurrences in `Cargo.lock` at `e418a316`; `base64`/`sha1`/`rand` already transitive). Proposed in `0b76f9f2` on `feat/rust-S2a-crypto-core`, one revert. Asked twice 2026-11-22, both forms timed out unanswered. | **OPEN — operator.** No crate that depends on `cms-db` can be called green on the trunk until it is answered. |
+| F1 | **`src/cmscommon/eventsource.py` (400 lines) does not need porting.** Its only Python consumer is `src/cmsranking/RankingWebServer.py:47` — the module S-4 deletes — and the Rust equivalent already exists: `ranking-web/src/events.rs` (accepts `text/event-stream`, the ten-minute close, the media-range matching). It leaves S-2 along with S-4, so S-2 drops 5,950 → 5,550 and S-2b is 739 lines, not 1,139. | Recorded; S-4's deletion is the trigger, so no extra step. |
+| F2 | **A pre-existing auth gap the port must carry.** `cms-db/src/auth.rs`'s `PlaintextPassword::matches` authenticates a `plaintext:` row, while `src/cmscommon/crypto.py:213` deliberately refuses one — its own comment: a `plaintext:` row *is* the password, so honouring it hands the account to anyone who can read the database. Nothing calls `matches` on a login path yet, so it is not exploitable today. | **Must land before S-8** (the admin web server). Not S-2a's, which ported the functions faithfully. |
+| F3 | **The `cmscommon` cipher is AES-128-CBC with no MAC and an unvalidated padding**, and existing ciphertext lives in the database and `config.toml`. Replacing it is a migration with a dual-read re-encryption path, not a refactor. | **Operator's call, not taken.** Reported by S-2a; the port is byte-compatible instead. |
