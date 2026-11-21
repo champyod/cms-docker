@@ -42,6 +42,13 @@ kept out of the ranking as scheduling facts, and the question names the axis tha
 than three passable candidates** → never lower the bar, record that the field holds no third and the
 search that showed it.
 
+**One question, one topic.** A decision form asks about exactly one topic. Two decisions in one form
+is not a shorter conversation, it is an unanswerable one: the answer to A changes which candidates
+for B survive, and the operator is left confirming a bundle he cannot judge. Ask, record, then ask
+the next — even when both are ready. Choosing a topic means naming the whole field of candidates that
+matter for that topic and comparing them; three hand-picked options out of a large space is a straw
+man wearing a table.
+
 **Context.** Every claim carries its evidence inline (`path:line`, command, output, version). Never
 name an ID, file, key or skill without restating what it says in the same breath. Thai for meaning
 and reasoning; English for identifiers, code, commands and anything that lands in the repository.
