@@ -14,10 +14,13 @@ SB="$(mktemp -d)"
 trap 'rm -rf "$SB"' EXIT
 
 # The update invokes the script directly; a non-executable checkout fails before env.
-if [[ -x "${REPO_ROOT}/scripts/__apply_sql.sh" ]]; then
+# Read the index mode too: core.filemode is false on this mount, so a chmod alone does
+# not change what a fresh clone checks out.
+apply_mode="$(git -C "$REPO_ROOT" ls-files -s scripts/__apply_sql.sh 2>/dev/null | awk '{print $1}')"
+if [[ "$apply_mode" == "100755" && -x "${REPO_ROOT}/scripts/__apply_sql.sh" ]]; then
   ok "the checked-out role bootstrap is executable"
 else
-  no "the checked-out role bootstrap is executable"
+  no "the checked-out role bootstrap is executable (mode ${apply_mode:-unknown})"
 fi
 
 mkdir -p "${SB}/bin" "${SB}/scripts/__lib" "${SB}/backups"
