@@ -43,7 +43,6 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P7 | **Classic admin writes on the same role** — dedicated write engine/session as `cms_admin_account_security` for classic admin account add/update/delete (and `admin_groups`), same role and grants as the panel; no `cmsuser` admin writes. Add config/env wiring and tests. No production run. | `.worktrees/classic-admin-security` | `fix/classic-admin-security` (from `e115f28d`) | hermes-agent | `src/cms/conf.py`, `src/cms/db/**`, `src/cms/server/admin/handlers/admin.py`, `src/cms/server/admin/handlers/base.py`, `admin-panel/prisma/roles/grants.tsv`, `admin-panel/prisma/sql/20260820110000_generated_roles.sql`, `scripts/__inject_config.sh`, `docker-compose.yml`, `tests/**`, `coordination/BOARD.md` | planning | in-flight |
 
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
