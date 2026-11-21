@@ -75,7 +75,19 @@ log() { printf 'parity: %s\n' "$*"; }
 die() { printf 'parity: FAIL %s\n' "$*" >&2; exit "${2:-2}"; }
 
 usage() {
-    sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    cat <<'USAGE'
+Usage: scripts/__check_render_parity.sh [options]
+
+  --baseline-only      boot the baseline stack and record it; no diff
+  --baseline-ref REF   baseline source (default HEAD, extracted with git archive)
+  --candidate-src DIR  candidate source (default: this checkout's src/)
+  --json PATH          where to write the machine-readable diff
+  --keep               keep the work directory and containers
+  -h, --help           this text
+
+Exit: 0 no difference, 1 a difference, 2 the harness could not run,
+      3 a surface did not answer what its expect block requires.
+USAGE
 }
 
 while [[ $# -gt 0 ]]; do
