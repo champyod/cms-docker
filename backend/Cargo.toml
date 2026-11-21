@@ -3,7 +3,10 @@ resolver = "2"
 members = ["cms-audit", "cms-db", "cms-proto", "cms-svc", "cms-worker"]
 
 [workspace.dependencies]
+aes = "0.8"
 backon = { version = "1.6", default-features = false }
+base64 = "0.22"
+bcrypt = "0.17"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

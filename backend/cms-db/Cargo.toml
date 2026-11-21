@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+aes = { workspace = true }
+base64 = { workspace = true }
+bcrypt = { workspace = true }
 chrono = { workspace = true }
+rand = { workspace = true }
+sha1 = { workspace = true }
 sqlx = { workspace = true }
 subtle = { workspace = true }
 thiserror = { workspace = true }
