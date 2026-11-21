@@ -107,7 +107,7 @@ BEGIN
     RAISE NOTICE 'cms_admin_login is missing: no grants applied for it';
     RETURN;
   END IF;
-  EXECUTE 'GRANT SELECT (username, authentication, enabled) ON public.admins TO cms_admin_login';
+  EXECUTE 'GRANT SELECT (id, username, authentication, enabled) ON public.admins TO cms_admin_login';
   EXECUTE 'DROP POLICY IF EXISTS cms_admin_login_select ON public.admins';
   EXECUTE 'CREATE POLICY cms_admin_login_select ON public.admins FOR SELECT TO cms_admin_login USING (true)';
 END $$;
