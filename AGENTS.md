@@ -19,6 +19,9 @@ This checkout is written by multiple agent CLIs. Every agent must:
 ## Authority
 
 - `CLAUDE.md` is the architecture and pattern law of this codebase.
+- `admin-panel/DESIGN.md` is the design law of the panel: the delete test, the ban list, density,
+  colour, type and the instruments that check them. Any UI change is judged by it before it is
+  judged by taste.
 - `docs/agent-protocol.md` §1 is the binding rule set for decisions, selection and context — it is
   copied verbatim at the end of this file, and the copy is checked.
 - `TODO-DEV.md` and `epics/` (hub root) are the durable backlog and decision record.
