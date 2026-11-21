@@ -3,7 +3,7 @@
 //! WHY the form owns focus and nothing else: field kinds own editing, and the page that
 //! builds the form owns rendering, so a new kind never has to touch navigation.
 
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

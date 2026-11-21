@@ -9,7 +9,7 @@ use super::route::Route;
 use super::state::App;
 use crate::core::expose::{bind_address_for, Mode};
 use crate::core::expose_input::{parse_port, parse_tailscale_ip};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use std::io::Write;
 
 /// What a key press asked the chooser to do.
@@ -201,7 +201,7 @@ pub fn write_env_value(path: &str, key: &str, value: &str) -> Result<(), String>
 mod tests {
     use super::{read_env_value, write_env_value, ExposureAction};
     use crate::tui::app::{App, Route};
-    use crossterm::event::KeyCode;
+    use ratatui::crossterm::event::KeyCode;
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("cms_expose_{name}_{}", std::process::id()));

@@ -1,6 +1,6 @@
 //! Fleet manager: worker table + detail pane + edit forms.
 
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};

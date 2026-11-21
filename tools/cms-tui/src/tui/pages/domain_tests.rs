@@ -7,7 +7,7 @@
 use super::{DomainAction, DomainView};
 use crate::tui::components::config_form::ConfigForm;
 use crate::tui::components::form_field::{Field, FieldKind};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 /// A form with just the rows the arming tests need.
 fn form_with_apply() -> ConfigForm {

@@ -8,7 +8,7 @@
 use super::App;
 use crate::tui::app::Route;
 use crate::tui::pages::domain::DomainAction;
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 /// A per-test directory that no other test shares.
 fn scratch(label: &str) -> std::path::PathBuf {

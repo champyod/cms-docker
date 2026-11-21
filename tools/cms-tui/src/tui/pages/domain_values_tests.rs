@@ -6,7 +6,7 @@
 
 use super::{form_from_disk, read_seeded_values};
 use crate::tui::pages::domain_request::{argv, request, wants_apply};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 /// A per-test directory that no other test shares, so seeds cannot bleed across tests.
 fn scratch(label: &str) -> std::path::PathBuf {

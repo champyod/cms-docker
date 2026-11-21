@@ -1,6 +1,6 @@
 use anyhow::Result;
-use crossterm::event::{DisableMouseCapture, EnableMouseCapture};
-use crossterm::terminal::{
+use ratatui::crossterm::event::{DisableMouseCapture, EnableMouseCapture};
+use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
     enable_raw_mode,
 };
@@ -34,7 +34,7 @@ pub fn init_terminal(
 ) -> Result<Terminal<CrosstermBackend<std::io::Stdout>>> {
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    crossterm::execute!(
+    ratatui::crossterm::execute!(
         stdout,
         EnterAlternateScreen,
         EnableMouseCapture
@@ -45,7 +45,7 @@ pub fn init_terminal(
 
 pub fn restore_terminal() -> Result<()> {
     let mut stdout = std::io::stdout();
-    crossterm::execute!(
+    ratatui::crossterm::execute!(
         stdout,
         LeaveAlternateScreen,
         DisableMouseCapture

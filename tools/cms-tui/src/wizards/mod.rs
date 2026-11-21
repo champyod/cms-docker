@@ -1,6 +1,6 @@
 //! Wizards tab: db-host settings, expose wiring, server connections.
 
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;

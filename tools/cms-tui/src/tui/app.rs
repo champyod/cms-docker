@@ -5,7 +5,6 @@ pub mod route;
 pub mod state;
 pub mod terminal;
 
-pub use domain_keys::DomainKeyOutcome;
 pub use route::{Route, WorkingPopup};
 pub use state::App;
 pub use terminal::run;

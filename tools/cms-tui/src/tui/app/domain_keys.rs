@@ -16,7 +16,7 @@ use crate::core::catalog::SCRIPT_DOMAIN;
 use crate::core::runner::Runner;
 use crate::tui::pages::domain::DomainAction;
 use crate::tui::pages::domain_request::request;
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use std::error::Error;
 use std::process::{Command, Stdio};
 

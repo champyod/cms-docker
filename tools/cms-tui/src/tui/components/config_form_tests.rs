@@ -6,7 +6,7 @@
 
 use super::{ConfigForm, KeyOutcome};
 use crate::tui::components::form_field::{Field, FieldKind};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 fn label(value: &str) -> String {
     value.to_string()

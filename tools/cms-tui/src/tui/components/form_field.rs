@@ -6,7 +6,7 @@
 //! after the operator had already pressed apply. Rejecting the wrong keystroke at the
 //! field keeps bad argv from ever being built.
 
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 use super::edit_cursor::{EditCursor, KeyOutcome};
 

@@ -1,6 +1,6 @@
 //! Feature launcher tab: every ./cms subcommand, run-and-return.
 
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;

@@ -14,7 +14,7 @@ use super::domain_fields::APPLY_LABEL;
 use super::domain_request::{argv, wants_apply};
 use super::domain_values::form_from_disk;
 use crate::tui::components::config_form::ConfigForm;
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},

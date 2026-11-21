@@ -1,6 +1,6 @@
 use super::route::{Route, WorkingPopup};
 use super::state::App;
-use crossterm::{
+use ratatui::crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},

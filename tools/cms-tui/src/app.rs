@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::{Terminal, backend::CrosstermBackend};
 
 use crate::data::snapshot::Snapshot;
@@ -148,7 +148,7 @@ impl App {
 /// Async task that resolves with the next user action (or None on read error).
 async fn wait_action() -> Action {
     loop {
-        if crossterm::event::poll(std::time::Duration::from_millis(50))
+        if ratatui::crossterm::event::poll(std::time::Duration::from_millis(50))
             .unwrap_or(false)
         {
             if let Some(action) = poll_event() {
@@ -161,10 +161,10 @@ async fn wait_action() -> Action {
 
 /// Non-blocking event read; returns None when no input pending.
 fn poll_event() -> Option<Action> {
-    if !crossterm::event::poll(std::time::Duration::from_millis(50)).ok()? {
+    if !ratatui::crossterm::event::poll(std::time::Duration::from_millis(50)).ok()? {
         return None;
     }
-    match crossterm::event::read().ok()? {
+    match ratatui::crossterm::event::read().ok()? {
         Event::Resize(_, _) => Some(Action::Redraw),
         Event::Key(key)
             if key.kind == KeyEventKind::Press =>

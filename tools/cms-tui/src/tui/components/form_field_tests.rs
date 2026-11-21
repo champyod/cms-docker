@@ -5,7 +5,7 @@
 //! also prove navigation, so a failure would not say which half broke.
 
 use super::{Field, FieldKind};
-use crossterm::event::KeyCode;
+use ratatui::crossterm::event::KeyCode;
 
 fn text(value: &str) -> Field {
     Field::new("KEY".to_string(), value.to_string(), FieldKind::Text)
