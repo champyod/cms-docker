@@ -3,20 +3,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * The credential read owns a connection, and only that connection.
- *
- * WHY these assertions exist: moving `admins.authentication` off the application-wide connection is
- * the point of the role, but the move is one import away from being undone — a later edit that
- * reaches for `prisma` reads the hash happily (that role still has the grant) and no test that only
- * exercises responses would notice. So the connection itself is pinned: absent variable fails
- * loudly, present variable yields one cached client built over it, and the login source selects the
- * four admitted columns over that client and nothing else.
- *
- * WHY Prisma is mocked and not connected: constructing a `PrismaClient` opens no socket, but the
- * suite has no database and must not acquire one. The mock records each construction so "no client
- * was created" is an assertion about behaviour, not about intent.
- */
+// Pin the connection, not just the response: a later edit reaching for prisma would read the hash unnoticed.
 
 const ENV = 'ADMIN_LOGIN_DATABASE_URL';
 const ROLE_URL = 'postgresql://cms_admin_login@database:5432/cmsdb';
@@ -39,13 +26,7 @@ interface LoadedModule {
   readonly PrismaClient: FakePrismaClient;
 }
 
-/**
- * Loads a fresh `@/lib/prisma` over a fake `@prisma/client`.
- *
- * WHY `vi.resetModules()` and a deleted `global.prisma`: the module caches its wrapper on
- * `globalThis` outside production, so without both the next case would inherit the previous case's
- * client and the construction counts below would prove nothing.
- */
+// Fresh module per case: the wrapper is cached on globalThis outside production.
 async function loadPrismaModule(constructed: ConstructedClient[]): Promise<LoadedModule> {
   vi.resetModules();
   delete (globalThis as { prisma?: unknown }).prisma;
@@ -139,17 +120,14 @@ describe('the login lookup', () => {
   });
 
   it('never names the application connection or its role', () => {
-    // WHY a source assertion: the failure mode is a fallback written months from now. Naming either
-    // token in this module is how it would start. The word boundaries matter: the role's own
-    // variable ends in DATABASE_URL and must not be mistaken for the application one.
+    // Source assertion: the failure mode is a fallback written later, and naming the token is how it starts.
     expect(AUTH_SOURCE).not.toMatch(/\bDATABASE_URL\b/);
     expect(AUTH_SOURCE).not.toMatch(/cmsuser/i);
     expect(AUTH_SOURCE).toMatch(/import \{[^}]*getAdminLoginClient[^}]*\} from '@\/lib\/prisma'/);
   });
 
   it('leaves the last_login_at write on the application connection', () => {
-    // The role holds SELECT on three columns, so an UPDATE through it would fail; the write must
-    // stay where the grant exists.
+    // The role's grant covers SELECT only, so the write must stay on the application connection.
     const body = functionSource('completeLogin');
 
     expect(body).toContain('prisma.admins.update');

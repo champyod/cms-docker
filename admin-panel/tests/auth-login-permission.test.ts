@@ -25,8 +25,7 @@ async function loadLoginWith(grantedPermissions: readonly string[]): Promise<Har
     enabled: true,
     authentication: STORED_AUTHENTICATION,
   }));
-  // The credential read runs over cms_admin_login's own client; `prisma` keeps the last_login_at
-  // write. Holding both here is what lets a test prove which one the lookup used.
+  // The credential read uses the login client; both delegates are held so a test can prove which ran.
   const findViaApplicationClient = vi.fn(async () => null);
   vi.doMock('@/lib/auth', () => ({ createSession, deleteSession: vi.fn(), getSession: vi.fn() }));
   vi.doMock('@/lib/prisma', () => ({
@@ -120,8 +119,7 @@ describe('signing in requires admin:login', () => {
 
     expect(state.error).toBeUndefined();
     expect(createSession).toHaveBeenCalledTimes(1);
-    // The credential read runs over cms_admin_login's client and asks for the four admitted columns;
-    // the application connection is never consulted for it.
+    // Four admitted columns over the login client; the application connection is never consulted.
     expect(findCredential).toHaveBeenCalledWith({
       where: { username: USERNAME },
       select: { id: true, username: true, authentication: true, enabled: true },

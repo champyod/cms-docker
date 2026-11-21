@@ -3,20 +3,7 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-/**
- * The admin account mutations own a connection, and only that connection.
- *
- * WHY these assertions exist: `cms_admin_account_security` is the role that may change
- * `admins.authentication`, and the application-wide connection deliberately keeps no path to that
- * write once this split lands. A later edit that reaches for `prisma` would still work (the
- * application role holds every column) and no test that only exercises returned rows would notice.
- * So the connection is pinned: absent variable fails loudly, present variable yields one cached
- * client built over it, and every mutation — create, update, delete and reveal — goes through it.
- *
- * WHY Prisma is mocked and not connected: constructing a `PrismaClient` opens no socket, but the
- * suite has no database and must not acquire one. The mock records each construction so "no client
- * was created" is an assertion about behaviour, not about intent.
- */
+// Pin the connection: the application role holds every column, so a mutation through it would go unnoticed.
 
 const ENV = 'ADMIN_SECURITY_DATABASE_URL';
 const ROLE_URL = 'postgresql://cms_admin_account_security@database:5432/cmsdb';
@@ -48,13 +35,7 @@ interface LoadedModule {
   readonly PrismaClient: FakePrismaClient;
 }
 
-/**
- * Loads a fresh `@/lib/prisma` over a fake `@prisma/client`.
- *
- * WHY `vi.resetModules()` and a deleted `global.prisma`: the module caches its wrapper on
- * `globalThis` outside production, and its clients in module scope, so without both the next case
- * would inherit the previous case's client and the construction counts below would prove nothing.
- */
+// Fresh module per case: the wrapper is cached on globalThis and its clients in module scope.
 async function loadPrismaModule(constructed: ConstructedClient[]): Promise<LoadedModule> {
   vi.resetModules();
   delete (globalThis as { prisma?: unknown }).prisma;
@@ -148,8 +129,7 @@ describe('the admin account-security client', () => {
   });
 
   it('keeps the security, read and login variables distinct', async () => {
-    // WHY: the three roles hold different columns. One variable answering for another would give a
-    // mutation the read role's grant (no write) or the login role's (no name/enabled write).
+    // One variable answering for another would give a mutation a grant without the write it needs.
     process.env.ADMIN_READ_DATABASE_URL = 'postgresql://cms_admin_read_people@database:5432/cmsdb';
     process.env.ADMIN_LOGIN_DATABASE_URL = 'postgresql://cms_admin_login@database:5432/cmsdb';
     const constructed: ConstructedClient[] = [];
@@ -171,8 +151,7 @@ describe('the admin account mutations', () => {
     expect(deleteBody).toContain('const security = getAdminSecurityClient()');
     expect(deleteBody).toContain('security.admins.findUnique');
     expect(deleteBody).toContain('security.admins.delete');
-    // WHY the select: the role's SELECT excludes last_login_at, so a bare delete would ask for the
-    // whole row in RETURNING and be refused before the audit guard is reached.
+    // Explicit select: the role cannot read last_login_at, so a bare delete's RETURNING would be refused.
     expect(deleteBody).toContain('select: { id: true }');
   });
 
@@ -186,9 +165,7 @@ describe('the admin account mutations', () => {
   });
 
   it('never names the application connection, its role, or prisma.admins', () => {
-    // WHY a source assertion: the failure mode is a fallback written months from now. Naming either
-    // token in these modules is how it would start. The word boundaries matter: the role's own
-    // variable ends in DATABASE_URL and must not be mistaken for the application one.
+    // Source assertion: the failure mode is a fallback written later, and naming the token is how it starts.
     for (const [label, source] of [
       ['admins.ts', ADMINS_SOURCE],
       ['admin-update-helpers.ts', UPDATE_HELPERS_SOURCE],

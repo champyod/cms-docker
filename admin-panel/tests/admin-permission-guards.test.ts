@@ -162,8 +162,7 @@ describe('runtime — mocked server actions enforce guards', () => {
     vi.doMock('@/lib/auth', () => ({
       getSession: vi.fn(async () => ({ userId: '1', username: 'caller', expiresAt: new Date().toISOString() })),
     }));
-    // WHY this module and not '@/lib/permission-engine': the target-grant read needs Prisma, so it
-    // lives in the server module; permission-engine stays pure for the client bundle.
+    // Server module: the target-grant read needs Prisma, and permission-engine stays pure for the client bundle.
     vi.doMock('@/lib/server/target-permissions', () => ({
       getTargetEffectivePermissions: vi.fn(async () => ({
         status: 'resolved' as const,

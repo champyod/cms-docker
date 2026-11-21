@@ -1,17 +1,6 @@
 #!/usr/bin/env bash
-# tests/test_admin_role_credentials.sh — the three admin roles get generated credentials, the
-# credential SQL stays superuser-only, and the bootstrap phase applies it as postgres.
-#
-# WHY every assertion is static or stubbed: the real path runs against a production database, so
-# this suite reads the files and drives scripts/__apply_sql.sh with a fake `docker` on PATH. No
-# database is contacted and no container is started.
-#
-# What can go wrong without an error message, and is therefore asserted:
-#   * a role keeps PASSWORD NULL because config sync never generated its secret;
-#   * a regenerated secret silently rotates a live credential on the second sync;
-#   * the credential SQL is applied by the application role (NOCREATEROLE) and fails the update;
-#   * the normal apply runs as superuser, which would widen every later statement's rights;
-#   * a password lands in the repository or in compose instead of .env.
+
+# Static or stubbed only: the real path runs against a production database.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -154,8 +143,8 @@ ENV
 chmod 600 "$TEST_ROOT/apply/.env"
 cat > "$STUB_DIR/docker" <<'STUB'
 #!/usr/bin/env bash
-# Fake docker: advertises the database container, records every exec call and the SQL handed to
-# psql on stdin, and never touches a real daemon.
+
+# Fake docker: records every exec call and the SQL on stdin, never touching a daemon.
 if [[ "${1:-}" == "ps" ]]; then
   printf '%s\n' "${STUB_PS_OUT-cms-database}"
   exit 0
@@ -243,6 +232,7 @@ NODOCKER="$TEST_ROOT/nodocker"
 mkdir -p "$NODOCKER" "$TEST_ROOT/sync/config" "$TEST_ROOT/sync/admin-panel"
 cat > "$NODOCKER/docker" <<'STUB'
 #!/usr/bin/env bash
+
 # No daemon: every database lookup in the sync sees "container absent" and is skipped.
 if [[ "${1:-}" == "ps" ]]; then exit 0; fi
 exit 1
