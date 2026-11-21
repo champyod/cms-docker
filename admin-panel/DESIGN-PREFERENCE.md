@@ -38,6 +38,16 @@ by surviving repeated application, not by being cited once.
 | 60-30-10 as a check | the measured shape is already 90/5/5; whether to enforce a ratio or just an accent ceiling is unresolved |
 | A bar for a single count against zero | the "waiting 214" bar was invented and removed; the honest form is a number plus its reference |
 
+## Decided 2026-11-21 (Tier B — decided by the agent, recorded for overrule)
+
+| # | Decision | Reasoning |
+|---|---|---|
+| P12 | **One primary action per surface**; every further level is the same family at lower weight (secondary → tertiary), never a raw `<a>`. The lowest level is still a button: hit area ≥ 24px and a real focus ring. | Carbon ("primary only once per screen; secondary only alongside a primary"), Material 3 ("primary actions carry higher emphasis through size, colour or shape"), Atlassian ("three levels; never two primaries; subtle is still a button; links are navigation"). All three converge, so no tie to ask about. |
+| P13 | **The main message of an incident is the state, not the count.** The title says what stopped ("Scoring is down"), the consequence line carries the quantity and the blast radius ("214 waiting · contest 9 has no scores"), the action sits with them. The number is not the largest element when it is a symptom rather than a metric someone decides on. | Carbon's notification title guidance (title = what stopped or cannot be done) + the BAN rule (a big number earns its size only when it is a number someone acts on) + F-pattern evidence (top-left gets the first fixation, so the main sentence must be there). |
+| P14 | **Re-think triggers, three levels.** The page's job changes → restart at procedure step 0 and rebuild the layout. A fact or a channel is added/changed → restart at steps 1–2 and re-measure the colour budget. An element is added → delete test plus placement check. | Design-debt literature: choose refactor / restructure / redesign by impact × change frequency and by reversibility, not by convenience. |
+| P15 | Every severity level carries its own colour; a lower level is a **quieter** colour, never an absent one. | Operator's correction + Carbon status indicators (at least three of four channels) + PatternFly (text + colour + icon). |
+
+
 ## Dropped
 
 | Candidate | Counter-case |
