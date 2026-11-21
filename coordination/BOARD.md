@@ -41,7 +41,6 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P5 | **Panel admin write/security role** — `createAdmin`, `updateAdmin`, `deleteAdmin`, `revealAdminPassword` over a lazy `ADMIN_SECURITY_DATABASE_URL` client as `cms_admin_account_security`; add the required `admins` column grants and tests. Ownership/revoke and credentials remain later. | `.worktrees/panel-admin-write` | `fix/panel-admin-write` (from `58054398`) | hermes-agent | `admin-panel/src/lib/prisma.ts`, `admin-panel/src/app/actions/admins.ts`, `admin-panel/src/app/actions/admin-update-helpers.ts`, `admin-panel/prisma/roles/grants.tsv`, `admin-panel/prisma/sql/20260820110000_generated_roles.sql`, `tests/test_role_catalog.sh`, `admin-panel/tests/**`, `coordination/BOARD.md` | planning | in-flight |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
