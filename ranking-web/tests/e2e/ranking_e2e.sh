@@ -192,8 +192,8 @@ seed_console_admin() {
     psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
 DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm');
 INSERT INTO admins (name, username, authentication, enabled) VALUES
-    ('E2E Operator', 'e2e', 'plaintext:e2e-secret', true),
-    ('E2E No Permission', 'e2e-noperm', 'plaintext:e2e-secret', true);
+    ('E2E Operator', 'e2e', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true),
+    ('E2E No Permission', 'e2e-noperm', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true);
 INSERT INTO permissions (key, module, verb)
     VALUES ('ranking:read', 'ranking', 'read') ON CONFLICT (key) DO NOTHING;
 INSERT INTO groups (name) VALUES ('e2e-ranking') ON CONFLICT (name) DO NOTHING;
