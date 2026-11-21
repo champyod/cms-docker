@@ -38,6 +38,7 @@
 #![forbid(unsafe_code)]
 
 mod auth;
+mod binary;
 mod digest;
 mod interval;
 mod permission;
@@ -45,6 +46,8 @@ mod reads;
 mod types;
 mod writes;
 
+pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
+pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
