@@ -225,8 +225,10 @@ written in its place.
 ## 10. Sources — what each one settles
 
 Read 2026-11-21. **The full evidence note, with the example or number behind each rule and the five
-conflicts and their adjudications, is `admin-panel/DESIGN-RESEARCH.md`.** This table is the index;
-that file is the evidence, and a rule may only cite a source that appears there.
+conflicts and their adjudications, is `admin-panel/DESIGN-RESEARCH.md`.** The **order in which a page
+is reasoned about — facts typed, encoding chosen by the effectiveness ranking, reference and
+provenance specified, colour budget measured — is `admin-panel/DESIGN-PROCEDURE.md`.** This table is
+the index; that file is the evidence, and a rule may only cite a source that appears there.
 
 | Source | What it settles here |
 |---|---|
