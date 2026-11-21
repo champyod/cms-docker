@@ -70,3 +70,32 @@ still open and this slice should not pre-empt it.
 
 Per `docs/agent-protocol.md` §1: command, exit code, counts, one line of what it proves — an evidence
 table, one row per criterion. Then what landed (SHA), what is blocked (named), what is next.
+
+## Landed — `cms-db`, at `22b89829`
+
+Sixteen names in `backend/cms-db`: `binary.rs` (4), `digest.rs` (`Digester`, `bytes_digest`,
+`path_digest`) and `crypto.rs` (9). No sixth workspace member: `auth.rs` already owns the
+`admins.authentication` row these functions write, and Q1 is still open.
+
+Three corrections and one weakness, recorded so the next slice does not re-derive them:
+
+- **The cipher is AES-128, not AES-256.** `get_random_key()` reads 16 bytes (`crypto.py:73`) and
+  `AES.new` sizes the cipher from the key it is given, so a 16-byte key is AES-128. Everything above
+  in this file says AES-256; the port follows the code, because the code wrote the ciphertext.
+- **The padding round-trips; what is missing is the check.** `rstrip(b"\x00")[:-1]` strips the
+  terminator, which sits after a plaintext's own trailing `0x00` bytes, so those survive. But
+  nothing verifies a `0x01` was there (`crypto.py:139` TODO), so a wrong key or a flipped ciphertext
+  byte decrypts to bytes with no refusal and no caller can tell. Confirmed by running the Python
+  side, not inferred.
+- **There is no MAC.** CBC without authentication means whoever can write a ciphertext can steer the
+  plaintext. Replacing it is a migration with a re-encryption path over every `encrypt_binary` value
+  plus `config.toml`'s `secret_key` — the operator's call, and unchanged by this slice.
+- **`generate_random_password` now draws from a CSPRNG**, not `random.choice`'s Mersenne Twister.
+  Nothing stored depends on which generator named a fresh password, and a password predictable from
+  624 earlier draws buys nothing in exchange.
+
+Dependencies added, proposed in `0b76f9f2` and still the operator's decision: `aes` 0.8 (the block
+cipher only; CBC and the padding are written out in `crypto.rs` so they can be read against
+`crypto.py` line by line), `bcrypt` 0.17, and `base64` 0.22, which is already in `Cargo.lock` as a
+transitive dependency so the direct edge compiles no new crate. Refusing them is one revert, and
+leaves `cms-db` uncompilable until `crypto.rs` goes with them.
