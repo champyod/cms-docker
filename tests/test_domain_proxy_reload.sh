@@ -63,6 +63,14 @@ else
   no "DockerClient::deploy delegates to the script"
 fi
 
+# A deploy has no terminal to answer __domain.sh's optional-feature prompts; redirecting
+# output alone left stdin on the tty and the update hung there.
+if grep -q 'proxy --apply --yes </dev/null' "$SCRIPT"; then
+  ok "the domain render is non-interactive"
+else
+  no "the domain render is non-interactive"
+fi
+
 # `make -n` rather than grepping the Makefile: a grep would still pass on a
 # commented-out line, and it would not follow the DOMAIN_PROXY_RELOAD variable
 # to the command it expands to. The dry run asks make itself what it would
