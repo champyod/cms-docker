@@ -46,7 +46,6 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P10 | **CI dependency audit** — pin the vulnerable transitive `effect@3.21.0` to the fixed `3.22.1` line and re-run the panel audit/tests. | base checkout | `fix/ci-effect-advisory` (from `6673ec9f`) | hermes-agent | `admin-panel/package.json`, `admin-panel/bun.lock`, `coordination/BOARD.md` | planning | in-flight |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
