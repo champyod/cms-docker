@@ -285,3 +285,53 @@ export function getAdminLoginClient(): PrismaClient {
   );
   return adminLoginClient;
 }
+
+/** The variable carrying the `cms_admin_read_people` connection string. Distinct from the login
+ * variable on purpose: the two roles hold different columns, and one name collapsing into the other
+ * would give the list the login's grant or the login the list's. */
+const ADMIN_READ_DATABASE_URL_ENV = 'ADMIN_READ_DATABASE_URL';
+
+/** The role that variable connects as; restated in the failure so an operator can search for it. */
+const ADMIN_READ_ROLE = 'cms_admin_read_people';
+
+let adminReadClient: PrismaClient | undefined;
+
+/**
+ * The client that lists admins, over the `cms_admin_read_people` role's own connection.
+ *
+ * WHY a second client and not a select on {@link prisma}: the list is the one admin read that every
+ * holder of `admin:read` triggers, and it needs five columns of a table whose sixth column is the
+ * credential. Reading it through `prisma` would leave the hash reachable from the list path forever,
+ * because the application role keeps that grant; the read role's SELECT is column-scoped to exactly
+ * `(id, username, name, enabled, last_login_at)`, so the hash is not merely unselected — it is
+ * unreadable over this connection. The grant is enforced in the database, which is what makes the
+ * narrowing true of the process rather than a convention the next module may forget.
+ *
+ * WHY lazy: every page, the scheduler, the CLI and the seed import this module, while only the
+ * admins list has a reason to hold this connection. Building it at import time would fail every
+ * one of those processes until the role is provisioned, and would open a pool nobody uses.
+ *
+ * WHY no fallback: `DATABASE_URL` names the application-wide role, which still holds the whole
+ * table. Falling back to it when this variable is absent would keep the list working while silently
+ * restoring the access the split removes. So an absent variable raises, naming it, and the list
+ * fails loudly instead of being served by the wrong identity.
+ */
+export function getAdminReadClient(): PrismaClient {
+  if (adminReadClient !== undefined) return adminReadClient;
+
+  const url = process.env[ADMIN_READ_DATABASE_URL_ENV]?.trim();
+  if (!url) {
+    throw new Error(
+      `${ADMIN_READ_DATABASE_URL_ENV} is not set: the ${ADMIN_READ_ROLE} role is not provisioned, ` +
+        'so the panel cannot list admins. Set it to that role\'s connection string; ' +
+        'there is deliberately no fallback to the application-wide connection.',
+    );
+  }
+
+  // Actor-aware, for the same reason as the main client: `admins` is row-level secured on
+  // cms.actor, and the signed-in admin's request is what supplies it.
+  adminReadClient = buildActorAwareClient(
+    new PrismaClient({ datasourceUrl: url, log: ['error', 'warn'] }),
+  );
+  return adminReadClient;
+}
