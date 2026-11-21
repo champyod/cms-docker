@@ -6,35 +6,57 @@ if (set -o pipefail 2>/dev/null); then
 fi
 
 ###############################################################################
-# CMS Full Backup Script
-# - Full logical pg_dump via docker exec (PGPASSWORD in env, not argv)
-# - Volume tar via helper container (cms-data:ro mount)
-# - manifest.json, rotation across BOTH dirs, disk guard, Discord webhook
+# CMS Backup Script
+# - Logical pg_dump via docker exec (PGPASSWORD in env, not argv)
+# - Full database, or a --tables selection turned into one -t per table
+# - Database-only. No volume is archived: every submitted file and testcase is
+#   stored in the database keyed by its SHA1 digest (src/cms/db/fsobject.py),
+#   so a volume holds a local copy of what the dump already carries
+# - manifest.json, rotation, disk guard, Discord webhook
+# - --root <path> retargets the archive set; --stdout streams the dump to the
+#   caller and archives nothing
 ###############################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# ---------------------------------------------------------------------------
+# lib/common.sh contract: log_info/log_warn/log_die, require_disk_free_gb and the
+# DISK_FLOOR_GB/DISK_WARN_GB thresholds all come from the shared library. Every
+# delivery of this script carries __lib beside it — the monitor image COPYs it and
+# the compose mounts name it — so a missing library is a broken delivery and is
+# reported as one, rather than met by a second, divergent copy of the helpers.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
-# Load env.  Do not override already-exported.
+# Load env (POSTGRES_* from .env.core).  Do not override already-exported.
 # ---------------------------------------------------------------------------
-if [[ -f "${REPO_ROOT}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.env" 2>/dev/null || true
-  set +a
-fi
+for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.infra"; do
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$env_file" 2>/dev/null || true
+    set +a
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # Config (keep BACKUP_* rotation envs compatible with legacy monitor.sh)
 # ---------------------------------------------------------------------------
 BACKUP_ROOT="${BACKUP_DIR:-${REPO_ROOT}/backups}"
 BACKUP_DB_DIR="${BACKUP_ROOT}/db"
-BACKUP_VOL_DIR="${BACKUP_ROOT}/volumes"
 MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
+# The audit-log archive this run wrote, if any — set by the dump step, read by the manifest entry.
+# WHY a run-level variable rather than a tenth argument threaded through three functions: the file is
+# created in one step and recorded in another, and an entry that silently omitted the trail would make
+# the manifest claim a run is database-only when it is not.
+AUDIT_ARCHIVE_NAME=""
 
 # Rotation envs — support both new and legacy names
 BACKUP_MAX_COUNT="${BACKUP_MAX_COUNT:-${MAX_BACKUPS:-50}}"
@@ -53,18 +75,102 @@ POSTGRES_BACKUP_USER_VAL="cms_backup"
 POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 
 CONTAINER_DB="cms-database"
-VOLUME_DATA="cms-data"
+
+# Exit contract — a caller must be able to separate "the database is safe" from
+# "nothing was archived" without reading the log:
+#   0 = the DB dump is on disk, its checksum is written, and the manifest records this run. A
+#       run whose rotation was skipped still reports 0: the run was recorded, so what it costs is
+#       retention.
+#   1 = no usable backup (the DB step failed, so no dump was kept)
+#   2 = the disk guard stopped the run — free space at the backup root was unreadable or under the
+#       floor, so nothing was written and there is no dump from this run to judge
+#   3 = partial backup — the dump was kept, but the manifest does not record this run, so a caller
+#       that saw 0 would retire a backup it has no way to check
+# --cleanup-only writes no backup and runs no disk guard, so it only ever returns 0 (the rotation
+# reclaimed disk) or 1 (the rotation itself failed) and never 2 or 3.
+readonly EXIT_PARTIAL_BACKUP=3
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-json_escape() {
-  # JSON-escape a string via python3 (fallback to naive escaping)
-  if command -v python3 >/dev/null 2>&1; then
-    python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$1"
-  else
-    printf '"%s"' "$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\n/\\n/g; s/\r/\\r/g; s/\t/\\t/g')"
+# json_escape_text <string> — the last-resort escaper, reached only on a box carrying no jq.
+# It escapes what JSON forbids unescaped and nothing more, which is why it is the fallback and
+# not the builder: one unescaped byte in the alert text is a payload Discord rejects, and an
+# alert nobody receives is the one failure that leaves no trace.
+# WHY the sentinels and not \n or \t in the patterns: sed reads line by line, so a newline is
+# never in the pattern space and no pattern can match one, and sed has no \t in a pattern either.
+# A byte either of those rules hides is swapped for one sed can see and put back as text, so a
+# line break or a tab in an alert is escaped rather than reaching the webhook raw — a raw control
+# character is a payload Discord rejects, and an alert nobody receives leaves no trace.
+json_escape_text() {
+  local line_break tab
+  line_break="$(printf '\036')"
+  tab="$(printf '\t')"
+  printf '%s' "$1" |
+    tr '\n' "$line_break" |
+    sed -e 's/\\/\\\\/g' \
+        -e 's/"/\\"/g' \
+        -e "s/${line_break}/\\\\n/g" \
+        -e "s/${tab}/\\\\t/g" \
+        -e 's/\r/\\r/g'
+}
+
+# WHY one flag rather than a test per path: the contract is that a run which announced a
+# degradation must not afterwards announce a success, and a check enumerating the degrading
+# paths would be silently wrong the moment one is added without it. The exit code is
+# deliberately untouched — the status contract above says what was backed up, and that did
+# not change; only the alert contradicted it.
+is_degraded=0
+
+send_degraded() {
+  # WHY the flag is raised beside the send and not at the call sites: a path that sends its
+  # own amber and forgets the flag is a run whose headline contradicts its own warning.
+  is_degraded=1
+  send_discord "$1" 16776960 "true"
+}
+
+# discord_payload_json <message> <color> <ts> <mention> — the alert body on stdout.
+# WHY jq and not python3: the monitor image ships jq (docker/monitor/Dockerfile) and ships no
+# python3, so a python3-first builder produced a payload only the host ever sent — the same move
+# the manifest note below records. The embed is the one python3 emitted, key for key and in the
+# same order, so every reader of an alert is unaffected.
+discord_payload_json() {
+  local message="$1" color="$2" ts="$3" mention="$4"
+  if command -v jq >/dev/null 2>&1; then
+    jq -c -n \
+      --arg msg "$message" \
+      --arg color "$color" \
+      --arg ts "$ts" \
+      --arg role "$ROLE_ID" \
+      --arg mention "$mention" \
+      '{embeds: [{title: "CMS Backup System", description: $msg, color: ($color | tonumber), timestamp: $ts}]}
+       + (if $mention == "true" and $role != "" then {content: ("<@&" + $role + ">")} else {} end)'
+    return
   fi
+  local escaped_msg escaped_role
+  escaped_msg="$(json_escape_text "$message")"
+  escaped_role="$(json_escape_text "$ROLE_ID")"
+  if [[ "$mention" == "true" && -n "$ROLE_ID" ]]; then
+    printf '{"content": "<@&%s>", "embeds": [{"title": "CMS Backup System", "description": "%s", "color": %s, "timestamp": "%s"}]}' \
+      "$escaped_role" "$escaped_msg" "$color" "$ts"
+    return
+  fi
+  printf '{"embeds": [{"title": "CMS Backup System", "description": "%s", "color": %s, "timestamp": "%s"}]}' \
+    "$escaped_msg" "$color" "$ts"
+}
+
+# discord_post <payload_file> <conf_file> — deliver a prepared alert.
+# WHY the webhook lands in a curl config file instead of on the command line: the token in that
+# URL is a credential, and a process command line is readable by every account on the box for as
+# long as the request lives. The body is read from disk for the same reason, so no part of an
+# alert — which names containers, paths and a role — is ever in argv.
+discord_post() {
+  local payload_file="$1" conf_file="$2"
+  cat > "$conf_file" <<EOF
+url = "${WEBHOOK_URL}"
+EOF
+  curl -s -o /dev/null -X POST -H "Content-Type: application/json" \
+    -d "@${payload_file}" -K "$conf_file" 2>/dev/null
 }
 
 send_discord() {
@@ -73,35 +179,33 @@ send_discord() {
   local mention="${3:-false}"
   [[ -z "$WEBHOOK_URL" ]] && return 0
 
-  local ts
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  local payload
-  local escaped_msg
-  escaped_msg="$(json_escape "$message")"
-  # json_escape already returns quoted string — strip outer quotes for embed
-  # Instead build payload via python to guarantee escaping
-  if command -v python3 >/dev/null 2>&1; then
-    payload="$(python3 -c '
-import json,sys
-msg=sys.argv[1]
-color=int(sys.argv[2])
-ts=sys.argv[3]
-role=sys.argv[4]
-mention=sys.argv[5]
-embed={"title":"CMS Backup System","description":msg,"color":color,"timestamp":ts}
-body={"embeds":[embed]}
-if mention=="true" and role:
-    body["content"]=f"<@&{role}>"
-print(json.dumps(body))
-' "$message" "$color" "$ts" "$ROLE_ID" "$mention")"
-  else
-    if [[ "$mention" == "true" && -n "$ROLE_ID" ]]; then
-      payload="{\"content\": \"<@&${ROLE_ID}>\", \"embeds\": [{\"title\": \"CMS Backup System\", \"description\": ${escaped_msg}, \"color\": ${color}, \"timestamp\": \"${ts}\"}]}"
-    else
-      payload="{\"embeds\": [{\"title\": \"CMS Backup System\", \"description\": ${escaped_msg}, \"color\": ${color}, \"timestamp\": \"${ts}\"}]}"
-    fi
+  local payload_file conf_file
+  if ! payload_file="$(mktemp "${TMPDIR:-/tmp}/cms-discord-payload.XXXXXX")"; then
+    log_warn "could not stage the Discord payload"
+    return 0
   fi
-  curl -s -H "Content-Type: application/json" -X POST -d "$payload" "$WEBHOOK_URL" >/dev/null 2>&1 || log_warn "Discord webhook POST failed"
+  chmod 600 "$payload_file" 2>/dev/null || true
+  if ! conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-discord-request.XXXXXX")"; then
+    rm -f -- "$payload_file"
+    log_warn "could not stage the Discord request"
+    return 0
+  fi
+  chmod 600 "$conf_file" 2>/dev/null || true
+  # WHY the removal is one statement at the end and not a RETURN trap: a RETURN trap is not
+  # scoped to the function that set it, so it fires at some later function's return instead —
+  # with this function's locals already out of scope, where a bare name dies on set -u and takes
+  # the run's exit code with it. Every step below is captured into a status rather than returned
+  # early, so this removal is the only exit and the payload — which names a container, a path and
+  # a role, in a directory every local account can write to — is never left behind.
+  local build_status=0
+  discord_payload_json "$message" "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$mention" \
+    > "$payload_file" || build_status=$?
+  if (( build_status != 0 )); then
+    log_warn "Discord payload could not be built"
+  else
+    discord_post "$payload_file" "$conf_file" || log_warn "Discord webhook POST failed"
+  fi
+  rm -f -- "$payload_file" "$conf_file"
 }
 
 file_size_bytes() {
@@ -111,7 +215,7 @@ file_size_bytes() {
 get_pg_version() {
   local ver=""
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
-    ver="$(docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SHOW server_version;' 2>/dev/null | tr -d ' \r\n' || true)"
+    ver="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SHOW server_version;' 2>/dev/null | tr -d ' \r\n' || true)"
   fi
   if [[ -z "$ver" ]]; then
     # Fallback: image version or postgres --version
@@ -124,27 +228,42 @@ get_pg_version() {
 }
 
 # ---------------------------------------------------------------------------
-# Rotation — operates on timestamp sets across BOTH dirs, always keeps ≥1 set
+# Rotation — one timestamp set per run, always keeps ≥1 set
 # ---------------------------------------------------------------------------
 list_backup_timestamps() {
   # Print sorted unique timestamps (oldest first) derived from filenames
-  # cmsdb-YYYYmmdd-HHMMSS.dump  and cms-data-YYYYmmdd-HHMMSS.tar.gz
+  # cmsdb-YYYYmmdd-HHMMSS.dump
   local t
   {
     ls -1 "${BACKUP_DB_DIR}"/cmsdb-*.dump 2>/dev/null | xargs -r -n1 basename | sed -n 's/^cmsdb-\(.*\)\.dump$/\1/p'
-    ls -1 "${BACKUP_VOL_DIR}"/cms-data-*.tar.gz 2>/dev/null | xargs -r -n1 basename | sed -n 's/^cms-data-\(.*\)\.tar\.gz$/\1/p'
   } | sort -u
 }
 
 delete_backup_set() {
   local ts="$1"
   local f
-  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz.sha256"; do
+  local removed=0
+  for f in "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" "${BACKUP_DB_DIR}/cmsdb-${ts}.dump.sha256" \
+           "${BACKUP_DB_DIR}/audit-log-${ts}.dump" "${BACKUP_DB_DIR}/audit-log-${ts}.dump.sha256"; do
     if [[ -f "$f" ]]; then
-      rm -f "$f"
+      # WHY the status is read instead of left to errexit: the caller tests the rotation in a
+      # condition, and errexit is ignored inside a function called that way — so an unchecked
+      # removal neither stops the loop nor reaches the caller, and the loop then retries the
+      # same set forever. A removal that fails is reported and ends the rotation instead.
+      if ! rm -f "$f"; then
+        log_warn "Rotation: could not remove $f"
+        return 1
+      fi
       log_info "Rotation: removed $f"
+      removed=1
     fi
   done
+  # WHY the mark lives here and not in the caller: all three rotation rules delete through this
+  # function, so a rule added later is marked without being touched, and a set whose files were
+  # already gone is not re-stamped on every later rotation.
+  if (( removed == 1 )); then
+    manifest_mark_pruned "$MANIFEST_FILE" "$ts"
+  fi
 }
 
 apply_rotation() {
@@ -163,7 +282,7 @@ apply_rotation() {
       # Always keep ≥1 newest — break if only 1 left
       if (( ${#timestamps[@]} <= 1 )); then break; fi
       local oldest="${timestamps[0]}"
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       mapfile -t timestamps < <(list_backup_timestamps)
       if (( ${#timestamps[@]} == 0 )); then break; fi
@@ -178,11 +297,10 @@ apply_rotation() {
     mapfile -t timestamps < <(list_backup_timestamps)
     for ts in "${timestamps[@]}"; do
       if (( ${#timestamps[@]} <= 1 )); then break; fi
+      # Find the oldest file's mtime among the set
       local ref_file=""
       if [[ -f "${BACKUP_DB_DIR}/cmsdb-${ts}.dump" ]]; then
         ref_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
-      elif [[ -f "${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz" ]]; then
-        ref_file="${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz"
       else
         continue
       fi
@@ -193,7 +311,7 @@ apply_rotation() {
         # Ensure we keep newest ≥1
         local newest="${timestamps[-1]}"
         if [[ "$ts" == "$newest" ]]; then continue; fi
-        delete_backup_set "$ts"
+        delete_backup_set "$ts" || return 1
         deleted_any=1
       fi
     done
@@ -204,24 +322,26 @@ apply_rotation() {
   if [[ "$BACKUP_MAX_SIZE_GB" =~ ^[0-9]+$ ]] && (( BACKUP_MAX_SIZE_GB > 0 )); then
     local max_bytes=$(( BACKUP_MAX_SIZE_GB * 1024 * 1024 * 1024 ))
     local total_bytes
-    total_bytes="$(du -sb "${BACKUP_DB_DIR}" "${BACKUP_VOL_DIR}" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+    total_bytes="$(du -sb "${BACKUP_DB_DIR}" 2>/dev/null | awk '{s+=$1} END{print s+0}')"
     if [[ -z "$total_bytes" || "$total_bytes" == "0" ]]; then
-      total_bytes="$(du -cb "${BACKUP_DB_DIR}"/* "${BACKUP_VOL_DIR}"/* 2>/dev/null | tail -1 | awk '{print $1}')"
+      total_bytes="$(du -cb "${BACKUP_DB_DIR}"/* 2>/dev/null | tail -1 | awk '{print $1}')"
       total_bytes="${total_bytes:-0}"
     fi
     mapfile -t timestamps < <(list_backup_timestamps)
+    # Sort timestamps ascending already
     while (( total_bytes > max_bytes )); do
       if (( ${#timestamps[@]} <= 1 )); then break; fi
       local oldest="${timestamps[0]}"
+      # Calculate size of oldest set
       local set_bytes=0
-      for f in "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump" "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump.sha256" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz" "${BACKUP_VOL_DIR}/cms-data-${oldest}.tar.gz.sha256"; do
+      for f in "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump" "${BACKUP_DB_DIR}/cmsdb-${oldest}.dump.sha256"; do
         if [[ -f "$f" ]]; then
           local sz
           sz="$(file_size_bytes "$f")"
           set_bytes=$(( set_bytes + sz ))
         fi
       done
-      delete_backup_set "$oldest"
+      delete_backup_set "$oldest" || return 1
       deleted_any=1
       total_bytes=$(( total_bytes - set_bytes ))
       mapfile -t timestamps < <(list_backup_timestamps)
@@ -235,83 +355,321 @@ apply_rotation() {
 }
 
 # ---------------------------------------------------------------------------
+# Manifest
+#
+# jq, not python3: the monitor image ships jq (docker/monitor/Dockerfile) and
+# the host has it, while it ships no python3 — a python3-first chain left the
+# manifest unwritten on every in-container run. jq is also what __create_contests.sh
+# and __monitor.sh already read JSON with, so one tool covers the whole script set.
+#
+# kind and tables record what was dumped: "full" with no tables for an ordinary run,
+# "selective" with the table list for a --tables run. Both are always written, so a
+# reader can rely on the field rather than inferring it from a missing key, and a
+# reader written before them keeps working because an extra key is not a rename.
+# ---------------------------------------------------------------------------
+manifest_entry_json() {
+  local ts="$1" db_sha="$2"
+  local pg_ver="$3" db_bytes="$4" total_bytes="$5"
+  local kind="${6:-full}" tables_csv="${7:-}" requested_by="${8:-root}"
+  local audit_dump="${9:-}"
+  # WHY tables is an array and not a joined string: a reader asks whether a table is
+  # in the set, and split-on-comma in every reader is a second place to get it wrong.
+  # WHY requested_by defaults to root: a launch that names no admin is a script
+  # action, and every script action is attributable to the system actor, so the
+  # default is an identity rather than an empty string a reader cannot search for.
+  jq -n \
+    --arg ts "$ts" \
+    --arg db_sha256 "$db_sha" \
+    --arg pg_version "$pg_ver" \
+    --arg requested_by "$requested_by" \
+    --arg kind "$kind" \
+    --arg audit_dump "$audit_dump" \
+    --arg tables_csv "$tables_csv" \
+    --argjson db_bytes "$db_bytes" \
+    --argjson total_bytes "$total_bytes" \
+    '{
+       ts: $ts,
+       db_dump: ("db/cmsdb-" + $ts + ".dump"),
+       # WHY null and not an absent key: a reader that asks whether this run carries the audit trail
+       # gets a definitive "no" instead of a missing field it has to distinguish from an empty one.
+       audit_dump: (if $audit_dump == "" then null else $audit_dump end),
+       db_sha256: $db_sha256,
+       pg_version: $pg_version,
+       requested_by: $requested_by,
+       sizes: {db_bytes: $db_bytes, total_bytes: $total_bytes},
+       kind: $kind,
+       tables: ($tables_csv | split(",") | map(select(length > 0)))
+     }'
+}
+
+manifest_merge() {
+  local prev_file="$1" entry_file="$2" out_file="$3"
+  # WHY the shape tests: an existing array is extended, a bare object is wrapped
+  # rather than dropped, and an empty array stays empty — so no reader meets a hole.
+  jq -n --slurpfile previous "$prev_file" --slurpfile entry "$entry_file" \
+    '($previous | length) as $count
+     | (if $count == 0 then []
+        else ($previous[0] | if type == "array" then . else [.] end)
+        end)
+     + $entry' > "$out_file"
+}
+
+# WHY approximate without jq: the entry shape cannot be assembled from the shell
+# alone, so the file is only seeded and the run stays unrecorded.
+manifest_seed() {
+  local manifest="$1"
+  if [[ -f "$manifest" ]]; then
+    return 0
+  fi
+  local seeded
+  seeded="$(mktemp "$(dirname -- "$manifest")/.manifest.XXXXXX")"
+  printf '[]\n' > "$seeded"
+  mv -- "$seeded" "$manifest"
+}
+
+# manifest_append <manifest> <ts> <db_sha256> <pg_version> <db_bytes>
+#               <total_bytes> <kind> <tables_csv> <requested_by>
+manifest_append() {
+  local manifest="$1"
+  # WHY the ts is read before the shift: every alert below names the run it belongs to, and
+  # this argument is the only place that timestamp survives the shift.
+  local ts="$2"
+  local dir prev entry_file merged
+  dir="$(dirname -- "$manifest")"
+  mkdir -p "$dir"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    # WHY a failed seed is fatal and not approximate: a manifest that cannot be created is a
+    # run nobody can read back, which is the one outcome an empty file must not stand in for.
+    if ! manifest_seed "$manifest"; then
+      log_warn "could not seed the manifest at $manifest"
+      send_discord "❌ **Backup Failed** — manifest not seeded at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
+      return 1
+    fi
+    log_warn "jq not found — manifest update is approximate"
+    send_degraded "⚠️ **Backup Degraded** — jq not found: manifest left empty, this run is unrecorded — backups are database-only — ts \`${ts}\`"
+    # WHY partial and not success: exit 0 is the contract's "complete backup", and a run nobody can read
+    # back is not one. The dump exists, but nothing records it, so a caller that saw 0 would retire a
+    # backup it cannot verify.
+    return "$EXIT_PARTIAL_BACKUP"
+  fi
+
+  prev="$(mktemp "${dir}/.manifest.prev.XXXXXX")"
+  entry_file="$(mktemp "${dir}/.manifest.entry.XXXXXX")"
+  merged="$(mktemp "${dir}/.manifest.merged.XXXXXX")"
+  shift
+  if ! manifest_entry_json "$@" > "$entry_file"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not build the manifest entry"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not build the entry — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+
+  # WHY a manifest that does not parse is dropped instead of fatal: an unreadable
+  # history must not cost this backup its own entry.
+  if ! jq . "$manifest" > "$prev" 2>/dev/null; then
+    printf '[]\n' > "$prev"
+  fi
+
+  if ! manifest_merge "$prev" "$entry_file" "$merged"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "jq could not assemble the manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: jq could not assemble the entries — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+
+  # atomic write: the merged file is renamed over the manifest in the same directory
+  if ! mv -- "$merged" "$manifest"; then
+    rm -f -- "$prev" "$entry_file" "$merged"
+    log_warn "could not replace the manifest at $manifest"
+    send_discord "❌ **Backup Failed** — manifest not updated: replace failed at \`${manifest}\` — ts \`${ts}\`" 16711680 "true"
+    return 1
+  fi
+  rm -f -- "$prev" "$entry_file"
+}
+
+# manifest_mark_pruned <manifest> <ts>
+# WHY this exists at all: rotation removes the dump and the archive but the entry that records
+# them survives verbatim, so a reader cannot tell a set the operator still holds from one whose
+# files were deleted — and an entry with no file behind it reads as a failed run, not a retired
+# one. The entry is kept rather than removed: the record of what was taken, and when it stopped
+# existing, is the history.
+manifest_mark_pruned() {
+  local manifest="$1"
+  local ts="$2"
+
+  # WHY a warning instead of a return code: rotation exists to reclaim disk, and a stale record
+  # is not a lost backup — the files it names are already gone, so there is nothing to restore
+  # that the mark would have saved. Rotation continues and the run keeps its dump.
+  if ! command -v jq >/dev/null 2>&1; then
+    log_warn "jq not found — manifest entry ${ts} stays unmarked as pruned"
+    return 0
+  fi
+  if [[ ! -f "$manifest" ]]; then
+    return 0
+  fi
+
+  local dir now staged
+  dir="$(dirname -- "$manifest")"
+  now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  # WHY the temporary file is not the destination's sibling via $TMPDIR: the replace is a rename,
+  # and a rename across filesystems is a copy that a concurrent reader can observe half-written.
+  if ! staged="$(mktemp "${dir}/.manifest.pruned.XXXXXX" 2>/dev/null)"; then
+    log_warn "could not stage the pruned manifest next to $manifest — entry ${ts} stays unmarked"
+    return 0
+  fi
+
+  # WHY pruned_at keeps its first value: the fact being recorded is when the files stopped
+  # existing, and a set restored and pruned again does not make the first moment untrue.
+  if ! jq --arg ts "$ts" --arg now "$now" '
+        def mark:
+          if .ts == $ts
+          then . + {pruned: true, pruned_at: (.pruned_at // $now)}
+          else . end;
+        if type == "array" then map(mark)
+        elif type == "object" then mark
+        else error("manifest root is neither an array nor an object")
+        end' "$manifest" > "$staged" 2>/dev/null; then
+    # WHY the manifest is left untouched instead of rewritten: an unreadable or unexpectedly
+    # shaped root is a fault of its own, and replacing it here would destroy the very history
+    # this function exists to keep.
+    rm -f -- "$staged"
+    log_warn "could not mark ${ts} pruned in ${manifest} — manifest left unchanged"
+    return 0
+  fi
+
+  if ! mv -- "$staged" "$manifest"; then
+    rm -f -- "$staged"
+    log_warn "could not replace the manifest at ${manifest} — entry ${ts} stays unmarked"
+    return 0
+  fi
+  log_info "Rotation: manifest entry ${ts} marked pruned"
+}
+
+# ---------------------------------------------------------------------------
 # Main backup
 # ---------------------------------------------------------------------------
+# Echoes the reason a dump cannot start, or nothing when it can. Shared by
+# run_backup (which reports through Discord) and run_stdout_dump (which reports
+# to its caller), so the gates themselves must never alert or exit.
+dump_gate_error() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker not found in PATH"
+    return 0
+  fi
+  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
+    echo "Backup failed: container $CONTAINER_DB not running"
+    return 0
+  fi
+  if [[ -z "$POSTGRES_BACKUP_PASSWORD_VAL" ]]; then
+    echo "POSTGRES_BACKUP_PASSWORD is empty — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS — run './cms config sync' to generate it"
+  fi
+  return 0
+}
+
 run_backup() {
   log_info "CMS backup starting — backup root: $BACKUP_ROOT"
 
-  # Disk guard — abort if <3GB free on backup filesystem
-  require_disk_free_gb "$BACKUP_ROOT" 3 5
+  # The gates run before anything is created: a dump that cannot start leaves
+  # no half-made directories or orphaned alerts behind.
+  local gate
+  gate="$(dump_gate_error)"
+  if [[ -n "$gate" ]]; then
+    log_warn "$gate"
+    send_discord "❌ **Backup Failed** — $gate" 16711680 "true"
+    return 1
+  fi
 
-  mkdir -p -m 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR"
-  chmod 700 "$BACKUP_DB_DIR" "$BACKUP_VOL_DIR" 2>/dev/null || true
-  chmod 700 "$BACKUP_ROOT" 2>/dev/null || true
+  # df fails on a path that does not exist, so measure the nearest ancestor instead.
+  local disk_guard_target="$BACKUP_ROOT"
+  while [[ ! -e "$disk_guard_target" && "$disk_guard_target" != "/" ]]; do
+    disk_guard_target="$(dirname -- "$disk_guard_target")"
+  done
+  # Subshell: require_disk_free_gb dies with its own exit code, which the caller must catch.
+  local disk_guard_status=0
+  ( require_disk_free_gb "$disk_guard_target" "$DISK_FLOOR_GB" "$DISK_WARN_GB" ) || disk_guard_status=$?
+  if (( disk_guard_status != 0 )); then
+    send_discord "❌ **Backup Failed** — disk guard aborted at \`${BACKUP_ROOT}\`: free space unreadable or under the ${DISK_FLOOR_GB} GB floor" 16711680 "true"
+    # WHY return and not exit: the entry point publishes the run's verdict — including this
+    # one — to the staleness textfile, and an exit here would skip it and leave the last
+    # successful timestamp standing while the box can no longer take a backup. The status
+    # is unchanged, so a caller reads exactly what the exit contract promises.
+    return "$disk_guard_status"
+  fi
+
+  # After the guard, so a run that cannot start leaves no directories behind.
+  mkdir -p "$BACKUP_DB_DIR"
+  # WHY g+rwx,g+s and not a mode clamp: it converges on the same dual-writer state
+  # ensure_backup_dir_perms establishes, because a forced 700 strips the group off the shared tree
+  # and locks the host operator out of its own backups. Ownership is that repair's alone.
+  chmod g+rwx,g+s "$BACKUP_DB_DIR" 2>/dev/null || true
+  chmod g+rwx,g+s "$BACKUP_ROOT" 2>/dev/null || true
 
   if [[ -z "$POSTGRES_PASSWORD_VAL" ]]; then
     log_warn "POSTGRES_PASSWORD is empty — pg_dump may fail if auth required"
   fi
 
-  if ! command -v docker >/dev/null 2>&1; then
-    log_die "docker not found in PATH"
-  fi
-
-  if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; then
-    local msg="Backup failed: container $CONTAINER_DB not running"
-    log_warn "$msg"
-    send_discord "❌ **Backup Failed** — $msg" 16711680 "true"
-    return 1
-  fi
-
   local ts
   ts="$(date +%Y%m%d-%H%M%S)"
-  local db_tmp="/tmp/cmsdb-${ts}.dump"
+  # WHY mktemp and not $ts in the name: a name built from the run's own timestamp tells every other
+  # account on the box which file is the live dump, so it can be read and pre-empted for as long as
+  # the run lasts. The template ends in XXXXXX because the runtime image is Alpine and its BusyBox
+  # mktemp rejects a suffix after the X's, so the name cannot carry a .dump ending. -u is safe
+  # because the file is created inside the container and never here: only pg_dump and the cleanup
+  # below ever reach this path. /tmp and not $TMPDIR, because the database container does not share
+  # the TMPDIR of whatever runs the script.
+  local db_tmp
+  db_tmp="$(mktemp -u /tmp/cmsdb.XXXXXX)"
+  # WHY private: this file carries pg_dump's stderr, which names the backup role and can name the
+  # server, and it lands in a directory every local account can write to.
+  local pgdump_log
+  pgdump_log="$(mktemp "${TMPDIR:-/tmp}/cms-backup-pgdump.XXXXXX")"
+  chmod 600 "$pgdump_log" 2>/dev/null || true
   local db_file="${BACKUP_DB_DIR}/cmsdb-${ts}.dump"
   local db_sha_file="${db_file}.sha256"
-  local vol_file="${BACKUP_VOL_DIR}/cms-data-${ts}.tar.gz"
-  local vol_sha_file="${vol_file}.sha256"
 
-  # Ensure container tmp is cleaned on failure
+  # WHY both files are removed here: the dump's container path is only needed until it has been
+  # copied out and the stderr log only until its text has reached the failure alert, so neither has
+  # a reason to outlive the run.
   local cleanup_done=0
   cleanup_container_tmp() {
-    if (( cleanup_done == 0 )); then
-      docker exec "$CONTAINER_DB" rm -f "$db_tmp" 2>/dev/null || true
+    if (( ${cleanup_done:-0} == 0 )); then
+      docker exec "$CONTAINER_DB" rm -f "${db_tmp:-}" 2>/dev/null || true
     fi
+    rm -f -- "${pgdump_log:-}" 2>/dev/null || true
   }
+  # WHY ${cleanup_done:-0} / ${db_tmp:-} / ${pgdump_log:-}: the EXIT trap can fire after run_backup returned and its locals are out of scope, so a bare reference would die on set -u and mask the real error.
   trap cleanup_container_tmp EXIT
 
-  # 1) Full logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
+  # 1) Logical backup — credentials via docker exec -e PGPASSWORD (never on host argv)
+  #    PG_SELECTION_ARGS is empty for a full dump and holds one -t per selected table
+  #    plus -b when the selected tables carry large objects.
   # WHY cms_backup: BYPASSRLS role can dump under FORCE RLS; owner cmsuser is NOBYPASSRLS+FORCE RLS so dump as owner fails — backups REQUIRE cms_backup
   local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
   local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
-  if [[ -z "$pg_dump_pass" ]]; then
-    log_warn "POSTGRES_BACKUP_PASSWORD is empty — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL cannot dump under FORCE RLS — run './cms config sync' to generate it"
-    pg_dump_user="$POSTGRES_USER_VAL"
-    pg_dump_pass="$POSTGRES_PASSWORD_VAL"
+  # Password validation is dump_gate_error's, at entry.
+  # WHY the destination is created before the dump is written: pg_dump creates its own output file,
+  # which on the container umask is readable by every account in that container for the whole
+  # write, whereas writing into a file that already exists keeps the mode pg_dump leaves alone. A
+  # container without sh keeps the previous behaviour instead of failing the run.
+  if ! docker exec "$CONTAINER_DB" sh -c 'umask 077 && : > "$1"' sh "$db_tmp"; then
+    log_warn "could not pre-create $db_tmp with mode 600 in $CONTAINER_DB — pg_dump will create it with the container default mode"
   fi
-  log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
-  local pg_dump_ok=0
-  if docker exec -e PGPASSWORD="$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
-    pg_dump_ok=1
-  elif [[ "$pg_dump_user" != "$POSTGRES_USER_VAL" ]]; then
-    # WHY: pg_dump as demoted owner fails under FORCE RLS ("query would be affected by row-level security policy");
-    # backups REQUIRE cms_backup (BYPASSRLS + member of cmsuser for LO). Owner is not a viable fallback.
-    log_warn "pg_dump as $pg_dump_user failed — owner fallback is not viable: backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS"
-    if docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" pg_dump -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc -f "$db_tmp" 2>/tmp/cms-backup-pgdump.log; then
-      log_warn "Owner fallback unexpectedly succeeded (FORCE RLS may not be active) — backups still REQUIRE cms_backup for reliable dumps"
-      pg_dump_ok=1
-    else
-      log_warn "Owner fallback failed as expected: owner cannot dump under FORCE RLS — backups REQUIRE cms_backup (BYPASSRLS)"
-    fi
+  if [[ "$BACKUP_KIND" == "selective" ]]; then
+    log_info "Running selective pg_dump (Fc) as $pg_dump_user for ${#SELECTED_TABLES[@]} table(s): ${SELECTED_TABLES[*]}"
   else
-    log_warn "pg_dump as owner failed as expected: owner is blocked by FORCE RLS — backups REQUIRE cms_backup (BYPASSRLS); run './cms config sync' to generate POSTGRES_BACKUP_PASSWORD"
+    log_info "Running pg_dump (Fc) inside $CONTAINER_DB as $pg_dump_user ..."
   fi
-  if (( pg_dump_ok == 0 )); then
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" -f "$db_tmp" 2>"$pgdump_log"; then
     local err
-    err="$(cat /tmp/cms-backup-pgdump.log 2>/dev/null || echo 'pg_dump failed')"
-    log_warn "pg_dump failed: $err"
-    send_discord "❌ **Backup Failed** — pg_dump error: $err" 16711680 "true"
+    err="$(cat "$pgdump_log" 2>/dev/null || echo 'pg_dump failed')"
+    rm -f -- "$pgdump_log"
+    log_warn "pg_dump as $pg_dump_user failed: $err — backups REQUIRE cms_backup (BYPASSRLS); owner $POSTGRES_USER_VAL is blocked by FORCE RLS; run './cms config sync' to verify POSTGRES_BACKUP_PASSWORD"
+    send_discord "❌ **Backup Failed** — pg_dump as $pg_dump_user error: $err" 16711680 "true"
     return 1
   fi
+  rm -f -- "$pgdump_log"
 
   log_info "Copying dump from container to host ..."
   if ! docker cp "${CONTAINER_DB}:${db_tmp}" "$db_file"; then
@@ -328,94 +686,107 @@ run_backup() {
   chmod 600 "$db_sha_file" 2>/dev/null || true
   local db_sha
   db_sha="$(awk '{print $1}' "$db_sha_file")"
+
+  # 1b) The audit log travels beside the archive, never inside the restore catalog.
+  # WHY its own artifact: the selective catalog deliberately excludes `audit_log`, because the
+  # panel's restore replays catalog rows INTO a live database and replaying audit rows would put
+  # actions in the trail that never happened on the restored host (tests/backup-table-catalog.test.ts
+  # argues this at length). That reasoning is right about replay and wrong about archival: the trail
+  # is the one thing that exists nowhere else, so a backup that omits it cannot answer "what
+  # happened" after the database is gone. So it ships as `audit-log-<ts>.dump` — structure and data,
+  # so it stands alone even if the schema has moved on — and it is restored only into a scratch
+  # database, where `admin-panel/scripts/audit-log.ts verify` proves the chain.
+  local audit_tmp audit_file audit_sha_file audit_log_file audit_err_file
+  audit_tmp="$(mktemp -u /tmp/cmsdb-audit.XXXXXX)"
+  audit_file="${BACKUP_DB_DIR}/audit-log-${ts}.dump"
+  audit_sha_file="${audit_file}.sha256"
+  audit_err_file="$(mktemp "${TMPDIR:-/tmp}/cms-backup-audit.XXXXXX")"
+  chmod 600 "$audit_err_file" 2>/dev/null || true
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" \
+      pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc \
+      -t audit_log -t audit_log_retention -f "$audit_tmp" 2>"$audit_err_file"; then
+    local audit_err
+    audit_err="$(cat "$audit_err_file" 2>/dev/null || echo 'pg_dump failed')"
+    rm -f -- "$audit_err_file"
+    docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+    log_warn "audit-log archive failed: $audit_err"
+    send_discord "❌ **Backup Failed** — the audit-log archive is missing from this run: ${audit_err}" 16711680 "true"
+    return 1
+  fi
+  rm -f -- "$audit_err_file"
+  if ! docker cp "${CONTAINER_DB}:${audit_tmp}" "$audit_file"; then
+    docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+    log_warn "audit-log archive: docker cp failed"
+    send_discord "❌ **Backup Failed** — the audit-log archive could not be copied out" 16711680 "true"
+    return 1
+  fi
+  docker exec "$CONTAINER_DB" rm -f "$audit_tmp" 2>/dev/null || true
+  chmod 600 "$audit_file" 2>/dev/null || true
+  sha256sum "$audit_file" | awk '{print $1"  " $2}' > "$audit_sha_file"
+  chmod 600 "$audit_sha_file" 2>/dev/null || true
+  audit_log_file="$(basename -- "$audit_file")"
+  AUDIT_ARCHIVE_NAME="db/${audit_log_file}"
+  log_info "audit-log archive written: ${audit_log_file} ($(file_size_bytes "$audit_file") bytes) — verify it with: make audit-restore-verify"
+
   local db_bytes
   db_bytes="$(file_size_bytes "$db_file")"
 
-  # 2) Volume backup via helper container (ro mount)
-  log_info "Archiving volume $VOLUME_DATA ..."
-  local vol_image="alpine:3.19"
-  # Pull quietly if needed (ignore failure — try busybox fallback)
-  docker pull "$vol_image" >/dev/null 2>&1 || true
-  if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" "$vol_image" sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume . 2>/tmp/tar.log || (cat /tmp/tar.log; exit 1)"; then
-    # Fallback to busybox
-    if ! docker run --rm -v "${VOLUME_DATA}:/volume:ro" -v "${BACKUP_VOL_DIR}:/backup" busybox sh -c "tar czf \"/backup/cms-data-${ts}.tar.gz\" -C /volume ."; then
-      log_warn "Volume backup failed"
-      send_discord "❌ **Backup Failed** — volume tar failed" 16711680 "true"
-      # Keep DB dump but warn — not fatal for DB part; still mark as failed
-      return 1
-    fi
-  fi
-
-  if [[ ! -f "$vol_file" ]]; then
-    log_warn "Volume tar not created: $vol_file"
-    send_discord "❌ **Backup Failed** — volume tar missing" 16711680 "true"
-    return 1
-  fi
-
-  chmod 600 "$vol_file" 2>/dev/null || true
-  sha256sum "$vol_file" | awk '{print $1"  " $2}' > "$vol_sha_file"
-  chmod 600 "$vol_sha_file" 2>/dev/null || true
-  local vol_sha
-  vol_sha="$(awk '{print $1}' "$vol_sha_file")"
-  local vol_bytes
-  vol_bytes="$(file_size_bytes "$vol_file")"
-
+  # 2) manifest.json append
+  # WHY no volume step runs at all: the database holds the authoritative copy of every
+  # submitted file and testcase — src/cms/db/fsobject.py stores the content in fsobjects
+  # keyed by its SHA1 digest, and the volume holds only the local copy gated behind
+  # submit_local_copy / tests_local_copy in src/cms/conf.py. A backup set therefore
+  # carries the dump and nothing else, and the trade — a restore brings back no
+  # on-disk submission history — is the one the operator accepted.
   local pg_ver
   pg_ver="$(get_pg_version)"
-  local total_bytes=$(( db_bytes + vol_bytes ))
+  local total_bytes="$db_bytes"
 
-  # 3) manifest.json append
   log_info "Updating manifest $MANIFEST_FILE ..."
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - "$MANIFEST_FILE" "$ts" "db/cmsdb-${ts}.dump" "$db_sha" "volumes/cms-data-${ts}.tar.gz" "$vol_sha" "$pg_ver" "$db_bytes" "$vol_bytes" "$total_bytes" <<'PY'
-import json, os, sys, tempfile
-manifest_path, ts, db_dump, db_sha, vol_tar, vol_sha, pg_ver, db_b, vol_b, tot_b = sys.argv[1:11]
-db_b=int(db_b); vol_b=int(vol_b); tot_b=int(tot_b)
-entry={"ts":ts,"db_dump":db_dump,"db_sha256":db_sha,"vol_tar":vol_tar,"vol_sha256":vol_sha,"pg_version":pg_ver,"sizes":{"db_bytes":db_b,"vol_bytes":vol_b,"total_bytes":tot_b}}
-if os.path.exists(manifest_path):
-    try:
-        with open(manifest_path) as f:
-            data=json.load(f)
-            if not isinstance(data, list):
-                data=[data]
-    except Exception:
-        data=[]
-else:
-    data=[]
-data.append(entry)
-os.makedirs(os.path.dirname(manifest_path) or ".", exist_ok=True)
-# atomic write: tmp then replace
-fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(manifest_path) or ".")
-try:
-    with os.fdopen(fd, "w") as f:
-        json.dump(data,f,indent=2)
-        f.write("\n")
-    os.replace(tmp_path, manifest_path)
-except Exception:
-    try: os.unlink(tmp_path)
-    except: pass
-    raise
-PY
-  else
-    # Fallback: minimal append without python — atomic via mktemp+mv
-    if [[ ! -f "$MANIFEST_FILE" ]]; then
-      tmp_manifest="$(mktemp "$(dirname -- "$MANIFEST_FILE")/.manifest.XXXXXX")"
-      echo "[]" > "$tmp_manifest"
-      mv -- "$tmp_manifest" "$MANIFEST_FILE"
-      chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
-    fi
-    log_warn "python3 not found — manifest update is approximate"
-  fi
+  # WHY the status is captured instead of left to errexit: a manifest that cannot be written
+  # costs this run its record, not its dump, and errexit would end the run on the spot —
+  # before the rotation, before the summary, and before the run says one word about
+  # itself. Judged with the rest of the run's verdict below, it still reaches an exit code.
+  local manifest_status=0
+  manifest_append "$MANIFEST_FILE" "$ts" "$db_sha" "$pg_ver" "$db_bytes" \
+    "$total_bytes" "$BACKUP_KIND" "$SELECTED_TABLES_CSV" "$REQUESTED_BY" \
+    "$AUDIT_ARCHIVE_NAME" || manifest_status=$?
   chmod 600 "$MANIFEST_FILE" 2>/dev/null || true
 
-  # 4) Rotation
-  apply_rotation || log_warn "Rotation encountered an error (non-fatal)"
+  # 3) Rotation
+  # WHY degraded and not fatal: the dump is already written and recorded by the time rotation
+  # runs, so a rotation that aborts costs retention rather than this run's backup. The flag is
+  # what makes the difference visible — it routes the run to the degraded verdict below instead
+  # of the success alert — and the status stays 0 because the contract's 0 covers the dump and
+  # its manifest entry, both of which are present.
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (non-fatal)"
+    send_degraded "⚠️ **Backup Degraded** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\` — ts \`${ts}\`"
+  fi
 
-  local db_mb vol_mb
+  local db_mb
   db_mb="$(awk "BEGIN{printf \"%.2f\", $db_bytes/1048576}")"
-  vol_mb="$(awk "BEGIN{printf \"%.2f\", $vol_bytes/1048576}")"
-  log_info "Backup complete: db=${db_mb}MB vol=${vol_mb}MB ts=${ts}"
-  send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB / Vol ${vol_mb}MB — \`${pg_ver}\`" 65280 "false"
+  # WHY the manifest status is judged here and not left to the alert the function already sent:
+  # a run nobody can read back is one a caller cannot verify, and a caller that read 0 would
+  # retire a backup it has no way to check. No second alert is sent — the function named the
+  # condition — so this only keeps the run from reaching the success alert. Every manifest
+  # failure scores 3 and never 1: 1 is reserved for a run that kept no dump, and the dump is
+  # on disk by the time this is reached.
+  if (( manifest_status != 0 )); then
+    log_warn "Backup degraded: db=${db_mb}MB manifest unrecorded ts=${ts}"
+    return "$EXIT_PARTIAL_BACKUP"
+  fi
+  # WHY the success alert is withheld once a run has degraded: the amber alert already went
+  # out, and a green headline after it is the last thing a reader sees, so the run announces
+  # both outcomes and the reader is left to guess which one the operator meant. The amber
+  # alert stands as this run's verdict. The status is unchanged, so a caller that reads the
+  # exit code sees exactly what it saw before.
+  if (( is_degraded == 1 )); then
+    log_warn "Backup degraded: db=${db_mb}MB ts=${ts}"
+    return 0
+  fi
+  log_info "Backup complete: db=${db_mb}MB ts=${ts}"
+  send_discord "✅ **Backup Successful** — ts \`${ts}\` — DB ${db_mb}MB (database-only) — \`${pg_ver}\`" 65280 "false"
 }
 
 # ---------------------------------------------------------------------------
@@ -423,19 +794,209 @@ PY
 # ---------------------------------------------------------------------------
 run_cleanup_only() {
   log_info "Running cleanup only"
-  apply_rotation
+  # WHY fatal and not a warning: prune mode exists to reclaim disk, so a rotation that stops
+  # is the whole job failing rather than a degraded run with something still usable left.
+  if ! apply_rotation; then
+    log_warn "Rotation encountered an error (cleanup aborted)"
+    send_discord "❌ **Cleanup Failed** — rotation aborted: superseded sets may accumulate in \`${BACKUP_ROOT}\`" 16711680 "true"
+    return 1
+  fi
+}
+
+# --stdout entry: stream the dump to the caller and archive nothing — no file,
+# no manifest entry, no rotation, no webhook; the caller owns transport and
+# failure reporting. exec 3 holds the real stdout: log_info prints to fd 1, so
+# fd 1 is re-pointed at stderr and the dump bytes alone keep the original
+# channel. pg_dump's stderr passes through beside ours and never enters the
+# stream; a failure mid-stream leaves the caller with truncated bytes and a
+# non-zero exit, which is what marks the download incomplete.
+run_stdout_dump() {
+  exec 3>&1 1>&2
+
+  local gate
+  gate="$(dump_gate_error)"
+  if [[ -n "$gate" ]]; then
+    log_die "$gate"
+  fi
+
+  local pg_dump_user="$POSTGRES_BACKUP_USER_VAL"
+  local pg_dump_pass="$POSTGRES_BACKUP_PASSWORD_VAL"
+  if [[ "$BACKUP_KIND" == "selective" ]]; then
+    log_info "Streaming selective pg_dump (Fc) as $pg_dump_user for ${#SELECTED_TABLES[@]} table(s)"
+  else
+    log_info "Streaming full pg_dump (Fc) as $pg_dump_user to stdout"
+  fi
+  # No -f: pg_dump writes to stdout by default, so nothing is staged in the container.
+  if ! docker_exec_db "$pg_dump_pass" "$CONTAINER_DB" \
+      pg_dump -U "$pg_dump_user" -d "$POSTGRES_DB_VAL" -Fc "${PG_SELECTION_ARGS[@]}" >&3; then
+    log_die "pg_dump as $pg_dump_user failed — see stderr above; backups REQUIRE cms_backup (BYPASSRLS)"
+  fi
 }
 
 # ---------------------------------------------------------------------------
-# Entry
+# Entry — flags are parsed before any work so a bad table name never reaches
+# pg_dump, and an unrecognised flag still runs the backup as it always has.
 # ---------------------------------------------------------------------------
-case "${1:-}" in
-  --cleanup-only) run_cleanup_only ;;
-  --help|-h)
-    echo "Usage: $0 [--cleanup-only]"
-    echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
-    echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* from .env"
-    ;;
-  "") run_backup ;;
-  *) log_warn "Unknown arg: $1 — running backup anyway"; run_backup ;;
+BACKUP_MODE="full"
+BACKUP_ROOT_OVERRIDE=""  # --root <path>: retargets db/ and manifest.json
+BACKUP_STDOUT=0          # --stdout: stream the dump to the caller, archive nothing
+REQUESTED_BY="root"      # --who <name>: the admin that asked for this run
+SELECTED_TABLES=()   # validated table names in the order pg_dump must dump them
+PG_SELECTION_ARGS=()  # one -t per selected table, plus -b for large objects
+BACKUP_KIND="full"
+SELECTED_TABLES_CSV=""
+
+usage() {
+  echo "Usage: $0 [--cleanup-only] [--tables <t1,t2,...>] [--large-objects] [--root <path>] [--stdout] [--who <name>]"
+  echo "Env: BACKUP_DIR, BACKUP_MAX_COUNT, BACKUP_MAX_AGE_DAYS, BACKUP_MAX_SIZE_GB"
+  echo "     DISCORD_WEBHOOK_URL (env only), POSTGRES_* and POSTGRES_BACKUP_PASSWORD from .env"
+  echo "Without --tables the whole database is dumped, exactly as before."
+  echo "--large-objects adds pg_dump -b and is only meaningful together with --tables."
+  echo "--tables accepts ^[a-z_]+$ names; the admin panel allowlists them first."
+  echo "--root <path> writes the archive set (db/, manifest.json) under <path>"
+  echo "  instead of BACKUP_DIR; also retargets --cleanup-only. Path is used as given."
+  echo "--stdout streams the dump to stdout and archives nothing: no file, no manifest,"
+  echo "  no rotation, no webhook. Log lines move to stderr so they cannot corrupt it."
+  echo "--who <name> records the admin that asked for this run in the manifest entry"
+  echo "  as requested_by; root when the flag is absent."
+}
+
+parse_args() {
+  local tables_csv=""
+  local tables_flag_given=0
+  local include_large_objects=0
+  local name
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --tables)
+        if [[ $# -lt 2 ]]; then
+          log_die "--tables requires a comma-separated table list"
+        fi
+        tables_csv="$2"
+        tables_flag_given=1
+        shift 2
+        ;;
+      --tables=*)
+        tables_csv="${1#--tables=}"
+        tables_flag_given=1
+        shift
+        ;;
+      --large-objects|-b)
+        include_large_objects=1
+        shift
+        ;;
+      --root)
+        if [[ $# -lt 2 || "$2" == -* ]]; then
+          log_die "--root requires a path"
+        fi
+        BACKUP_ROOT_OVERRIDE="$2"
+        shift 2
+        ;;
+      --root=*)
+        BACKUP_ROOT_OVERRIDE="${1#--root=}"
+        if [[ -z "$BACKUP_ROOT_OVERRIDE" ]]; then
+          log_die "--root requires a path"
+        fi
+        shift
+        ;;
+      --stdout)
+        BACKUP_STDOUT=1
+        shift
+        ;;
+      --cleanup-only)
+        BACKUP_MODE="cleanup"
+        shift
+        ;;
+      --who)
+        if [[ $# -lt 2 || -z "$2" || "$2" == -* ]]; then
+          log_die "--who requires a name"
+        fi
+        REQUESTED_BY="$2"
+        shift 2
+        ;;
+      --who=*)
+        REQUESTED_BY="${1#--who=}"
+        if [[ -z "$REQUESTED_BY" || "$REQUESTED_BY" == -* ]]; then
+          log_die "--who requires a name"
+        fi
+        shift
+        ;;
+      --help|-h)
+        BACKUP_MODE="help"
+        shift
+        ;;
+      "") shift ;;
+      *)
+        log_warn "Unknown arg: $1 — running backup anyway"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ "$BACKUP_MODE" != "full" || "$tables_flag_given" -eq 0 ]]; then
+    return 0
+  fi
+
+  local -a requested=()
+  IFS=',' read -r -a requested <<< "$tables_csv"
+  for name in "${requested[@]}"; do
+    name="${name#"${name%%[![:space:]]*}"}"
+    name="${name%"${name##*[![:space:]]}"}"
+    [[ -n "$name" ]] || continue
+    if [[ ! "$name" =~ ^[a-z_]+$ ]]; then
+      log_die "Refusing table name: '$name' — expected ^[a-z_]+\$"
+    fi
+    if [[ " ${SELECTED_TABLES[*]:-} " != *" $name "* ]]; then
+      SELECTED_TABLES+=("$name")
+    fi
+  done
+
+  if [[ ${#SELECTED_TABLES[@]} -eq 0 ]]; then
+    log_die "Refusing an empty --tables selection: pg_dump with no -t would dump the entire database"
+  fi
+
+  BACKUP_KIND="selective"
+  SELECTED_TABLES_CSV="$(IFS=','; printf '%s' "${SELECTED_TABLES[*]}")"
+  for name in "${SELECTED_TABLES[@]}"; do
+    PG_SELECTION_ARGS+=(-t "$name")
+  done
+  if [[ "$include_large_objects" -eq 1 ]]; then
+    PG_SELECTION_ARGS+=(-b)
+  fi
+}
+
+parse_args "$@"
+
+# --root retargets the whole archive set: db/ and manifest.json are derived, so both
+# follow the new root for run_backup and run_cleanup_only alike. An empty override
+# means the flag was absent (a bare --root with no path dies in parse_args), so
+# BACKUP_DIR keeps its historical meaning.
+if [[ -n "$BACKUP_ROOT_OVERRIDE" ]]; then
+  BACKUP_ROOT="$BACKUP_ROOT_OVERRIDE"
+  BACKUP_DB_DIR="${BACKUP_ROOT}/db"
+  MANIFEST_FILE="${BACKUP_ROOT}/manifest.json"
+fi
+
+case "$BACKUP_MODE" in
+  cleanup) run_cleanup_only ;;
+  help) usage ;;
+  *) if [[ "$BACKUP_STDOUT" -eq 1 ]]; then
+       run_stdout_dump
+     else
+       # WHY the verdict is published here and nowhere else: this is the one place that
+       # knows how the run ended, and a backup that stops working is only visible as the
+       # age of the last success — which nothing could read before this file existed. The
+       # marker is written only for exit 0, so a run that kept its dump but could not
+       # record it (3) or that the disk guard stopped (2) never resets the clock.
+       run_status=0
+       run_backup || run_status=$?
+       if (( run_status == 0 )); then
+         record_backup_success "$BACKUP_ROOT" "$(date +%s)" ||
+           log_warn "could not record this run as the newest successful backup under $(backup_metrics_dir "$BACKUP_ROOT")"
+       fi
+       publish_backup_metrics "$BACKUP_ROOT" "$run_status" ||
+         log_warn "could not publish the backup metrics under $(backup_metrics_dir "$BACKUP_ROOT")"
+       exit "$run_status"
+     fi ;;
 esac

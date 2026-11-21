@@ -1,0 +1,163 @@
+{
+  "run_id": "20261110T090000Z",
+  "window_hours": 26,
+  "model": "template",
+  "inventory": {
+    "images": {},
+    "npm": {},
+    "cargo": {},
+    "pip": {},
+    "docs": {},
+    "products": {
+      "linux": {
+        "key": "linux",
+        "name": "Linux kernel",
+        "versions": ["5.15.0-203"],
+        "deploy_versions": ["5.15.0-203"],
+        "lib_versions": [],
+        "where": ["cms/admin/ranking hosts (Ubuntu 22.04.5 LTS)"]
+      },
+      "nginx": {
+        "key": "nginx",
+        "name": "nginx",
+        "versions": ["1.18.0-0ubuntu1.7"],
+        "deploy_versions": ["1.18.0-0ubuntu1.7"],
+        "lib_versions": [],
+        "where": ["docker-compose.yml"]
+      }
+    },
+    "hosts": [
+      {
+        "name": "cms/admin/ranking hosts",
+        "os": "Ubuntu 22.04.5 LTS",
+        "kernel": "5.15.0-203-generic",
+        "note": "jammy GA kernel line"
+      },
+      {
+        "name": "dev workstation",
+        "os": "CachyOS (Arch)",
+        "kernel": "7.3.0-4-cachyos",
+        "note": "rolling"
+      }
+    ]
+  },
+  "stats": {
+    "fetched": {"kev": 2, "usn": 2, "avg": 0, "ghsa": 1, "nvd": 2, "news": 2},
+    "merged": 7,
+    "ours": 3,
+    "fresh": 5,
+    "sections": {"act_now": 2, "watch": 1, "industry": 2, "news": 2, "rest_critical": 3}
+  },
+  "collector_errors": ["Ubuntu USN: HTTP 503 (served RSS fallback)", "KEV: Timeout: 30s"],
+  "sections": {
+    "act_now": [
+      {
+        "id": "CVE-2026-7001",
+        "kind": "kev",
+        "source": "CISA KEV",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-7001",
+        "published": "2026-11-10",
+        "severity": "critical",
+        "score": 10.0,
+        "title": "OpenSSL Buffer Overread Vulnerability",
+        "summary": "OpenSSL contains a buffer overread when parsing a crafted certificate.",
+        "cves": ["CVE-2026-7001"],
+        "products": ["linux", "openssl"],
+        "exploited": true,
+        "ours": ["linux", "openssl"],
+        "fresh": true,
+        "detail": {
+          "requiredAction": "Apply updates per vendor instructions.",
+          "ransomware": "Known",
+          "dueDate": "2026-12-01"
+        }
+      },
+      {
+        "id": "USN-9002-1",
+        "kind": "usn",
+        "source": "Ubuntu USN",
+        "url": "https://ubuntu.com/security/notices/USN-9002-1",
+        "published": "2026-11-10T08:00:00Z",
+        "severity": "",
+        "score": null,
+        "title": "nginx vulnerability",
+        "summary": "It was discovered that nginx incorrectly handled HTTP/2 requests.",
+        "cves": ["CVE-2026-7003"],
+        "products": ["nginx"],
+        "exploited": false,
+        "ours": ["nginx"],
+        "fresh": false,
+        "detail": {"packages": ["nginx"], "fixed": "jammy 1.18.0-0ubuntu1.7"}
+      }
+    ],
+    "watch": [
+      {
+        "id": "CVE-2026-7004",
+        "kind": "ghsa",
+        "source": "GitHub Advisory",
+        "url": "https://github.com/advisories/GHSA-xxxx-yyyy-zzzz",
+        "published": "2026-11-09T22:00:00Z",
+        "severity": "high",
+        "score": 8.1,
+        "title": "Next.js Server-Side Request Forgery",
+        "summary": "A SSRF flaw in Next.js allows requests to internal hosts.",
+        "cves": ["CVE-2026-7004"],
+        "products": ["next"],
+        "exploited": false,
+        "ours": ["next", "version-match"],
+        "fresh": true,
+        "detail": {"matches_ours": ["next 14.2.3"], "packages": [["next", ">= 14.0.0, < 14.2.4"]]}
+      }
+    ],
+    "industry": [
+      {
+        "id": "CVE-2026-8100",
+        "kind": "nvd",
+        "source": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8100",
+        "published": "2026-11-10T01:00:00Z",
+        "severity": "critical",
+        "score": 9.4,
+        "title": "Improper Control of Generation of Code in a build tool",
+        "summary": "A remote attacker can execute arbitrary code.",
+        "cves": ["CVE-2026-8100"],
+        "products": [],
+        "exploited": false,
+        "ours": [],
+        "fresh": true,
+        "detail": {"status": "Analyzed"}
+      },
+      {
+        "id": "CVE-2026-8200",
+        "kind": "nvd",
+        "source": "NVD",
+        "url": "https://nvd.nist.gov/vuln/detail/CVE-2026-8200",
+        "published": "2026-11-09T12:00:00Z",
+        "severity": "",
+        "score": 9.2,
+        "title": "PostgreSQL privilege escalation",
+        "summary": "A flaw lets an authenticated user escalate privileges.",
+        "cves": ["CVE-2026-8200"],
+        "products": ["postgres"],
+        "exploited": false,
+        "ours": [],
+        "fresh": false,
+        "detail": {}
+      }
+    ],
+    "news": [
+      {
+        "title": "Hackers exploit critical OpenSSL flaw in the wild",
+        "url": "https://example.invalid/openssl",
+        "source": "BleepingComputer"
+      },
+      {
+        "title": "Ransomware group claims breach of a cloud provider",
+        "url": "https://example.invalid/breach",
+        "source": "The Register"
+      }
+    ],
+    "rest_critical": 3,
+    "seen_ids": ["CVE-2026-7001", "CVE-2026-7003", "CVE-2026-7004", "CVE-2026-8100", "CVE-2026-8200", "USN-9002-1"]
+  }
+}

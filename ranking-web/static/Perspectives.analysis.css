@@ -1,0 +1,43 @@
+.persp-analysis-bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    margin: 8px 0;
+}
+
+.persp-analysis-mode {
+    font: inherit;
+    padding: 0.3em 0.8em;
+    border: 1px solid #C8C8CC;
+    border-radius: 4px;
+    background-color: #ECECEF;
+    cursor: pointer;
+}
+
+.persp-analysis-mode.active {
+    background-color: #3465a4;
+    color: #FFFFFF;
+    border-color: #3465a4;
+}
+
+.persp-analysis-pick {
+    margin: 8px 0;
+    color: #444444;
+}
+
+#Persp_analysis_panel {
+    overflow-x: auto;
+}
+
+.persp-analysis-heat td:first-child,
+.persp-analysis-heat th:first-child,
+.persp-analysis-matrix td:first-child,
+.persp-analysis-matrix th:first-child {
+    width: auto;
+    text-align: left;
+}
+
+.persp-analysis-cell {
+    text-align: center;
+}

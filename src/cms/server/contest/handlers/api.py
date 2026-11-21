@@ -24,10 +24,14 @@ import ipaddress
 import logging
 
 from cms.db.submission import Submission
-from cms.server import multi_contest
+from cms.db.user import Participation
+from cms.server import login_refusal, multi_contest
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.submission import \
     UnacceptableSubmission, accept_submission
+from cms.server.login_counters import login_attempt_context
+from cms.server.login_refusal import LoginRefusal
 from .contest import ContestHandler, api_login_required
 from ..phase_management import actual_phase_required
 
@@ -57,15 +61,7 @@ class ApiLoginHandler(ApiContestHandler):
         admin_token = self.get_argument("admin_token", "")
 
         if current_user is not None:
-            if username != "" and current_user.user.username != username:
-                self.json(
-                    {"error": f"Logged in as {current_user.user.username} but trying to login as {username}"}, 400)
-            else:
-                cookie_name = self.contest.name + "_login"
-                cookie = self.get_secure_cookie(cookie_name)
-                self.json({"login_data": self.request.headers.get(
-                    "X-CMS-Authorization", cookie if cookie is not None else "Already-Logged-In")})
-
+            self._answer_already_logged_in(username)
             return
 
         try:
@@ -75,18 +71,118 @@ class ApiLoginHandler(ApiContestHandler):
                            self.request.remote_ip)
             return None
 
+        if not self._may_examine_password(username, admin_token):
+            return
+
         participation, login_data = validate_login(
             self.sql_session, self.contest, self.timestamp, username, password,
             ip_address, admin_token=admin_token)
 
+        self._answer_login_result(username, participation, login_data)
+
+    def _answer_login_result(self, username: str,
+                             participation: Participation | None,
+                             login_data: bytes | None) -> None:
+        """Answer the outcome of a credential check and keep the counters true.
+
+        Split out of `post` so the success branches and the counter updates that
+        belong to them are read as one thing.
+
+        """
         if participation is None:
-            self.json({"error": "Login failed"}, 403)
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
+            self._refuse(login_refusal.CREDENTIALS)
         elif login_data is not None:
+            # WHY record_success here and in the branch below: whoever ends up
+            # authenticated has proven they are not guessing, so the failures
+            # behind this account and address are dropped and a mistyped
+            # password cannot accumulate into a lockout.
+            self.captcha.record_success(username, self.request.remote_ip)
             cookie_name = self.contest.name + "_login"
             self.json({"login_data": self.create_signed_value(
                 cookie_name, login_data).decode()})
         else:
+            # WHY cleared even though no login data is issued: validate_login
+            # returns (participation, None) when the contest allows IP
+            # autologin instead of password authentication, which is a success.
+            # The client is already authenticated by address and holds no
+            # password worth counting, so the counters have to go or the
+            # failures of an earlier attempt keep the lockout armed forever.
+            self.captcha.record_success(username, self.request.remote_ip)
             self.json({})
+
+    def _may_examine_password(self, username: str, admin_token: str) -> bool:
+        """Return whether this attempt may reach the password check.
+
+        The lockout gate and the captcha gate in the order they have to run in,
+        neither of them charging a failure the attempt did not earn.
+
+        """
+        ip = self.request.remote_ip
+
+        # WHY the lockout first: while it holds it is what refused the attempt,
+        # and a challenge refusal would send the user to fix a captcha that is
+        # not the obstacle while calling the provider for nothing.
+        # WHY not recorded as another failure: the count is already at the
+        # threshold and is never reset while the window is live, so incrementing
+        # it here would slide the window forward on every attempt and turn a
+        # lockout someone waits out into one that never ends for an address that
+        # keeps trying.
+        if admin_token == "" and self.captcha.is_locked(username, ip):
+            logger.info("Login refused, account or IP %r locked out from IP %s.",
+                        username, ip)
+            self._refuse(login_refusal.locked_refusal(
+                self.captcha.counters.retry_after(username, ip)))
+            return False
+
+        # WHY a token is exempt from the challenge as well as from the lockout:
+        # this endpoint is JSON with nowhere to answer a challenge, so demanding
+        # one would reproduce the unsatisfiable gate the form had. The token is
+        # still validated afterwards, so an invalid one fails as an ordinary
+        # rejected login.
+        # WHY the captcha comes before the credential check: a wrong or forged
+        # answer must not reach it at all. is_required() is the single authority
+        # on whether a challenge is demanded.
+        if admin_token == "" and self.captcha.is_required(username, ip):
+            outcome = self.captcha.verify(
+                username, ip, extract_token(self), extract_provider(self))
+            captcha_refusal = login_refusal.refusal_for_outcome(outcome)
+            if captcha_refusal is not None:
+                # WHY the counter is left alone: the answer says nothing about
+                # the password, and charging it climbs the ratchet towards a ban
+                # this attempt never earned.
+                logger.info("CAPTCHA refused for API login %r from IP %s: %s.",
+                            username, ip, outcome.value)
+                self._refuse(captcha_refusal)
+                return False
+
+        return True
+
+    def _refuse(self, refusal: LoginRefusal) -> None:
+        """Answer one refusal, in the shape every API client reads."""
+        if refusal.retry_after is not None:
+            self.set_header("Retry-After", str(refusal.retry_after))
+        self.json(refusal.body(), refusal.status)
+
+    def _answer_already_logged_in(self, username: str) -> None:
+        """Answer a login request from a client that is already authenticated.
+
+        An attempt to switch to a different account from a session that is
+        already authenticated is refused; anything else reports back the
+        credential the session currently holds, so a client that lost the
+        response of its previous login can recover it without another one.
+
+        """
+        current_user = self.get_current_user()
+        if username != "" and current_user.user.username != username:
+            self.json(
+                {"error": f"Logged in as {current_user.user.username} but trying to login as {username}"}, 400)
+            return
+        cookie_name = self.contest.name + "_login"
+        cookie = self.get_secure_cookie(cookie_name)
+        self.json({"login_data": self.request.headers.get(
+            "X-CMS-Authorization",
+            cookie if cookie is not None else "Already-Logged-In")})
 
     def check_xsrf_cookie(self):
         pass

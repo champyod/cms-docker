@@ -118,7 +118,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                                        for d in t.datasets
                                        for m in d.managers.values()))
 
-    def test_clean_import(self):
+    def test_it_imports_a_new_task_and_attaches_it_to_the_contest(self):
         # Completely new task, import and attach it to the contest.
         prefix = "prefix"
         override_name = "overridden"
@@ -131,7 +131,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
         self.assertTaskInDb(prefix + override_name, new_title, self.contest_id,
                             dataset_ids=[])
 
-    def test_clean_import_no_contest(self):
+    def test_it_imports_a_new_task_without_a_contest(self):
         # Completely new task, do not attach it to any contest.
         prefix = "prefix"
         override_name = "overridden"
@@ -144,7 +144,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
         self.assertTaskInDb(prefix + override_name, new_title, None,
                             dataset_ids=[])
 
-    def test_task_exists_no_update(self):
+    def test_it_fails_when_the_task_exists_and_is_not_updated(self):
         # Task exists, but we don't ask to update it.
         new_task = self.get_task(name=self.task_name, title="new_title")
         ret = self.do_import(new_task, self.contest_id, update=False,
@@ -155,7 +155,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                             task_id=self.task_id,
                             dataset_ids=[self.dataset_id])
 
-    def test_task_exists_update(self):
+    def test_it_updates_the_task_keeping_the_existing_dataset(self):
         # Task exists, and we update it, attaching it to the same contest.
         # The existing dataset should be kept.
         new_title = "new_title"
@@ -168,7 +168,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                             task_id=self.task_id,
                             dataset_ids=[self.dataset_id])
 
-    def test_task_exists_update_new_dataset(self):
+    def test_it_adds_a_new_dataset_when_updating_the_task(self):
         # Task exists, and we update it, attaching it to the same contest.
         # The existing dataset should be kept, and the new one should be added.
         new_title = "new_title"
@@ -185,7 +185,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                                                   new_desc],
                             active_dataset_id=self.dataset_id)
 
-    def test_task_exists_update_overwrite_dataset(self):
+    def test_it_overwrites_the_dataset_when_updating_the_task(self):
         # Task exists, and we update it, attaching it to the same contest.
         # The existing dataset should be overwritten by the new one, and we
         # check by looking at the task type.
@@ -204,7 +204,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                             dataset_descriptions=[self.dataset_description],
                             dataset_task_types=["Batch"])
 
-    def test_task_exists_update_new_manager(self):
+    def test_it_updates_the_dataset_manager_when_updating_the_task(self):
         # Task exists, and we update it, attaching it to the same contest.
         # The existing dataset should be overwritten by the new one, in
         # particular the new manager should be included.
@@ -223,7 +223,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                             dataset_manager_digests=[new_checker.digest],
                             active_dataset_id=self.dataset_id)
 
-    def test_task_exists_update_keep_contest(self):
+    def test_it_keeps_the_existing_contest_when_no_contest_is_given(self):
         # Task exists, and we update it, not specifying which contest (should
         # remain attached to the same).
         new_title = "new_title"
@@ -235,7 +235,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
         self.assertTaskInDb(self.task_name, new_title, self.contest_id,
                             task_id=self.task_id)
 
-    def test_task_exists_update_change_contest(self):
+    def test_it_fails_when_updating_the_task_into_another_contest(self):
         # Task exists, and we update it, but we try to attach it to a different
         # contest. This is not allowed.
         new_contest = self.add_contest()
@@ -249,7 +249,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
         self.assertTaskInDb(self.task_name, self.task_title, self.contest_id,
                             task_id=self.task_id)
 
-    def test_task_exists_update_not_removing_submissions(self):
+    def test_it_keeps_the_submissions_when_updating_the_task(self):
         # Task exists, and we update it. The submission should still be there.
         new_title = "new_title"
         new_task = self.get_task(name=self.task_name, title=new_title)
@@ -265,7 +265,7 @@ class TestImportTask(DatabaseMixin, unittest.TestCase):
                 .filter(Submission.id == self.submission_id).all()
             self.assertEqual(len(submissions), 1)
 
-    def test_task_exists_not_tied(self):
+    def test_it_updates_a_task_that_is_not_tied_to_a_contest(self):
         # Task exists, not tied to a contest, we update it.
         self.task.contest = None
         self.session.commit()

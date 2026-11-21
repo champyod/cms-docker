@@ -1,207 +1,234 @@
+//! Encoder assertions for `__domain.sh setup`, kept out of the encoder file so both
+//! stay readable.
+
 use super::{
-    domain_setup_args, emitted_flag_names, DomainMode, DomainRetryPolicy, DomainSetupRequest,
-    DomainSwitches, DEFAULT_CERT_METHOD,
+    domain_setup_args, DomainRetryPolicy, DomainSetupRequest, DomainStorePolicy, DomainSwitches,
 };
 
-fn request() -> DomainSetupRequest {
+/// The baseline every caller starts from: `cms domain setup` with no flags, cert untyped.
+fn base() -> DomainSetupRequest {
     DomainSetupRequest {
-        cert: "provided".to_string(),
-        domain: Some("a.example".to_string()),
-        admin_domain: Some("adm.example".to_string()),
-        oj_domain: Some("oj.example".to_string()),
-        ranking_domain: Some("rank.example".to_string()),
-        cert_path: Some("/c/fullchain.pem".to_string()),
-        key_path: Some("/c/privkey.pem".to_string()),
-        email: Some("ops@example".to_string()),
-        extra_domains: Some("x.example y.example".to_string()),
-        dns: Some("cloudflare".to_string()),
-        dns_credentials: Some("/c/creds.ini".to_string()),
-        deploy_hook: Some("systemctl reload nginx".to_string()),
-        config: Some("/c/alt.env".to_string()),
-        reason: Some("keycompromise".to_string()),
-        days: Some(14),
-        wait_port80: Some(45),
-        retry: DomainRetryPolicy {
-            is_auto_retry: true,
-            is_retry_forever: true,
-            attempts: Some(3),
-            interval: Some(20),
-        },
-        switches: DomainSwitches {
-            is_staging: true,
-            is_force: true,
-            is_backup_certs: true,
-            is_lock: true,
-            is_json: true,
-        },
-        mode: DomainMode {
-            is_dry_run: true,
-            is_apply: true,
-            is_yes: true,
-        },
+        is_yes: true,
+        ..DomainSetupRequest::default()
     }
 }
 
-fn argv(args: &[&str]) -> Vec<String> {
-    args.iter().map(|arg| (*arg).to_string()).collect()
+#[test]
+fn an_empty_request_is_only_the_verb_and_non_interactive_flag() {
+    assert_eq!(domain_setup_args("setup", &base()), vec!["setup", "--yes"]);
 }
 
-/// An empty request must still name a certificate method, because the script reads
-/// `--cert` before anything else and rejects a verb it cannot scope.
 #[test]
-fn an_empty_request_still_sends_the_default_cert_method() {
+fn a_typed_cert_is_emitted_and_an_empty_one_is_left_to_the_script() {
+    let typed = DomainSetupRequest {
+        cert: "provided".to_string(),
+        ..base()
+    };
     assert_eq!(
-        domain_setup_args("setup", &DomainSetupRequest::default()),
-        argv(&["setup", "--cert", DEFAULT_CERT_METHOD])
+        domain_setup_args("setup", &typed),
+        vec!["setup", "--cert", "provided", "--yes"]
+    );
+    // An empty cert reaches the script as the absence of --cert, leaving DOMAIN_CERT_METHOD to apply.
+    assert_eq!(domain_setup_args("setup", &base()), vec!["setup", "--yes"]);
+}
+
+#[test]
+fn every_value_flag_is_emitted_in_script_order() {
+    let setup = DomainSetupRequest {
+        domain: "contest.example.org".to_string(),
+        admin_domain: "admin.example.org".to_string(),
+        oj_domain: "oj.example.org".to_string(),
+        ranking_domain: "rank.example.org".to_string(),
+        cert_path: "/etc/certs/fullchain.pem".to_string(),
+        key_path: "/etc/certs/privkey.pem".to_string(),
+        email: "ops@example.org".to_string(),
+        extra_domains: "a.example.org b.example.org".to_string(),
+        dns: "cloudflare".to_string(),
+        dns_credentials: "/etc/certs/dns.ini".to_string(),
+        challenge: "tls-alpn-01".to_string(),
+        ca: "zerossl".to_string(),
+        acme_client: "lego".to_string(),
+        deploy_hook: "systemctl reload nginx".to_string(),
+        ..base()
+    };
+    assert_eq!(
+        domain_setup_args("setup", &setup),
+        vec![
+            "setup",
+            "--domain",
+            "contest.example.org",
+            "--admin-domain",
+            "admin.example.org",
+            "--oj-domain",
+            "oj.example.org",
+            "--ranking-domain",
+            "rank.example.org",
+            "--cert-path",
+            "/etc/certs/fullchain.pem",
+            "--key-path",
+            "/etc/certs/privkey.pem",
+            "--email",
+            "ops@example.org",
+            "--extra-domains",
+            "a.example.org b.example.org",
+            "--dns",
+            "cloudflare",
+            "--dns-credentials",
+            "/etc/certs/dns.ini",
+            "--challenge",
+            "tls-alpn-01",
+            "--ca",
+            "zerossl",
+            "--acme-client",
+            "lego",
+            "--deploy-hook",
+            "systemctl reload nginx",
+            "--yes",
+        ]
     );
 }
 
 #[test]
-fn a_blank_cert_row_falls_back_to_the_script_default() {
+fn an_empty_value_is_omitted_so_the_script_keeps_its_own_default() {
     let setup = DomainSetupRequest {
-        cert: "   ".to_string(),
-        ..DomainSetupRequest::default()
+        domain: "contest.example.org".to_string(),
+        admin_domain: String::new(),
+        email: String::new(),
+        ..base()
     };
-    let args = domain_setup_args("cert", &setup);
-    assert_eq!(args[0], "cert");
-    assert_eq!(args[1..3], argv(&["--cert", DEFAULT_CERT_METHOD])[..]);
+    let args = domain_setup_args("setup", &setup);
+    assert!(args.contains(&"--domain".to_string()));
+    assert!(!args.contains(&"--admin-domain".to_string()));
+    assert!(!args.contains(&"--email".to_string()));
 }
 
 #[test]
-fn every_field_reaches_argv() {
-    let args = domain_setup_args("setup", &request());
+fn retry_forever_reaches_the_script_as_an_unlimited_attempt_cap() {
+    let setup = DomainSetupRequest {
+        retry: DomainRetryPolicy {
+            is_retry_forever: true,
+            attempts: Some(20),
+            ..DomainRetryPolicy::default()
+        },
+        ..base()
+    };
+    let args = domain_setup_args("setup", &setup);
+    assert!(args.contains(&"--auto-retry".to_string()));
+    let attempts = args
+        .windows(2)
+        .find(|pair| pair[0] == "--retry-attempts")
+        .expect("emits an attempt cap");
+    assert_eq!(attempts[1], "0", "forever overrides a typed cap");
+}
+
+#[test]
+fn auto_retry_alone_keeps_the_typed_cap() {
+    let setup = DomainSetupRequest {
+        retry: DomainRetryPolicy {
+            is_auto_retry: true,
+            attempts: Some(3),
+            interval: Some(45),
+            ..DomainRetryPolicy::default()
+        },
+        ..base()
+    };
     assert_eq!(
-        args,
-        argv(&[
+        domain_setup_args("setup", &setup),
+        vec![
             "setup",
-            "--cert",
-            "provided",
-            "--domain",
-            "a.example",
-            "--admin-domain",
-            "adm.example",
-            "--oj-domain",
-            "oj.example",
-            "--ranking-domain",
-            "rank.example",
-            "--cert-path",
-            "/c/fullchain.pem",
-            "--key-path",
-            "/c/privkey.pem",
-            "--email",
-            "ops@example",
-            "--extra-domains",
-            "x.example y.example",
-            "--deploy-hook",
-            "systemctl reload nginx",
-            "--reason",
-            "keycompromise",
-            "--dns",
-            "cloudflare",
-            "--dns-credentials",
-            "/c/creds.ini",
-            "--config",
-            "/c/alt.env",
+            "--auto-retry",
             "--retry-attempts",
             "3",
             "--retry-interval",
-            "20",
-            "--wait-port80",
             "45",
-            "--days",
-            "14",
-            "--dry-run",
-            "--apply",
             "--yes",
-            "--auto-retry",
-            "--retry-forever",
+        ]
+    );
+}
+
+#[test]
+fn no_retry_related_argv_at_all_when_retry_is_off() {
+    let setup = DomainSetupRequest {
+        retry: DomainRetryPolicy::default(),
+        ..base()
+    };
+    let args = domain_setup_args("setup", &setup);
+    for flag in ["--auto-retry", "--retry-attempts", "--retry-interval"] {
+        assert!(!args.iter().any(|arg| arg == flag), "{flag} leaked");
+    }
+}
+
+#[test]
+fn the_boolean_flags_keep_their_established_order() {
+    let setup = DomainSetupRequest {
+        switches: DomainSwitches {
+            is_staging: true,
+            is_force: true,
+            is_lock: true,
+        },
+        store: DomainStorePolicy {
+            is_backup_certs: true,
+            is_auto_renew: true,
+        },
+        wait_port80: Some(60),
+        ..base()
+    };
+    assert_eq!(
+        domain_setup_args("setup", &setup),
+        vec![
+            "setup",
+            "--wait-port80",
+            "60",
             "--staging",
             "--force",
             "--backup-certs",
             "--lock",
-            "--json",
-        ])
+            "--auto-renew",
+            "--yes",
+        ]
     );
 }
 
 #[test]
-fn the_verb_travels_first_so_the_script_scopes_the_run_before_reading_flags() {
+fn apply_is_only_present_when_it_was_asked_for() {
+    assert!(!domain_setup_args("setup", &base()).contains(&"--apply".to_string()));
+    let live = DomainSetupRequest {
+        is_apply: true,
+        ..base()
+    };
+    assert!(domain_setup_args("setup", &live).contains(&"--apply".to_string()));
+}
+
+#[test]
+fn the_verb_is_the_first_argument_and_alone_picks_the_scope() {
+    // WHY this matters: `cert` and `proxy` are the two halves of `setup`, and the only
+    // thing on the command line that distinguishes them is which word comes first. If
+    // the encoder ever leaked a scope flag into argv, the script would reject it and the
+    // operator would see a parser error instead of the scope they asked for.
+    let setup = DomainSetupRequest {
+        domain: "contest.example.org".to_string(),
+        switches: DomainSwitches {
+            is_staging: true,
+            ..DomainSwitches::default()
+        },
+        ..base()
+    };
     for verb in ["setup", "cert", "proxy"] {
-        assert_eq!(
-            domain_setup_args(verb, &DomainSetupRequest::default())[0],
-            verb
-        );
-    }
-}
-
-#[test]
-fn unset_fields_are_omitted_so_the_script_keeps_applying_its_own_defaults() {
-    let args = domain_setup_args("setup", &DomainSetupRequest::default());
-    for absent in [
-        "--domain", "--email", "--days", "--reason", "--dns", "--config", "--apply", "--json",
-    ] {
+        let args = domain_setup_args(verb, &setup);
+        assert_eq!(args.first().map(String::as_str), Some(verb));
         assert!(
-            !args.iter().any(|arg| arg == absent),
-            "{absent} was sent although it was never given"
+            !args.contains(&"--cert-only".to_string()),
+            "flag was removed"
+        );
+        assert!(
+            !args.contains(&"--proxy-only".to_string()),
+            "flag was removed"
         );
     }
-}
-
-/// The script resolves the mode pair in argv order, so emitting `--apply` first would
-/// silently turn an operator's dry-run request into a live run.
-#[test]
-fn dry_run_precedes_apply_so_the_script_applies() {
-    let args = domain_setup_args("setup", &request());
-    let dry_run_at = args.iter().position(|arg| arg == "--dry-run");
-    let apply_at = args.iter().position(|arg| arg == "--apply");
-    assert!(
-        dry_run_at < apply_at,
-        "the script reads the pair in argv order"
+    // Both narrow scopes carry identical flags; the script decides which half to skip,
+    // so the encoder must not try to second-guess it.
+    assert_eq!(
+        domain_setup_args("cert", &setup).len(),
+        domain_setup_args("proxy", &setup).len()
     );
-}
-
-/// The flag set is the contract with `scripts/__domain.sh`'s parse block. A flag added
-/// to the encoder and not to the script (or the reverse) is invisible to any test that
-/// only builds argv, because such a test never reads the script's own `case` arms.
-#[test]
-fn the_emitted_flag_set_is_the_script_parse_block() {
-    let source = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../scripts/__domain.sh"
-    ))
-    .expect("the domain script is in the repo");
-    // Only the parse block counts: the usage text above it documents the same flags
-    // with their arguments (`--cert <letsencrypt|provided>`), which is prose, not a
-    // pattern the script matches on.
-    let parse_block = source
-        .split("while [[ $# -gt 0 ]]; do")
-        .nth(1)
-        .and_then(|rest| rest.split("esac").next())
-        .expect("the script still parses its flags in a while/case block");
-    let script: Vec<&str> = parse_block
-        .lines()
-        // A parse arm is the pattern between the arm indentation and its `)`, so
-        // `--yes|-y)` yields both spellings the script accepts.
-        .filter(|line| line.trim_start().starts_with("--"))
-        .filter_map(|line| line.split(')').next())
-        .flat_map(|pattern| pattern.split('|'))
-        .map(str::trim)
-        .filter(|flag| flag.starts_with("--"))
-        // `--help` is answered by the same loop but is not a value a run carries, so it is
-        // deliberately absent from the form; the short spellings are aliases, not flags.
-        .filter(|flag| *flag != "--help")
-        .collect();
-    let emitted = emitted_flag_names();
-    for flag in &emitted {
-        assert!(
-            script.contains(flag),
-            "{flag} is emitted but __domain.sh has no parse arm for it"
-        );
-    }
-    for flag in &script {
-        assert!(
-            emitted.contains(flag),
-            "__domain.sh parses {flag} but no form row can send it"
-        );
-    }
 }

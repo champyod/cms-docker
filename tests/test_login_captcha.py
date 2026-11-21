@@ -1,0 +1,1156 @@
+#!/usr/bin/env python3
+
+# Contest Management System - http://cms-dev.github.io/
+# Copyright © 2026 Champ <noreply@example.invalid>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""Adaptive login CAPTCHA for AWS and CWS.
+
+Usage: python3 tests/test_login_captcha.py
+"""
+
+import importlib.util
+import json
+import os
+import re
+import sys
+import tempfile
+import types
+import unittest
+
+import jinja2
+
+
+REPO_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+SRC_ROOT = os.path.join(REPO_ROOT, "src")
+# The loader the contest web server itself uses, so the pages under test are the
+# shipped ones rather than a copy that could drift from them.
+TEMPLATES = os.path.join(SRC_ROOT, "cms", "server", "contest", "templates")
+# The classic admin login page is its own Jinja environment and template root.
+ADMIN_TEMPLATES = os.path.join(SRC_ROOT, "cms", "server", "admin", "templates")
+
+# The loader rejects the sample's shipped default secret, so a generated config carries a
+# non-default 16-byte hex key.
+SUITE_SECRET_KEY: str = "0123456789abcdef0123456789abcdef"
+
+
+def _config_path() -> str:
+    """Return a config the loader accepts: config/cms.toml when present, else the tracked
+    sample with a real secret. Only conf.CaptchaConfig is under test."""
+    live: str = os.path.join(REPO_ROOT, "config", "cms.toml")
+    if os.path.exists(live):
+        return live
+    with open(os.path.join(REPO_ROOT, "config", "cms.sample.toml"), encoding="utf-8") as source:
+        sample: str = source.read()
+    sample = re.sub(r'^secret_key = ".*"$', f'secret_key = "{SUITE_SECRET_KEY}"',
+                    sample, count=1, flags=re.MULTILINE)
+    path: str = os.path.join(tempfile.mkdtemp(prefix="cms-captcha-config-"), "cms.toml")
+    with open(path, "w", encoding="utf-8") as generated:
+        generated.write(sample)
+    return path
+
+
+# Order matters: conf.py reads sys.prefix to locate the installation root before it
+# parses anything, so the prefix has to be corrected before sys.path is extended.
+if sys.prefix == "/usr":
+    sys.prefix = REPO_ROOT
+if "CMS_CONFIG" not in os.environ:
+    os.environ["CMS_CONFIG"] = _config_path()
+sys.path.insert(0, SRC_ROOT)
+
+
+def _load(module_name, relative_path):
+    """Load one module straight from the source tree.
+
+    `import cms` runs the package __init__, which reaches cms.db and so needs
+    sqlalchemy and the rest of the runtime. Captcha needs neither, only
+    dataclasses, so loading its two files directly keeps the tested code real
+    and the server's dependencies out of the suite.
+    """
+    spec = importlib.util.spec_from_file_location(
+        module_name, os.path.join(SRC_ROOT, relative_path))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_package = types.ModuleType("cms")
+_package.__path__ = [SRC_ROOT]
+sys.modules["cms"] = _package
+
+_server = types.ModuleType("cms.server")
+_server.__path__ = [os.path.join(SRC_ROOT, "cms", "server")]
+sys.modules["cms.server"] = _server
+
+# conf.py imports cms.log, which in turn reaches the whole runtime. Only set_detailed_logs
+# is used, so a placeholder satisfies it without pulling any of that in.
+_log = types.ModuleType("cms.log")
+_log.set_detailed_logs = lambda *_args, **_kwargs: None
+sys.modules["cms.log"] = _log
+
+conf = _load("cms.conf", "cms/conf.py")
+provider = _load("cms.server.captcha_provider", "cms/server/captcha_provider.py")
+backend = _load("cms.server.login_counter_backend",
+                "cms/server/login_counter_backend.py")
+counters = _load("cms.server.login_counters", "cms/server/login_counters.py")
+health = _load("cms.server.captcha_health", "cms/server/captcha_health.py")
+captcha = _load("cms.server.captcha", "cms/server/captcha.py")
+refusal = _load("cms.server.login_refusal", "cms/server/login_refusal.py")
+
+REMOTE_IP = "203.0.113.7"
+
+CONTESTANT = "contestant"
+# One failure past the captcha threshold of `configured`, and one short of its
+# ban threshold: the count demands a challenge without also locking the account,
+# so a refusal can only have come from the captcha gate.
+OVER_CAPTCHA_THRESHOLD = 4
+
+
+def _stub(name, **attributes):
+    """Register a placeholder module under *name* and return it.
+
+    WHY the handlers reach so much that this exists: loading api.py imports the
+    ORM models and the database session machinery, none of which is installed
+    here. Only the login gates are under test, so what they import is replaced
+    by placeholders and the file itself is executed unmodified -- the code that
+    decides the refusal is the real one.
+    """
+    module = types.ModuleType(name)
+    module.__dict__.update(attributes)
+    sys.modules[name] = module
+    return module
+
+
+def _passthrough_decorator(*args, **kwargs):
+    """A decorator that changes nothing, in the bare and the called form.
+
+    WHY both forms: the handlers use `@multi_contest` bare and
+    `@actual_phase_required(0, 3)` with arguments. A stub written for only one
+    of them turns the other into a lambda, so the module still loads while the
+    method it wrapped is no longer the real one.
+    """
+    if len(args) == 1 and not kwargs and callable(args[0]):
+        return args[0]
+    return lambda function: function
+
+
+def _load_api_module():
+    """Return the real contest API handler module with its imports stubbed."""
+    _stub("cms.db", __path__=[os.path.join(SRC_ROOT, "cms", "db")])
+    _stub("cms.db.submission", Submission=type("Submission", (), {}))
+    _stub("cms.db.user", Participation=type("Participation", (), {}))
+
+    contest_package = os.path.join(SRC_ROOT, "cms", "server", "contest")
+    _stub("cms.server.contest", __path__=[contest_package])
+    _stub("cms.server.contest.handlers",
+          __path__=[os.path.join(contest_package, "handlers")])
+    _stub("cms.server.contest.handlers.contest",
+          ContestHandler=type("ContestHandler", (), {}),
+          api_login_required=_passthrough_decorator)
+    _stub("cms.server.contest.phase_management",
+          actual_phase_required=_passthrough_decorator)
+    _stub("cms.server.contest.authentication", validate_login=_stubbed_login)
+    _stub("cms.server.contest.submission",
+          UnacceptableSubmission=type("UnacceptableSubmission", (Exception,), {}),
+          accept_submission=lambda *_args, **_kwargs: None)
+
+    sys.modules["cms.server"].multi_contest = _passthrough_decorator
+    return _load("cms.server.contest.handlers.api",
+                 "cms/server/contest/handlers/api.py")
+
+
+# WHY the stand-in records its calls: an admin token is only ever checked by the
+# real validate_login, so the thing that shows a token is not waved through by
+# the exemption is that the gate still lets the attempt reach it.
+VALIDATED_LOGINS: list = []
+
+
+def _stubbed_login(*args, **kwargs):
+    """The stand-in validate_login: records the attempt and refuses it."""
+    VALIDATED_LOGINS.append((args, kwargs))
+    return None, None
+
+
+api = _load_api_module()
+
+
+class ManualClock:
+    """A clock the test moves by hand.
+
+    A failure window is measured in minutes, so asserting that one lapses
+    otherwise means either waiting for it or reading a private field and
+    rewriting the timestamp behind the code's back. Driving the clock the
+    backend already accepts keeps the assertion on the behaviour rather than on
+    the storage detail.
+    """
+
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def configured(verify=None, clock=None, **overrides):
+    """A captcha that is on and fully keyed, with the provider stubbed out."""
+    values = {
+        "enabled": True,
+        "provider": "turnstile",
+        "site_key": "site-key",
+        "secret_key": "secret",
+        "threshold": 3,
+        "ban_threshold": 5,
+    }
+    values.update(overrides)
+    if clock is not None:
+        counts = counters.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        return captcha.Captcha(conf.CaptchaConfig(**values), counters=counts,
+                               verify=verify if verify is not None
+                               else (lambda *_: True))
+    return captcha.Captcha(conf.CaptchaConfig(**values),
+                           verify=verify if verify is not None else (lambda *_: True))
+
+
+class CaptchaNotDemandedTest(unittest.TestCase):
+    def test_below_threshold_needs_no_token(self):
+        subject = configured()
+        subject.record_failure("admin", REMOTE_IP)
+        self.assertFalse(subject.is_required("admin", REMOTE_IP))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                         captcha.CaptchaOutcome.ALLOWED)
+
+    def test_threshold_demands_a_token(self):
+        subject = configured()
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertTrue(subject.is_required("admin", REMOTE_IP))
+
+    def test_a_rejected_token_stops_the_attempt(self):
+        subject = configured(verify=lambda *_: False)
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertEqual(subject.verify("admin", REMOTE_IP, "forged"),
+                         captcha.CaptchaOutcome.CHALLENGE_FAILED)
+
+    def test_an_accepted_token_lets_the_attempt_through(self):
+        subject = configured()
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertEqual(subject.verify("admin", REMOTE_IP, "good"),
+                         captcha.CaptchaOutcome.ALLOWED)
+
+    def test_a_demand_from_the_address_reaches_every_account_on_it(self):
+        # The address counter is what stops username rotation, so a failure against one
+        # account is deliberately enough to demand a captcha from the next one.
+        subject = configured()
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertTrue(subject.is_required("someone-else", REMOTE_IP))
+
+
+class UnconfiguredTest(unittest.TestCase):
+    def test_disabled_captcha_never_blocks(self):
+        subject = configured(enabled=False)
+        for _ in range(9):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertFalse(subject.is_required("admin", REMOTE_IP))
+        self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                         captcha.CaptchaOutcome.ALLOWED)
+
+    def test_a_missing_secret_never_blocks(self):
+        for missing in ("site_key", "secret_key"):
+            with self.subTest(missing=missing):
+                subject = configured(**{missing: ""})
+                self.assertFalse(subject.is_enabled())
+                self.assertEqual(subject.verify("admin", REMOTE_IP, ""),
+                                 captcha.CaptchaOutcome.ALLOWED)
+
+    def test_no_widget_is_rendered_when_unconfigured(self):
+        self.assertEqual(configured(enabled=False).widget_html(), "")
+
+    def test_the_secret_is_never_handed_to_a_template(self):
+        params = configured().render_params("admin", REMOTE_IP)
+        self.assertNotIn("secret_key", params)
+        self.assertEqual(params["captcha_site_key"], "site-key")
+
+
+class EscalationTest(unittest.TestCase):
+    def test_a_successful_login_clears_the_counter(self):
+        subject = configured()
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+        subject.record_success("admin", REMOTE_IP)
+        self.assertFalse(subject.is_required("admin", REMOTE_IP))
+
+    def test_rotating_usernames_still_escalates_the_address(self):
+        subject = configured()
+        for index in range(3):
+            subject.record_failure(f"user-{index}", REMOTE_IP)
+        self.assertTrue(subject.is_required("user-0", REMOTE_IP))
+
+    def test_a_loopback_client_is_counted_by_account_but_not_by_address(self):
+        # A local address is one attacker, not a shared network, so it holds no
+        # address counter — but its failures still count against the account, or a
+        # brute force run from the box itself would never escalate.
+        counters = captcha.LoginFailureCounters()
+        for _ in range(3):
+            counters.record_failure("admin", "127.0.0.1")
+        self.assertEqual(counters.count("admin", "127.0.0.1"), 3)
+        self.assertEqual(counters.count("other", "127.0.0.1"), 0)
+
+    def test_the_ban_threshold_refuses_and_keeps_refusing(self):
+        # Reaching the threshold must REFUSE, not reset the count. A count that
+        # restarted there re-armed itself on the very next attempt, so the
+        # account was guessable without limit: the sixth guess was counted as
+        # the first, and so on forever. Every attempt past the threshold has to
+        # read as locked, which is only true while the count is retained.
+        subject = configured(ban_threshold=5)
+        for _ in range(5):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+        for _ in range(3):
+            subject.record_failure("admin", REMOTE_IP)
+            self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+
+    def test_a_lapsed_window_reads_as_no_failures(self):
+        # A count that never expired would strand a user who mistyped a few
+        # times, walked away, and came back: their old failures would still be
+        # counted against them an hour later.
+        clock = ManualClock()
+        subject = configured(ban_threshold=5, clock=clock)
+        for _ in range(4):
+            subject.record_failure("admin", REMOTE_IP)
+        self.assertFalse(subject.is_locked("admin", REMOTE_IP))
+
+        clock.advance(counters.FAILURE_WINDOW + 1)
+        self.assertEqual(subject.counters.count("admin", REMOTE_IP), 0)
+        self.assertFalse(subject.is_locked("admin", REMOTE_IP))
+
+    def test_the_window_slides_so_a_lockout_outlives_the_gap(self):
+        # Each failure must push the window forward, or an attacker pausing for
+        # most of a window between guesses would regain a fresh allowance every
+        # time: four failures spread across three windows still have to add up.
+        clock = ManualClock()
+        subject = configured(ban_threshold=5, clock=clock)
+        for _ in range(4):
+            subject.record_failure("admin", REMOTE_IP)
+            clock.advance(counters.FAILURE_WINDOW - 1)
+        self.assertEqual(subject.counters.count("admin", REMOTE_IP), 4)
+
+        subject.record_failure("admin", REMOTE_IP)
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+
+        # Going quiet for less than a window must not lift the lockout.
+        clock.advance(counters.FAILURE_WINDOW - 1)
+        self.assertTrue(subject.is_locked("admin", REMOTE_IP))
+
+
+class Form:
+    """The one method extract_token needs from a request."""
+
+    def __init__(self, values):
+        self.values = values
+
+    def get_argument(self, name, default=""):
+        return self.values.get(name, default)
+
+
+class TokenFieldTest(unittest.TestCase):
+    def test_the_plain_field_is_read(self):
+        self.assertEqual(captcha.extract_token(Form({"captchaToken": "t"})), "t")
+
+    def test_each_provider_field_is_read(self):
+        for field in ("cf-turnstile-response", "h-captcha-response",
+                      "g-recaptcha-response"):
+            with self.subTest(field=field):
+                self.assertEqual(captcha.extract_token(Form({field: "t"})), "t")
+
+    def test_a_blank_field_does_not_count_as_a_token(self):
+        self.assertEqual(captcha.extract_token(Form({"captchaToken": "   "})), "")
+
+
+class VerifyTokenTest(unittest.TestCase):
+    def test_an_empty_token_is_refused_without_a_request(self):
+        self.assertFalse(captcha.verify_token("", "secret", "turnstile"))
+
+    def test_an_unreachable_provider_is_refused(self):
+        # Fail closed and signal the failover: an unreachable provider raises
+        # rather than returning a verdict, so the chain's health can skip it,
+        # and the caller still refuses the attempt.
+        with self.assertRaises(captcha.ProviderUnreachable):
+            captcha.verify_token("t", "s", "turnstile")
+
+    def test_a_captcha_refuses_when_the_provider_is_unreachable(self):
+        # The raise must not escape to the login handler: verify() catches it and
+        # refuses, which is the fail-closed path.
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("turnstile")
+
+        subject = configured(verify=unreachable)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok"),
+                         captcha.CaptchaOutcome.PROVIDER_UNREACHABLE)
+
+
+class Attributes:
+    """A bag of attributes for the names a template reads off an object."""
+
+    def __init__(self, **attributes):
+        self.__dict__.update(attributes)
+
+
+def _render(template_name: str, facts: dict) -> str:
+    """Render one contest template the way the contest web server does.
+
+    WHY the templates are rendered here instead of being grepped for the
+    widget: the defect was a form served without a challenge it was then
+    refused for, so what matters is that the rendered page carries the field
+    back to the server. The loader, the i18n extension and StrictUndefined are
+    the ones the server itself configures; the context is the smallest set of
+    names the login pages read, and the captcha facts are the ones
+    ContestHandler.render_params really returns.
+    """
+    environment = jinja2.Environment(
+        trim_blocks=True, lstrip_blocks=True, autoescape=True,
+        undefined=jinja2.StrictUndefined,
+        loader=jinja2.FileSystemLoader(TEMPLATES),
+        extensions=["jinja2.ext.i18n"])
+    environment.install_null_translations(newstyle=True)
+    # The two filters the pages declare for a logged-in client; the login pages
+    # never reach them, but the whole file is compiled at once.
+    environment.filters["to_language"] = lambda value: Attributes(
+        source_extensions=[])
+    environment.filters["make_timestamp"] = lambda value: 0
+    environment.filters["format_datetime_smart"] = lambda value, with_zone=False: "T"
+    return environment.get_template(template_name).render(**facts)
+
+
+def _login_page_facts(captcha_facts: dict) -> dict:
+    """Return a render context for the pages an unauthenticated client reaches."""
+    return {
+        "url": lambda *_args, **_kwargs: "/static/x",
+        "contest_url": lambda *_args, **_kwargs: "/contest",
+        "handler": Attributes(get_argument=lambda _name, default="": default),
+        "xsrf_form_html": "",
+        "translation": Attributes(identifier="en"),
+        "contest": Attributes(description="A contest", name="contest",
+                              languages=[], tasks=[], allow_registration=True),
+        "phase": 0,
+        "available_translations": [],
+        "credits": Attributes(project=Attributes(name="CMS", author="CCYod"),
+                              license=Attributes(url="/license", name="AGPL")),
+        "config": Attributes(global_=Attributes(source_url="/source", ranking_url="")),
+        "teams": [],
+        "MAX_INPUT_LENGTH": 50,
+        "MIN_PASSWORD_LENGTH": 6,
+        **captcha_facts,
+    }
+
+
+def _render_admin_login(captcha_facts: dict, handler=None) -> str:
+    """Render the classic admin login page the AWS itself serves.
+
+    The admin page is a standalone template with its own root and no i18n
+    extension, so it needs its own environment: the one the contest server
+    configures would not find login.html at all.
+    """
+    environment = jinja2.Environment(
+        trim_blocks=True, lstrip_blocks=True, autoescape=True,
+        undefined=jinja2.StrictUndefined,
+        loader=jinja2.FileSystemLoader(ADMIN_TEMPLATES))
+    return environment.get_template("login.html").render(
+        url=lambda *_args, **_kwargs: "/static/x",
+        handler=handler if handler is not None else Attributes(
+            get_argument=lambda _name, default="": default),
+        xsrf_form_html="",
+        **captcha_facts)
+
+
+def _over_threshold() -> "captcha.Captcha":
+    """A captcha demanding a challenge, with every answer refused.
+
+    WHY every answer is refused: the pages have to carry a field the client can
+    answer, and a stub that accepted anything would make a template that posts
+    no field look correct.
+    """
+    subject = configured(verify=lambda *_args: False)
+    for _ in range(OVER_CAPTCHA_THRESHOLD):
+        subject.record_failure(CONTESTANT, REMOTE_IP)
+    return subject
+
+
+class ContestFormWidgetTest(unittest.TestCase):
+    """The widget the contest login and registration forms have to post back."""
+
+    def test_the_contest_login_form_carries_the_widget(self):
+        # contest.html is the base template every other contest page extends, so
+        # this is the form an unauthenticated contestant is served on the contest
+        # root, and it is refused at main.py's gate when the captcha is demanded.
+        subject = _over_threshold()
+        page = _render("contest.html", _login_page_facts(
+            subject.render_params(CONTESTANT, REMOTE_IP)))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+        # The class has to be the one Turnstile scans for, or the container is
+        # present but the widget never renders and the field stays empty.
+        self.assertIn('class="cf-turnstile"', page)
+
+    def test_the_registration_form_carries_the_widget(self):
+        # The registration handler refuses a challenged attempt with a 429 and
+        # its own script shows the widget again, so the form has to post the
+        # answer it asks for.
+        subject = _over_threshold()
+        page = _render("register.html", _login_page_facts(
+            subject.render_params(CONTESTANT, REMOTE_IP)))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+        self.assertIn('class="cf-turnstile"', page)
+
+    def test_a_deployment_without_a_captcha_renders_no_widget(self):
+        # render_params leaves the widget empty when nothing is configured, so
+        # the guard has to keep the markup out of a deployment that sets no key
+        # rather than emitting an empty container.
+        subject = configured(enabled=False)
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+        self.assertEqual(facts["captcha_widget"], "")
+
+        for template in ("contest.html", "register.html"):
+            with self.subTest(template=template):
+                page = _render(template, _login_page_facts(facts))
+
+                self.assertNotIn("captchaToken", page)
+
+
+class WidgetDemandTest(unittest.TestCase):
+    """The widget is withheld until the challenge can actually be demanded."""
+
+    def test_a_fresh_client_gets_no_widget(self):
+        # Below the threshold the provider script must not load: the challenge
+        # cannot be demanded yet, so its cost would be paid for nothing.
+        subject = configured()
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+
+        self.assertFalse(facts["captcha_required"])
+        self.assertEqual(facts["captcha_widget"], "")
+        page = _render("contest.html", _login_page_facts(facts))
+
+        self.assertNotIn("captchaToken", page)
+
+    def test_a_challenged_client_gets_the_widget(self):
+        subject = _over_threshold()
+        facts = subject.render_params(CONTESTANT, REMOTE_IP)
+
+        self.assertTrue(facts["captcha_required"])
+        self.assertIn("captchaToken", facts["captcha_widget"])
+
+    def test_a_loopback_client_needs_its_username_to_be_seen(self):
+        # A loopback address holds no address bucket, so a page that only knows
+        # the address cannot see the account's own count. That is why a refused
+        # login carries the username into the redirect: without it the widget
+        # would stay away while the next attempt is refused for lacking a token.
+        subject = configured()
+        for _ in range(OVER_CAPTCHA_THRESHOLD):
+            subject.record_failure(CONTESTANT, "127.0.0.1")
+
+        named = subject.render_params(CONTESTANT, "127.0.0.1")
+        anonymous = subject.render_params("", "127.0.0.1")
+
+        self.assertIn("captchaToken", named["captcha_widget"])
+        self.assertEqual(anonymous["captcha_widget"], "")
+
+
+class WidgetMarkupTest(unittest.TestCase):
+    """The markup alone: the class, the callbacks, and the token field."""
+
+    def test_the_widget_uses_the_class_the_provider_renders(self):
+        # The provider NAME is not the class its script scans for: `turnstile`,
+        # `hcaptcha` and `recaptcha` all match nothing, so the container is
+        # ignored and the challenge never appears.
+        for name, expected in (("turnstile", "cf-turnstile"),
+                               ("hcaptcha", "h-captcha"),
+                               ("recaptcha", "g-recaptcha")):
+            with self.subTest(provider=name):
+                widget = configured(provider=name).widget_html()
+
+                self.assertIn('class="%s"' % expected, widget)
+                self.assertNotIn('class="%s"' % name, widget)
+
+    def test_the_widget_copies_the_token_into_the_form_field(self):
+        # An element without a callback renders a challenge whose answer never
+        # reaches the hidden field, so the form posts an empty token and the
+        # server refuses it.
+        widget = configured().widget_html()
+
+        self.assertIn('data-callback="onCaptchaSuccess"', widget)
+        self.assertIn('input[name=captchaToken]', widget)
+        self.assertIn("function onCaptchaSuccess(token)", widget)
+
+
+class ProviderTableTest(unittest.TestCase):
+    """The three provider tables must share one key set: a provider missing from
+    the class table renders a container its script never scans for, and one
+    missing from the endpoint table verifies against the wrong provider."""
+
+    def test_the_tables_agree_on_the_provider_set(self):
+        keys = set(provider.PROVIDER_SCRIPT)
+
+        self.assertEqual(keys, set(provider.PROVIDER_WIDGET_CLASS))
+        self.assertEqual(keys, set(provider.PROVIDER_VERIFY_URL))
+        self.assertEqual(keys, {"turnstile", "hcaptcha", "recaptcha"})
+
+
+def _chain(verify=None, health=None, **overrides):
+    """A captcha with two keyed providers and hcaptcha first in the chain."""
+    values = {
+        "enabled": True,
+        "providers": ["hcaptcha", "turnstile"],
+        "keys": {
+            "hcaptcha": conf.CaptchaKeys(site_key="h-site", secret_key="h-secret"),
+            "turnstile": conf.CaptchaKeys(site_key="t-site", secret_key="t-secret"),
+        },
+        "threshold": 3,
+        "ban_threshold": 5,
+    }
+    values.update(overrides)
+    return captcha.Captcha(conf.CaptchaConfig(**values),
+                           verify=verify if verify is not None
+                           else (lambda *_: True),
+                           health=health)
+
+
+class _Health:
+    """A provider-health store the test drives by hand."""
+
+    def __init__(self, unhealthy=()):
+        self.unhealthy = set(unhealthy)
+
+    def is_healthy(self, provider):
+        return provider not in self.unhealthy
+
+    def record_failure(self, provider):
+        self.unhealthy.add(provider)
+
+    def record_success(self, provider):
+        self.unhealthy.discard(provider)
+
+
+class ProviderFailoverTest(unittest.TestCase):
+    """An unreachable provider is skipped for the next in the chain."""
+
+    def test_an_unhealthy_provider_is_skipped(self):
+        subject = _chain(health=_Health(unhealthy=["hcaptcha"]))
+
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_a_transport_failure_moves_the_chain_to_the_next(self):
+        state = _Health()
+
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("hcaptcha")
+
+        subject = _chain(verify=unreachable, health=state)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"),
+                         captcha.CaptchaOutcome.PROVIDER_UNREACHABLE)
+        self.assertFalse(state.is_healthy("hcaptcha"))
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_a_successful_check_clears_the_provider(self):
+        state = _Health(unhealthy=["turnstile"])
+        subject = _chain(health=state)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        self.assertEqual(subject.verify(CONTESTANT, REMOTE_IP, "tok", "hcaptcha"),
+                         captcha.CaptchaOutcome.ALLOWED)
+
+        self.assertTrue(state.is_healthy("hcaptcha"))
+
+
+class ProviderHealthTest(unittest.TestCase):
+    """The shared health store's threshold and cooldown."""
+
+    def test_a_provider_is_healthy_until_it_fails_enough(self):
+        store = health.ProviderHealth()
+
+        self.assertTrue(store.is_healthy("turnstile"))
+        for _ in range(health.HEALTH_FAILURES - 1):
+            store.record_failure("turnstile")
+        self.assertTrue(store.is_healthy("turnstile"))
+
+        store.record_failure("turnstile")
+        self.assertFalse(store.is_healthy("turnstile"))
+
+        store.record_success("turnstile")
+        self.assertTrue(store.is_healthy("turnstile"))
+
+
+class ProviderChainTest(unittest.TestCase):
+    """A service's provider priority list, and the token that names its provider."""
+
+    def test_the_first_configured_provider_is_used(self):
+        subject = _chain()
+
+        self.assertEqual(subject.provider(), "hcaptcha")
+        self.assertIn("h-site", subject.widget_html())
+        self.assertIn('class="h-captcha"', subject.widget_html())
+
+    def test_a_provider_without_keys_falls_through_to_the_next(self):
+        # First in the list but unkeyed: it must not disable the challenge while
+        # a usable provider remains.
+        subject = _chain(keys={
+            "turnstile": conf.CaptchaKeys(site_key="t-site", secret_key="t-secret"),
+        })
+
+        self.assertEqual(subject.provider(), "turnstile")
+
+    def test_the_widget_names_the_provider_it_rendered(self):
+        widget = _chain().widget_html()
+
+        self.assertIn('name="captchaProvider" value="hcaptcha"', widget)
+
+    def test_a_token_is_verified_against_its_named_provider(self):
+        seen = []
+
+        def record(token, secret, provider):
+            seen.append((token, secret, provider))
+            return True
+
+        subject = _chain(verify=record)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        subject.verify(CONTESTANT, REMOTE_IP, "tok", "turnstile")
+
+        self.assertEqual(seen, [("tok", "t-secret", "turnstile")])
+
+    def test_an_unnamed_provider_verifies_against_the_active_one(self):
+        seen = []
+
+        def record(token, secret, provider):
+            seen.append((token, secret, provider))
+            return True
+
+        subject = _chain(verify=record)
+        for _ in range(3):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+
+        subject.verify(CONTESTANT, REMOTE_IP, "tok", "")
+
+        self.assertEqual(seen, [("tok", "h-secret", "hcaptcha")])
+
+
+class AdminFormWidgetTest(unittest.TestCase):
+    """The widget the classic admin login page has to carry."""
+
+    def test_the_admin_login_form_carries_the_widget(self):
+        subject = _over_threshold()
+        page = _render_admin_login(subject.render_params("admin", REMOTE_IP))
+
+        self.assertIn("captchaToken", page)
+        self.assertIn(subject.config.site_key, page)
+        self.assertIn('class="cf-turnstile"', page)
+
+    def test_a_deployment_without_a_captcha_renders_no_widget(self):
+        facts = configured(enabled=False).render_params("admin", REMOTE_IP)
+        page = _render_admin_login(facts)
+
+        self.assertNotIn("captchaToken", page)
+
+
+class LockoutMessageTest(unittest.TestCase):
+    """The 429 page has to explain a lockout, not just print the status."""
+
+    def test_the_lockout_page_names_the_window(self):
+        # WHY: a locked-out user lands on the status page, so it is the one place
+        # the refusal and its window can be explained.
+        page = _render("error.html", {
+            **_login_page_facts({}),
+            "status_code": 429,
+            "lockout_retry_after": 15 * 60,
+        })
+
+        self.assertIn("locked out", page)
+        self.assertIn("15 minutes", page)
+
+    def test_an_ordinary_error_carries_no_lockout_text(self):
+        page = _render("error.html", {
+            **_login_page_facts({}),
+            "status_code": 500,
+            "lockout_retry_after": None,
+        })
+
+        self.assertNotIn("locked out", page)
+
+
+class ApiLoginHandler:
+    """A contest API login handler with only what its login path touches.
+
+    WHY the real handler class rather than a copy of the gates: the refusal is
+    the handler's decision, so the method under test has to be the one the
+    server runs. What is replaced is everything around it -- the session, the
+    ORM and the response writer -- none of which decides whether a captcha is
+    demanded.
+    """
+
+    def __init__(self, subject, arguments=None):
+        self.captcha = subject
+        self.arguments = arguments if arguments is not None else {}
+        self.request = Attributes(
+            remote_ip=REMOTE_IP, path="/login/",
+            headers=Attributes(get=lambda _name, default=None: default))
+        self.answers: list = []
+        self.headers: dict = {}
+        self.contest = None
+        self.sql_session = None
+        self.timestamp = None
+
+    post = api.ApiLoginHandler.post
+    _may_examine_password = api.ApiLoginHandler._may_examine_password
+    _answer_login_result = api.ApiLoginHandler._answer_login_result
+    _refuse = api.ApiLoginHandler._refuse
+
+    def get_argument(self, name, default=""):
+        return self.arguments.get(name, default)
+
+    def get_current_user(self):
+        return None
+
+    def create_signed_value(self, _name, value):
+        return value
+
+    def set_header(self, name, value):
+        self.headers[name] = value
+
+    def json(self, payload, status=200):
+        self.answers.append((payload, status))
+
+
+class ApiCaptchaGateTest(unittest.TestCase):
+    """The captcha gate of the JSON login endpoint, which has no page."""
+
+    def setUp(self):
+        VALIDATED_LOGINS.clear()
+
+    def test_a_token_login_is_not_challenged_over_the_threshold(self):
+        # The endpoint answers JSON and never renders a widget, so a script
+        # presenting an admin token could not answer a challenge however many
+        # times it tried.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertTrue(handler._may_examine_password(CONTESTANT, "admin-token"))
+        self.assertEqual(handler.answers, [])
+
+    def test_a_login_without_a_token_is_still_challenged_over_the_threshold(self):
+        # The exemption is for the token alone: a browser or a script that
+        # presents none is taxed exactly as before.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+        self.assertEqual(handler.answers,
+                         [(refusal.CHALLENGE_FAILED.body(), 403)])
+
+    def test_a_login_below_the_threshold_never_reaches_the_provider(self):
+        # is_required() is the single authority on whether a captcha is
+        # demanded, so an untaxed attempt must not be verified at all.
+        def refuse(*_args):
+            raise AssertionError("the provider was reached below the threshold")
+
+        subject = configured(verify=refuse)
+        handler = ApiLoginHandler(subject)
+
+        self.assertTrue(handler._may_examine_password(CONTESTANT, ""))
+        self.assertEqual(handler.answers, [])
+
+    def test_an_exempted_token_still_reaches_validate_login(self):
+        # The exemption waives the challenge, not the credential check: the
+        # token is handed on to be validated, so one that is invalid fails as an
+        # ordinary rejected login rather than authenticating anyone.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject, {
+            "username": CONTESTANT, "password": "",
+            "admin_token": "admin-token"})
+
+        handler.post()
+
+        self.assertEqual(len(VALIDATED_LOGINS), 1)
+        self.assertEqual(VALIDATED_LOGINS[0][1]["admin_token"], "admin-token")
+        self.assertEqual(handler.answers, [(refusal.CREDENTIALS.body(), 403)])
+
+
+class RefusalTableTest(unittest.TestCase):
+    """The one table every login surface refuses through."""
+
+    def test_every_outcome_that_is_not_allowed_is_mapped(self):
+        # A member added to CaptchaOutcome later has to refuse the attempt, so
+        # the table is asserted to be as complete as the enum.
+        self.assertEqual(set(refusal.OUTCOME_REFUSALS),
+                         set(captcha.CaptchaOutcome)
+                         - {captcha.CaptchaOutcome.ALLOWED})
+
+    def test_an_allowed_outcome_is_not_a_refusal(self):
+        self.assertIsNone(refusal.refusal_for_outcome(captcha.CaptchaOutcome.ALLOWED))
+
+    def test_the_credential_refusal_stays_generic(self):
+        # The message must not tell a caller whether the account exists.
+        self.assertEqual(refusal.CREDENTIALS.message, "Login failed")
+
+    def test_a_captcha_refusal_answers_its_own_status(self):
+        self.assertEqual(refusal.CHALLENGE_FAILED.status, 403)
+        self.assertEqual(refusal.UNAVAILABLE.status, 503)
+
+    def test_registration_refuses_a_challenge_with_its_own_status(self):
+        # The register form spends 403 on "the password is not correct" and its
+        # script tells the two apart by the status alone, so a refused challenge
+        # cannot reuse it.
+        self.assertEqual(
+            refusal.registration_refusal(
+                captcha.CaptchaOutcome.CHALLENGE_FAILED).status,
+            refusal.LOCKED_STATUS)
+        self.assertEqual(
+            refusal.registration_refusal(
+                captcha.CaptchaOutcome.PROVIDER_UNREACHABLE).status, 503)
+
+    def test_a_lockout_states_the_measured_wait(self):
+        self.assertEqual(refusal.locked_refusal(42).retry_after, 42)
+
+    def test_an_unmeasured_wait_reports_the_whole_window(self):
+        # Reporting zero would tell a locked-out client to retry at once.
+        self.assertEqual(refusal.locked_refusal(0).retry_after,
+                         counters.FAILURE_WINDOW)
+
+
+class CounterWaitTest(unittest.TestCase):
+    """The counters can state how long a lockout still holds."""
+
+    def test_a_live_count_reports_the_window_left(self):
+        clock = ManualClock()
+        subject = captcha.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        subject.record_failure("admin", REMOTE_IP)
+        clock.advance(60)
+
+        self.assertAlmostEqual(subject.retry_after("admin", REMOTE_IP),
+                               counters.FAILURE_WINDOW - 60, places=3)
+
+    def test_an_address_count_alone_still_reports_a_wait(self):
+        # The address bucket is the one that holds when usernames rotate.
+        clock = ManualClock()
+        subject = captcha.LoginFailureCounters(
+            backend=backend.InProcessBackend(clock=clock))
+        subject.record_failure("someone", REMOTE_IP)
+        clock.advance(30)
+
+        self.assertAlmostEqual(subject.retry_after("nobody", REMOTE_IP),
+                               counters.FAILURE_WINDOW - 30, places=3)
+
+    def test_no_count_reports_no_wait(self):
+        self.assertEqual(captcha.LoginFailureCounters().retry_after(
+            "admin", REMOTE_IP), 0.0)
+
+
+class ApiRefusalTest(unittest.TestCase):
+    """Which outcomes are charged, and what each one answers."""
+
+    def test_a_rejected_challenge_is_not_charged(self):
+        # A token the provider refused says nothing about the password, so
+        # charging it climbs a ratchet the attempt never earned.
+        subject = _over_threshold()
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP),
+                         OVER_CAPTCHA_THRESHOLD)
+        self.assertEqual(handler.answers[0][1], refusal.CHALLENGE_FAILED.status)
+        self.assertEqual(handler.answers[0][0]["reason"],
+                         refusal.CHALLENGE_FAILED.reason)
+
+    def test_an_unreachable_provider_is_not_charged(self):
+        def unreachable(*_args):
+            raise captcha.ProviderUnreachable("turnstile")
+
+        subject = configured(verify=unreachable)
+        for _ in range(OVER_CAPTCHA_THRESHOLD):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP),
+                         OVER_CAPTCHA_THRESHOLD)
+        self.assertEqual(handler.answers, [(refusal.UNAVAILABLE.body(), 503)])
+
+    def test_a_wrong_password_is_still_charged_and_stays_generic(self):
+        subject = configured()
+        handler = ApiLoginHandler(subject)
+
+        handler._answer_login_result(CONTESTANT, None, None)
+
+        self.assertEqual(subject.counters.count(CONTESTANT, REMOTE_IP), 1)
+        self.assertEqual(handler.answers, [(refusal.CREDENTIALS.body(), 403)])
+
+    def test_a_lockout_answers_its_reason_and_its_wait(self):
+        subject = configured(ban_threshold=5)
+        for _ in range(5):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        payload, status = handler.answers[0]
+        self.assertEqual(status, refusal.LOCKED_STATUS)
+        self.assertEqual(payload["reason"], refusal.LOCKED_REASON)
+        self.assertGreater(payload["retry_after_seconds"], 0)
+        self.assertEqual(handler.headers["Retry-After"],
+                         str(payload["retry_after_seconds"]))
+
+    def test_a_locked_account_hears_about_the_lockout_not_the_challenge(self):
+        # Answering "challenge failed" sends a locked-out user to fix a captcha
+        # that is not what refused them, and calls the provider for nothing.
+        called = []
+
+        def refuse(*_args):
+            called.append(True)
+            return False
+
+        subject = configured(ban_threshold=5, verify=refuse)
+        for _ in range(5):
+            subject.record_failure(CONTESTANT, REMOTE_IP)
+        handler = ApiLoginHandler(subject)
+
+        self.assertFalse(handler._may_examine_password(CONTESTANT, ""))
+
+        self.assertEqual(called, [])
+        self.assertEqual(handler.answers[0][1], refusal.LOCKED_STATUS)
+
+
+class LoginPageRefusalTest(unittest.TestCase):
+    """The login pages name a challenge refusal instead of blaming the password."""
+
+    def _contest_page(self, reason: str) -> str:
+        facts = _login_page_facts(configured().render_params("", REMOTE_IP))
+        facts["handler"] = Attributes(
+            get_argument=lambda name, default="":
+            reason if name == "login_error" else default)
+        return _render("contest.html", facts)
+
+    def _admin_page(self, reason: str) -> str:
+        return _render_admin_login(
+            configured(enabled=False).render_params("", REMOTE_IP),
+            handler=Attributes(
+                get_argument=lambda name, default="":
+                reason if name == "login_error" else default))
+
+    def test_a_challenge_refusal_is_named_on_both_pages(self):
+        # Every captcha reason in the table has to reach a branch that says so,
+        # or the page blames the password for a challenge that never registered.
+        for outcome in captcha.CaptchaOutcome:
+            refusal_for = refusal.refusal_for_outcome(outcome)
+            if refusal_for is None:
+                continue
+            for page in (self._contest_page(refusal_for.reason),
+                         self._admin_page(refusal_for.reason)):
+                with self.subTest(reason=refusal_for.reason):
+                    self.assertIn("The challenge", page)
+                    self.assertNotIn("Failed to log in.", page)
+
+    def test_a_credential_failure_still_reads_as_one(self):
+        self.assertIn("Failed to log in.", self._contest_page("credentials"))
+        self.assertIn("Failed to log in.", self._admin_page("credentials"))
+
+
+class _AttemptRecordingBackend:
+    """A backend that counts in a dict and keeps the attempts it is handed."""
+
+    def __init__(self):
+        self.buckets: dict = {}
+        self.attempts: list = []
+
+    def read(self, key):
+        return self.buckets.get(key)
+
+    def write(self, key, count, expires_in):
+        self.buckets[key] = (count, expires_in)
+
+    def delete(self, keys):
+        for key in keys:
+            self.buckets.pop(key, None)
+
+    def keys(self):
+        return list(self.buckets)
+
+    def clear(self):
+        self.buckets.clear()
+
+    def record_attempt(self, key, entry, window):
+        self.attempts.append((key, entry))
+
+
+class AttemptLogTest(unittest.TestCase):
+    """One failure appends its attempt to each family's list, keyed to the counter."""
+
+    def test_a_failure_appends_the_attempt_to_both_families(self):
+        subject = counters.LoginFailureCounters(_AttemptRecordingBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua="pytest-agent")
+
+        subject.record_failure(CONTESTANT, REMOTE_IP, context)
+
+        logged = subject._backend.attempts
+        self.assertEqual([key for key, _ in logged],
+                         [f"{CONTESTANT}|{REMOTE_IP}", f"ip#{REMOTE_IP}"])
+        entry = json.loads(logged[0][1])
+        self.assertEqual(entry["surfaceKey"], "contest")
+        self.assertEqual(entry["ip"], REMOTE_IP)
+        self.assertEqual(entry["path"], "/login/")
+        self.assertEqual(entry["ua"], "pytest-agent")
+        self.assertIsInstance(entry["at"], int)
+
+    def test_a_loopback_client_logs_only_the_account_family(self):
+        subject = counters.LoginFailureCounters(_AttemptRecordingBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua=None)
+
+        subject.record_failure(CONTESTANT, "127.0.0.1", context)
+
+        self.assertEqual([key for key, _ in subject._backend.attempts],
+                         [f"{CONTESTANT}|127.0.0.1"])
+
+    def test_a_backend_without_attempts_still_counts(self):
+        subject = counters.LoginFailureCounters(backend.InProcessBackend())
+        context = counters.LoginAttemptContext(
+            surface_key="contest", path="/login/", ua=None)
+
+        subject.record_failure(CONTESTANT, REMOTE_IP, context)
+
+        self.assertEqual(subject.count(CONTESTANT, REMOTE_IP), 1)
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

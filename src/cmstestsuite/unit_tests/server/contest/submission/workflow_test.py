@@ -24,7 +24,7 @@ from unittest.mock import MagicMock, PropertyMock, patch, sentinel, ANY
 from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
 
 from cms import config
-from cms.db import Submission, UserTest
+from cms.db import ContestTask, Submission, UserTest
 from cms.server.contest.submission import InvalidArchive, \
     InvalidFilesOrLanguage, StorageFailed, UnacceptableSubmission, \
     accept_submission, TestingNotAllowed, UnacceptableUserTest, accept_user_test
@@ -72,8 +72,10 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.participation = self.add_participation(
             contest=self.contest)
         self.task = self.add_task(
-            submission_format=["foo.%l", "bar.%l", "baz.%l"],
-            contest=self.contest)
+            submission_format=["foo.%l", "bar.%l", "baz.%l"])
+        self.session.add(ContestTask(contest=self.contest, task=self.task,
+                                     num=0))
+        self.session.flush()
         self.dataset = self.add_dataset(
             task=self.task)
         self.task.active_dataset = self.dataset
@@ -181,14 +183,14 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
                               (bytes_digest(b) for b in files.values()))
         self.assertIs(submission.official, official)
 
-    def test_success(self):
+    def test_it_accepts_a_valid_submission(self):
         submission = self.call()
 
         self.assertSubmissionIsValid(
             submission, self.timestamp, "MockLanguage",
             {"foo.%l": FOO_CONTENT, "bar.%l": BAR_CONTENT}, True)
 
-    def test_success_all_languages_allowed(self):
+    def test_it_accepts_a_submission_when_all_languages_are_allowed(self):
         self.contest.languages = None
 
         submission = self.call()
@@ -197,7 +199,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             submission, self.timestamp, "MockLanguage",
             {"foo.%l": FOO_CONTENT, "bar.%l": BAR_CONTENT}, True)
 
-    def test_success_language_agnostic(self):
+    def test_it_accepts_a_language_agnostic_submission(self):
         self.task.submission_format = ["foo", "bar", "baz"]
         self.files = {"foo": FOO_CONTENT}
         self.language = None
@@ -209,7 +211,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             submission, self.timestamp, None,
             {"foo": FOO_CONTENT, "bar": BAR_CONTENT}, True)
 
-    def test_success_unofficial(self):
+    def test_it_accepts_an_unofficial_submission(self):
         self.official = False
 
         submission = self.call()
@@ -218,7 +220,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             submission, self.timestamp, "MockLanguage",
             {"foo.%l": FOO_CONTENT, "bar.%l": BAR_CONTENT}, False)
 
-    def test_failure_due_to_max_number_on_contest(self):
+    def test_it_rejects_a_submission_over_the_contest_limit(self):
         max_number = unique_long_id()
         self.contest.max_submission_number = max_number
         # False only when we ask for contest.
@@ -231,7 +233,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.check_max_number.assert_called_with(
             self.session, max_number, self.participation, contest=self.contest)
 
-    def test_failure_due_to_max_number_on_task(self):
+    def test_it_rejects_a_submission_over_the_task_limit(self):
         max_number = unique_long_id()
         self.task.max_submission_number = max_number
         # False only when we ask for task.
@@ -244,7 +246,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.check_max_number.assert_called_with(
             self.session, max_number, self.participation, task=self.task)
 
-    def test_failure_due_to_min_interval_on_contest(self):
+    def test_it_rejects_a_submission_before_the_contest_interval(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.contest.min_submission_interval = min_interval
         # False only when we ask for contest.
@@ -259,7 +261,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             self.session, min_interval, self.timestamp, self.participation,
             contest=self.contest)
 
-    def test_success_with_min_interval_on_contest_in_last_minutes(self):
+    def test_it_accepts_a_submission_in_the_grace_period_of_the_contest(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.contest.min_submission_interval = min_interval
         # False only when we ask for contest.
@@ -272,7 +274,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.is_last_minutes.assert_called_with(
             self.timestamp, self.participation)
 
-    def test_failure_due_to_min_interval_on_task(self):
+    def test_it_rejects_a_submission_before_the_task_interval(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.task.min_submission_interval = min_interval
         # False only when we ask for task.
@@ -287,7 +289,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             self.session, min_interval, self.timestamp, self.participation,
             task=self.task)
 
-    def test_success_with_min_interval_on_task_in_last_minutes(self):
+    def test_it_accepts_a_submission_in_the_grace_period_of_the_task(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.task.min_submission_interval = min_interval
         # False only when we ask for task.
@@ -300,7 +302,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
         self.is_last_minutes.assert_called_with(
             self.timestamp, self.participation)
 
-    def test_failure_due_to_extract_files_from_tornado(self):
+    def test_it_rejects_an_invalid_archive(self):
         self.extract_files_from_tornado.side_effect = InvalidArchive
 
         with self.assertRaisesRegex(UnacceptableSubmission, "archive"):
@@ -308,7 +310,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
 
         self.extract_files_from_tornado.assert_called_with(self.tornado_files, ANY, ANY)
 
-    def test_failure_due_to_match_files_and_language(self):
+    def test_it_rejects_files_that_do_not_match(self):
         self.match_files_and_language.side_effect = InvalidFilesOrLanguage
 
         with self.assertRaisesRegex(UnacceptableSubmission, "file"):
@@ -319,7 +321,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             {"foo.%l", "bar.%l", "baz.%l"},
             ["MockLanguage", "AnotherMockLanguage"])
 
-    def test_failure_due_to_missing_files(self):
+    def test_it_rejects_a_partial_submission_when_partials_are_disallowed(self):
         self.task_type.ALLOW_PARTIAL_SUBMISSION = False
 
         with self.assertRaisesRegex(UnacceptableSubmission, "file"):
@@ -327,7 +329,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
 
         self.fetch_file_digests_from_previous_submission.assert_not_called()
 
-    def test_success_without_missing_files(self):
+    def test_it_accepts_a_complete_submission_when_partials_are_disallowed(self):
         self.task_type.ALLOW_PARTIAL_SUBMISSION = False
         # Ensure all codenames of the submission format are provided.
         self.files["bar.%l"] = BAR_CONTENT
@@ -341,7 +343,17 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
              "baz.%l": BAZ_CONTENT}, True)
         self.fetch_file_digests_from_previous_submission.assert_not_called()
 
-    def test_failure_due_to_files_too_large(self):
+    def test_it_rejects_a_submission_without_an_active_dataset(self):
+        self.task_type.ALLOW_PARTIAL_SUBMISSION = False
+        # Ensure all codenames of the submission format are provided.
+        self.files["bar.%l"] = BAR_CONTENT
+        self.files["baz.%l"] = BAZ_CONTENT
+        self.task.active_dataset = None
+
+        with self.assertRaises(UnacceptableSubmission):
+            self.call()
+
+    def test_it_rejects_files_over_the_maximum_length(self):
         self.files["foo.%l"] = FOO_CONTENT * 100
         max_size = len(FOO_CONTENT) * 100 - 1
 
@@ -350,7 +362,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
                                         "%d" % max_size):
                 self.call()
 
-    def test_success_without_store_local_copy(self):
+    def test_it_accepts_a_submission_without_storing_a_local_copy(self):
         with patch.object(config.contest_web_server, "submit_local_copy", False):
             submission = self.call()
 
@@ -359,7 +371,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             {"foo.%l": FOO_CONTENT, "bar.%l": BAR_CONTENT}, True)
         self.store_local_copy.assert_not_called()
 
-    def test_success_even_with_store_local_copy_failure(self):
+    def test_it_accepts_a_submission_even_when_storing_the_copy_fails(self):
         self.store_local_copy.side_effect = StorageFailed
 
         submission = self.call()
@@ -371,7 +383,7 @@ class TestAcceptSubmission(DatabaseMixin, unittest.TestCase):
             self.submit_local_copy_path, self.participation, self.task,
             self.timestamp, self.files)
 
-    def test_failure_due_to_file_cacher(self):
+    def test_it_rejects_a_submission_when_storage_fails(self):
         self.file_cacher.put_file_content.side_effect = Exception
 
         with self.assertRaisesRegex(UnacceptableSubmission, "storage"):
@@ -406,8 +418,10 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
         self.participation = self.add_participation(
             contest=self.contest)
         self.task = self.add_task(
-            submission_format=["foo.%l", "bar.%l", "baz.%l"],
-            contest=self.contest)
+            submission_format=["foo.%l", "bar.%l", "baz.%l"])
+        self.session.add(ContestTask(contest=self.contest, task=self.task,
+                                     num=0))
+        self.session.flush()
         self.dataset = self.add_dataset(
             task=self.task)
         self.task.active_dataset = self.dataset
@@ -517,7 +531,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
         self.assertEqual(user_test.input,
                          bytes_digest(input_) if input_ is not None else None)
 
-    def test_success(self):
+    def test_it_accepts_a_valid_user_test(self):
         user_test = self.call()
 
         self.assertUserTestIsValid(
@@ -526,7 +540,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             {"spammock.1": SPAM_CONTENT, "hammock.1": HAM_CONTENT},
             INPUT_CONTENT)
 
-    def test_success_all_languages_allowed(self):
+    def test_it_accepts_a_user_test_when_all_languages_are_allowed(self):
         self.contest.languages = None
 
         user_test = self.call()
@@ -537,7 +551,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             {"spammock.1": SPAM_CONTENT, "hammock.1": HAM_CONTENT},
             INPUT_CONTENT)
 
-    def test_success_language_agnostic(self):
+    def test_it_accepts_a_language_agnostic_user_test(self):
         self.task.submission_format = ["foo", "bar", "baz"]
         self.task_type.get_user_managers.return_value = ["spam", "ham", "eggs"]
         self.files = {"foo": FOO_CONTENT, "spam": SPAM_CONTENT,
@@ -554,7 +568,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             {"spam": SPAM_CONTENT, "ham": HAM_CONTENT},
             INPUT_CONTENT)
 
-    def test_input_filled_in_from_previous_test(self):
+    def test_it_fills_the_input_from_the_previous_user_test(self):
         del self.files["input"]
         self.digests["input"] = bytes_digest(INPUT_CONTENT)
 
@@ -566,19 +580,25 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             {"spammock.1": SPAM_CONTENT, "hammock.1": HAM_CONTENT},
             INPUT_CONTENT)
 
-    def test_input_not_provided(self):
+    def test_it_rejects_a_user_test_without_an_input(self):
         del self.files["input"]
 
         with self.assertRaisesRegex(UnacceptableUserTest, "file"):
             self.call()
 
-    def test_non_testable(self):
+    def test_it_rejects_a_user_test_when_testing_is_not_allowed(self):
         self.task_type.testable = False
 
         with self.assertRaises(TestingNotAllowed):
             self.call()
 
-    def test_failure_due_to_max_number_on_contest(self):
+    def test_it_rejects_a_user_test_without_an_active_dataset(self):
+        self.task.active_dataset = None
+
+        with self.assertRaises(TestingNotAllowed):
+            self.call()
+
+    def test_it_rejects_a_user_test_over_the_contest_limit(self):
         max_number = unique_long_id()
         self.contest.max_user_test_number = max_number
         # False only when we ask for contest.
@@ -592,7 +612,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             self.session, max_number, self.participation, contest=self.contest,
             cls=UserTest)
 
-    def test_failure_due_to_max_number_on_task(self):
+    def test_it_rejects_a_user_test_over_the_task_limit(self):
         max_number = unique_long_id()
         self.task.max_user_test_number = max_number
         # False only when we ask for task.
@@ -606,7 +626,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             self.session, max_number, self.participation, task=self.task,
             cls=UserTest)
 
-    def test_failure_due_to_min_interval_on_contest(self):
+    def test_it_rejects_a_user_test_before_the_contest_interval(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.contest.min_user_test_interval = min_interval
         # False only when we ask for contest.
@@ -621,7 +641,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             self.session, min_interval, self.timestamp, self.participation,
             contest=self.contest, cls=UserTest)
 
-    def test_failure_due_to_min_interval_on_task(self):
+    def test_it_rejects_a_user_test_before_the_task_interval(self):
         min_interval = timedelta(seconds=unique_long_id())
         self.task.min_user_test_interval = min_interval
         # False only when we ask for task.
@@ -636,7 +656,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             self.session, min_interval, self.timestamp, self.participation,
             task=self.task, cls=UserTest)
 
-    def test_failure_due_to_extract_files_from_tornado(self):
+    def test_it_rejects_a_user_test_with_an_invalid_archive(self):
         self.extract_files_from_tornado.side_effect = InvalidArchive
 
         with self.assertRaisesRegex(UnacceptableUserTest, "archive"):
@@ -644,7 +664,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
 
         self.extract_files_from_tornado.assert_called_with(self.tornado_files, ANY, ANY)
 
-    def test_failure_due_to_match_files_and_language(self):
+    def test_it_rejects_user_test_files_that_do_not_match(self):
         self.match_files_and_language.side_effect = InvalidFilesOrLanguage
 
         with self.assertRaisesRegex(UnacceptableUserTest, "file"):
@@ -656,7 +676,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
              "input"},
             ["MockLanguage", "AnotherMockLanguage"])
 
-    def test_success_without_missing_files(self):
+    def test_it_accepts_a_complete_user_test_when_partials_are_disallowed(self):
         self.task_type.ALLOW_PARTIAL_SUBMISSION = False
         # Ensure all codenames of the submission format are provided.
         self.files["bar.%l"] = BAR_CONTENT
@@ -675,7 +695,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             INPUT_CONTENT)
         self.fetch_file_digests_from_previous_submission.assert_not_called()
 
-    def test_failure_due_to_missing_files(self):
+    def test_it_rejects_a_partial_user_test_when_partials_are_disallowed(self):
         self.task_type.ALLOW_PARTIAL_SUBMISSION = False
 
         with self.assertRaisesRegex(UnacceptableUserTest, "file"):
@@ -683,7 +703,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
 
         self.fetch_file_digests_from_previous_submission.assert_not_called()
 
-    def test_failure_due_to_files_too_large(self):
+    def test_it_rejects_user_test_files_over_the_maximum_length(self):
         self.files["foo.%l"] = FOO_CONTENT * 100
         max_size = len(FOO_CONTENT) * 100 - 1
 
@@ -691,7 +711,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             with self.assertRaisesRegex(UnacceptableUserTest, "%d" % max_size):
                 self.call()
 
-    def test_failure_due_to_managers_too_large(self):
+    def test_it_rejects_user_test_managers_over_the_maximum_length(self):
         self.files["spam.%l"] = SPAM_CONTENT * 100
         max_size = len(SPAM_CONTENT) * 100 - 1
 
@@ -699,7 +719,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             with self.assertRaisesRegex(UnacceptableUserTest, "%d" % max_size):
                 self.call()
 
-    def test_failure_due_to_input_too_large(self):
+    def test_it_rejects_a_user_test_input_over_the_maximum_length(self):
         self.files["input"] = INPUT_CONTENT * 100
         max_size = len(INPUT_CONTENT) * 100 - 1
 
@@ -707,7 +727,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             with self.assertRaisesRegex(UnacceptableUserTest, "%d" % max_size):
                 self.call()
 
-    def test_success_without_store_local_copy(self):
+    def test_it_accepts_a_user_test_without_storing_a_local_copy(self):
         with patch.object(config.contest_web_server, "tests_local_copy", False):
             user_test = self.call()
 
@@ -718,7 +738,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             INPUT_CONTENT)
         self.store_local_copy.assert_not_called()
 
-    def test_success_even_with_store_local_copy_failure(self):
+    def test_it_accepts_a_user_test_even_when_storing_the_copy_fails(self):
         self.store_local_copy.side_effect = StorageFailed
 
         user_test = self.call()
@@ -732,7 +752,7 @@ class TestAcceptUserTest(DatabaseMixin, unittest.TestCase):
             self.tests_local_copy_path, self.participation, self.task,
             self.timestamp, self.files)
 
-    def test_failure_due_to_file_cacher(self):
+    def test_it_rejects_a_user_test_when_storage_fails(self):
         self.file_cacher.put_file_content.side_effect = Exception
 
         with self.assertRaisesRegex(UnacceptableUserTest, "storage"):

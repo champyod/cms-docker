@@ -1,18 +1,19 @@
 import { getContests } from '@/app/actions/contests';
 import { ContestList } from '@/components/contests/ContestList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
+import { PageSurface } from '@/components/core/PageSurface';
 import { getDictionary } from '@/i18n';
+import { readListSort } from '@/lib/list-sorting';
+import { checkPermission, getPermissions } from '@/lib/permissions';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { notFound } from 'next/navigation';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
 
 export default async function ContestsPage({
   params,
   searchParams,
 }: {
     params: Promise<{ locale: string }>;
-    searchParams: Promise<{ page?: string; search?: string }>;
-}) {
+    searchParams: Promise<{ page?: string; search?: string; sort?: string; dir?: string }>;
+}): Promise<React.JSX.Element> {
   const { locale } = await params;
   const dict = await getDictionary(locale);
   const hasPermission = await checkPermission('contest:list', false);
@@ -26,17 +27,17 @@ export default async function ContestsPage({
   const sParams = await searchParams;
   const page = Number(sParams.page) || 1;
   const search = sParams.search || '';
+  const sort = readListSort({ sort: sParams.sort, dir: sParams.dir });
 
-  const { contests, totalPages } = await getContests({ page, search });
+  const { contests, totalPages } = await getContests({ page, search, sort });
 
   return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.contests.title}</Text>
-        <Text variant="muted">{dict.contests.subtitle}</Text>
-      </Stack>
-
-      <ContestList initialContests={contests} totalPages={totalPages} permissionKeys={Array.from(permissions)} />
-    </Stack>
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'contests.list', dict)}
+      title={dict.contests.title}
+      description={dict.contests.subtitle}
+    >
+      <ContestList initialContests={contests} totalPages={totalPages} permissionKeys={Array.from(permissions)} initialSort={sort} />
+    </PageSurface>
   );
 }

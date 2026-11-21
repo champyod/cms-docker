@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block core %}
+
+<div class="core_title">
+  <h1>Credits</h1>
+</div>
+
+<div id="details">
+  {# The byline the scoreboard sidebar carries, spelled out with the upstream
+     name: contributors lead this page, and the licence offer is a footnote. #}
+  <p class="credits-byline">
+    {{ credits.project.name }}{% if credits.project.author %} by {{ credits.project.author }}{% endif %}
+    {%- for line in credits_surface.attribution %} &middot; {{ line.text }}{% endfor %}
+  </p>
+
+  <h2>Contributors</h2>
+
+  <table class="bordered">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Contribution</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if credits.project.author %}
+      <tr>
+        <td><a href="{{ credits.project.url }}" rel="author noreferrer" target="_blank">{{ credits.project.author }}</a></td>
+        <td>Maintainer of this project</td>
+      </tr>
+      {% endif %}
+      {% if credits.project.upstream %}
+      <tr>
+        <td><a href="{{ credits.project.upstream.url }}" rel="author noreferrer" target="_blank">{{ credits.project.upstream.name }}</a></td>
+        <td>Upstream project this forks</td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  <h2>Components</h2>
+
+  <table class="bordered">
+    <thead>
+      <tr>
+        <th>Software</th>
+        <th>Holder</th>
+        <th>Licence</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for asset in credits_surface.assets %}
+      <tr>
+        <td>{{ asset.name }}</td>
+        <td>{{ asset.holder }}</td>
+        <td>
+          {% if asset.license_urls %}
+          <a href="{{ asset.license_urls[0] }}" rel="license noreferrer" target="_blank">{{ asset.license_id }}</a>
+          {% else %}
+          {{ asset.license_id }}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p class="credits-licence">
+    {{ credits.project.name }} is released under the
+    <a href="{{ credits.license.url }}" rel="license noreferrer" target="_blank">{{ credits.license.name }}</a>
+    (<code>{{ credits.license.spdx_id }}</code>). Corresponding source:
+    <a href="{{ config.global_.source_url }}" rel="license noreferrer" target="_blank">{{ config.global_.source_url }}</a>.
+  </p>
+</div>
+
+{% endblock core %}

@@ -1,13 +1,19 @@
 import { Sidebar, SIDEBAR_STORAGE_KEY } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Header } from "@/components/layout/Header";
-import { getSession, refreshSession } from "@/lib/auth";
+import { getSession, readSessionStatus } from "@/lib/auth";
 import { getFreshPermissions } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { PageBackground } from "@/components/core/PageBackground";
 import { Stack } from "@/components/core/Layout";
 import { ShortcutLayer } from "@/components/layout/ShortcutOverlay";
+import { MAIN_SCROLL_CONTAINER_ID, ScrollReset } from "@/components/layout/ScrollReset";
+import { DeployContestProvider } from "@/components/providers/DeployContestProvider";
+import { DictionaryProvider } from "@/components/providers/DictionaryProvider";
+import { ConfirmProvider } from "@/components/providers/ConfirmProvider";
+import { LiveNotificationProvider } from "@/lib/live/notifications";
+import { getDictionary } from "@/i18n";
 
 export default async function AuthenticatedLayout({
   children,
@@ -25,35 +31,57 @@ export default async function AuthenticatedLayout({
     redirect(`/${locale}/auth/login`);
   }
 
-  // Why: refresh validates session liveness and clears cookie if disabled; failure means timeout so redirect once
-  const refreshedSessionToken = await refreshSession(session);
-  if (!refreshedSessionToken) {
+  // Why: once the session is known these four are independent — status, the sidebar
+  // cookie, the dictionary and the fresh permissions — so they resolve in one
+  // round-trip instead of a serial chain per request.
+  const [sessionStatus, cookieStore, dict, freshPermissions] = await Promise.all([
+    readSessionStatus(session.userId),
+    cookies(),
+    getDictionary(locale),
+    getFreshPermissions(session.userId),
+  ]);
+
+  // Why: liveness is read-only here because rendering cannot write cookies; the session
+  // slide and the disabled-admin clear happen on the proxy response. Anything but active
+  // means timeout or revoked, so redirect once.
+  if (sessionStatus.state !== "active") {
     redirect(`/${locale}/auth/login`);
   }
 
-  const sidebarExpanded = (await cookies()).get(SIDEBAR_STORAGE_KEY)?.value !== '0';
+  const sidebarExpanded = cookieStore.get(SIDEBAR_STORAGE_KEY)?.value !== '0';
 
   // Why: Sidebar must reflect current database permissions not stale token claims
-  const freshPermissions = await getFreshPermissions(session.userId);
   const permissionKeys: readonly string[] = freshPermissions ? Array.from(freshPermissions) : [];
 
   return (
-    <PageBackground className="flex h-screen overflow-hidden">
-      <Sidebar
-        className="z-20 hidden md:flex"
-        locale={locale}
-        permissionKeys={permissionKeys}
-        initialExpanded={sidebarExpanded}
-      />
-      <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
-        <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
+    <DictionaryProvider dict={dict}>
+      <ConfirmProvider>
+        {/* Why the notification service wraps the whole shell rather than the header: the header and
+            the palette read the same service, and two providers would open the alert stream twice. */}
+        <LiveNotificationProvider permissionKeys={permissionKeys}>
+          <PageBackground className="flex h-screen overflow-hidden" data-authenticated-shell="true">
+            <Sidebar
+              className="z-20 hidden md:flex"
+              locale={locale}
+              permissionKeys={permissionKeys}
+              initialExpanded={sidebarExpanded}
+            />
+            <Stack as="main" className="flex-1 min-h-0 relative overflow-hidden" gap={0}>
+              {/* The provider wraps the header too, so the command palette shares the one deploy context. */}
+              <DeployContestProvider>
+                <Header className="z-10" username={session.username} permissionKeys={permissionKeys} />
 
-        <div className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
-          {children}
-        </div>
-      </Stack>
-      <MobileNav locale={locale} permissionKeys={permissionKeys} />
-      <ShortcutLayer />
-    </PageBackground>
+                <div id={MAIN_SCROLL_CONTAINER_ID} className="flex-1 overflow-y-auto p-4 pb-24 sm:p-6 sm:pb-24 lg:p-8 lg:pb-8 z-10 scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20">
+                  {children}
+                </div>
+                <ScrollReset containerId={MAIN_SCROLL_CONTAINER_ID} />
+              </DeployContestProvider>
+            </Stack>
+            <MobileNav locale={locale} permissionKeys={permissionKeys} />
+            <ShortcutLayer permissionKeys={permissionKeys} />
+          </PageBackground>
+        </LiveNotificationProvider>
+      </ConfirmProvider>
+    </DictionaryProvider>
   );
 }

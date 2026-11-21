@@ -4,6 +4,7 @@ import { useParticipationForm } from './participation-modal/useParticipationForm
 import { ParticipationFormFields } from './participation-modal/ParticipationFormFields';
 import { Dialog } from '@/components/core/Dialog';
 import { Button } from '@/components/core/Button';
+import { InlineAlert } from '@/components/core/InlineAlert';
 
 interface ParticipationModalProps {
   isOpen: boolean;
@@ -26,7 +27,7 @@ export function ParticipationModal({ isOpen, onClose, participationId, username,
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }} title="Participation Settings" description={username}>
-      {error && <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       {loading ? (
         <div className="p-8 text-center text-muted-foreground">Loading...</div>
       ) : (

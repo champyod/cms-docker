@@ -95,12 +95,12 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.task.token_max_number = max_number
         self.task.token_min_interval = timedelta(seconds=min_interval)
 
-    def test_infinite(self):
+    def test_it_returns_infinite_tokens_when_both_modes_are_infinite(self):
         self.set_contest_token_infinite()
         self.set_task_token_infinite()
         self.assertEqual(self.call(10), (-1, None, None))
 
-    def test_disabled(self):
+    def test_it_returns_no_tokens_when_either_mode_is_disabled(self):
         self.set_contest_token_infinite()
         self.set_task_token_disabled()
         self.assertEqual(self.call(10), (0, None, None))
@@ -109,7 +109,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.set_task_token_infinite()
         self.assertEqual(self.call(10), (0, None, None))
 
-    def test_finite_on_contest(self):
+    def test_it_regenerates_tokens_on_the_contest(self):
         self.set_contest_token_finite(initial=3, number=2, interval=4, max_=6)
         self.set_task_token_infinite()
 
@@ -123,7 +123,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.add_token_to_contest(9)
         self.assertEqual(self.call(10), (5, self.at(12), None))
 
-    def test_finite_on_task(self):
+    def test_it_regenerates_tokens_on_the_task(self):
         self.set_contest_token_infinite()
         self.set_task_token_finite(initial=3, number=2, interval=4, max_=6)
 
@@ -141,7 +141,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.add_token_to_contest(9)
         self.assertEqual(self.call(10), (5, self.at(12), None))
 
-    def test_finite_on_both(self):
+    def test_it_combines_contest_and_task_token_generation(self):
         self.set_contest_token_finite(initial=1, number=2, interval=5)
         self.set_task_token_finite(initial=2, number=1, interval=4, max_=5)
 
@@ -173,7 +173,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.assertEqual(self.call(103), (4, self.at(104), None))
         self.assertEqual(self.call(105), (5, None, None))
 
-    def test_constraints(self):
+    def test_it_applies_the_number_and_interval_constraints(self):
         self.set_contest_token_finite(initial=3, number=1, interval=2, max_=6)
         self.set_task_token_finite(initial=1, number=2, interval=2)
 
@@ -203,7 +203,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         # We played all the tokens we could on the contest.
         self.assertEqual(self.call(7), (0, None, None))
 
-    def test_constraints_have_no_effect_if_infinite(self):
+    def test_it_ignores_constraints_when_tokens_are_infinite(self):
         self.set_contest_token_infinite()
         self.set_task_token_infinite()
 
@@ -222,7 +222,7 @@ class TestTokensAvailable(DatabaseMixin, unittest.TestCase):
         self.set_contest_token_constraints(1, 10)
         self.assertEqual(self.call(10), (-1, None, None))
 
-    def test_usaco_like(self):
+    def test_it_starts_token_generation_at_the_user_start_time(self):
         self.contest.per_user_time = timedelta(seconds=100)
         self.participation.starting_time = self.at(1000)
 
@@ -261,32 +261,32 @@ class TestAcceptToken(DatabaseMixin, unittest.TestCase):
     def call(self):
         return accept_token(self.session, self.submission, self.timestamp)
 
-    def test_success_infinite_tokens(self):
+    def test_it_accepts_a_token_with_infinite_tokens(self):
         self.tokens_available.return_value = (-1, None, None)
         token = self.call()
         self.assertIsNotNone(token)
         self.assertIs(token.submission, self.submission)
         self.assertIs(token.timestamp, self.timestamp)
 
-    def test_success_finite_tokens(self):
+    def test_it_accepts_a_token_with_finite_tokens(self):
         self.tokens_available.return_value = (1, None, None)
         token = self.call()
         self.assertIsNotNone(token)
         self.assertIs(token.submission, self.submission)
         self.assertIs(token.timestamp, self.timestamp)
 
-    def test_failure_none_available(self):
+    def test_it_rejects_a_token_when_none_are_available(self):
         self.tokens_available.return_value = (0, None, None)
         with self.assertRaises(UnacceptableToken):
             self.call()
 
-    def test_failure_cooldown_in_effect(self):
+    def test_it_rejects_a_token_during_the_cooldown(self):
         self.tokens_available.return_value = \
             (1, None, self.timestamp + timedelta(seconds=1))
         with self.assertRaises(UnacceptableToken):
             self.call()
 
-    def test_double_use(self):
+    def test_it_rejects_a_token_that_was_already_played(self):
         # Infinite tokens.
         self.tokens_available.return_value = (-1, None, None)
         self.add_token(submission=self.submission,

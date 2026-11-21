@@ -1,7 +1,9 @@
 # Funnel mirror nginx config — envsubst template
 # Mirrors grader layout on Tailscale funnel ports with basic_auth wrappers.
 # Rendered by __domain.sh → config/funnel-mirror.nginx.conf
-# Render with: envsubst '$DOMAIN_NAME $CONTEST_LISTEN_PORT ...' < template > output
+# Render with: envsubst '$DOMAIN_NAME $CONTEST_LISTEN_PORT $ADMIN_LISTEN_PORT
+#   $RANKING_LISTEN_PORT $FUNNEL_* $PROXY_MAX_BODY_SIZE $ADMIN_PANEL_CONTAINER
+#   $ADMIN_NEXT_LISTEN_PORT' < template > output
 
 # Rate limit zones
 limit_req_zone $binary_remote_addr zone=funnel_login:10m rate=5r/s;
@@ -14,7 +16,10 @@ upstream funnel_cms_contest {
 }
 
 upstream funnel_cms_admin_panel {
-    server cms-admin-panel-next:3000;
+    # WHY no literal container: the panel runs as one of two colours and the swap records
+    # which is live. scripts/__admin_panel_target.sh is the one naming rule, and a render
+    # supplies both names from it.
+    server ${ADMIN_PANEL_CONTAINER}:${ADMIN_NEXT_LISTEN_PORT};
 }
 
 upstream funnel_cms_classic_admin {
@@ -27,7 +32,8 @@ upstream funnel_cms_ranking {
 
 # ── Funnel: Contest (port 8443) ──────────────────────────────────
 server {
-    listen ${FUNNEL_CONTEST_LISTEN} ssl http2;
+    listen ${FUNNEL_CONTEST_LISTEN} ssl;
+    http2 on;
     server_name _;
 
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN_NAME}/fullchain.pem;
@@ -38,7 +44,7 @@ server {
     auth_basic           "${FUNNEL_REALM}";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 
-    client_max_body_size 10M;
+    client_max_body_size ${PROXY_MAX_BODY_SIZE};
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;
@@ -95,15 +101,27 @@ server {
     auth_basic           "${FUNNEL_REALM}";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 
-    client_max_body_size 10M;
+    client_max_body_size ${PROXY_MAX_BODY_SIZE};
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;
     proxy_read_timeout 90;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    # WHY: this vhost fronts the admin panel, which keys its login rate limit on
+    # the address the nearest proxy asserted — the rightmost X-Forwarded-For hop,
+    # then X-Real-IP. Asserting $remote_addr hands it exactly one entry the caller
+    # never influenced, even with another proxy in front of this one.
+    proxy_set_header X-Forwarded-For $remote_addr;
     proxy_set_header X-Forwarded-Proto $scheme;
+
+    # The panel's long-lived endpoints: the shared SSE directives, from the one definition
+    # in scripts/__nginx_sse.sh, so ordinary requests keep the server-level timeout.
+    location ~ ^/${SSE_ENDPOINT_PATTERN} {
+${SSE_PROXY_DIRECTIVES}
+        proxy_pass http://funnel_cms_admin_panel;
+        proxy_redirect off;
+    }
 
     location / {
         proxy_pass http://funnel_cms_admin_panel;
@@ -127,7 +145,7 @@ server {
     auth_basic           "${FUNNEL_REALM}";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 
-    client_max_body_size 10M;
+    client_max_body_size ${PROXY_MAX_BODY_SIZE};
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;

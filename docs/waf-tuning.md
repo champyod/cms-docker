@@ -1,5 +1,7 @@
 # WAF Tuning Guide — OWASP ModSecurity CRS (Plan-First, Optional)
 
+> **Security module:** see `docs/SECURITY-MODULE.md` for the panel's security surface, its permission groups and the host agent that applies unbans and renewals.
+
 > WAF is **available but disabled by default** (`WAF_ENABLED=0`). It never replaces CAPTCHA — both can run together. This document explains tuning, price, wiring, and how to enable safely.
 
 ---
@@ -65,7 +67,9 @@ No vendor, no subscription.
 
 ## 7. Wiring (How WAF Sits in Front of Nginx)
 
-Default: **no wiring change**. With `WAF_ENABLED=0` (default), `grader-waf` is not started; host 80/443 stay on `grader-nginx-proxy`.
+Default: **no wiring change**. With `WAF_ENABLED=0` (default), `grader-waf` is not started; host 80/443 stay on `grader-nginx-proxy` — the compose service name in `docker-compose.domain.yml`, which also equals its container name.
+
+Not in this chain: the contest profile's proxy, service `nginx-proxy` / container `cms-nginx-contest` in `docker-compose.yml`. It is a separate service on its own profile and is never fronted by the WAF.
 
 When `WAF_ENABLED=1` + `--profile waf`:
 
@@ -81,7 +85,9 @@ Keep host 443 on `grader-nginx-proxy`; test via `curl http://127.0.0.1:8080/` th
 **Production option B — WAF fronts 443**:
 Set `WAF_PORT=443` and move `DOMAIN_NGINX_HTTPS_PORT` off 443 (e.g., 8443), or run a host LB in front. Only do this after DetectionOnly is clean. Document choice in your runbook; nothing forces it.
 
-**Alternative**: point `grader-nginx-proxy` BACKEND-style from WAF via `BACKEND=http://grader-nginx-proxy:80` (already wired). No nginx `upstream` change needed — nginx continues to terminate TLS.
+**Wiring for option B**: set `WAF_BACKEND=https://grader-nginx-proxy:8443` (or whatever port `DOMAIN_NGINX_HTTPS_PORT` moved to), then `WAF_PORT=443`, `WAF_BIND_IP=<host address>` and `DOMAIN_NGINX_HTTPS_PORT=8443`. TLS terminates at grader-waf and again at the proxy on its new port.
+
+Leaving `WAF_BACKEND` at `http://grader-nginx-proxy:80` once the proxy has moved to 8443 sends every request into the proxy's redirect-only `:80` vhost, which answers `301 https://$host` — straight back to the WAF, in a loop.
 
 ---
 
@@ -89,7 +95,7 @@ Set `WAF_PORT=443` and move `DOMAIN_NGINX_HTTPS_PORT` off 443 (e.g., 8443), or r
 
 WAF and CAPTCHA are **independent layers**:
 
-- **CAPTCHA (Upgrade-2)**: per-IP failed-login counter → challenge at threshold 3, ban at 5. Handles brute-force.
+- **CAPTCHA**: failed-login counter → challenge at threshold 3, lockout at 5. Handles brute-force. The counter is per account plus, on some deployment paths, per source address — see [LOGIN-CAPTCHA.md](LOGIN-CAPTCHA.md) for which paths get the per-source ban.
 - **WAF**: per-request payload scoring → blocks exploit payloads at any endpoint.
 - **Both on**: WAF score can tighten `limit_req` (e.g., map WAF `X-ModSec-Score` to a lower `limit_req` burst) but CAPTCHA still handles credential stuffing even if WAF whitelists `/login` payloads. WAF **does not** replace CAPTCHA; CAPTCHA stays active when `WAF_ENABLED=0` and also when `WAF_ENABLED=1`.
 - **Policy**: leave `CAPTCHA_ENABLED` as before; WAF enablement does not change CAPTCHA files or envs.

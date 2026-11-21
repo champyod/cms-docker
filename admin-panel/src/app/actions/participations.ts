@@ -3,16 +3,15 @@
 import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import { safeUserSelect } from '@/lib/prisma-selects';
 import { recordAudit } from '@/lib/audit';
 import {
   executeParticipationUpdate,
   parseIpAllowlist,
-  queryParticipationDetails,
-  type ParticipationDetails,
   type UpdateParticipationInput,
 } from './participation-sql';
+import { resyncRankingUsers } from '@/lib/ranking-projection';
 
 const PLAINTEXT_PREFIX = 'plaintext:';
 
@@ -21,25 +20,11 @@ interface ActionResult {
   error?: string;
 }
 
-export async function getParticipation(participationId: number) {
-  await ensurePermission('participation:read');
-  return prisma.participations.findUnique({
-    where: { id: participationId },
-    include: {
-      users: { select: safeUserSelect },
-      contests: true,
-      submissions: { orderBy: { timestamp: 'desc' }, take: 10 },
-      messages: { orderBy: { timestamp: 'desc' } },
-      questions: { orderBy: { question_timestamp: 'desc' } },
-    }
-  });
-}
-
 export async function updateParticipation(
   participationId: number,
   data: UpdateParticipationInput
 ): Promise<ActionResult> {
-  await ensurePermission('participation:update');
+  await ensurePermission(ACTION_PERMISSIONS.updateParticipation);
 
   try {
     const permissions = await getPermissions();
@@ -49,6 +34,12 @@ export async function updateParticipation(
     if (error) return { success: false, error };
 
     await executeParticipationUpdate(participationId, allowed, validIps);
+
+    const participation = await prisma.participations.findUnique({
+      where: { id: participationId },
+      select: { contest_id: true },
+    });
+    if (participation !== null) await resyncRankingUsers(participation.contest_id);
 
     {
       const { password: _password, passwordKind: _passwordKind, ip: _ip, ...restAllowed } = allowed as Record<string, unknown>;
@@ -74,7 +65,7 @@ export async function updateParticipation(
 }
 
 export async function setTestUser(participationId: number): Promise<ActionResult> {
-  await ensurePermission('participation:update');
+  await ensurePermission(ACTION_PERMISSIONS.setTestUser);
 
   try {
     const permissions = await getPermissions();
@@ -89,6 +80,11 @@ export async function setTestUser(participationId: number): Promise<ActionResult
         ...(allowed.unrestricted !== undefined && { unrestricted: allowed.unrestricted }),
       },
     });
+    const participation = await prisma.participations.findUnique({
+      where: { id: participationId },
+      select: { contest_id: true },
+    });
+    if (participation !== null) await resyncRankingUsers(participation.contest_id);
     await recordAudit({
       verb: 'participation:update',
       entity: 'participation',
@@ -109,6 +105,9 @@ async function resolveNewTeamUserIds(contestId: number, teamId: number): Promise
     select: { user_id: true },
   });
   const allUserIds = [...new Set(teamParticipations.map((p) => p.user_id))];
+  if (allUserIds.length === 0) {
+    return { allUserIds: [], newIds: [] };
+  }
 
   const existingParticipations = await prisma.participations.findMany({
     where: { contest_id: contestId, user_id: { in: allUserIds } },
@@ -143,12 +142,20 @@ export async function addTeamToContest(
     const hidden = allowed.hidden ?? false;
     const unrestricted = allowed.unrestricted ?? false;
 
-    for (const userId of newIds) {
-      await prisma.$executeRaw`
-        INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-        VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
-      `;
-    }
+    await prisma.$transaction(async (tx) => {
+      for (const userId of newIds) {
+        await tx.$executeRaw`
+          INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
+          VALUES (${contestId}, ${userId}, ${teamId}, ${hidden}, ${unrestricted}, '0 seconds'::interval, '0 seconds'::interval)
+          ON CONFLICT (contest_id, user_id) DO UPDATE
+          SET team_id = EXCLUDED.team_id,
+              hidden = EXCLUDED.hidden,
+              unrestricted = EXCLUDED.unrestricted
+        `;
+      }
+    });
+
+    await resyncRankingUsers(contestId);
 
     await recordAudit({
       verb: 'participation:create',
@@ -161,25 +168,6 @@ export async function addTeamToContest(
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
-}
-
-export async function getParticipationDetails(id: number): Promise<ParticipationDetails | null> {
-  await ensurePermission('participation:read');
-  const p = await queryParticipationDetails(id);
-  if (!p) return null;
-
-  return {
-    id: p.id,
-    contest_id: p.contest_id,
-    user_id: p.user_id,
-    team_id: p.team_id,
-    hidden: p.hidden,
-    unrestricted: p.unrestricted,
-    delay_time_seconds: p.delay_time_seconds || 0,
-    extra_time_seconds: p.extra_time_seconds || 0,
-    starting_time: p.starting_time ? new Date(p.starting_time).toISOString().slice(0, 16) : '',
-    ip_string: p.ip_string || '',
-  };
 }
 
 export async function revealParticipationPassword(participationId: number): Promise<
@@ -230,6 +218,7 @@ export async function sendMessage(participationId: number, adminId: number, data
   text: string;
 }): Promise<ActionResult> {
   await ensurePermission('message:send');
+  await ensurePermission('message:create');
 
   try {
     const message = await prisma.messages.create({
@@ -257,6 +246,7 @@ export async function sendMessage(participationId: number, adminId: number, data
 
 export async function getMessages(participationId: number) {
   await ensurePermission('message:list');
+  await ensurePermission('message:read');
   return prisma.messages.findMany({
     where: { participation_id: participationId },
     include: { admins: { select: { username: true } } },

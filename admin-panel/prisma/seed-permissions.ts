@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
+import { PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS, ROOT_ACTOR_GROUP_NAME } from '@/lib/permission-groups';
 
 interface SeedSummary {
   permissionsUpserted: number;
@@ -106,13 +108,49 @@ async function seed(): Promise<SeedSummary> {
         }
       }
 
+      // Why reconciled here and not through DEFAULT_GROUPS: the system actor's
+      // grant is every registry key, derived rather than spelled out, so a new
+      // key reaches it without a hand edit and findMissingPermissionKeys can
+      // never flag the group. Add-only, like the migration that seeded the row:
+      // the actor's links are attribution infrastructure, never pruned here.
+      const rootGroup = await tx.groups.upsert({
+        where: { name: ROOT_ACTOR_GROUP_NAME },
+        update: { is_seeded: true },
+        create: {
+          name: ROOT_ACTOR_GROUP_NAME,
+          description:
+            'System actor group: every permission in the registry, so script-side actions attribute to a fully privileged admin. Do not edit or delete.',
+          is_seeded: true,
+        },
+        select: { id: true },
+      });
+      const existingRootLinks = await tx.group_permissions.findMany({
+        where: { group_id: rootGroup.id },
+        select: { permission_id: true },
+      });
+      const rootMissingIds = [...permissionIdByKey.values()].filter(
+        (id) => !existingRootLinks.some((link) => link.permission_id === id),
+      );
+      if (rootMissingIds.length > 0) {
+        const added = await tx.group_permissions.createMany({
+          data: rootMissingIds.map((permission_id) => ({ group_id: rootGroup.id, permission_id })),
+        });
+        linksAdded += added.count;
+      }
+
       return { permissionsUpserted, groupsUpserted, linksAdded, linksRemoved };
     },
     { timeout: 120_000, maxWait: 15_000 },
   );
 }
 
-seed()
+// WHY the named identity: migration 20261025120000 puts FORCE RLS on every table, and FORCE
+// applies to the owner too — so the seed's own writes need an actor like any other statement.
+// Without it the first query reaches the request-scoped resolution, which imports
+// next/headers outside a request and dies with MODULE_NOT_FOUND: the seed failed that way on
+// the first production run, mid-migration, leaving admins holding groups that grant nothing.
+// `system:migration` is the identity the generator already trusts for schema work.
+withActor({ kind: 'system', name: SYSTEM_IDENTITIES.MIGRATION }, () => seed())
   .then((summary) => {
     console.log(
       `Seed complete: ${summary.permissionsUpserted} permissions upserted, ` +

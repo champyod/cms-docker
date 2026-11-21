@@ -1,9 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 
 interface BulkEditPreviewRow {
   id: number;
@@ -22,13 +23,6 @@ interface BulkEditPreviewTableProperties {
   onToggleRevealRow: (rowId: number) => void;
   onToggleAllRevealed: () => void;
   allRevealed: boolean;
-}
-
-interface MobilePreviewCardsProperties {
-  rows: BulkEditPreviewRow[];
-  revealedIds: number[];
-  revealingIds: number[];
-  onToggleRevealRow: (rowId: number) => void;
 }
 
 function passwordContent(row: BulkEditPreviewRow, revealed: boolean, revealing: boolean, onToggleRevealRow: (rowId: number) => void): React.JSX.Element {
@@ -63,20 +57,68 @@ function passwordContent(row: BulkEditPreviewRow, revealed: boolean, revealing: 
   );
 }
 
-function MobilePreviewCards({ rows, revealedIds, revealingIds, onToggleRevealRow }: MobilePreviewCardsProperties): React.JSX.Element | null {
-  if (rows.length === 0) return null;
-  return (
-    <>
-      {rows.map((row) => (
-        <MobileCard key={row.id}>
-          <MobileCardRow label="Name" value={`${row.first_name} ${row.last_name}`} />
-          <MobileCardRow label="Username" value={row.username} />
-          <MobileCardRow label="Password" value={passwordContent(row, revealedIds.includes(row.id), revealingIds.includes(row.id), onToggleRevealRow)} />
-          <MobileCardRow label="Email" value={row.email ?? '-'} />
-        </MobileCard>
-      ))}
-    </>
-  );
+// Why: one column definition drives desktop rows and mobile cards, so
+// the two layouts cannot drift apart. Reveal buttons stay Button
+// size="sm" iconOnly (h-11/w-11) so both layouts keep 44px targets.
+function buildBulkEditColumns(args: {
+  revealedIds: number[];
+  revealingIds: number[];
+  allRevealed: boolean;
+  onToggleRevealRow: (rowId: number) => void;
+  onToggleAllRevealed: () => void;
+}): ResponsiveColumn<BulkEditPreviewRow>[] {
+  const { revealedIds, revealingIds, allRevealed, onToggleRevealRow, onToggleAllRevealed } = args;
+  const isRevealed = (rowId: number): boolean => revealedIds.includes(rowId);
+  const isRevealing = (rowId: number): boolean => revealingIds.includes(rowId);
+  return [
+    {
+      key: 'id',
+      header: 'ID',
+      render: (row) => <span className="text-muted-foreground">#{row.id}</span>,
+      hideOnMobile: true,
+    },
+    {
+      key: 'first_name',
+      header: 'first_name',
+      render: (row) => row.first_name,
+    },
+    {
+      key: 'last_name',
+      header: 'last_name',
+      render: (row) => row.last_name,
+    },
+    {
+      key: 'username',
+      header: 'username',
+      render: (row) => row.username,
+    },
+    {
+      key: 'password',
+      header: (
+        <span className="inline-flex items-center gap-1">
+          password
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={allRevealed ? EyeOff : Eye}
+            iconOnly
+            tooltip={allRevealed ? 'Hide all passwords' : 'Reveal all passwords'}
+            onClick={onToggleAllRevealed}
+          />
+        </span>
+      ),
+      render: (row) => (
+        <span className="font-mono">
+          {passwordContent(row, isRevealed(row.id), isRevealing(row.id), onToggleRevealRow)}
+        </span>
+      ),
+    },
+    {
+      key: 'email',
+      header: 'email',
+      render: (row) => row.email ?? '-',
+    },
+  ];
 }
 
 export function BulkEditPreviewTable({
@@ -87,70 +129,18 @@ export function BulkEditPreviewTable({
   onToggleAllRevealed,
   allRevealed,
 }: BulkEditPreviewTableProperties): React.JSX.Element {
-  const isRevealed = (rowId: number): boolean => revealedIds.includes(rowId);
-  const isRevealing = (rowId: number): boolean => revealingIds.includes(rowId);
+  const columns = useMemo(
+    () => buildBulkEditColumns({ revealedIds, revealingIds, allRevealed, onToggleRevealRow, onToggleAllRevealed }),
+    [revealedIds, revealingIds, allRevealed, onToggleRevealRow, onToggleAllRevealed],
+  );
 
   return (
-    <>
-      <div className="space-y-3 md:hidden">
-        {rows.length === 0 ? (
-          <MobileCard>
-            <div className="py-2 text-center text-xs text-muted-foreground">No selected users</div>
-          </MobileCard>
-        ) : (
-          <MobilePreviewCards rows={rows} revealedIds={revealedIds} revealingIds={revealingIds} onToggleRevealRow={onToggleRevealRow} />
-        )}
-      </div>
-      <div className="hidden border border-border rounded-lg overflow-hidden md:block">
-        <div className="max-h-80 overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
-            <tr>
-              <th className="text-left px-2 py-2">ID</th>
-              <th className="text-left px-2 py-2">first_name</th>
-              <th className="text-left px-2 py-2">last_name</th>
-              <th className="text-left px-2 py-2">username</th>
-              <th className="text-left px-2 py-2">
-                <span className="inline-flex items-center gap-1">
-                  password
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={allRevealed ? EyeOff : Eye}
-                    iconOnly
-                    tooltip={allRevealed ? 'Hide all passwords' : 'Reveal all passwords'}
-                    onClick={onToggleAllRevealed}
-                  />
-                </span>
-              </th>
-              <th className="text-left px-2 py-2">email</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                  No selected users
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr key={row.id} className="border-t border-border">
-                  <td className="px-2 py-2 text-muted-foreground">#{row.id}</td>
-                  <td className="px-2 py-2">{row.first_name}</td>
-                  <td className="px-2 py-2">{row.last_name}</td>
-                  <td className="px-2 py-2">{row.username}</td>
-                  <td className="px-2 py-2 font-mono">
-                    {passwordContent(row, isRevealed(row.id), isRevealing(row.id), onToggleRevealRow)}
-                  </td>
-                  <td className="px-2 py-2">{row.email ?? '-'}</td>
-                </tr>
-              ))
-            )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
+    <ResponsiveTable
+      columns={columns}
+      rows={rows}
+      getRowKey={(row) => row.id}
+      outerClassName="max-h-80"
+      emptyState={<div className="py-2 text-center text-xs text-muted-foreground">No selected users</div>}
+    />
   );
 }

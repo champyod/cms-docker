@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/prisma';
+import { groupSortOrderBy } from '@/lib/group-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { normaliseEffect, type AdminAccess, type AdminAccessSummary, type GroupWithPermissions } from '@/lib/admin-access-types';
 
 export async function fetchAdminAccess(adminId: number): Promise<AdminAccess | null> {
@@ -25,9 +27,9 @@ export async function fetchAdminAccess(adminId: number): Promise<AdminAccess | n
   };
 }
 
-export async function fetchGroupsWithPermissions(): Promise<GroupWithPermissions[]> {
+export async function fetchGroupsWithPermissions(sort?: ListSortInput | null): Promise<GroupWithPermissions[]> {
   const rows = await prisma.groups.findMany({
-    orderBy: { name: 'asc' },
+    orderBy: groupSortOrderBy(sort ?? null),
     select: {
       id: true,
       name: true,

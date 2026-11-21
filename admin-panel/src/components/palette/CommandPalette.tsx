@@ -1,18 +1,30 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import { buildLocaleHref, extractLocale } from '@/hooks/useShortcuts';
-import { Command, CommandInput, CommandList } from '@/components/ui/command';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { useToast } from '../providers/ToastProvider';
-import { logout } from '@/app/actions/auth';
-import { activateContest, getAvailableContests } from '@/app/actions/contests';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import { extractLocale } from '@/hooks/useShortcuts';
+import { Command, CommandEmpty, CommandInput, CommandList } from '@/components/core/Command';
+import {
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogRoot,
+  DialogTitle,
+} from '@/components/core/Dialog';
+import { toast } from 'sonner';
+import { getAvailableContests } from '@/app/actions/contests';
+import { useDeployContest } from '@/hooks/useDeployContest';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { buildEntitySearchers } from './entity-searchers';
 import { useEntitySearch } from './useEntitySearch';
 import { MIN_QUERY_LENGTH } from './search-scheduler';
 import { buildNavVisibility } from './palette-data';
-import { entriesByGroup } from '@/lib/nav-registry';
+import { filterPaletteRows, normalizeQuery } from './palette-filter';
+import { useDictionary } from '@/hooks/useDictionary';
+import type { ShellNavItem } from '@/components/navigation/shell-nav';
+import { buildShellItems } from '@/components/navigation/shell-nav';
+import { buildRoute } from '@/lib/navigation/routes';
 import { NavigationItems, EntityItems, ActionItems } from './CommandPaletteItems';
 
 const PALETTE_TOGGLE_KEY = 'k';
@@ -22,20 +34,31 @@ interface AvailableContestRow { id: number; name: string; is_active: boolean; }
 interface CommandPaletteProps { open: boolean; onOpenChange: (open: boolean) => void; permissionKeys: readonly string[]; }
 
 export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPaletteProps): React.JSX.Element {
-  const router = useRouter();
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = extractLocale(pathname ?? '');
-  const { addToast } = useToast();
+  const dictionary = useDictionary();
   const [query, setQuery] = useState('');
   const [availableContests, setAvailableContests] = useState<AvailableContestRow[]>([]);
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const visibility = useMemo(() => buildNavVisibility(permissionKeys), [permissionKeys]);
-  // Why: palette navigation is rendered from the single registry so /search and any future
-  // exposeIn:'palette' entries appear without touching the palette.
-  const navSections = useMemo(() => entriesByGroup(effective, 'palette'), [effective]);
-  const searchers = useMemo(() => buildEntitySearchers(visibility), [visibility]);
+  const { deploy } = useDeployContest();
+  const canDeploy = useMemo(
+    () => hasEffectivePermission(new Set(permissionKeys), ACTION_PERMISSIONS.deployContest),
+    [permissionKeys],
+  );
+  const navItems = useMemo(
+    () => buildShellItems(effective, 'palette', locale, dictionary),
+    [effective, locale, dictionary],
+  );
+  const searchers = useMemo(() => buildEntitySearchers(visibility, locale), [visibility, locale]);
   const { loading, hits } = useEntitySearch(open, query, searchers);
   const hasQuery = query.trim().length >= MIN_QUERY_LENGTH;
+  const needle = normalizeQuery(query);
+  const visibleNavItems = useMemo(
+    () => filterPaletteRows<ShellNavItem>(navItems, needle, (item) => item.label),
+    [navItems, needle],
+  );
 
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) setQuery('');
@@ -43,11 +66,11 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   }, [onOpenChange]);
 
   useEffect(() => {
-    if (!open || !visibility.contests) return;
+    if (!open || !canDeploy) return;
     let cancelled = false;
     getAvailableContests().then((result) => { if (!cancelled && result.success) setAvailableContests(result.contests); }).catch(() => { if (!cancelled) setAvailableContests([]); });
     return () => { cancelled = true; };
-  }, [open, visibility.contests]);
+  }, [open, canDeploy]);
 
   const openRef = useRef(open);
   const toggleRef = useRef(handleOpenChange);
@@ -71,32 +94,43 @@ export function CommandPalette({ open, onOpenChange, permissionKeys }: CommandPa
   }, [open]);
 
   const close = useCallback(() => handleOpenChange(false), [handleOpenChange]);
-  const navigateTo = useCallback((path: string) => { close(); router.push(buildLocaleHref(locale, path)); }, [close, locale, router]);
+  const navigateTo = useCallback((href: string) => { close(); router.push(href); }, [close, router]);
 
-  const runSwitchContest = async (contestId: number): Promise<void> => {
+  const runSwitchContest = (contestId: number): void => {
     close();
-    try {
-      const result = await activateContest(contestId);
-      if (result.success) { addToast({ type: 'success', title: 'Active contest switched' }); router.refresh(); }
-      else addToast({ type: 'error', title: 'Failed to switch contest', message: result.error ?? 'Unknown error' });
-    } catch { addToast({ type: 'error', title: 'Failed to switch contest' }); }
+    // Why the deploy and not a bare flag write: switching the active contest must also sync
+    // config.toml/.env and recreate the contest stack, or the running stack keeps serving the old one.
+    void deploy(contestId);
   };
 
-  const runSignOut = (): void => { close(); logout().catch(() => { addToast({ type: 'error', title: 'Sign out failed' }); }); };
+  // Why: the route handler owns both the cookie clear and the locale-correct redirect, so the
+  // palette hands off to it instead of posting a Server Action from the page it is leaving.
+  // The destination is built from the frozen registry so the sign-out URL has one owner.
+  const runSignOut = (): void => {
+    close();
+    try {
+      router.push(buildRoute(locale, 'auth.signout'));
+    } catch {
+      toast.error('Sign out failed');
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <DialogRoot open={open} onOpenChange={handleOpenChange}>
       <DialogContent showCloseButton={false} className="overflow-hidden p-0">
         <DialogHeader className="sr-only"><DialogTitle>Command Palette</DialogTitle><DialogDescription>Type a command or search...</DialogDescription></DialogHeader>
         <Command shouldFilter={false} className={COMMAND_STYLING}>
           <CommandInput value={query} onValueChange={setQuery} placeholder="Search navigation, entities, actions..." />
           <CommandList>
-            <NavigationItems sections={navSections} onSelect={(entry) => navigateTo(entry.path)} />
+            {visibleNavItems.length > 0 && (
+              <NavigationItems items={visibleNavItems} onSelect={(item) => navigateTo(item.href)} />
+            )}
             <EntityItems loading={loading} hasQuery={hasQuery} hits={hits} onSelect={(hit) => navigateTo(hit.path)} />
-            <ActionItems contestsEnabled={visibility.contests} availableContests={availableContests} onCreateContest={() => navigateTo('/contests')} onSwitchContest={(contestId) => void runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <ActionItems contestsEnabled={visibility.contests} canDeploy={canDeploy} availableContests={availableContests} needle={needle} onCreateContest={() => navigateTo(buildRoute(locale, 'contests.list'))} onSwitchContest={(contestId) => runSwitchContest(contestId)} onSignOut={runSignOut} />
+            <CommandEmpty>No matching commands.</CommandEmpty>
           </CommandList>
         </Command>
       </DialogContent>
-    </Dialog>
+    </DialogRoot>
   );
 }

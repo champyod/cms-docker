@@ -82,7 +82,7 @@ class TestScoringService(DatabaseMixin, unittest.TestCase):
 
     # Testing new_evaluation.
 
-    def test_new_evaluation(self):
+    def test_it_scores_a_new_submission(self):
         """One submission is scored.
 
         """
@@ -104,7 +104,7 @@ class TestScoringService(DatabaseMixin, unittest.TestCase):
                          self.score_info)
         self.assertIsNotNone(sr.scored_at)
 
-    def test_new_evaluation_two(self):
+    def test_it_scores_multiple_submissions_in_the_queue(self):
         """More than one submissions in the queue.
 
         """
@@ -123,7 +123,7 @@ class TestScoringService(DatabaseMixin, unittest.TestCase):
                               [(sr_a.submission_id, sr_a.dataset_id),
                                (sr_b.submission_id, sr_b.dataset_id)])
 
-    def test_new_evaluation_already_scored(self):
+    def test_it_does_not_rescore_an_already_scored_submission(self):
         """One submission is not re-scored if already scored.
 
         """

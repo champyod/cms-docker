@@ -1,0 +1,205 @@
+import type { Prisma } from '@prisma/client';
+import { filterReadableFields } from '@/lib/field-permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { prisma } from '@/lib/prisma';
+import { requirePermission } from '@/lib/server/authorization';
+import { NO_INTERVALS, toIntervalString, type IntervalColumns } from '@/lib/queries/read-model-format';
+import { enrichStatements, type TaskStatementSummary } from '@/lib/queries/task-statements';
+
+export type { TaskStatementSummary } from '@/lib/queries/task-statements';
+
+export type TaskDetailSummary = {
+  id: number; name: string; title: string; contest: { id: number; name: string } | null;
+  permissionKeys: readonly string[];
+};
+
+export type TaskDatasetSummary = {
+  id: number; description: string; time_limit: number | null; memory_limit: string | null;
+  task_type: string; score_type: string; autojudge: boolean;
+  task_type_parameters: unknown; score_type_parameters: unknown;
+  testcases: Array<{ id: number; codename: string; public: boolean }>;
+};
+
+export type TaskAttachmentSummary = { id: number; filename: string };
+
+export type TaskSettingsRecord = {
+  id: number; name: string; title: string; score_mode: string; feedback_level: string;
+  score_precision: number | null; allowed_languages: string[]; submission_format: string[];
+  token_mode: string; token_max_number: number | null; token_min_interval: string | null;
+  token_gen_initial: number | null; token_gen_number: number | null; token_gen_interval: string | null; token_gen_max: number | null;
+  max_submission_number: number | null; max_user_test_number: number | null; min_submission_interval: string | null; min_user_test_interval: string | null;
+  // Why nullable: the override's NULL is the "inherit the contest's delay" state, not "no limit".
+  evaluation_throttle_delay_s: number | null;
+};
+
+export type TaskOverviewData = {
+  task: { id: number; name: string; title: string; score_precision: number | null; score_mode: string; feedback_level: string; submissions: number };
+  statements: readonly TaskStatementSummary[]; permissionKeys: readonly string[];
+};
+
+export type TaskDatasetsData = {
+  taskId: number; activeDatasetId: number | null; datasets: readonly TaskDatasetSummary[];
+  permissionKeys: readonly string[];
+};
+
+export type TaskFilesData = { taskId: number; attachments: readonly TaskAttachmentSummary[]; permissionKeys: readonly string[] };
+
+export type TaskSettingsData = { task: TaskSettingsRecord; permissionKeys: readonly string[] };
+
+function toMemoryString(value: bigint | number | string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
+export async function getTaskDetailSummary(taskId: number): Promise<TaskDetailSummary | null> {
+  const permissions = await requirePermission('task:read');
+  // Why: the contest name needs its own contest:read projection — without it
+  // the query skips the relation and the result carries contest: null.
+  const canReadContest = hasEffectivePermission(permissions, 'contest:read');
+  const row = canReadContest
+    ? await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, name: true, title: true, contest_tasks: { select: { contests: { select: { id: true, name: true } } } } } })
+    : await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, name: true, title: true } });
+  if (!row) return null;
+  const visible = filterReadableFields('tasks', { id: row.id, name: row.name, title: row.title }, permissions);
+  const memberships = canReadContest ? (row as { contest_tasks?: Array<{ contests: { id: number; name: string } }> }).contest_tasks : undefined;
+  const contest = memberships && memberships.length > 0 ? { id: memberships[0].contests.id, name: memberships[0].contests.name } : null;
+  return {
+    id: visible.id ?? row.id, name: visible.name ?? row.name, title: visible.title ?? row.title,
+    contest, permissionKeys: [...permissions],
+  };
+}
+
+export async function getTaskOverview(taskId: number): Promise<TaskOverviewData | null> {
+  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('statement:read')]);
+  // Why: overview carries config, counts, and statements only — datasets stay on their own boundary.
+  const row = await prisma.tasks.findUnique({
+    where: { id: taskId },
+    select: {
+      id: true, name: true, title: true, score_precision: true, score_mode: true, feedback_level: true,
+      _count: { select: { submissions: true } },
+      statements: { select: { id: true, language: true, digest: true } },
+    },
+  });
+  if (!row) return null;
+  const visible = filterReadableFields('tasks', { id: row.id, name: row.name, title: row.title, score_precision: row.score_precision, score_mode: row.score_mode, feedback_level: row.feedback_level }, permissions);
+  const statements = await enrichStatements(row.id, row.statements ?? []);
+  return {
+    task: {
+      id: visible.id ?? row.id, name: visible.name ?? row.name, title: visible.title ?? row.title,
+      score_precision: visible.score_precision ?? row.score_precision, score_mode: String(visible.score_mode ?? row.score_mode),
+      feedback_level: String(visible.feedback_level ?? row.feedback_level), submissions: row._count.submissions,
+    },
+    statements, permissionKeys: [...permissions],
+  };
+}
+
+type DatasetEntry = {
+  id: number; description: string; time_limit: number | null; memory_limit: bigint | number | null; task_type: string; score_type: string;
+  autojudge: boolean; task_type_parameters: unknown; score_type_parameters: unknown;
+  testcases?: Array<{ id: number; codename: string; public: boolean }>;
+};
+
+function toDatasetSummary(dataset: DatasetEntry, permissions: ReadonlySet<string>): TaskDatasetSummary {
+  const visible = filterReadableFields('datasets', { id: dataset.id, description: dataset.description, time_limit: dataset.time_limit,
+    task_type: dataset.task_type, score_type: dataset.score_type, autojudge: dataset.autojudge }, permissions);
+  const showTestcases = hasEffectivePermission(permissions, 'testcase:read');
+  return {
+    id: visible.id ?? dataset.id, description: visible.description ?? dataset.description,
+    time_limit: visible.time_limit ?? dataset.time_limit,
+    memory_limit: toMemoryString(dataset.memory_limit),
+    task_type: visible.task_type ?? dataset.task_type, score_type: visible.score_type ?? dataset.score_type,
+    autojudge: visible.autojudge ?? dataset.autojudge,
+    task_type_parameters: dataset.task_type_parameters, score_type_parameters: dataset.score_type_parameters,
+    testcases: showTestcases && 'testcases' in dataset && dataset.testcases
+      ? dataset.testcases.map((testcase) => ({ id: testcase.id, codename: testcase.codename, public: testcase.public }))
+      : [],
+  };
+}
+
+export async function getTaskDatasets(taskId: number): Promise<TaskDatasetsData | null> {
+  // Why only these two keys: they are exactly what the `tasks.tabs.datasets` route
+  // descriptor declares, so the rail never advertises a tab whose reader the read
+  // model then rejects. Every field in the `datasets` permission table is gated on
+  // `dataset:read`, and the testcase projection is gated separately on
+  // `testcase:read`, so no third key is load-bearing here.
+  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('dataset:read')]);
+  const datasetSelect = {
+    id: true, description: true, time_limit: true, memory_limit: true, task_type: true,
+    score_type: true, autojudge: true, task_type_parameters: true, score_type_parameters: true,
+  };
+  const row = hasEffectivePermission(permissions, 'testcase:read')
+    ? await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, active_dataset_id: true, datasets_datasets_task_idTotasks: { select: { ...datasetSelect, testcases: { select: { id: true, codename: true, public: true } } } } } })
+    : await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, active_dataset_id: true, datasets_datasets_task_idTotasks: { select: datasetSelect } } });
+  if (!row) return null;
+  return {
+    taskId, activeDatasetId: row.active_dataset_id,
+    datasets: row.datasets_datasets_task_idTotasks.map((dataset) => toDatasetSummary(dataset, permissions)), permissionKeys: [...permissions],
+  };
+}
+
+export async function getTaskFiles(taskId: number): Promise<TaskFilesData | null> {
+  const permissions = new Set<string>([...await requirePermission('task:read'), ...await requirePermission('attachment:read')]);
+  // Why: attachments have no field-permission table entry, so the
+  // attachment:read gate plus this id/filename-only projection is the filter.
+  const row = await prisma.tasks.findUnique({ where: { id: taskId }, select: { id: true, attachments: { select: { id: true, filename: true } } } });
+  if (!row) return null;
+  return { taskId, attachments: row.attachments.map((attachment) => ({ id: attachment.id, filename: attachment.filename })), permissionKeys: [...permissions] };
+}
+
+const taskSettingsSelect = {
+  id: true, name: true, title: true, score_mode: true, feedback_level: true, score_precision: true,
+  allowed_languages: true, submission_format: true, token_mode: true, token_max_number: true,
+  token_gen_initial: true, token_gen_number: true, token_gen_max: true,
+  max_submission_number: true, max_user_test_number: true,
+  // Why this is a plain typed column while the intervals right below need a raw read: the throttle
+  // override is an int, which Prisma deserializes fine, and schema.prisma mirrors it from
+  // scripts/__fix_db_schema.sql — the client is regenerated from that file by the panel image and CI
+  // (admin-panel/Dockerfile:40, .github/workflows/ci.yml:268).
+  evaluation_throttle_delay_s: true,
+} satisfies Prisma.tasksSelect;
+
+async function fetchTaskRawColumns(taskId: number): Promise<IntervalColumns> {
+  try {
+    // Why the epoch cast: `interval` is Unsupported in the Prisma types and the driver cannot
+    // deserialize it, so selecting the column raw threw "Failed to deserialize column of type
+    // interval" and left every interval input on its default. EPOCH reads it as total seconds,
+    // which is exactly what the dialog's parser takes.
+    const rows = await prisma.$queryRaw<IntervalColumns[]>`SELECT EXTRACT(EPOCH FROM token_min_interval)::int AS token_min_interval, EXTRACT(EPOCH FROM token_gen_interval)::int AS token_gen_interval, EXTRACT(EPOCH FROM min_submission_interval)::int AS min_submission_interval, EXTRACT(EPOCH FROM min_user_test_interval)::int AS min_user_test_interval FROM tasks WHERE id = ${taskId}`;
+    return rows[0] ?? NO_INTERVALS;
+  } catch {
+    // Why degrade, not throw: the interval columns live on a CMS-created table that
+    // no admin-panel migration owns, so a schema drift or a connection fault there
+    // must leave four cosmetic inputs unset rather than fail the whole settings
+    // read — the same reasoning the statement-size and upload-date reads follow.
+    return NO_INTERVALS;
+  }
+}
+
+type TaskSettingsRow = Prisma.tasksGetPayload<{ select: typeof taskSettingsSelect }> & IntervalColumns;
+
+export async function getTaskSettings(taskId: number): Promise<TaskSettingsData | null> {
+  const permissions = await requirePermission('task:read');
+  const [row, raw] = await Promise.all([
+    prisma.tasks.findUnique({ where: { id: taskId }, select: taskSettingsSelect }),
+    fetchTaskRawColumns(taskId),
+  ]);
+  if (!row) return null;
+  const full: TaskSettingsRow = { ...row, ...raw };
+  const visible = filterReadableFields('tasks', full, permissions);
+  const pick = <K extends keyof TaskSettingsRow>(key: K): TaskSettingsRow[K] => (visible[key] ?? full[key]) as TaskSettingsRow[K];
+  return {
+    task: {
+      id: pick('id'), name: pick('name'), title: pick('title'),
+      score_mode: String(pick('score_mode')), feedback_level: String(pick('feedback_level')),
+      score_precision: pick('score_precision'),
+      allowed_languages: [...pick('allowed_languages')], submission_format: [...pick('submission_format')],
+      token_mode: String(pick('token_mode')), token_max_number: pick('token_max_number'),
+      token_min_interval: toIntervalString(pick('token_min_interval')), token_gen_initial: pick('token_gen_initial'), token_gen_number: pick('token_gen_number'),
+      token_gen_interval: toIntervalString(pick('token_gen_interval')), token_gen_max: pick('token_gen_max'),
+      max_submission_number: pick('max_submission_number'), max_user_test_number: pick('max_user_test_number'),
+      min_submission_interval: toIntervalString(pick('min_submission_interval')), min_user_test_interval: toIntervalString(pick('min_user_test_interval')),
+      evaluation_throttle_delay_s: pick('evaluation_throttle_delay_s'),
+    },
+    permissionKeys: [...permissions],
+  };
+}

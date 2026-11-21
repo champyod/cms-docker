@@ -25,7 +25,8 @@ import logging
 import sys
 
 from cms import utf8_decoder, ServiceCoord
-from cms.db import File, Participation, SessionGen, Submission, Task, User, \
+from cms.db import ContestTask, File, Participation, SessionGen, Submission, \
+    Task, User, \
     ask_for_contest
 from cms.db.filecacher import FileCacher
 from cms.grading.language import Language
@@ -97,7 +98,8 @@ def add_submission(
             return False
         task: Task | None = (
             session.query(Task)
-            .filter(Task.contest_id == contest_id)
+            .filter(Task.contest_tasks.any(
+                ContestTask.contest_id == contest_id))
             .filter(Task.name == task_name)
             .first()
         )
@@ -128,7 +130,7 @@ def add_submission(
                 else:
                     contest_languages = [
                         get_language(language)
-                        for language in task.contest.languages
+                        for language in participation.contest.languages
                     ]
                     language = language_from_submitted_files(files, contest_languages)
             except ValueError as e:

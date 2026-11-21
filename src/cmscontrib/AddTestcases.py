@@ -28,7 +28,7 @@ import re
 import sys
 
 from cms import utf8_decoder
-from cms.db import Contest, Dataset, SessionGen, Task
+from cms.db import Contest, ContestTask, Dataset, SessionGen, Task
 from cms.db.filecacher import FileCacher
 from cmscommon.importers import import_testcases_from_zipfile
 
@@ -65,7 +65,8 @@ def add_testcases(
             contest: Contest | None = (
                 session.query(Contest).filter(Contest.name == contest_name).first()
             )
-            if task.contest != contest:
+            if not any(ct.contest_id == contest.id
+                       for ct in task.contest_tasks):
                 logger.error("%s is not in %s" %
                              (task_name, contest_name))
                 return False

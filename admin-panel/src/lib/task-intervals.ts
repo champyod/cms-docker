@@ -47,3 +47,27 @@ export function addIntervalClause(
   params.push(`${value} ${unit}`);
   setClauses.push(`${key} = $${params.length}::interval`);
 }
+
+/**
+ * A nullable whole-number column in the same hand-written UPDATE the intervals use.
+ *
+ * Why here and not `prisma.tasks.update`: the throttle override is created by scripts/
+ * __fix_db_schema.sql and the generated client predates it, so a typed update would reject the
+ * argument as unknown until the client is regenerated. Unlike addIntervalClause this writes a plain
+ * int, and an explicit null is a real state ("inherit the contest's"), so it becomes `${key} = NULL`.
+ */
+export function addNullableIntClause(
+  setClauses: string[],
+  params: unknown[],
+  fields: IntervalFieldMap,
+  key: string
+): void {
+  const value = fields[key];
+  if (value === undefined) return;
+  if (value === null) {
+    setClauses.push(`${key} = NULL`);
+    return;
+  }
+  params.push(value);
+  setClauses.push(`${key} = $${params.length}`);
+}

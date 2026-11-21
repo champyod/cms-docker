@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { safeUserSelect } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
@@ -20,7 +21,7 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('user:update');
+  const { authorized, response } = await verifyApiPermission(ACTION_PERMISSIONS.updateUser);
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -72,7 +73,7 @@ export async function PUT(
       afterValues: { changedKeys: Object.keys(updateData).filter((k) => k !== 'password') },
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
     return apiError(error);
@@ -83,7 +84,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const { authorized, response } = await verifyApiPermission('user:delete');
+  const { authorized, response } = await verifyApiPermission(ACTION_PERMISSIONS.deleteUser);
   if (!authorized) return response;
 
   const id = parseInt((await params).id);
@@ -99,7 +100,7 @@ export async function DELETE(
       beforeValues: beforeDeleteUser ? { username: beforeDeleteUser.username, first_name: beforeDeleteUser.first_name, last_name: beforeDeleteUser.last_name } : undefined,
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ message: 'User deleted successfully' });
   } catch (error) {
     return apiError(error);

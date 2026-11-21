@@ -44,14 +44,14 @@ class TestExtractOutcomeAndText(unittest.TestCase):
         self.sandbox.stdout_file = "o"
         self.sandbox.stderr_file = "e"
 
-    def test_success(self):
+    def test_it_returns_the_float_outcome_and_the_text(self):
         self.sandbox.fake_file("o", b"0.45\n")
         self.sandbox.fake_file("e", "你好.\n".encode("utf-8"))
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
         self.assertEqual(outcome, 0.45)
         self.assertEqual(text, ["你好."])
 
-    def test_admin_message(self):
+    def test_it_returns_the_admin_message(self):
         self.sandbox.fake_file("o", b"0.45\n")
         self.sandbox.fake_file("e", b"Text to return.\nADMIN_MESSAGE: admin")
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
@@ -59,47 +59,47 @@ class TestExtractOutcomeAndText(unittest.TestCase):
         self.assertEqual(text, ["Text to return."])
         self.assertEqual(admin_text, "admin")
 
-    def test_following_lines_ignored(self):
+    def test_it_ignores_lines_after_the_text(self):
         self.sandbox.fake_file("o", b"0.45\nNothing\n")
         self.sandbox.fake_file("e", b"Text to return.\nto see here")
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
         self.assertEqual(outcome, 0.45)
         self.assertEqual(text, ["Text to return."])
 
-    def test_works_without_newlines(self):
+    def test_it_works_without_trailing_newlines(self):
         self.sandbox.fake_file("o", b"0.45")
         self.sandbox.fake_file("e", b"Text to return.")
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
         self.assertEqual(outcome, 0.45)
         self.assertEqual(text, ["Text to return."])
 
-    def test_text_is_stripped(self):
+    def test_it_strips_whitespace_from_the_text(self):
         self.sandbox.fake_file("o", b"   0.45\t \nignored")
         self.sandbox.fake_file("e", b"\t  Text to return.\r\n")
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
         self.assertEqual(outcome, 0.45)
         self.assertEqual(text, ["Text to return."])
 
-    def test_text_is_translated(self):
+    def test_it_translates_the_text(self):
         self.sandbox.fake_file("o", b"0.45\n")
         self.sandbox.fake_file("e", b"translate:success\n")
         outcome, text, admin_text = extract_outcome_and_text(self.sandbox)
         self.assertEqual(outcome, 0.45)
         self.assertEqual(text, ["Output is correct"])
 
-    def test_failure_not_a_float(self):
+    def test_it_rejects_a_non_numeric_outcome(self):
         self.sandbox.fake_file("o", b"not a float\n")
         self.sandbox.fake_file("e", b"Text to return.\n")
         with self.assertRaises(ValueError):
             extract_outcome_and_text(self.sandbox)
 
-    def test_failure_invalid_utf8(self):
+    def test_it_rejects_invalid_utf8_text(self):
         self.sandbox.fake_file("o", b"0.45")
         self.sandbox.fake_file("e", INVALID_UTF8)
         with self.assertRaises(ValueError):
             extract_outcome_and_text(self.sandbox)
 
-    def test_failure_missing_file(self):
+    def test_it_rejects_a_missing_stderr_file(self):
         self.sandbox.fake_file("o", b"0.45\n")
         with self.assertRaises(FileNotFoundError):
             extract_outcome_and_text(self.sandbox)
@@ -122,7 +122,7 @@ class TestTrustedStep(unittest.TestCase):
         else:
             self.mock_logger_error.assert_not_called()
 
-    def test_single_command_success(self):
+    def test_it_reports_success_for_a_successful_single_command(self):
         expected_stats = get_stats(
             0.1, 0.5, 1000 * 1024, Sandbox.EXIT_OK, stdout="o", stderr="你好")
         with patch("cms.grading.steps.trusted.generic_step",
@@ -137,7 +137,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertTrue(trusted_success)
         self.assertEqual(stats, expected_stats)
 
-    def test_single_commands_trusted_failed_nonzero_return(self):
+    def test_it_logs_a_trusted_failure_on_nonzero_return(self):
         expected_stats = get_stats(
             0.1, 0.5, 1000 * 1024, Sandbox.EXIT_NONZERO_RETURN,
             stdout="o", stderr="e")
@@ -152,7 +152,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertFalse(trusted_success)
         self.assertEqual(stats, expected_stats)
 
-    def test_single_commands_trusted_failed_timeout(self):
+    def test_it_logs_a_trusted_failure_on_cpu_timeout(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but trusted is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -169,7 +169,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertFalse(trusted_success)
         self.assertEqual(stats, expected_stats)
 
-    def test_single_commands_trusted_failed_timeout_wall(self):
+    def test_it_logs_a_trusted_failure_on_wall_timeout(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but trusted is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -186,7 +186,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertFalse(trusted_success)
         self.assertEqual(stats, expected_stats)
 
-    def test_single_commands_trusted_failed_signal(self):
+    def test_it_logs_a_trusted_failure_on_a_signal(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but trusted is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -203,7 +203,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertFalse(trusted_success)
         self.assertEqual(stats, expected_stats)
 
-    def test_single_commands_sandbox_failed(self):
+    def test_it_reports_a_sandbox_failure_and_logs_it(self):
         with patch("cms.grading.steps.trusted.generic_step",
                    return_value=None):
             success, trusted_success, stats = trusted_step(
@@ -215,7 +215,7 @@ class TestTrustedStep(unittest.TestCase):
         self.assertIsNone(trusted_success)
         self.assertIsNone(stats)
 
-    def test_multiple_commands_success(self):
+    def test_it_reports_success_for_multiple_commands(self):
         expected_stats = get_stats(
             0.1, 0.5, 1000 * 1024, Sandbox.EXIT_OK, stdout="o", stderr="你好")
         with patch("cms.grading.steps.trusted.generic_step",
@@ -262,7 +262,7 @@ class TestCheckerStep(unittest.TestCase):
         if text is not None:
             self.sandbox.fake_file(self.sandbox.stderr_file, text)
 
-    def test_success(self):
+    def test_it_runs_the_checker_and_returns_its_outcome(self):
         self.mock_trusted_step.return_value = (True, True, {})
         self.set_checker_output(b"0.123\n", b"Text.\n")
 
@@ -279,7 +279,7 @@ class TestCheckerStep(unittest.TestCase):
                             trusted.CHECKER_CORRECT_OUTPUT_FILENAME, "o"]])
         self.assertLoggedError(False)
 
-    def test_sandbox_failure(self):
+    def test_it_reports_a_sandbox_failure(self):
         self.mock_trusted_step.return_value = (False, None, None)
         # Output files are ignored.
         self.set_checker_output(b"0.123\n", b"Text.\n")
@@ -289,7 +289,7 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_checker_failure(self):
+    def test_it_reports_a_checker_failure(self):
         self.mock_trusted_step.return_value = (True, False, {})
         # Output files are ignored.
         self.set_checker_output(b"0.123\n", b"Text.\n")
@@ -299,28 +299,28 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_missing_checker(self):
+    def test_it_fails_when_the_checker_is_missing(self):
         ret = checker_step(self.sandbox, None, "i_dig", "co_dig", "o")
 
         self.mock_trusted_step.assert_not_called()
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_checker_already_in_sandbox(self):
+    def test_it_fails_when_the_checker_is_already_in_the_sandbox(self):
         self.sandbox.fake_file(trusted.CHECKER_FILENAME, b"something")
         ret = checker_step(self.sandbox, "c_dig", "i_dig", "co_dig", "o")
 
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_input_already_in_sandbox(self):
+    def test_it_fails_when_the_input_is_already_in_the_sandbox(self):
         self.sandbox.fake_file(trusted.CHECKER_INPUT_FILENAME, b"something")
         ret = checker_step(self.sandbox, "c_dig", "i_dig", "co_dig", "o")
 
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_correct_output_already_in_sandbox(self):
+    def test_it_fails_when_the_correct_output_is_already_in_the_sandbox(self):
         self.sandbox.fake_file(trusted.CHECKER_CORRECT_OUTPUT_FILENAME,
                                b"something")
         ret = checker_step(self.sandbox, "c_dig", "i_dig", "co_dig", "o")
@@ -328,7 +328,7 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_invalid_checker_outcome(self):
+    def test_it_fails_when_the_checker_outcome_is_invalid(self):
         self.mock_trusted_step.return_value = (True, True, {})
         self.set_checker_output(b"A0.123\n", b"Text.\n")
 
@@ -337,7 +337,7 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_invalid_checker_text(self):
+    def test_it_fails_when_the_checker_text_is_invalid(self):
         self.mock_trusted_step.return_value = (True, True, {})
         self.set_checker_output(b"0.123\n", INVALID_UTF8)
 
@@ -346,7 +346,7 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_missing_checker_outcome(self):
+    def test_it_fails_when_the_checker_returns_no_outcome(self):
         self.mock_trusted_step.return_value = (True, True, {})
         self.set_checker_output(None, b"Text.\n")
 
@@ -355,7 +355,7 @@ class TestCheckerStep(unittest.TestCase):
         self.assertEqual(ret, (False, None, None, None))
         self.assertLoggedError()
 
-    def test_missing_checker_text(self):
+    def test_it_fails_when_the_checker_returns_no_text(self):
         self.mock_trusted_step.return_value = (True, True, {})
         self.set_checker_output(b"0.123\n", None)
 

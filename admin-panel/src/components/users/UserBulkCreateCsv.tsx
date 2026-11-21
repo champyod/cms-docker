@@ -4,120 +4,74 @@ import { useMemo, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { CredentialTemplateField } from '@/components/core/CredentialTemplateField';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
 import { apiClient } from '@/lib/apiClient';
+import { downloadCsvFile, openServerDownload } from '@/lib/csv-download';
+import type { Dictionary } from '@/lib/dictionary';
 import type { PasswordKind } from '@/lib/password-format';
-import {
-  buildPreviewRows,
-  fillRowCredentials,
-  type GenerationMode,
-  type PreviewRow,
-} from './csvPreview';
-import { buildSelectedCsv, TEMPLATE_CSV } from './csvTemplate';
 import {
   BulkCreateInputSection,
   HeaderWarnings,
+  PreviewStateAlerts,
   PreviewTable,
   SubmitResultBanner,
   type BulkSubmitResult,
 } from './bulkCreateSections';
+import { buildSelectedCsv, TEMPLATE_CSV } from './csvTemplate';
+import { useBulkCreatePreview } from './useBulkCreatePreview';
 
 interface UserBulkCreateCsvProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   contests: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
 }
 
-function downloadCsv(filename: string, content: string): void {
-  // UTF-8 BOM keeps Thai characters readable in Excel/LibreOffice
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.setAttribute('download', filename);
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
-}
-
-export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: UserBulkCreateCsvProps) {
-  const [csvText, setCsvText] = useState('');
-  const [headerWarnings, setHeaderWarnings] = useState<string[]>([]);
-  const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
-  const [generationMode, setGenerationMode] = useState<GenerationMode>('none');
+export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests, canReadContests, navigation }: UserBulkCreateCsvProps) {
+  const preview = useBulkCreatePreview();
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<BulkSubmitResult | null>(null);
-  const [selectedRowIndices, setSelectedRowIndices] = useState<Set<number>>(new Set());
   const [contestId, setContestId] = useState<number>(0);
+  const [ip, setIp] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
 
   const placeholder = useMemo(() => TEMPLATE_CSV, []);
 
   const handleDownloadTemplate = (): void => {
-    downloadCsv('users-bulk-template.csv', `${TEMPLATE_CSV}\n`);
+    downloadCsvFile('users-bulk-template.csv', `${TEMPLATE_CSV}\n`);
   };
 
   const handleExportCreatedCredentials = (): void => {
-    if (!submitResult?.success || !submitResult.downloadUrl) {
-      return;
-    }
-    const anchor = document.createElement('a');
-    anchor.href = submitResult.downloadUrl;
-    anchor.setAttribute('download', `users-created-credentials-${Date.now()}.csv`);
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
+    if (!submitResult?.success || !submitResult.downloadUrl) return;
+    openServerDownload(submitResult.downloadUrl, `users-created-credentials-${Date.now()}.csv`);
   };
 
   const handleExportSelectedPreview = (): void => {
-    if (selectedRowIndices.size === 0) return;
-
-    const selectedRows = previewRows.filter((row) => selectedRowIndices.has(row.rowIndex));
-    downloadCsv('users-selected.csv', buildSelectedCsv(selectedRows));
-  };
-
-  const buildPreview = (text: string, mode: GenerationMode): void => {
-    const { warnings, rows } = buildPreviewRows(text, mode);
-    setHeaderWarnings(warnings);
-    setPreviewRows(rows);
-    setSelectedRowIndices(new Set());
-  };
-
-  const handleUploadFile = (file: File | undefined): void => {
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = String(event.target?.result ?? '');
-      setCsvText(text);
-      buildPreview(text, generationMode);
-    };
-    reader.readAsText(file);
-  };
-
-  const fillEmptyInPreview = (mode: GenerationMode): void => {
-    setGenerationMode(mode);
-    const usedUsernames = new Set<string>();
-    setPreviewRows((previousRows) =>
-      previousRows.map((row) => fillRowCredentials(row, mode, usedUsernames))
-    );
+    if (preview.selectedRowIndices.size === 0) return;
+    const selectedRows = preview.previewRows.filter((row) => preview.selectedRowIndices.has(row.rowIndex));
+    downloadCsvFile('users-selected.csv', buildSelectedCsv(selectedRows));
   };
 
   const handleSubmitBulk = async (): Promise<void> => {
     setSubmitResult(null);
-    if (previewRows.length === 0) {
-      setSubmitResult({ error: 'No parsed rows to submit' });
+    if (preview.stalePreview) {
+      setSubmitResult({ error: 'Re-parse the CSV before creating' });
+      return;
+    }
+    if (preview.submittableRows.length === 0) {
+      setSubmitResult({ error: 'Select at least one row to create' });
       return;
     }
 
     setSubmitting(true);
     try {
       const result = await apiClient.post('/api/users/bulk', {
-        rows: previewRows.map((row) => ({
+        rows: preview.submittableRows.map((row) => ({
           rowIndex: row.rowIndex,
           first_name: row.first_name,
           last_name: row.last_name,
@@ -127,8 +81,12 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
           timezone: row.timezone,
           team: row.team,
         })),
-        generationMode,
+        usernameTemplate: preview.usernameTemplate,
+        passwordTemplate: preview.passwordTemplate,
+        usernameConfig: preview.usernameConfig,
+        passwordConfig: preview.passwordConfig,
         contestId: contestId || undefined,
+        ip: ip.trim() || undefined,
         passwordKind,
       });
 
@@ -139,13 +97,10 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
     }
   };
 
-  const toggleRow = (rowIndex: number, checked: boolean): void => {
-    setSelectedRowIndices((previous) => {
-      const next = new Set(previous);
-      if (checked) next.add(rowIndex);
-      else next.delete(rowIndex);
-      return next;
-    });
+  // A submit already in flight cannot be recalled, so cancelling through it would
+  // close the dialog over an unresolved create.
+  const cancel = (): void => {
+    if (!submitting) onClose();
   };
 
   return (
@@ -155,6 +110,7 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         if (!open) onClose();
       }}
       title="Bulk Add Users (CSV)"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
       <div className="space-y-4">
@@ -164,39 +120,67 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
         </div>
 
         <BulkCreateInputSection
-          contests={contests}
+          contests={canReadContests ? contests : []}
           contestId={contestId}
-          csvText={csvText}
+          canReadContests={canReadContests}
+          csvText={preview.csvText}
           placeholder={placeholder}
+          ip={ip}
           onContestIdChange={setContestId}
-          onCsvTextChange={setCsvText}
+          onCsvTextChange={preview.setCsvText}
+          onIpChange={setIp}
           onDownloadTemplate={handleDownloadTemplate}
-          onUploadFile={handleUploadFile}
-          onRebuildPreview={() => buildPreview(csvText, generationMode)}
-          onFillEmpty={fillEmptyInPreview}
+          onUploadFile={preview.uploadFile}
+          onRebuildPreview={() => preview.buildPreview(preview.csvText)}
+          onFillEmpty={preview.fillEmptyInPreview}
         />
 
-        <HeaderWarnings warnings={headerWarnings} />
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CredentialTemplateField
+            label="Username template"
+            value={preview.usernameTemplate}
+            onChange={preview.setUsernameTemplate}
+            config={preview.usernameConfig}
+            onConfigChange={preview.setUsernameConfig}
+            symbolsAllowed={false}
+            placeholder="camp1*"
+          />
+          <CredentialTemplateField
+            label="Password template"
+            value={preview.passwordTemplate}
+            onChange={preview.setPasswordTemplate}
+            config={preview.passwordConfig}
+            onConfigChange={preview.setPasswordConfig}
+            placeholder="*"
+          />
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            Each * becomes a random run, and a blank template is one full random run. Only empty cells are
+            filled, so credentials the CSV already carries are kept.
+          </p>
+        </div>
+
+        <HeaderWarnings warnings={preview.headerWarnings} />
+
+        <PreviewStateAlerts
+          stalePreview={preview.stalePreview}
+          blockingSelectedCount={preview.blockingSelectedCount}
+          skipInvalid={preview.skipInvalid}
+          onReparse={() => preview.buildPreview(preview.csvText)}
+          onToggleSkipInvalid={preview.toggleSkipInvalid}
+        />
 
         <PreviewTable
-          rows={previewRows.slice(0, 100)}
-          totalRowCount={previewRows.length}
-          selectedRowIndices={selectedRowIndices}
-          onSelectAll={(checked) => {
-            setSelectedRowIndices(checked ? new Set(previewRows.map((r) => r.rowIndex)) : new Set());
-          }}
-          onToggleRow={toggleRow}
+          rows={preview.previewRows.slice(0, 100)}
+          totalRowCount={preview.previewRows.length}
+          selectedRowIndices={preview.selectedRowIndices}
+          onSelectAll={preview.selectAll}
+          onToggleRow={preview.toggleRow}
         />
 
-        {selectedRowIndices.size > 0 && (
+        {preview.selectedRowIndices.size > 0 && (
           <div className="rounded-lg border border-primary/30 bg-primary/10 p-3 text-primary text-xs flex items-center justify-between">
-            <span>{selectedRowIndices.size} row(s) selected</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={FileSpreadsheet}
-              onClick={handleExportSelectedPreview}
-            >
+            <span>{preview.selectedRowIndices.size} row(s) selected</span>
+            <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={handleExportSelectedPreview}>
               Export Selected
             </Button>
           </div>
@@ -206,22 +190,17 @@ export function UserBulkCreateCsv({ isOpen, onClose, onSuccess, contests }: User
           <SubmitResultBanner result={submitResult} onDownloadCredentials={handleExportCreatedCredentials} />
         )}
       </div>
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={submitting}>
-          Cancel
-        </Button>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Generation mode: {generationMode}</span>
-          <Button
-            variant="positive"
-            loading={submitting}
-            onClick={handleSubmitBulk}
-            disabled={submitting || previewRows.length === 0}
-          >
-            Create Users from Preview
-          </Button>
-        </div>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel={preview.confirmLabel}
+        onCancel={cancel}
+        onConfirm={handleSubmitBulk}
+        confirmLoading={submitting}
+        confirmDisabled={submitting || !preview.canSubmit}
+        leadingAction={<span className="text-xs text-muted-foreground">Credential templates: {preview.usernameTemplate || '*'} / {preview.passwordTemplate || '*'}</span>}
+      />
     </Dialog>
   );
 }

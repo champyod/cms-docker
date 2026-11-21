@@ -201,7 +201,7 @@ check_env() {
     record_result "env: core" "PASS" "skipped (--stack ${STACK})"
   fi
 
-  # ---- admin: AUTH_SECRET, RANKING_PASSWORD ----
+  # ---- admin: AUTH_SECRET ----
   if should_validate_stack "admin"; then
     local admin_issues=()
     local v
@@ -211,19 +211,13 @@ check_env() {
     elif is_default_secret "$v"; then
       admin_issues+=("AUTH_SECRET is default/placeholder")
     fi
-    v="${RANKING_PASSWORD:-}"
-    if [[ -z "$v" ]]; then
-      admin_issues+=("RANKING_PASSWORD empty")
-    elif is_default_secret "$v"; then
-      admin_issues+=("RANKING_PASSWORD is default/placeholder")
-    fi
     if [[ ${#admin_issues[@]} -gt 0 ]]; then
       local msg
       msg=$(IFS='; '; echo "${admin_issues[*]}")
       printf '[FAIL] admin env: %s\n' "$msg" >&2
       record_result "env: admin" "FAIL" "$msg"
     else
-      record_result "env: admin" "PASS" "AUTH_SECRET, RANKING_PASSWORD set"
+      record_result "env: admin" "PASS" "AUTH_SECRET set"
     fi
   else
     record_result "env: admin" "PASS" "skipped (--stack ${STACK})"
@@ -234,8 +228,6 @@ check_env() {
     local contest_issues=()
     local cid="${CONTEST_ID:-}"
     local skey="${SECRET_KEY:-}"
-    # Also check CONTEST_ID via ACTIVE_CONTEST_ID alias if needed — but spec
-    # says contest→CONTEST_ID; also check ACTIVE_CONTEST_ID emptiness as hint.
     if [[ -z "$cid" ]]; then
       contest_issues+=("CONTEST_ID empty (set CONTEST_ID numeric in config.toml [contest])")
     elif ! [[ "$cid" =~ ^[0-9]+$ ]]; then
@@ -319,7 +311,83 @@ check_cms_toml() {
 }
 
 # ===========================================================================
-# 5) Secrets file permissions — warn if world-readable
+# 6) Login CAPTCHA settings — only meaningful when the admin panel enables it
+# ===========================================================================
+# The CAPTCHA secret is issued by the provider, so it can never be generated
+# locally. A missing key silently disables the challenge (isCaptchaConfigured
+# in the panel requires both keys) and a generated-hex placeholder passes every
+# "is it set" test while failing every verification call. Both states look
+# healthy at runtime and are caught here instead.
+captcha_is_active() {
+  local raw="${CAPTCHA_ENABLED:-}"
+  [[ "$raw" == "1" || "${raw,,}" == "true" ]]
+}
+
+check_captcha() {
+  if ! stack_includes "admin"; then
+    record_result "captcha config" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! captcha_is_active; then
+    record_result "captcha config" "PASS" "CAPTCHA_ENABLED=${CAPTCHA_ENABLED:-0}"
+    return 0
+  fi
+
+  local captcha_issues=()
+  # WHY the chain is checked per provider: CAPTCHA_PROVIDERS names each provider
+  # and its own key pair, and a provider with a missing or placeholder key would
+  # otherwise be selected at render time and fail every challenge. An empty chain
+  # falls back to the legacy scalar keys.
+  local providers="${CAPTCHA_PROVIDERS:-}"
+  if [[ -n "$providers" ]]; then
+    local provider upper site_var secret_var site_key secret_key usable=0
+    local -a provider_list=()
+    IFS=',' read -ra provider_list <<< "$providers"
+    for provider in "${provider_list[@]}"; do
+      provider="$(printf '%s' "$provider" | tr -d '[:space:]')"
+      [[ -z "$provider" ]] && continue
+      upper="$(printf '%s' "$provider" | tr '[:lower:]' '[:upper:]')"
+      site_var="CAPTCHA_${upper}_SITE_KEY"
+      secret_var="CAPTCHA_${upper}_SECRET_KEY"
+      site_key="${!site_var:-}"
+      secret_key="${!secret_var:-}"
+      if [[ -n "$site_key" && -n "$secret_key" && ! "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+        usable=1
+      else
+        captcha_issues+=("${provider}: ${site_var}/${secret_var} missing or a 64-char hex placeholder")
+      fi
+    done
+    if [[ $usable -eq 0 && ${#captcha_issues[@]} -eq 0 ]]; then
+      captcha_issues+=("CAPTCHA_PROVIDERS names no provider")
+    fi
+  else
+    site_key="${CAPTCHA_SITE_KEY:-}"
+    secret_key="${CAPTCHA_SECRET_KEY:-}"
+    if [[ -z "$site_key" ]]; then
+      captcha_issues+=("CAPTCHA_SITE_KEY empty (CAPTCHA_ENABLED=1)")
+    fi
+    if [[ -z "$secret_key" ]]; then
+      captcha_issues+=("CAPTCHA_SECRET_KEY empty (CAPTCHA_ENABLED=1)")
+    elif [[ "$secret_key" =~ ^[0-9a-f]{64}$ ]]; then
+      captcha_issues+=("CAPTCHA_SECRET_KEY is a 64-char hex placeholder, not a provider secret — replace with the secret from the ${CAPTCHA_PROVIDER:-turnstile} dashboard")
+    fi
+  fi
+
+  if [[ ${#captcha_issues[@]} -gt 0 ]]; then
+    local msg
+    msg=$(IFS='; '; echo "${captcha_issues[*]}")
+    printf '[FAIL] captcha env: %s\n' "$msg" >&2
+    printf '       Fix: paste the real provider keys (CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY, or CAPTCHA_SITE_KEY/_SECRET_KEY), or set CAPTCHA_ENABLED=0 to run without it\n' >&2
+    record_result "captcha config" "FAIL" "$msg"
+    return 0
+  fi
+
+  record_result "captcha config" "PASS" "CAPTCHA_ENABLED=1, keys set"
+}
+
+# ===========================================================================
+# 7) Secrets file permissions — warn if world-readable
 # ===========================================================================
 check_secret_perms() {
   local files=("${REPO_ROOT}/.env" "${REPO_ROOT}/config/cms.toml")
@@ -358,7 +426,7 @@ check_secret_perms() {
 }
 
 # ===========================================================================
-# 6) Port-collision quick check (warn only) — ss -ltn probe per stack
+# 7) Port-collision quick check (warn only) — ss -ltn probe per stack
 # ===========================================================================
 check_ports() {
   local ports=()
@@ -417,7 +485,7 @@ check_ports() {
 }
 
 # ===========================================================================
-# 7) Worker cgroup check (--stack worker only)
+# 8) Worker cgroup check (--stack worker only)
 # ===========================================================================
 check_worker_cgroup() {
   if [[ "$STACK" != "worker" ]]; then
@@ -446,17 +514,428 @@ check_worker_cgroup() {
 }
 
 # ===========================================================================
+# 9) Monitor backup write access — backup-root ownership vs the container uid
+# ===========================================================================
+# The monitor container is not root, so it writes under the uid it was built
+# for. A backup root owned by a different uid then fails every cycle while the
+# host shell — which owns that directory — reports the same path as writable.
+# Ownership and mode are therefore read from the filesystem, never from `test
+# -w`, which answers for the operator instead of for the container.
+#
+# Prints which rule grants the container write access to the backup root and
+# returns 0, or returns 1 when no rule applies. <mode> is read on its last three
+# octal digits so a setuid or sticky digit cannot shift the group/other columns.
+# Creating a directory inside the root also needs the search bit, so a class
+# counts only when its octal digit carries write and execute together — 3 or 7.
+backup_root_write_rule() {
+  local owner_uid="$1" group_gid="$2" mode="$3" container_uid="$4" container_gid="$5"
+  local perms="$mode"
+  # WHY pad: stat -c %a prints the minimal octal form, so a mode below 100
+  # arrives shorter than the three columns indexed below and every offset
+  # slice of it would come back empty. Zeros are prefixed and the last three
+  # digits kept, which left-pads short modes and still trims a setuid or
+  # sticky digit, and it never parses the value as a number, so a leading
+  # zero in <mode> survives. A non-numeric mode is left untouched and the
+  # column tests below reject it.
+  if [[ "$perms" =~ ^[0-9]+$ ]]; then
+    perms="000${perms}"
+  fi
+  perms="${perms: -3}"
+  if [[ "$owner_uid" == "$container_uid" && "${perms:0:1}" =~ [37] ]]; then
+    printf 'owner uid %s\n' "$owner_uid"
+    return 0
+  fi
+  if [[ "$group_gid" == "$container_gid" && "${perms:1:1}" =~ [37] ]]; then
+    printf 'group %s write (mode %s)\n' "$group_gid" "$mode"
+    return 0
+  fi
+  if [[ "${perms:2:1}" =~ [37] ]]; then
+    printf 'other-write (mode %s)\n' "$mode"
+    return 0
+  fi
+  return 1
+}
+
+check_monitor_backup_access() {
+  if ! stack_includes "monitor"; then
+    record_result "monitor backup access" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  # Host tree, not ${BACKUP_DIR}: that is the in-container path (/app/backups), which
+  # nothing is mounted at on the host — stat-ing it here names a stale root.
+  local backup_root="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
+  local container_uid="${DOCKER_UID:-1000}"
+  # WHY ${container_uid} and not ${DOCKER_GID:-999}: docker/monitor/Dockerfile
+  # creates the monitor group with addgroup -g ${DOCKER_UID}, so the container gid
+  # is the same number as its uid; DOCKER_GID is granted on docker.sock alone and
+  # never reaches file access.
+  local container_gid="${container_uid}"
+
+  # Inspect only — a box that has never written a backup has no root to judge.
+  if [[ ! -d "$backup_root" ]]; then
+    record_result "monitor backup access" "PASS" "no backup root yet (${backup_root})"
+    return 0
+  fi
+
+  local stat_line
+  if ! stat_line=$(stat -c '%u %g %a' "$backup_root" 2>/dev/null) || [[ -z "$stat_line" ]]; then
+    printf '[FAIL] cannot read ownership of %s\n' "$backup_root" >&2
+    record_result "monitor backup access" "FAIL" "stat failed on ${backup_root}"
+    return 0
+  fi
+
+  local owner_uid group_gid mode rule=""
+  read -r owner_uid group_gid mode <<<"$stat_line"
+  if ! rule=$(backup_root_write_rule "$owner_uid" "$group_gid" "$mode" "$container_uid" "$container_gid"); then
+    printf '[FAIL] monitor cannot write %s: uid %s mode %s, container runs as uid %s gid %s\n' \
+      "$backup_root" "$owner_uid" "$mode" "$container_uid" "$container_gid" >&2
+    printf '       Fix: sudo chown -R %s %s   or: export DOCKER_UID=%s\n' \
+      "$container_uid" "$backup_root" "$owner_uid" >&2
+    record_result "monitor backup access" "FAIL" \
+      "uid ${owner_uid} mode ${mode}; container uid ${container_uid} cannot write"
+    return 0
+  fi
+
+  record_result "monitor backup access" "PASS" "$rule"
+}
+
+# ===========================================================================
 # Main — run checks in order
 # ===========================================================================
 printf '=== CMS Preflight Checks (stack: %s) ===\n' "$STACK"
+
+check_config_stale() {
+  # Warn-only: a container started before config.toml last changed may run
+  # stale values (edits apply on recreate, not while running).
+  if [[ ! -f "$REPO_ROOT/config.toml" ]]; then
+    record_result "config freshness" "PASS" "no config.toml"
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    record_result "config freshness" "PASS" "docker unavailable"
+    return 0
+  fi
+  local cfg_mtime stale_list name started started_epoch
+  cfg_mtime=$(stat -c %Y "$REPO_ROOT/config.toml" 2>/dev/null || echo 0)
+  stale_list=""
+  while read -r name _rest; do
+    [[ "$name" == cms-* ]] || continue
+    started=$(docker inspect -f '{{.State.StartedAt}}' "$name" 2>/dev/null || echo "")
+    [[ -n "$started" ]] || continue
+    started_epoch=$(date -d "$started" +%s 2>/dev/null || echo 0)
+    if [[ "$started_epoch" -lt "$cfg_mtime" ]]; then
+      stale_list="${stale_list:+$stale_list, }$name"
+    fi
+  done < <(docker ps --format '{{.Names}}' 2>/dev/null || true)
+  if [[ -n "$stale_list" ]]; then
+    record_result "config freshness" "WARN" "predates config.toml: $stale_list"
+  else
+    record_result "config freshness" "PASS" "containers newer than config"
+  fi
+}
+
+# ===========================================================================
+# 11) Initial TLS certificate — the domain stack has no cert to serve :443
+# ===========================================================================
+# WHY this needs its own check: certbot's renewal loop runs forever whether or not
+# the first issuance ever succeeded, so a fresh domain stack with no certificate
+# looks identical to a healthy one from container state alone. The certbot
+# container records the outcome in certbot-status; __certbot_status.sh maps it to
+# PASS/WARN/FAIL. A pending or terminal issuance (1/2) is a domain-lifecycle state
+# the domain stack owns, so it warns without blocking config sync; only a status
+# that disagrees with the filesystem (4) is a failure.
+check_certbot_issuance() {
+  local script="${REPO_ROOT}/scripts/__certbot_status.sh"
+  if [[ ! -f "$script" ]]; then
+    record_result "tls certificate" "PASS" "skipped (status helper absent)"
+    return 0
+  fi
+
+  local out rc
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero one aborts the run under `set -e` before the case below can map it.
+  out="$(bash "$script" 2>&1)" && rc=0 || rc=$?
+  case "$rc" in
+    0) record_result "tls certificate" "PASS" "${out##*: }" ;;
+    1) record_result "tls certificate" "WARN" "${out##*: }" ;;
+    2) record_result "tls certificate" "WARN" "${out##*: }" ;;
+    3) record_result "tls certificate" "PASS" "skipped (domain stack not running)" ;;
+    4) record_result "tls certificate" "FAIL" "${out##*: }" ;;
+    *) record_result "tls certificate" "WARN" "status helper exited $rc" ;;
+  esac
+}
+
+# ===========================================================================
+# 12) Worker isolate sandbox probe — execute isolate, don't just inspect files
+# ===========================================================================
+# WHY a live probe: a worker image whose isolate setup is broken still builds,
+# deploys and reports healthy — the failure only surfaces when a grading job
+# asks for a sandbox. The probe therefore creates and destroys one empty
+# sandbox in a throwaway container started from the exact image the worker
+# stack deploys, granted the same privileges compose grants that service, so a
+# PASS means the whole chain (setuid binary, isolate account, subuid ranges)
+# works end to end. No submission runs and no host state is touched; a host
+# with no worker image yet has nothing to probe and skips rather than fails.
+check_isolate_sandbox() {
+  if ! stack_includes "worker"; then
+    record_result "isolate sandbox" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (docker unavailable)"
+    return 0
+  fi
+
+  local worker_image="ghcr.io/champyod/cms-docker-worker:${IMG_TAG:-major-admin-panel}"
+  if ! docker image inspect "$worker_image" >/dev/null 2>&1; then
+    record_result "isolate sandbox" "PASS" "skipped (worker image not built)"
+    return 0
+  fi
+
+  local probe_timeout=30
+  local out rc
+  # WHY chained: a standalone assignment adopts the substitution's status, so a
+  # non-zero probe would abort the run under `set -e` before rc is classified.
+  out="$(timeout "$probe_timeout" docker run --rm --privileged --network none \
+    "$worker_image" sh -c 'isolate --init && isolate --cleanup' 2>&1)" && rc=0 || rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    printf '[INFO] isolate sandbox probe passed: %s\n' "$worker_image"
+    record_result "isolate sandbox" "PASS" "sandbox create+cleanup ok"
+    return 0
+  fi
+
+  local last_line
+  last_line="$(printf '%s\n' "$out" | tail -n 1)"
+  printf '[FAIL] isolate sandbox probe failed (exit %s): %s\n' "$rc" "$last_line" >&2
+  if [[ $rc -eq 124 ]]; then
+    record_result "isolate sandbox" "FAIL" "probe timed out after ${probe_timeout}s"
+  else
+    record_result "isolate sandbox" "FAIL" "isolate exit ${rc}: ${last_line}"
+  fi
+}
+
+# nginx size (52M, 100M) or a bare byte count, as both sides of this comparison are
+# written by hand in config files. WHY the suffix matters: comparing the strings would
+# put "100M" and "104857600" on either side of an inequality and warn about a limit that
+# is actually the larger one.
+nginx_size_to_bytes() {
+  local raw="$1" number unit
+  raw="$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]' | tr -d '[:space:]')"
+  [[ "$raw" =~ ^([0-9]+)([KMG]?)$ ]] || return 1
+  number="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    K) printf '%s' "$(( number * 1024 ))" ;;
+    M) printf '%s' "$(( number * 1024 * 1024 ))" ;;
+    G) printf '%s' "$(( number * 1024 * 1024 * 1024 ))" ;;
+    *) printf '%s' "$number" ;;
+  esac
+}
+
+# Whether the proxy will accept everything the panel is willing to send.
+# WHY this is a warning and not a failure: the stack works, every smaller upload works,
+# and only a batch between the two limits is refused — with nginx's bare 413, so the
+# operator sees no explanation from the panel. It is a mismatch to reconcile, not a
+# deployment that will not come up.
+check_proxy_body_size() {
+  local configured panel_expr panel_bytes proxy_bytes
+  configured="${PROXY_MAX_BODY_SIZE:-}"
+  if [[ -z "$configured" ]]; then
+    record_result "proxy body size" "PASS" "PROXY_MAX_BODY_SIZE unset — the proxy default applies"
+    return 0
+  fi
+  if ! proxy_bytes="$(nginx_size_to_bytes "$configured")"; then
+    record_result "proxy body size" "WARN" "PROXY_MAX_BODY_SIZE=${configured} is not a size nginx understands"
+    return 0
+  fi
+  # The panel's cap is a TypeScript constant, so it is read from the source rather than
+  # restated here — a copy would drift and the warning would stop matching reality.
+  panel_expr="$(sed -n 's/^const DEFAULT_UPLOAD_BYTES *= *\([0-9][0-9* ]*\);.*/\1/p' \
+    "${REPO_ROOT}/admin-panel/src/lib/testcase-limits.ts" 2>/dev/null | head -1 | tr -d '[:space:]')"
+  # WHY the factors are multiplied rather than concatenated: the source spells the cap
+  # `50 * 1024 * 1024`, and treating those digits as one number yields 5010241024 — a cap
+  # a thousand times too large, which turns every comparison into a false warning.
+  local factor product=1
+  if [[ "$panel_expr" =~ ^[0-9]+(\*[0-9]+)+$ ]]; then
+    local IFS='*'
+    for factor in $panel_expr; do
+      product=$(( product * factor ))
+    done
+    panel_bytes="$product"
+  elif [[ "$panel_expr" =~ ^[0-9]+$ ]]; then
+    panel_bytes="$panel_expr"
+  fi
+  if [[ ! "$panel_bytes" =~ ^[0-9]+$ || "$panel_bytes" -le 0 ]]; then
+    # The panel source is not where it was expected, so say the check did not run rather
+    # than reporting a comparison that was never made.
+    record_result "proxy body size" "PASS" "panel upload cap not readable — nothing to compare against"
+    return 0
+  fi
+  if (( proxy_bytes >= panel_bytes )); then
+    record_result "proxy body size" "PASS" "proxy ${configured} accepts the panel's ${panel_bytes}-byte upload cap"
+  else
+    record_result "proxy body size" "WARN" \
+      "proxy ${configured} is below the panel's ${panel_bytes}-byte cap — uploads in that range fail as a bare nginx 413"
+  fi
+}
+
+# ===========================================================================
+# 13) Contest documentation assets
+# ===========================================================================
+# CWS mounts config docs_path at /docs (SharedDataMiddleware) and the handler lists a
+# subdirectory per language, so a page lives at /docs/<lang>/index.html. A docs tree
+# that ships without the files its entry page references renders unstyled with no
+# error anywhere, so the entry page and one referenced asset are asserted: over HTTP
+# when the contest server answers, on disk when the tree is local. docs_path is
+# container-internal in the shipped config, and an update must never abort over a path
+# this host cannot see (regression fixed in 941f09a8) — every arm that cannot be
+# verified records WARN, never FAIL.
+# docs_path_from_toml and docs_language come from __lib/common.sh: the smoke probe
+# resolves the same language folder over the same docs_path, so the rule has to live
+# where both scripts load it rather than in either one.
+
+# The first asset the entry HTML pulls in, as written in that page (reads stdin).
+docs_referenced_asset() {
+  awk 'match($0, /(href|src)="[^"]+"/) {
+         s = substr($0, RSTART, RLENGTH)
+         sub(/^(href|src)="/, "", s)
+         sub(/"$/, "", s)
+         print s
+         exit
+       }'
+}
+
+# Follow browser resolution: the entry page is served at /docs/<lang>/, so a
+# root-absolute ref starts at the SITE root while a relative one sits beside the page.
+docs_asset_url_path() {
+  local language="$1" asset="$2"
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  if [[ "$asset" == /* ]]; then
+    printf '%s' "$asset"
+  else
+    printf '/docs/%s/%s' "$language" "$asset"
+  fi
+}
+
+# HTTP status of a served path; "000" when curl is absent or nothing is listening.
+docs_http_code() {
+  if ! command -v curl >/dev/null 2>&1; then
+    printf '000'
+    return 0
+  fi
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$1" 2>/dev/null || true)"
+  printf '%s' "${code:-000}"
+}
+
+docs_http_body() {
+  command -v curl >/dev/null 2>&1 || return 0
+  curl -fsS --max-time 5 "$1" 2>/dev/null || true
+}
+
+# What the contest server actually serves. Returns 1 when it cannot be reached, which
+# is the normal case here: preflight runs before the stack is brought up.
+check_docs_served() {
+  local port="$1" language="$2"
+  local base="http://127.0.0.1:${port}"
+  local entry_path="/docs/${language}/index.html"
+  local entry_code
+  entry_code="$(docs_http_code "${base}${entry_path}")"
+  [[ "$entry_code" != "000" ]] || return 1
+
+  if [[ ! "$entry_code" =~ ^2 ]]; then
+    record_result "contest docs" "WARN" "HTTP ${entry_code} for ${entry_path}"
+    return 0
+  fi
+
+  local asset url_path asset_code
+  asset="$(docs_http_body "${base}${entry_path}" | docs_referenced_asset)"
+  if [[ -z "$asset" ]]; then
+    record_result "contest docs" "PASS" "${entry_path} served"
+    return 0
+  fi
+
+  url_path="$(docs_asset_url_path "$language" "$asset")"
+  asset_code="$(docs_http_code "${base}${url_path}")"
+  if [[ "$asset_code" =~ ^2 ]]; then
+    record_result "contest docs" "PASS" "${entry_path} + ${url_path} served"
+  else
+    record_result "contest docs" "WARN" "HTTP ${asset_code} for ${url_path} (ref of ${entry_path})"
+  fi
+}
+
+# The tree as this host sees it: a dev checkout or a mounted volume. A site-root ref is
+# a URL concern with no file behind it here, so it is reported instead of resolved.
+check_docs_on_disk() {
+  local docs_path="$1" language="$2"
+  local entry_html="${docs_path}/${language}/index.html"
+  if [[ ! -f "$entry_html" ]]; then
+    record_result "contest docs" "WARN" "SKIP: ${entry_html} unreadable from this host"
+    return 0
+  fi
+
+  local asset
+  asset="$(docs_referenced_asset < "$entry_html")"
+  if [[ -z "$asset" ]]; then
+    record_result "contest docs" "PASS" "${language}/index.html present"
+    return 0
+  fi
+  if [[ "$asset" == /* ]]; then
+    record_result "contest docs" "WARN" "SKIP: site-root ref ${asset} needs the served URL"
+    return 0
+  fi
+
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  if [[ -e "${docs_path}/${language}/${asset}" ]]; then
+    record_result "contest docs" "PASS" "${language}/index.html + ${asset} present"
+  else
+    record_result "contest docs" "WARN" "${asset} referenced by ${language}/index.html is missing"
+  fi
+}
+
+check_docs_assets() {
+  if ! stack_includes "contest"; then
+    record_result "contest docs" "PASS" "skipped (--stack ${STACK})"
+    return 0
+  fi
+
+  local docs_path
+  docs_path="$(docs_path_from_toml "$REPO_ROOT" || true)"
+  if [[ -z "$docs_path" ]]; then
+    record_result "contest docs" "PASS" "docs_path unset — nothing to serve under /docs"
+    return 0
+  fi
+
+  local language
+  language="$(docs_language "$docs_path" || true)"
+  if [[ -z "$language" ]]; then
+    record_result "contest docs" "WARN" "SKIP: no docs tree with an entry page under ${docs_path}"
+    return 0
+  fi
+
+  check_docs_served "${CONTEST_PORT_EXTERNAL:-${CONTEST_LISTEN_PORT:-8888}}" "$language" && return 0
+  check_docs_on_disk "$docs_path" "$language"
+}
 
 check_disk
 check_docker
 check_env
 check_cms_toml
+check_captcha
 check_secret_perms
 check_ports
 check_worker_cgroup
+check_monitor_backup_access
+check_config_stale
+check_proxy_body_size
+check_certbot_issuance
+check_isolate_sandbox
+check_docs_assets
 
 # ===========================================================================
 # Summary table

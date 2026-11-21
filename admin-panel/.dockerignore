@@ -3,3 +3,7 @@ node_modules
 .git
 *.md
 .DS_Store
+# Runtime secrets are injected via compose environment, never baked into layers
+.env
+.env.*
+!.env.*.example

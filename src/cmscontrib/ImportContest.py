@@ -43,7 +43,8 @@ import sys
 
 from cms import utf8_decoder
 from cms.db.session import Session
-from cms.db import SessionGen, User, Team, Participation, Task, Contest
+from cms.db import SessionGen, User, Team, Participation, Task, Contest, \
+    ContestTask
 from cms.db.filecacher import FileCacher
 from cmscontrib.importing import ImportDataError, update_contest, update_task
 from cmscontrib.loaders import choose_loader, build_epilog
@@ -96,7 +97,6 @@ class ContestImporter:
         # and participations only in the other return values. We make sure.
         contest, tasks, participations = self.loader.get_contest()
         if contest.tasks != []:
-            contest.tasks = []
             logger.warning("Contest loader should not fill tasks.")
         if contest.participations != []:
             contest.participations = []
@@ -113,9 +113,10 @@ class ContestImporter:
             try:
                 contest = self._contest_to_db(
                     session, contest, contest_has_changed)
-                # Detach all tasks before reattaching them
-                for t in list(contest.tasks):
-                    t.contest = None
+                # Detach all tasks from this contest before reattaching them.
+                for contest_task in list(contest.task_contests):
+                    session.delete(contest_task)
+                session.flush()
                 for tasknum, taskname in enumerate(tasks):
                     self._task_to_db(session, contest, tasknum, taskname)
                 # Delete stale participations if asked to, then import all
@@ -242,15 +243,16 @@ class ContestImporter:
             logger.warning("Not updating task \"%s\", even if it has changed. "
                            "Use --update-tasks to update it.", taskname)
 
-        # Finally we tie the task to the contest, if it is not already used
-        # elsewhere.
-        if task.contest is not None and task.contest.name != contest.name:
-            raise ImportDataError(
-                "Task \"%s\" is already tied to contest \"%s\"."
-                % (taskname, task.contest.name))
-
-        task.num = tasknum
-        task.contest = contest
+        # Tie the task to the contest with its position; a task may be in
+        # several contests, so an existing membership is just renumbered.
+        membership = session.query(ContestTask)\
+            .filter(ContestTask.contest_id == contest.id)\
+            .filter(ContestTask.task_id == task.id)\
+            .first()
+        if membership is None:
+            session.add(ContestTask(task=task, contest=contest, num=tasknum))
+        else:
+            membership.num = tasknum
         return task
 
     @staticmethod

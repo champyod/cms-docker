@@ -20,6 +20,13 @@ scrape_configs:
       - targets: ["node-exporter:9100"]
         labels:
           instance: "grader-host"
+    # Carries the backup ages: node-exporter's textfile collector reads
+    # backups/metrics/cms_backup.prom (scripts/__lib/common.sh publish_backup_metrics) and
+    # exports cms_backup_* / cms_offsite_* on this endpoint, so no job is added for them.
+    # The age of the newest backup is `time() - cms_backup_last_success_timestamp_seconds`;
+    # cms_backup_stale is 1 when it passes BACKUP_STALE_HOURS (default 26) or when no run
+    # has ever recorded a success, and node_textfile_mtime_seconds{file="cms_backup.prom"}
+    # says whether anything is still writing the file at all.
 
   - job_name: "nginx"
     metrics_path: /metrics

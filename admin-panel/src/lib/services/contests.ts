@@ -1,11 +1,16 @@
 import { prisma } from '@/lib/prisma';
-import { getSession } from '@/lib/auth';
-import { getFreshPermissions } from '@/lib/permissions';
-import type { PermissionKey } from '@/lib/permissions';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { requirePermission, ACTION_PERMISSIONS } from '@/lib/server/authorization';
 import { stripDisallowedFields } from '@/lib/field-permissions';
+import { LIMIT_FIELDS, normalizeLimitValue } from '@/lib/limits';
+import type { LimitPatch } from '@/lib/limit-patch';
 import { validateContestData, CONTEST_NAME_MESSAGE, CONTEST_NAME_REGEX } from '@/lib/contest-validation';
 import { recordAudit } from '@/lib/audit';
+import { writeActiveContestId } from '@/lib/active-contest';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
+import { readContestWebServerShard, resolveContestBinding, readShardContestBindings, CONTEST_WEB_SERVER_SHARD_KEY, type ContestBinding } from '@/lib/contest-binding';
+import type { ShardContestBinding } from '@/lib/service-wiring-contract';
+import { resyncRankingUsers } from '@/lib/ranking-projection';
+import { attachContestTask, detachContestTask } from '@/lib/panel-actions';
 import {
   fetchContestsPage,
   buildContestInsertDefaults,
@@ -14,45 +19,37 @@ import {
   mapContestDbError,
 } from '@/lib/contests-repo';
 import type { ContestData } from '@/lib/contests-repo';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export type { ContestData } from '@/lib/contests-repo';
 
-type ContestListParams = { page?: number; search?: string };
+type ContestListParams = { page?: number; search?: string; sort?: ListSortInput };
 type ContestListResult = Awaited<ReturnType<typeof fetchContestsPage>>;
 type MutationResult = { success: boolean; error?: string; errors?: Array<{ field: string; message: string; code: string }> };
 type AvailableResult = { success: boolean; contests: Array<{ id: number; name: string; is_active: boolean }>; error?: string };
-type ActiveResult = { success: boolean; contest?: unknown; error?: string };
-
-// Why: permission failure must surface as a thrown error so adapters can map to
-// their transport (throw for actions, 401/403 JSON for routes) without duplicating the check.
-async function requirePermission(permission: PermissionKey): Promise<ReadonlySet<string>> {
-  const session = await getSession();
-  if (!session) {
-    const error = new Error('Unauthorized') as Error & { status: number };
-    error.status = 401;
-    throw error;
-  }
-  const perms = await getFreshPermissions(session.userId);
-  if (!perms || !hasEffectivePermission(perms, permission)) {
-    const error = new Error(`Unauthorized: Missing ${permission} permission`) as Error & {
-      status: number;
-      permission: string;
-    };
-    error.status = 403;
-    error.permission = permission;
-    throw error;
-  }
-  return perms;
-}
+type BoundContestResult = { success: boolean; binding?: ContestBinding; error?: string };
+type ShardBindingsResult = { success: boolean; bindings: ShardContestBinding[]; error?: string };
 
 export async function listContests(params: ContestListParams = {}): Promise<ContestListResult> {
   await requirePermission('contest:list');
   return fetchContestsPage(params);
 }
 
+/**
+ * Put every limit field the payload names through the shared rule before validation and the write,
+ * so a 0 or a blank arrives as NULL ("no limit") rather than as something the CHECK would refuse.
+ */
+function normalizeLimitFields<T extends Partial<ContestData>>(data: T): T {
+  const next: Record<string, unknown> = { ...data };
+  for (const field of LIMIT_FIELDS) {
+    if (field in next) next[field] = normalizeLimitValue(next[field]);
+  }
+  return next as T;
+}
+
 export async function createContest(data: ContestData): Promise<MutationResult> {
-  const perms = await requirePermission('contest:create');
-  const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData;
+  const perms = await requirePermission(ACTION_PERMISSIONS.createContest);
+  const allowed = normalizeLimitFields(stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as ContestData);
   const rawName = (data as unknown as Record<string, unknown>).name;
   if (typeof rawName !== 'string' || !CONTEST_NAME_REGEX.test(rawName)) {
     return {
@@ -81,8 +78,8 @@ export async function createContest(data: ContestData): Promise<MutationResult> 
 }
 
 export async function updateContest(id: number, data: Partial<ContestData>): Promise<MutationResult> {
-  const perms = await requirePermission('contest:update');
-  const allowed = stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>;
+  const perms = await requirePermission(ACTION_PERMISSIONS.updateContest);
+  const allowed = normalizeLimitFields(stripDisallowedFields('contests', data as unknown as Record<string, unknown>, perms) as unknown as Partial<ContestData>);
   const validation = validateContestData(allowed as ContestData);
   if (!validation.valid) {
     return { success: false, errors: validation.errors, error: 'Validation failed' };
@@ -103,7 +100,7 @@ export async function updateContest(id: number, data: Partial<ContestData>): Pro
 }
 
 export async function deleteContest(id: number): Promise<MutationResult> {
-  await requirePermission('contest:delete');
+  await requirePermission(ACTION_PERMISSIONS.deleteContest);
   const beforeRow = await prisma.contests.findUnique({ where: { id } });
   try {
     await prisma.contests.delete({ where: { id } });
@@ -121,12 +118,14 @@ export async function deleteContest(id: number): Promise<MutationResult> {
 }
 
 export async function addParticipant(contestId: number, userId: number): Promise<MutationResult> {
-  await requirePermission('participation:create');
+  await requirePermission(ACTION_PERMISSIONS.addParticipant);
   try {
     await prisma.$executeRaw`
       INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
       VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
+      ON CONFLICT (contest_id, user_id) DO NOTHING
     `;
+    await resyncRankingUsers(contestId);
     await recordAudit({
       verb: 'participation:create',
       entity: 'participation',
@@ -140,10 +139,11 @@ export async function addParticipant(contestId: number, userId: number): Promise
 }
 
 export async function removeParticipant(participationId: number): Promise<MutationResult> {
-  await requirePermission('participation:delete');
+  await requirePermission(ACTION_PERMISSIONS.removeParticipant);
   const beforeRow = await prisma.participations.findUnique({ where: { id: participationId } });
   try {
     await prisma.participations.delete({ where: { id: participationId } });
+    if (beforeRow !== null) await resyncRankingUsers(beforeRow.contest_id);
     await recordAudit({
       verb: 'participation:delete',
       entity: 'participation',
@@ -160,7 +160,7 @@ export async function removeParticipant(participationId: number): Promise<Mutati
 export async function addTaskToContest(contestId: number, taskId: number): Promise<MutationResult> {
   await requirePermission('task:update');
   try {
-    await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: contestId } });
+    await attachContestTask(prisma, contestId, taskId);
     await recordAudit({
       verb: 'task:update',
       entity: 'task',
@@ -174,10 +174,10 @@ export async function addTaskToContest(contestId: number, taskId: number): Promi
   }
 }
 
-export async function removeTaskFromContest(taskId: number): Promise<MutationResult> {
+export async function removeTaskFromContest(contestId: number, taskId: number): Promise<MutationResult> {
   await requirePermission('task:update');
   try {
-    await prisma.tasks.update({ where: { id: taskId }, data: { contest_id: null } });
+    await detachContestTask(prisma, contestId, taskId);
     await recordAudit({
       verb: 'task:update',
       entity: 'task',
@@ -195,6 +195,45 @@ export async function updateContestSettings(id: number, data: Partial<ContestDat
   return updateContest(id, data);
 }
 
+// Why no read-then-write any more: executeContestUpdate now keeps every limit column a patch does
+// not name, so a window-only patch no longer needs the current limits carried along. The remaining
+// read is only the not-found answer the window route reports per contest.
+export async function updateContestWindow(id: number, patch: Partial<ContestData>): Promise<MutationResult> {
+  await requirePermission(ACTION_PERMISSIONS.updateContest);
+  const exists = await prisma.contests.findUnique({ where: { id }, select: { id: true } });
+  if (exists === null) return { success: false, error: 'Contest not found' };
+  return updateContest(id, patch);
+}
+
+/**
+ * The bulk limit write: apply one already-whitelisted limit patch to a single contest. It reuses
+ * the same permission gate and the same repository write as a full contest update, so the batch
+ * route never touches SQL itself and the whitelist stays in `pickLimitPatch`.
+ */
+export async function updateContestLimits(id: number, patch: LimitPatch): Promise<MutationResult> {
+  const perms = await requirePermission(ACTION_PERMISSIONS.updateContest);
+  const allowed = stripDisallowedFields('contests', patch as unknown as Record<string, unknown>, perms) as unknown as LimitPatch;
+  const exists = await prisma.contests.findUnique({ where: { id }, select: { id: true } });
+  if (exists === null) return { success: false, error: 'Contest not found' };
+  const data: Partial<ContestData> = {};
+  for (const field of LIMIT_FIELDS) {
+    if (field in allowed) data[field] = allowed[field];
+  }
+  try {
+    await executeContestUpdate(id, data);
+    await recordAudit({
+      verb: 'contest:update',
+      entity: 'contest',
+      entityId: String(id),
+      afterValues: data,
+      result: 'success',
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    return mapContestDbError(error);
+  }
+}
+
 export async function getAvailableContests(): Promise<AvailableResult> {
   await requirePermission('contest:list');
   try {
@@ -208,10 +247,48 @@ export async function getAvailableContests(): Promise<AvailableResult> {
   }
 }
 
+/**
+ * The contest the deployment's contest web server serves, resolved from the registry the way the
+ * server resolves it for itself. It opens config.toml itself, so it carries the gate the audited
+ * reader demands for that file (env:read + env:list) and leaves the same config:view row.
+ */
+export async function getBoundContestId(): Promise<BoundContestResult> {
+  await requirePermission('contest:list');
+  await requirePermission('env:read');
+  await requirePermission('env:list');
+  try {
+    const binding = await resolveContestBinding(await readContestWebServerShard());
+    // WHY the match travels with the row: a declared shard that names no registry row leaves the
+    // enabled rows' own answer, so the row that answered is how a config.toml and a registry that
+    // disagree about the shard become visible at all.
+    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, requestedKeys: [`contest.${CONTEST_WEB_SERVER_SHARD_KEY}`], bindingMatchedBy: binding.matchedBy }, result: 'success' });
+    return { success: true, binding };
+  } catch (error: unknown) {
+    await recordAudit({ verb: 'config:view', entity: 'config', afterValues: { file: CONFIG_TOML_FILE, error: error instanceof Error ? error.name : 'UnknownError' }, result: 'failure' });
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+/**
+ * The per-shard contest bindings from the service registry: one entry per enabled row that names a
+ * contest. The deployments screen shows these in place of one active-contest id, because the
+ * registry row — not contests.is_active — is the source a running instance resolves its contest
+ * from. It reads the registry table alone, so it carries the contest:list gate every contest read
+ * on that screen carries and leaves no config:view row.
+ */
+export async function getShardContestBindings(): Promise<ShardBindingsResult> {
+  await requirePermission('contest:list');
+  try {
+    return { success: true, bindings: await readShardContestBindings() };
+  } catch (error: unknown) {
+    return { success: false, bindings: [], error: (error as Error).message };
+  }
+}
+
 export async function activateContest(id: number): Promise<MutationResult> {
   await requirePermission('contest:switch');
   try {
-    await prisma.$executeRaw`UPDATE contests SET is_active = (id = ${id})`;
+    await writeActiveContestId(id);
     await recordAudit({
       verb: 'contest:switch',
       entity: 'contest',
@@ -220,19 +297,6 @@ export async function activateContest(id: number): Promise<MutationResult> {
       result: 'success',
     });
     return { success: true };
-  } catch (error: unknown) {
-    return { success: false, error: (error as Error).message };
-  }
-}
-
-export async function getActiveContest(): Promise<ActiveResult> {
-  await requirePermission('contest:read');
-  try {
-    const contest = await prisma.contests.findFirst({
-      where: { is_active: true },
-      include: { _count: { select: { participations: true } } },
-    });
-    return { success: true, contest };
   } catch (error: unknown) {
     return { success: false, error: (error as Error).message };
   }

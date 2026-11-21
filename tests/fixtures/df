@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# tests/fixtures/df — a df whose report a suite chooses: STUB_DF=ok|unreadable|low.
+# The scratch tree always clears the floor, so the report is the only way to reach the guard.
+set -u
+
+case "${STUB_DF:-ok}" in
+  ok)
+    exec "${STUB_REAL_DF:?STUB_REAL_DF is not set}" "$@"
+    ;;
+  unreadable)
+    exit 1
+    ;;
+  low)
+    printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+    printf 'stubfs 1000000 1000000 1 100%% /stub\n'
+    exit 0
+    ;;
+esac

@@ -39,11 +39,18 @@ Commands:
   setup                     first-time guided setup (fresh or update wizard)
   update                    interactive config update wizard (config only)
   fix                       non-interactive repair of missing/insecure config
-  deploy <stack> [--img]    make core|admin|contest|worker|infra [-img]; stack=all loops
+  deploy <stack> [--img]    make core|admin|contest|worker|infra|monitor [-img]; stack=all loops
   stop [stack]              stop one stack or all
   clean [stack]             clean one stack or all
   pull [stack]              pull images for one stack or all
-  db <init|reset|clean|sync> database lifecycle shortcuts
+  db <init|reset|clean|sync>  database lifecycle shortcuts
+  db migrate                apply the full migration history to the ACTIVE
+                            database (cms-init + prisma-sync) and verify
+                            schema + roles + RLS
+  db use <name>             switch the active db profile (repoints, config sync, restack)
+  db create <name> [--dry-run]  CREATE DATABASE (stops cms-database: single-user mode)
+  db rename <old> <new> [--dry-run]  rename a database (stops cms-database: single-user mode)
+  db clean|reset                delete ALL cms volumes; requires "yes" on a TTY or CONFIRM_DB_DESTROY=yes
   admin-create              create superadmin account
   status                    live service status dashboard
   monitor                   monitoring/backup operations UI
@@ -61,10 +68,16 @@ Commands:
                             public ts.net access behind basic auth (no tailnet)
   domain setup|status|renew|preflight
                             <DOMAIN_NAME> HTTPS domain lifecycle (TLS+Nginx+certs)
-  config sync [--dry-run]   generate .env.* from config.toml
+  config sync [--dry-run]   generate .env from config.toml
   config edit               open config.toml in $EDITOR
   config show               print current config.toml
   contest create            create contests from YAML
+  contest set-active <id>   set the active contest in the database (config.toml/.env
+                            are derived from it; rows and DB are the source of truth)
+  panel <area> <verb> [args]  perform a panel action in-process, with no panel server up:
+                            registry bind|service|wiring|exposure, config show|end,
+                            override add|end, task attach|detach, accounts rotate
+                            (writes are audited under the 'root' actor)
   update-server             shard-aware FULL server update (git+img+db+verify)
   update all                alias for update-server (full update)
 
@@ -72,7 +85,16 @@ Examples:
   ./cms setup
   ./cms deploy core --img
   ./cms db reset
+  ./cms db create cmsdb_evaluate --dry-run
+  ./cms db use evaluate
+  ./cms db migrate
+  bash scripts/__db_migrate.sh --dry-run   # print the migration steps, change nothing
   ./cms backup drill
+  ./cms panel registry bind cms-proxy-1 --contest 9
+  ./cms panel config show 9 --reason 'day two goes live'
+  ./cms panel override add --contest 9 --kind task --key 'Day_202/A_20Plus_20B' --action hide --reason 'withdrawn'
+  ./cms panel task attach 9 --task 4,5
+  ./cms panel accounts rotate 9 --user 12,13 --team 3 --reason 'day two'
 CMDS
 }
 
@@ -123,7 +145,79 @@ run_tui() {
 # Single source: cli/mod.rs + core/dispatch.rs. No bash duplication.
 # Lifecycle below only runs for no-args non-TTY bootstrap.
 
+# `db use <name>` switches the active database profile. scripts/__db_use.sh is the
+# single authority for the switch (config.toml -> config sync -> stack restart); the
+# Rust CLI routes to the same script.
+if [[ $# -ge 2 && "$1" == "db" && "$2" == "use" ]]; then
+  bash scripts/__db_use.sh "${3:-}"
+  exit $?
+fi
+
+# `db clean` / `db reset` delete EVERY volume in the cms project. They must
+# clear the shared guard (scripts/__db_destroy_guard.sh owns the policy: the
+# literal word on a TTY, or CONFIRM_DB_DESTROY=yes) before the TUI/make path can
+# reach `down -v`; the guard's exit code is propagated so a refusal stops here.
+# Only the exact two-word shape is admitted: any extra/unknown argument is
+# refused instead of forwarded, because a shape this gate did not classify must
+# never fall through to make db-clean / db-reset.
+if [[ $# -ge 2 && "$1" == "db" && ( "${2:-}" == "clean" || "${2:-}" == "reset" ) ]]; then
+  if [[ $# -ne 2 ]]; then
+    echo "Error: unexpected arguments after 'db ${2}' (got: $*)." >&2
+    echo "Refusing to forward this shape to the destructive teardown path." >&2
+    echo "The only accepted form is: ./cms db ${2}" >&2
+    exit 2
+  fi
+  if [[ "${2:-}" == "reset" ]]; then
+    _db_guard_action="db-reset"
+  else
+    _db_guard_action="db-clean"
+  fi
+  bash scripts/__db_destroy_guard.sh "$_db_guard_action" || exit $?
+fi
+
+# `db create <name> [--dry-run]` / `db rename <old> <new> [--dry-run]` delegate
+# to scripts/__db_admin.sh — the single authority for the container-side SQL,
+# the CONFIRM_DB_ADMIN policy and the exit codes. This shim only routes and
+# forwards --dry-run verbatim; the admin script validates the argument shape.
+if [[ $# -ge 2 && "$1" == "db" && ( "${2:-}" == "create" || "${2:-}" == "rename" ) ]]; then
+  _db_admin_rc=0
+  bash scripts/__db_admin.sh "$2" "${@:3}" || _db_admin_rc=$?
+  exit "$_db_admin_rc"
+fi
+
+# `panel <area> <verb> [args]` performs a panel action itself, in-process, with no panel server
+# up — never by calling panel HTTP. scripts/__panel_action.sh is the single authority for how the
+# action runs (bun inside the panel package, importing the same module the panel's server actions
+# wrap); this shim only routes the verb and propagates the exit code, so a refused write stops here.
+if [[ $# -ge 1 && "$1" == "panel" ]]; then
+  _panel_rc=0
+  bash scripts/__panel_action.sh "${@:2}" || _panel_rc=$?
+  exit "$_panel_rc"
+fi
+
+if [[ $# -eq 1 && "$1" == "help" ]]; then
+  cmd_usage
+  exit 0
+fi
+
+# One source for the shell helpers, resolved before any subcommand is routed.
+# shellcheck source=/dev/null
+source scripts/__lib/common.sh 2>/dev/null || true
+declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
+declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
+declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
+declare -F is_root  >/dev/null || is_root()  { [[ "$(id -u)" == "0" ]]; }
+
+# The Rust catalog owns which actions need root (requires_sudo); the shim asks it rather
+# than keeping a second copy of the list, so a new privileged action needs no change here.
+action_needs_root() { [[ "$(run_tui --needs-sudo "$@" 2>/dev/null || true)" == "yes" ]]; }
+
 if [[ $# -gt 0 ]]; then
+  if action_needs_root "$@" && ! is_root; then
+    command -v sudo >/dev/null 2>&1 \
+      || log_die "root is required for '$*' and sudo is not installed — run: sudo $0 $*" 1
+    exec sudo -E "$0" "$@"
+  fi
   run_tui "$@"
 fi
 
@@ -161,11 +255,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 is_skipped() { [[ ",$SKIPS," == *",$1,"* ]]; }
-
-source scripts/__lib/common.sh 2>/dev/null || true
-declare -F log_info >/dev/null || log_info() { echo "[INFO] $*"; }
-declare -F log_warn >/dev/null || log_warn() { echo "[WARN] $*" >&2; }
-declare -F log_die  >/dev/null || log_die()  { echo "[FAIL] $*" >&2; exit "${2:-1}"; }
 
 RESULTS=()
 record() { RESULTS+=("$1|$2"); printf '  %-14s %s\n' "$1:" "$2"; }
@@ -253,8 +342,9 @@ is_skipped prisma-sync || run_step prisma-sync ""    'make prisma-sync'
 
 run_step admin "" 'make admin'
 
-# Optional tailnet HTTPS front (opt-in via TAILSCALE_SERVE=1 in .env.admin)
-if [[ "$(awk -F= '$1=="TAILSCALE_SERVE"{gsub(/[ \r]/,"",$2);print $2}' .env.admin 2>/dev/null || true)" == 1* ]]; then
+# Optional tailnet HTTPS front (opt-in: TAILSCALE_SERVE = 1 in config.toml [tailscale],
+# which `make env` above has already rendered into .env)
+if [[ "$(awk -F= '$1=="TAILSCALE_SERVE"{gsub(/[ \r]/,"",$2);print $2}' .env 2>/dev/null || true)" == 1* ]]; then
   if command -v tailscale >/dev/null 2>&1; then
     run_step tailscale-serve soft 'bash scripts/__tailscale_serve.sh setup'
   else
@@ -273,7 +363,7 @@ if ! is_skipped contest; then
       if [[ "$have" == "0" ]]; then
         log_info "DB has no contests — importing sample (examples/contests.yaml)"
         run_step sample-contest soft './scripts/__create_contests.sh -f examples/contests.yaml'
-        log_info "Set CONTEST_ID in .env.contest to the desired sample id, then: make env && make contest"
+        log_info "Set the active contest with './cms contest set-active <id>' (the database is the source of truth; config.toml/.env derive from it), then: make contest"
       else
         record "sample-contest" "SKIPPED (contests exist: $have)"
       fi
@@ -296,7 +386,7 @@ run_step monitor soft '
   mkdir -p backups
   if ! make infra; then
     echo "Monitor failed — if permission denied on docker.sock set DOCKER_GID:"
-    echo "  stat -c %g /var/run/docker.sock   # put value in .env.infra as DOCKER_GID=<n>"
+    echo "  stat -c %g /var/run/docker.sock   # put it in config.toml [infra] as DOCKER_GID=<n>"
     exit 1
   fi
 '

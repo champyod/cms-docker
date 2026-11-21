@@ -3,6 +3,7 @@
 import { useSearchParams, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { searchAll } from '@/app/actions/search';
+import { buildRoute } from '@/lib/navigation/routes';
 import { Users, Trophy, ClipboardList, Shield, SearchX } from 'lucide-react';
 import Link from 'next/link';
 import { SearchResultCard, SectionHeader } from '@/components/search/SearchComponents';
@@ -45,7 +46,7 @@ export default function SearchClient() {
                     <SectionHeader title="Users" count={results.users.length} icon={Users} iconColor="text-blue-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.users.map((u: SearchResults['users'][number]) => (
-                            <Link href={`/${locale}/users?search=${encodeURIComponent(u.username)}`} key={u.id}>
+                            <Link href={buildRoute(locale, 'people.user-tabs.profile', { id: u.id })} key={u.id}>
                                 <SearchResultCard title={u.username} subtitle={`${u.first_name} ${u.last_name}`} />
                             </Link>
                         ))}
@@ -57,7 +58,7 @@ export default function SearchClient() {
                     <SectionHeader title="Tasks" count={results.tasks.length} icon={ClipboardList} iconColor="text-emerald-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.tasks.map((t: SearchResults['tasks'][number]) => (
-                            <Link href={`/${locale}/tasks/${t.id}`} key={t.id}>
+                            <Link href={buildRoute(locale, 'tasks.record', { id: t.id })} key={t.id}>
                                 <SearchResultCard title={t.name} subtitle={t.title} />
                             </Link>
                         ))}
@@ -69,7 +70,7 @@ export default function SearchClient() {
                      <SectionHeader title="Contests" count={results.contests.length} icon={Trophy} iconColor="text-amber-400" />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {results.contests.map((c: SearchResults['contests'][number]) => (
-                            <Link href={`/${locale}/contests/${c.id}`} key={c.id}>
+                            <Link href={buildRoute(locale, 'contests.record', { id: c.id })} key={c.id}>
                                 <SearchResultCard title={c.name} subtitle={c.description} />
                             </Link>
                         ))}

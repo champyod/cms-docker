@@ -1,0 +1,649 @@
+/* Programming contest management system
+ * Copyright © 2012 Luca Wehrstedt <luca.wehrstedt@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ */
+
+var escapeHTML = (function() {
+    var escapeMap = {
+        '&' : '&amp;',
+        '<' : '&lt;',
+        '>' : '&gt;',
+        '"' : '&quot;',
+        "'" : '&#x27;',
+        '/' : '&#x2F;',
+        '`' : '&#x60;'
+    };
+    var escapeHTML = function(str) {
+        return String(str).replace(/[&<>"'\/`]/g, function(ch) {
+            return escapeMap[ch];
+        });
+    };
+    return escapeHTML;
+})();
+
+var Scoreboard = new function () {
+    var self = this;
+
+    self.init = function () {
+        self.tcols_el = $('#Scoreboard_cols');
+        self.thead_el = $('#Scoreboard_head');
+        self.tbody_el = $('#Scoreboard_body');
+
+        self.generate();
+
+        DataStore.user_create.add(self.create_user);
+        DataStore.user_update.add(self.update_user);
+        DataStore.user_delete.add(self.delete_user);
+
+        DataStore.score_events.add(self.score_handler);
+        DataStore.rank_events.add(self.rank_handler);
+        DataStore.select_events.add(self.select_handler);
+        DataStore.override_events.add(self.override_handler);
+    };
+
+    self.frozen = new Object();
+
+    self.display_name = function (user) {
+        var renamed = DataStore.rename_for(user["key"]);
+        if (renamed !== null) return { first: renamed, last: "" };
+        return { first: user["f_name"], last: user["l_name"] };
+    };
+
+    /* An unknown team is the data fault the store has already logged. The row still gets
+       built, so the team shows its raw key — the name ranking-web/src/board.rs renders too.
+     */
+    self.team_name = function (team) {
+        var entry = DataStore.teams[team];
+        return (entry === undefined) ? team : entry["name"];
+    };
+
+    self.display_global = function (user) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined) return snap["global"];
+        var replaced = DataStore.score_for(user["key"]);
+        if (replaced !== null) return replaced;
+        return user["global"];
+    };
+
+    self.display_rank = function (user) {
+        var pinned = DataStore.pin_for(user["key"]);
+        if (pinned !== null) return pinned;
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined) return snap["rank"];
+        if (typeof user["rank"] !== "number") return user["rank"];
+        var mine = self.display_global(user);
+        var rank = 1;
+        for (var u_id in DataStore.users) {
+            if (self.display_global(DataStore.users[u_id]) > mine) rank += 1;
+        }
+        return rank;
+    };
+
+    self.display_task = function (user, t_id) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined && snap["tasks"][t_id] !== undefined) return snap["tasks"][t_id];
+        return user["t_" + t_id];
+    };
+
+    self.display_contest = function (user, c_id) {
+        var snap = self.frozen[user["key"]];
+        if (snap !== undefined && snap["contests"][c_id] !== undefined) return snap["contests"][c_id];
+        return user["c_" + c_id];
+    };
+
+    self.display_column = function (user, sort_key) {
+        if (sort_key === "global") return self.display_global(user);
+        if (sort_key.slice(0, 2) === "c_") return self.display_contest(user, sort_key.slice(2));
+        if (sort_key.slice(0, 2) === "t_") return self.display_task(user, sort_key.slice(2));
+        return user[sort_key];
+    };
+
+    self.is_frozen = function (user) {
+        return self.frozen[user["key"]] !== undefined;
+    };
+
+    self.snapshot_user = function (user) {
+        var tasks = new Object();
+        for (var t_id in DataStore.tasks) tasks[t_id] = user["t_" + t_id];
+        var contests = new Object();
+        for (var c_id in DataStore.contests) contests[c_id] = user["c_" + c_id];
+        return { global: user["global"], rank: user["rank"], tasks: tasks, contests: contests };
+    };
+
+    self.override_handler = function (overrides) {
+        var boardFrozen = DataStore.board_freeze_hit() !== null;
+        var next = new Object();
+        for (var u_id in DataStore.users) {
+            if (boardFrozen || DataStore.freeze_hit_for(u_id) !== null) {
+                next[u_id] = (self.frozen[u_id] !== undefined) ? self.frozen[u_id] : self.snapshot_user(DataStore.users[u_id]);
+            }
+        }
+        self.frozen = next;
+        self.render();
+    };
+
+    /* Draws the whole table from the store: the column set, the head and the body. The
+       override event carries a task hide, which moves a column, so the columns are redrawn
+       with the rows; redrawing the rows alone would keep the hidden task's column standing
+       until a reload.
+     */
+    self.render = function () {
+        self.tcols_el.html(self.make_cols());
+        self.thead_el.html(self.make_head());
+        self.rebuild();
+        self.mark_sort_key();
+    };
+
+    /* The board is sorted on a drawn column, so the marker belongs to the column the key
+       names, in the head and in every row.
+     */
+    self.mark_sort_key = function () {
+        $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).addClass("sort_key");
+        $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).addClass("sort_key");
+        $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).addClass("sort_key");
+    };
+
+    self.rebuild = function () {
+        self.tbody_el.empty();
+        self.user_list = new Array();
+        self.make_body();
+    };
+
+    /* The tasks the board draws a column for: a hidden task keeps its row, its dataset and
+       its metadata, so the list the page loads already leaves it out and the board's own
+       list has to leave it out too.
+     */
+    self.board_tasks = function (contest) {
+        return contest["tasks"].filter(function (task) {
+            return !DataStore.is_task_hidden(task["key"]);
+        });
+    };
+
+    self.visible_users = function () {
+        var out = new Array();
+        if (DataStore.is_board_hidden()) return out;
+        for (var u_id in DataStore.users) {
+            if (!DataStore.is_hidden(u_id)) out.push(DataStore.users[u_id]);
+        }
+        var guests = DataStore.guest_rows();
+        for (var idx in guests) {
+            var row = guests[idx];
+            var user = { key: row["target_key"], f_name: row["value"] || row["target_key"], l_name: "", team: null, global: 0, rank: "–", selected: 0 };
+            for (var t_id in DataStore.tasks) user["t_" + t_id] = 0;
+            out.push(user);
+        }
+        return out;
+    };
+
+
+    self.generate = function () {
+        // Create callbacks for sorting
+        self.thead_el.on("click", "th.score", function () {
+            $("col[data-sort_key=" + self.sort_key + "]", self.tcols_el).removeClass("sort_key");
+            $("tr td[data-sort_key=" + self.sort_key + "]", self.thead_el).removeClass("sort_key");
+            $("tr td[data-sort_key=" + self.sort_key + "]", self.tbody_el).removeClass("sort_key");
+
+            var $this = $(this);
+
+            if ($this.hasClass("global")) {
+                self.sort_key = "global";
+            } else if ($this.hasClass("contest")) {
+                self.sort_key = "c_" + $this.data("contest");
+            } else if ($this.hasClass("task")) {
+                self.sort_key = "t_" + $this.data("task");
+            }
+
+            self.sort();
+
+            self.mark_sort_key();
+        });
+
+        self.sort_key = "global";
+        self.render();
+
+        // Create callbacks for selection
+        self.tbody_el.on("click", "td.sel", function () {
+            DataStore.toggle_selected($(this).parent().data("user"));
+        });
+
+        // Create callbacks for UserPanel
+        self.tbody_el.on("click", "td.f_name, td.l_name, td.user_id", function () {
+            UserDetail.show($(this).parent().data("user"));
+        });
+
+        // Create callbacks for animation-end
+        self.tbody_el.on('animationend', 'tr', function(event) {
+            $(this).removeClass("score_up score_down");
+        });
+
+        // Fuck, WebKit!!
+        self.tbody_el.on('webkitAnimationEnd', 'tr', function(event) {
+            $(this).removeClass("score_up score_down");
+        });
+    };
+
+
+    self.make_cols = function () {
+        // We want some columns to have a fixed, constant width at all screen
+        // sizes (i.e. the sel, rank and team columns) while having the other
+        // columns scale accoring to the available horizontal space. Yet, we
+        // also want these columns' widths to keep a certain ratio one to each
+        // other, for example the task score, contest score and global score
+        // columns should be in a 3:4:5 ratio. Since the number of columns is
+        // not known beforehand, this is quite difficult to achieve.
+        // We cannot specify all the widths using pixel sizes (or similar)
+        // because when there are many tasks the table may overflow, and when
+        // there are few tasks it may underflow (and, in such cases, the
+        // remaining width is divided proportionally among all columns, thus
+        // enlarging the constant width columns too). We cannot use relative
+        // widths (i.e. using precent values) because it seems that some
+        // versions of IE don't like it when the sum of the widths is greater
+        // than 100% (and this may happen when there are many tasks).
+        // We cannot use an 'auto' width on all columns because this would not
+        // preserve the ratio among widths.
+        // We cannot mix fixed/percent/auto widths because, depending on the
+        // way we do it, the solution may not scale well at high resolutions or
+        // it may again be difficult to keep the ratio that we want.
+        // Also, I would like not to use JS or strange HTML constructions to
+        // achieve this goal: it would be great if we could do this using just
+        // simple CSS rules.
+        // I couldn't find the perfect solution, so the one I'm implementing is
+        // a bit of a compromise, which tries to mess as little as possible
+        // with JS and HTML. So, at the moment, this is what we do: we set the
+        // columns with fixed width to their fixed width (via CSS). We don't
+        // define a width for all other columns, thus leaving them at their
+        // default value: auto. Yet, we don't create a single <col/> element
+        // for each column, but we create 3 for the task columns, 4 for the
+        // contest columns, 5 for the global column, etc. Then we set the
+        // colspan attribute of task cells to 3, of contest cells to 4, of
+        // global cells to 5, etc. This way, since all <col/>s with a width of
+        // 'auto' get the same computed width, we keep the 3:4:5 ratio and are
+        // able to scale well at each screen size, while keeping the constant
+        // width columns constant. (Note: the first_ and last_name columns are one
+        // <col/> each with an explicit width. A spanned <col/> would instead be given
+        // that width per spanned column, so a "span" of 10 would multiply the name
+        // width by ten — which is exactly how the name columns once ate the table.)
+        // Suggestion on other solution that get the same result and don't mess
+        // this much with JS and HTML are extremely welcome!
+        var result = " \
+<col class=\"sel\"/> \
+<col class=\"rank\"/> \
+<col class=\"f_name\"/> \
+<col class=\"l_name\"/> \
+<col class=\"user_id\"/> \
+<col class=\"team\"/>";
+
+        var contests = DataStore.contest_list;
+        for (var i in contests) {
+            var contest = contests[i];
+            var c_id = contest["key"];
+
+            var tasks = self.board_tasks(contest);
+            for (var j in tasks) {
+                var task = tasks[j];
+                var t_id = task["key"];
+
+                result += " \
+<col class=\"score task\" data-task=\"" + t_id + "\" data-sort_key=\"t_" + t_id + "\"/> <col/><col/>";
+            }
+
+            result += " \
+<col class=\"score contest\" data-contest=\"" + c_id + "\" data-sort_key=\"c_" + c_id + "\"/> <col/><col/><col/>";
+        }
+
+        self.show_global_score = contests.length > 1;
+
+        if(self.show_global_score) {
+            result += " \
+<col class=\"score global\" data-sort_key=\"global\"/> <col/><col/><col/><col/>";
+        }
+
+        return result;
+    };
+
+
+    self.make_head = function () {
+        // See the comment in .make_cols() for the reason we use colspans.
+        var result = " \
+<tr> \
+    <th class=\"sel\"></th> \
+    <th class=\"rank\">Rank</th> \
+    <th class=\"f_name\">First Name</th> \
+    <th class=\"l_name\">Last Name</th>" +
+            (PublicConfig.show_id_column ? "<th class=\"user_id\">ID</th>" : "") +
+            "<th class=\"team\">Team</th>";
+
+        var contests = DataStore.contest_list;
+        for (var i in contests) {
+            var contest = contests[i];
+            var c_id = contest["key"];
+
+            var tasks = self.board_tasks(contest);
+            for (var j in tasks) {
+                var task = tasks[j];
+                var t_id = task["key"];
+
+                result += " \
+    <th colspan=\"3\" class=\"score task\" data-task=\"" + t_id + "\" data-sort_key=\"t_" + t_id + "\"><abbr title=\"" + escapeHTML(task["name"]) + "\">" + escapeHTML(task["short_name"]) + "</abbr></th>";
+            }
+
+            result += " \
+    <th colspan=\"4\" class=\"score contest\" data-contest=\"" + c_id + "\" data-sort_key=\"c_" + c_id + "\"><abbr title=\"" + escapeHTML(contest["name"]) + "\">" + escapeHTML(contest["name"]) + "</abbr></th>";
+        }
+
+        if(self.show_global_score) {
+            result += " \
+    <th colspan=\"5\" class=\"score global\" data-sort_key=\"global\">Global</th> \
+</tr>";
+        }
+
+        return result;
+    };
+
+
+    self.make_body = function () {
+        var visible = self.visible_users();
+        for (var idx in visible) {
+            var user = visible[idx];
+            user["row"] = $(self.make_row(user))[0];
+            self.user_list.push(user);
+        }
+
+        self.sort();
+    };
+
+
+    self.make_row = function (user) {
+        var name = self.display_name(user);
+        var result = " \
+<tr class=\"user" + (user["selected"] > 0 ? " selected color" + user["selected"] : "") + "\" data-user=\"" + user["key"] + "\"> \
+    <td class=\"sel\"></td> \
+    <td class=\"rank\">" + self.display_rank(user) + "</td> \
+    <td class=\"f_name\">" + escapeHTML(name["first"]) + "</td> \
+    <td class=\"l_name\">" + escapeHTML(name["last"]) + "</td>" +
+            (PublicConfig.show_id_column ? "<td class=\"user_id\">" + user["key"] + "</td>" : "");
+
+        if (user['team']) {
+            result += " \
+    <td class=\"team\"><img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + self.team_name(user["team"]) + "\" /></td>";
+        } else {
+            result += " \
+    <td class=\"team\"></td>";
+        }
+
+        var contests = DataStore.contest_list;
+        for (var i in contests) {
+            var contest = contests[i];
+            var c_id = contest["key"];
+
+            var tasks = self.board_tasks(contest);
+            for (var j in tasks) {
+                var task = tasks[j];
+                var t_id = task["key"];
+
+                var score_class = self.get_score_class(self.display_task(user, t_id), task["max_score"]);
+                result += " \
+    <td colspan=\"3\" class=\"score task " + score_class + "\" data-task=\"" + t_id + "\" data-sort_key=\"t_" + t_id + "\">" + round_to_str(self.display_task(user, t_id), task["score_precision"]) + "</td>";
+            }
+
+            var score_class = self.get_score_class(self.display_contest(user, c_id), contest["max_score"]);
+            result += " \
+    <td colspan=\"4\" class=\"score contest " + score_class + "\" data-contest=\"" + c_id + "\" data-sort_key=\"c_" + c_id + "\">" + round_to_str(self.display_contest(user, c_id), contest["score_precision"]) + "</td>";
+        }
+
+        if(self.show_global_score) {
+            var score_class = self.get_score_class(self.display_global(user), DataStore.global_max_score);
+            result += " \
+    <td colspan=\"5\" class=\"score global " + score_class + "\" data-sort_key=\"global\">" + round_to_str(self.display_global(user), DataStore.global_score_precision) + "</td> \
+</tr>";
+        }
+
+        return result;
+    };
+
+
+    self.get_score_class = function (score, max_score) {
+        if (score <= 0) {
+            return "score_0";
+        } else if (score >= max_score) {
+            return "score_100";
+        } else {
+            var rel_score = parseInt(score / max_score * 10) * 10;
+            return "score_" + rel_score + "_" + (rel_score + 10);
+        }
+    };
+
+
+    // We keep a sorted list of user that represent the current order of the
+    // scoreboard. In particular we sort using these keys:
+    // - the score in the current active column
+    // - the global score
+    // - the last name
+    // - the first name
+    // - the key
+    self.user_list = new Array();
+
+
+    // Compare two users. Returns -1 if "a < b" or +1 if "a >= b"
+    // (where a < b means that a shoud go above b in the scoreboard)
+    self.compare_users = function (a, b) {
+        var a_pin = DataStore.pin_for(a["key"]);
+        var b_pin = DataStore.pin_for(b["key"]);
+        if (a_pin !== null || b_pin !== null) {
+            var a_rank = (a_pin !== null) ? a_pin : Number.MAX_SAFE_INTEGER;
+            var b_rank = (b_pin !== null) ? b_pin : Number.MAX_SAFE_INTEGER;
+            if (a_rank !== b_rank) return (a_rank < b_rank) ? -1 : +1;
+        }
+        var sort_key = self.sort_key;
+        var a_value = self.display_column(a, sort_key);
+        var b_value = self.display_column(b, sort_key);
+        var a_global = self.display_global(a);
+        var b_global = self.display_global(b);
+        if ((a_value > b_value) || ((a_value == b_value) &&
+           ((a_global > b_global) || ((a_global == b_global) &&
+           ((a["l_name"] < b["l_name"]) || ((a["l_name"] == b["l_name"]) &&
+           ((a["f_name"] < b["f_name"]) || ((a["f_name"] == b["f_name"]) &&
+           (a["key"] <= b["key"]))))))))) {
+            return -1;
+        } else {
+            return +1;
+        }
+    };
+
+
+    // Suppose the scoreboard is correctly sorted except for the given user.
+    // Move this user (up or down) to put it in their correct position.
+    self.move_user = function (user) {
+        var list = self.user_list;
+        var compare = self.compare_users;
+
+        var list_l = list.length;
+        var i = parseInt(user["index"]);
+
+        if (i > 0 && compare(user, list[i-1]) == -1) {
+            // Move up
+
+            while (i > 0 && compare(user, list[i-1]) == -1) {
+                list[i] = list[i-1];
+                list[i]["index"] = i;
+                i -= 1;
+            }
+            list[i] = user;
+            user["index"] = i;
+
+            if (i == 0) {
+                self.tbody_el.prepend(user["row"]);
+            } else {
+                self.tbody_el.children("tr.user[data-user=" + list[i-1]["key"] + "]").after(user["row"]);
+            }
+        } else if (i < list_l-1 && compare(list[i+1], user) == -1) {
+            // Move down
+
+            while (i < list_l-1 && compare(list[i+1], user) == -1) {
+                list[i] = list[i+1];
+                list[i]["index"] = i;
+                i += 1;
+            }
+            list[i] = user;
+            user["index"] = i;
+
+            if (i == list_l-1) {
+                self.tbody_el.append(user["row"]);
+            } else {
+                self.tbody_el.children("tr.user[data-user=" + list[i+1]["key"] + "]").before(user["row"]);
+            }
+        }
+    };
+
+
+    // Sort the scoreboard using the column with the given index.
+    self.sort = function () {
+        var list = self.user_list;
+
+        list.sort(self.compare_users);
+
+        var fragment = document.createDocumentFragment();
+        for (var idx in list)
+        {
+            list[idx]["index"] = idx;
+            fragment.appendChild(list[idx]["row"]);
+        }
+
+        self.tbody_el.append(fragment);
+    };
+
+
+    // This callback is called by the DataStore when a user is created.
+    self.create_user = function (u_id, user) {
+        if (DataStore.is_hidden(u_id)) return;
+        var $row = $(self.make_row(user));
+        $row.children("td[data-sort_key=" + self.sort_key + "]").addClass("sort_key");
+
+        user["row"] = $row[0];
+        user["index"] = self.user_list.length;
+        self.user_list.push(user);
+
+        self.tbody_el.append($row);
+        // The row will be at the bottom (since it has a score of zero and thus
+        // the maximum rank), but we may still need to sort it due to other
+        // users having that score and the sort-by-name clause.
+        self.move_user(user);
+    };
+
+
+    // This callback is called by the DataStore when a user is updated.
+    // It updates only its basic information (first name, last name and team).
+    self.update_user = function (u_id, old_user, user) {
+        var $row = $(old_user["row"]);
+
+        user["row"] = old_user["row"];
+        user["index"] = old_user["index"];
+        self.user_list.splice(old_user["index"], 1, user);
+        delete old_user["row"];
+        delete old_user["index"];
+
+        $row.children("td.rank").text(self.display_rank(user));
+        var name = self.display_name(user);
+        $row.children("td.f_name").text(name["first"]);
+        $row.children("td.l_name").text(name["last"]);
+
+        if (user["team"]) {
+            $row.children(".team").html("<img src=\"" + Config.get_flag_url(user["team"]) + "\" title=\"" + self.team_name(user["team"]) + "\" />");
+        } else {
+            $row.children(".team").text("");
+        }
+    };
+
+
+    // This callback is called by the DataStore when a user is deleted.
+    self.delete_user = function (u_id, old_user) {
+        var $row = $(old_user["row"]);
+
+        self.user_list.splice(old_user["index"], 1);
+        delete old_user["row"];
+        delete old_user["index"];
+
+        $row.remove();
+    };
+
+
+    // This callback is called by the DataStore when a user changes score.
+    self.score_handler = function (u_id, user, t_id, task, delta) {
+        var $row = $(user["row"]);
+
+        $row.children("td.score").each(function () {
+            var $this = $(this);
+
+            if ($this.hasClass("global")) {
+                var max_score = DataStore.global_max_score;
+                var score = self.display_global(user);
+                $this.text(round_to_str(score, DataStore.global_score_precision));
+            } else if ($this.hasClass("contest")) {
+                var contest = DataStore.contests[$this.data("contest")];
+                var max_score = contest["max_score"];
+                var score = self.display_contest(user, $this.data("contest"));
+                $this.text(round_to_str(score, contest["score_precision"]));
+            } else if ($this.hasClass("task")) {
+                var task = DataStore.tasks[$this.data("task")];
+                var max_score = task["max_score"];
+                var score = self.display_task(user, $this.data("task"));
+                $this.text(round_to_str(score, task["score_precision"]));
+            }
+
+            var score_class = self.get_score_class(score, max_score);
+            $this.removeClass("score_0 score_0_10 score_10_20 score_20_30 score_30_40 score_40_50 score_50_60 score_60_70 score_70_80 score_80_90 score_90_100 score_100");
+            $this.addClass(score_class);
+        });
+
+        if (self.is_frozen(user)) return;
+
+        self.move_user(user);
+
+        $row.removeClass("score_up score_down");
+        if (delta > 0) {
+            $row.addClass("score_up");
+        } else if (delta < 0) {
+            $row.addClass("score_down");
+        }
+    };
+
+
+    // This callback is called by the DataStore when a user changes rank.
+    self.rank_handler = function (u_id, user) {
+        var $row = $(user["row"]);
+
+        $row.children("td.rank").text(self.display_rank(user));
+    };
+
+
+    self.select_handler = function (u_id, color) {
+        var $row = $(DataStore.users[u_id]["row"]);
+
+        // TODO we could user a data-* attribute to store the color
+
+        if (color != 0) {
+            $row.addClass("selected color" + color);
+        } else {
+            $row.removeClass("selected color1 color2 color3 color4 color5 color6 color7 color8");
+        }
+    };
+
+    self.scroll_into_view = function (u_id) {
+        var $row = $("tr.user[data-user=" + u_id + "]", self.tbody_el);
+        var $frame = $("#InnerFrame");
+        var scroll = $row.position().top + $row.height() / 2 - $frame.height() / 2;
+        $frame.scrollTop(scroll);
+    };
+};

@@ -68,7 +68,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
 
     # Testing get_submissions_operations.
 
-    def test_get_submissions_operations_no_operations(self):
+    def test_it_returns_no_operations_when_none_are_needed(self):
         """Test for submissions without operations to do."""
         # A submission for a different contest.
         self.add_submission()
@@ -101,7 +101,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             set())
 
-    def test_get_submissions_operations_without_results(self):
+    def test_it_returns_compilation_operations_for_a_submission_without_results(self):
         """Test for a submission without submission results."""
         submission = self.add_submission(self.tasks[0], self.participation)
         self.session.flush()
@@ -114,7 +114,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_with_results(self):
+    def test_it_returns_compilation_operations_for_a_submission_with_results(self):
         """Test for a submission with submission results."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation)
@@ -128,7 +128,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_with_results_second_try(self):
+    def test_it_lowers_the_priority_for_a_retried_compilation(self):
         """Test for a submission with submission results."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation)
@@ -145,7 +145,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_to_evaluate(self):
+    def test_it_returns_evaluation_operations_for_a_compiled_submission(self):
         """Test for a compiled submission."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation, True)
@@ -160,7 +160,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_to_evaluate_second_try(self):
+    def test_it_lowers_the_priority_for_a_retried_evaluation(self):
         """Test for a compiled submission."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation, True)
@@ -177,7 +177,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_partially_evaluate(self):
+    def test_it_returns_operations_only_for_unevaluated_testcases(self):
         """Test for a submission with some evaluation present."""
         submission, results = self.add_submission_with_results(
             self.tasks[0], self.participation, True)
@@ -200,7 +200,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_submissions_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_submissions_operations_mixed(self):
+    def test_it_returns_the_expected_operations_for_mixed_submissions(self):
         """Test with many different submission statuses."""
         expected_operations = set()
 
@@ -261,7 +261,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
 
     # Testing get_user_tests_operations.
 
-    def test_get_user_tests_operations_no_operations(self):
+    def test_it_returns_no_user_test_operations_when_none_are_needed(self):
         """Test for user_tests without operations to do."""
         # A user_test for a different contest.
         self.add_user_test()
@@ -289,7 +289,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             set())
 
-    def test_get_user_tests_operations_without_results(self):
+    def test_it_returns_compilation_operations_for_a_user_test_without_results(self):
         """Test for a user_test without user_test results."""
         user_test = self.add_user_test(self.tasks[0], self.participation)
         self.session.flush()
@@ -302,7 +302,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_user_tests_operations_with_results(self):
+    def test_it_returns_compilation_operations_for_a_user_test_with_results(self):
         """Test for a user_test with user_test results."""
         user_test, results = self.add_user_test_with_results()
         self.session.flush()
@@ -315,7 +315,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_user_tests_operations_with_results_second_try(self):
+    def test_it_lowers_the_priority_for_a_retried_user_test_compilation(self):
         """Test for a user_test with user_test results."""
         user_test, results = self.add_user_test_with_results()
         for result in results:
@@ -331,7 +331,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_user_tests_operations_to_evaluate(self):
+    def test_it_returns_evaluation_operations_for_a_compiled_user_test(self):
         """Test for a compiled user_test."""
         user_test, results = self.add_user_test_with_results(True)
         self.session.flush()
@@ -344,7 +344,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_user_tests_operations_to_evaluate_second_try(self):
+    def test_it_lowers_the_priority_for_a_retried_user_test_evaluation(self):
         """Test for a compiled user_test."""
         user_test, results = self.add_user_test_with_results(True)
         for result in results:
@@ -359,7 +359,7 @@ class TestESOperations(DatabaseMixin, unittest.TestCase):
             set(get_user_tests_operations(self.session, self.contest.id)),
             expected_operations)
 
-    def test_get_user_tests_operations_mixed(self):
+    def test_it_returns_the_expected_operations_for_mixed_user_tests(self):
         """Test with many different user_test statuses."""
         expected_operations = set()
 

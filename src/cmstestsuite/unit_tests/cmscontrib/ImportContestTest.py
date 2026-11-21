@@ -151,7 +151,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
         with SessionGen() as session:
             self.assertEqual(session.query(Submission).count(), count)
 
-    def test_import_task_in_db_not_attached(self):
+    def test_it_attaches_an_existing_unattached_task(self):
         # Completely new contest, the task is already in the DB, not attached
         # to any contest. The import should succeed and the task should made
         # part of the contest.
@@ -169,7 +169,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(task_name, task_title)],
                                [])
 
-    def test_import_task_not_in_db_imported(self):
+    def test_it_imports_a_missing_task_when_asked(self):
         # Completely new contest, the task is not in the DB, but we ask to
         # import it. The import should succeed and the task should made part of
         # the contest.
@@ -186,7 +186,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(task_name, task_title)],
                                [])
 
-    def test_import_task_not_in_db_fail(self):
+    def test_it_fails_when_a_missing_task_is_not_imported(self):
         # Completely new contest, but the task is not in the DB and we do not
         # ask to import it, so import should fail.
         name = "new_name"
@@ -199,7 +199,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
 
         self.assertFalse(ret)
 
-    def test_import_task_in_db_already_attached_fail(self):
+    def test_it_fails_when_the_task_is_already_attached_to_another_contest(self):
         # Completely new contest, but the task is already attached to another
         # contest in the DB.
         name = "new_name"
@@ -216,7 +216,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.task_name, self.task_title)],
                                [(self.username, self.last_name)])
 
-    def test_contest_exists_fail(self):
+    def test_it_fails_when_the_contest_exists_and_is_not_updated(self):
         # Contest exists but we do not ask to update it, should fail.
         description = "new_desc"
         contest = self.get_contest(name=self.name, description=description)
@@ -227,7 +227,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.task_name, self.task_title)],
                                [(self.username, self.last_name)])
 
-    def test_update_contest(self):
+    def test_it_updates_the_contest_description(self):
         # Update the existing contest, task not updated, participations should
         # not change even if we do not pass any.
         description = "new_desc"
@@ -245,7 +245,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.username, self.last_name)])
         self.assertSubmissionCount(1)
 
-    def test_update_contest_removing_task(self):
+    def test_it_unties_a_task_removed_from_the_contest(self):
         # Update the existing contest, the existing task is untied, but we
         # keep the submission.
         description = "new_desc"
@@ -259,7 +259,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.username, self.last_name)])
         self.assertSubmissionCount(1)
 
-    def test_update_contest_updating_and_adding_task(self):
+    def test_it_updates_a_task_and_adds_another(self):
         # Update the existing contest and the task, also add a new one.
         description = "new_desc"
         contest = self.get_contest(name=self.name, description=description)
@@ -281,7 +281,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.username, self.last_name)])
         self.assertSubmissionCount(1)
 
-    def test_import_participation_in_db(self):
+    def test_it_adds_a_participation_for_an_existing_user(self):
         # Completely new contest, no tasks, a new participation for an existing
         # user, whose existing submission should be retained.
         name = "new_name"
@@ -295,7 +295,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
                                [(self.username, self.last_name)])
         self.assertSubmissionCount(1)
 
-    def test_import_participation_not_in_db(self):
+    def test_it_fails_when_the_participating_user_is_missing(self):
         # Completely new contest, no tasks, a new participation but the user
         # is not in the DB, so it should fail.
         name = "new_name"
@@ -307,7 +307,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
         self.assertFalse(ret)
         self.assertSubmissionCount(1)
 
-    def test_delete_stale_participations(self):
+    def test_it_deletes_participations_that_are_not_passed(self):
         # Update the existing contest, task not updated, we also ask to
         # delete participations that we do not pass.
 
@@ -340,7 +340,7 @@ class TestImportContest(DatabaseMixin, unittest.TestCase):
         # remain.
         self.assertEqual(len(self.session.query(User).all()), 2)
 
-    def test_update_contest_same_participations(self):
+    def test_it_keeps_the_participations_that_are_passed(self):
         # Update the existing contest, task not updated, participations passed.
         description = "new_desc"
         contest = self.get_contest(name=self.name, description=description)

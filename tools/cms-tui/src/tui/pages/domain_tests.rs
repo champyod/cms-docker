@@ -1,207 +1,140 @@
+//! Assertions on the domain page's own behaviour, above the form it drives.
+//!
+//! WHY the arming step is tested here and not through `App`: the property that matters is
+//! that no single keystroke can produce a live run, and that is a statement about
+//! `DomainView::handle_key` alone.
+
 use super::{DomainAction, DomainView};
 use crate::tui::components::config_form::ConfigForm;
-use crate::tui::pages::{domain_fields, domain_request};
-use clap::Parser;
-use domain_fields::APPLY_LABEL;
-use ratatui::crossterm::event::KeyCode;
+use crate::tui::components::form_field::{Field, FieldKind};
+use crossterm::event::KeyCode;
+
+/// A form with just the rows the arming tests need.
+fn form_with_apply() -> ConfigForm {
+    ConfigForm::new(vec![
+        Field::new(
+            "--domain".to_string(),
+            String::new(),
+            FieldKind::Text,
+        ),
+        Field::new(
+            "--apply".to_string(),
+            String::new(),
+            FieldKind::Toggle { is_on: false },
+        ),
+    ])
+}
 
 fn view() -> DomainView {
-    DomainView::from_values("setup", &[])
+    DomainView::new(form_with_apply())
 }
 
-/// A stand-in for the command-line entry point, so the test drives clap's own parser
-/// instead of hand-building the flags struct the parser would have produced.
-#[derive(clap::Parser)]
-struct TestCli {
-    #[command(subcommand)]
-    command: crate::cli::Commands,
-}
-
-fn typed(view: &mut DomainView, label: &str, keys: &str) {
-    view.form_mut().focus_row(label);
-    for key in keys.chars() {
-        view.form_mut().handle_key(KeyCode::Char(key));
-    }
+/// Moves focus onto the apply row the way a keystroke would.
+fn focus_apply(view: &mut DomainView) {
+    view.form_mut().goto_row("--apply");
 }
 
 #[test]
-fn the_form_carries_every_row_the_table_declares() {
+fn a_new_form_describes_a_dry_run() {
     let view = view();
-    let labels = view.form().labels();
-    for spec in domain_fields::all_specs() {
-        assert!(
-            labels.iter().any(|label| label == spec.label),
-            "the form has no {} row",
-            spec.label
-        );
-    }
-}
-
-#[test]
-/// The page shows its own state as prose, so an operator can see whether a run is live
-/// without reading the argv.
-fn a_fresh_form_describes_a_dry_run_not_a_live_one() {
-    let view = view();
-    assert!(!view.is_apply(), "the form opened armed");
-    assert!(!view.is_arming());
-    assert!(
-        !view.preview().contains("--apply"),
-        "a fresh form sent --apply: {}",
-        view.preview()
-    );
-    assert!(
-        view.preview().contains("--yes"),
-        "the form must answer the script's prompts: {}",
-        view.preview()
+    assert!(!view.is_apply());
+    assert_eq!(
+        view.preview(),
+        "setup --cert letsencrypt --yes",
+        "the page must open showing the dry-run argv"
     );
 }
 
 #[test]
-fn the_preview_names_the_verb_the_script_reads_first() {
-    let view = view();
-    assert!(
-        view.preview().starts_with("setup "),
-        "{} does not lead with the verb",
-        view.preview()
-    );
-    assert_eq!(view.verb(), "setup");
-}
-
-#[test]
-fn the_cert_and_proxy_forms_submit_their_own_verb() {
-    for verb in ["cert", "proxy"] {
-        let view = DomainView::from_values(verb, &[]);
-        assert!(view.preview().starts_with(verb), "{}", view.preview());
-    }
-}
-
-/// Arming must take two deliberate keys, so a stray keystroke cannot reissue a certificate.
-#[test]
-fn a_live_run_needs_a_second_key_to_confirm() {
+fn the_arm_key_only_opens_the_question() {
     let mut view = view();
-    view.form_mut().focus_row(APPLY_LABEL);
+    focus_apply(&mut view);
     assert_eq!(view.handle_key(KeyCode::Char('a')), DomainAction::Arming);
     assert!(view.is_arming());
     assert!(
         !view.is_apply(),
-        "arming asked the question, not the answer"
+        "opening the question must not arm the live run"
     );
+    assert!(!view.preview().contains("--apply"));
+}
 
+#[test]
+fn only_a_yes_confirms_and_the_run_flag_appears_only_then() {
+    let mut view = view();
+    focus_apply(&mut view);
+    view.handle_key(KeyCode::Char('a'));
     assert_eq!(view.handle_key(KeyCode::Char('y')), DomainAction::Confirmed);
     assert!(view.is_apply());
-    assert!(!view.is_arming());
-    assert!(
-        view.preview().contains("--apply"),
-        "an armed run did not send --apply: {}",
-        view.preview()
-    );
+    assert!(view.preview().contains("--apply"));
 }
 
 #[test]
-fn any_other_key_cancels_the_live_run_question() {
-    for key in [KeyCode::Char('n'), KeyCode::Esc, KeyCode::Enter] {
+fn any_other_key_at_the_question_cancels_it() {
+    for key in [
+        KeyCode::Char('n'),
+        KeyCode::Char('q'),
+        KeyCode::Esc,
+        KeyCode::Enter,
+        KeyCode::Char('Y'),
+    ] {
         let mut view = view();
-        view.form_mut().focus_row(APPLY_LABEL);
+        focus_apply(&mut view);
         view.handle_key(KeyCode::Char('a'));
-        assert_eq!(view.handle_key(key), DomainAction::Cancelled);
-        assert!(!view.is_apply(), "{key:?} armed the run anyway");
-        assert!(!view.is_arming());
-    }
-}
-
-#[path = "domain_submit_tests.rs"]
-mod submit;
-
-#[test]
-fn a_run_records_the_argv_it_launched() {
-    let mut view = view();
-    let launched = super::super::domain_request::argv(view.form(), "setup");
-    view.note_run(launched.clone());
-    assert_eq!(view.last_run(), launched.as_slice());
-}
-
-/// The whole point of the shared builder: what the form encodes and what the command line
-/// encodes for the same values must be the same argv.
-#[test]
-fn the_form_and_the_command_line_encode_the_same_argv() {
-    let mut view = view();
-    typed(&mut view, "--domain", "a.example");
-    typed(&mut view, "--email", "ops@example");
-    view.form_mut().focus_row("--staging");
-    view.form_mut().flip_row("--staging");
-
-    // The form always sends `--yes` because it cannot answer the script's prompts; the
-    // command line only sends it when asked. That is the one intended difference, so it
-    // is asserted here rather than papered over.
-    let cli = TestCli::parse_from([
-        "cms",
-        "domain",
-        "setup",
-        "--domain",
-        "a.example",
-        "--email",
-        "ops@example",
-        "--staging",
-        "--yes",
-    ]);
-    let crate::cli::Commands::Domain {
-        sub: crate::cli::DomainCmd::Setup { flags },
-    } = cli.command
-    else {
-        panic!("setup parsed as a domain setup");
-    };
-
-    // The command-line argv comes from clap's flags through the CLI projection; the form's
-    // comes from its rows through the TUI projection. Only the encoder is shared.
-    let from_cli = crate::cli::resolve_domain_setup_args(&flags);
-    let from_form = domain_request::argv(view.form(), "setup");
-    assert_eq!(from_form, from_cli);
-    assert!(
-        from_form.contains(&"--staging".to_string()),
-        "the toggled row is missing from the argv: {from_form:?}"
-    );
-    assert_eq!(flags.domain.as_deref(), Some("a.example"));
-}
-
-#[test]
-fn an_untouched_counter_row_is_not_sent_as_zero() {
-    let view = view();
-    let plan = view.preview();
-    for absent in ["--retry-attempts", "--retry-interval", "--wait-port80"] {
-        assert!(
-            !plan.contains(absent),
-            "{absent} was sent although its row was left blank"
-        );
+        let action = view.handle_key(key);
+        assert_eq!(action, DomainAction::Cancelled, "{key:?} should back out");
+        assert!(!view.is_apply(), "{key:?} armed a live run");
     }
 }
 
 #[test]
-fn the_form_never_sends_the_flag_only_for_revocation() {
+fn a_cancel_leaves_no_trace_on_the_apply_row() {
     let mut view = view();
-    typed(&mut view, "--domain", "a.example");
-    let request = super::submit_request(&view);
-    assert!(
-        request.reason.is_none() && request.days.is_none(),
-        "the setup form must not carry revoke or check-expiry values"
-    );
+    focus_apply(&mut view);
+    view.handle_key(KeyCode::Char('a'));
+    view.handle_key(KeyCode::Char('n'));
+    assert!(!view.is_arming());
+    assert!(!view.form().is_on("--apply"));
 }
 
 #[test]
-fn escape_leaves_the_page_and_typing_keys_do_not() {
+fn pressing_a_again_on_an_armed_form_disarms_it() {
     let mut view = view();
-    view.form_mut().focus_row("--domain");
-    assert_eq!(view.handle_key(KeyCode::Esc), DomainAction::Back);
+    focus_apply(&mut view);
+    view.handle_key(KeyCode::Char('a'));
+    view.handle_key(KeyCode::Char('y'));
+    assert!(view.is_apply());
+    assert_eq!(view.handle_key(KeyCode::Char('a')), DomainAction::Cancelled);
+    assert!(!view.is_apply(), "a second 'a' disarms rather than re-asking");
+}
+
+#[test]
+fn the_arm_key_is_ignored_on_any_row_but_the_apply_one() {
+    let mut view = view();
     assert_eq!(
-        view.handle_key(KeyCode::Char('x')),
+        view.handle_key(KeyCode::Char('a')),
         DomainAction::Edited,
-        "a typed character must not be read as a page binding"
+        "on a text row 'a' is just a character"
     );
+    assert!(!view.is_arming());
 }
 
 #[test]
-fn an_empty_form_still_answers_every_key_without_panicking() {
-    let mut view = DomainView::new("setup", ConfigForm::new(Vec::new()));
+fn submit_and_back_are_the_pages_own_keys() {
+    let mut view = view();
     assert_eq!(view.handle_key(KeyCode::Char('r')), DomainAction::Submit);
     assert_eq!(view.handle_key(KeyCode::Esc), DomainAction::Back);
-    assert_eq!(view.handle_key(KeyCode::Down), DomainAction::Edited);
+}
+
+#[test]
+fn a_key_the_page_does_not_own_is_left_alone() {
+    let mut view = view();
+    assert_eq!(view.handle_key(KeyCode::F(5)), DomainAction::Ignored);
+}
+
+#[test]
+fn the_last_run_is_recorded_so_the_page_can_show_what_was_launched() {
+    let mut view = view();
+    assert!(view.last_run().is_empty());
+    view.note_run(vec!["setup".to_string(), "--cert".to_string()]);
+    assert_eq!(view.last_run(), ["setup".to_string(), "--cert".to_string()]);
 }

@@ -2,15 +2,19 @@
 
 import { useState, useMemo } from 'react';
 import { apiClient } from '@/lib/apiClient';
-import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { Dialog } from '@/components/core/Dialog';
 import { RestrictedField } from '@/components/core/RestrictedField';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import type { Dictionary } from '@/lib/dictionary';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
 
 interface TeamData {
   id?: number;
-  code: string;
-  name: string;
+  code: string | null;
+  name: string | null;
+  registerable?: boolean | null;
 }
 
 interface TeamModalProps {
@@ -19,10 +23,11 @@ interface TeamModalProps {
   onSuccess: () => void;
   initialData?: TeamData | null;
   permissionKeys: readonly string[];
+  navigation: Dictionary['navigation'];
 }
 
-export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionKeys }: TeamModalProps) {
-  const [formData, setFormData] = useState({ code: '', name: '' });
+export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionKeys, navigation }: TeamModalProps) {
+  const [formData, setFormData] = useState({ code: '', name: '', registerable: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -33,9 +38,11 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
   const [renderedSession, setRenderedSession] = useState(sessionKey);
   if (renderedSession !== sessionKey) {
     setRenderedSession(sessionKey);
-    setFormData(initialData ? { code: initialData.code, name: initialData.name } : { code: '', name: '' });
+    setFormData(initialData ? { code: initialData.code ?? '', name: initialData.name ?? '', registerable: initialData.registerable ?? true } : { code: '', name: '', registerable: true });
     setError('');
   }
+
+  const runAction = useActionFeedback();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,10 +56,22 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
 
     const allowed = stripDisallowedFields('teams', formData as Record<string, unknown>, effective);
 
-    const result = (initialData && initialData.id)
-      ? await apiClient.put(`/api/teams/${initialData.id}`, allowed)
-      : await apiClient.post('/api/teams', allowed);
-
+    const result = await runAction(
+      {
+        pending: initialData ? 'Updating team...' : 'Creating team...',
+        success: initialData ? 'Team updated' : 'Team created',
+        failure: 'Save failed',
+        description: `${formData.name} saved successfully.`,
+      },
+      () =>
+        initialData && initialData.id
+          ? apiClient.put(`/api/teams/${initialData.id}`, allowed)
+          : apiClient.post('/api/teams', allowed)
+    );
+    if (!result) {
+      setLoading(false);
+      return;
+    }
     if (result.success) {
       onSuccess();
       onClose();
@@ -64,6 +83,12 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
 
   const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <Dialog
       open={isOpen}
@@ -71,14 +96,11 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
         if (!open) onClose();
       }}
       title={initialData ? 'Edit Team' : 'Add Team'}
+      description={navigation.people.teams.label}
       className="sm:max-w-md"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive text-sm">
-            {error}
-          </div>
-        )}
+      <form id="team-form" onSubmit={handleSubmit} className="space-y-4">
+        {error && <InlineAlert tone="destructive" density="regular" className="border-destructive/30">{error}</InlineAlert>}
 
         <RestrictedField
           canRead={fieldAccess.code.canRead}
@@ -109,15 +131,32 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
             placeholder="e.g. Thailand Team 1"
           />
         </RestrictedField>
+        <RestrictedField
+          canRead={fieldAccess.registerable.canRead}
+          canUpdate={fieldAccess.registerable.canUpdate}
+          label="Registerable"
+          lockHint="Read-only — you lack team:update"
+        >
+          <label className="flex items-center gap-2 text-sm text-foreground">
+            <input
+              type="checkbox"
+              checked={formData.registerable}
+              onChange={(e) => setFormData({ ...formData, registerable: e.target.checked })}
+            />
+            Offer this team to contestants at registration
+          </label>
+        </RestrictedField>
 
-        <DialogFooter className="pt-4">
-          <Button type="button" variant="negativeOutline" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="positive" loading={loading} disabled={loading}>
-            {initialData ? 'Update Team' : 'Create Team'}
-          </Button>
-        </DialogFooter>
+        <ModalFooter
+          formId="team-form"
+          className="pt-4"
+          cancelLabel="Cancel"
+          cancelVariant="negativeOutline"
+          confirmLabel={initialData ? 'Update Team' : 'Create Team'}
+          onCancel={cancel}
+          confirmLoading={loading}
+          confirmDisabled={loading}
+        />
       </form>
     </Dialog>
   );

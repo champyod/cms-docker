@@ -438,6 +438,10 @@ class DumpImporter:
         cls = type(obj)
 
         for prp in cls._rel_props:
+            # View-only mirrors of the contest_tasks association are not
+            # serialized; only the association rows carry the linkage.
+            if prp.viewonly:
+                continue
             if prp.key not in data:
                 # Relationships are always optional
                 continue

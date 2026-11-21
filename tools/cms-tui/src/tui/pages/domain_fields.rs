@@ -1,4 +1,4 @@
-//! The domain form's row table: what every row is, and which `config.toml` key seeds it.
+//! The domain form's field table: what every row is, and which key seeds it.
 //!
 //! WHY a table rather than a constructor call per row: the form has to show the operator
 //! the effective value instead of a blank row, which means knowing the `config.toml` and
@@ -6,26 +6,39 @@
 //! `__domain.sh`, so it is declared once and read by both the prefill and the renderer.
 
 use crate::core::domain_setup::DEFAULT_CERT_METHOD;
+use crate::tui::components::form_field::{Field, FieldKind};
 
 /// `DOMAIN_CERT_METHOD` values the script's `--cert` parser accepts.
 pub const CERT_METHODS: [&str; 3] = ["letsencrypt", "provided", "selfsigned"];
 
-/// The `--cert` value a fresh form starts with.
+/// The default `--cert` a fresh form starts with.
 pub const DEFAULT_CERT: &str = DEFAULT_CERT_METHOD;
 
-/// What kind of edit a row accepts.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FieldKind {
-    /// Free text.
-    Text,
-    /// Digits only, so a non-numeric seed cannot reach argv.
-    Integer,
-    /// A switch that is either on or off.
-    Toggle,
+/// The script's defaults for the two retry counters, shown in otherwise-blank rows.
+const DEFAULT_ATTEMPTS: &str = "8";
+const DEFAULT_INTERVAL: &str = "15";
+
+/// The script's own defaults for the counters, shown beside a row the operator left blank.
+///
+/// WHY these live here and not in the row table: the rows start blank on purpose (see
+/// [`number`]), so this map is the only place the operator learns what an untouched row
+/// will do.
+const SCRIPT_DEFAULTS: [(&str, &str); 3] = [
+    ("--retry-attempts", DEFAULT_ATTEMPTS),
+    ("--retry-interval", DEFAULT_INTERVAL),
+    ("--wait-port80", "0"),
+];
+
+/// What the script will do with `label` when the row is left as the form opens it.
+#[must_use]
+pub fn script_default(label: &str) -> Option<&'static str> {
+    SCRIPT_DEFAULTS
+        .iter()
+        .find(|(row, _)| *row == label)
+        .map(|(_, value)| *value)
 }
 
 /// One row of the domain form.
-#[derive(Debug, Clone, Copy)]
 pub struct FieldSpec {
     /// The `__domain.sh` flag this row edits, and the label the form is read back by.
     pub label: &'static str,
@@ -33,17 +46,23 @@ pub struct FieldSpec {
     /// The config/env key this row is seeded from; `None` when nothing on disk backs it.
     ///
     /// WHY `None` is a real answer and not an oversight: `__domain.sh` resets `CERT_PATH`
-    /// and `KEY_PATH` to empty before it parses anything, and a run's mode is decided per
-    /// run. Both start blank and are typed per run, so inventing a config key for them
+    /// and `KEY_PATH` to empty before it parses anything, and `--apply` is a per-run
+    /// decision. Both start blank and are typed per run, so inventing a key for them
     /// would show a value the script ignores.
     pub key: Option<&'static str>,
-    /// What the script does when this row is left blank, shown beside the row.
+    /// Text shown when the key has no value, and what the field starts as.
+    pub fallback: &'static str,
+}
+
+impl FieldSpec {
+    /// Whether this row starts checked.
     ///
-    /// WHY a number row starts blank rather than holding this value: the field seeds from
-    /// it, and a seeded value is indistinguishable from one the operator typed, so it would
-    /// be sent back in argv — freezing today's default into every run and keeping it after
-    /// the box raises its own. The renderer shows this as a hint instead.
-    pub script_default: &'static str,
+    /// WHY every boolean row is declared off: a form that opened already armed at a live
+    /// run would make "dry-run by default" a property of the code rather than of the UI.
+    #[must_use]
+    pub const fn is_on(&self) -> bool {
+        matches!(self.kind, FieldKind::Toggle { is_on: true })
+    }
 }
 
 /// A free-text row seeded from `key`.
@@ -52,27 +71,23 @@ const fn text(label: &'static str, key: &'static str) -> FieldSpec {
         label,
         kind: FieldKind::Text,
         key: Some(key),
-        script_default: "",
+        fallback: "",
     }
 }
 
-/// A free-text row nothing on disk backs, typed fresh per run.
-const fn typed(label: &'static str) -> FieldSpec {
-    FieldSpec {
-        label,
-        kind: FieldKind::Text,
-        key: None,
-        script_default: "",
-    }
-}
-
-/// A digits-only row seeded from `key`.
-const fn number(label: &'static str, key: &'static str, script_default: &'static str) -> FieldSpec {
+/// A digits-only row seeded from `key`, showing `default` when the key is unset.
+///
+/// WHY the number rows start blank rather than showing `default`: the form's job is to
+/// show what the next run will do, and the script already applies `default` itself.
+/// Sending it back would freeze today's default into argv, so a box that later raises
+/// `CERT_RETRY_ATTEMPTS_DEFAULT` would keep the older number. The renderer shows the
+/// script's default beside a blank row instead.
+const fn number(label: &'static str, key: &'static str) -> FieldSpec {
     FieldSpec {
         label,
         kind: FieldKind::Integer,
         key: Some(key),
-        script_default,
+        fallback: "",
     }
 }
 
@@ -80,9 +95,19 @@ const fn number(label: &'static str, key: &'static str, script_default: &'static
 const fn switch(label: &'static str, key: &'static str) -> FieldSpec {
     FieldSpec {
         label,
-        kind: FieldKind::Toggle,
+        kind: FieldKind::Toggle { is_on: false },
         key: Some(key),
-        script_default: "off",
+        fallback: "off",
+    }
+}
+
+/// A row nothing on disk backs, typed fresh per run.
+const fn typed(label: &'static str, kind: FieldKind) -> FieldSpec {
+    FieldSpec {
+        label,
+        kind,
+        key: None,
+        fallback: "",
     }
 }
 
@@ -98,26 +123,30 @@ pub const FIELDS: &[FieldSpec] = &[
     text("--oj-domain", "CONTEST_DOMAIN"),
     text("--ranking-domain", "RANKING_DOMAIN"),
     text("--email", "CERT_EMAIL"),
-    typed("--cert-path"),
-    typed("--key-path"),
-    // The retry group mirrors the script's own block. Keeping the toggles and their
-    // counters adjacent is what makes "--retry-forever implies an unbounded run"
+    typed("--cert-path", FieldKind::Text),
+    typed("--key-path", FieldKind::Text),
+    // The retry group mirrors `__domain.sh`'s own block. Keeping the toggles and their
+    // counters adjacent is what makes "--retry-forever implies an attempt cap of 0"
     // visible at the moment the operator is editing it.
     switch("--auto-retry", "AUTO_RETRY"),
     switch("--retry-forever", "CERT_RETRY_FOREVER"),
-    number("--retry-attempts", "CERT_RETRY_ATTEMPTS", "8"),
-    number("--retry-interval", "CERT_RETRY_INTERVAL", "15"),
+    number("--retry-attempts", "CERT_RETRY_ATTEMPTS"),
+    number("--retry-interval", "CERT_RETRY_INTERVAL"),
     switch("--staging", "LE_STAGING"),
     switch("--force", "FORCE_RENEWAL"),
-    number("--wait-port80", "WAIT_PORT80_TIMEOUT", "0"),
     switch("--backup-certs", "BACKUP_CERTS"),
     switch("--lock", "USE_LOCK"),
+    switch("--auto-renew", "AUTO_RENEW"),
+    number("--wait-port80", "WAIT_PORT80_TIMEOUT"),
     text("--extra-domains", "EXTRA_DOMAINS"),
-    text("--dns", "DNS_PROVIDER"),
-    text("--dns-credentials", "DNS_CREDENTIALS_FILE"),
+    text("--dns", "ACME_DNS_PROVIDER"),
+    text("--dns-credentials", "ACME_DNS_CREDENTIALS_FILE"),
+    text("--challenge", "ACME_CHALLENGE"),
+    text("--ca", "ACME_CA"),
+    text("--acme-server", "ACME_DIRECTORY_URL"),
+    text("--acme-client", "ACME_CLIENT"),
+    text("--tls-address", "ACME_TLS_ALPN_ADDRESS"),
     text("--deploy-hook", "DEPLOY_HOOK"),
-    switch("--json", "JSON_OUTPUT"),
-    text("--config", "CONFIG_FILE"),
 ];
 
 /// The row carrying `--apply`.
@@ -127,9 +156,9 @@ pub const FIELDS: &[FieldSpec] = &[
 /// a dry-run quietly becomes an apply.
 pub const APPLY_FIELD: FieldSpec = FieldSpec {
     label: "--apply",
-    kind: FieldKind::Toggle,
+    kind: FieldKind::Toggle { is_on: false },
     key: None,
-    script_default: "off",
+    fallback: "off",
 };
 
 /// The label of the row whose arming requires a confirm step.
@@ -146,54 +175,62 @@ pub fn spec_for(label: &str) -> Option<&'static FieldSpec> {
     all_specs().find(|spec| spec.label == label)
 }
 
-/// The text a row should open with, given what the box currently has configured.
-///
-/// WHY the cert row is validated rather than copied: a `config.toml` naming a method the
-/// script's parser rejects has to leave the row at an accepted value, otherwise the form
-/// opens showing a plan that dies on the first certbot invocation.
+/// The keys the form can be seeded from, for diagnostics and tests.
 #[must_use]
-pub fn seed_value(spec: &FieldSpec, current: &str) -> String {
-    // WHY a blank row stays blank for every kind: a seeded value is indistinguishable from
-    // one the operator typed, so it would be sent back in argv. Only the renderer uses
-    // `script_default`, and only to say what leaving the row blank will do.
-    let value = current;
+pub fn source_keys() -> Vec<&'static str> {
+    all_specs().filter_map(|spec| spec.key).collect()
+}
+
+/// Builds the editable field for `spec`, seeded with `current`.
+///
+/// WHY the seed is validated against the row's kind rather than copied blindly: a
+/// `config.toml` that names a cert method the script would reject has to leave the row
+/// at a value the script accepts, otherwise the form opens showing a plan that dies on
+/// the first certbot invocation.
+#[must_use]
+pub fn build_field(spec: &FieldSpec, current: &str) -> Field {
+    let value = seed_value(spec, current);
+    let kind = match spec.kind {
+        FieldKind::Toggle { .. } => FieldKind::Toggle {
+            is_on: is_truthy(&value),
+        },
+        other => other,
+    };
+    Field::new(spec.label.to_string(), value, kind)
+}
+
+/// The text a row should open with, given what the box currently has.
+fn seed_value(spec: &FieldSpec, current: &str) -> String {
+    let value = if current.trim().is_empty() {
+        spec.fallback
+    } else {
+        current
+    };
     match spec.kind {
-        FieldKind::Toggle => on_off(is_truthy(value)),
-        // WHY a rejected number row becomes blank rather than the script default: the
-        // default belongs to the script, and a row that silently adopted it would send a
-        // flag the operator never asked for.
-        FieldKind::Integer => numeric_seed(value),
+        FieldKind::Toggle { .. } => on_off(is_truthy(value)),
+        FieldKind::Integer => numeric_seed(value, spec.fallback),
         FieldKind::Text if spec.label == "--cert" => cert_seed(value),
         FieldKind::Text => value.trim().to_string(),
     }
 }
 
 /// The spellings `config.toml` and the generated `.env` use for a set boolean.
-#[must_use]
-pub fn is_truthy(value: &str) -> bool {
-    matches!(
-        value.trim().to_ascii_lowercase().as_str(),
-        "1" | "on" | "true" | "yes"
-    )
+fn is_truthy(value: &str) -> bool {
+    matches!(value.trim(), "1" | "on" | "true" | "yes")
 }
 
-/// The same two words a toggle row reports, so a seed round-trips.
-#[must_use]
-pub fn on_off(is_on: bool) -> String {
+/// The same two words `Field::value` reports for a checkbox, so a seed round-trips.
+fn on_off(is_on: bool) -> String {
     if is_on { "on" } else { "off" }.to_string()
 }
 
-/// Keeps a digits-only row digits-only; anything else reads as unset.
-///
-/// WHY blank rather than a fallback: the encoder parses this row as a number, so a
-/// non-numeric value must never reach argv, and `0` is a real value — unbounded attempts —
-/// so it must not stand in for "unset" either.
-fn numeric_seed(value: &str) -> String {
+/// Keeps a digits-only row digits-only, so a stray non-numeric seed cannot reach argv.
+fn numeric_seed(value: &str, fallback: &'static str) -> String {
     let trimmed = value.trim();
-    if trimmed.is_empty() || !trimmed.chars().all(|ch| ch.is_ascii_digit()) {
-        String::new()
-    } else {
+    if !trimmed.is_empty() && trimmed.chars().all(|ch| ch.is_ascii_digit()) {
         trimmed.to_string()
+    } else {
+        fallback.to_string()
     }
 }
 

@@ -16,10 +16,6 @@ export const DISCORD_ALERT_COLOR = 3447003;
 
 export type FieldValidation = { ok: true; value: string } | { ok: false; error: string };
 
-export type NotificationKeyCheck =
-  | { ok: true; updates: Record<string, string> }
-  | { ok: false; error: string };
-
 export interface DiscordWebhookPayload {
   content?: string;
   embeds: Array<{
@@ -69,31 +65,6 @@ export function validateDiscordRoleId(raw: string): FieldValidation {
     return { ok: false, error: 'The role ID must be the numeric Discord role ID (snowflake)' };
   }
   return { ok: true, value };
-}
-
-/**
- * Guards the notification keys of an environment-file update. Applies to every settings
- * screen that writes .env: a malformed webhook makes the monitor drop alerts silently, so
- * the write is rejected with the key named instead of storing a value nobody will notice.
- */
-export function validateNotificationEnvUpdates(updates: Record<string, string>): NotificationKeyCheck {
-  const checked = { ...updates };
-  if ('DISCORD_WEBHOOK_URL' in checked) {
-    const webhook = validateDiscordWebhookUrl(checked.DISCORD_WEBHOOK_URL);
-    if (!webhook.ok) {
-      return { ok: false, error: `DISCORD_WEBHOOK_URL was not saved: ${webhook.error}` };
-    }
-    // Trailing whitespace in the environment value breaks curl, so store the trimmed form.
-    checked.DISCORD_WEBHOOK_URL = webhook.value;
-  }
-  if ('DISCORD_ROLE_ID' in checked) {
-    const role = validateDiscordRoleId(checked.DISCORD_ROLE_ID);
-    if (!role.ok) {
-      return { ok: false, error: `DISCORD_ROLE_ID was not saved: ${role.error}` };
-    }
-    checked.DISCORD_ROLE_ID = role.value;
-  }
-  return { ok: true, updates: checked };
 }
 
 /**
@@ -185,6 +156,19 @@ function isSectionHeader(trimmed: string): boolean {
   return trimmed.startsWith('[') && trimmed.endsWith(']');
 }
 
+/**
+ * Reads one single-line TOML scalar, dropping a trailing `#` comment. A quoted value
+ * is taken up to its closing quote; anything else is cut at the first `#`, where TOML
+ * starts a comment. Without this an inline comment rode into the value and downstream
+ * numeric parses (COOKIE_DURATION) came back blank.
+ */
+function readTomlScalar(rawValue: string): string {
+  const quoted = rawValue.match(/^"([^"]*)"/) ?? rawValue.match(/^'([^']*)'/);
+  if (quoted) return quoted[1];
+  const hash = rawValue.indexOf('#');
+  return (hash === -1 ? rawValue : rawValue.slice(0, hash)).trim();
+}
+
 /** Reads an unquoted value from one TOML section; returns '' when absent. */
 export function readTomlValue(content: string, section: string, key: string): string {
   const lines = content.split('\n');
@@ -202,8 +186,7 @@ export function readTomlValue(content: string, section: string, key: string): st
       continue;
     }
     const rawValue = line.slice(line.indexOf('=') + 1).trim();
-    // Values are single-line, so the quotes are stripped without the dotAll flag (ES2017 target).
-    return rawValue.replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1');
+    return readTomlScalar(rawValue);
   }
   return '';
 }

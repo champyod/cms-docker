@@ -5,14 +5,19 @@ import { getSession } from '@/lib/auth';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import {
-  getTargetEffectivePermissions,
+  hasEffectivePermission,
   isEffectiveSuperset,
+  ACTION_PERMISSIONS,
 } from '@/lib/permission-engine';
+// WHY from the server module: resolving another admin's grants needs Prisma, and
+// permission-engine.ts is imported by client components (action buttons read their key from it).
+import { getTargetEffectivePermissions } from '@/lib/server/target-permissions';
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { type ListSortInput } from '@/lib/list-sorting';
+import { adminSortOrderBy } from '@/lib/admin-sorting';
 import { prisma } from '@/lib/prisma';
 import { safeAdminSelect, type AdminWithLogin } from '@/lib/prisma-selects';
 import {
-  buildAdminUpdateData,
   findAdminTarget,
   isCurrentlySuperadmin,
   isSelfDemotion,
@@ -26,6 +31,8 @@ import {
   DEFAULT_PASSWORD_KIND,
   type PasswordKind,
 } from '@/lib/password-format';
+import { ROOT_ACTOR_USERNAME } from '@/lib/permission-groups';
+import { handleAdminUpdateWrite } from './admin-update-helpers';
 
 interface ActionResult {
   success: boolean;
@@ -69,16 +76,17 @@ async function guardAdminMutation(
   return null;
 }
 
-export async function getAdmins(): Promise<AdminWithLogin[]> {
+
+export async function getAdmins(sort?: ListSortInput): Promise<AdminWithLogin[]> {
   await ensurePermission('admin:read');
   return prisma.admins.findMany({
     select: { ...safeAdminSelect, last_login_at: true },
-    orderBy: { username: 'asc' }
+    orderBy: adminSortOrderBy(sort ?? null)
   });
 }
 
 export async function createAdmin(data: CreateAdminInput): Promise<ActionResult> {
-  await ensurePermission('admin:create');
+  await ensurePermission(ACTION_PERMISSIONS.createAdmin);
   // WHY: creation is gated by `admin:create`; stripDisallowedFields models the UPDATE contract (per-field `update` keys) and must not be applied to create payloads
   try {
     const created = await prisma.admins.create({
@@ -97,7 +105,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
       afterValues: { username: data.username, name: data.name },
       result: 'success',
     });
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true };
   } catch (error) {
     const e = error as Error;
@@ -108,38 +116,20 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
   }
 }
 
-
-async function handleAdminUpdateWrite(
-  adminId: number,
-  allowed: Record<string, unknown>,
-): Promise<void> {
-  const beforeAdmin = await prisma.admins.findUnique({
-    where: { id: adminId },
-    select: { name: true, enabled: true, username: true },
-  });
-  await prisma.admins.update({
-    where: { id: adminId },
-    data: await buildAdminUpdateData(allowed as unknown as UpdateAdminInput),
-  });
-  await recordAudit({
-    verb: 'admin:update',
-    entity: 'admin',
-    entityId: String(adminId),
-    beforeValues: beforeAdmin
-      ? { name: beforeAdmin.name, enabled: beforeAdmin.enabled, username: beforeAdmin.username }
-      : undefined,
-    afterValues: { changedKeys: Object.keys(allowed) },
-    result: 'success',
-  });
-  invalidateAccessCache(String(adminId));
-  revalidatePath('/[locale]/admins', 'page');
-}
-
 export async function updateAdmin(adminId: number, data: UpdateAdminInput): Promise<ActionResult> {
-  await ensurePermission('admin:update');
-  // Why: server-side guard — never write a field the caller cannot update, even if the client sends it
+  // Why: the write is gated per field rather than by one blanket key, so a caller holding only
+  // admin:password:update can still reset a credential while every other field is stripped below.
   const effectivePermissions = await getPermissions();
   const allowed = stripDisallowedFields('admins', data as Record<string, unknown>, effectivePermissions);
+
+  const mayUpdateAdmin = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.updateAdmin);
+  const mayUpdatePassword = hasEffectivePermission(effectivePermissions, ACTION_PERMISSIONS.setAdminPassword);
+  if (!mayUpdateAdmin && !mayUpdatePassword) {
+    return { success: false, error: 'Not authorized' };
+  }
+  if (Object.keys(allowed).length === 0) {
+    return { success: false, error: 'You do not have permission to change these fields' };
+  }
 
   const session = await getSession();
   if (!session) {
@@ -152,6 +142,13 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
   const target = await findAdminTarget(adminId);
   if (isSelfDemotion(session.userId, adminId, target, data)) {
     return { success: false, error: 'Cannot demote your own superadmin account' };
+  }
+
+  // Why: the system actor's enabled flag is what keeps the passwordless row
+  // unloginnable. Re-enabling it would hand a root login attempt to the
+  // verifier, and the attribution identity has no operator-controlled state.
+  if (target?.username === ROOT_ACTOR_USERNAME && allowed.enabled !== undefined) {
+    return { success: false, error: 'Cannot change the enabled flag of the system actor' };
   }
 
   // WHY: prevent the last superadmin from being demoted or disabled
@@ -170,7 +167,7 @@ export async function updateAdmin(adminId: number, data: UpdateAdminInput): Prom
 }
 
 export async function deleteAdmin(adminId: number): Promise<ActionResult> {
-  await ensurePermission('admin:delete');
+  await ensurePermission(ACTION_PERMISSIONS.deleteAdmin);
 
   const session = await getSession();
   if (!session) {
@@ -186,9 +183,15 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   if (mutationError) return mutationError;
 
   const target = await findAdminTarget(adminId);
-  // WHY: deleting a superadmin removes superadmin status — block if this is the last one
+  // Why: deleting a superadmin removes superadmin status — block if this is the last one
   if (isCurrentlySuperadmin(target) && await wouldRemoveLastSuperadmin(adminId)) {
     return { success: false, error: 'Cannot remove the last superadmin' };
+  }
+
+  // Why: the system actor is attribution infrastructure — every script-side
+  // action logs under its id, so the row is insert-only and no delete path exists.
+  if (target?.username === ROOT_ACTOR_USERNAME) {
+    return { success: false, error: 'Cannot delete the system actor — script-side action attribution resolves through it' };
   }
 
   try {
@@ -202,7 +205,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -215,11 +218,45 @@ export async function revealAdminPassword(id: number): Promise<
   await ensurePermission('password:reveal');
   try {
     const row = await prisma.admins.findUnique({ where: { id }, select: { authentication: true } });
-    if (!row) return { success: false, error: 'Admin not found' };
+    if (!row) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'admin',
+        entityId: String(id),
+        beforeValues: { adminId: id },
+        // A named reason, not a message: this failed before any secret was read, and the reason
+        // belongs in the log while whatever the driver said does not.
+        afterValues: { error: 'NotFound' },
+        result: 'failure',
+      });
+      return { success: false, error: 'Admin not found' };
+    }
     const parsed = parseStoredPassword(row.authentication);
+    // Why kind only: the row records that this admin's secret was disclosed, never the secret.
+    // An admin credential is the one that re-grants every permission below it, so leaving this
+    // read unlogged made it the single sensitive read on the panel with no trail.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'admin',
+      entityId: String(id),
+      beforeValues: { adminId: id },
+      afterValues: { kind: parsed.kind },
+      result: 'success',
+    });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
-  } catch {
+  } catch (error) {
+    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
+    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
+    // payload — a message here can carry the query that was refused.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'admin',
+      entityId: String(id),
+      beforeValues: { adminId: id },
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: 'Unable to load password' };
   }
 }

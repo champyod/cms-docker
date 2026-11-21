@@ -45,6 +45,9 @@ __all__ = [
     "version", "engine",
     # session
     "Session", "ScopedSession", "SessionGen", "custom_psycopg2_connection",
+    # actor
+    "db_actor", "CORE_ACTOR", "KNOWN_SYSTEM_ACTORS", "ACTOR_ENV",
+    "InvalidActorError", "default_actor", "validate_actor",
     # types
     "CastingArray", "Codename", "Filename", "FilenameSchema",
     "FilenameSchemaArray", "Digest",
@@ -53,14 +56,20 @@ __all__ = [
     # fsobject
     "FSObject", "LargeObject",
     # contest
-    "Contest", "Announcement",
+    "Contest", "Announcement", "ContestTeam", "ContestTask",
     # user
     "User", "Team", "Participation", "Message", "Question",
+    "registerable_teams_query",
+    # username config
+    "ContestantGroup", "ContestantGroupMembership",
+    "UsernamePolicy", "ContestUsername", "ContestUsernameHistory",
     # admin
     "Admin",
     # permissions
     "Permission", "Group", "GroupPermission", "AdminGroup",
     "AdminPermissionOverride", "AuditLog",
+    # security
+    "SecurityBlock",
     # task
     "Task", "Statement", "Attachment", "Dataset", "Manager", "Testcase",
     # submission
@@ -75,14 +84,17 @@ __all__ = [
     "drop_db",
     # util
     "test_db_connection", "get_contest_list", "is_contest_id",
-    "ask_for_contest", "get_submissions", "get_submission_results",
+    "ask_for_contest", "ask_for_active_contest", "active_contest_id",
+    "ContestsTableMissingError", "contest_binding", "service_binding",
+    "ServiceBinding", "NoOverride", "NO_OVERRIDE",
+    "get_submissions", "get_submission_results",
     "get_datasets_to_judge", "enumerate_files"
 ]
 
 
 # Instantiate or import these objects.
 
-version = 48
+version = 50
 
 engine = create_engine(config.database.url, echo=config.database.debug,
                        pool_timeout=60, pool_recycle=120)
@@ -91,14 +103,20 @@ metadata = MetaData(engine)
 
 from .session import Session, ScopedSession, SessionGen, \
     custom_psycopg2_connection
+from . import actor as db_actor
+from .actor import CORE_ACTOR, KNOWN_SYSTEM_ACTORS, ACTOR_ENV, \
+    InvalidActorError, default_actor, validate_actor
 
 from .types import CastingArray, Codename, Filename, FilenameSchema, \
     FilenameSchemaArray, Digest
 from .base import Base
 from .fsobject import FSObject, LargeObject
 from .admin import Admin
-from .contest import Contest, Announcement
-from .user import User, Team, Participation, Message, Question
+from .contest import Contest, Announcement, ContestTeam, ContestTask
+from .user import User, Team, Participation, Message, Question, \
+    registerable_teams_query
+from .username import ContestantGroup, ContestantGroupMembership, \
+    UsernamePolicy, ContestUsername, ContestUsernameHistory
 from .task import Task, Statement, Attachment, Dataset, Manager, Testcase
 from .submission import Submission, File, Token, SubmissionResult, \
     Executable, Evaluation
@@ -110,13 +128,19 @@ from .usertest import UserTest, UserTestFile, UserTestManager, \
 # resolution; Prisma migrations own their creation (cmsInitDB excludes them).
 from .permissions import Permission, Group, GroupPermission, AdminGroup, \
     AdminPermissionOverride, AuditLog
+# WHY imported like the RBAC models: Prisma owns the table's creation, and the
+# web servers only append the lockouts they count so the panel's block list has
+# something to read.
+from .security_block import SecurityBlock
 
 from .init import init_db
 from .drop import drop_db
 
 from .util import test_db_connection, get_contest_list, is_contest_id, \
-    ask_for_contest, get_submissions, get_submission_results, \
-    get_datasets_to_judge, enumerate_files
+    ask_for_contest, ask_for_active_contest, active_contest_id, \
+    ContestsTableMissingError, contest_binding, service_binding, \
+    ServiceBinding, NoOverride, NO_OVERRIDE, get_submissions, \
+    get_submission_results, get_datasets_to_judge, enumerate_files
 
 
 configure_mappers()

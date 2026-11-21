@@ -14,6 +14,13 @@ cd "$CMS_ROOT"
 
 TOML_FILE="config.toml"
 TOML_EXAMPLE="config.toml.example"
+# The file parse_toml actually reads. Points at TOML_FILE normally; in dry-run
+# mode migrate_missing_keys / migrate_db_config_keys write a simulated merge to
+# a temp file and re-point this, so downstream steps see the state a real run
+# would produce instead of failing on sections that have not been written yet.
+TOML_PARSE_SOURCE="$TOML_FILE"
+# The one env file compose and the scripts read; see migrate_split_env_files below.
+MERGED_ENV=".env"
 DRY_RUN=0
 NO_SECRETS=0
 
@@ -28,6 +35,10 @@ done
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# The route table owns which front vhost a hostname belongs to, and which fragment file that vhost
+# includes, so the sync asks the one place that defines it instead of repeating the rule.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__domain_routes.sh"
 log_error() { printf '[ERROR] %s\n' "$*" >&2; }
 
 # --- Secret generators (mirrors Makefile env: target) ---
@@ -98,7 +109,7 @@ env_quote() {
 declare -A __TOML
 # Explicitly initialized empty: ${#arr[@]} must resolve under `set -u` even
 # when a TOML section has no keys.
-declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=()
+declare -a __CORE_KEYS=() __ADMIN_KEYS=() __CONTEST_KEYS=() __WORKER_KEYS=() __INFRA_KEYS=() __TAILSCALE_KEYS=() __RPC_KEYS=() __BACKUP_KEYS=()
 
 # Trim surrounding whitespace (and a CR from a CRLF worktree) off one TOML line.
 # WHY not `xargs` (the previous trimming): xargs applies its own quote and backslash
@@ -147,8 +158,11 @@ toml_value() {
 }
 
 parse_toml() {
-  local file="$1" section="" line key val
+  local file="$1" section="" line key val lineno=0 seen_key
+  declare -A first_line=()
+  declare -A first_section=()
   while IFS= read -r line || [[ -n "$line" ]]; do
+    lineno=$((lineno + 1))
     line="$(toml_trim "$line")"
     [[ -z "$line" || "$line" == '#'* ]] && continue
     if [[ "$line" =~ ^\[([a-zA-Z0-9_]+)\][[:space:]]*(#.*)?$ ]]; then
@@ -156,7 +170,34 @@ parse_toml() {
     elif [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
       key="${BASH_REMATCH[1]}"
       val="$(toml_value "${BASH_REMATCH[2]}")"
-      __TOML["${section}.${key}"]="$val"
+      # WHY a key in two sections keeps the FIRST section's value: the same key in two
+      # sections is one .env slot, and __TOML is keyed by section.key, so both were
+      # written and the .env carried the setting twice — the raw readers and the shell
+      # then disagreed on which won. A [db_<name>] profile is exempt: every profile
+      # repeats the same POSTGRES_* keys on purpose, and they are projected into [core]
+      # by resolve_active_db_profile rather than written to the .env, so two profiles
+      # coexist without competing for a slot.
+      if [[ "$section" != db_* ]]; then
+        if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+          log_warn "duplicate key '${key}' in [${section}] at line ${lineno} — already defined in [${first_section[$key]}]; keeping that section's value, ignoring this one"
+          continue
+        fi
+        first_section["$key"]="$section"
+      fi
+      seen_key="${section}.${key}"
+      # WHY a repeated key keeps the FIRST value instead of the last: TOML parsers
+      # reject a duplicate key outright, but this reader does not, so the two
+      # disagree — a reader taking the last occurrence sees a different setting
+      # from one taking the first. Keeping the first preserves the value an
+      # operator wrote at the top of the section and only discards the later
+      # shadow. This used to overwrite silently, which is how a populated
+      # CERT_EMAIL could be lost to a later empty line with no message anywhere.
+      if [[ -n "${first_line[$seen_key]:-}" ]]; then
+        log_warn "duplicate key [${section}] ${key} at line ${lineno} — already defined at line ${first_line[$seen_key]}; keeping the first value, ignoring this one"
+        continue
+      fi
+      first_line["$seen_key"]="$lineno"
+      __TOML["${seen_key}"]="$val"
       case "$section" in
         core)      __CORE_KEYS+=("$key") ;;
         admin)     __ADMIN_KEYS+=("$key") ;;
@@ -165,12 +206,37 @@ parse_toml() {
         infra)     __INFRA_KEYS+=("$key") ;;
         tailscale) __TAILSCALE_KEYS+=("$key") ;;
         rpc)       __RPC_KEYS+=("$key") ;;
+        backup)    __BACKUP_KEYS+=("$key") ;;
       esac
     fi
   done < "$file"
 }
 
 is_secret_key() { [[ "$1" =~ (PASSWORD|SECRET|TOKEN|KEY|ENCRYPT) ]]; }
+
+# Projects the active [db_<name>] profile into the core namespace so every
+# existing core.POSTGRES_* consumer keeps working unchanged. WHY it runs after
+# the secrets block: a secret-generation re-parse resets __TOML and the key
+# arrays, so an earlier copy would be wiped from memory.
+resolve_active_db_profile() {
+  local name="${__TOML[core.ACTIVE_DATABASE]:-default}"
+  local prefix="db_${name}." key full_key found=0
+  for full_key in "${!__TOML[@]}"; do
+    [[ "$full_key" == "${prefix}POSTGRES_"* ]] || continue
+    found=1
+    key="${full_key#"$prefix"}"
+    __TOML["core.${key}"]="${__TOML[$full_key]}"
+    if [[ " ${__CORE_KEYS[*]} " != *" ${key} "* ]]; then
+      __CORE_KEYS+=("$key")
+    fi
+  done
+  if [[ "$found" -eq 0 ]]; then
+    log_error "ACTIVE_DATABASE is \"${name}\" but ${TOML_FILE} has no [db_${name}] section with POSTGRES_* keys; add [db_${name}] or fix core.ACTIVE_DATABASE."
+    exit 1
+  fi
+  [[ "$DRY_RUN" -eq 1 ]] && echo "Active database profile: db_${name}"
+  return 0
+}
 
 # Returns generated secret value for a given key name, empty if none.
 generate_secret_for() {
@@ -182,12 +248,18 @@ generate_secret_for() {
     SECRET_KEY)          gen_hex32 ;;
     CMS_SECRET_KEY)      gen_hex32 ;;
     RPC_SECRET)          gen_hex32 ;;
-    RANKING_PASSWORD)    echo "cms_ranking_$(gen_pw)" ;;
+    # WHY this secret is generated while the CAPTCHA secret is not: this one is ours
+    # to invent and only has to be unpredictable, whereas the CAPTCHA secret is issued
+    # by a provider and random hex can never authenticate against its API.
+    RANKING_SESSION_SECRET) gen_hex32 ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
     VAULT_TOKEN)         gen_hex32 ;;
     HSM_PIN)             gen_hex32 ;;
-    CAPTCHA_SECRET_KEY)  gen_hex32 ;;
+    # WHY no CAPTCHA_SECRET_KEY arm: that value is issued by the CAPTCHA
+    # provider's dashboard, so random hex can never authenticate against the
+    # provider API. Leaving it empty makes the preflight captcha check report
+    # it instead of shipping a silently broken value.
     *) echo "" ;;
   esac
 }
@@ -263,7 +335,7 @@ migrate_missing_keys() {
         existing_keys["${key}"]=1
       fi
     fi
-  done < "$TOML_FILE"
+  done < "$TOML_PARSE_SOURCE"
   declare -A missing_by_section
   declare -A missing_count
   declare -a sections_order=()
@@ -310,7 +382,9 @@ migrate_missing_keys() {
       fi
     done
     log_info "Would migrate $total new config keys: ${summary%"; "}"
-    return 0
+    # Fall through to the rewrite below so the simulated merge reaches
+    # parse_toml — returning here would leave [db_default] absent and
+    # make resolve_active_db_profile fail on a file a real run would fix.
   fi
   local tmp_new
   tmp_new="$(mktemp)"
@@ -336,7 +410,7 @@ migrate_missing_keys() {
       prev_sec="$header_sec"
     fi
     echo "$line" >> "$tmp_new"
-  done < "$TOML_FILE"
+  done < "$TOML_PARSE_SOURCE"
   if [[ -n "$prev_sec" && -n "${pending_missing[$prev_sec]:-}" ]]; then
     while IFS= read -r mline || [[ -n "$mline" ]]; do
       echo "$mline" >> "$tmp_new"
@@ -359,6 +433,12 @@ migrate_missing_keys() {
       unset pending_missing["$s"]
     fi
   done
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # Discard the previous simulated file (if any) and keep the new merge for parse_toml.
+    [[ "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]] && rm -f -- "$TOML_PARSE_SOURCE"
+    TOML_PARSE_SOURCE="$tmp_new"
+    return 0
+  fi
   cat "$tmp_new" > "$TOML_FILE"
   rm -f "$tmp_new"
   local summary=""
@@ -370,6 +450,1362 @@ migrate_missing_keys() {
     fi
   done
   log_info "migrated $total new config keys: ${summary%"; "}"
+}
+
+# --- Retired keys ---
+# WHY: a key that no reader resolves to any more is retired by moving its value onto
+# the key that now carries that job, so an operator's setting survives the rename
+# instead of silently reverting to a default.
+#
+# WHY the value travels rather than being dropped: an operator who set one of these
+# believed it controlled what the published port was reachable on, or where the
+# worker fleet dials. Dropping the key alone leaves the reader falling back to its
+# own default and changing behaviour with no error. Moving the value keeps what the
+# operator chose, on the key that now carries it.
+#
+# WHY only the keys these ones name: the map is written out rather than derived, so a
+# key with no retired-name mapping cannot be given one.
+declare -A RETIRED_KEY_TARGET=(
+  [CONTEST_LISTEN_ADDRESS]=CONTEST_BIND_IP
+  [ADMIN_LISTEN_ADDRESS]=ADMIN_BIND_IP
+  [RANKING_LISTEN_ADDRESS]=RANKING_BIND_IP
+  [ADMIN_NEXT_LISTEN_ADDRESS]=ADMIN_NEXT_BIND_IP
+  [TAILSCALE_IP]=INNER_IP
+  [DNS_PROVIDER]=ACME_DNS_PROVIDER
+  [DNS_CREDENTIALS_FILE]=ACME_DNS_CREDENTIALS_FILE
+  [CERTBOT_IMAGE]=ACME_CERTBOT_IMAGE
+)
+declare -a RETIRED_KEYS=(
+  "CONTEST_LISTEN_ADDRESS"
+  "ADMIN_LISTEN_ADDRESS"
+  "RANKING_LISTEN_ADDRESS"
+  "ADMIN_NEXT_LISTEN_ADDRESS"
+  "TAILSCALE_IP"
+  "DNS_PROVIDER"
+  "DNS_CREDENTIALS_FILE"
+  "CERTBOT_IMAGE"
+)
+declare -A RETIRED_BIND_VALUE=()
+declare -a RETIRED_BIND_ORDER=()
+# Targets the plan found defined nowhere, so the write has to give them an entry rather
+# than rewrite one.
+declare -a RETIRED_BIND_APPEND=()
+# Which keys the write actually put in the file, and the section each retired key was
+# defined in — the outcome has to survive the write, because the keys it describes are
+# gone from the file by the time the log line that names them is written.
+declare -A RETIRED_BIND_WRITTEN=()
+declare -A RETIRED_KEY_SECTION=()
+
+# Keys retired with NO successor. WHY a table of their own: RETIRED_KEY_TARGET renames a
+# key and moves its value onto the replacement, but nothing reads these any more, so there
+# is nothing to move — only the line goes, and the reason names what took the key's job.
+declare -A RETIRED_DEAD_REASON=(
+  [RANKING_USERNAME]="an admin holding ranking:read, signed with RANKING_SESSION_SECRET"
+  [RANKING_PASSWORD]="an admin holding ranking:read, signed with RANKING_SESSION_SECRET"
+  [CMS_RANKING_CONFIG]="the ranking service's own config file"
+  [CMS_RANKING_LOG_DIR]="the ranking service's own log_dir setting"
+)
+declare -a RETIRED_DEAD_KEYS=(
+  "RANKING_USERNAME"
+  "RANKING_PASSWORD"
+  "CMS_RANKING_CONFIG"
+  "CMS_RANKING_LOG_DIR"
+)
+
+# The POSTGRES_* keys that moved from [core] into [db_default] profiles (89d92c37).
+# WHY a dedicated array and not RETIRED_KEY_TARGET: that map pairs a retired key
+# NAME with a replacement key NAME (TAILSCALE_IP -> INNER_IP), but POSTGRES_* keys
+# keep the same name — only the section they live in moved — so a name-to-name map
+# cannot express the move and the retired-key pass would strip both copies.
+declare -a DB_CONFIG_KEYS=(
+  "POSTGRES_HOST"
+  "POSTGRES_PORT"
+  "POSTGRES_PORT_EXTERNAL"
+  "POSTGRES_DB"
+  "POSTGRES_USER"
+  "POSTGRES_PASSWORD"
+  "POSTGRES_BACKUP_PASSWORD"
+  "POSTGRES_HOST_AUTH_METHOD"
+)
+# Key -> value collected from [core] for the section move; emptied as each key
+# is written into [db_default] so no value lands twice.
+declare -A DB_MIGRATE_VALS=()
+
+# Reads one key's value from a TOML file, ignoring comments and section headers.
+# Prints an empty string when the key is absent.
+toml_value_of_key() {
+  local file="$1" want="$2" line trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    [[ "$trimmed" =~ ^\[[a-zA-Z0-9_]+\]$ ]] && continue
+    [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+    if [[ "${BASH_REMATCH[1]}" == "$want" ]]; then
+      toml_value "${BASH_REMATCH[2]}"
+      return 0
+    fi
+  done < "$file"
+  return 0
+}
+
+# True when a TOML file defines <key>, whatever its value. An empty retired key is
+# still a key: it is an operator's line, and leaving it behind would have the next
+# migrate_missing_keys pass copy it straight back from config.toml.example.
+toml_defines_key() {
+  local file="$1" want="$2" line trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    [[ "$trimmed" =~ ^\[[a-zA-Z0-9_]+\]$ ]] && continue
+    [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+    [[ "${BASH_REMATCH[1]}" == "$want" ]] && return 0
+  done < "$file"
+  return 1
+}
+
+# The section <key> is defined in, empty when it is defined nowhere. An entry above the
+# first section header is read as [core] by parse_toml, and reported the same way here.
+toml_section_of_key() {
+  local file="$1" want="$2" line trimmed sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      [[ "${BASH_REMATCH[1]}" == "$want" ]] || continue
+      [[ -n "$sec" ]] || { printf 'core'; return 0; }
+      printf '%s' "$sec"
+      return 0
+    fi
+  done < "$file"
+  printf ''
+}
+
+# Reads <key> from <section> in <file>; prints empty when the section or key
+# is absent. Unlike toml_value_of_key (first match across all sections), this
+# is section-scoped, which is what the [core] -> [db_default] move needs when
+# the same key name exists in both sections.
+toml_value_in_section() {
+  local file="$1" want_sec="$2" want_key="$3" line trimmed sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      [[ "${BASH_REMATCH[1]}" == "$want_key" && "$sec" == "$want_sec" ]] || continue
+      toml_value "${BASH_REMATCH[2]}"
+      return 0
+    fi
+  done < "$file"
+  printf ''
+}
+
+# True when <file> defines <key> inside <section>.
+toml_key_in_section() {
+  local file="$1" want_sec="$2" want_key="$3" line trimmed sec=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      [[ "${BASH_REMATCH[1]}" == "$want_key" && "$sec" == "$want_sec" ]] && return 0
+    fi
+  done < "$file"
+  return 1
+}
+
+# True when <file> contains a [section] header.
+toml_section_exists() {
+  local file="$1" want="$2" line trimmed
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]] && [[ "${BASH_REMATCH[1]}" == "$want" ]] && return 0
+  done < "$file"
+  return 1
+}
+
+# Collect the values every retired key hands to its live replacement, and abort first
+# on any target that already holds a different value.
+#
+# WHY stop on a conflict instead of resolving it: the live value decides what the
+# published port is reachable on, so overwriting it would change network exposure
+# without telling anyone, and taking it would drop a setting an operator set on the key
+# that is now the live one. Neither is the operator's call to guess.
+plan_retired_keys() {
+  local key target value live retired_section conflicts="" unreadable=""
+  RETIRED_BIND_VALUE=()
+  RETIRED_BIND_ORDER=()
+  RETIRED_BIND_APPEND=()
+  RETIRED_KEY_SECTION=()
+  for key in "${RETIRED_KEYS[@]}"; do
+    toml_defines_key "$TOML_FILE" "$key" || continue
+    retired_section="$(toml_section_of_key "$TOML_FILE" "$key")"
+    target="${RETIRED_KEY_TARGET[$key]}"
+    value="$(toml_value_of_key "$TOML_FILE" "$key")"
+    live="$(toml_value_of_key "$TOML_FILE" "$target")"
+    if [[ -n "$live" && "$live" != "$value" ]]; then
+      conflicts+="  [${retired_section}] ${key} = \"${value}\"   ->   ${target} = \"${live}\""$'\n'
+      continue
+    fi
+    # The outcome is recorded even when there is no value to move, so the log can say
+    # what happened to the retired key after this pass has deleted the line.
+    RETIRED_KEY_SECTION["$key"]="$retired_section"
+    if [[ -z "$value" ]]; then
+      # Nothing to carry across and nothing to expose: the target keeps whatever it
+      # already resolved to, and that value alone decides the published address.
+      continue
+    fi
+    # A target that is defined nowhere gets its entry written where the retired line
+    # stood, so the section the operator put the address in keeps carrying it — but a
+    # section the generator does not read would drop it again on the next pass, so the
+    # value only survives while the section it lands in is one parse_toml reads. A target
+    # that is already defined is rewritten in place, because its own section — not the
+    # retired key's — is the one its value is read from.
+    if [[ -z "$(toml_section_of_key "$TOML_FILE" "$target")" ]]; then
+      RETIRED_BIND_APPEND+=("$target")
+      case " ${retired_section} " in
+        " core " | " admin " | " contest " | " worker " | " infra " | " tailscale " | " rpc " | " backup " ) : ;;
+        *) unreadable+="${key}"$'\n' ;;
+      esac
+    fi
+    RETIRED_BIND_VALUE["$target"]="$value"
+    RETIRED_BIND_ORDER+=("$target")
+  done
+  if [[ -n "$conflicts" ]]; then
+    log_error "config.toml sets a retired key to a value its live replacement already differs from:"
+    printf '%s' "$conflicts" >&2
+    log_error "The retired key and its replacement are both live: the value on the left of"
+    log_error "an arrow still has a reader, and the one on the right is what that reader"
+    log_error "resolves to today. Moving one over the other would change network exposure"
+    log_error "or the worker dial target silently, so the choice is yours: reconcile the"
+    log_error "two keys in $TOML_FILE by hand and sync again."
+    exit 1
+  fi
+  if [[ -n "$unreadable" ]]; then
+    while IFS= read -r key; do
+      [[ -n "$key" ]] || continue
+      log_warn "[$(toml_section_of_key "$TOML_FILE" "$key")] is a section this generator does not read, so ${RETIRED_KEY_TARGET[$key]} = \"${RETIRED_BIND_VALUE[${RETIRED_KEY_TARGET[$key]}]:-}\" cannot be stored: delete ${key} from $TOML_FILE by hand, then run the sync again and ${RETIRED_KEY_TARGET[$key]} is merged in from ${TOML_EXAMPLE}"
+    done <<< "$unreadable"
+  fi
+}
+
+# Write config.toml with every retired key line removed and every migrated value in its
+# place, in a single pass. Every other byte is copied through, so comments, ordering and
+# blank lines survive — which is what makes a second run find nothing left to do.
+apply_retired_keys() {
+  local tmp line trimmed key target
+  (( ${#RETIRED_BIND_ORDER[@]} > 0 || ${#RETIRED_KEY_SECTION[@]} > 0 )) || return 0
+  RETIRED_BIND_WRITTEN=()
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${RETIRED_KEY_TARGET[$key]:-}" ]]; then
+        target="${RETIRED_KEY_TARGET[$key]}"
+        if [[ " ${RETIRED_BIND_APPEND[*]} " == *" ${target} "* ]]; then
+          printf '%s\n' "$(toml_entry "$target" "${RETIRED_BIND_VALUE[$target]}")" >> "$tmp"
+          RETIRED_BIND_WRITTEN["$target"]=1
+        fi
+        continue
+      fi
+      if [[ -n "${RETIRED_BIND_VALUE[$key]:-}" ]]; then
+        printf '%s\n' "$(toml_entry "$key" "${RETIRED_BIND_VALUE[$key]}")" >> "$tmp"
+        RETIRED_BIND_WRITTEN["$key"]=1
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# One line per retired key that left the file this run, naming where its value went. The
+# ledger is read here and not off the file, because the keys it reports are gone from it
+# by now — re-reading would report nothing on the one run that did the work.
+announce_retired_keys() {
+  local key target value
+  for key in "${RETIRED_KEYS[@]}"; do
+    [[ -n "${RETIRED_KEY_SECTION[$key]:-}" ]] || continue
+    target="${RETIRED_KEY_TARGET[$key]}"
+    value="${RETIRED_BIND_VALUE[$target]:-}"
+    if [[ -z "$value" ]]; then
+      log_info "removed retired ${key} from $TOML_FILE [${RETIRED_KEY_SECTION[$key]}] — it was empty and ${target} keeps its own value"
+    else
+      log_info "removed retired ${key} = \"${value}\" from $TOML_FILE [${RETIRED_KEY_SECTION[$key]}] and moved the value onto ${target} in [$(toml_section_of_key "$TOML_FILE" "$target")]"
+    fi
+  done
+  for key in "${RETIRED_BIND_ORDER[@]}"; do
+    [[ -n "${RETIRED_BIND_WRITTEN[$key]:-}" ]] && continue
+    log_warn "${key} = \"${RETIRED_BIND_VALUE[$key]}\" was collected but did not reach $TOML_FILE, so it falls back to whatever the reader's own default resolves to"
+  done
+}
+
+# Move every retired key's value onto the key that now carries that job, then delete the
+# retired line. The "never stamp a code default" rule: the retired value is whatever the
+# operator wrote, so 0.0.0.0 stays 0.0.0.0 and 127.0.0.1 stays loopback.
+#
+# WHY the check and the write are one step and not two passes over the file: config.toml
+# is rewritten by migrate_missing_keys, promote_split_keys_to_toml and the secret generator
+# between runs, so a value recorded against a read of one revision must reach the same
+# revision it was read from or the migration reports a write that did not land. This runs
+# on the file as it stands, which is why it replaces the abort rather than adding a step
+# to it, and why it reports only what actually moved.
+migrate_retired_keys() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    local key target value live
+    for key in "${RETIRED_KEYS[@]}"; do
+      toml_defines_key "$TOML_FILE" "$key" || continue
+      target="${RETIRED_KEY_TARGET[$key]}"
+      value="$(toml_value_of_key "$TOML_FILE" "$key")"
+      live="$(toml_value_of_key "$TOML_FILE" "$target")"
+      if [[ -n "$live" && "$live" != "$value" ]]; then
+        log_error "[$(toml_section_of_key "$TOML_FILE" "$key")] ${key} = \"${value}\" would have to overwrite ${target} = \"${live}\""
+        exit 1
+      fi
+      [[ -n "$value" ]] || value=""
+      printf 'Would migrate [%s] %s = "%s" onto [%s] %s and delete the retired line\n' \
+        "$(toml_section_of_key "$TOML_FILE" "$key")" "$key" "$value" \
+        "$(toml_section_of_key "$TOML_FILE" "$target")" "$target"
+    done
+    return 0
+  fi
+  plan_retired_keys
+  # Announced only once the write has landed, so no line claims a migration that did
+  # not happen and the retired keys are still in the file for the next run to try.
+  if apply_retired_keys; then
+    announce_retired_keys
+  else
+    log_warn "could not write the retired-key migration into $TOML_FILE — $TOML_FILE left untouched, re-run './cms config sync'"
+  fi
+  return 0
+}
+
+# The one retirement sentence both the dry run and the real run emit, so they cannot differ.
+# Args: verb key section
+dead_key_notice() {
+  printf '%s retired %s from %s [%s] — no reader consumes it; use %s instead\n' \
+    "$1" "$2" "$TOML_FILE" "$3" "${RETIRED_DEAD_REASON[$2]}"
+}
+
+# Delete every RETIRED_DEAD_KEYS line, copying every other byte so comments, ordering and
+# blank lines survive. cat into the file keeps its inode and permissions (secrets: mode 600).
+apply_dead_key_removal() {
+  local tmp line trimmed key
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${RETIRED_DEAD_REASON[$key]:-}" ]]; then
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Remove keys with no successor, reporting what replaced each and moving nothing. WHY after
+# migrate_missing_keys (see main): deleting first would let a still-listed example copy the
+# key straight back in, and parse_toml must read the cleaned file or .env keeps exporting it.
+# A key the live file carries in a second section is a copy an older example left behind:
+# the reader keeps the first and ignores the rest, so the extra line is dead weight on a
+# file this tooling maintains. Drop it and say which section owns it now.
+drop_stale_section_copies() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  local tmp line trimmed key section="" dropped=0
+  declare -A first_section=()
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      printf '%s\n' "$line" >> "$tmp"
+      continue
+    fi
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ "$section" != db_* ]]; then
+        if [[ -n "${first_section[$key]:-}" && "${first_section[$key]}" != "$section" ]]; then
+          dropped=$((dropped + 1))
+          log_info "removed stale ${key} from [${section}] in $TOML_FILE - the tooling declares it in [${first_section[$key]}] only"
+          continue
+        fi
+        first_section["$key"]="$section"
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  if (( dropped > 0 )) && [[ "$DRY_RUN" -eq 0 ]]; then
+    cat "$tmp" > "$TOML_FILE" || { rm -f "$tmp"; return 1; }
+  fi
+  rm -f "$tmp"
+}
+
+retire_dead_keys() {
+  [[ -f "$TOML_FILE" ]] || return 0
+  local -a present=()
+  declare -A section_of=()
+  local key
+  for key in "${RETIRED_DEAD_KEYS[@]}"; do
+    toml_defines_key "$TOML_FILE" "$key" || continue
+    present+=("$key")
+    section_of["$key"]="$(toml_section_of_key "$TOML_FILE" "$key")"
+  done
+  (( ${#present[@]} > 0 )) || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    for key in "${present[@]}"; do
+      dead_key_notice "Would remove" "$key" "${section_of[$key]}"
+    done
+    return 0
+  fi
+  if ! apply_dead_key_removal; then
+    log_warn "could not remove retired keys from $TOML_FILE — left untouched, re-run './cms config sync'"
+    return 0
+  fi
+  for key in "${present[@]}"; do
+    log_info "$(dead_key_notice "removed" "$key" "${section_of[$key]}")"
+  done
+}
+
+# Move POSTGRES_* values still living in [core] onto the [db_default] profile and
+# delete the [core] lines — the move-plus-conflict-check contract of the retired-key
+# migration, applied to a section move (key names unchanged, only their section moved).
+# WHY before migrate_missing_keys: real values must reach [db_default] before the
+# example's empty placeholders could be merged in over them.
+migrate_db_config_keys() {
+  [[ -f "$TOML_PARSE_SOURCE" ]] || return 0
+  toml_key_in_section "$TOML_PARSE_SOURCE" "core" "POSTGRES_PASSWORD" || return 0
+  DB_MIGRATE_VALS=()
+  local key core_val db_val moved_keys
+  local -a conflicts=()
+  for key in "${DB_CONFIG_KEYS[@]}"; do
+    toml_key_in_section "$TOML_PARSE_SOURCE" "core" "$key" || continue
+    core_val="$(toml_value_in_section "$TOML_PARSE_SOURCE" "core" "$key")"
+    db_val="$(toml_value_in_section "$TOML_PARSE_SOURCE" "db_default" "$key")"
+    if [[ -n "$db_val" && -n "$core_val" && "$db_val" != "$core_val" ]]; then
+      conflicts+=("  [core] ${key} = \"${core_val}\"  ->  [db_default] ${key} = \"${db_val}\"")
+      continue
+    fi
+    DB_MIGRATE_VALS["$key"]="$core_val"
+  done
+  if [[ ${#conflicts[@]} -gt 0 ]]; then
+    log_error "config.toml still defines POSTGRES_* in [core] but [db_default] already holds different values:"
+    printf '%s\n' "${conflicts[@]}" >&2
+    log_error "Reconcile the two copies by hand in $TOML_FILE and run './cms config sync' again."
+    exit 1
+  fi
+  [[ ${#DB_MIGRATE_VALS[@]} -gt 0 ]] || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    for key in "${!DB_MIGRATE_VALS[@]}"; do
+      printf 'Would move [core] %s to [db_default]\n' "$key"
+    done
+    apply_db_config_migration || return 1
+    return 0
+  fi
+  moved_keys="${!DB_MIGRATE_VALS[*]}"
+  apply_db_config_migration || {
+    log_warn "could not write the POSTGRES_* migration into $TOML_FILE — re-run './cms config sync'"
+    return 1
+  }
+  log_info "moved POSTGRES_* from [core] to [db_default]: ${moved_keys}"
+  return 0
+}
+
+# Flush pending [db_default] writes at a section boundary — called both when the
+# loop crosses from one section to the next and after the last line is read.
+flush_db_section_edges() {
+  local sec="$1" has_db="$2" out="$3"
+  if [[ "$sec" == "core" && "$has_db" -eq 0 ]]; then
+    emit_db_default_section "$out"
+  fi
+  if [[ "$sec" == "db_default" && ${#DB_MIGRATE_VALS[@]} -gt 0 ]]; then
+    append_pending_db_keys "$out"
+  fi
+}
+
+# Rewrite config.toml: strip POSTGRES_* out of [core] and write them into
+# [db_default], creating the section when it does not exist yet. Every other
+# byte is copied through so comments and ordering survive.
+apply_db_config_migration() {
+  local key line trimmed sec="" has_db=0 tmp
+  toml_section_exists "$TOML_PARSE_SOURCE" "db_default" && has_db=1
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      flush_db_section_edges "$sec" "$has_db" "$tmp"
+      sec="${BASH_REMATCH[1]}"
+      printf '%s\n' "$line" >> "$tmp"
+      continue
+    fi
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ "$sec" == "core" && -n "${DB_MIGRATE_VALS[$key]+set}" ]]; then
+        continue
+      fi
+      if [[ "$sec" == "db_default" && -n "${DB_MIGRATE_VALS[$key]+set}" ]]; then
+        [[ -n "${DB_MIGRATE_VALS[$key]}" ]] && printf '%s\n' "$(toml_entry "$key" "${DB_MIGRATE_VALS[$key]}")" >> "$tmp"
+        unset "DB_MIGRATE_VALS[$key]"
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_PARSE_SOURCE"
+  flush_db_section_edges "$sec" "$has_db" "$tmp"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    # config.toml stays untouched; point downstream steps at the simulated state.
+    [[ "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]] && rm -f -- "$TOML_PARSE_SOURCE"
+    TOML_PARSE_SOURCE="$tmp"
+    return 0
+  fi
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Write the [db_default] header and every still-pending non-empty value to <out>.
+emit_db_default_section() {
+  printf '\n[db_default]\n' >> "$1"
+  append_pending_db_keys "$1"
+}
+
+# Write every still-pending non-empty value to <out> and mark it written.
+append_pending_db_keys() {
+  local out="$1" key
+  for key in "${DB_CONFIG_KEYS[@]}"; do
+    [[ -n "${DB_MIGRATE_VALS[$key]+set}" ]] || continue
+    [[ -n "${DB_MIGRATE_VALS[$key]}" ]] || continue
+    printf '%s\n' "$(toml_entry "$key" "${DB_MIGRATE_VALS[$key]}")" >> "$out"
+    unset "DB_MIGRATE_VALS[$key]"
+  done
+}
+
+# A key the sync refuses to carry forward, because it has no value to move.
+# WHY it cannot join RETIRED_KEYS: that path writes the retired value onto a live target
+# key, and this key has no target — it selected which address family the other keys
+# resolved against rather than naming an address of its own, so there is nothing to move
+# the value onto. Why it must stop the sync instead of warning: it silently chose the
+# address every published port would answer on, so an operator carrying it forward without
+# noticing would deploy ports on addresses they never picked. Stalling forces them to set
+# each service's *_BIND_IP by hand, which is the value that now decides. Handled by key
+# match on the config file only, so unrelated keys are never touched.
+# WHY this runs before migrate_retired_keys: the operator's own line is still in the file
+# at that point, so the message names the line they have to delete.
+abort_on_unmappable_retired_key() {
+  local key="$1" section value hint="$2" retired_section
+  [[ -f "$TOML_FILE" ]] || return 0
+  toml_defines_key "$TOML_FILE" "$key" || return 0
+  retired_section="$(toml_section_of_key "$TOML_FILE" "$key")"
+  value="$(toml_value_of_key "$TOML_FILE" "$key")"
+  log_error "[${retired_section}] ${key} = \"${value}\" is no longer read and has no equivalent key to move its value onto."
+  log_error "Delete the ${key} line from ${TOML_FILE} by hand, then run './cms config sync' again. ${hint}"
+  exit 1
+}
+
+# --- Retired split env files ---
+# WHY: compose loads only the merged .env (no compose file declares `env_file:`), so a
+# value living in .env.core/.env.contest/.env.worker/.env.infra/.env.tailscale/.env.admin
+# was honoured by some scripts and ignored by the stack — the drift behind a false
+# configuration-mismatch report. Surviving values are folded into .env, then the split
+# file is removed. Absent files are a no-op, so fresh installs and re-runs are unaffected.
+SPLIT_ENV_FILES=(.env.core .env.contest .env.worker .env.infra .env.tailscale .env.admin)
+# The config.toml section each retired file fed, which is why the file existed: a value it
+# carried has to keep reaching .env from the source of truth once the file itself is gone.
+declare -A SPLIT_ENV_SECTIONS=(
+  [.env.core]=core
+  [.env.contest]=contest
+  [.env.worker]=worker
+  [.env.infra]=infra
+  [.env.tailscale]=tailscale
+  [.env.admin]=admin
+)
+declare -A SPLIT_VALUES=()
+declare -a SPLIT_KEYS=()
+
+# True when <file> holds a non-empty value for <key>. Presence alone is not enough: the
+# merged .env carries every config.toml key, most of them empty, and an empty generated
+# value must not displace the real value an operator kept in a split file.
+env_file_has_value() {
+  local key="$1" file="$2" raw
+  [[ -f "$file" ]] || return 1
+  raw="$(awk -F= -v k="$key" '$1==k { v=$0; sub(/^[^=]*=/, "", v); print v; exit }' "$file" 2>/dev/null | tr -d '\r' || true)"
+  [[ -n "$(env_unquote "$raw")" ]]
+}
+
+# Read one retired file into SPLIT_KEYS/SPLIT_VALUES: the keys .env carries no value for.
+# Values are copied verbatim; env_quote re-protects them for every reader when written.
+collect_split_env_keys() {
+  local src="$1" line key val
+  SPLIT_KEYS=(); SPLIT_VALUES=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    case "$line" in ''|'#'*) continue ;; esac
+    line="${line#export }"
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    val="$(env_unquote "${line#*=}")"
+    [[ -n "$val" ]] || continue
+    [[ -z "${SPLIT_VALUES[$key]:-}" ]] || continue
+    env_file_has_value "$key" "$MERGED_ENV" && continue
+    SPLIT_KEYS+=("$key")
+    SPLIT_VALUES["$key"]="$val"
+  done < "$src"
+}
+
+# Write the collected values into .env: a key .env already carries is replaced in place,
+# a key it lacks is appended. WHY replace rather than append: raw readers (awk/grep/cut)
+# take the FIRST match and the shell takes the LAST, so a duplicated key would leave the
+# two disagreeing about the same setting.
+apply_split_env_values() {
+  local tmp line key
+  (( ${#SPLIT_VALUES[@]} > 0 )) || return 0
+  declare -A pending=()
+  for key in "${!SPLIT_VALUES[@]}"; do pending["$key"]="${SPLIT_VALUES[$key]}"; done
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    key="${line%%=*}"
+    if [[ "$line" == *=* && -n "${pending[$key]:-}" ]]; then
+      printf '%s=%s\n' "$key" "$(env_quote "${pending[$key]}")" >> "$tmp"
+      pending["$key"]=""
+    else
+      printf '%s\n' "$line" >> "$tmp"
+    fi
+  done < "$MERGED_ENV"
+  for key in "${SPLIT_KEYS[@]}"; do
+    [[ -n "${pending[$key]:-}" ]] || continue
+    printf '%s=%s\n' "$key" "$(env_quote "${pending[$key]}")" >> "$tmp"
+    pending["$key"]=""
+  done
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$MERGED_ENV"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# --- Rescued keys get a durable home in config.toml ---
+# WHY: the next sync rebuilds .env from config.toml alone, so a value that only ever lived
+# in a split file survives the run that migrates it and is gone from the one after — the
+# silent loss behind dead Discord alerting, a missing tailnet front and an empty worker
+# fleet. Promoting the value into config.toml makes the migration survive that rebuild.
+# A key is only ever added to a section parse_toml reads, because a key written anywhere
+# else would be dropped by the next sync just the same.
+declare -a TOML_INSERT_KEYS=() TOML_FILL_KEYS=()
+# key → section, kept so the write log can still name the section after the write is done.
+declare -A TOML_INSERT_SECTION=() TOML_FILL_SECTION=()
+# key → section, the ledger of inserts a rewrite pass has not written yet.
+declare -A TOML_INSERT_PENDING=()
+
+# Escape a value for the TOML basic string it is written as. `\` and `"` are the two escapes
+# toml_value decodes, so the value comes back byte-identical on the next sync.
+toml_escape() {
+  local v="${1-}"
+  v="${v//\\/\\\\}"
+  printf '%s' "${v//\"/\\\"}"
+}
+
+# One `key = "value"` entry — the form the admin panel's own config.toml writer emits.
+# WHY no inline comment on it: the panel's reader takes everything after `=` as the value,
+# so a comment left on a written entry shows up as part of the value there and makes its
+# config.toml-vs-.env comparison report a drift that does not exist.
+toml_entry() {
+  printf '%s = "%s"' "$1" "$(toml_escape "$2")"
+}
+
+# Sort the rescued keys by what config.toml already says about them. WHAT it says is read
+# from the file, not from __TOML: that map also holds values derived at runtime
+# (DOMAIN_NAME), and no section can be written for a value the file never had.
+# A key the file already values keeps that value. A key the file defines empty is filled
+# where it is defined, so the section that owns it wins and the key is never duplicated.
+# Args: section_name split_file
+classify_split_keys() {
+  local section="$1" src="$2" key line trimmed sec=""
+  declare -A defined_in=() valued_in=()
+  TOML_INSERT_KEYS=(); TOML_FILL_KEYS=()
+  TOML_INSERT_SECTION=(); TOML_FILL_SECTION=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      [[ -n "${SPLIT_VALUES[$key]+set}" ]] || continue
+      [[ -n "${defined_in[$key]:-}" ]] || defined_in["$key"]="$sec"
+      if [[ -z "${valued_in[$key]:-}" && -n "$(toml_value "${BASH_REMATCH[2]}")" ]]; then
+        valued_in["$key"]="$sec"
+      fi
+    fi
+  done < "$TOML_FILE"
+  for key in "${SPLIT_KEYS[@]}"; do
+    if [[ -n "${valued_in[$key]:-}" ]]; then
+      log_info "kept ${key} already set in [${valued_in[$key]}] — the value in ${src} was not needed"
+    elif [[ -n "${defined_in[$key]:-}" ]]; then
+      TOML_FILL_KEYS+=("$key")
+      TOML_FILL_SECTION["$key"]="${defined_in[$key]}"
+    else
+      TOML_INSERT_KEYS+=("$key")
+      TOML_INSERT_SECTION["$key"]="$section"
+    fi
+  done
+}
+
+# Write out the keys still waiting for <section> as that section ends, in the order the
+# split file listed them, so a re-run reproduces exactly the same lines. Whatever is still
+# waiting once the file has been read through had no section to go into.
+# Args: output_file section_name
+append_new_toml_keys() {
+  local out="$1" section="$2" key
+  (( ${#TOML_INSERT_PENDING[@]} > 0 )) || return 0
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    [[ "${TOML_INSERT_PENDING[$key]:-}" == "$section" ]] || continue
+    printf '%s\n' "$(toml_entry "$key" "${SPLIT_VALUES[$key]}")" >> "$out"
+    unset "TOML_INSERT_PENDING[$key]"
+  done
+}
+
+# Rewrite config.toml: fill the entries the classification marked in place, and append each
+# section's missing keys to the end of that section. Every other byte is copied through, so
+# comments, ordering and blank lines survive. Returns non-zero without touching the file
+# when a section a key needs is absent: the generator would not read a section it does not
+# know, so inventing one would hide the value rather than keep it.
+rewrite_config_toml() {
+  local tmp line trimmed key sec=""
+  TOML_INSERT_PENDING=()
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    TOML_INSERT_PENDING["$key"]="${TOML_INSERT_SECTION[$key]}"
+  done
+  tmp="$(mktemp)" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      append_new_toml_keys "$tmp" "$sec"
+      sec="${BASH_REMATCH[1]}"
+    elif [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+      if [[ -n "${TOML_FILL_SECTION[$key]:-}" && "${TOML_FILL_SECTION[$key]}" == "$sec" ]]; then
+        printf '%s\n' "$(toml_entry "$key" "${SPLIT_VALUES[$key]}")" >> "$tmp"
+        continue
+      fi
+    fi
+    printf '%s\n' "$line" >> "$tmp"
+  done < "$TOML_FILE"
+  append_new_toml_keys "$tmp" "$sec"
+  if (( ${#TOML_INSERT_PENDING[@]} > 0 )); then
+    log_warn "no section to write these keys into: ${!TOML_INSERT_PENDING[*]}"
+    rm -f "$tmp"
+    return 1
+  fi
+  # cat into the existing file keeps its inode and permissions (secrets: mode 600).
+  if ! cat "$tmp" > "$TOML_FILE"; then
+    rm -f "$tmp"
+    return 1
+  fi
+  rm -f "$tmp"
+}
+
+# Move the collected keys into config.toml, each into the section that owns it. Returns
+# non-zero when they could not be stored, so the caller keeps the split file instead of
+# deleting the only surviving copy.
+# Args: split_file section_name
+promote_split_keys_to_toml() {
+  local src="$1" section="$2" key
+  (( ${#SPLIT_KEYS[@]} > 0 )) || return 0
+  classify_split_keys "$section" "$src"
+  if (( ${#TOML_INSERT_KEYS[@]} == 0 && ${#TOML_FILL_KEYS[@]} == 0 )); then
+    return 0
+  fi
+  if ! rewrite_config_toml; then
+    log_warn "could not store the keys of ${src} in $TOML_FILE — ${src} kept"
+    return 1
+  fi
+  # Reported only now, so no log line claims a write that did not land.
+  for key in "${TOML_FILL_KEYS[@]}"; do
+    log_info "filled empty ${key} in $TOML_FILE [${TOML_FILL_SECTION[$key]}] from ${src}"
+  done
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    log_info "added ${key} to $TOML_FILE [${TOML_INSERT_SECTION[$key]}] from ${src}"
+  done
+}
+
+# Print exactly what a real run would write into .env and config.toml, and change nothing.
+# Args: split_file section_name
+report_split_env_dry_run() {
+  local src="$1" section="$2" key
+  classify_split_keys "$section" "$src"
+  for key in "${SPLIT_KEYS[@]}"; do
+    printf 'Would migrate %s from %s into %s\n' "$key" "$src" "$MERGED_ENV"
+  done
+  for key in "${TOML_FILL_KEYS[@]}"; do
+    printf 'Would fill the empty %s in %s [%s] with the value from %s\n' \
+      "$key" "$TOML_FILE" "${TOML_FILL_SECTION[$key]}" "$src"
+  done
+  for key in "${TOML_INSERT_KEYS[@]}"; do
+    printf 'Would add %s to %s [%s] from %s\n' \
+      "$key" "$TOML_FILE" "${TOML_INSERT_SECTION[$key]}" "$src"
+  done
+  printf 'Would delete retired split env file %s\n' "$src"
+}
+
+migrate_split_env_files() {
+  local src section key
+  for src in "${SPLIT_ENV_FILES[@]}"; do
+    [[ -f "$src" ]] || continue
+    section="${SPLIT_ENV_SECTIONS[$src]}"
+    collect_split_env_keys "$src"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      report_split_env_dry_run "$src" "$section"
+      continue
+    fi
+    # Reported only after the write succeeded, so a failed file is never announced as
+    # migrated and never removed.
+    if ! apply_split_env_values; then
+      log_warn "migration of ${src} failed — $MERGED_ENV left untouched, ${src} kept"
+      continue
+    fi
+    for key in "${SPLIT_KEYS[@]}"; do
+      log_info "migrated ${key} from ${src} into $MERGED_ENV"
+    done
+    # The split file is removed only once its values live where the next sync looks for
+    # them again — every run rebuilds .env from config.toml.
+    if ! promote_split_keys_to_toml "$src" "$section"; then
+      continue
+    fi
+    if rm -f -- "$src"; then
+      log_info "deleted retired split env file ${src}"
+    else
+      log_warn "could not delete ${src} — remove it manually"
+    fi
+  done
+}
+
+# --- The active contest: the database authors it, and this script only reads rows ---
+# contests.is_active is the deployment's default contest; a service registry row names the
+# contest one instance serves and outranks it (cms.db.contest_binding reads that row per call).
+# Nothing here derives [contest] CONTEST_ID in either direction: that value is the bootstrap a
+# database with no contests table yet is read from, and compose passes it on unchanged.
+DB_CONTAINER="cms-database"
+
+# One value out of the running database, or empty. Uses the resolved core.POSTGRES_* values
+# (already projected from the active [db_<name>] profile), so it follows the same database
+# the stack is pointed at.
+# WHY the actor: contest_exposures is one of the 43 tables whose EVERY verb is gated on
+# `cms.actor`. Without an identity the exposure count, the tls/tailnet/hostname reads and the
+# service-registry rows all come back empty — this script would then render a compose/domain
+# graph with no exposures in it and report a clean sync over an unchanged database.
+# WHY system:migration: the sync is bring-up and provisioning — `make env`, the post-update
+# refresh, `./cms config sync` — with no request and no human identity behind it, and what it
+# reads was written by the seeding path (the exposures a panel admin registered). The policies
+# admit it as staff, so it sees exactly what the panel and the core see; it claims the
+# unattended, deploy-time identity rather than borrowing an admin's or a login's.
+db_query() {
+  local sql="$1"
+  docker_exec_db "${__TOML[core.POSTGRES_PASSWORD]:-}" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" -i \
+    "$DB_CONTAINER" psql -U "${__TOML[core.POSTGRES_USER]:-cmsuser}" \
+    -d "${__TOML[core.POSTGRES_DB]:-cmsdb}" -tA -v ON_ERROR_STOP=1 -c "$sql" 2>/dev/null
+}
+
+# Is a [db_<name>] profile present in config.toml? Mirrors resolve_active_db_profile's
+# prefix scan so both agree on what counts as a profile.
+has_db_profile() {
+  local prefix="db_$1.POSTGRES_" key
+  for key in "${!__TOML[@]}"; do
+    [[ "$key" == "${prefix}"* ]] && return 0
+  done
+  return 1
+}
+
+# Every enabled service names a DB profile, and that profile must exist as a
+# [db_<name>] section. WHY fatal instead of falling back to the active profile: a
+# typo would silently point one service at the live database while its row claims
+# another, and the symptom would be wrong data rather than a failed start.
+validate_service_db_profiles() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local active="${__TOML[core.ACTIVE_DATABASE]:-default}"
+  local profiles profile
+  profiles="$(db_query "SELECT DISTINCT db_profile FROM services WHERE enabled;")" || return 1
+  while IFS= read -r profile; do
+    [[ -z "$profile" ]] && continue
+    [[ "$profile" == "$active" ]] && continue
+    if ! has_db_profile "$profile"; then
+      log_error "services.db_profile names \"${profile}\" but ${TOML_FILE} has no [db_${profile}] section with POSTGRES_* keys; add it or correct the service row."
+      return 1
+    fi
+  done <<< "$profiles"
+  return 0
+}
+
+# --- Service wiring: the database authors the routes, config sync renders them ---
+WIRING_OUT_DIR="config/generated"
+WIRING_RENDERER="admin-panel/src/lib/service-wiring-cli.ts"
+WIRING_COMPOSE="docker-compose.tailscale.generated.yml"
+WIRING_REGISTRY_COMPOSE="docker-compose.registry.generated.yml"
+
+# The comment every front-vhost fragment carries until the registry renders a location into it.
+# WHY it exists: the vhost includes locations-<label>.conf by exact name, so the file has to be
+# on disk even on a deployment whose registry names no exposure for that vhost — nginx stops on a
+# missing literal include. A comment is enough: an empty fragment is what nginx would read anyway.
+FRONT_VHOST_PLACEHOLDER='# No registry exposure answers on this vhost. This file exists because the vhost includes it by exact name.'
+
+# One tailscale container per exposed node.
+#
+# WHY this file is generated rather than declared: how many tunnels exist is a row in the
+# registry, so a hand-written file could only ever describe one contest. Each container
+# mounts its own serve config, which is what keeps a node from claiming another contest.
+# WHY the authkey is referenced and not copied: the secret stays in config.toml and
+# compose resolves it at run time, so it is never written into a generated file.
+render_tailscale_compose() {
+  local nodes="$1" node tmp
+  tmp="$(mktemp)" || return 1
+  {
+    printf '%s\n' "# Generated by ./cms config sync from the service registry. Do not edit; it is rewritten on every sync."
+    printf '%s\n' "services:"
+    while IFS= read -r node; do
+      [[ -n "$node" ]] || continue
+      printf '%s\n' \
+        "  cms-tailscale-$node:" \
+        "    image: tailscale/tailscale:latest" \
+        "    container_name: cms-tailscale-$node" \
+        "    hostname: $node" \
+        "    restart: unless-stopped" \
+        "    environment:" \
+        "      - TS_AUTHKEY=\${TAILSCALE_AUTHKEY}" \
+        "      - TS_STATE_DIR=/var/lib/tailscale" \
+        "      - TS_USERSPACE=false" \
+        "      - TS_SERVE_CONFIG=/config/serve.json" \
+        "    volumes:" \
+        "      - tailscale-state-$node:/var/lib/tailscale" \
+        "      - ./$WIRING_OUT_DIR/tailscale/$node.json:/config/serve.json:ro" \
+        "    cap_add:" \
+        "      - NET_ADMIN" \
+        "      - SYS_MODULE" \
+        "    devices:" \
+        "      - /dev/net/tun:/dev/net/tun" \
+        "    networks:" \
+        "      - cms-network"
+    done <<< "$nodes"
+    printf '%s\n' "networks:" "  cms-network:" "    external: true" "    name: cms-network" "volumes:"
+    while IFS= read -r node; do
+      [[ -n "$node" ]] || continue
+      printf '  tailscale-state-%s:\n    name: tailscale-state-%s\n' "$node" "$node"
+    done <<< "$nodes"
+  } > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$WIRING_COMPOSE" || { rm -f "$tmp"; return 1; }
+  return 0
+}
+
+# The command one role runs, so a registry-created container behaves like the role its row
+# names rather than a fixed one. WHY no -c here: the process resolves the contest its own row
+# names as it works (cms.db.contest_binding), so re-pointing the row reaches the running
+# container — an argument would freeze the contest until something recreated it.
+_registry_role_command() {
+  local role="$1" shard="$2"
+  case "$role" in
+    ContestWebServer) printf 'cmsContestWebServer %s' "$shard" ;;
+    EvaluationService) printf 'cmsEvaluationService %s' "$shard" ;;
+    ProxyService) printf 'cmsProxyService %s' "$shard" ;;
+    *) return 1 ;;
+  esac
+}
+
+# The compose files the base stack declares its services in, so a generated file can tell which
+# containers already exist, and how the declared one of a role is probed.
+_registry_base_files() {
+  local file
+  for file in docker-compose.yml docker-compose.override.yml docker-compose.expose.yml; do
+    [[ -f "$file" ]] && printf '%s\n' "$file"
+  done
+}
+
+# The healthcheck timings the declared service of a role carries. WHY only the timings: the
+# declared test hardcodes the declared container's ports, and a registry row binds the ports it
+# names, so the test itself is built from the row (see _registry_healthcheck).
+_registry_health_timings() { # <role>
+  local role="$1" file
+  while IFS= read -r file; do
+    awk -v role="$role" '
+      /^  [a-z0-9_-]+:$/ { in_service = 0; in_hc = 0 }
+      $0 ~ ("SERVICE_TYPE: " role "$") { in_service = 1 }
+      in_service && /^    healthcheck:$/ { in_hc = 1; next }
+      in_hc && /^      (interval|timeout|retries|start_period):/ { print; next }
+      in_hc && /^    [^ ]/ { in_hc = 0 }
+    ' "$file"
+  done < <(_registry_base_files)
+}
+
+# The healthcheck one registry row carries: the role's own probe against the ports the row binds,
+# with the timings the declared service of that role uses. Rows with no port to probe carry none,
+# because a container nothing can dial has no health to report.
+_registry_healthcheck() { # <role> <http_port> <rpc_port>
+  local role="$1" http_port="$2" rpc_port="$3" timings
+  timings="$(_registry_health_timings "$role")"
+  case "$role" in
+    ContestWebServer)
+      [[ "$http_port" =~ ^[0-9]+$ ]] || return 0
+      printf '    healthcheck:\n      test: ["CMD", "curl", "-f", "http://localhost:%s/"]\n' "$http_port"
+      ;;
+    EvaluationService | ProxyService)
+      [[ "$rpc_port" =~ ^[0-9]+$ ]] || return 0
+      printf '    healthcheck:\n      test: ["CMD-SHELL", "pgrep -f cms%s && python3 -c \\"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), %s))\\" || exit 1"]\n' \
+        "$role" "$rpc_port"
+      ;;
+    *) return 0 ;;
+  esac
+  [[ -z "$timings" ]] || printf '%s\n' "$timings"
+}
+
+# One container per service row the registry authors.
+#
+# WHY generated rather than declared: how many contest, evaluation or proxy services exist is a
+# row in the registry, so a hand-written file could only ever describe one. Each container takes
+# its name and ports from its row, and no contest: the process reads the contest its row names as
+# it works, so nothing here has to be re-rendered for a re-pointed row to take effect. The image,
+# config mount and volumes mirror the hand-declared contest services, so a registry-created
+# container is the same process, differently named.
+render_registry_compose() {
+  local rows="$1" name role shard host http_port rpc_port db_profile tmp command ports service_env image pull_policy image_line
+  tmp="$(mktemp)" || return 1
+  {
+    printf '%s\n' "# Generated by ./cms config sync from the service registry. Do not edit; it is rewritten on every sync."
+    printf '%s\n' "services:"
+    while IFS='|' read -r name role shard host http_port rpc_port db_profile image pull_policy; do
+      [[ -n "$name" ]] || continue
+      command="$(_registry_role_command "$role" "$shard")" || { rm -f "$tmp"; return 1; }
+      # The row's own ports, so the process binds what its container publishes: one shared
+      # cms.toml cannot describe N servers.
+      service_env=""
+      [[ "$http_port" =~ ^[0-9]+$ ]] && service_env+="      SERVICE_HTTP_PORT: $http_port"$'\n'
+      [[ "$rpc_port" =~ ^[0-9]+$ ]] && service_env+="      SERVICE_RPC_PORT: $rpc_port"$'\n'
+      # The row's own image, else the deployment's IMG_TAG left for compose to resolve at
+      # run time — baking it here would freeze the tag on the generated file.
+      image_line="    image: ghcr.io/champyod/cms-docker-core:\${IMG_TAG:-major-admin-panel}"
+      [[ -n "$image" ]] && image_line="    image: $image"
+      printf '  %s:\n' "$name"
+      printf '%s\n' \
+        "$image_line" \
+        "    container_name: $name" \
+        "    restart: unless-stopped" \
+        "    pull_policy: $pull_policy" \
+        "    environment:" \
+        "      CMS_CONFIG: \${CMS_CONFIG:-/usr/local/etc/cms.toml}" \
+        "      SERVICE_TYPE: $role" \
+        "      SERVICE_SHARD: $shard" \
+        "      DB_PROFILE: $db_profile"
+      printf '%b' "$service_env"
+      printf '%s\n' \
+        "    volumes:" \
+        "      - ./config/cms.toml:/usr/local/etc/cms.toml:ro" \
+        "      - cms-logs:/var/local/log/cms" \
+        "      - cms-cache:/var/local/cache/cms" \
+        "      - cms-data:/var/local/lib/cms" \
+        "    networks:" \
+        "      - cms-network" \
+        "    command: [\"sh\", \"-c\", \"$command\"]"
+      _registry_healthcheck "$role" "$http_port" "$rpc_port"
+      ports=""
+      [[ "$http_port" =~ ^[0-9]+$ ]] && ports+="      - \"\${INNER_IP:-127.0.0.1}:$http_port:$http_port\""$'\n'
+      [[ "$rpc_port" =~ ^[0-9]+$ ]] && ports+="      - \"\${INNER_IP:-127.0.0.1}:$rpc_port:$rpc_port\""$'\n'
+      [[ -z "$ports" ]] || printf '    ports:\n%b' "$ports"
+    done <<< "$rows"
+    printf '%s\n' \
+      "networks:" "  cms-network:" "    external: true" "    name: cms-network" \
+      "volumes:" \
+      "  cms-logs:" "    external: true" "    name: cms-logs" \
+      "  cms-cache:" "    external: true" "    name: cms-cache" \
+      "  cms-data:" "    external: true" "    name: cms-data"
+  } > "$tmp" || { rm -f "$tmp"; return 1; }
+  mv "$tmp" "$WIRING_REGISTRY_COMPOSE" || { rm -f "$tmp"; return 1; }
+  return 0
+}
+
+# Every row as one JSON document. WHY one query rather than three passes: the
+# renderer validates the whole registry at once, so three reads would only widen
+# the window in which the tables disagree with each other.
+wiring_payload_json() {
+  db_query "SELECT json_build_object(
+    'services', COALESCE((SELECT json_agg(row_to_json(s)) FROM (
+        SELECT id, name, role, shard, host, http_port, rpc_port, db_profile, contest_id, enabled
+        FROM services) s), '[]'::json),
+    'wirings', COALESCE((SELECT json_agg(row_to_json(w)) FROM (
+        SELECT from_service_id, to_service_id, relation, enabled
+        FROM wirings) w), '[]'::json),
+    'exposures', COALESCE((SELECT json_agg(row_to_json(e)) FROM (
+        SELECT service_id, hostname, path, tls, tailnet
+        FROM contest_exposures ORDER BY id) e), '[]'::json))::text;"
+}
+
+# The value <file_key> holds in config.toml, or <fallback> when the file does not define it: an
+# empty value the operator wrote means empty, and only a key the file lacks takes the fallback.
+toml_value_or() {
+  local file_key="$1" fallback="$2"
+  if [[ -n "${__TOML[$file_key]+set}" ]]; then
+    printf '%s' "${__TOML[$file_key]}"
+    return 0
+  fi
+  printf '%s' "$fallback"
+}
+
+# The domain a vhost key carries once the [core] CMS_DOMAIN fallback is applied — the one place the
+# rule lives, so the front vhost map and the .env writer cannot publish different vhosts.
+#
+# WHY CMS_DOMAIN and not DOMAIN_NAME: DOMAIN_NAME lives in [admin] beside the other domain keys, not
+# in [infra]; reading infra.DOMAIN_NAME silently found nothing and wrote a second, differently
+# sectioned key the proxy never read.
+resolve_vhost_domain() {
+  printf '%s' "${__TOML[$1]:-${__TOML[core.CMS_DOMAIN]:-cms.local}}"
+}
+
+# The front's own vhosts as `label|hostname|paths`, from the same route table the domain proxy
+# renders: the paths are the ones each vhost's own block already answers on.
+#
+# WHY the domain keys are mirrored from config.toml: this runs before the .env writer, so the
+# deployment's domains are still only in the TOML file, and the table reads them as variables. A value
+# already in the environment wins, because that caller knows the deployment it names, and the
+# CMS_DOMAIN fallback comes from the same function the .env writer calls.
+#
+# WHY the path and port keys read the file first instead: the table applies its own defaults when it
+# is sourced, so `${ADMIN_ROUTE_PATH:-...}` can never see the key the operator just edited — and the
+# map would then publish defaults while the vhost renders the edited values.
+front_vhost_map() {
+  DOMAIN_NAME="${DOMAIN_NAME:-${__TOML[admin.DOMAIN_NAME]:-}}"
+  [[ -n "$DOMAIN_NAME" ]] || DOMAIN_NAME="$(resolve_vhost_domain admin.DOMAIN_NAME)"
+  ADMIN_DOMAIN="${ADMIN_DOMAIN:-${__TOML[admin.ADMIN_DOMAIN]:-}}"
+  OJ_DOMAIN="${OJ_DOMAIN:-${__TOML[contest.OJ_DOMAIN]:-}}"
+  RANKING_DOMAIN="${RANKING_DOMAIN:-${__TOML[admin.RANKING_DOMAIN]:-}}"
+  CONTEST_ROUTE_PATH="$(toml_value_or admin.CONTEST_ROUTE_PATH "${CONTEST_ROUTE_PATH:-/}")"
+  ADMIN_ROUTE_PATH="$(toml_value_or admin.ADMIN_ROUTE_PATH "${ADMIN_ROUTE_PATH:-/admin}")"
+  ADMIN_CLASSIC_ROUTE_PATH="$(toml_value_or admin.ADMIN_CLASSIC_ROUTE_PATH "${ADMIN_CLASSIC_ROUTE_PATH:-/classic}")"
+  PRIMARY_CLASSIC_ROUTE_PATH="$(toml_value_or admin.PRIMARY_CLASSIC_ROUTE_PATH "${PRIMARY_CLASSIC_ROUTE_PATH:-}")"
+  RANKING_ROUTE_PATH="$(toml_value_or admin.RANKING_ROUTE_PATH "${RANKING_ROUTE_PATH:-/ranking}")"
+  OJ_ROUTE_PATH="$(toml_value_or admin.OJ_ROUTE_PATH "${OJ_ROUTE_PATH:-}")"
+  CONTEST_LISTEN_PORT="$(toml_value_or contest.CONTEST_LISTEN_PORT "$CONTEST_LISTEN_PORT")"
+  ADMIN_LISTEN_PORT="$(toml_value_or admin.ADMIN_LISTEN_PORT "$ADMIN_LISTEN_PORT")"
+  RANKING_LISTEN_PORT="$(toml_value_or admin.RANKING_LISTEN_PORT "$RANKING_LISTEN_PORT")"
+  OJ_BACKEND_PORT="$(toml_value_or contest.OJ_BACKEND_PORT "$OJ_BACKEND_PORT")"
+  _routes_collect
+  _routes_front_vhost_map
+}
+
+# Every hostname a server block in the rendered front declares, lower-cased and deduplicated.
+front_config_hostnames() {
+  awk '/^[[:space:]]*server_name[[:space:]]/ {gsub(/;.*/, ""); for (i = 2; i <= NF; i++) print tolower($i)}' \
+    config/grader.nginx.conf 2>/dev/null | sort -u
+}
+
+# The front's own vhosts as the lines the renderer and the panel read back: the table's
+# `label|hostname|paths` map, then the names the rendered front declares with no row behind them.
+#
+# WHY both in one list: the map names the fragment file a vhost includes and the paths its own block
+# already answers on, and the rendered config names what nginx actually claims. A name only the config
+# knows is one no row owns, so the renderer refuses an exposure on it instead of writing a fragment
+# nothing includes. WHY one list and not two: the panel reads this same file, so the renderer, the
+# sync and the screen all see the same vhosts in the same order.
+front_vhost_lines() {
+  front_vhost_map || return 1
+  if [[ -f config/grader.nginx.conf ]]; then
+    front_config_hostnames
+  fi
+  return 0
+}
+
+# Publishes one fragment file per front vhost the route table maps, each starting as the
+# placeholder comment, so the file a vhost's include names by exact name is always on disk.
+#
+# WHY the shell owns this and not the renderer: the placeholder has no behavioural content, and
+# the sync must publish it even on a deployment whose registry has never been used, where bun and
+# the exposures table cannot be relied on. WHY the stale ones are removed first: a label the table
+# no longer names would otherwise keep the fragment — or the rows — of the vhost that used to own it.
+publish_front_vhost_placeholders() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "Would publish a front-vhost fragment placeholder for every mapped vhost in $WIRING_OUT_DIR/"
+    return 0
+  fi
+  local lines label hostname
+  lines="$(front_vhost_lines)" || return 1
+  mkdir -p "$WIRING_OUT_DIR" || return 1
+  # WHY the whole line list on disk: the panel previews the vhosts the sync renders for from this
+  # one file, so the label that names a fragment and the paths that vhost answers on cannot drift.
+  printf '%s\n' "$lines" > "$WIRING_OUT_DIR/front-vhosts.txt" || return 1
+  rm -f "$WIRING_OUT_DIR"/locations-*.conf
+  while IFS='|' read -r label hostname _; do
+    [[ -n "$label" && -n "$hostname" ]] || continue
+    printf '%s\n' "$FRONT_VHOST_PLACEHOLDER" > "$WIRING_OUT_DIR/locations-$label.conf" || return 1
+  done <<< "$lines"
+}
+
+# Renders the generated route artifacts from the registry.
+#
+# WHY the placeholders are published first, before every guard below: every front vhost includes
+# its fragment by exact name, so the file has to exist even on a deployment whose registry has
+# never been used — the missing literal include would stop nginx.
+# WHY the route render itself is still a no-op with nothing exposed: a deployment that never used
+# the registry must stay exactly as it was, so the N=1 path renders as it always has.
+# WHY fatal when rows exist but bun does not: the operator asked for wiring that
+# cannot be rendered, and leaving a stale artifact would serve routes the database
+# no longer describes.
+render_wiring_artifacts() {
+  publish_front_vhost_placeholders || return 1
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local exposed
+  exposed="$(db_query "SELECT count(*) FROM contest_exposures;")" || return 1
+  [[ -n "$exposed" && "$exposed" != "0" ]] || return 0
+
+  local bun_bin
+  if ! bun_bin="$(resolve_bun)"; then
+    log_error "service wiring has $exposed exposure row(s) but bun is not installed, so the route renderer cannot run."
+    return 1
+  fi
+  [[ -f "$WIRING_RENDERER" ]] || { log_error "missing wiring renderer: $WIRING_RENDERER"; return 1; }
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "Would render $exposed contest route(s) into $WIRING_OUT_DIR/"
+    return 0
+  fi
+
+  # The cert the domain front actually serves. WHY this mirror of CERT_LINEAGE_DOMAIN's
+  # fallback: the domain proxy reads a certbot lineage named after that key, so a block
+  # pointing at any other path makes nginx refuse to start.
+  # WHY only these three: the domain proxy entrypoint signs a stand-in certificate for
+  # exactly this chain, so any other fallback names a lineage nobody creates and nginx
+  # then refuses to start. A TLS exposure with no lineage to point at is a configuration
+  # error to report, not a file to render.
+  local lineage="${__TOML[admin.CERT_LINEAGE_DOMAIN]:-}"
+  [[ -n "$lineage" ]] || lineage="${__TOML[admin.DOMAIN_NAME]:-}"
+  [[ -n "$lineage" ]] || lineage="${__TOML[contest.CONTEST_DOMAIN]:-}"
+
+  local tls_exposed
+  tls_exposed="$(db_query 'SELECT count(*) FROM contest_exposures WHERE tls;')" || return 1
+  if [[ -n "$tls_exposed" && "$tls_exposed" != "0" && -z "$lineage" ]]; then
+    log_error "$tls_exposed exposure(s) need TLS but no certificate lineage is configured; set [admin] CERT_LINEAGE_DOMAIN or DOMAIN_NAME."
+    return 1
+  fi
+  [[ -n "$lineage" ]] || lineage="${__TOML[core.CMS_DOMAIN]:-cms.local}"
+
+  # WHY: the artifact query below names contest_exposures.service_id, which migration
+  # 20261014140000 adds. ./cms update-server runs this sync BEFORE it syncs the schema, so a box
+  # that has not migrated yet must not fail here — that would abort the update before the
+  # migration which fixes it. Nothing is rendered until the column is there, and the artifacts
+  # are rendered again after prisma-sync.
+  local schema_current
+  schema_current="$(db_query "SELECT count(*) FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'contest_exposures' AND column_name = 'service_id';")" || return 1
+  if [[ "$schema_current" != "1" ]]; then
+    log_warn "the registry artifacts need migration 20261014140000 (contest_exposures.service_id) — skipping them; './cms update-server' renders them after it syncs the schema"
+    return 0
+  fi
+
+  local payload
+  payload="$(wiring_payload_json)" || return 1
+  [[ -n "$payload" ]] || return 1
+
+  mkdir -p "$WIRING_OUT_DIR"
+  # WHY the whole line list and not a map plus a config read: the renderer and the panel read this one
+  # file, so the label that names a fragment, the hostname it belongs to and the paths that vhost
+  # already answers on cannot drift apart between what the sync renders and what the screen reports.
+  # The publisher already wrote those same lines to front-vhosts.txt; the renderer gets them inline.
+  local front_lines front_vhosts report
+  front_lines="$(front_vhost_lines)" || return 1
+  front_vhosts="$(printf '%s\n' "$front_lines" | paste -sd',' - || true)"
+
+  # WHY one call for the whole set: the renderer owns every file name and every byte, so the shell can
+  # no longer assemble a server block, a fragment or a serve config the panel would write differently.
+  if ! report="$(printf '%s' "$payload" | "$bun_bin" "$WIRING_RENDERER" apply "$WIRING_OUT_DIR" \
+      --cert "/etc/letsencrypt/live/$lineage/fullchain.pem" \
+      --key "/etc/letsencrypt/live/$lineage/privkey.pem" \
+      --ssl-include /etc/nginx/conf.d/nginx-ssl.conf \
+      --front-vhosts "$front_vhosts")"; then
+    log_error "the wiring renderer refused the registry; fix the rows rather than deploy a partial route table."
+    return 1
+  fi
+  # WHY the report is logged and not only returned: a sync that rewrote nothing and one that rewrote
+  # every route read the same in the log otherwise.
+  local changed
+  changed="$(printf '%s' "$report" | grep -c '"status": *"\(added\|changed\|removed\)"' || true)"
+  [[ -z "$changed" || "$changed" == "0" ]] || log_info "Rewrote $changed generated route artifact(s) in $WIRING_OUT_DIR/"
+
+  # The node list comes from the table, not the renderer: compose needs one container per name, and
+  # asking the database keeps the renderer a pure function of its input.
+  local nodes
+  nodes="$(db_query "SELECT DISTINCT tailnet FROM contest_exposures WHERE tailnet IS NOT NULL ORDER BY tailnet;")" || return 1
+  if [[ -n "$nodes" ]]; then
+    render_tailscale_compose "$nodes"
+  else
+    rm -f "$WIRING_COMPOSE"
+  fi
+  # The SANs the domain front must cover. WHY only tls rows: a plain :80 vhost needs no
+  # certificate, and a name in the SAN that is never served over TLS only widens the cert.
+  # WHY a file and not .env: __domain.sh certifies from the host and never reads the
+  # database, so the hostnames it must cover have to reach it as data it already reads.
+  local tls_hosts
+  tls_hosts="$(db_query "SELECT DISTINCT hostname FROM contest_exposures WHERE tls ORDER BY hostname;")" || return 1
+  printf '%s\n' "$tls_hosts" > "$WIRING_OUT_DIR/exposed-hosts.txt" || return 1
+
+  log_info "Rendered $exposed contest route(s) into $WIRING_OUT_DIR/"
+  return 0
+}
+
+# Generates the registry compose from the service rows, independent of exposures: a registry
+# that names services but no exposure still wants its containers described.
+render_registry_compose_from_db() {
+  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER" || return 0
+  local table_present
+  table_present="$(db_query "SELECT to_regclass('public.services') IS NOT NULL;")" || return 1
+  [[ "$table_present" == "t" ]] || return 0
+
+  local rows
+  rows="$(db_query "SELECT name, role, shard, host, COALESCE(http_port::text, ''), COALESCE(rpc_port::text, ''), db_profile, COALESCE(image, ''), pull_policy FROM services WHERE enabled AND role IN ('ContestWebServer', 'EvaluationService', 'ProxyService') ORDER BY role, shard, id;")" || return 1
+
+  # WHY the names come from the base compose rather than a list here: the base compose already
+  # owns those containers, so a generated file claiming one fails `make registry-up` on a name
+  # conflict instead of leaving the declared container in place. That container reads its row at
+  # runtime (cms.db.contest_binding), so the row still decides its contest and ports.
+  local declared
+  declared="$(while IFS= read -r file; do
+    grep -hoE '^[[:space:]]*container_name:[[:space:]]*[^[:space:]]+' "$file" 2>/dev/null
+  done < <(_registry_base_files) | awk '{print $2}' | sort -u | paste -sd'|' - || true)"
+  if [[ -n "$declared" ]]; then
+    rows="$(printf '%s\n' "$rows" | grep -vE "^(${declared})\|" || true)"
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    [[ -z "$rows" ]] || log_info "Would generate $WIRING_REGISTRY_COMPOSE from the service registry."
+    return 0
+  fi
+  if [[ -z "$rows" ]]; then
+    rm -f "$WIRING_REGISTRY_COMPOSE"
+    return 0
+  fi
+  render_registry_compose "$rows" || return 1
+  # WHY validated here: compose reads this file at run time, and an invalid one fails the whole
+  # project, so the sync reports it now rather than leaving it for the next `up`.
+  if command -v docker >/dev/null 2>&1; then
+    docker compose -f "$WIRING_REGISTRY_COMPOSE" config --quiet >/dev/null 2>&1 \
+      || { log_error "the generated registry compose is invalid: $WIRING_REGISTRY_COMPOSE"; return 1; }
+  fi
+  log_info "Generated $WIRING_REGISTRY_COMPOSE from the service registry."
+  return 0
 }
 
 # --- Main ---
@@ -391,17 +1827,37 @@ main() {
     fi
   fi
 
+  abort_on_unmappable_retired_key "BIND_MODE" \
+    "Each service's *_BIND_IP now decides its published address on its own; a comma-separated list publishes it on several addresses at once. Set the *_BIND_IP key of every service you want reachable."
+
+  # Carry POSTGRES_* still living in [core] (old layout) onto [db_default] and delete
+  # the [core] lines. WHY first: migrate_missing_keys would otherwise inject empty
+  # placeholders from the example into [db_default] before the real values reached it,
+  # and resolve_active_db_profile would then overwrite the in-memory [core] values
+  # with those empties — the credential-loss path this migration closes.
+  migrate_db_config_keys
+
+  # Carry a retired *_LISTEN_ADDRESS value onto the *_BIND_IP key that now binds the
+  # published port, and delete the retired line. WHY ahead of the merge rather than behind
+  # it: migrate_missing_keys copies the example's 127.0.0.1 into every admin/contest section
+  # the file is missing, so a file still carrying a retired 0.0.0.0 would first be handed a
+  # live 127.0.0.1 and only then be found to disagree — a conflict manufactured by our own
+  # merge rather than one the operator wrote. Run first, the file is read exactly as it was
+  # last written, and a genuine two-value conflict still stops the sync.
+  migrate_retired_keys
+
   # WHY: merge newly-added example keys into existing config before parsing and
   # secret generation — bootstrap only copies once, so updates would otherwise
   # never reach old worktrees and downstream .env would fallback to defaults.
   migrate_missing_keys
 
-  parse_toml "$TOML_FILE"
+  # WHY after migrate_missing_keys and before parse_toml: deleting a dead key before the
+  # merge would let a file the example still lists copy it straight back in, and parse_toml
+  # has to read the cleaned file or the generated .env keeps exporting the dead key.
+  retire_dead_keys
+  drop_stale_section_copies
 
-  # Ensure ranking config exists from sample (needed for logo_path injection)
-  if [[ ! -f "config/cms_ranking.toml" && -f "config/cms_ranking.sample.toml" ]]; then
-    cp "config/cms_ranking.sample.toml" "config/cms_ranking.toml" && log_info "Created config/cms_ranking.toml from sample"
-  fi
+  parse_toml "$TOML_PARSE_SOURCE"
 
   # Ensure CMS config exists from sample — __inject_config.sh modifies but
   # never creates it, and __config_sync must be self-sufficient on first run.
@@ -416,6 +1872,7 @@ main() {
     scan_and_generate_secrets worker  __WORKER_KEYS
     scan_and_generate_secrets infra   __INFRA_KEYS
     scan_and_generate_secrets rpc     __RPC_KEYS
+    scan_and_generate_secrets backup  __BACKUP_KEYS
 
     if [[ "$SECRETS_CHANGED" -eq 1 ]]; then
       log_info "Generated secrets in config.toml"
@@ -425,19 +1882,31 @@ main() {
     if [[ "$DRY_RUN" -eq 0 && "$SECRETS_CHANGED" -eq 1 ]]; then
       __TOML=()
       __CORE_KEYS=(); __ADMIN_KEYS=(); __CONTEST_KEYS=()
-      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=(); __RPC_KEYS=()
+      __WORKER_KEYS=(); __INFRA_KEYS=(); __TAILSCALE_KEYS=(); __RPC_KEYS=(); __BACKUP_KEYS=()
       parse_toml "$TOML_FILE"
     fi
   fi
 
-  # Derived values: CONTEST_DOMAIN → CMS_DOMAIN, DOMAIN_NAME → CMS_DOMAIN
-  local cms_domain="${__TOML[core.CMS_DOMAIN]:-cms.local}"
-  if [[ -z "${__TOML[contest.CONTEST_DOMAIN]:-}" ]]; then
-    __TOML[contest.CONTEST_DOMAIN]="$cms_domain"
-  fi
-  if [[ -z "${__TOML[infra.DOMAIN_NAME]:-}" ]]; then
-    __TOML[infra.DOMAIN_NAME]="$cms_domain"
-  fi
+  resolve_active_db_profile
+
+  # WHY before the .env writer: the profile check must run so an unknown profile fails the
+  # sync rather than leaving a service pointed at a database its row does not name.
+  validate_service_db_profiles
+
+  # WHY after the profile check: a service whose profile does not exist is a broken
+  # registry, and rendering it would publish routes for a service that cannot start.
+  render_wiring_artifacts
+
+  # WHY independent of the exposure render: a registry that names services but no exposure
+  # still wants its containers described, so this runs on its own row query.
+  render_registry_compose_from_db
+
+  # Derived values. WHY these run before the .env is written: a value that is only derived here never
+  # existed in config.toml, so it has to reach .env on this run or the deployment it belongs to comes
+  # up with an empty hostname. WHY the same function the front vhost map calls: the map publishes the
+  # vhosts a registry exposure may not shadow, so the two have to name the same domains.
+  __TOML[contest.CONTEST_DOMAIN]="$(resolve_vhost_domain contest.CONTEST_DOMAIN)"
+  __TOML[admin.DOMAIN_NAME]="$(resolve_vhost_domain admin.DOMAIN_NAME)"
 
   # Write unified .env with section headers for diff readability
   if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -452,11 +1921,16 @@ main() {
       write_section_block "infra"     __INFRA_KEYS
       write_section_block "tailscale" __TAILSCALE_KEYS
       write_section_block "rpc"       __RPC_KEYS
+      write_section_block "backup"    __BACKUP_KEYS
     } > .env
     chmod 600 .env
   else
     echo "Would write unified .env from config.toml (all sections)"
   fi
+
+  # Runs on the finished .env and before any consumer reads it, so a value that only
+  # existed in a split file is in place for this deploy rather than the next one.
+  migrate_split_env_files
 
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local db_user="${__TOML[core.POSTGRES_USER]:-cmsuser}"
@@ -552,28 +2026,46 @@ main() {
   }
   sync_ranking_logo || log_warn "Logo sync encountered issues (non-fatal)"
 
-  # Run config injection (generates config/cms.toml)
-  if [[ "$DRY_RUN" -eq 0 ]]; then
-    log_info "Running config injection..."
-    set -a; source .env 2>/dev/null || true; set +a
-    if [[ -f scripts/__inject_config.sh ]]; then
-      bash scripts/__inject_config.sh || { log_error "Config injection failed"; exit 1; }
-    else
-      log_warn "__inject_config.sh not found — skipping cms.toml generation"
-    fi
-  else
-    echo "Would run: bash scripts/__inject_config.sh"
-  fi
-
-  # Ensure backups/.gitkeep exists (monitor mount needs host dir)
+   # Run config injection (generates config/cms.toml)
+   if [[ "$DRY_RUN" -eq 0 ]]; then
+     log_info "Running config injection..."
+     set -a; source .env 2>/dev/null || true; set +a
+     if [[ -f scripts/__inject_config.sh ]]; then
+       # Fail closed: if injection dies after rewriting .env, restore the
+       # previous .env so the live config doesn't drift from cms.toml.
+       _env_restore=""
+       [[ -f .env ]] && { _env_restore="$(mktemp)"; cp -p .env "$_env_restore"; }
+       bash scripts/__inject_config.sh || {
+         log_error "Config injection failed"
+         if [[ -n "$_env_restore" ]]; then mv "$_env_restore" .env; log_warn "Restored previous .env — cms.toml generation aborted, .env unchanged"; fi
+         rm -f "$_env_restore"
+         exit 1
+       }
+       rm -f "$_env_restore"
+     else
+       log_warn "__inject_config.sh not found — skipping cms.toml generation"
+     fi
+   else
+     log_info "Would run: bash scripts/__inject_config.sh"
+   fi
+ 
+  # Ensure backups/.gitkeep exists (monitor mount needs host dir) and that the
+  # monitor's uid can write it — a directory created here belongs to the
+  # operator, and the monitor container is not the operator.
   if [[ "$DRY_RUN" -eq 0 ]]; then
     mkdir -p backups && touch backups/.gitkeep
+    ensure_backup_dir_perms || log_warn "monitor may not be able to write backups"
+    # After the logo sync above: that writes through a root helper, so this also reclaims
+    # the file it just dropped into the volume.
+    ensure_ranking_paths_perms "$CMS_ROOT" || log_warn "the panel may not be able to upload the ranking logo"
+    # The exposure reconciler writes the front's vhosts into config/generated as the panel uid.
+    ensure_generated_dir_perms "$CMS_ROOT" || log_warn "the exposure reconciler may not be able to write config/generated"
   fi
 
   if [[ "$DRY_RUN" -eq 0 ]]; then
     local total_vars=$((${#__CORE_KEYS[@]} + ${#__ADMIN_KEYS[@]} + \
                         ${#__CONTEST_KEYS[@]} + ${#__WORKER_KEYS[@]} + ${#__INFRA_KEYS[@]} + \
-                        ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]}))
+                        ${#__TAILSCALE_KEYS[@]} + ${#__RPC_KEYS[@]} + ${#__BACKUP_KEYS[@]}))
     chmod 600 .env admin-panel/.env 2>/dev/null || true
     log_info "Synced ${total_vars} vars from config.toml → .env"
   fi
@@ -581,6 +2073,11 @@ main() {
   if [[ "$DRY_RUN" -eq 0 ]] && [[ -f scripts/__preflight.sh ]]; then
     log_info "Running preflight checks..."
     bash scripts/__preflight.sh || log_warn "Preflight reported issues"
+  fi
+
+  # Discard the dry-run's simulated merge; it only ever existed for parse_toml.
+  if [[ "$DRY_RUN" -eq 1 && "$TOML_PARSE_SOURCE" != "$TOML_FILE" ]]; then
+    rm -f -- "$TOML_PARSE_SOURCE"
   fi
 }
 

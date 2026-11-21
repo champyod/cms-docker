@@ -30,9 +30,9 @@
 from datetime import datetime, timedelta
 
 from sqlalchemy.dialects.postgresql import ARRAY
-from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import relationship
-from sqlalchemy.schema import Column, ForeignKey, CheckConstraint
+from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
+    UniqueConstraint
 from sqlalchemy.types import Integer, Unicode, DateTime, Interval, Enum, \
     Boolean, String
 
@@ -263,9 +263,46 @@ class Contest(Base):
         CheckConstraint("min_user_test_interval > '0 seconds'"),
         nullable=True)
 
-    # Per-participation queue fairness penalty in seconds.
+    # Queue-time evaluation throttle policy (throttle family).
+    # Delay in seconds applied per pending submission of the same
+    # participation when scheduling evaluation operations. Read
+    # new-first; the legacy queue_fairness_penalty_seconds below stays
+    # one release as fallback.
+    evaluation_throttle_delay_s: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_delay_s >= 0"),
+        nullable=False,
+        default=0)
+
+    # Sliding window in seconds for the per-participation evaluation
+    # rate cap, with at most evaluation_throttle_max submissions inside
+    # the window. Consumed by the lane policy behind the final-open
+    # bypass; zero disables the cap.
+    evaluation_throttle_window_s: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_window_s >= 0"),
+        nullable=False,
+        default=0)
+    evaluation_throttle_max: int = Column(
+        Integer,
+        CheckConstraint("evaluation_throttle_max >= 0"),
+        nullable=False,
+        default=0)
+
+    # Manual final-round toggle. When true, the queue-time lane and
+    # throttle policy is bypassed for this contest.
+    evaluation_final_open: bool = Column(
+        Boolean,
+        nullable=False,
+        default=False)
+    evaluation_final_open_at: datetime | None = Column(
+        DateTime,
+        nullable=True)
+
+    # Per-participation queue fairness penalty in seconds (legacy).
     # Effective scheduling timestamp: submission_time + n * queue_fairness_penalty_seconds,
     # where n is the number of this participation's pending submissions.
+    # Fallback for evaluation_throttle_delay_s; kept one release.
     queue_fairness_penalty_seconds: int = Column(
         Integer,
         CheckConstraint("queue_fairness_penalty_seconds >= 0"),
@@ -280,16 +317,32 @@ class Contest(Base):
         nullable=False,
         default=0)
 
+    # Whether this is the contest the stack serves. The database is the single source
+    # of truth for this: config.toml [contest] CONTEST_ID and the generated .env are
+    # derived from it (scripts/__config_sync.sh, ./cms contest set-active).
+    is_active: bool = Column(
+        Boolean,
+        nullable=False,
+        default=False)
+
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
 
-    tasks: list["Task"] = relationship(
-        "Task",
-        collection_class=ordering_list("num"),
-        order_by="[Task.num]",
-        cascade="all",
+    # Many-to-many with tasks through the contest_tasks association, whose rows
+    # carry the per-contest ordering (`num`) and are the source of truth.
+    task_contests: list["ContestTask"] = relationship(
+        "ContestTask",
+        order_by="[ContestTask.num]",
+        cascade="all, delete-orphan",
         passive_deletes=True,
         back_populates="contest")
+    # Convenience read-only view of the contest's tasks in order; deletions are
+    # handled by task_contests so a shared task is never cascaded away here.
+    tasks: list["Task"] = relationship(
+        "Task",
+        secondary="contest_tasks",
+        order_by="ContestTask.num",
+        viewonly=True)
 
     announcements: list["Announcement"] = relationship(
         "Announcement",
@@ -300,6 +353,12 @@ class Contest(Base):
 
     participations: list["Participation"] = relationship(
         "Participation",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        back_populates="contest")
+
+    contest_teams: list["ContestTeam"] = relationship(
+        "ContestTeam",
         cascade="all, delete-orphan",
         passive_deletes=True,
         back_populates="contest")
@@ -326,6 +385,71 @@ class Contest(Base):
             elif timestamp <= self.analysis_stop:
                 return 2
         return 3
+
+
+class ContestTeam(Base):
+    """A team's registration state within one contest.
+
+    """
+    __tablename__ = 'contest_teams'
+
+    # Composite key: one roster entry per contest-team pair, cascading on delete.
+    contest_id: int = Column(
+        Integer,
+        ForeignKey(Contest.id,
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True)
+    team_id: int = Column(
+        Integer,
+        ForeignKey("teams.id",
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True,
+        index=True)
+
+    # Overrides the team's own registerable flag for this contest.
+    registerable: bool = Column(
+        Boolean,
+        nullable=False,
+        default=True)
+
+    contest: Contest = relationship(
+        Contest,
+        back_populates="contest_teams")
+
+
+class ContestTask(Base):
+    """A task's membership in one contest, with its ordering number.
+
+    """
+    __tablename__ = 'contest_tasks'
+    __table_args__ = (
+        # Ordering is per contest; NULL is allowed so reordering can use a
+        # temporary sentinel without colliding on the unique index.
+        UniqueConstraint('contest_id', 'num',
+                         name='contest_tasks_contest_id_num_key'),
+    )
+
+    contest_id: int = Column(
+        Integer,
+        ForeignKey(Contest.id,
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True)
+    task_id: int = Column(
+        Integer,
+        ForeignKey("tasks.id",
+                   onupdate="CASCADE", ondelete="CASCADE"),
+        primary_key=True,
+        index=True)
+    num: int | None = Column(
+        Integer,
+        nullable=True)
+
+    contest: Contest = relationship(
+        Contest,
+        back_populates="task_contests")
+    task: "Task" = relationship(
+        "Task",
+        back_populates="contest_tasks")
 
 
 class Announcement(Base):

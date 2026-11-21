@@ -1,0 +1,202 @@
+# Address / Bind Model
+
+How a service decides which host address its published ports bind to, and how to
+publish on more than one address.
+
+## Variables
+
+Every published port is named by exactly one key, and that key alone decides the
+address it answers on. There is no system-wide switch.
+
+| Variable | Scope | Meaning |
+| --- | --- | --- |
+| `<SVC>_BIND_IP` | front-door service | The address one service's published ports answer on. One address in the compose files' port specs; a comma list is expanded only by `scripts/__render_expose.sh` (see "Publishing on several addresses"). |
+| `INNER_IP` | peer-facing services | The address `database`, the six RPC services and `worker` publish on, and the address a worker dials to reach the main server. Empty leaves each on its compose default (`127.0.0.1`). |
+| `PUBLIC_IP` | not a bind key | Your box's public IP. Used for `CORE_SERVICES_HOST` and apt-mirror selection, **not** for binding a port. Keep it separate from `INNER_IP` — they answer different questions and merging them silently repoints one of the two. |
+
+The front-door keys are `CONTEST_BIND_IP`, `NGINX_BIND_IP`, `ADMIN_BIND_IP`,
+`ADMIN_NEXT_BIND_IP` and `RANKING_BIND_IP`. `database` uses `DB_BIND_IP` and
+`worker` uses `WORKER_BIND_ADDR`.
+
+## Resolution
+
+1. `<SVC>_BIND_IP` — the service's own key. One address in the compose files'
+   port specs; a comma-separated list is expanded only by
+   `scripts/__render_expose.sh` into the generated override (see below).
+2. Nothing set → the service is not emitted and keeps its compose default. For
+   `database` and the six RPC services that default is `${INNER_IP:-127.0.0.1}`,
+   so an unset key means loopback, not every interface.
+
+The bind keys follow the repository's one-way generation chain, so there is no
+precedence to reconcile between the sources. `config.toml` is the only one that is
+edited by hand; `./cms config sync` renders `.env` from it; `scripts/__render_expose.sh`
+sources that `.env` and writes the generated `docker-compose.expose.yml`. The
+generated file therefore never overrides what was configured — it is that
+configuration, in the form Compose can use. Re-run the two generators after editing
+`config.toml`; editing `.env` or the generated override by hand has no effect on the
+next sync.
+
+A port answers on an address only when the key owning that port names that
+address. There is no fallback that puts the peer ports — postgres, the RPC
+services, the worker's 26000 — on an address set for the web tier, so widening
+the front door never widens the evaluation surface.
+
+## `INNER_IP` direction
+
+`INNER_IP` is read by both machines, and the same key names opposite things on each. It
+is one key rather than two on purpose: two keys would let the main server and its workers
+drift apart silently, and the drift would only surface as an unreachable worker fleet.
+
+| Machine | Meaning | Reader |
+| --- | --- | --- |
+| Main server | The address to bind worker-RPC ports to; `/metrics` allow-list entry | `__domain.sh`, `__render_expose.sh`, compose port bindings |
+| Worker | The main server's address to dial | `__worker_tui.sh`, read from the worker's own `config.toml` |
+
+## Publishing on several addresses
+
+`ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"` names the public address and the
+tailnet address together. A comma-separated list is how several addresses are
+requested — there is no second key and no mode to set. The base compose files
+cannot carry the list: docker compose pins one `host_ip` per port entry and
+rejects a comma in it, so they publish the front-door ports on `0.0.0.0` and
+`scripts/__render_expose.sh` rewrites them — one published entry per address.
+The `Makefile` runs that generator before every stack target (`expose`) and
+includes the file when present (`COMPOSE_FILES`), so a comma list needs no
+hand-editing:
+
+```
+ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
+make admin        # or ./cms deploy all
+```
+
+The override uses Compose's `!override` tag to replace a service's `ports` list, so
+it needs Compose >= 2.24. The generated file is gitignored.
+
+### The panel is not a front door
+
+`admin-panel-next` is the one service the base file publishes on `127.0.0.1`, and it
+is not an oversight to be tidied into `0.0.0.0`. The panel names a caller from a header
+only a proxy asserts — `x-real-ip`, or the rightmost `x-forwarded-for` hop, read in
+`admin-panel/src/lib/request-identity.ts` — so the published address decides whether
+that name is the proxy's or the caller's. On a routable address a caller connects to
+`:8891` directly, sends the header itself, and picks both the login bucket its failures
+count against and the address its audit rows carry. No proxy here needs the host port:
+the grader vhost and the funnel gateway dial `cms-admin-panel-next:3000` over
+`cms-network`. The host publish serves an operator on the box (and `tailscale serve`,
+which dials `127.0.0.1`). `ADMIN_NEXT_BIND_IP` widens it through the same generated
+override, one published entry per address — a routable value is a decision to front the
+panel with a proxy of your own, not a way to reach it directly.
+
+Because the base files no longer read the `*_BIND_IP` keys themselves, a bare
+`docker compose up` that skips the generator binds the front-door web ports on
+`0.0.0.0` — including the ones whose key defaults to loopback. The panel is not among
+them: its base entry names `127.0.0.1`, so skipping the generator narrows it instead of
+widening it. Bring stacks up through `make`/`./cms deploy` so the configured addresses
+apply.
+
+## Hand-written local overrides
+
+`docker-compose.expose.yml` is generated from the bind keys above. A file called
+`docker-compose.override.yml` is not — it is yours, and it is where machine-specific
+pins and mounts live. Start from the committed skeleton:
+
+```
+cp docker-compose.override.yml.example docker-compose.override.yml
+```
+
+The name is the whole mechanism. The `Makefile` builds its `-f` list from
+`$(wildcard docker-compose.yml docker-compose.override.yml docker-compose.expose.yml)`,
+so the override joins every `core`/`admin`/`contest`/`worker`/`infra` target the moment
+the file exists, and Compose merges it over the base file. `make domain` and `make waf`
+use their own `-f` lists that do not include it, so a `grader-nginx-proxy:` block there
+is not read by those targets at all. Both files are gitignored — never commit either.
+
+### Every service block needs an image
+
+A service Compose has never seen before needs an `image:` or a `build:`, whichever comes
+first in the `-f` list. An override block that only sets environment or ports introduces
+exactly such an unknown service, and the run fails before any container starts:
+
+```
+service grader-nginx-proxy has neither an image nor a build context specified
+```
+
+This is the trap for `grader-nginx-proxy` specifically: it is declared in
+`docker-compose.domain.yml`, which the default `-f` list does not load, so a block
+naming it in the override merges against nothing. The fix is the `image:` line the
+example ships — repeat the image the service already uses, then override only the keys
+you actually own. Compose merges mappings key by key, so the rest of the service survives.
+
+Prefer overriding an existing key over adding a new block: `ports` merges by
+`{ip, target, published, protocol}` and appends anything that does not collide, so a plain
+`ports:` assignment leaves the base mapping in place alongside yours. Use `!override` to
+replace the list. Validate before bringing anything up:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.override.yml config > /dev/null
+```
+
+## The domain path
+
+Publishing a name instead of an address is a separate concern, owned entirely by
+`scripts/__domain.sh`. It reads `ADMIN_DOMAIN`, `OJ_DOMAIN`, `RANKING_DOMAIN` and
+`DOMAIN_NAME`, obtains certificates, and runs one `grader-nginx-proxy` that owns :80 and
+:443 for whichever vhosts those names cover.
+
+The two paths are independent on purpose. A domain says *what the box is called*;
+a bind key says *which address answers*. A deployment can be reached by name only,
+by address only, or by both at once, and each combination is a valid configuration
+rather than a mode to be switched between. So no bind key turns the domain stack on
+or off, and no domain name moves a port to a different address.
+
+The one thing the two paths share is contention: while the domain proxy owns
+:80/:443, a UI also published on a routable address reaches the operator through two
+paths at once. That is why the exposure chooser greys out `public` and `ts-http` for
+every UI — but keyed on whether the proxy is *running*, not on whether a vhost is
+*configured*, since a box can set names without having brought the stack up.
+
+## Two ways over the tailnet
+
+Reaching a UI through the tailnet has two distinct mechanisms, and they are not
+alternatives for one another.
+
+| Mechanism | Keys | What the tailnet sees |
+| --- | --- | --- |
+| Publish the port | `*_BIND_IP`, `INNER_IP` | The UI on its own port, **plain HTTP**, on the tailnet address |
+| `tailscale serve` | `TS_HTTPS_*` | The UI on its loopback port, fronted by a `tailscale serve` listener, **HTTPS** |
+
+The first moves the published address; the second keeps loopback and adds TLS at the
+edge. Only the admin surfaces have `tailscale serve` entries — `TS_HTTPS_PANEL`,
+`TS_HTTPS_CLASSIC` and `TS_HTTPS_RANKING` — because that is all
+`scripts/__tailscale_serve.sh` fronts. The contest UI has no such entry, so the
+chooser offers it no `ts-https` mode; its tailnet reach is the publish path above.
+
+## Examples
+
+Public host, single address:
+
+```
+ADMIN_BIND_IP = "203.0.113.10"
+```
+
+Public plus tailnet on the same service — set the comma list, then run
+`bash scripts/__render_expose.sh` and `make` (or `./cms deploy`) so the
+generated override expands it:
+
+```
+ADMIN_BIND_IP = "203.0.113.10,100.64.0.1"
+```
+
+Loopback only (local testing) — name it, because the base file's own default for the
+front-door web ports is `0.0.0.0`:
+
+```
+ADMIN_BIND_IP = "127.0.0.1"
+```
+
+Workers reachable on the tailnet only:
+
+```
+INNER_IP = "100.64.0.1"
+WORKER_BIND_ADDR = "100.64.0.1"
+```

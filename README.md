@@ -11,11 +11,11 @@ Scalable, containerized deployment for the [Contest Management System (CMS)](htt
 | Path | Command | Best for |
 |------|---------|----------|
 | **1. One-stop script** ⭐ | `./cms` | Everyone. Zero-arg full bootstrap, resumable |
-| **2. Pre-built images** | `make env && make core-img ...` | Fast production deploys |
-| **3. Build from source** | `make env && DEPLOYMENT_TYPE=src make core ...` | Custom CMS patches / air-gapped |
+| **2. Pre-built images** | `./cms config sync && make core ...` | Fast production deploys |
+| **3. Build from source** | `./cms config sync && DEPLOYMENT_TYPE=src make core ...` | Custom CMS patches / air-gapped |
 | **4. Raw docker compose** | `docker compose --profile core up -d --build` | Compose-native workflows |
 
-All four paths share one config step (`make env`) and one consolidated
+All four paths share one config step (`./cms config sync`) and one consolidated
 [`docker-compose.yml`](docker-compose.yml) with service profiles
 (`core`, `admin`, `contest`, `worker`, `monitor`).
 
@@ -76,18 +76,18 @@ Fastest production path — pulls versioned images from GHCR.
 
 ```bash
 cp config.toml.example config.toml   # then edit credentials!
-./cms config sync                    # generate .env.*, render configs, run preflight gate
+./cms config sync                    # generate .env, render configs, run preflight gate
 
 make pull                            # fetch all stack images
-make core-img                        # database + RPC services (health-gated)
+make core                            # database + RPC services (health-gated)
 make cms-init                        # create/patch DB schema
 make admin-create                    # interactive superadmin
 make prisma-sync                     # sync Admin Panel schema
-make contest-img admin-img infra-img
-make worker-img                      # needs host cgroup prep (see Prerequisites)
+make contest admin infra
+make worker                          # needs host cgroup prep (see Prerequisites)
 ```
 
-> **Upgrading from an `.env.*`-based setup?** `.env.*` files are now generated — `config sync` overwrites them from `config.toml`. Values that only lived in `.env.*` are not imported: set them in `config.toml` (or via `./cms update`) before your next `config sync`.
+> **Upgrading from an `.env.*`-based setup?** There is now a single generated `.env` — `./cms config sync` overwrites it from `config.toml`. Values that only lived in `.env.*` are imported by `./cms config sync` — copied into `.env`, promoted into `config.toml`, and the split file is then removed. Still, set new or changed values in `config.toml`.
 
 ## 3. Manual: Build From Source
 
@@ -139,7 +139,7 @@ Pick by scenario:
 ### Config changes only (passwords, ports, contest ID, limits)
 ```bash
 ./cms update        # interactive wizard over every managed variable
-# or edit .env.* directly, then:
+# or edit config.toml, then:
 ./cms               # idempotent re-run: regenerates configs, recreates changed containers
 ```
 
@@ -187,7 +187,9 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms fix` | Non-interactive repair of missing/insecure config |
 | `./cms deploy <stack> [--img]` | Start one stack (`core/admin/contest/worker/infra`) or `all`; `--img` forces registry images |
 | `./cms stop [stack]` / `clean [stack]` / `pull [stack]` | Lifecycle per stack or all |
-| `./cms db init\|reset\|clean\|sync` | Database shortcuts (init schema, full reset, wipe, Prisma sync) |
+| `./cms db init\|reset\|clean\|sync\|migrate` | Database shortcuts (init schema, full reset, wipe, Prisma sync, and migrate the active DB: schema + roles + RLS) |
+| `./cms db use <profile>` | Point the deployment at a different database — rewrites `ACTIVE_DATABASE`, runs `./cms config sync`, restacks what is running |
+| `./cms db create <name>` / `./cms db rename <old> <new>` | Create or rename a database in the running `cms-database` container. **Stops `cms-database`** for the length of the statement — no role on this cluster holds `CREATEDB`, so it runs in single-user mode — then starts it again. `--dry-run` first, then `CONFIRM_DB_ADMIN=yes` or type `yes`. Neither touches the schema or the config: after `create` run `./cms db use <profile>` then `./cms db migrate`; after `rename` repoint every `[db_<profile>]` `POSTGRES_DB`, run `./cms config sync`, then `./cms deploy core`. See [`docs/DB-ROTATION.md`](docs/DB-ROTATION.md) |
 | `./cms admin-create` | Create a superadmin interactively |
 | `./cms status` | Live service status dashboard |
 | `./cms monitor` | Monitoring/backup operations UI |
@@ -203,7 +205,7 @@ below map 1:1 onto the Makefile and helper scripts.
 | `./cms contest create <yaml...>` | Batch-create contests from YAML/JSON |
 | `./cms funnel setup\|passwd\|remove\|status` | Public ts.net access behind basic auth — no tailnet needed |
 | `./cms domain setup\|status\|renew\|preflight` | HTTPS domain lifecycle for `DOMAIN_NAME` (TLS certs + Nginx) |
-| `./cms config sync [--dry-run]` / `edit` / `show` | Generate `.env.*` + `cms.toml` from `config.toml` / open it in `$EDITOR` / print it |
+| `./cms config sync [--dry-run]` / `edit` / `show` | Generate `.env` (+ `admin-panel/.env`) + `cms.toml` from `config.toml` / open it in `$EDITOR` / print it |
 | `./cms update-server` | Safe server update: preflight → backup → rolling recreate → verify |
 
 Global bootstrap flags: `--yes` (non-interactive), `--skip <a,b>`,
@@ -332,27 +334,27 @@ rotation policy (count/age/size) enforced by the monitor container.
 
 ## Architecture
 
-One [`docker-compose.yml`](docker-compose.yml), five profiles:
+One [`docker-compose.yml`](docker-compose.yml), six profiles:
 
 | Profile | Services |
 |---------|----------|
 | `core` | PostgreSQL · LogService · ResourceService · ScoringService · CheckerService |
 | `admin` | AdminPanelNext (:8891) · AdminWebServer (:8889) · RankingWebServer (:8890) |
-| `contest` | ContestWebServer (:8888+) · EvaluationService · ProxyService · nginx (TLS option) |
+| `contest` | ContestWebServer (:8888+) · EvaluationService · ProxyService · redis-rate-limit |
+| `proxy` | Optional contest nginx front — publishes no host port until `NGINX_BIND_IP` is set |
 | `worker` | Sandboxed isolate workers (`WORKER_SHARD` unique per instance) |
-| `monitor` | Health/backups/Discord alerting (non-root, docker.sock via `DOCKER_GID`) |
+| `monitor` | Health/backups/Discord alerting (non-root, docker.sock via `DOCKER_GID`) · scheduler |
 
 Startup ordering is healthcheck-gated (`depends_on: condition:
 service_healthy`) — no sleep hacks. Shared resources are plain named
 volumes/network declared once; no `external:` coupling between stacks.
 
 ### Multi-Contest & Remote Workers
-* Set `CONTEST_ID` in `.env.contest` (canonical; legacy `ACTIVE_CONTEST_ID`
-  still mapped by `make env` with a warning). Ports follow
-  `CONTEST_PORT_EXTERNAL`.
+* Set `CONTEST_ID` in `config.toml` `[contest]` — the only source of truth, and
+  where the admin panel writes it. Ports follow `CONTEST_PORT_EXTERNAL`.
 * Remote workers: point `config.toml` [worker] `CORE_SERVICES_HOST` /
-  `POSTGRES_*` at the main host, keep RPC bindings on the Tailscale IP
-  (`TAILSCALE_IP` in [core]), then `make worker` on that machine.
+  `POSTGRES_*` at the main host, keep RPC bindings on the inner peer address
+  (`INNER_IP` in [core]), then `make worker` on that machine.
 * Batch-create contests:
   `./scripts/__create_contests.sh -f examples/contests.yaml`
   (names must be codename-safe: `[A-Za-z0-9_-]`).
@@ -364,9 +366,8 @@ volumes/network declared once; no `external:` coupling between stacks.
 | File | Purpose |
 |------|---------|
 | `config.toml` | **Source of truth** — all config (edit this) |
-| `.env` | Generated by `./cms config sync` — do not edit directly (unified env) |
-| `.env.contest` | Per-contest override (`CONTEST_ID`, ports, TLS, limits) |
-| `config/cms.toml` | Rendered CMS config — regenerated by `make env`; containers always reach the DB as `database:5432` over the compose network |
+| `.env` | Generated from `config.toml` by `./cms config sync` — do not edit directly (overwritten on every sync) |
+| `config/cms.toml` | Rendered CMS config — created from `config/cms.sample.toml` by `./cms config sync`, which then updates it in place; containers always reach the DB as `database:5432` over the compose network |
 
 Secrets hygiene: generated files are chmod 600 on POSIX filesystems
 (NTFS mounts ignore chmod — preflight detects this and skips the check);
@@ -382,7 +383,7 @@ preflight hard-fails on placeholder/default secrets with fix instructions.
 | `worker` exits citing `ISOLATE_CGROUP_PATH` | Run `sudo ./scripts/__worker_cgroup_setup.sh` once on that host |
 | Monitor can't reach docker.sock | Set `DOCKER_GID` in `config.toml` [infra] to `stat -c %g /var/run/docker.sock`, then `./cms config sync` |
 | CWS logs "no contest with the specified id" | Import a contest or align `CONTEST_ID`: `./scripts/__create_contests.sh -f examples/contests.yaml` |
-| Config changes not applying | `make env` never overwrites existing `config/cms.toml`; delete it to force regeneration |
+| Config changes not applying | `./cms config sync` updates an existing `config/cms.toml` in place; delete it to regenerate it from `config/cms.sample.toml` |
 | Disk near-full during pulls | Images total ≈ 6–7 GB; preflight aborts under 3 GB free — prune with `docker system df` guidance |
 
 ## Useful References
@@ -393,6 +394,7 @@ preflight hard-fails on placeholder/default secrets with fix instructions.
 | [docs/QUICKREF.md](docs/QUICKREF.md) | Command cheat sheet for daily operations |
 | [docs/ACCESS-CONFIGURATION.md](docs/ACCESS-CONFIGURATION.md) | Binding IPs, ports, and exposure modes |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | External dependencies and versions |
+| [docs/acme-challenges.md](docs/acme-challenges.md) | ACME challenge, CA, cert import and renewal |
 | [docs/optional-features.md](docs/optional-features.md) | HSM, Vault, DNSSEC/CAA, mTLS, rate limiting, monitoring stack |
 | [docs/waf-tuning.md](docs/waf-tuning.md) | WAF (ModSecurity CRS) enablement and tuning |
 | [docs/csp-implementation.md](docs/csp-implementation.md) | Content-Security-Policy details |

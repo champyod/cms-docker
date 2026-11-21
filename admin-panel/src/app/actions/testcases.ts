@@ -5,19 +5,11 @@ import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
-import { storeFile } from '@/lib/fsobjects';
-
-interface TestcaseInput {
-  codename: string;
-  inputBase64: string;
-  outputBase64: string;
-  isPublic: boolean;
-}
-
-interface ActionResult {
-  success: boolean;
-  error?: string;
-}
+import {
+  findDatasetOrError,
+  toSafeActionError,
+  type ActionResult,
+} from './testcase-support';
 
 type TestcaseRow = Awaited<ReturnType<typeof prisma.testcases.findMany>>[number];
 
@@ -28,6 +20,8 @@ export async function addTestcase(datasetId: number, data: {
   isPublic: boolean;
 }): Promise<ActionResult> {
   await ensurePermission('testcase:create');
+  const datasetError = await findDatasetOrError(datasetId);
+  if (datasetError) return datasetError;
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('testcases', {
     codename: data.codename,
@@ -64,7 +58,7 @@ export async function addTestcase(datasetId: number, data: {
     if (e.message?.includes('unique constraint')) {
       return { success: false, error: `Testcase with codename "${data.codename}" already exists` };
     }
-    return { success: false, error: e.message };
+    return { success: false, error: toSafeActionError(error) };
   }
 }
 
@@ -146,60 +140,6 @@ export async function updateTestcasesPublic(testcaseIds: number[], isPublic: boo
       verb: 'testcase:update',
       entity: 'testcase',
       afterValues: { testcaseIds, public: allowed.public, count: result.count },
-      result: 'success',
-    });
-    revalidatePath('/[locale]/tasks');
-    return { success: true };
-  } catch (error) {
-    const e = error as Error;
-    return { success: false, error: e.message };
-  }
-}
-
-async function createTestcaseSafely(datasetId: number, tc: TestcaseInput): Promise<void> {
-  const inputDigest = await storeFile(Buffer.from(tc.inputBase64, 'base64'));
-  const outputDigest = await storeFile(Buffer.from(tc.outputBase64, 'base64'));
-
-  const permissions = await getPermissions();
-  const allowed = stripDisallowedFields('testcases', {
-    codename: tc.codename,
-    public: tc.isPublic,
-    input: inputDigest,
-    output: outputDigest,
-  }, permissions);
-  const { codename, input, output, public: isPub } = allowed;
-  if (codename === undefined || input === undefined || output === undefined) {
-    throw new Error('Insufficient field permissions for testcase creation');
-  }
-
-  try {
-    await prisma.testcases.create({
-      data: {
-        dataset_id: datasetId,
-        codename,
-        input,
-        output,
-        public: isPub ?? false,
-      }
-    });
-  } catch (error) {
-    const e = error as { message?: string };
-    if (!e.message?.includes('unique constraint')) throw error;
-    console.warn(`Testcase ${tc.codename} already exists, skipping.`);
-  }
-}
-
-export async function batchUploadTestcases(datasetId: number, testcases: TestcaseInput[]): Promise<ActionResult> {
-  await ensurePermission('testcase:update');
-
-  try {
-    for (const tc of testcases) {
-      await createTestcaseSafely(datasetId, tc);
-    }
-    await recordAudit({
-      verb: 'testcase:update',
-      entity: 'testcase',
-      afterValues: { datasetId, count: testcases.length },
       result: 'success',
     });
     revalidatePath('/[locale]/tasks');

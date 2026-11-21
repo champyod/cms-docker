@@ -233,6 +233,7 @@ class TeamHandler(BaseHandler):
 
             self.get_string(attrs, "code")
             self.get_string(attrs, "name")
+            self.get_bool(attrs, "registerable")
 
             assert attrs.get("code") is not None, \
                 "No team code specified."
@@ -262,6 +263,7 @@ class AddTeamHandler(SimpleHandler("add_team.html", permission="team:create")):
 
             self.get_string(attrs, "code")
             self.get_string(attrs, "name")
+            self.get_bool(attrs, "registerable")
 
             assert attrs.get("code") is not None, \
                 "No team code specified."

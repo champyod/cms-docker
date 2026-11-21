@@ -1,0 +1,340 @@
+#!/usr/bin/env bash
+# tests/test_image_pins.sh — every third-party image reference is pinned to tag@sha256.
+#
+# WHY this gate exists: a floating tag is a supply-chain input that changes without a commit.
+# `postgres:15` or `nginx:alpine` re-resolve to whatever the registry serves today, so the stack
+# that passed review is not the stack that starts tomorrow, and nothing in git records the
+# difference. The policy — the decision, the readable-tag rule, and why our own images are
+# exempt — lives in docs/decisions/image-digest-pinning.md, which is the single place to read
+# or change it; this suite is only the enforcement.
+#
+# WHAT it asserts, per `image:` line in every compose file the repo ships
+# (docker-compose*.yml and docker/docker-compose*.yml, the same globs `make lint` and the CI
+# compose loop walk):
+#   1. a third-party image carries `@sha256:` — a digest, not just a tag;
+#   2. that digest is exactly 64 lowercase hex characters — a truncated or fabricated digest
+#      otherwise parses fine in compose and only fails at pull time, on the target host;
+#   3. the tag before the digest is concrete: `:latest` and untagged refs are rejected, because
+#      both mean "whatever the registry has now" and neither can be reviewed as a change;
+#   4. two references to the same repo:tag carry the SAME digest, so there is one pin per image
+#      even though the string appears wherever it is used;
+#   5. our own `ghcr.io/champyod/*` images are exempt, still carry ${IMG_TAG}, and the file says
+#      why (the sentinel comment checked below) — a digest there would freeze a deploy to one
+#      build, since the tag is how a deploy selects the build CI just pushed.
+#
+# `--list` prints the inventory (repo:tag<TAB>sha256:digest, one line per distinct pin) so the
+# table in the decision record can be regenerated from the tree instead of hand-maintained.
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+ADR="${REPO_ROOT}/docs/decisions/image-digest-pinning.md"
+# Files the decision record's prose lives behind; the suite fails if an exempt image has no
+# explanation beside it, so the exemption cannot be smuggled in silently.
+SENTINEL='WHY no digest on our own images'
+
+pass=0
+fail=0
+ok() { pass=$((pass + 1)); printf '  ok   %s\n' "$1"; }
+no() { fail=$((fail + 1)); printf '  FAIL %s\n' "$1"; }
+
+# ── inventory ────────────────────────────────────────────────────────────────────────────────
+# WHY `*generated*` is skipped: `./cms config sync` writes docker-compose.*.generated.yml from
+# the service registry at run time. Those files are untracked operator artifacts, not something
+# this repository ships, and the registry rows they mirror are the operator's to pin.
+# WHY a git-ignored file is skipped too: docker-compose.expose.yml is a deployment artifact the
+# operator generates on the host (it is in .gitignore), so it is not repository content and its
+# image lines are not this gate's to police.
+COMPOSE_FILES=()
+for f in "${REPO_ROOT}"/docker-compose*.yml "${REPO_ROOT}"/docker/docker-compose*.yml; do
+  [ -f "$f" ] || continue
+  case "$f" in *generated*) continue ;; esac
+  if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1 &&
+     git -C "$REPO_ROOT" check-ignore -q -- "$f"; then
+    continue
+  fi
+  COMPOSE_FILES+=("$f")
+done
+
+if [ "${#COMPOSE_FILES[@]}" -eq 0 ]; then
+  no "found no compose files to scan (run from the repository root)"
+fi
+
+# repo:tag -> digest, so a second reference to the same image cannot disagree with the first.
+declare -A digest_of=()
+total=0
+third_party=0
+ours=0
+
+# image_value <raw yaml value> -> the reference to judge, with the ${VAR:-default} wrapper
+# unwrapped (an interpolated default is still the image a deploy runs when the var is unset).
+image_value() {
+  local v="$1"
+  v="${v#"${v%%[![:space:]]*}"}"           # ltrim
+  v="${v%"${v##*[![:space:]]}"}"           # rtrim
+  v="${v%%[[:space:]]#*}"                  # trailing `# comment`
+  v="${v%\"}"; v="${v#\"}"                 # double quotes
+  v="${v%\'}"; v="${v#\'}"                 # single quotes
+  v="${v%"${v##*[![:space:]]}"}"           # rtrim again (quote before comment)
+  if [[ "$v" =~ ^\$\{[A-Za-z_][A-Za-z0-9_]*:-(.+)\}$ ]]; then
+    v="${BASH_REMATCH[1]}"
+  fi
+  printf '%s' "$v"
+}
+
+for f in "${COMPOSE_FILES[@]}"; do
+  rel="${f#"${REPO_ROOT}/"}"
+  printf '\n%s\n' "$rel"
+  while IFS= read -r hit; do
+    lineno="${hit%%:*}"
+    raw="${hit#*:}"
+    raw="${raw#*image:}"
+    ref="$(image_value "$raw")"
+    total=$((total + 1))
+
+    # Our own images: selected by tag, pinned by CI's build, exempt by policy.
+    if [[ "$ref" == ghcr.io/champyod/* ]]; then
+      ours=$((ours + 1))
+      if [[ "$ref" == *'${IMG_TAG'* ]]; then
+        ok "${rel}:${lineno} own image selected by \${IMG_TAG} (${ref})"
+      else
+        no "${rel}:${lineno} own image is not \${IMG_TAG}-selected: ${ref}"
+      fi
+      if grep -qF -- "$SENTINEL" "$f"; then
+        ok "${rel}:${lineno} states why own images carry no digest"
+      else
+        no "${rel} has an own image but no comment saying why it is unpinned"
+      fi
+      continue
+    fi
+
+    third_party=$((third_party + 1))
+
+    if [[ "$ref" != *@sha256:* ]]; then
+      no "${rel}:${lineno} third-party image has no digest: ${ref}"
+      continue
+    fi
+    name_and_tag="${ref%%@sha256:*}"
+    digest="${ref##*@sha256:}"
+    if [[ "$digest" =~ ^[0-9a-f]{64}$ ]]; then
+      ok "${rel}:${lineno} ${name_and_tag} pinned at sha256:${digest:0:12}…"
+    else
+      no "${rel}:${lineno} digest is not 64 lowercase hex chars: ${digest}"
+    fi
+
+    last="${name_and_tag##*/}"
+    if [[ "$last" != *:* ]] || [ -z "${last##*:}" ]; then
+      no "${rel}:${lineno} third-party image is untagged: ${ref}"
+      continue
+    fi
+    tag="${last##*:}"
+    if [ "$tag" = "latest" ]; then
+      no "${rel}:${lineno} third-party image floats on :latest: ${ref}"
+    fi
+
+    # Normalise the docker.io/library spellings so `postgres:15` and `docker.io/postgres:15`
+    # are recognised as the same image and must therefore carry the same digest.
+    key="${name_and_tag}"
+    key="${key#docker.io/library/}"; key="${key#docker.io/}"; key="${key#library/}"
+    if [ -n "${digest_of[$key]:-}" ]; then
+      if [ "${digest_of[$key]}" != "$digest" ]; then
+        no "${rel}:${lineno} ${key} carries two different digests (${digest_of[$key]:0:12}… vs ${digest:0:12}…)"
+      else
+        ok "${rel}:${lineno} ${key} repeats the same digest as its other reference"
+      fi
+    else
+      digest_of["$key"]="$digest"
+    fi
+  done < <(grep -nE '^[[:space:]]*image:[[:space:]]*' "$f")
+done
+
+# ── Dockerfiles: a FROM is an image reference too ───────────────────────────────────────────
+# WHY this half exists: the compose-only scan let `admin-panel/Dockerfile` name
+# `node:20-bookworm-slim` with no digest for the whole life of the pin policy, while
+# docker/scheduler/Dockerfile pinned its own — and nothing failed. A base image selected by tag
+# can change between two builds of the same commit with no PR, which is exactly what pinning is
+# for, and it is the path a runtime CVE takes into the image.
+printf '\nthe Dockerfiles pin their bases too\n'
+dfrom_total=0
+dfrom_third=0
+dfrom_ours=0
+# `find`, not `git ls-files`: the gate has to answer the same way from an exported tree as from a
+# checkout, and a scan that silently covers nothing because git is absent is the failure mode this
+# whole section exists to prevent. Build artifacts are pruned by path, not by trusting .gitignore.
+# `target/` is cargo build output (and its test fixtures), never a reviewed source.
+for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' \
+             -not -path '*/target/*' | sed 's|^\./||'); do
+  while IFS= read -r line; do
+    ref="$(printf '%s' "$line" | awk '{print $2}')"
+    # `FROM base AS build` style references a previous stage, not a registry image.
+    case "$ref" in
+      *"$SENTINEL"*|*"\$"*) continue ;;
+    esac
+    if printf '%s' "$line" | grep -qE '^[[:space:]]*FROM[[:space:]]+[A-Za-z0-9_.-]+([[:space:]]+AS[[:space:]]+[A-Za-z0-9_-]+)?[[:space:]]*$' \
+       && ! printf '%s' "$ref" | grep -q '[/:]'; then
+      continue
+    fi
+    dfrom_total=$((dfrom_total + 1))
+    if printf '%s' "$ref" | grep -qE '^ghcr\.io/champyod/'; then
+      dfrom_ours=$((dfrom_ours + 1))
+      continue
+    fi
+    dfrom_third=$((dfrom_third + 1))
+    img="${ref%@*}"
+    if ! printf '%s' "$ref" | grep -qE '@sha256:[0-9a-f]{64}$'; then
+      no "${f}: FROM ${img} has no @sha256 digest — the base can change under a build with no PR"
+    elif printf '%s' "$img" | grep -qE ':(latest)?$'; then
+      no "${f}: FROM ${img} is tagged latest"
+    else
+      ok "${f}: ${img} is pinned by digest"
+    fi
+  done < <(grep -iE '^[[:space:]]*FROM[[:space:]]' "$REPO_ROOT/$f")
+done
+if [ "$dfrom_total" -eq 0 ]; then
+  no "no FROM lines matched — the Dockerfile scan is broken, not the tree"
+fi
+if [ "$dfrom_third" -gt 0 ]; then
+  ok "scanned ${dfrom_total} FROM lines: ${dfrom_third} third-party, ${dfrom_ours} our own"
+else
+  no "no third-party FROM lines found — the exemption filter is swallowing everything"
+fi
+
+# ── the toolchain baked into our images is pinned too ───────────────────────────────────────
+# WHY this half exists: the FROM scan above pins the *base image*, but a build can also pull a
+# tool out of the network at build time. `curl https://get.docker.com | sh` does exactly that,
+# and it cannot pin everything it installs: measured 2026-11-08, its `--version` argument covers
+# `docker-ce`/`docker-ce-cli`/`containerd.io` but it installs `docker-compose-plugin`
+# unversioned (get.docker.com:656). So an unchanged commit rebuilt one day later carried Compose
+# 5.7.0 instead of 5.6.0, moved its `golang.org/x/net` from 0.58.0 to 0.60.0, and the image scan
+# gained CVE-2026-78661 — a finding no commit introduced. A pin that is only a comment is what
+# that was; these are the rules that make it a fact.
+#
+# WHAT it asserts, on Dockerfile *code* (comment lines blanked first, so a comment explaining
+# the rule cannot satisfy or violate it):
+#   1. no Dockerfile installs Docker from the convenience script or a `releases/latest` binary;
+#   2. a Dockerfile that installs `docker-ce-cli` / `docker-compose-plugin` names an exact
+#      version — a literal `=1.2.3…`, or `${NAME}` whose `ARG NAME=` default starts with a digit;
+#   3. a Dockerfile that fetches the Docker apt key verifies it against a pinned digest, for the
+#      same reason a base image is pinned;
+#   4. the scan covers at least one Dockerfile that installs the client, so a broken glob cannot
+#      pass as compliance.
+printf '\nthe toolchain installed into our images is pinned\n'
+
+# Comment lines blanked, line numbers kept: a rule about code must not be satisfiable by prose
+# (the failure mode that let a comment mentioning `withActor()` pass an entry-point gate).
+code_of() { grep -n '' "$1" | sed -E 's/^([0-9]+):[[:space:]]*#.*$/\1:/'; }
+
+# first_of <text> — the first line, without a pipe into an early-exiting reader: this suite runs
+# under `pipefail`, and a `| head -1` whose producer is killed by SIGPIPE returns 141 for the
+# whole pipeline, which turns a check into a coin flip. A gate that fails at random is worse
+# than no gate, because the next reader learns to re-run it.
+first_of() { local text="$1"; printf '%s\n' "${text%%$'\n'*}"; }
+
+# is_pinned <code-view> <package> -> "pinned", or the reason it is not
+is_pinned() {
+  local code="$1" pkg="$2" value name arg_line default
+  value="$(first_of "$(grep -oE "$pkg=[^[:space:]\"']+" <<<"$code")")"
+  value="${value#"$pkg="}"
+  if [ -z "$value" ]; then
+    printf 'names no version (install it as %s=<version>)' "$pkg"
+    return 0
+  fi
+  if [[ "$value" =~ ^[0-9] ]]; then
+    printf 'pinned'
+    return 0
+  fi
+  if [[ "$value" =~ ^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$ ]]; then
+    name="${BASH_REMATCH[1]}"
+    arg_line="$(first_of "$(grep -E "ARG[[:space:]]+${name}=" <<<"$code")")"
+    default="${arg_line#*"${name}="}"
+    if [[ "$default" =~ ^[0-9] ]]; then
+      printf 'pinned'
+      return 0
+    fi
+    printf "is \${%s} but ARG %s carries no version" "$name" "$name"
+    return 0
+  fi
+  printf 'names an unversioned value (%s)' "$value"
+}
+
+tool_files=0
+client_files=0
+for f in $(cd "$REPO_ROOT" && find . -name Dockerfile -not -path './node_modules/*' \
+             -not -path '*/.git/*' -not -path '*/.next/*' -not -path '*/node_modules/*' \
+             -not -path '*/target/*' | sed 's|^\./||' | sort); do
+  tool_files=$((tool_files + 1))
+  code="$(code_of "$REPO_ROOT/$f")"
+
+  # 1. the floating installer, named by file:line from the code view.
+  while IFS= read -r hit; do
+    [ -n "$hit" ] || continue
+    no "${f}:${hit%%:*} installs Docker from the floating convenience script — pin the package versions"
+  done <<<"$(grep -E 'get\.docker\.com|compose/releases/latest' <<<"$code")"
+
+  # 2. every installed client package carries a version.
+  for pkg in docker-ce-cli docker-compose-plugin; do
+    if ! grep -qE "${pkg}[=[:space:]\"']" <<<"$code"; then
+      continue
+    fi
+    if [ "$pkg" = docker-ce-cli ]; then
+      client_files=$((client_files + 1))
+    fi
+    verdict="$(is_pinned "$code" "$pkg")"
+    if [ "$verdict" = pinned ]; then
+      ok "${f}: ${pkg} is pinned"
+    else
+      no "${f}: ${pkg} ${verdict}"
+    fi
+  done
+
+  # 3. the apt key the client is installed against is itself pinned by digest.
+  if grep -q 'download\.docker\.com/linux/debian/gpg' <<<"$code"; then
+    if grep -qE 'sha256sum[[:space:]]+-c' <<<"$code"; then
+      ok "${f}: the Docker apt key is verified against a pinned digest"
+    else
+      no "${f}: fetches the Docker apt key without checking its sha256 — the key can change silently"
+    fi
+  fi
+done
+if [ "$tool_files" -eq 0 ]; then
+  no "no Dockerfiles matched — the toolchain scan is broken, not the tree"
+fi
+if [ "$client_files" -eq 0 ]; then
+  no "no Dockerfile installs a pinned Docker client — the scan proves nothing"
+fi
+
+# ── the decision record ─────────────────────────────────────────────────────────────────────
+printf '\nthe decision lives in one place\n'
+if [ -f "$ADR" ]; then
+  ok "docs/decisions/image-digest-pinning.md exists"
+  if grep -qF -- "$SENTINEL" "$ADR"; then
+    ok "the record states why our own images are exempt"
+  else
+    no "the record does not state the own-image exemption"
+  fi
+  if grep -qF -- 'IMG_TAG' "$ADR"; then
+    ok "the record names the selector (\${IMG_TAG}) the exemption is about"
+  else
+    no "the record does not name \${IMG_TAG}"
+  fi
+else
+  no "docs/decisions/image-digest-pinning.md is missing — the pin policy has no home"
+fi
+
+# ── inventory mode ──────────────────────────────────────────────────────────────────────────
+if [ "${1:-}" = "--list" ]; then
+  printf '\n%s\t%s\n' "image:tag" "digest"
+  for key in "${!digest_of[@]}"; do
+    printf '%s\tsha256:%s\n' "$key" "${digest_of[$key]}"
+  done | sort
+fi
+
+printf '\n%d image references: %d third-party, %d our own, %d distinct pins\n' \
+  "$total" "$third_party" "$ours" "${#digest_of[@]}"
+if [ "$total" -eq 0 ]; then
+  no "no image references matched — the scan, not the tree, is broken"
+fi
+
+printf '\n%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

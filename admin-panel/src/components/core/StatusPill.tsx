@@ -1,0 +1,56 @@
+'use client';
+
+export type StatusTone = 'emerald' | 'amber' | 'blue' | 'red' | 'slate';
+
+/** Single tone map for every connection/service/worker status in the panel. */
+export function statusTone(status: string): StatusTone {
+  switch (status) {
+    case 'healthy':
+    case 'running':
+    case 'online':
+    case 'connected':
+      return 'emerald';
+    case 'busy':
+    case 'unhealthy':
+    case 'connecting':
+      return 'amber';
+    case 'idle':
+    case 'starting':
+      return 'blue';
+    case 'disconnected':
+    case 'offline':
+    case 'stopped':
+      return 'red';
+    case 'unknown':
+      return 'slate';
+    default:
+      return 'red';
+  }
+}
+
+const DOT_TONE: Record<StatusTone, string> = {
+  emerald: 'bg-success',
+  amber: 'bg-warning',
+  blue: 'bg-info',
+  red: 'bg-destructive',
+  slate: 'bg-muted-foreground/50',
+};
+
+const TEXT_TONE: Record<StatusTone, string> = {
+  emerald: 'text-success',
+  amber: 'text-warning',
+  blue: 'text-info',
+  red: 'text-destructive',
+  slate: 'text-muted-foreground',
+};
+
+/** One dot plus label for a status string; the only status renderer. */
+export function StatusPill({ status, className }: { status: string; className?: string }): React.JSX.Element {
+  const tone = statusTone(status);
+  return (
+    <span className={`inline-flex items-center gap-2 ${className ?? ''}`}>
+      <span className={`w-2 h-2 rounded-full fill-current ${DOT_TONE[tone]}`} />
+      <span className={`font-medium text-xs uppercase ${TEXT_TONE[tone]}`}>{status.toUpperCase()}</span>
+    </span>
+  );
+}

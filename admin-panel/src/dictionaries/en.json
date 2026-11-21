@@ -1,4 +1,130 @@
 {
+  "infrastructure": {
+    "services": {
+      "tabs": {
+        "services": "Services",
+        "wirings": "Wirings",
+        "exposures": "Exposures",
+        "preview": "Preview",
+        "ariaLabel": "Registry sections"
+      },
+      "kinds": {
+        "service": "Service",
+        "wiring": "Wiring",
+        "exposure": "Exposure"
+      },
+      "columns": {
+        "actions": "Actions",
+        "name": "Name",
+        "role": "Role",
+        "host": "Host",
+        "ports": "Ports",
+        "dbProfile": "DB profile",
+        "contest": "Contest",
+        "enabled": "Enabled",
+        "from": "From",
+        "relation": "Relation",
+        "to": "To",
+        "hostname": "Hostname",
+        "path": "Path",
+        "tls": "TLS",
+        "tailnet": "Tailnet",
+        "source": "Source"
+      },
+      "fields": {
+        "name": "Name",
+        "role": "Role",
+        "shard": "Shard",
+        "host": "Host",
+        "httpPort": "HTTP port",
+        "rpcPort": "RPC port",
+        "dbProfile": "DB profile",
+        "image": "Image",
+        "pullPolicy": "Pull policy",
+        "contest": "Contest",
+        "enabled": "Enabled",
+        "from": "From",
+        "to": "To",
+        "relation": "Relation",
+        "service": "Service",
+        "hostname": "Hostname",
+        "path": "Path",
+        "tls": "TLS",
+        "tailnet": "Tailnet name"
+      },
+      "actions": {
+        "addService": "Add service",
+        "addWiring": "Add wiring",
+        "addExposure": "Add exposure",
+        "edit": "Edit",
+        "remove": "Remove",
+        "save": "Save",
+        "saveApply": "Save & apply",
+        "cancel": "Cancel",
+        "rowGroup": "Registry actions"
+      },
+      "values": {
+        "yes": "yes",
+        "no": "no",
+        "allContests": "all contests",
+        "none": "—",
+        "http": "http",
+        "rpc": "rpc",
+        "database": "database"
+      },
+      "source": {
+        "curated": "{file} · {key}",
+        "readOnly": "Curated here: this route is rendered from {file}, so the panel can only remove the exposure, not move it."
+      },
+      "apply": {
+        "applied": "Applied",
+        "refusedValidation": "Refused by validation",
+        "refusedNginx": "Refused by nginx",
+        "refused": "Not saved",
+        "appliedMessage": "{label} is live: the front reloaded with it.",
+        "refusedMessage": "{label}: {message}"
+      },
+      "empty": {
+        "service": "No service is registered yet.",
+        "wiring": "No wiring is registered yet.",
+        "exposure": "No contest is exposed yet, so no generated route is rendered.",
+        "preview": "No artifact is rendered for this registry yet."
+      },
+      "confirm": {
+        "title": "Remove {label}",
+        "description": "Remove {label} from the registry? The next config sync stops rendering it.",
+        "confirmLabel": "Remove"
+      },
+      "toast": {
+        "savedTitle": "{kind} saved",
+        "removedTitle": "{label} removed",
+        "errorTitle": "Not saved",
+        "errorFallback": "Unknown failure",
+        "unexpected": "Unexpected failure"
+      },
+      "errors": {
+        "numberRequired": "A whole number is required.",
+        "unknownRole": "Choose a role this build offers."
+      },
+      "problems": {
+        "title": "{count} problems before a sync",
+        "one": "1 problem before a sync"
+      },
+      "preview": {
+        "title": "Generated artifacts",
+        "description": "What the next config sync renders from this registry.",
+        "nginxTitle": "Nginx server blocks",
+        "nginxHotApply": "Exposures: re-sync, then reload nginx in the front",
+        "locationTitle": "Nginx location fragment for {node}",
+        "locationHotApply": "Front vhost fragment: re-sync, then reload nginx in the front",
+        "serveTitle": "Tailnet serve config for {node}",
+        "serveHotApply": "New tailnet name: recreate that node",
+        "mountedNote": "Anything mounted is never instant.",
+        "errorTitle": "Preview unavailable",
+        "errorFallback": "The artifacts could not be rendered."
+      }
+    }
+  },
   "dashboard": {
     "welcome": "Welcome back, Admin",
     "description": "Here is what is happening with your contests today.",
@@ -14,10 +140,43 @@
     "contactAdmin": "Contact your administrator to request access.",
     "returnToDashboard": "Return to Dashboard"
   },
+  "participation": {
+    "ip": {
+      "label": "IP Address / Subnet",
+      "placeholder": "e.g., 192.168.1.0/24, 10.0.0.1",
+      "hint": "Comma-separated list of IPs or subnets in CIDR notation"
+    }
+  },
   "contests": {
     "title": "Contests Management",
     "subtitle": "Create and manage programming contests.",
-    "allContests": "All Contests"
+    "allContests": "All Contests",
+    "roster": {
+      "title": "Registration Roster",
+      "description": "A row here decides for this contest; a team with no row falls back to its own flag.",
+      "empty": "No teams are available for this contest",
+      "inheritedOpen": "Inherited — the team's own flag allows it",
+      "inheritedClosed": "Inherited — the team's own flag blocks it",
+      "registerableOpen": "Registerable for this contest",
+      "registerableClosed": "Not registerable for this contest",
+      "toggle": "Registerable",
+      "add": "Add to roster",
+      "remove": "Return to inherited",
+      "readOnly": "Read-only — changing the roster needs team:update",
+      "setPending": "Updating roster...",
+      "setSuccess": "Roster updated",
+      "setFailure": "Roster update failed",
+      "addPending": "Adding team...",
+      "addSuccess": "Team added to roster",
+      "addFailure": "Adding the team failed",
+      "removePending": "Removing team...",
+      "removeSuccess": "Team returned to inherited",
+      "removeFailure": "Removing the team failed"
+    },
+    "questions": {
+      "settledByStatement": "Settled by the statement",
+      "clarificationNeeded": "Clarification needed"
+    }
   },
   "tasks": {
     "title": "Tasks",
@@ -43,11 +202,28 @@
       "download": "Download",
       "delete": "Delete statement",
       "uploadDialogTitle": "Add Statement"
+    },
+    "contestTasks": {
+      "filterPlaceholder": "Filter tasks…",
+      "selectAll": "Select every filtered task",
+      "selectRow": "Select this task",
+      "detachSelected": "Detach {count} selected",
+      "attachSelected": "Attach tasks…",
+      "detachDone": "Detached {count} tasks",
+      "detachPartial": "Detached {count} of {total} selected tasks",
+      "failed": "The change was refused",
+      "attachTitle": "Attach tasks to contest",
+      "attachRun": "Attach {count} tasks",
+      "attachEmpty": "No available tasks",
+      "attachFailed": "The attach was refused",
+      "attachCancel": "Cancel",
+      "createNew": "Create new task"
     }
   },
   "users": {
     "title": "User Management",
     "subtitle": "Manage system users and participants.",
+    "participations": "{count} participations",
     "allUsers": "All Users",
     "bulkAddUsers": "Bulk Add Users",
     "createUser": "Create User",
@@ -58,9 +234,65 @@
     "tableEmptyDescription": "Adjust your search or create a new user to get started.",
     "bulkCreateTitle": "Bulk Add Users (CSV)",
     "bulkEditTitle": "Edit Selected Users",
+    "bulkEdit": {
+      "ipTitle": "IP allowlist",
+      "ipContest": "Contest",
+      "ipApply": "Apply IP allowlist"
+    },
     "bulkCreateTemplate": "Download CSV Template",
     "bulkCreateParse": "Parse & Preview",
-    "bulkOverwriteApply": "Apply Credentials"
+    "bulkOverwriteApply": "Apply Credentials",
+    "profile": {
+      "username": "Username",
+      "name": "Name",
+      "email": "Email",
+      "timezone": "Timezone",
+      "languages": "Languages",
+      "status": "Status",
+      "organization": "Organization",
+      "country": "Country",
+      "participations": "Participations",
+      "teams": "Teams",
+      "savedPassword": "Saved password"
+    },
+    "teamsTab": {
+      "emptyTitle": "No teams found.",
+      "emptyDescription": "This user is not assigned to any team yet.",
+      "noTeam": "No team",
+      "contestLabel": "Contest #{id}"
+    },
+    "history": {
+      "accountAccess": "Account Access",
+      "lastLogin": "Last login: {value}",
+      "contestLabel": "Contest #{id}",
+      "taskLabel": "Task #{id}",
+      "teamLabel": "Team #{id}",
+      "sections": {
+        "contests": {
+          "title": "Contests",
+          "empty": "No contest activity."
+        },
+        "participations": {
+          "title": "Participations",
+          "empty": "No participations."
+        },
+        "teams": {
+          "title": "Teams",
+          "empty": "No teams."
+        },
+        "submissions": {
+          "title": "Submissions",
+          "empty": "No submissions."
+        },
+        "recentActivity": {
+          "title": "Recent Activity",
+          "empty": "No recent activity."
+        }
+      }
+    },
+    "selectAllFiltered": "Select every user the filter matches",
+    "selectedUnavailable": "{count} selected row(s) are not loaded",
+    "editSelectedCount": "Edit Selected ({count})"
   },
   "teams": {
     "title": "Teams",
@@ -73,7 +305,68 @@
     "editTeamTooltip": "Edit team",
     "deleteTeamTooltip": "Delete team",
     "tableEmptyTitle": "No teams found",
-    "tableEmptyDescription": "Teams will appear here once created."
+    "tableEmptyDescription": "Teams will appear here once created.",
+    "overview": {
+      "code": "Team Code",
+      "name": "Team Name",
+      "registerable": "Registerable",
+      "registerableHint": "Offer this team to contestants at registration",
+      "readOnlyHint": "Read-only — you lack team:update",
+      "saveChanges": "Save Changes"
+    },
+    "members": {
+      "emptyTitle": "No members in this team yet.",
+      "emptyDescription": "Add members by assigning this team to a participation in a contest.",
+      "moreCount": "+{count} more",
+      "filterPlaceholder": "Filter members…",
+      "selectAll": "Select every filtered member",
+      "selectRow": "Select this member",
+      "selectionCount": "{count} selected",
+      "selectionClear": "Clear selection"
+    },
+    "contests": {
+      "emptyTitle": "No contests found.",
+      "emptyDescription": "This team is not participating in any contests yet."
+    },
+    "bulkActions": {
+      "button": "Bulk actions",
+      "title": "Bulk actions",
+      "description": "Apply changes to this team and its members.",
+      "registerable": "Registerable",
+      "contest": "Contest",
+      "contestPlaceholder": "Select a contest",
+      "addUsers": "Add users to team",
+      "addUsersHint": "Usernames separated by commas or new lines",
+      "settings": "Participation settings",
+      "hidden": "Hidden",
+      "unrestricted": "Unrestricted",
+      "extraTime": "Extra time (seconds)",
+      "delayTime": "Delay time (seconds)",
+      "ip": "IP restrictions (CIDR, comma separated)",
+      "noChange": "No change",
+      "yes": "Yes",
+      "no": "No",
+      "apply": "Apply",
+      "cancel": "Cancel",
+      "needContest": "Select a contest first.",
+      "needMembers": "Select at least one member for participation settings.",
+      "applied": "Bulk actions applied"
+    },
+    "rotate": {
+      "action": "Rotate accounts…",
+      "title": "Rotate usernames and set team",
+      "description": "Give each selected account a fresh display username and set its team, in one write.",
+      "reason": "Reason",
+      "run": "Rotate {count} accounts",
+      "done": "Rotated {rotated} usernames and set the team on {assigned}.",
+      "failed": "The rotation was refused",
+      "needReason": "A reason is required",
+      "contest": "Contest",
+      "contestPlaceholder": "Choose a contest",
+      "needContest": "Pick the contest to rotate usernames in",
+      "cancel": "Cancel",
+      "teamToggle": "Also set this team on the accounts"
+    }
   },
   "submissions": {
     "title": "Submissions",
@@ -82,11 +375,239 @@
     "readOnlyBadge": "Read-only",
     "tableEmptyTitle": "No submissions found",
     "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
-    "viewSubmission": "View submission"
+    "viewSubmission": "View submission",
+    "lanesDescription": "Drag submissions between lanes or move them with a reason.",
+    "filters": {
+      "search": "Search",
+      "searchPlaceholder": "Submission id or username",
+      "contest": "Contest",
+      "task": "Task",
+      "user": "User",
+      "any": "Any",
+      "apply": "Filter",
+      "clear": "Clear",
+      "more": "More",
+      "searching": "Searching…",
+      "noMatches": "No matches",
+      "loadFailed": "Could not load options.",
+      "pickerHint": "Type a name to filter the list."
+    },
+    "bulk": {
+      "rescore": "Rescore",
+      "reevaluate": "Re-evaluate",
+      "full": "Full re-run",
+      "official": "Mark official",
+      "comment": "Apply comment",
+      "applyToFilter": "Apply to all {count} matching the filter"
+    },
+    "actions": {
+      "rescore": "Rescore",
+      "reevaluate": "Re-evaluate",
+      "fullRerun": "Full Re-run",
+      "downloadFiles": "Download files",
+      "editComment": "Edit comment",
+      "markOfficial": "Mark official",
+      "clearOfficial": "Clear official",
+      "moveLane": "Move lane",
+      "moreActions": "More actions"
+    },
+    "status": {
+      "done": "Done",
+      "compiling": "Compiling",
+      "compilationFailed": "Compilation Failed",
+      "evaluating": "Evaluating",
+      "scoring": "Scoring",
+      "judging": "Judging…",
+      "pending": "Pending"
+    },
+    "toasts": {
+      "commentPending": "Saving comment...",
+      "commentSuccess": "Comment saved",
+      "commentFailure": "Comment update failed",
+      "officialPending": "Saving official flag...",
+      "officialSuccess": "Official flag saved",
+      "officialFailure": "Official flag update failed",
+      "recomputePending": "Recalculating...",
+      "recomputeSuccess": "Submission queued for recalculation",
+      "recomputeFailure": "Recalculation failed",
+      "downloadPending": "Preparing download...",
+      "downloadSuccess": "Download started",
+      "downloadFailure": "Download failed",
+      "batchPending": "Queueing recalculation...",
+      "batchSuccess": "{count} submissions queued for recalculation",
+      "batchFailure": "Batch recalculation failed"
+    },
+    "history": {
+      "label": "History",
+      "empty": "No recorded changes for this submission yet."
+    },
+    "queued": {
+      "title": "Queued for recalculation",
+      "banner": "This submission is queued for recalculation — results appear once the evaluation service picks it up.",
+      "bannerAt": "Re-run queued at {time} — waiting for worker"
+    },
+    "notify": {
+      "scored": "Submission #{id} finished with {score} points.",
+      "compilationFailed": "Submission #{id} finished: compilation failed.",
+      "batchTitle": "Submission recalculations finished",
+      "batchDetail": "{first} (+{count} more)"
+    },
+    "retry": {
+      "title": "Recalculation failed",
+      "description": "The evaluation service did not take the request. Retry to queue it again.",
+      "action": "Retry"
+    },
+    "lockHint": "Read-only — you lack {keys}",
+    "record": {
+      "actions": {
+        "rescore": "Rescore",
+        "reEvaluate": "Re-evaluate",
+        "fullRerun": "Full Re-run",
+        "rerun": "Re-run",
+        "downloadFiles": "Download files",
+        "editComment": "Edit comment",
+        "moveLane": "Move lane"
+      },
+      "official": {
+        "mark": "Mark official",
+        "clear": "Clear official",
+        "revert": "Revert",
+        "on": "Official on",
+        "off": "Official off"
+      },
+      "toolbarLabel": "Submission #{id} actions",
+      "lane": {
+        "description": "A lane move is recorded with its reason and can be moved again later."
+      },
+      "rerunTyped": {
+        "title": "Full re-run submission #{id}?",
+        "description": "Stored results are cleared and the submission is judged from scratch.",
+        "instruction": "Type the submission id {id} to confirm",
+        "mismatch": "The typed id does not match.",
+        "confirm": "Run again"
+      },
+      "comment": {
+        "title": "Edit comment — {record} #{id}",
+        "description": "The comment is stored on the submission and is visible to every reader who may open it.",
+        "label": "Comment",
+        "save": "Save comment",
+        "lastEdited": "Last edited by {name} · {time}",
+        "snippetsLabel": "Canned comments",
+        "snippets": [
+          "Wrong answer on edge cases.",
+          "Time limit exceeded — optimize the solution.",
+          "Compilation error — check the submitted files.",
+          "Please follow the required output format.",
+          "Rejudged after a checker fix.",
+          "Accepted — nice work."
+        ],
+        "applyTitle": "Apply comment",
+        "applyDescription": "The comment is stored on every submission in scope and is visible to every reader who may open it.",
+        "applyConfirm": "Apply comment",
+        "applyEmpty": "A comment is required",
+        "applyPreviewLoading": "Counting matching submissions…",
+        "applyFailed": "Could not apply the comment",
+        "toasts": {
+          "pending": "Saving comment...",
+          "saved": "Comment saved",
+          "failed": "Comment update failed"
+        }
+      },
+      "compare": {
+        "chip": "Compare with #{id}",
+        "title": "Compare sources",
+        "previous": "Previous #{id}",
+        "current": "Current #{id}",
+        "loading": "Loading comparison…",
+        "equal": "No line changes between the two sources.",
+        "summary": "{added} added, {removed} removed",
+        "fetchFailed": "Could not load the source bytes.",
+        "previousEmpty": "The previous submission stored no source file to compare.",
+        "previousHidden": "The previous submission's source is hidden — requires file:read."
+      },
+      "toasts": {
+        "officialPending": "Saving official flag...",
+        "officialSaved": "Official flag saved",
+        "officialFailed": "Official flag update failed",
+        "recomputePending": "Recalculating...",
+        "recomputeQueued": "Submission queued for recalculation",
+        "recomputeFailed": "Recalculation failed",
+        "downloadEmpty": "No stored files for this submission"
+      },
+      "source": {
+        "title": "Source code",
+        "showFull": "Show full code",
+        "collapse": "Collapse",
+        "loading": "Loading source…",
+        "empty": "No stored source file.",
+        "hidden": "Hidden — requires file:read",
+        "noContents": "No stored contents for this file.",
+        "download": "Download",
+        "copy": "Copy",
+        "copied": "Copied to clipboard",
+        "copyFailed": "Could not copy",
+        "wrap": "Wrap lines"
+      },
+      "status": {
+        "judging": "Judging…",
+        "compiling": "Compiling",
+        "compilationFailed": "Compilation Failed",
+        "evaluating": "Evaluating",
+        "scoring": "Scoring",
+        "done": "Done",
+        "official": "★ Official",
+        "points": "{score} pts"
+      },
+      "links": {
+        "allByUser": "All submissions by {name}",
+        "allForTask": "All submissions for task {name}",
+        "allForContest": "All submissions in contest {name}"
+      },
+      "identity": {
+        "time": "Time",
+        "language": "Language"
+      },
+      "outcome": {
+        "compilation": "Compilation",
+        "evaluation": "Evaluation",
+        "open": "Open {title}",
+        "unreadable": "{title} not readable"
+      },
+      "results": {
+        "emptyTitle": "No results yet",
+        "emptyDescription": "Results appear once the submission has been judged.",
+        "dataset": "Dataset #{id}",
+        "pending": "Pending...",
+        "compilationSkipped": "Skipped (Compilation Failed)",
+        "evaluationSkipped": "Pending/Skipped",
+        "stats": {
+          "time": "Time",
+          "memory": "Memory",
+          "public": "Public",
+          "scored": "Scored"
+        }
+      },
+      "logs": {
+        "emptyTitle": "No compilation logs",
+        "emptyDescription": "Compiler output appears once the submission has been compiled.",
+        "title": "Compilation Logs — {record} #{id}"
+      },
+      "recompute": {
+        "datasetLabel": "Dataset",
+        "activeDefault": "Active dataset"
+      },
+      "history": {
+        "actor": "Changed by",
+        "action": "Action",
+        "reason": "Reason",
+        "result": "Result",
+        "timestamp": "Time"
+      }
+    }
   },
   "admins": {
     "title": "Administrators",
-    "subtitle": "Manage admin accounts and permissions.",
+    "addAdmin": "Add Admin",
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
@@ -94,15 +615,275 @@
   },
   "resources": {
     "title": "Resource Control",
-    "subtitle": "Monitor and manage main server resources and distributed worker activity."
+    "subtitle": "Monitor and manage main server resources and distributed worker activity.",
+    "loading": "Loading system metrics...",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "RAM Usage",
+    "hostSource": "(Host)",
+    "containerSource": "(Container)",
+    "workerNodes": "Worker Nodes",
+    "systemMetrics": "System Metrics",
+    "uptime": "Uptime",
+    "loadAvg": "Load Avg",
+    "networkTotal": "Network Total"
+  },
+  "containers": {
+    "upAll": "Up All",
+    "selected": "{count} selected",
+    "clearSelection": "Clear selection",
+    "restartSelection": "Restart selected containers",
+    "stopSelection": "Stop selected containers",
+    "logsSelection": "View logs for selection",
+    "discordBadge": "Discord not configured",
+    "discordWarning": "Discord not configured — notifications will be skipped",
+    "stats": {
+      "total": "Total",
+      "running": "Running",
+      "stopped": "Stopped",
+      "uptime": "Uptime"
+    },
+    "activeContainers": "Active Containers",
+    "emptyTitle": "No Docker containers found on this host.",
+    "restart": "Restart",
+    "remove": "Remove",
+    "logs": "Logs",
+    "bulk": {
+      "selectedDescription": "{count} containers selected",
+      "cancel": "Cancel",
+      "restartTitle": "Confirm Restart",
+      "restartDescription": "This will restart the selected containers and their dependents.",
+      "restartPreviewLabel": "This will restart:",
+      "restartDependents": "Includes dependent services via restart policies",
+      "restartConfirm": "Confirm Restart",
+      "stopTitle": "Confirm Stop",
+      "stopDescription": "This will stop the selected containers. You can start them again from the control center.",
+      "stopConfirm": "Confirm Stop",
+      "logsTitle": "View Logs",
+      "logsDescription": "Open logs for the first selected container. Use individual rows for more containers.",
+      "logsConfirm": "View Logs"
+    }
+  },
+  "deployments": {
+    "refresh": "Refresh",
+    "partialTitle": "Some details could not be loaded",
+    "partialDescription": "Unavailable: {parts}. Everything else on this screen is current."
+  },
+  "ranking": {
+    "board": {
+      "title": "Scoreboard",
+      "hint": "What a visitor sees first on the ranking page, and the logo it is served with.",
+      "hintProtected": "Sign-in required before a visitor sees this board. What they see first once signed in is the identity and logo below.",
+      "previewContestField": "Preview contest",
+      "previewContestSubmit": "Preview",
+      "previewContestHint": "Preview only — selecting a contest does not change the live public scoreboard."
+    },
+    "diagnostics": {
+      "title": "Dropped rows",
+      "hint": "What the ranking service could not apply, counted per cause. A row dropped by a hide you applied is expected; a row nothing explains is not.",
+      "overridesLabel": "Overrides not applied",
+      "subchangesTitle": "Rows the board dropped",
+      "subchangeTotal": "All dropped rows",
+      "hiddenTaskSubchanges": "Removed by a hide",
+      "unknownTaskSubchanges": "Task no drawn contest announces",
+      "orphanSubchanges": "Subchange with no submission",
+      "hidesTitle": "Task hides that drop nothing",
+      "unknownTaskHides": "All task hides that named no task",
+      "withheldTaskHides": "Task the projection withholds",
+      "renamedTaskHides": "Task a live contest no longer holds",
+      "unmatchedTaskHides": "Key nothing in the projection explains",
+      "faultAlert": "{count} dropped row(s) for a reason no hide explains — the task is in no contest this board draws, or the projection is behind. Check the shown contest, then the push.",
+      "hideAlert": "{count} task hide(s) no longer match a task — a renamed task silently stops being hidden.",
+      "unreachable": "Applied-changes report unavailable ({reason}). The board below may omit rows a dropped override would explain.",
+      "notReported": "This ranking service does not report this breakdown."
+    },
+    "appearance": {
+      "title": "Scoreboard appearance",
+      "identitySection": "Identity",
+      "displaySection": "Display",
+      "advancedSection": "Advanced (JSON)",
+      "displayNameField": "Display name",
+      "displayNameHint": "Shown below the logo on the public scoreboard. Leave blank to use the contest's name instead.",
+      "titleField": "Title override",
+      "titleHint": "Replaces the contest's own name on the header. Leave blank to use the contest's name.",
+      "subtitleField": "Subtitle override",
+      "subtitleHint": "Replaces the contest's dates on the header. Leave blank to use the contest's dates.",
+      "organisationField": "Organisation",
+      "accessField": "Access",
+      "accessPublic": "Public",
+      "accessProtected": "Sign-in required",
+      "showIdColumn": "Show the id column",
+      "anonymousField": "Start the board anonymous",
+      "footerField": "Footer text",
+      "creditsField": "Credits text",
+      "themeField": "Theme (JSON)",
+      "themeHint": "Optional JSON the board reads for colours and styling.",
+      "scoreFormatField": "Score format (JSON)",
+      "scoreFormatHint": "Optional JSON describing how scores are formatted.",
+      "perspectivesField": "Perspective tabs (JSON)",
+      "perspectivesHint": "Which tabs the board shows and how the bar copes when they do not fit. Tabs: board, teams, tasks, scores, progress, time, group, metrics, analysis. Overflow: wrap, scroll or menu.",
+      "save": "Save appearance",
+      "saveSaving": "Saving...",
+      "saveDone": "Saved",
+      "savePending": "Saving the appearance...",
+      "saveSuccess": "Appearance saved",
+      "saveFailed": "The appearance could not be saved",
+      "readOnly": "Showing the scoreboard settings. Changing them needs the ranking:appearance permission."
+    },
+    "shown": {
+      "title": "Shown contests",
+      "hint": "The contests the board draws. With none here the board shows nothing — it never falls back to the active contest.",
+      "contestField": "Contest",
+      "contestHint": "The contest the board draws, with every task and score inside it.",
+      "contestPlaceholder": "Choose a contest",
+      "contestNone": "No contest shown",
+      "reasonField": "Reason",
+      "show": "Show",
+      "showFailed": "The contest could not be shown",
+      "empty": "No contest is shown",
+      "emptyHint": "The board draws nothing until a contest is added here.",
+      "endTitle": "Take this contest off the board",
+      "end": "Take off the board",
+      "ended": "The contest is off the board",
+      "endFailed": "The contest could not be taken off the board",
+      "outsidePanelBadge": "written outside the panel"
+    },
+    "overrides": {
+      "title": "Manual ranking overrides",
+      "hint": "A row here changes what the scoreboard shows without touching the contest data. Ending one keeps its history.",
+      "contestId": "Contest id",
+      "chooseContest": "Select a contest",
+      "target": "Target",
+      "targetUser": "user",
+      "targetTeam": "team",
+      "targetRanking": "ranking",
+      "targetTask": "task",
+      "targetContest": "contest",
+      "targetKey": "Target key",
+      "chooseTargetKey": "Select a target",
+      "action": "Action",
+      "actionHide": "hide the row",
+      "actionHideTask": "hide the task column",
+      "actionHideContest": "hide the contest and its tasks",
+      "actionGuest": "add a guest row",
+      "actionPin": "pin a rank",
+      "actionRename": "rename the display name",
+      "actionScore": "override the shown score",
+      "actionFreeze": "freeze the board at a cutoff",
+      "value": "Value (rank, name or score)",
+      "freezeValue": "Freeze cutoff (Unix seconds)",
+      "reason": "Reason",
+      "add": "Add override",
+      "end": "End",
+      "targetSearch": "Search or pick a target",
+      "searching": "Searching…",
+      "searchFailed": "The search failed. Pick from the list instead.",
+      "noMatches": "No matching target",
+      "impactTitle": "Impact on the board",
+      "impactColumns": "Columns",
+      "impactUsers": "Users",
+      "impactTeams": "Teams",
+      "impactEmpty": "Nothing on the board changes yet.",
+      "impactLoading": "Reading the projection…",
+      "impactFailed": "The impact could not be read. The projection may be unavailable.",
+      "impactUnknown": "The projection holds no row for this target, so the row changes nothing.",
+      "impactScopeMismatch": "This key names a contest other than the one this shard serves, so the ranker never applies it.",
+      "impactBoard": "The whole board this shard draws.",
+      "orphanBadge": "orphan",
+      "orphanHint": "The board does not show this contest, so the ranker never applies the row.",
+      "orphanSummary": "orphan rows",
+      "listTitle": "Active overrides",
+      "listHint": "Filter the rows, then select the ones to correct.",
+      "listEmpty": "No overrides are active for this shard.",
+      "filtersKind": "Kind",
+      "filtersAction": "Action",
+      "filtersAll": "All",
+      "filtersSearch": "Search key or reason",
+      "filtersOrphanOnly": "Orphan rows only",
+      "columnAction": "Action",
+      "columnContest": "Contest",
+      "columnReason": "Reason",
+      "columnCreated": "Created",
+      "selectAll": "Select all overrides",
+      "selectRow": "Select override",
+      "endSelected": "End selected",
+      "endedSelected": "Ended {count} overrides",
+      "endFailed": "The overrides could not be ended.",
+      "shardTabs": "Ranking shards",
+      "shardLabel": "Shard",
+      "noShards": "No shard serves a contest yet.",
+      "endSelectedCount": "End {count} selected",
+      "endedPartial": "Ended {ended} of {total} selected overrides",
+      "bulkAddToggle": "File for several targets",
+      "bulkAddNeedTargets": "Pick at least one target",
+      "addMany": "Add {count} overrides",
+      "addedMany": "Filed {count} overrides",
+      "bulkAddFailed": "The batch was refused",
+      "selectionCount": "{count} selected",
+      "selectionClear": "Clear selection",
+      "bulkAddNeedReason": "A reason is required",
+      "batchRemove": "Remove",
+      "filtersAuthor": "Author",
+      "filtersAuthorPanel": "Filed from the panel",
+      "filtersAuthorOutside": "Written outside the panel",
+      "outsidePanelBadge": "outside the panel"
+    },
+    "hides": {
+      "title": "Hidden from the board",
+      "hint": "Every row this shard's board drops, and the write that hides it — an override row the panel filed, or a participation the contest data marks hidden.",
+      "empty": "Nothing is hidden from this shard's board.",
+      "columnTarget": "Target",
+      "columnSource": "Hidden by",
+      "columnReason": "Reason",
+      "sourceOverride": "override row",
+      "sourceParticipation": "participation flag",
+      "unknownTarget": "names nothing the board has",
+      "wholeBoard": "the whole board"
+    },
+    "credits": {
+      "title": "Credit list",
+      "field": "Full credit list (JSON)",
+      "hint": "Leave empty to serve the vendored credits.json. The licence source line is added by the service and cannot be removed here.",
+      "save": "Save credit list"
+    },
+    "users": {
+      "title": "Ranking users",
+      "hint": "Every participation in the contest, including the rows the public board hides. Open a row for its scores and overrides.",
+      "name": "User",
+      "team": "Team",
+      "total": "Total",
+      "rank": "Rank",
+      "hidden": "Hidden",
+      "hiddenYes": "hidden",
+      "hiddenNo": "visible",
+      "empty": "No ranking users yet.",
+      "identity": "Identity",
+      "username": "Username",
+      "taskScores": "Task scores",
+      "task": "Task",
+      "score": "Score",
+      "scoresEmpty": "No scored submissions yet.",
+      "activeOverrides": "Active overrides",
+      "overridesEmpty": "No overrides are active on this user."
+    }
   },
   "settings": {
     "title": "System Settings",
-    "subtitle": "Configure environment files and service restarts."
+    "subtitle": "Configure environment files and service restarts.",
+    "deploymentMode": {
+      "img": "Restart follows the image mode declared in config.toml: it pulls the latest images, then recreates the containers without rebuilding.",
+      "src": "Restart follows the source mode declared in config.toml: it rebuilds the images from source, then recreates the containers. This is much slower and replaces the images that are running.",
+      "unresolved": "config.toml [admin] does not declare a readable DEPLOYMENT_TYPE, so restart pulls images and does not rebuild. Set DEPLOYMENT_TYPE to \"img\" or \"src\" there to make this explicit."
+    },
+    "serviceControl": {
+      "restarting": "Restarting…",
+      "restartReasonHint": "State the reason — it is recorded in the audit log with this restart.",
+      "contestLiveRestart": "Contest #{contest} is bound to this stack. Restarting the contest stack takes that board down until it comes back up.",
+      "contestLiveRestartUnknown": "The contest binding could not be read. If a contest is live, restarting the contest stack takes that board down.",
+      "contestManagedElsewhere": "Contest instances are managed in Infrastructure → Deployments."
+    }
   },
   "groups": {
     "title": "Groups Management",
-    "subtitle": "Create and manage permission groups.",
     "createGroup": "Create Group",
     "editGroup": "Edit Group",
     "name": "Name",
@@ -116,7 +897,12 @@
     "noGroups": "No groups found",
     "noGroupsDescription": "Create a group to get started.",
     "deleteTooltip": "Delete group",
-    "editTooltip": "Edit group"
+    "editTooltip": "Edit group",
+    "loadFailed": "Groups could not be loaded."
+  },
+  "permissions": {
+    "title": "Permissions",
+    "subtitle": "Manage administrator accounts and the groups that grant their access."
   },
   "audit": {
     "title": "Audit Log",
@@ -126,7 +912,7 @@
       "actor": "Actor",
       "verb": "Verb",
       "entity": "Entity",
-      "entityId": "Entity ID",
+      "entityName": "Name / Title",
       "result": "Result",
       "reason": "Reason"
     },
@@ -134,6 +920,12 @@
       "entity": "Entity",
       "verb": "Verb",
       "actorId": "Actor ID",
+      "ip": "IP Address",
+      "pageViews": "Show page views",
+      "result": "Result",
+      "allResults": "All results",
+      "search": "Search",
+      "searchPlaceholder": "verb, reason, entity…",
       "fromDate": "From",
       "toDate": "To",
       "apply": "Apply",
@@ -141,8 +933,12 @@
       "allEntities": "All Entities"
     },
     "noEntries": "No audit entries found.",
+    "exportCsv": "Export CSV",
+    "autoRefresh": "Auto-refresh",
     "pageInfo": "{total} entries total",
     "expandedDetails": "Details",
+    "detailLoadFailed": "Could not load details",
+    "loadFailed": "Audit log could not be loaded.",
     "beforeValues": "Before",
     "afterValues": "After",
     "ip": "IP Address",
@@ -151,8 +947,797 @@
     "prevHash": "Previous Hash"
   },
   "docs": {
-    "title": "CMS Documentation",
     "subtitle": "Comprehensive guide to the Contest Management System.",
-    "officialDocs": "CMS Official Docs"
+    "officialDocs": "CMS Official Docs",
+    "viewDocumentation": "View Documentation"
+  },
+  "about": {
+    "project": "Project",
+    "source": "Source",
+    "upstream": "Upstream",
+    "license": "Licence",
+    "attribution": "Attribution",
+    "firstParty": "First-party files",
+    "transitiveDependencies": "Transitive dependencies",
+    "contributors": {
+      "title": "Contributors",
+      "name": "Name",
+      "contribution": "Contribution",
+      "maintainer": "Maintainer of this project",
+      "upstream": "Upstream project this forks"
+    },
+    "softwareCount": "Components ({count})",
+    "columns": {
+      "name": "Software",
+      "version": "Version",
+      "holder": "Copyright holder",
+      "license": "Licence",
+      "paths": "Used by"
+    }
+  },
+  "confirmations": {
+    "cancel": "Cancel",
+    "captions": {
+      "destructive": "Irreversible",
+      "recoverable": "Reversible",
+      "operational": "Service impact"
+    },
+    "nouns": {
+      "user": "user",
+      "contest": "contest",
+      "admin": "admin",
+      "announcement": "announcement",
+      "team": "team",
+      "task": "task",
+      "dataset": "dataset",
+      "testcase": "testcase",
+      "statement": "statement",
+      "managerFile": "manager file",
+      "attachment": "attachment"
+    },
+    "destructive": {
+      "title": "Delete this {noun}?",
+      "description": "This permanently deletes the {noun}. This cannot be undone.",
+      "confirmLabel": "Delete {noun}"
+    },
+    "removeParticipant": {
+      "title": "Remove this participant?",
+      "description": "This permanently removes the participant's entry from this contest. This cannot be undone.",
+      "confirmLabel": "Remove participant"
+    },
+    "removeTaskFromContest": {
+      "title": "Remove this task from the contest?",
+      "description": "The task is unassigned and is not deleted; it can be added to the contest again.",
+      "confirmLabel": "Remove task"
+    },
+    "markTestUser": {
+      "title": "Mark this user as a test user?",
+      "description": "The participant becomes hidden and unrestricted. Both flags can be changed back in the participation settings.",
+      "confirmLabel": "Mark as test user"
+    },
+    "recalculate": {
+      "title": "Recalculate this submission ({type})?",
+      "description": "Current results are cleared and recomputed from the submission, which is kept.",
+      "descriptionDataset": "Current results are cleared and the submission is recomputed on {dataset}.",
+      "confirmLabel": "Recalculate",
+      "types": {
+        "score": "score",
+        "evaluation": "evaluation",
+        "full": "full"
+      }
+    },
+    "fullServerUpdate": {
+      "title": "Run a full server update?",
+      "description": "This pulls the latest images, restarts all services and updates the database schema. The server is unavailable for a few minutes.",
+      "confirmLabel": "Run update"
+    },
+    "restartStack": {
+      "title": "Restart {label}?",
+      "description": "The affected services restart and are unavailable until they come back up.",
+      "confirmLabel": "Restart",
+      "labels": {
+        "core": "Core Stack",
+        "admin": "Admin Stack",
+        "worker": "Worker Stack",
+        "all": "All Services"
+      }
+    },
+    "pullImages": {
+      "title": "Pull the latest images?",
+      "description": "Images are downloaded from the registry without restarting the running services. This may take several minutes.",
+      "confirmLabel": "Pull images"
+    },
+    "rebuildStack": {
+      "title": "Rebuild {label} images from source?",
+      "description": "Images are rebuilt from the current source without restarting the running services. This may take 5-10 minutes.",
+      "confirmLabel": "Rebuild images",
+      "labels": {
+        "core": "Core",
+        "admin": "Admin",
+        "worker": "Worker",
+        "all": "All"
+      }
+    },
+    "manualBackup": {
+      "title": "Trigger a manual backup now?",
+      "description": "All submissions are backed up in the background; the server keeps running.",
+      "confirmLabel": "Trigger backup"
+    },
+    "toggleOfficial": {
+      "title": "Change the official flag?",
+      "description": "Only the official flag changes; the submission itself is untouched and the flag can be changed back.",
+      "confirmLabel": "Change official flag"
+    },
+    "discardUnsavedChanges": {
+      "title": "Discard unsaved changes?",
+      "description": "The edits on this form have not been saved yet and will be lost.",
+      "confirmLabel": "Discard changes"
+    },
+    "deleteArchive": {
+      "title": "Delete this backup archive?",
+      "description": "Permanently removes {name} from backup storage. This cannot be undone.",
+      "confirmLabel": "Delete archive"
+    }
+  },
+  "sidePanel": {
+    "close": "Close"
+  },
+  "toasts": {
+    "deploy": {
+      "progressMessage": "Deploying contest #{contestId} — {percent}% pulling",
+      "progressStatusMessage": "Deploying contest #{contestId} — {status}",
+      "progressDescription": "Progress {percent}% pulling",
+      "waitingDescription": "Waiting for build output...",
+      "startedTitle": "Deploying contest #{contestId}",
+      "startingDescription": "Starting deployment...",
+      "alreadyRunningTitle": "Deploy already running",
+      "alreadyRunningDescription": "Another deployment is in progress.",
+      "startFailedTitle": "Deploy failed to start",
+      "startFailedDescription": "Could not initiate deployment.",
+      "watchingStoppedTitle": "Deploy continues in the background",
+      "watchingStoppedDescription": "The panel stopped watching this deploy. It keeps running, and the contest is updated when it finishes.",
+      "completedTitle": "Contest deployed",
+      "completedDescription": "Contest #{contestId} is now active.",
+      "failedTitle": "Deploy failed",
+      "failedDescription": "Deployment did not complete.",
+      "notFoundTitle": "Deploy not found",
+      "notFoundDescription": "Operation unknown."
+    },
+    "maintenance": {
+      "saveFailed": "Failed to save: {error}",
+      "notificationSaveFailed": "Notification settings not saved: {error}",
+      "saved": "Maintenance settings saved successfully!",
+      "backupTriggered": "Backup triggered in background. Check Discord for status.",
+      "failed": "Failed: {error}",
+      "notificationsSaved": "Notification settings saved to config.toml and .env.",
+      "notificationsSavedMonitorRecreated": "Notification settings saved and the monitor was recreated.",
+      "monitorRestartFailed": "Settings saved, but the monitor restart failed: {error}",
+      "testAlertDelivered": "Test alert delivered (HTTP {status}).",
+      "testAlertFailedFallback": "The test alert failed.",
+      "testAlertFailed": "Test alert failed: {message}"
+    },
+    "serviceControl": {
+      "actionFailed": "Error: {error}",
+      "updateFailed": "Failed to trigger update",
+      "restartFailed": "Failed to restart",
+      "pullFailed": "Failed to pull images",
+      "rebuildFailed": "Failed to rebuild"
+    },
+    "envConfig": {
+      "saveFailed": "Failed to save {filename}: {error}",
+      "restarted": "Saved and restarted: {services}",
+      "restartFailed": "Saved, but failed to restart: {error}",
+      "saved": "Saved {filename} successfully!",
+      "unexpectedError": "An error occurred while saving."
+    },
+    "monitor": {
+      "errorTitle": "Error",
+      "urlRequiredDescription": "URL is required",
+      "addedTitle": "Added",
+      "addedDescription": "Monitor target added",
+      "failureDescription": "Failed",
+      "removedTitle": "Removed",
+      "removedDescription": "Target removed",
+      "testOkTitle": "OK",
+      "testMismatchTitle": "Mismatch",
+      "testFailedTitle": "Test Failed",
+      "connectionErrorDescription": "Connection error",
+      "resultDescription": "HTTP {status} (expected {expectedStatus}) — {latency}ms"
+    },
+    "discord": {
+      "testAlertTitle": "CMS Alert Test",
+      "testAlertDescription": "Test alert sent from the admin panel. Delivery is working — monitor alerts (CPU, memory, disk and container events) will arrive here.",
+      "configTomlMissing": "Could not update {configToml} — run './cms config sync' once so the value has a source of truth, then retry.",
+      "envWriteFailed": "{configToml} was updated, but writing {envFile} failed: {error}",
+      "noWebhookUrl": "No webhook URL to test — enter one and save it, or set DISCORD_WEBHOOK_URL in config.toml [infra].",
+      "deliveryFailed": "Delivery failed"
+    },
+    "containers": {
+      "errorTitle": "Error",
+      "restartFailedFallback": "Failed to restart container",
+      "stopFailedFallback": "Failed to stop container",
+      "restartTriggered": "Restart triggered for {count} containers",
+      "stopTriggered": "Stop triggered for {count} containers",
+      "controlSucceeded": "Container {action} completed successfully",
+      "composeSucceeded": "Compose {action} completed",
+      "autoRestartEnabled": "Auto-restart enabled",
+      "autoRestartDisabled": "Auto-restart disabled",
+      "restartCountReset": "Restart count reset",
+      "discordEnabled": "Discord notifications enabled",
+      "discordDisabled": "Discord notifications disabled",
+      "discordNotConfiguredTitle": "Discord not configured",
+      "discordNotConfiguredDescription": "Webhook is empty — notifications will be skipped until configured in settings."
+    },
+    "ranking": {
+      "logoUpdatedTitle": "Logo updated",
+      "logoUpdatedDescription": "Ranking logo hot reloaded",
+      "uploadFailedTitle": "Upload failed",
+      "uploadFailedFallback": "Failed to upload logo",
+      "snapshotFailed": "Failed to fetch ranking snapshot",
+      "sessionFailed": "Failed to load ranking session",
+      "connectFailed": "Failed to connect ranking",
+      "disconnectFailed": "Failed to disconnect ranking"
+    },
+    "deploySettings": {
+      "saveFailedTitle": "Save Failed",
+      "saveFailedFallback": "Could not update config.toml",
+      "savedTitle": "Settings Saved",
+      "savedDescription": "Contest settings updated.",
+      "unexpectedErrorTitle": "Unexpected Error"
+    }
+  },
+  "live": {
+    "connecting": "Connecting…",
+    "connected": "Live",
+    "reconnecting": "Reconnecting…",
+    "paused": "Paused",
+    "rowBehind": "Read {readAt}; the newest read this page has is {surfaceReadAt}.",
+    "rowUnconfirmed": "Read {readAt}, and the live stream is reconnecting, so the panel cannot confirm it."
+  },
+  "systemAlerts": {
+    "title": "System alerts",
+    "markAllRead": "Mark all read",
+    "clear": "Clear",
+    "empty": "No alerts yet.",
+    "questionTitle": "New Question Received!",
+    "questionDetail": "From {username}: {subject}",
+    "questionUnnamedAsker": "User",
+    "audit": {
+      "criticalTitle": "Critical action: {verb}",
+      "criticalDetail": "{actor} ran {verb} on {target}",
+      "failedTitle": "Failed sensitive action: {verb}",
+      "failedDetail": "{actor} failed {verb} on {target}"
+    }
+  },
+  "states": {
+    "retry": {
+      "label": "Retry",
+      "description": "The data could not be loaded. Retry the request."
+    },
+    "loading": {
+      "deployments": "Loading contest deployment...",
+      "people": "Loading people...",
+      "evaluation": "Loading evaluation...",
+      "userProfile": "Loading user profile...",
+      "userTeams": "Loading user teams...",
+      "userHistory": "Loading user history...",
+      "teamOverview": "Loading team overview...",
+      "teamMembers": "Loading team members...",
+      "teamContests": "Loading team contests...",
+      "submissionSummary": "Loading submission summary...",
+      "submissionResults": "Loading submission results...",
+      "submissionLogs": "Loading submission logs...",
+      "submissionEvaluation": "Loading submission evaluation...",
+      "submissionHistory": "Loading submission history..."
+    },
+    "error": {
+      "people": "People could not be loaded",
+      "evaluation": "Evaluation could not be loaded",
+      "userRecord": "This user could not be loaded",
+      "teamRecord": "This team could not be loaded",
+      "submissionRecord": "This submission could not be loaded",
+      "generic": "This page could not be loaded"
+    },
+    "selection": {
+      "count": "{count} selected",
+      "clear": "Clear selection"
+    }
+  },
+  "rowActions": {
+    "admins": "Administrator actions",
+    "contests": "Contest actions",
+    "containers": "Container actions",
+    "groups": "Group actions",
+    "questions": "Question actions",
+    "tasks": "Task actions",
+    "users": "User actions"
+  },
+  "security": {
+    "blocks": {
+      "captchaTitle": "CAPTCHA status",
+      "captchaEnabled": "Enabled",
+      "captchaThreshold": "Challenge threshold",
+      "captchaBanThreshold": "Ban threshold",
+      "captchaCounterStore": "Counter store",
+      "captchaProvider": "Provider",
+      "captchaHealth": "Health",
+      "enabledOn": "on",
+      "enabledOff": "off"
+    },
+    "overview": {
+      "cards": {
+        "waf": "WAF",
+        "wafAlerts": "WAF alerts parsed",
+        "banned": "Banned addresses",
+        "lockouts": "Open lockouts",
+        "certsExpiring": "Certificates expiring soon",
+        "hostAgent": "Host agent"
+      },
+      "values": {
+        "notRunning": "not running",
+        "reporting": "reporting",
+        "notReporting": "not reporting"
+      }
+    },
+    "patching": {
+      "title": "Patching",
+      "subtitle": "Unresolved findings from the security feed, grouped by the producer that reported them.",
+      "allClear": "No unresolved findings. Every producer's last push was clean.",
+      "sources": {
+        "diun": "Container images",
+        "rootfs": "Host OS packages",
+        "osv": "Project dependencies",
+        "dast": "Running web app"
+      },
+      "columns": {
+        "severity": "Severity",
+        "reachability": "Reachability",
+        "subject": "Subject",
+        "installed": "Installed",
+        "available": "Available",
+        "host": "Host",
+        "firstSeen": "First seen",
+        "lastSeen": "Last seen",
+        "waiver": "Waiver",
+        "source": "Source",
+        "match": "Covers",
+        "reason": "Reason",
+        "owner": "Signed by",
+        "reviewBy": "Review by"
+      },
+      "waiver": {
+        "none": "none",
+        "active": "active until {date}",
+        "expired": "expired {date}"
+      },
+      "cards": {
+        "staleImages": "Stale images",
+        "unresolvedCves": "Unresolved CVEs",
+        "expiredWaivers": "Expired waivers",
+        "hostOsUpdates": "Host OS updates available"
+      },
+      "waiversTitle": "Waivers",
+      "waiversEmpty": "No waiver has been recorded.",
+      "waiverEnded": "ended {date}",
+      "waive": "Waive",
+      "endWaiver": "End waiver",
+      "createTitle": "Waive a finding",
+      "createDescription": "A waiver keeps the finding visible and sets the date its decision must be reviewed.",
+      "endTitle": "End a waiver",
+      "endDescription": "Ending a waiver is a decision, not a deletion: the row and its reason stay readable.",
+      "matchLabel": "Finding key or CVE id",
+      "reasonLabel": "Reason",
+      "reviewByLabel": "Review by",
+      "submit": "Record waiver",
+      "cancel": "Cancel",
+      "failed": "The waiver could not be saved",
+      "saved": "Waiver recorded",
+      "ended": "Waiver ended",
+      "expiredNotice": "{count} waiver(s) are past their review date: CI fails until each one is ended or renewed.",
+      "filters": {
+        "source": "Source",
+        "severity": "Severity",
+        "reachability": "Reachability",
+        "allReachability": "All reachability",
+        "sort": "Sort by",
+        "direction": "Order",
+        "allSources": "All sources",
+        "allSeverities": "All severities",
+        "sorts": {
+          "lastSeen": "Last seen",
+          "firstSeen": "First seen",
+          "subject": "Subject",
+          "host": "Host",
+          "source": "Producer"
+        },
+        "ascending": "Ascending",
+        "descending": "Descending",
+        "match": "{count} findings match the filter",
+        "noMatch": "No finding matches this filter. The feed may still hold unresolved rows under other filters.",
+        "flip": "Waiver fit",
+        "flipAll": "Any finding",
+        "flipWaived": "Waived but reachable now",
+        "flipNotice": "{count} findings are reachable now under a waiver written when they were not.",
+        "flipLink": "Show them"
+      },
+      "pager": {
+        "row": "findings",
+        "range": "Showing {from}–{to} of {total}"
+      },
+      "reachability": {
+        "reachable": "reachable",
+        "unreachable": "not running",
+        "unknown": "unknown"
+      },
+      "bulkWaive": {
+        "button": "Waive unreachable findings",
+        "title": "Waive every finding this host cannot reach",
+        "description": "One waiver per CVE, for findings stored as not running. Reachable and unknown findings are refused and listed — nothing is hidden.",
+        "reviewByLabel": "Review by",
+        "preview": "Preview",
+        "previewHint": "Preview first: nothing is written until you confirm the plan.",
+        "confirm": "Waive {count} CVEs",
+        "candidates": "Findings examined",
+        "planned": "Waivers to create",
+        "findingsWaived": "Findings covered",
+        "refusedReachable": "Refused — reachable",
+        "refusedUnknown": "Refused — unknown",
+        "alreadyWaived": "Already waived",
+        "refusalsTitle": "Refused findings",
+        "nothing": "No finding is left to waive.",
+        "applied": "{waived} waivers recorded; {refused} findings refused.",
+        "failed": "The bulk waiver could not be recorded.",
+        "previewFailed": "The plan could not be read.",
+        "reviewRequired": "Choose the review date first."
+      }
+    },
+    "signal": {
+      "title": "Security digest",
+      "tone": {
+        "act": "Needs attention",
+        "unevaluable": "Partly unreadable",
+        "watch": "Watching",
+        "clear": "All clear"
+      },
+      "counts": {
+        "unwaivedCritical": "Unwaived critical",
+        "unwaivedHigh": "Unwaived high",
+        "expiredWaivers": "Expired waivers",
+        "expiringWaivers": "Waivers due in {days}d",
+        "agedFindings": "Older than {days}d"
+      },
+      "worst": "Worst finding",
+      "oldest": "Oldest unowned",
+      "ageDays": "{days}d old",
+      "channel": {
+        "backup": "Backup",
+        "offsite": "Offsite copy"
+      },
+      "state": {
+        "current": "current",
+        "stale": "stale",
+        "unknown": "cannot evaluate"
+      },
+      "ageHours": "{hours}h ago",
+      "detail": "Open patching",
+      "clear": "Nothing needs a decision: no expired waiver, no unwaived critical, and both copies of the data are current.",
+      "unreadable": "A backup reading could not be taken, so this card does not claim the backups are healthy."
+    }
+  },
+  "navigation": {
+    "groups": {
+      "direct": "Direct",
+      "people": "People",
+      "evaluation": "Evaluation",
+      "administration": "Administration",
+      "security": "Security",
+      "infrastructure": "Infrastructure",
+      "ranking": "Ranking",
+      "system": "System"
+    },
+    "home": {
+      "label": "Dashboard"
+    },
+    "security": {
+      "overview": {
+        "label": "Security overview",
+        "description": "Posture of the WAF, blocked addresses, lockouts and certificates."
+      },
+      "waf": {
+        "label": "WAF",
+        "description": "ModSecurity engine mode, paranoia level and anomaly thresholds."
+      },
+      "blocks": {
+        "label": "Blocks",
+        "description": "Banned addresses and locked-out admin accounts."
+      },
+      "tls": {
+        "label": "TLS",
+        "description": "Certificate lineages and ingress container state."
+      },
+      "patching": {
+        "label": "Patching",
+        "description": "Unresolved image, OS-package and dependency findings from the security feed."
+      }
+    },
+    "contests": {
+      "list": {
+        "label": "Contests"
+      },
+      "record": {
+        "label": "Contest"
+      },
+      "tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "tasks": {
+          "label": "Tasks"
+        },
+        "participants": {
+          "label": "Participants"
+        },
+        "communications": {
+          "label": "Communications"
+        },
+        "ranking": {
+          "label": "Ranking"
+        },
+        "settings": {
+          "label": "Settings"
+        },
+        "countdown": {
+          "label": "Countdown"
+        }
+      }
+    },
+    "tasks": {
+      "list": {
+        "label": "Tasks"
+      },
+      "record": {
+        "label": "Task"
+      },
+      "tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "datasets": {
+          "label": "Datasets"
+        },
+        "files": {
+          "label": "Files"
+        },
+        "settings": {
+          "label": "Settings"
+        }
+      }
+    },
+    "people": {
+      "users": {
+        "label": "Users"
+      },
+      "user-record": {
+        "label": "User"
+      },
+      "user-tabs": {
+        "profile": {
+          "label": "Profile"
+        },
+        "teams": {
+          "label": "Teams"
+        },
+        "history": {
+          "label": "History"
+        }
+      },
+      "teams": {
+        "label": "Teams"
+      },
+      "team-record": {
+        "label": "Team"
+      },
+      "team-tabs": {
+        "overview": {
+          "label": "Overview"
+        },
+        "members": {
+          "label": "Members"
+        },
+        "contests": {
+          "label": "Contests"
+        }
+      }
+    },
+    "evaluation": {
+      "submissions": {
+        "label": "Submissions"
+      },
+      "submission-record": {
+        "label": "Submission"
+      },
+      "submission-tabs": {
+        "summary": {
+          "label": "Summary"
+        },
+        "results": {
+          "label": "Results"
+        },
+        "logs": {
+          "label": "Logs"
+        },
+        "evaluation": {
+          "label": "Evaluation"
+        },
+        "history": {
+          "label": "History"
+        }
+      },
+      "lanes": {
+        "label": "Evaluation Lanes"
+      }
+    },
+    "administration": {
+      "admins": {
+        "label": "Admins"
+      },
+      "groups": {
+        "label": "Groups",
+        "description": "Assign permissions to each group and review the access it grants."
+      },
+      "audit": {
+        "label": "Audit"
+      }
+    },
+    "infrastructure": {
+      "deployments": {
+        "label": "Deployments",
+        "description": "Select, activate, and manage the currently deployed contest stack."
+      },
+      "containers": {
+        "label": "Containers",
+        "description": "Manage and monitor Docker services in real time."
+      },
+      "resources": {
+        "label": "Resources",
+        "description": "Monitor server resources, workers, services, and network traffic."
+      },
+      "services": {
+        "label": "Services & wiring",
+        "description": "Declare the services this deployment runs and wire them to each contest."
+      }
+    },
+    "ranking": {
+      "board": {
+        "label": "Board",
+        "description": "Review what the public scoreboard opens with and set the logo it carries."
+      },
+      "users": {
+        "label": "Overrides",
+        "description": "List the manual overrides this shard applies, with the board impact and any orphan scopes."
+      },
+      "settings": {
+        "label": "Settings",
+        "description": "Apply manual ranking overrides without touching the contest data."
+      },
+      "appearance": {
+        "label": "Appearance",
+        "description": "Set the scoreboard title, subtitle, access mode and footer text."
+      },
+      "credits": {
+        "label": "Credits",
+        "description": "Edit the credit list the scoreboard attributes its licences to."
+      }
+    },
+    "system": {
+      "appearance": {
+        "label": "Appearance",
+        "description": "Configure branding, service previews, and display density."
+      },
+      "maintenance": {
+        "label": "Maintenance",
+        "description": "Configure automated backups and system notifications."
+      },
+      "backup-restore": {
+        "label": "Backup & Restore",
+        "description": "Transfer database tables to and from files and backup locations."
+      },
+      "settings": {
+        "label": "Settings",
+        "description": "Configure environment files and service restarts."
+      },
+      "docs": {
+        "label": "Docs",
+        "description": "Read CMS administration and contest-system documentation."
+      },
+      "about": {
+        "label": "About",
+        "description": "Review the licence, attribution, and third-party software this panel ships."
+      },
+      "search": {
+        "label": "Search"
+      }
+    },
+    "auth": {
+      "signout": {
+        "label": "Sign out"
+      }
+    },
+    "states": {
+      "loading": "Loading",
+      "error": "could not be loaded",
+      "notFound": "Not found",
+      "retry": "Try again"
+    }
+  },
+  "limits": {
+    "unlimited": "Unlimited",
+    "toggle": "Toggle no limit",
+    "apply": {
+      "openButton": "Apply to…",
+      "editButton": "Edit limits",
+      "title": "Apply limits",
+      "contests": "Contests",
+      "tasks": "Tasks",
+      "searchPlaceholder": "Search",
+      "searchContests": "Search contests",
+      "searchTasks": "Search tasks",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "empty": "No targets available",
+      "noMatches": "No matches",
+      "selectedCount": "{count} selected",
+      "applyTo": "Apply to {count} selected",
+      "cancel": "Cancel",
+      "needTarget": "Choose at least one target.",
+      "needField": "Set or clear at least one limit.",
+      "failed": "Applied to {count}; these failed: {ids}",
+      "failure": "The limits could not be applied."
+    },
+    "fields": {
+      "max_submission_number": "Max Submissions",
+      "max_user_test_number": "Max User Tests",
+      "token_max_number": "Max Total Tokens",
+      "token_gen_max": "Max Gen Count",
+      "min_submission_interval": "Min Submission Interval",
+      "min_user_test_interval": "Min User Test Interval",
+      "time_limit": "Time Limit",
+      "memory_limit": "Memory Limit",
+      "per_user_time": "Per-user Time",
+      "min_submission_interval_grace_period": "Min Submission Interval Grace Period"
+    },
+    "hints": {
+      "max_submission_number": "Per user; blank means no limit.",
+      "max_user_test_number": "Per user; blank means no limit.",
+      "token_max_number": "Total allowed across the contest; blank means no limit.",
+      "token_gen_max": "Highest number of generated tokens; blank means no limit.",
+      "min_submission_interval": "Seconds a user must wait between two submissions; blank means no wait.",
+      "min_user_test_interval": "Seconds a user must wait between two user tests; blank means no wait.",
+      "time_limit": "Seconds allowed for each evaluation; blank means no limit.",
+      "memory_limit": "MiB allowed for each evaluation; blank means no limit.",
+      "per_user_time": "Seconds one user may spend on the contest in total; blank means no limit.",
+      "min_submission_interval_grace_period": "Seconds of grace on top of the minimum submission interval; blank means none."
+    },
+    "throttle": {
+      "title": "Evaluation throttle",
+      "delayLabel": "Evaluation throttle delay",
+      "delayHint": "Seconds added to a submission's evaluation time per pending submission; 0 means no throttle delay of my own. Resolved as: this task's override → this contest's delay when positive → the legacy Queue Fairness Penalty below.",
+      "windowLabel": "Evaluation throttle window",
+      "maxLabel": "Evaluation throttle max",
+      "finalOpenLabel": "Evaluation final open",
+      "finalOpenAtLabel": "Evaluation final open at",
+      "reserved": "Reserved — nothing reads it yet",
+      "overrideLabel": "Evaluation throttle delay override",
+      "overrideHint": "Blank inherits the contest's delay; 0 means no delay for this task; N is N seconds for this task only.",
+      "overridePlaceholder": "Inherit from contest",
+      "overrideInherit": "Inheriting the contest's delay.",
+      "overrideNone": "No throttle delay for this task.",
+      "overrideSeconds": "{seconds} seconds for this task only."
+    }
+  },
+  "reasonDialog": {
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "required": "A reason is required"
   }
 }

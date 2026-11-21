@@ -3,9 +3,10 @@ import { apiError, verifyApiAuth } from '@/lib/api-utils';
 import { cleanupExpiredCreds } from '@/lib/creds-file';
 import { handleApplyCredentials, handleExportCurrent, handleRegenerate } from './credentialActions';
 import { handleContest, handleTeam } from './enrollmentActions';
+import { handleParticipation } from './participationActions';
 import { handleProfile } from './profileActions';
 
-const BATCH_ACTIONS = ['regenerate', 'contest', 'team', 'profile', 'apply-credentials', 'export-current'] as const;
+const BATCH_ACTIONS = ['regenerate', 'contest', 'team', 'participation', 'profile', 'apply-credentials', 'export-current'] as const;
 
 function parseUserIds(body: Record<string, unknown>): number[] {
   if (!Array.isArray(body.userIds)) return [];
@@ -42,6 +43,8 @@ export async function POST(req: NextRequest) {
         return handleContest(request);
       case 'team':
         return handleTeam(request);
+      case 'participation':
+        return handleParticipation(request);
       case 'profile':
         return handleProfile(request);
       default:

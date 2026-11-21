@@ -1,4 +1,4 @@
-import type { UsersPageRow } from '@/lib/prisma-selects';
+import type { SafeUser } from '@/lib/prisma-selects';
 
 export const DEFAULT_TIMEZONE = 'Asia/Bangkok';
 
@@ -26,7 +26,9 @@ export const EMPTY_USER_FORM: UserFormState = {
   preferred_languages: [],
 };
 
-export function formFromUser(user: UsersPageRow): UserFormState {
+// Why the narrow row: the form reads six identity columns, and the list row is a
+// structural supertype of it, so every existing caller still passes one unchanged.
+export function formFromUser(user: SafeUser): UserFormState {
   return {
     ...EMPTY_USER_FORM,
     first_name: user.first_name,

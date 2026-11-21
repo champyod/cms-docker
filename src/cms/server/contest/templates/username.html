@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block title %}
+    {{ contest.description }}
+{% endblock title %}
+
+{% block body %}
+
+<div class="register_box hero-unit">
+    <h1>{% trans %}Display username{% endtrans %}</h1>
+    {% if username_config_allowed %}
+    <p>{% trans %}Shown on the contest pages and in the rankings instead of your real name. Leave it empty to go back to your real name.{% endtrans %}</p>
+    <form class="form-horizontal" action="{{ contest_url('username') }}" method="POST">
+        {{ xsrf_form_html|safe }}
+        <div class="control-group">
+            <label class="control-label" for="username">{% trans %}Username{% endtrans %}</label>
+            <div class="controls">
+                <input minlength="0" maxlength="{{ MAX_INPUT_LENGTH }}" pattern="^[A-Za-z0-9_-]*$" type="text" class="input-xlarge" name="username" id="username" value="{{ username if username is not none else '' }}">
+            </div>
+        </div>
+        <div class="control-group">
+            <div class="controls">
+                <button type="submit" class="btn btn-primary">{% trans %}Save{% endtrans %}</button>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <p>{% trans %}You cannot configure a display username in this contest.{% endtrans %}</p>
+    {% endif %}
+    <a href="{{ contest_url() }}" class="btn">{% trans %}Back to contest{% endtrans %}</a>
+</div>
+
+{% endblock body %}

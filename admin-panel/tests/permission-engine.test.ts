@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_GROUPS, PERMISSION_REGISTRY } from '@/lib/permission-registry';
+import { PERMISSION_REGISTRY, RESERVED_PERMISSIONS } from '@/lib/permission-registry';
+import { DEFAULT_GROUPS } from '@/lib/permission-groups';
 import {
   hasEffectivePermission,
   resolveEffectivePermissions,
@@ -174,6 +175,12 @@ describe('PERMISSION_REGISTRY', () => {
     expect(PERMISSION_REGISTRY.length).toBeGreaterThan(0);
   });
 
+  // Why pinned: MODULES / DOMAIN_VERBS edits must be deliberate, not silent.
+  // 231 + patching:read + patching:waive, the security feed's read and waive verbs.
+  it('holds exactly 233 keys', () => {
+    expect(PERMISSION_REGISTRY.length).toBe(233);
+  });
+
   it.each(PERMISSION_REGISTRY)('entry $key equals ${module}:${verb}', (definition) => {
     expect(definition.key).toBe(`${definition.module}:${definition.verb}`);
   });
@@ -191,13 +198,22 @@ describe('PERMISSION_REGISTRY', () => {
   it('contains the all:all entry', () => {
     expect(PERMISSION_REGISTRY.some((definition) => definition.key === 'all:all')).toBe(true);
   });
+
+  it('reserves only documented registry keys', () => {
+    const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
+    for (const reserved of RESERVED_PERMISSIONS) {
+      expect(registryKeys.has(reserved.key)).toBe(true);
+      expect(reserved.reason.length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe('DEFAULT_GROUPS', () => {
   const registryKeys = new Set(PERMISSION_REGISTRY.map((definition) => definition.key));
 
-  it('defines exactly eight groups with unique names', () => {
-    expect(DEFAULT_GROUPS).toHaveLength(8);
+  it('defines exactly sixteen code groups with unique names', () => {
+    // The roster is seventeen with the root actor, seeded separately in prisma/seed-permissions.ts.
+    expect(DEFAULT_GROUPS).toHaveLength(16);
     const names = DEFAULT_GROUPS.map((group) => group.name);
     expect(new Set(names).size).toBe(names.length);
   });
@@ -207,14 +223,70 @@ describe('DEFAULT_GROUPS', () => {
     expect(missing).toEqual([]);
   });
 
-  it('grants Superadmin every registry key', () => {
+  it('grants Superadmin every registry key except backup:schedule', () => {
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin).toBeDefined();
-    expect(new Set(superadmin?.permissions ?? [])).toEqual(registryKeys);
+    const expected = new Set([...registryKeys].filter((key) => key !== 'backup:schedule'));
+    expect(new Set(superadmin?.permissions ?? [])).toEqual(expected);
+  });
+
+  it('never expands all:all into backup:schedule', () => {
+    const effective = resolveEffectivePermissions(['all:all'], []);
+    // Why only schedule stays out: it is the one backup key Superadmin does not hold,
+    // so a wildcard that reached it would schedule recurring backups silently.
+    expect(hasEffectivePermission(effective, 'backup:schedule')).toBe(false);
+    for (const key of ['backup:create', 'backup:list', 'backup:restore', 'backup:settle', 'backup:delete']) {
+      expect(hasEffectivePermission(effective, key)).toBe(true);
+    }
+    expect(hasEffectivePermission(effective, 'contest:list')).toBe(true);
+  });
+
+  it('grants Security the security surface and admin:login', () => {
+    const security = DEFAULT_GROUPS.find((group) => group.name === 'Security');
+    expect(security?.permissions).toEqual([
+      'admin:login',
+      'security:read',
+      'waf:read',
+      'waf:config',
+      'waf:control',
+      'ban:read',
+      'ban:unban',
+      'lockout:read',
+      'lockout:unlock',
+      'lockout:exempt',
+      'tls:read',
+      'tls:renew',
+      // The feed's surface joins the same group: patching:read opens the page and
+      // patching:waive records the decision, so the seed and the registry agree.
+      'patching:read',
+      'patching:waive',
+    ]);
+    const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
+    for (const key of security?.permissions ?? []) {
+      expect(superadmin?.permissions).toContain(key);
+    }
   });
 
   it('includes the all:all key for Superadmin', () => {
     const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
     expect(superadmin?.permissions).toContain('all:all');
+  });
+
+  it('grants lane keys to Contest Manager and Judge', () => {
+    for (const name of ['Contest Manager', 'Judge']) {
+      const group = DEFAULT_GROUPS.find((entry) => entry.name === name);
+      expect(group?.permissions).toContain('evaluation:lane_assign');
+      expect(group?.permissions).toContain('evaluation:lane_move');
+    }
+  });
+
+  it('grants backup:schedule to Backup Operator alone', () => {
+    // Superadmin still lacks it: the engine carve-out keeps it out of all:all, so
+    // scheduling a recurring backup takes this group's explicit grant.
+    const holders = DEFAULT_GROUPS.filter((group) => group.permissions.includes('backup:schedule'));
+    expect(holders.map((group) => group.name)).toEqual(['Backup Operator']);
+    const superadmin = DEFAULT_GROUPS.find((group) => group.name === 'Superadmin');
+    expect(superadmin?.permissions).toContain('backup:restore');
+    expect(superadmin?.permissions).not.toContain('backup:schedule');
   });
 });

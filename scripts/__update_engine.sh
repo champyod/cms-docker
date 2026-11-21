@@ -151,7 +151,7 @@ ensure_worker_cgroup_setup() {
         if [ "$AUTO_CGROUP" = "y" ]; then
             print_info "Running __worker_cgroup_setup.sh..."
             chmod +x ./scripts/__worker_cgroup_setup.sh
-            if sudo ./scripts/__worker_cgroup_setup.sh; then
+            if run_privileged ./scripts/__worker_cgroup_setup.sh; then
                 print_success "Worker cgroups configured successfully."
             else
                 print_error "Failed to configure cgroups. Worker might not start correctly."
@@ -162,59 +162,23 @@ ensure_worker_cgroup_setup() {
     fi
 }
 
-configure_ranking_auth() {
-    echo ""
-    print_step "Contest & Ranking Authentication"
-
-    local existing_ranking_username
-    local existing_ranking_password
-
-    existing_ranking_username=$(get_var "[admin]" RANKING_USERNAME)
-    existing_ranking_password=$(get_var "[admin]" RANKING_PASSWORD)
-
-    if [ "$MODE" = "fix" ]; then
-        if [ -n "$existing_ranking_username" ] && ! is_default_secret "$existing_ranking_password"; then
-            print_info "Ranking credentials present — nothing to fix."
-            return 0
-        fi
-        RANKING_USERNAME_INPUT="${existing_ranking_username:-admin}"
-        RANKING_PASSWORD_INPUT=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-16)
-        print_info "RANKING_PASSWORD: <generated>"
-    else
-        read -r -p "Ranking username [${existing_ranking_username:-admin}]: " RANKING_USERNAME_INPUT
-        RANKING_USERNAME_INPUT=${RANKING_USERNAME_INPUT:-${existing_ranking_username:-admin}}
-
-        read -r -s -p "Ranking password [hidden, leave blank to keep current]: " RANKING_PASSWORD_INPUT
-        echo ""
-        if [ -z "$RANKING_PASSWORD_INPUT" ]; then
-            RANKING_PASSWORD_INPUT=$existing_ranking_password
-        fi
-        if is_default_secret "$RANKING_PASSWORD_INPUT"; then
-            RANKING_PASSWORD_INPUT=$(openssl rand -base64 12 | tr -d "=+/" | cut -c1-16)
-            print_info "RANKING_PASSWORD: <generated>"
-        fi
-    fi
-
-    if [ "$DRY_RUN" = "true" ]; then
-        echo "DRY-RUN: Would update config.toml [admin]: RANKING_USERNAME=$RANKING_USERNAME_INPUT"
-        echo "DRY-RUN: Would update config.toml [admin]: RANKING_PASSWORD=<hidden>"
-        echo "DRY-RUN: Would run: make env"
-        echo "DRY-RUN: Would run: ./scripts/__inject_config.sh"
-        return
-    fi
-
-    update_toml_var "[admin]" "RANKING_USERNAME" "$RANKING_USERNAME_INPUT"
-    update_toml_var "[admin]" "RANKING_PASSWORD" "$RANKING_PASSWORD_INPUT"
-    propagate_generated
-    print_success "Ranking credentials updated in config.toml [admin], .env, config/cms.toml, and config/cms_ranking.toml"
-}
-
 propagate_generated() {
     if [ ! -f Makefile ]; then
         print_warning "No Makefile here — skipping derived-file propagation (make env / inject_config)."
         return 0
     fi
     run_or_print "make env"
+    # WHY the re-export below: run_or_print runs each command in its own process, so
+    # the exports `make env` made died with that subprocess and the injector then
+    # read an empty environment. Every _set_* found nothing to write and returned
+    # without a word, so a value edited in the panel reached .env and stopped there —
+    # a silent no-op covering every injected family, CAPTCHA_* and the login rate
+    # limits included. Sourcing .env puts those values in this process, which the
+    # injector's child inherits; the same pattern __config_sync.sh uses for the same
+    # two steps. Guarded because set -eu would otherwise abort the run on a bad line.
+    if [ "$DRY_RUN" != "true" ] && [ -f .env ]; then
+        set -a; . ./.env 2>/dev/null || true; set +a
+    fi
     if [ -x ./scripts/__inject_config.sh ] || [ -f ./scripts/__inject_config.sh ]; then
         run_or_print "./scripts/__inject_config.sh"
     fi
@@ -630,19 +594,22 @@ walk_section() {
 VAR_SPECS=(
   "Core & Network|[core]|COMPOSE_PROJECT_NAME|str||cms-docker"
   "Core & Network|[core]|PUBLIC_IP|str||live_ip"
-  "Core & Network|[core]|TAILSCALE_IP|str||"
+  "Core & Network|[core]|INNER_IP|str||"
   "Core & Network|[core]|REMOTE_WORKERS_ENABLED|bool||false"
-  "Core & Network|[core]|POSTGRES_PORT_EXTERNAL|port||5432"
-  "Core & Network|[core]|POSTGRES_PORT|port||5432"
-  "Core & Network|[core]|POSTGRES_HOST|str||database"
-  "Core & Network|[core]|POSTGRES_HOST_AUTH_METHOD|str||md5"
-  "Core & Network|[core]|POSTGRES_DB|str||cmsdb"
-  "Core & Network|[core]|POSTGRES_USER|str||cmsuser"
-  "Core & Network|[core]|POSTGRES_PASSWORD|secret||rand_pw"
-  "Core & Network|[core]|POSTGRES_BACKUP_PASSWORD|secret||rand_pw"
+  "Core & Network|[core]|ACTIVE_DATABASE|str||default"
+  "Database|[db_default]|POSTGRES_PORT_EXTERNAL|port||5432"
+  "Database|[db_default]|POSTGRES_PORT|port||5432"
+  "Database|[db_default]|POSTGRES_HOST|str||database"
+  "Database|[db_default]|POSTGRES_HOST_AUTH_METHOD|str||md5"
+  "Database|[db_default]|POSTGRES_DB|str||cmsdb"
+  "Database|[db_default]|POSTGRES_USER|str||cmsuser"
+  "Database|[db_default]|POSTGRES_PASSWORD|secret||rand_pw"
+  "Database|[db_default]|POSTGRES_BACKUP_PASSWORD|secret||rand_pw"
   "Core & Network|[core]|CMS_SECRET_KEY|secret||hex32"
   "Core & Network|[core]|CMS_DOMAIN|str||cms.local"
+  "Core & Network|[core]|CMS_SOURCE_URL|url||https://github.com/champyod/cms-docker"
   "Core & Network|[core]|CMS_CONFIG|str||/usr/local/etc/cms.toml"
+  "Core & Network|[core]|CMS_RANKING_URL|str||"
   "Core & Network|[core]|CMS_LOG_DIR|str||/var/local/log/cms"
   "Core & Network|[core]|CMS_CACHE_DIR|str||/var/local/cache/cms"
   "Core & Network|[core]|CMS_DATA_DIR|str||/var/local/lib/cms"
@@ -654,57 +621,103 @@ VAR_SPECS=(
   "Core & Network|[core]|EVALUATION_SERVICE_SHARD|num||0"
   "Core & Network|[core]|PROXY_SERVICE_SHARD|num||0"
   "Core & Network|[core]|CHECKER_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|APT_PORTS_MIRROR|str||ports.ubuntu.com"
+  "Core & Network|[core]|BASE_IMAGE|str||ubuntu:noble"
+  "Core & Network|[core]|DB_BIND_IP|str||127.0.0.1"
+  "Core & Network|[core]|CERT_EMAIL|str||"
+  "Core & Network|[core]|ACME_CERTBOT_IMAGE|str||certbot/certbot"
+  "Core & Network|[core]|TLS_CERTRESOLVER|str||letsencrypt"
   "Admin Panel|[admin]|DEPLOYMENT_TYPE|enum:img,src||img"
   "Admin Panel|[admin]|ADMIN_NEXT_PORT_EXTERNAL|port||8891"
   "Admin Panel|[admin]|ADMIN_PORT_EXTERNAL|port||8889"
-  "Admin Panel|[admin]|ADMIN_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|ADMIN_BIND_IP|str||127.0.0.1"
+  "Admin Panel|[admin]|ADMIN_NEXT_BIND_IP|str||127.0.0.1"
   "Admin Panel|[admin]|ADMIN_LISTEN_PORT|port||8889"
   "Admin Panel|[admin]|ADMIN_DOMAIN|str||admin.cms.local"
   "Admin Panel|[admin]|ADMIN_NEXT_DOMAIN|str||admin-next.cms.local"
   "Admin Panel|[admin]|RANKING_PORT_EXTERNAL|port||8890"
-  "Admin Panel|[admin]|RANKING_LISTEN_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|RANKING_BIND_IP|str||127.0.0.1"
   "Admin Panel|[admin]|RANKING_LISTEN_PORT|port||8890"
+  "Admin Panel|[admin]|RANKING_BIND_ADDRESS|str||0.0.0.0"
+  "Admin Panel|[admin]|RANKING_SHARD|num||0"
   "Admin Panel|[admin]|RANKING_DOMAIN|str||ranking.cms.local"
-  "Admin Panel|[admin]|RANKING_USERNAME|str||admin"
-  "Admin Panel|[admin]|RANKING_PASSWORD|secret||"
+  "Admin Panel|[admin]|RANKING_SESSION_SECRET|secret||hex32"
   "Admin Panel|[admin]|ADMIN_COOKIE_DURATION|num||36000"
   "Admin Panel|[admin]|AUTH_SECRET|secret||hex32"
-  "Admin Panel|[admin]|SERVER_BASE_URL|url||http://localhost"
-  "Admin Panel|[admin]|VITE_API_URL|url||http://localhost:8889"
+  "Admin Panel|[admin]|COOKIE_SECURE|bool||false"
   "Admin Panel|[admin]|CAPTCHA_ENABLED|enum:0,1||0"
   "Admin Panel|[admin]|CAPTCHA_PROVIDER|enum:turnstile,hcaptcha||turnstile"
   "Admin Panel|[admin]|CAPTCHA_SITE_KEY|str||"
   "Admin Panel|[admin]|CAPTCHA_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_PROVIDERS|str||"
+  "Admin Panel|[admin]|CAPTCHA_TURNSTILE_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_TURNSTILE_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_HCAPTCHA_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_HCAPTCHA_SECRET_KEY|secret||"
+  "Admin Panel|[admin]|CAPTCHA_RECAPTCHA_SITE_KEY|str||"
+  "Admin Panel|[admin]|CAPTCHA_RECAPTCHA_SECRET_KEY|secret||"
   "Admin Panel|[admin]|CAPTCHA_THRESHOLD|num||3"
   "Admin Panel|[admin]|CAPTCHA_BAN_THRESHOLD|num||5"
+  # Login counters in the shared redis-rate-limit instance. Named apart from
+  # REDIS_HOST/REDIS_RATE_LIMIT (the nginx limit_req store) so turning the nginx
+  # layer on cannot drag the Python login counters into the same switch: they
+  # answer different requests and nginx's limit_req is deliberately untouched.
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_ENABLED|enum:0,1||0"
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_HOST|str||redis-rate-limit"
+  "Admin Panel|[admin]|LOGIN_RATE_LIMIT_REDIS_PORT|port||6379"
   "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
   "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
   "Admin Panel|[admin]|REDIS_PORT|port||6379"
   "Admin Panel|[admin]|REDIS_RATE_LIMIT|num||0"
   "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
   "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
-  "Admin Panel|[admin]|CMS_RANKING_LOG_DIR|str||/var/local/log/cms/ranking"
   "Admin Panel|[admin]|RANKING_LOGO_PATH|str||"
   "Admin Panel|[admin]|CMS_RANKING_LIB_DIR|str||/var/local/lib/cms/ranking"
+  "Admin Panel|[admin]|DOMAIN_NGINX_HTTP_PORT|port||80"
+  "Admin Panel|[admin]|DOMAIN_NGINX_HTTPS_PORT|port||443"
+  "Admin Panel|[admin]|RANKING_AUTH_DIRECTIVES|str||"
+  "Admin Panel|[admin]|CONTEST_ROUTE_PATH|str||/"
+  "Admin Panel|[admin]|ADMIN_ROUTE_PATH|str||/admin"
+  "Admin Panel|[admin]|ADMIN_CLASSIC_ROUTE_PATH|str||/classic"
+  "Admin Panel|[admin]|PRIMARY_CLASSIC_ROUTE_PATH|str||"
+  "Admin Panel|[admin]|RANKING_ROUTE_PATH|str||/ranking"
+  "Admin Panel|[admin]|OJ_ROUTE_PATH|str||"
+  "Admin Panel|[admin]|OJ_UPSTREAM|str||"
+  "Admin Panel|[admin]|CONTEST_UPSTREAM|str||cms-contest-web-server"
+  "Admin Panel|[admin]|ADMIN_PANEL_COLOUR|enum:a,b||a"
+  "Admin Panel|[admin]|ADMIN_CLASSIC_UPSTREAM|str||cms-admin-web-server"
+  "Admin Panel|[admin]|RANKING_UPSTREAM|str||cms-ranking-web-server"
+  "Admin Panel|[admin]|ADMIN_NEXT_LISTEN_PORT|port||3000"
   "Contest|[contest]|CONTEST_ID|num||1"
   "Contest|[contest]|CONTEST_DOMAIN|str||cms.local"
   "Contest|[contest]|CONTEST_LISTEN_PORT|port||8888"
-  "Contest|[contest]|CONTEST_LISTEN_ADDRESS|str||0.0.0.0"
+  "Contest|[contest]|CONTEST_BIND_IP|str||127.0.0.1"
   "Contest|[contest]|ACTIVE_CONTEST_PORT|port||8888"
   "Contest|[contest]|SECRET_KEY|secret||hex32"
   "Contest|[contest]|COOKIE_DURATION|num||10800"
-  "Contest|[contest]|ACCESS_METHOD|enum:public_port,domain||public_port"
   "Contest|[contest]|NUM_PROXIES_USED|num||1"
   "Contest|[contest]|MAX_SUBMISSION_LENGTH|num||100000"
   "Contest|[contest]|MAX_INPUT_LENGTH|num||5000000"
   "Contest|[contest]|SUBMIT_LOCAL_COPY|bool||true"
+  "Contest|[contest]|TESTS_LOCAL_COPY|bool||true"
   "Contest|[contest]|CONTEST_WEB_CPU_LIMIT|str||2"
   "Contest|[contest]|CONTEST_WEB_MEMORY_LIMIT|str||2G"
   "Contest|[contest]|ENABLE_TLS|bool||false"
+  "Contest|[contest]|CONTEST_PORT_EXTERNAL|port||8888"
+  "Contest|[contest]|CONTEST_WEB_SERVER_SHARD|num||0"
+  "Contest|[contest]|CONTEST_WEB_CPU_RESERVATION|str||0.1"
+  "Contest|[contest]|CONTEST_WEB_MEMORY_RESERVATION|str||256M"
+  "Contest|[contest]|NGINX_BIND_IP|str||"
+  "Contest|[contest]|NGINX_HTTP_PORT|port||80"
+  "Contest|[contest]|NGINX_HTTPS_PORT|port||443"
+  "Contest|[contest]|NGINX_EXTERNAL_PORT|port||80"
+  "Contest|[contest]|OJ_DOMAIN|str||"
+  "Contest|[contest]|OJ_BACKEND_PORT|port||9000"
   "Worker|[worker]|CORE_SERVICES_HOST|str||mirror_public_ip"
   "Worker|[worker]|WORKER_SHARD|num||0"
   "Worker|[worker]|WORKER_NAME|str||worker-0"
   "Worker|[worker]|WORKER_PORT|port||26000"
+  "Worker|[worker]|WORKER_BIND_ADDR|str||0.0.0.0"
   "Worker|[worker]|WORKER_REPLICAS|num||1"
   "Worker|[worker]|WORKER_CPU_LIMIT|str||2"
   "Worker|[worker]|WORKER_MEMORY_LIMIT|str||2G"
@@ -720,66 +733,144 @@ VAR_SPECS=(
   "Infra & Monitoring|[infra]|MONITOR_MEM_THRESHOLD|num||80"
   "Infra & Monitoring|[infra]|MONITOR_DISK_THRESHOLD|num||80"
   "Infra & Monitoring|[infra]|MONITOR_INTERVAL|num||10"
-  "Infra & Monitoring|[infra]|MONITOR_COOLDOWN|num||300"
   "Infra & Monitoring|[infra]|DOCKER_GID|num||docker_gid"
+  "Infra & Monitoring|[infra]|DOCKER_UID|num||1000"
   "Infra & Monitoring|[infra]|DISK_PATH|str||/host"
   "Infra & Monitoring|[infra]|BACKUP_INTERVAL_MINS|num||1440"
   "Infra & Monitoring|[infra]|BACKUP_MAX_COUNT|num||50"
   "Infra & Monitoring|[infra]|BACKUP_MAX_AGE_DAYS|num||10"
   "Infra & Monitoring|[infra]|BACKUP_MAX_SIZE_GB|num||5"
+  "Admin Panel|[admin]|BACKUP_DIR|str||/app/backups"
   "Admin Panel|[admin]|DOMAIN_NAME|str||cms.local"
+  "Admin Panel|[admin]|CERT_LINEAGE_DOMAIN|str||"
+  "Admin Panel|[admin]|DOMAIN_NGINX_BIND_IP|str||"
   "Admin Panel|[admin]|DOMAIN_CERT_METHOD|str||letsencrypt"
-  "Admin Panel|[admin]|HSTS_MAX_AGE|num||300"
+  "Admin Panel|[admin]|AUTO_RETRY|enum:0,1||0"
+  "Admin Panel|[admin]|CERT_RETRY_ATTEMPTS|num||8"
+  "Admin Panel|[admin]|CERT_RETRY_INTERVAL|num||15"
+  "Admin Panel|[admin]|CERT_RETRY_FOREVER|enum:0,1||0"
+  "Admin Panel|[admin]|EXTRA_DOMAINS|str||"
+  "Admin Panel|[admin]|DEPLOY_HOOK|str||"
+  "Admin Panel|[admin]|LE_STAGING|enum:0,1||0"
+  "Admin Panel|[admin]|FORCE_RENEWAL|enum:0,1||0"
+  "Admin Panel|[admin]|WAIT_PORT80_TIMEOUT|num||0"
+  "Admin Panel|[admin]|BACKUP_CERTS|enum:0,1||0"
+  "Admin Panel|[admin]|USE_LOCK|enum:0,1||0"
+  "Admin Panel|[admin]|AUTO_RENEW|enum:0,1||0"
+  "Admin Panel|[admin]|CERT_RETRY_INTERVAL_CAP|num||120"
+  "Admin Panel|[admin]|ACME_CHALLENGE|enum:http-01,dns-01,tls-alpn-01||http-01"
+  "Admin Panel|[admin]|ACME_CLIENT|enum:certbot,lego||certbot"
+  "Admin Panel|[admin]|ACME_CA|enum:letsencrypt,letsencrypt-staging,zerossl,buypass,custom||letsencrypt"
+  "Admin Panel|[admin]|ACME_DIRECTORY_URL|str||"
+  "Admin Panel|[admin]|ACME_DNS_PROVIDER|str||"
+  "Admin Panel|[admin]|ACME_DNS_CREDENTIALS_FILE|str||"
+  "Admin Panel|[admin]|ACME_TLS_ALPN_ADDRESS|str||:443"
+  "Admin Panel|[admin]|ACME_LEGO_IMAGE|str||goacme/lego:v5.5.2"
+  "Admin Panel|[admin]|ACME_HTTP01_ON_443|enum:0,1||0"
+  "Admin Panel|[admin]|ACME_HANDOVER_TIMEOUT|num||60"
+  "Admin Panel|[admin]|ACME_RENEW_AT_UTC|str||03:00"
+  "Admin Panel|[admin]|ACME_RENEW_BEFORE_DAYS|num||7"
+  "Admin Panel|[admin]|CERT_NOTIFY_ENABLED|enum:0,1||1"
+  "Admin Panel|[admin]|HSTS_MAX_AGE|num||31536000"
+  "Admin Panel|[admin]|MAX_TESTCASE_UPLOAD_BYTES|num||52428800"
+  "Admin Panel|[admin]|MAX_TESTCASE_FILE_BYTES|num||2097152"
+  "Admin Panel|[admin]|MAX_LOGO_UPLOAD_BYTES|num||5242880"
+  "Admin Panel|[admin]|MAX_AVATAR_UPLOAD_BYTES|num||2097152"
+  "Admin Panel|[admin]|MAX_STATEMENT_UPLOAD_BYTES|num||10485760"
+  "Admin Panel|[admin]|MAX_ATTACHMENT_UPLOAD_BYTES|num||10485760"
+  "Admin Panel|[admin]|NEXT_PUBLIC_BASE_PATH|str||"
+  "Admin Panel|[admin]|SESSION_COOKIE_NAME|str||session"
+  "Admin Panel|[admin]|EVALUATION_RPC_TARGET|str||"
   "Infra & Monitoring|[infra]|OFFSITE_TAILNET_NODE|str||"
   "Infra & Monitoring|[infra]|OFFSITE_ENCRYPT_KEY|secret||"
   "Infra & Monitoring|[infra]|OFFSITE_BACKUP_PATH|str||/var/local/backups/cms"
-  "Admin Panel|[admin]|SOCKET_PROXY|enum:0,1||0"
-  "Admin Panel|[admin]|MONITOR_ENHANCED|enum:0,1||0"
-  "Admin Panel|[admin]|REDIS_HOST|str||redis-rate-limit"
-  "Admin Panel|[admin]|REDIS_PORT|port||6379"
-  "Admin Panel|[admin]|REDIS_RATE_LIMIT|num||0"
-  "Admin Panel|[admin]|PER_USER_LIMIT|num||1"
+  "Infra & Monitoring|[infra]|BACKUP_STALE_HOURS|num||26"
+  "Infra & Monitoring|[infra]|PROMETHEUS_URL|url||http://prometheus:9090"
+  "Infra & Monitoring|[infra]|SECURITY_SIGNAL_INTERVAL_SECONDS|num||30"
+  "Infra & Monitoring|[infra]|SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS|num||1500"
+  "Infra & Monitoring|[infra]|SECURITY_STALENESS_CACHE_MS|num||15000"
+  "Infra & Monitoring|[infra]|AUDIT_RETENTION_INTERVAL_SECS|num||86400"
+  "Infra & Monitoring|[infra]|EXPOSURE_RECONCILE_INTERVAL_SECS|num||60"
   "Infra & Monitoring|[infra]|MONITORING_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|PROMETHEUS_PORT|port||9090"
   "Infra & Monitoring|[infra]|PROMETHEUS_BIND_IP|str||127.0.0.1"
   "Infra & Monitoring|[infra]|GRAFANA_PORT|port||3001"
   "Infra & Monitoring|[infra]|GRAFANA_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|FUNNEL_BIND_IP|str||127.0.0.1"
   "Infra & Monitoring|[infra]|GRAFANA_ADMIN_USER|str||admin"
   "Infra & Monitoring|[infra]|GRAFANA_PASSWORD|secret||admin"
   "Infra & Monitoring|[infra]|GRAFANA_ROOT_URL|url||http://localhost:3001/"
-  "Core & Network|[core]|TAILSCALE_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|SECURITY_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|SECURITY_HOST|str||"
+  "Infra & Monitoring|[infra]|PANEL_URL|url||http://admin-panel-next:3000"
+  "Infra & Monitoring|[infra]|SECURITY_FEED_TOKEN|secret||"
+  "Infra & Monitoring|[infra]|SECURITY_SCAN_SCHEDULE|str||0 3 * * *"
+  "Infra & Monitoring|[infra]|DIUN_WATCH_SCHEDULE|str||0 */6 * * *"
+  "Infra & Monitoring|[infra]|SECURITY_BRIDGE_PORT|port||8099"
+  "Infra & Monitoring|[infra]|SECURITY_BRIDGE_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|RENOVATE_TOKEN|secret||"
+  "Infra & Monitoring|[infra]|RENOVATE_REPOSITORIES|str||"
+  "Infra & Monitoring|[infra]|RENOVATE_INTERVAL_SECONDS|num||86400"
+  "Infra & Monitoring|[infra]|RENOVATE_LOG_LEVEL|enum:debug,info,warn,error||info"
+  
   "Infra & Monitoring|[infra]|CAA_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|CAA_ISSUER|str||letsencrypt.org"
   "Infra & Monitoring|[infra]|DNSSEC_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|CLOUDFLARE_API_TOKEN|secret||"
   "Infra & Monitoring|[infra]|HSM_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|HSM_KEY_LABEL|str||grader-privkey"
   "Infra & Monitoring|[infra]|HSM_MODULE|str||softhsm"
   "Infra & Monitoring|[infra]|HSM_PIN|secret||"
-  "Core & Network|[core]|ACCESS_METHOD|enum:public_port,domain||public_port"
   "Core & Network|[core]|MTLS_WORKERS_ENABLED|enum:0,1||0"
   "Core & Network|[core]|MTLS_CA_CERT|str||config/mtls/ca.pem"
   "Core & Network|[core]|MTLS_WORKER_CERT|str||config/mtls/worker.pem"
   "Core & Network|[core]|MTLS_WORKER_KEY|str||config/mtls/worker-key.pem"
   "RPC|[rpc]|RPC_SECRET|secret||hex32"
   "RPC|[rpc]|RPC_ALLOW_BACKDOOR|bool||false"
-  "Infra & Monitoring|[infra]|MTLS_WORKERS_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|VAULT_ADDR|url||http://vault:8200"
   "Infra & Monitoring|[infra]|VAULT_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|VAULT_PATH|str||secret/cms"
   "Infra & Monitoring|[infra]|VAULT_TOKEN|secret||"
-  "Admin Panel|[admin]|WAF_ENABLED|enum:0,1||0"
-  "Admin Panel|[admin]|WAF_PORT|port||8080"
-  "Admin Panel|[admin]|WAF_PARANOIA|num||1"
-  "Admin Panel|[admin]|WAF_ANOMALY_INBOUND|num||5"
   "Infra & Monitoring|[infra]|WAF_ANOMALY_INBOUND|num||5"
   "Infra & Monitoring|[infra]|WAF_ANOMALY_OUTBOUND|num||4"
   "Infra & Monitoring|[infra]|WAF_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|WAF_BACKEND|str||http://grader-nginx-proxy:80"
+  "Infra & Monitoring|[infra]|PROXY_MAX_BODY_SIZE|str||100M"
+  "Infra & Monitoring|[infra]|SERVER_TOKENS_OFF|enum:0,1||1"
+  "Infra & Monitoring|[infra]|OCSP_STAPLING|enum:0,1||1"
+  "Infra & Monitoring|[infra]|CSP_ENABLED|enum:0,1||0"
+  "Infra & Monitoring|[infra]|CSP_MODE|enum:report-only,enforce||report-only"
+  "Infra & Monitoring|[infra]|CSP_REPORT_URI|str||"
+  "Infra & Monitoring|[infra]|CSP_DEFAULT_SRC|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_SCRIPT_SRC|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_STYLE_SRC|str||'self' 'unsafe-inline'"
+  "Infra & Monitoring|[infra]|CSP_IMG_SRC|str||'self' data:"
+  "Infra & Monitoring|[infra]|CSP_FONT_SRC|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_CONNECT_SRC|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_OBJECT_SRC|str||'none'"
+  "Infra & Monitoring|[infra]|CSP_BASE_URI|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_FORM_ACTION|str||'self'"
+  "Infra & Monitoring|[infra]|CSP_FRAME_ANCESTORS|str||'self'"
   "Infra & Monitoring|[infra]|WAF_ENABLED|enum:0,1||0"
   "Infra & Monitoring|[infra]|WAF_PARANOIA|num||1"
   "Infra & Monitoring|[infra]|WAF_PORT|port||8080"
   "Infra & Monitoring|[infra]|WAF_RULE_ENGINE|str||DetectionOnly"
+  "Infra & Monitoring|[infra]|WAF_RESP_BODY_ACCESS|enum:Off,On,Force,Rejected||Off"
+    "Infra & Monitoring|[infra]|CMS_LOG_MAX_AGE_DAYS|num||7"
+  "Infra & Monitoring|[infra]|CMS_LOG_MAX_SIZE_GB|num||5"
+  "Infra & Monitoring|[infra]|CMS_LOG_PRUNE_INTERVAL_MINS|num||60"
+  "Infra & Monitoring|[infra]|FUNNEL_ENABLED|bool||false"
+  "Infra & Monitoring|[infra]|FUNNEL_REALM|str||CMS restricted"
+  "Infra & Monitoring|[infra]|FUNNEL_CONTEST_LISTEN|port||8443"
+  "Infra & Monitoring|[infra]|FUNNEL_PANEL_LISTEN|port||8892"
+  "Infra & Monitoring|[infra]|FUNNEL_RANKING_LISTEN|port||8893"
+  "Infra & Monitoring|[infra]|VAULT_BIND_IP|str||127.0.0.1"
+  "Infra & Monitoring|[infra]|VAULT_PORT|port||8200"
   "Tailscale|[tailscale]|TAILSCALE_AUTHKEY|secret||"
   "Tailscale|[tailscale]|TAILSCALE_HOSTNAME|str||cms-contest"
+  "Tailscale|[tailscale]|TS_HTTPS_PANEL|port||8843"
+  "Tailscale|[tailscale]|TS_HTTPS_CLASSIC|port||8844"
+  "Tailscale|[tailscale]|TS_HTTPS_RANKING|port||8845"
 )
 
 needs_fix() {
@@ -824,9 +915,6 @@ run_fix_mode() {
         fi
         apply_var "$section" "$key" "$newval" generated
     done
-    if [ "$unfixable" -eq 0 ]; then
-        configure_ranking_auth
-    fi
     print_summary
     exit $unfixable
 }
@@ -911,5 +999,4 @@ else
     done
 fi
 
-configure_ranking_auth
 print_summary

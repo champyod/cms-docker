@@ -17,6 +17,7 @@ function isValidKey(key: string): boolean {
 
 export async function readConfigToml(): Promise<{ success: true; content: string; values: Record<string, string> } | { success: false; error: string }> {
   await ensurePermission('appearance:read');
+  await ensurePermission('appearance:list');
   try {
     const repoRoot = getRepoRoot();
     const tomlPath = path.join(repoRoot, 'config.toml');

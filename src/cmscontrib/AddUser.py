@@ -59,8 +59,11 @@ def add_user(
         password = generate_random_password()
         pwd_generated = True
     if is_hashed:
+        # Already a bcrypt hash: only tag it with its method. build_password()
+        # refuses a payload that is not a hash and any non-bcrypt method.
         stored_password = build_password(password, method)
     else:
+        # A raw password: hash_password() is the single entry that stores one.
         stored_password = hash_password(password, method)
 
     if preferred_languages is None:
@@ -115,24 +118,34 @@ def main():
         help="password of the user in plain text")
     password_group.add_argument(
         "-H", "--hashed-password", action="store", type=utf8_decoder,
-        help="password of the user, already hashed using the given algorithm "
-             "(currently only --bcrypt)")
+        help="password of the user, already bcrypt-hashed")
     method_group = parser.add_mutually_exclusive_group()
     method_group.add_argument(
+        "--method", dest="method", action="store", default="bcrypt",
+        help="how to store the password; bcrypt is the only accepted method "
+             "(and the default). Storing a password in plain text is refused: "
+             "it would put the user's secret in the database and the row could "
+             "not log in")
+    method_group.add_argument(
         "--bcrypt", dest="method", action="store_const", const="bcrypt",
-        help="whether the password will be stored in bcrypt-hashed format "
-             "(if omitted it will be stored in plain text)")
+        default=argparse.SUPPRESS,
+        help="deprecated alias for --method bcrypt")
 
     args = parser.parse_args()
 
-    if args.hashed_password is not None and args.method is None:
-        parser.error("hashed password given but no method specified")
+    if args.method != "bcrypt":
+        parser.error(
+            "method %r is not allowed: it would store the password in a form "
+            "that is not a bcrypt hash, leaving the user's secret readable in "
+            "the database. Use the default, --method bcrypt." % args.method)
 
-    success = add_user(args.first_name, args.last_name, args.username,
-                       args.plaintext_password or args.hashed_password,
-                       args.method or "plaintext",
-                       args.hashed_password is not None, args.email,
-                       args.timezone, args.languages)
+    try:
+        success = add_user(args.first_name, args.last_name, args.username,
+                           args.plaintext_password or args.hashed_password,
+                           args.method, args.hashed_password is not None,
+                           args.email, args.timezone, args.languages)
+    except ValueError as error:
+        parser.error(str(error))
     return 0 if success is True else 1
 
 

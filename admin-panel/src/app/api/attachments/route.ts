@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
+import { validateAssetSize } from '@/lib/asset-upload';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
@@ -19,11 +20,10 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (filenameTrimmed.includes('/') || filenameTrimmed.includes('\\') || filenameTrimmed.includes('..')) return apiError({ message: 'Filename must not contain path separators', status: 400 });
     if (filenameTrimmed.length > 255) return apiError({ message: 'Filename must be at most 255 characters', status: 400 });
     if (typeof fileData !== 'string' || fileData.length === 0) return apiError({ message: 'File data is required', status: 400 });
-    if (fileData.length > 15 * 1024 * 1024) return apiError({ message: 'File too large', status: 400 });
 
     const buffer = Buffer.from(fileData, 'base64');
-    if (buffer.length === 0) return apiError({ message: 'File data is empty after decoding', status: 400 });
-    if (buffer.length > 10 * 1024 * 1024) return apiError({ message: 'Decoded file exceeds 10 megabytes', status: 400 });
+    const sizeError = validateAssetSize('attachment', buffer.length);
+    if (sizeError) return apiError({ message: sizeError, status: 400 });
     const digest = await storeFile(buffer);
 
     await prisma.$executeRaw`

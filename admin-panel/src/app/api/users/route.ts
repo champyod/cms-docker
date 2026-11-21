@@ -1,6 +1,10 @@
 import { prisma } from '@/lib/prisma';
 import { verifyApiPermission, apiError, apiSuccess } from '@/lib/api-utils';
-import { buildUserSearchWhere, safeUserSelect, usersPageSelect } from '@/lib/prisma-selects';
+import { getPermissions } from '@/lib/permissions';
+import { readListSort } from '@/lib/list-sorting';
+import { userSortOrderBy } from '@/lib/user-sorting';
+import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
+import { buildUserSearchWhere, safeUserSelect, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
 import { formatStoredPassword, isPasswordKind, DEFAULT_PASSWORD_KIND } from '@/lib/password-format';
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
@@ -19,6 +23,10 @@ export async function GET(req: NextRequest) {
     const page = Math.max(Number(searchParams.get('page')) || 1, 1);
     const perPage = Math.min(Math.max(Number(searchParams.get('perPage')) || DEFAULT_USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
     const search = (searchParams.get('search') || '').trim();
+    const sort = readListSort({
+      sort: searchParams.get('sort') || undefined,
+      dir: searchParams.get('dir') || undefined,
+    });
     const skip = (page - 1) * perPage;
 
     const where = buildUserSearchWhere(search);
@@ -28,19 +36,26 @@ export async function GET(req: NextRequest) {
         where,
         skip,
         take: perPage,
-        orderBy: { id: 'asc' },
+        orderBy: userSortOrderBy(sort),
         select: usersPageSelect,
       }),
       prisma.users.count({ where }),
     ]);
 
+    const permissions = await getPermissions();
+    const usersFieldAccess = getFieldAccess('users', permissions);
+    const visibleUsers = users.map((user) =>
+      filterReadableFieldsWith(usersFieldAccess, user as unknown as Record<string, unknown>) as unknown as UsersPageRow,
+    );
+
     return apiSuccess({
-      users,
+      users: visibleUsers,
       total,
       totalPages: Math.max(Math.ceil(total / perPage), 1),
       currentPage: page,
       perPage,
       search,
+      sort,
     });
   } catch (error) {
     return apiError(error);
@@ -104,7 +119,7 @@ export async function POST(req: NextRequest) {
       afterValues: { username: usernameTrimmed, first_name: firstNameTrimmed, last_name: lastNameTrimmed },
       result: 'success',
     });
-    revalidatePath('/[locale]/users', 'page');
+    revalidatePath('/[locale]/people/users', 'page');
     return apiSuccess({ user });
   } catch (error) {
     const e = error as { code?: string };

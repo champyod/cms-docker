@@ -27,28 +27,28 @@ from cms.server.util import Url
 
 class TestUrl(unittest.TestCase):
 
-    def test_top_level(self):
+    def test_it_builds_urls_from_an_absolute_root(self):
         url = Url("/")
         self.assertEqual(url(), "/")
         self.assertEqual(url("foo"), "/foo")
         self.assertEqual(url("foo", "bar"), "/foo/bar")
         self.assertEqual(url("foo", 42), "/foo/42")
 
-    def test_prefix(self):
+    def test_it_builds_urls_under_an_absolute_prefix(self):
         url = Url("/prefix")
         self.assertEqual(url(), "/prefix")
         self.assertEqual(url("foo"), "/prefix/foo")
         self.assertEqual(url("foo", "bar"), "/prefix/foo/bar")
         self.assertEqual(url("foo", 42), "/prefix/foo/42")
 
-    def test_relative_prefix(self):
+    def test_it_builds_urls_under_a_relative_prefix(self):
         url = Url("..")
         self.assertEqual(url(), "..")
         self.assertEqual(url("foo"), "../foo")
         self.assertEqual(url("foo", "bar"), "../foo/bar")
         self.assertEqual(url("foo", 42), "../foo/42")
 
-    def test_top_level_extension(self):
+    def test_it_appends_path_segments_to_an_absolute_root(self):
         url = Url("/")
         self.assertEqual(url["foo"](), "/foo")
         self.assertEqual(url["foo"]("bar"), "/foo/bar")
@@ -56,7 +56,7 @@ class TestUrl(unittest.TestCase):
         self.assertEqual(url["foo"](42), "/foo/42")
         self.assertEqual(url["foo"][42]("bar"), "/foo/42/bar")
 
-    def test_prefix_extension(self):
+    def test_it_appends_path_segments_under_an_absolute_prefix(self):
         url = Url("/prefix")
         self.assertEqual(url["foo"](), "/prefix/foo")
         self.assertEqual(url["foo"]("bar"), "/prefix/foo/bar")
@@ -64,7 +64,7 @@ class TestUrl(unittest.TestCase):
         self.assertEqual(url["foo"](42), "/prefix/foo/42")
         self.assertEqual(url["foo"][42]("bar"), "/prefix/foo/42/bar")
 
-    def test_relative_prefix_extension(self):
+    def test_it_appends_path_segments_under_a_relative_prefix(self):
         url = Url("..")
         self.assertEqual(url["foo"](), "../foo")
         self.assertEqual(url["foo"]("bar"), "../foo/bar")
@@ -72,14 +72,14 @@ class TestUrl(unittest.TestCase):
         self.assertEqual(url["foo"](42), "../foo/42")
         self.assertEqual(url["foo"][42]("bar"), "../foo/42/bar")
 
-    def test_query(self):
+    def test_it_appends_query_parameters(self):
         url = Url("/foo")["bar"]
         self.assertEqual(url("baz", a="b"), "/foo/bar/baz?a=b")
         self.assertEqual(url("baz", a=42), "/foo/bar/baz?a=42")
         self.assertEqual(url("baz", a="b", b="a"),
                          "/foo/bar/baz?a=b&b=a")
 
-    def test_escape(self):
+    def test_it_percent_escapes_path_and_query_characters(self):
         url = Url("/")
         self.assertEqual(url("foo/bar"), "/foo%2Fbar")
         self.assertEqual(url("foo?bar"), "/foo%3Fbar")

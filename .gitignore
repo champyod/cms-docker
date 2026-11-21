@@ -29,14 +29,23 @@ config.toml
 .env.*.local
 *.local
 *.pem.local
+# Security feed: the template is committed, the live copy (.env.security) stays local
+!.env.security.example
 docker-compose.override.yml
+docker-compose.expose.yml
+
+# Security agent queue, results and state — written by the panel, applied on the host
+.security-agent/
 
 # VSCode settings
 .vscode/
 
 .agent/environment.md
 .result
-docker-compose.contests.generated.yml
+docker-compose.registry.generated.yml
+# Rendered by ./cms config sync from the service registry; regenerated on every run.
+config/generated/
+docker-compose.tailscale.generated.yml
 admin-panel/.env
 
 # Agent tools
@@ -64,6 +73,10 @@ config/*.pem.local
 
 # Backup archives
 backups/*.tar.gz
+# The monitoring stack's textfile collector reads backups/metrics (docker-compose.monitoring.yml).
+# What lands there is a runtime fact — the ages of the newest backups — not a source file.
+backups/metrics/*
+!backups/metrics/.gitkeep
 
 # Monitoring data (Docker volumes — not files, but ignore stray local copies)
 prometheus-data/
@@ -77,3 +90,25 @@ config/modsecurity/modsec_audit.log
 config/modsecurity/modsec_debug.log
 waf-logs/
 cms-waf-logs/
+
+# Rust build artifacts for the ranking service
+ranking-web/target/
+
+# Generated parity captures: the script writes here by default.
+ranking-web/tests/fixtures/parity/captured/*/
+
+# A stray `bun install` at the repo root (the panel has its own) creates this.
+/node_modules/
+
+# Generated per CI run from the panel's waiver table (security/waivers.json): the ids that may be
+# suppressed are waiver rows, so a local .trivyignore must never be committed.
+.trivyignore
+
+# scripts/__image_scan.sh's working directory: trivy reports, the drift table and the issue body it
+# renders. Run output, not source — the nightly workflow writes it under $RUNNER_TEMP.
+/.image-scan/
+trivy-image.txt
+
+# Which admin-panel colour is live. Written by scripts/__admin_panel_swap.sh and read by the
+# route renderer: it is this box's state, not a source file.
+/config/admin-panel-colour

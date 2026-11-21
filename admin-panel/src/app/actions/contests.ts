@@ -2,12 +2,14 @@
 
 import { revalidatePath } from 'next/cache';
 import * as contestService from '@/lib/services/contests';
+import * as contestDetail from '@/lib/queries/contest-detail';
 import type { ContestData } from '@/lib/contests-repo';
+import type { ListSortInput } from '@/lib/list-sorting';
 
 export type { ContestData } from '@/lib/contests-repo';
 
-export async function getContests({ page = 1, search = '' }: { page?: number; search?: string }): Promise<Awaited<ReturnType<typeof contestService.listContests>>> {
-  return contestService.listContests({ page, search });
+export async function getContests({ page = 1, search = '', sort = null }: { page?: number; search?: string; sort?: ListSortInput }): Promise<Awaited<ReturnType<typeof contestService.listContests>>> {
+  return contestService.listContests({ page, search, sort });
 }
 
 export async function createContest(data: ContestData): Promise<Awaited<ReturnType<typeof contestService.createContest>>> {
@@ -46,8 +48,8 @@ export async function addTaskToContest(contestId: number, taskId: number): Promi
   return result;
 }
 
-export async function removeTaskFromContest(taskId: number): Promise<Awaited<ReturnType<typeof contestService.removeTaskFromContest>>> {
-  const result = await contestService.removeTaskFromContest(taskId);
+export async function removeTaskFromContest(contestId: number, taskId: number): Promise<Awaited<ReturnType<typeof contestService.removeTaskFromContest>>> {
+  const result = await contestService.removeTaskFromContest(contestId, taskId);
   if (result.success) revalidatePath('/[locale]/contests', 'page');
   return result;
 }
@@ -62,12 +64,28 @@ export async function getAvailableContests(): Promise<Awaited<ReturnType<typeof 
   return contestService.getAvailableContests();
 }
 
+export async function getBoundContestId(): Promise<Awaited<ReturnType<typeof contestService.getBoundContestId>>> {
+  return contestService.getBoundContestId();
+}
+
+export async function getShardContestBindings(): Promise<Awaited<ReturnType<typeof contestService.getShardContestBindings>>> {
+  return contestService.getShardContestBindings();
+}
+
 export async function activateContest(id: number): Promise<Awaited<ReturnType<typeof contestService.activateContest>>> {
   const result = await contestService.activateContest(id);
   if (result.success) revalidatePath('/[locale]/contests', 'page');
   return result;
 }
 
-export async function getActiveContest(): Promise<Awaited<ReturnType<typeof contestService.getActiveContest>>> {
-  return contestService.getActiveContest();
+// Why: on-demand dialog read — the record layout never loads full edit
+// fields, so the Edit Contest dialog fetches them through this wrapper.
+export async function getContestEditData(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestEditData>>> {
+  return contestDetail.getContestEditData(id);
+}
+
+// Why: the countdown tab polls this to hot-reload timing config edits
+// made in Overview or Settings without a manual browser refresh.
+export async function getContestCountdown(id: number): Promise<Awaited<ReturnType<typeof contestDetail.getContestCountdown>>> {
+  return contestDetail.getContestCountdown(id);
 }

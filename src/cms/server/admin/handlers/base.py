@@ -58,6 +58,10 @@ import cms.db
 from cms.grading.scoretypes import get_score_type_class
 from cms.grading.tasktypes import get_task_type_class
 from cms.server import CommonRequestHandler, FileHandlerMixin
+from cms.server.captcha import Captcha
+from cms.server.login_exemption import is_login_exempt
+from cms.server.login_lockout_ledger import record_login_lockout
+from cms.server.credits import load_credits
 from cmscommon.crypto import hash_password, parse_authentication
 from cmscommon.datetime import make_datetime
 from cms.db.permissions import (
@@ -171,6 +175,18 @@ _effective_perms_cache: dict[int, tuple[float, frozenset[str]]] = {}
 # WHY: bound staleness from out-of-process writes while still coalescing bursts.
 _CACHE_TTL_SECONDS: float = 5.0
 _ALL_PERMISSION = "all:all"
+
+
+def first_contest(task) -> "Contest | None":
+    """Return the contest a task's admin page is scoped to.
+
+    A task may belong to several contests; the task pages use the first
+    (lowest-numbered) one for their breadcrumb and context, or None when the
+    task is attached to no contest.
+
+    """
+    contests = task.contests
+    return contests[0] if contests else None
 
 
 def _all_permission_keys(sql_session) -> set[str]:
@@ -306,18 +322,30 @@ def invalidate_permission_cache(admin_id: int) -> None:
     _effective_perms_cache.pop(admin_id, None)
 
 
-def require_permission(permission: str = "authenticated", self_allowed: bool = False):
-    """Return a decorator requiring a specific permission registry key.
+def require_permission(
+    permission: str | tuple[str, ...] | list[str] = "authenticated",
+    self_allowed: bool = False,
+):
+    """Return a decorator requiring one of the given permission keys.
 
     permission: a registry key of the form "module:verb" (e.g. "task:create"),
         "all:all" for full access, or "authenticated" for any logged-in admin
-        with no fine-grained check.
+        with no fine-grained check. A tuple or list of keys is accepted too
+        and is read as any-of: the caller has to hold at least one of them.
+        "authenticated" inside such a collection keeps its no-fine-grained-
+        check meaning.
     self_allowed: if true, allow the action when the first URL argument
         matches the current admin's id, regardless of permissions.
     """
     _P = typing.ParamSpec("_P")
     _R = typing.TypeVar("_R")
     _T = typing.TypeVar("_T", bound=BaseHandler)
+
+    # Normalise upfront: a plain string is iterable, so the request path must
+    # never iterate over the raw argument.
+    permissions: tuple[str, ...] = (
+        (permission,) if isinstance(permission, str) else tuple(permission)
+    )
 
     def decorator(
         func: Callable[typing.Concatenate[_T, _P], _R],
@@ -327,7 +355,7 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
         def newfunc(self: _T, *args: _P.args, **kwargs: _P.kwargs):
             # AUTHENTICATED only requires a valid session (handled by
             # @tornado.web.authenticated above).
-            if permission == BaseHandler.AUTHENTICATED:
+            if BaseHandler.AUTHENTICATED in permissions:
                 return func(self, *args, **kwargs)
 
             user = self.current_user
@@ -343,7 +371,8 @@ def require_permission(permission: str = "authenticated", self_allowed: bool = F
                     pass
 
             effective = get_effective_permissions(user.id, self.sql_session)
-            if has_effective_permission(effective, permission):
+            if any(has_effective_permission(effective, key)
+                   for key in permissions):
                 return func(self, *args, **kwargs)
 
             raise tornado.web.HTTPError(403, "Admin is not authorized")
@@ -368,6 +397,24 @@ class BaseHandler(CommonRequestHandler):
     AUTHENTICATED = "authenticated"
     current_user: Admin | None
     service: "AdminWebServer"
+
+    _aws_captcha: Captcha | None = None
+
+    @property
+    def captcha(self) -> Captcha:
+        """Return the AWS's adaptive login captcha.
+
+        Built once per process and cached on the class: the failure counters it
+        carries are process-wide, exactly as the admin panel's are, and
+        rebuilding it per request would reset them on every page load.
+
+        """
+        if BaseHandler._aws_captcha is None:
+            BaseHandler._aws_captcha = Captcha(
+                config.admin_web_server.captcha,
+                lockout_sink=record_login_lockout,
+                is_exempt=is_login_exempt)
+        return BaseHandler._aws_captcha
 
     def try_commit(self) -> bool:
         """Try to commit the current session.
@@ -475,6 +522,12 @@ class BaseHandler(CommonRequestHandler):
         # FIXME These objects provide too broad an access: their usage
         # should be extracted into with narrower-scoped parameters.
         params["config"] = config
+        # WHY every AWS page carries the credits: AGPL-13 requires the offer of
+        # the Corresponding Source to reach the users interacting with this
+        # server, so the sidebar needs the deployment's own source URL, which a
+        # self-hosted fork configures, and the licence identity, which must not
+        # be typed into a template where it can drift from the credits file.
+        params["credits"] = load_credits()
         params["handler"] = self
         if self.current_user is not None:
             params["admin"] = self.current_user
@@ -708,7 +761,14 @@ class BaseHandler(CommonRequestHandler):
 
         # If a password is given, we use that.
         if len(password) > 0:
-            dest["password"] = hash_password(password, method)
+            # WHY 400 and not a 500 from hash_password: the form no longer offers
+            # a plaintext method, so reaching this with one means a stale page or
+            # a hand-made request. The admin gets told the choice is refused
+            # instead of a traceback, and the refused method is never stored.
+            try:
+                dest["password"] = hash_password(password, method)
+            except ValueError as exc:
+                raise tornado.web.HTTPError(400, str(exc)) from exc
         # If the password was set and was hashed, and the admin kept
         # the method unchanged and didn't specify anything, they must
         # have meant to keep the old password unchanged.

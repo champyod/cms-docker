@@ -1,30 +1,19 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { readEnvFile } from '@/app/actions/env';
+import { readConfigTomlValues, readDatabaseProfiles } from '@/app/actions/configTomlActions';
+import { CONFIG_TOML_FILE } from '@/lib/config-toml';
 import {
-  CONFIG_SECTIONS,
-  EnvFilesData,
-  deepCopyEnvData,
-  updateFileValue
+  configTomlKeys,
+  updateFileValue,
+  type EnvFilesData,
 } from './envConfigSections';
-
-async function fetchAllEnvConfigs(): Promise<EnvFilesData> {
-  const result: EnvFilesData = {};
-
-  for (const section of CONFIG_SECTIONS) {
-    if (result[section.filename]) continue;
-    const res = await readEnvFile(section.filename);
-    // Failed reads surface as an empty config instead of blocking the view
-    result[section.filename] = res.success && res.config ? res.config : {};
-  }
-
-  return result;
-}
 
 export interface EnvConfigDocuments {
   data: EnvFilesData;
   originalData: EnvFilesData;
+  /** The [db_<name>] profiles config.toml declares, for the active-database selector. */
+  databaseProfiles: string[];
   loading: boolean;
   saving: boolean;
   error: string;
@@ -37,17 +26,34 @@ export interface EnvConfigDocuments {
 export function useEnvConfigDocuments(): EnvConfigDocuments {
   const [originalData, setOriginalData] = useState<EnvFilesData>({});
   const [data, setData] = useState<EnvFilesData>({});
+  const [databaseProfiles, setDatabaseProfiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  // Reads config.toml rather than the .env it generates: the generated file lags the
+  // source until the next sync, so showing it would hide the value just saved here.
   const loadData = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError('');
     try {
-      const next = await fetchAllEnvConfigs();
+      const [result, profiles] = await Promise.all([
+        readConfigTomlValues(configTomlKeys()),
+        readDatabaseProfiles(),
+      ]);
+      if (!result.success) {
+        setError('Failed to load configuration');
+        return;
+      }
+      const next: EnvFilesData = { [CONFIG_TOML_FILE]: result.values };
       setData(next);
-      setOriginalData(deepCopyEnvData(next));
+      // Why shared, not cloned: every writer (updateFileValue, the save updater)
+      // replaces objects instead of mutating them, so this snapshot can never be
+      // changed behind the baseline that computeChangedKeys compares against.
+      setOriginalData(() => next);
+      // Why not a load failure: the profile list only populates the selector's options, so an
+      // unreadable list still leaves the current value editable rather than blanking the page.
+      if (profiles.success) setDatabaseProfiles(profiles.profiles);
     } catch {
       setError('Failed to load configuration');
     } finally {
@@ -58,5 +64,5 @@ export function useEnvConfigDocuments(): EnvConfigDocuments {
   const handleChange = (filename: string, key: string, value: string): void =>
     setData(prev => updateFileValue(prev, filename, key, value));
 
-  return { data, originalData, loading, saving, error, loadData, handleChange, setSaving, setOriginalData };
+  return { data, originalData, databaseProfiles, loading, saving, error, loadData, handleChange, setSaving, setOriginalData };
 }

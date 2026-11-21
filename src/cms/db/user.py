@@ -28,15 +28,17 @@
 from datetime import datetime, timedelta
 from ipaddress import IPv4Network, IPv6Network
 
+from sqlalchemy import and_, func
 from sqlalchemy.dialects.postgresql import ARRAY, CIDR
 from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column, ForeignKey, CheckConstraint, \
     UniqueConstraint
 from sqlalchemy.types import Boolean, Integer, String, Unicode, DateTime, \
-    Interval
+    Enum, Interval
 
-from cmscommon.crypto import generate_random_password, build_password
+from cmscommon.crypto import generate_random_password, hash_password
 from . import CastingArray, Codename, Base, Admin, Contest
+from .contest import ContestTeam
 import typing
 if typing.TYPE_CHECKING:
     from . import Submission, UserTest
@@ -69,7 +71,7 @@ class User(Base):
     password: str = Column(
         Unicode,
         nullable=False,
-        default=lambda: build_password(generate_random_password()))
+        default=lambda: hash_password(generate_random_password()))
 
     # Email for any communications in case of remote contest.
     email: str | None = Column(
@@ -96,6 +98,14 @@ class User(Base):
         ARRAY(String),
         nullable=False,
         default=[])
+
+    # Timestamp of the most recent successful password login through CWS.
+    # Written by validate_login on success so the admin panel can surface it
+    # under the audit:read permission. NULL when the user has never logged in
+    # or the column has not yet been backfilled.
+    last_login_at: datetime | None = Column(
+        DateTime,
+        nullable=True)
 
     # These one-to-many relationships are the reversed directions of
     # the ones defined in the "child" classes using foreign keys.
@@ -134,6 +144,14 @@ class Team(Base):
         Unicode,
         nullable=False)
 
+    # Whether a contestant may pick this team when registering in a contest.
+    # This is the DEFAULT: a contest_teams row overrides it per contest, and a
+    # team with no such row falls back to this flag.
+    registerable: bool = Column(
+        Boolean,
+        nullable=False,
+        default=True)
+
     participations: list["Participation"] = relationship(
         "Participation",
         cascade="all, delete-orphan",
@@ -142,6 +160,21 @@ class Team(Base):
 
     # TODO: decide if the flag images will eventually be stored here.
     # TODO: (hopefully, the same will apply for faces in User).
+
+
+def registerable_teams_query(sql_session, contest):
+    """Return the query of teams registerable for a contest.
+
+    Resolution rule: a contest_teams row decides for that contest; with no
+    row the team falls back to its own registerable flag.
+
+    """
+    return sql_session.query(Team).outerjoin(
+        ContestTeam,
+        and_(ContestTeam.team_id == Team.id,
+             ContestTeam.contest_id == contest.id)).filter(
+        func.coalesce(ContestTeam.registerable,
+                      Team.registerable).is_(True))
 
 
 class Participation(Base):
@@ -373,6 +406,13 @@ class Question(Base):
         nullable=True)
     reply_text: str | None = Column(
         Unicode,
+        nullable=True)
+
+    # Whether the statement itself answered the question or an answer had to. Null
+    # until an admin answers, and on rows written before the column existed.
+    resolution_kind: str | None = Column(
+        Enum("clarification_needed", "settled_by_statement",
+             name="question_resolution_kind"),
         nullable=True)
 
     # Participation (id and object) owning the question.

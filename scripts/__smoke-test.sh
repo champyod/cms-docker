@@ -29,6 +29,7 @@ MODE=""
 STACKS="core,admin"
 KEEP=0
 DRY_RUN=0
+WORKER_PROJECT=""
 
 print_usage() {
   cat <<'USAGE'
@@ -150,11 +151,19 @@ dump_logs() {
   fi
 }
 
+teardown_worker() {
+  # The smoke worker belongs to a separate project, so the stack down cannot remove it.
+  if [[ -n "$WORKER_PROJECT" ]]; then
+    docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker down --remove-orphans 2>&1 || log_warn "worker compose down returned non-zero (ignored)"
+  fi
+}
+
 teardown() {
   if [[ "$SMOKE_KEEP_UP" == "1" || "$KEEP" -eq 1 ]]; then
     log_info "teardown skipped (--keep / SMOKE_KEEP_UP=1); stack left up"
     return 0
   fi
+  teardown_worker
   log_info "teardown: compose down for profiles: ${STACKS_NORM[*]} (without -v, volumes preserved)"
   local pargs
   pargs=$(compose_profiles_args)
@@ -168,6 +177,7 @@ on_fail_teardown() {
     log_warn "failure path: keeping stack up (SMOKE_KEEP_UP=1)"
   else
     # Dump attempt already done by caller; now down
+    teardown_worker
     local pargs
     pargs=$(compose_profiles_args)
     # shellcheck disable=SC2086
@@ -284,7 +294,7 @@ Steps:
      a. docker compose -f docker-compose.yml --profile core up -d database -> wait_healthy cms-database 90
      b. remaining core: up log/resource/scoring/checker -> wait_healthy each 120
      c. admin: up admin profile (if in stacks) -> curl_wait 127.0.0.1:\${ADMIN_NEXT_PORT_EXTERNAL:-8891}, :\${ADMIN_PORT_EXTERNAL:-8889}, ranking :\${RANKING_PORT_EXTERNAL:-8890} (120s each)
-     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s)
+     d. contest: up contest profile (if in stacks) -> curl_wait :\$(resolve_contest_port) via compose-discovered env var (120s); then /docs/<lang>/index.html + one asset it references, <lang> from the cms.toml docs tree (60s each, advisory: WARN only, never fails the run)
      Note: worker/monitor never run by default; --stacks worker includes ISOLATE_CGROUP_CONTROL=0 override (real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)
   5. Result matrix: service | check type | result | duration
   6. Teardown: compose down for requested profiles WITHOUT -v (preserve volumes); on failure dump docker logs --tail 100 to /tmp/cms-smoke-<ts>/; keep up only if SMOKE_KEEP_UP=1
@@ -315,12 +325,6 @@ set -a
 source "${REPO_ROOT}/.env" 2>/dev/null || true
 set +a
 
-# .env.contest is a per-contest override — source it if present
-_env_contest="${REPO_ROOT}/.env.contest"
-if [[ -f "$_env_contest" ]]; then
-  set -a; source "$_env_contest" 2>/dev/null || true; set +a
-fi
-
 env_preflight_fail=0
 check_secret_var() {
   local var_name="$1"
@@ -346,7 +350,7 @@ for _v in POSTGRES_PASSWORD AUTH_SECRET SECRET_KEY; do
 done
 
 if [[ "$env_preflight_fail" -ne 0 ]]; then
-  printf '[FAIL] preflight env sanity failed — fix .env.* then run: make env\n' >&2
+  printf '[FAIL] preflight env sanity failed — fix config.toml then run: ./cms config sync\n' >&2
   exit 2
 fi
 log_info "preflight env sanity: POSTGRES_PASSWORD/AUTH_SECRET/SECRET_KEY OK"
@@ -431,6 +435,60 @@ run_curl_wait() {
   return $rc
 }
 
+# Advisory twin of run_curl_wait: the docs mount is deployment content that may
+# legitimately be absent, so a miss is a WARN in the matrix and never sets
+# SMOKE_FAILED — a docs gap must not turn a previously-green run red.
+# WHY 2>/dev/null around curl_wait: its own timeout line says [FAIL], which would
+# contradict the advisory verdict recorded here.
+run_curl_warn() {
+  local svc="$1"; local url="$2"; local timeout_s="$3"
+  local start dur rc
+  start=$(date +%s)
+  if curl_wait "$url" "$timeout_s" 2>/dev/null; then rc=0; else rc=1; fi
+  dur="$(( $(date +%s) - start ))s"
+  if [[ $rc -eq 0 ]]; then
+    record_matrix "$svc" "http" "PASS" "$dur"
+  else
+    record_matrix "$svc" "http" "WARN" "no 2xx/3xx in ${timeout_s}s"
+    log_warn "${svc}: ${url} did not answer (advisory)"
+  fi
+  return 0
+}
+
+# The /docs mount is separate from the contest root, so the root can answer while
+# every docs asset 404s. Assert the entry page and one referenced asset. The language
+# folder comes from the same docs_path + tree rule __preflight.sh uses, so a java-only
+# tree is probed where a literal cpp would only ever 404 and disagree with preflight;
+# the asset name is read from the page so a renamed bundle is followed, not assumed.
+probe_contest_docs() {
+  local port="$1"
+  local docs_path language=""
+  docs_path="$(docs_path_from_toml "$REPO_ROOT" || true)"
+  [[ -n "$docs_path" ]] && language="$(docs_language "$docs_path" || true)"
+  if [[ -z "$language" ]]; then
+    record_matrix "contest-docs" "http" "WARN" "docs language unresolved (docs_path: ${docs_path:-unset})"
+    return 0
+  fi
+
+  local entry="http://127.0.0.1:${port}/docs/${language}/index.html"
+  run_curl_warn "contest-docs" "$entry" 60
+  local asset
+  asset="$(curl -fsS "$entry" 2>/dev/null \
+    | awk 'match($0, /(href|src)="[^"]+"/) { s = substr($0, RSTART, RLENGTH); sub(/^(href|src)="/, "", s); sub(/"$/, "", s); print s; exit }' || true)"
+  if [[ -z "$asset" ]]; then
+    record_matrix "contest-docs-asset" "http" "WARN" "asset ref unreadable"
+    return 0
+  fi
+  asset="${asset%%#*}"
+  asset="${asset%%\?*}"
+  local url
+  case "$asset" in
+    /*) url="http://127.0.0.1:${port}${asset}" ;;
+    *)  url="http://127.0.0.1:${port}/docs/${language}/${asset}" ;;
+  esac
+  run_curl_warn "contest-docs-asset" "$url" 60
+}
+
 # Failure handler mid-flow
 fail_mid_flow() {
   local msg="$1"
@@ -493,6 +551,7 @@ if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "contest"; then
   docker compose -f "$COMPOSE_FILE" --profile core --profile contest up -d 2>&1 || fail_mid_flow "compose up contest failed"
   CONTEST_PORT_VAL=$(resolve_contest_port)
   run_curl_wait "contest" "http://127.0.0.1:${CONTEST_PORT_VAL}/" 120 || true
+  probe_contest_docs "$CONTEST_PORT_VAL"
   if [[ "$SMOKE_FAILED" -ne 0 ]]; then
     log_warn "contest checks had failures (see matrix)"
   fi
@@ -504,16 +563,24 @@ fi
 # Worker/monitor explicit support
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "worker"; then
   log_info "up: worker profile (ISOLATE_CGROUP_CONTROL=0 override; real isolate needs host cgroup setup via scripts/__worker_cgroup_setup.sh)"
-  ISOLATE_CGROUP_CONTROL=0 docker compose -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
-  # Health check for worker container(s) — name is cms-worker-${WORKER_SHARD:-0}
+  # Smoke tests need only the selected shard, not fleet seeding or a config.toml dependency.
   WORKER_SHARD_VAL="${WORKER_SHARD:-0}"
+  [[ "$WORKER_SHARD_VAL" =~ ^[0-9]+$ ]] || fail_mid_flow "WORKER_SHARD must be numeric"
+  WORKER_PROJECT="cw${WORKER_SHARD_VAL}"
+  ISOLATE_CGROUP_CONTROL=0 docker compose -p "$WORKER_PROJECT" -f "$COMPOSE_FILE" --profile worker up -d 2>&1 || fail_mid_flow "compose up worker failed"
   run_wait_healthy "cms-worker-${WORKER_SHARD_VAL}" 120 || true
 fi
 
 if printf '%s\n' "${STACKS_NORM[@]}" | grep -qx "monitor"; then
   log_info "up: monitor profile"
+  # WHY --profile core as well: the monitor profile also holds cms-scheduler, whose
+  # depends_on is `database: service_healthy` while database sits behind
+  # profiles: [core]. Compose validates the whole project before starting anything, so
+  # --profile monitor alone failed with `service "scheduler" depends on undefined
+  # service "database"` and the monitor never came up — in the one script whose job is
+  # to prove the stacks start.
   # shellcheck disable=SC2086
-  docker compose -f "$COMPOSE_FILE" --profile monitor up -d 2>&1 || fail_mid_flow "compose up monitor failed"
+  docker compose -f "$COMPOSE_FILE" --profile core --profile monitor up -d 2>&1 || fail_mid_flow "compose up monitor failed"
   # Monitor has no HTTP endpoint; check container running
   run_wait_healthy "cms-monitor" 60 || true
 fi

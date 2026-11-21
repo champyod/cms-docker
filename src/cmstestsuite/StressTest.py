@@ -21,8 +21,24 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+"""Stress test a running contest web server with real logins.
+
+Passwords are stored hashed, so they cannot be recovered from the database.
+To let the test log in, hand it the raw passwords with --passwords-file: a JSON
+object mapping each username to its password, for example
+
+    {"contestant1": "secret1", "contestant2": "secret2"}
+
+Accounts without an entry are reported and skipped; if no account is left the
+test exits with a failure instead of reporting a run that tested nothing.
+Alternatively, --read-from a contest data file produced by --prepare-path (that
+file already carries the raw passwords).
+
+"""
+
 import argparse
 import ast
+import json
 import os
 import random
 import sys
@@ -247,11 +263,39 @@ class SubmitActor(Actor):
                 submissions_path=self.submissions_path))
 
 
-def harvest_contest_data(contest_id: int) -> tuple[dict[str, dict], list[str]]:
+def load_passwords_file(path: str) -> dict[str, str]:
+    """Read the raw passwords the stress test needs to log in.
+
+    path: a JSON file containing an object mapping username to password.
+
+    return: the mapping.
+
+    raise (SystemExit): if the file is not such a JSON object, because then no
+        login could be attempted and the test would report success anyway.
+
+    """
+    with open(path, "rt", encoding="utf-8") as file_:
+        passwords = json.load(file_)
+    if not isinstance(passwords, dict) or \
+            not all(isinstance(k, str) and isinstance(v, str)
+                    for k, v in passwords.items()):
+        raise SystemExit(
+            "%s must contain a JSON object mapping username to password, for "
+            "example {\"contestant1\": \"secret1\"}." % path)
+    return passwords
+
+
+def harvest_contest_data(
+    contest_id: int, passwords: dict[str, str] | None = None
+) -> tuple[dict[str, dict], list[str]]:
     """Retrieve the couples username, password and the task list for a
     given contest.
 
     contest_id: the id of the contest we want.
+    passwords: raw passwords by username, from --passwords-file; a stored
+        password is a hash and cannot be turned back into the secret, so an
+        account is usable only when the fixture supplies its password.
+
     return: the first element is a dictionary mapping
                     usernames to passwords; the second one is the list
                     of the task names.
@@ -259,23 +303,36 @@ def harvest_contest_data(contest_id: int) -> tuple[dict[str, dict], list[str]]:
     """
     users = {}
     tasks = []
+    skipped = []
     with SessionGen() as session:
         contest = Contest.get_from_id(contest_id, session)
         for participation in contest.participations:
             user = participation.user
+            if passwords is not None and user.username in passwords:
+                users[user.username] = {'password': passwords[user.username]}
+                continue
             # Pick participation's password if present, or the user's.
             password_source = participation.password
             if password_source is None:
                 password_source = user.password
-            # We can log in only if we know the plaintext password.
-            method, password = parse_authentication(password_source)
-            if method != "plaintext":
-                print("Not using user %s with non-plaintext password."
-                      % user.username)
-                continue
-            users[user.username] = {'password': password}
+            # No fixture: the row is all we have, and it holds a hash (or a
+            # plaintext value the login path now refuses). Either way we cannot
+            # log in, so say so instead of silently testing nothing.
+            try:
+                method, _ = parse_authentication(password_source)
+            except ValueError:
+                method = "invalid"
+            skipped.append((user.username, method))
         for task in contest.tasks:
             tasks.append((task.id, task.name, list(task.statements.keys())))
+
+    if skipped:
+        print("Not using %d account(s) whose raw password is unknown; pass "
+              "--passwords-file with {\"username\": \"password\"} entries to "
+              "include them." % len(skipped), file=sys.stderr)
+        for username, method in skipped:
+            print("  %s (stored method: %s)" % (username, method),
+                  file=sys.stderr)
     return users, tasks
 
 
@@ -308,6 +365,12 @@ def main():
         "-r", "--read-from", action="store", type=utf8_decoder,
         help="file to read contest info from")
     parser.add_argument(
+        "-P", "--passwords-file", action="store", type=utf8_decoder,
+        help="JSON file mapping username to the raw password, needed to log "
+             "in to accounts whose password is stored hashed (it cannot be "
+             "recovered from the database). Accounts without an entry are "
+             "reported and skipped")
+    parser.add_argument(
         "-t", "--time-coeff", action="store", type=float, default=10.0,
         help="average wait between actions")
     parser.add_argument(
@@ -315,10 +378,14 @@ def main():
         help="whether the actor only submits solutions")
     args = parser.parse_args()
 
+    passwords = {}
+    if args.passwords_file is not None:
+        passwords = load_passwords_file(args.passwords_file)
+
     # If prepare_path is specified we only need to save some useful
     # contest data and exit.
     if args.prepare_path is not None:
-        users, tasks = harvest_contest_data(args.contest_id)
+        users, tasks = harvest_contest_data(args.contest_id, passwords)
         contest_data = dict()
         contest_data['users'] = users
         contest_data['tasks'] = tasks
@@ -335,16 +402,26 @@ def main():
     # If read_from is not specified, read contest data from database
     # if it is specified - read contest data from the file
     if args.read_from is None:
-        users, tasks = harvest_contest_data(args.contest_id)
+        users, tasks = harvest_contest_data(args.contest_id, passwords)
     else:
         with open(args.read_from, "rt", encoding="utf-8") as file_:
             contest_data = ast.literal_eval(file_.read())
         users = contest_data['users']
         tasks = contest_data['tasks']
+        # A prepared file already carries the raw passwords; the fixture can
+        # still refresh them.
+        for username, password in passwords.items():
+            if username in users:
+                users[username]['password'] = password
 
     if len(users) == 0:
-        print("No viable users, terminating.")
-        return
+        # Failing loudly matters: exiting successfully here would report a
+        # stress test that never logged in nor submitted anything.
+        print("No viable users: not running a test that would exercise "
+              "nothing. Pass --passwords-file with the raw passwords, or "
+              "--read-from a file prepared with --prepare-path.",
+              file=sys.stderr)
+        sys.exit(1)
 
     if args.actor_num is not None:
         user_items = list(users.items())

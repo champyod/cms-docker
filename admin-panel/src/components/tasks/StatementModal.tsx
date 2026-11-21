@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ModalFooter } from '@/components/core/ModalFooter';
 import { LanguagePicker } from '@/components/core/LanguagePicker';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { normalizeLanguageCode } from '@/lib/constants/languages';
 import { apiClient } from '@/lib/apiClient';
 import { readFileAsBase64 } from '@/lib/file-helpers';
@@ -22,6 +24,7 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
+  const runAction = useActionFeedback();
 
   if (!isOpen) return null;
 
@@ -45,7 +48,16 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
     setError('');
     try {
       const base64 = await readFileAsBase64(file);
-      const result = await apiClient.post('/api/statements', { taskId, language: normalizedLanguage, fileData: base64 });
+      const result = await runAction(
+        {
+          pending: 'Uploading statement...',
+          success: 'Statement uploaded',
+          failure: 'Upload failed',
+          description: `Statement (${normalizedLanguage}) saved successfully.`,
+        },
+        () => apiClient.post('/api/statements', { taskId, language: normalizedLanguage, fileData: base64 })
+      );
+      if (!result) return;
       if (result.success) {
         onSuccess();
         onClose();
@@ -53,11 +65,15 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       } else {
         setError(result.error ?? 'Failed to upload statement');
       }
-    } catch {
-      setError('An unexpected error occurred');
     } finally {
       setLoading(false);
     }
+  }
+
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved upload.
+  function cancel(): void {
+    if (!loading) onClose();
   }
 
   return (
@@ -68,18 +84,19 @@ export function StatementModal({ isOpen, onClose, taskId, existingLanguages, onS
       }}
       title="Add Statement"
       footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-            Cancel
-          </Button>
-          <Button type="submit" form="statement-form" variant="positive" icon={Upload} loading={loading} disabled={loading || !file}>
-            Upload Statement
-          </Button>
-        </>
+        <ModalFooter
+          formId="statement-form"
+          cancelLabel="Cancel"
+          confirmLabel="Upload Statement"
+          onCancel={cancel}
+          confirmIcon={Upload}
+          confirmLoading={loading}
+          confirmDisabled={loading || !file}
+        />
       }
       className="sm:max-w-md"
     >
-      {error ? <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
+      {error ? <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert> : null}
       <form id="statement-form" onSubmit={handleSubmit} className="space-y-4">
         <LanguagePicker value={language} onChange={setLanguage} extraOptions={existingLanguages} placeholder="en" label="Language" id="statement-language" />
         <div>

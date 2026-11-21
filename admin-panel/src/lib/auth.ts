@@ -1,45 +1,35 @@
-import { SignJWT, jwtVerify, type JWTPayload } from "jose";
-import { cookies } from "next/headers";
+import type { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
+import { cookies } from "next/headers";
+
+import { withActor, SYSTEM_IDENTITIES } from "@/lib/db-actor";
 import { prisma } from "@/lib/prisma";
+import {
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_PATH,
+  SESSION_DURATION_MS,
+  SESSION_REFRESH_INTERVAL_MS,
+  decrypt,
+  encrypt,
+  readSessionClaims,
+  type SessionClaims,
+  type SessionPayload,
+} from "@/lib/session-token";
 
-// Why: use 7-day session cookie but 2-hour JWT expiry so refreshSession must validate liveness on each request
-const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Session handling. The cookie itself — its name, signing key and the two JWT operations — lives in
+ * `./session-token` so that reading it never has to import the database layer; that is what lets
+ * `./db-actor` derive the actor for a request from the same cookie without a cycle. Everything
+ * here adds what needs the database: liveness, sliding, clearing.
+ */
 
-const secretKey = (() => {
-  if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
-  console.warn("WARNING: AUTH_SECRET is not set. Using a random secret — sessions will not persist across restarts.");
-  return crypto.randomBytes(32).toString("hex");
-})();
-const key = new TextEncoder().encode(secretKey);
+// Why re-exported: `./session-token` is an implementation detail of this pair of modules, and
+// every caller in the app already imports these names from here.
+export { encrypt, decrypt };
+export type { SessionPayload };
 
 // COOKIE_SECURE=true only if explicitly set — defaults false so HTTP access works
 const isSecureCookie = process.env.COOKIE_SECURE === 'true';
-
-// Why: permissions are resolved per request via getFreshPermissions, never stored on the token,
-// so a re-signed session cannot carry stale grants.
-export interface SessionPayload {
-  userId: string;
-  username: string;
-  expiresAt: string | Date;
-}
-
-/** Signs a payload as an HS256 JWT with a fixed 2h expiry (short-lived by design; sessions refresh via refreshSession). */
-export async function encrypt<T extends JWTPayload>(payload: T): Promise<string> {
-  return await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("2h")
-    .sign(key);
-}
-
-/** Verifies signature/expiry and returns the decoded payload; callers re-validate shape before trusting fields. */
-export async function decrypt<T = unknown>(input: string): Promise<T> {
-  const { payload } = await jwtVerify(input, key, {
-    algorithms: ["HS256"],
-  });
-  return payload as T;
-}
 
 function buildCookieOptions(expiresAt: Date) {
   return {
@@ -47,62 +37,124 @@ function buildCookieOptions(expiresAt: Date) {
     secure: isSecureCookie,
     expires: expiresAt,
     sameSite: "lax" as const,
-    path: "/",
+    path: SESSION_COOKIE_PATH,
   };
 }
 
 export async function createSession(userId: string, username: string): Promise<void> {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const session = await encrypt({ userId, username, expiresAt });
-  (await cookies()).set("session", session, buildCookieOptions(expiresAt));
+  (await cookies()).set(SESSION_COOKIE_NAME, session, buildCookieOptions(expiresAt));
 }
 
-export async function refreshSession(payload: SessionPayload): Promise<string | null> {
-  let admin;
-  try {
-    admin = await prisma.admins.findUnique({
-      where: { id: Number.parseInt(payload.userId, 10) },
-      select: { username: true, enabled: true },
-    });
-  } catch {
-    // DB unavailable — fail closed, keep existing cookie untouched
-    return null;
-  }
+type AdminLiveness = {
+  readonly isEnabled: boolean;
+  readonly username: string;
+};
 
-  if (!admin || !admin.enabled) {
-    try {
-      (await cookies()).delete("session");
-    } catch {
-      // cookies() may throw in read-only render contexts — safe to ignore
-    }
+/**
+ * Liveness verdict for the admin behind a session. The active branch carries the current
+ * username so a caller that re-signs picks up a rename without querying twice.
+ */
+export type SessionStatus =
+  | { readonly state: "active"; readonly username: string }
+  | { readonly state: "revoked" }
+  | { readonly state: "unreachable" };
+
+async function findAdminLiveness(userId: string): Promise<AdminLiveness | null> {
+  try {
+    // WHY system:auth: this read is the session-liveness check itself, so it runs while the session
+    // is still unproven — that is the definition of the pre-session identity. `admins` is the one
+    // table whose policy admits it (AUTH_BOOTSTRAP in the generator), and nothing else may use it.
+    const admin = await withActor({ kind: 'system', name: SYSTEM_IDENTITIES.AUTH }, () =>
+      prisma.admins.findUnique({
+        where: { id: Number.parseInt(userId, 10) },
+        select: { username: true, enabled: true },
+      }),
+    );
+    if (!admin) return { isEnabled: false, username: "" };
+    return { isEnabled: admin.enabled, username: admin.username };
+  } catch {
+    // Database unreachable — reported as its own state so callers fail the request closed
+    // but leave the cookie alone, otherwise a transient outage signs every admin out
     return null;
   }
+}
+
+/**
+ * Read-only session liveness check. It never touches cookies, so the render phase can call
+ * it where a write would throw; slideSessionCookie owns every mutation.
+ */
+export async function readSessionStatus(userId: string): Promise<SessionStatus> {
+  const liveness = await findAdminLiveness(userId);
+  if (liveness === null) return { state: "unreachable" };
+  if (!liveness.isEnabled) return { state: "revoked" };
+  return { state: "active", username: liveness.username };
+}
+
+function isRefreshDue(claims: SessionClaims): boolean {
+  if (claims.iat === undefined) return true;
+  return Date.now() - claims.iat * 1000 >= SESSION_REFRESH_INTERVAL_MS;
+}
+
+function clearSessionCookie(response: NextResponse): void {
+  response.cookies.delete({ name: SESSION_COOKIE_NAME, path: SESSION_COOKIE_PATH });
+}
+
+/**
+ * Slides the session cookie forward on a proxy response. Proxy is the only per-request
+ * context that can emit Set-Cookie, so it carries every write and re-signing; rendering
+ * stays read-only. Expired or revoked sessions are cleared here because the render path
+ * redirects instead of writing.
+ */
+export async function slideSessionCookie(
+  request: NextRequest,
+  response: NextResponse
+): Promise<void> {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return;
+
+  const claims = await readSessionClaims(token);
+  if (!claims) {
+    clearSessionCookie(response);
+    return;
+  }
+  if (!isRefreshDue(claims)) return;
+
+  const status = await readSessionStatus(claims.userId);
+  if (status.state === "revoked") {
+    clearSessionCookie(response);
+    return;
+  }
+  if (status.state === "unreachable") return;
 
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const session = await encrypt({
-    userId: payload.userId,
-    username: admin.username,
+    userId: claims.userId,
+    username: status.username,
     expiresAt,
   });
-
-  try {
-    (await cookies()).set("session", session, buildCookieOptions(expiresAt));
-  } catch {
-    // cookies() may throw in read-only render contexts — safe to ignore
-  }
-  return session;
+  response.cookies.set(SESSION_COOKIE_NAME, session, buildCookieOptions(expiresAt));
 }
 
 export async function deleteSession(): Promise<void> {
-  (await cookies()).delete("session");
+  (await cookies()).delete({ name: SESSION_COOKIE_NAME, path: SESSION_COOKIE_PATH });
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
-  const session = (await cookies()).get("session")?.value;
-  if (!session) return null;
-  try {
-    return await decrypt<SessionPayload>(session);
-  } catch {
-    return null;
-  }
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+  return await readSessionClaims(token);
+}
+
+const SESSION_ID_FINGERPRINT_LENGTH = 16;
+
+/**
+ * A stable, non-reversible fingerprint of the session cookie, for correlating
+ * audit rows to one session without storing the token itself.
+ */
+export async function getSessionId(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE_NAME)?.value;
+  if (token === undefined) return null;
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, SESSION_ID_FINGERPRINT_LENGTH);
 }

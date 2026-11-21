@@ -24,7 +24,8 @@ import argparse
 import sys
 
 from cms import utf8_decoder
-from cms.db import Participation, SessionGen, Submission, Task, User, \
+from cms.db import ContestTask, Participation, SessionGen, Submission, Task, \
+    User, \
     ask_for_contest
 from cms.db.session import Session
 
@@ -65,7 +66,8 @@ def remove_submissions_for_user(contest_id: int, username: str):
 def remove_submissions_for_task(contest_id: int, task_name: str):
     with SessionGen() as session:
         task = session.query(Task)\
-            .filter(Task.contest_id == contest_id)\
+            .filter(Task.contest_tasks.any(
+                ContestTask.contest_id == contest_id))\
             .filter(Task.name == task_name).first()
         if task is None:
             print("Unable to find task.")

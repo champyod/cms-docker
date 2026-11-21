@@ -1,6 +1,6 @@
 # ADR: Ranking Logo Storage — Volume vs DB vs S3
 
-- **Status:** Accepted
+- **Status:** Accepted — the volume-plus-mirror decision still stands. Updated 2026-10-09: the reader named below is now the Rust service, which probes the same extensions in the same order instead of negotiating over Accept.
 - **Date:** 2026-08-31
 - **Deciders:** Admin Panel, Ranking Service
 - **Scope:** `RANKING_LOGO_PATH` / `/logo` asset lifecycle
@@ -52,4 +52,4 @@ Rationale:
 
 - **Positive:** Minimal operational surface, fast hot-swap, cache-bust via `?ts` remains valid, `scripts/__config_sync.sh` stays authoritative, and the host mirror preserves the logo across volume resets.
 - **Negative:** Multi-host deployments still require shared storage or a later migration to S3; DB backup coverage for the logo depends on remembering to snapshot the volume/host file rather than relying solely on `cmsdb`.
-- **Follow-up:** When `RANKING_LOGO_STORAGE` is introduced, add migration docs, update `config.toml.example` with the new key and `MINIO_ENABLED` reference, and adjust `docker-compose.yml` / `docker-compose.admin.yml` plus RankingWebServer fetch logic under the flag. Until then, no change to `RankingWebServer` beyond the existing `logo_path` fallback.
+- **Follow-up:** When `RANKING_LOGO_STORAGE` is introduced, add migration docs, update `config.toml.example` with the new key and `MINIO_ENABLED` reference, and adjust `docker-compose.yml` plus RankingWebServer fetch logic under the flag. Until then, no change to `RankingWebServer` beyond the existing `logo_path` fallback.

@@ -1,105 +1,77 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { hasEffectivePermission } from '@/lib/permission-engine';
 import { Bell, Search, User } from 'lucide-react';
-import { useToast } from '../providers/ToastProvider';
-import { getUnansweredQuestions } from '@/app/actions/questions';
-import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import { buildRoute } from '@/lib/navigation/routes';
+import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
+import { useLiveNotifications } from '@/lib/live/notifications';
 import { ThemeToggle } from './ThemeToggle';
+import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
 import { CommandPalette } from '../palette/CommandPalette';
 
+/**
+ * The header's two live signals: the alert bell and the unanswered-question dot.
+ *
+ * Why they render together: both read the one notification service, which holds the connections and
+ * the alerting, so neither component has to know where its alerts came from.
+ */
+function HeaderNotifications({ permissionKeys }: { permissionKeys: readonly string[] }): React.JSX.Element {
+  const keys = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const { events, unread, unansweredCount, clearEvents, markSeen } = useLiveNotifications();
+  const router = useAppRouter();
+  const pathname = usePathname();
+
+  const openContestQuestions = (): void => {
+    router.push(buildRoute(localeFromPathname(pathname), 'contests.list'));
+  };
+
+  return (
+    <>
+      {hasEffectivePermission(keys, 'audit:read') && (
+        <NotificationBell
+          events={events}
+          unread={unread}
+          onClear={clearEvents}
+          onSeen={markSeen}
+        />
+      )}
+      {hasEffectivePermission(keys, 'question:list') && (
+        <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={openContestQuestions}>
+          <span className="relative flex">
+            <Bell className="size-4" />
+            {unansweredCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-destructive animate-pulse" />
+            )}
+          </span>
+        </Button>
+      )}
+    </>
+  );
+}
+
 export const Header: React.FC<{ className?: string; username?: string; permissionKeys: readonly string[] }> = ({ className, username, permissionKeys }) => {
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [hasNotifications, setHasNotifications] = useState(false);
-  const lastCheckTimeRef = useRef(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const authenticationExpiredRef = useRef(false);
-  const { addToast } = useToast();
-  const router = useRouter();
+  const router = useAppRouter();
+  const pathname = usePathname();
 
-  const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }, []);
-
-  const handleAuthenticationExpired = useCallback(() => {
-    // Why: after 401 the session is invalid so polling would spam errors — stop and redirect once
-    if (authenticationExpiredRef.current) return;
-    authenticationExpiredRef.current = true;
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    const segments = window.location.pathname.split('/');
-    const locale = segments[1] || 'en';
-    router.push(`/${locale}/auth/login`);
-  }, [router]);
-
+  // Why the header answers a dead session: it is mounted on every authenticated page, so it is the one
+  // place a 401 raised anywhere in the panel is turned into a single redirect to the login page.
   useEffect(() => {
-    const checkNotifications = async () => {
-      if (authenticationExpiredRef.current) {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current);
-          intervalRef.current = null;
-        }
-        return;
-      }
-      try {
-        const questions = await getUnansweredQuestions(null);
-
-        if (questions && questions.length > 0) {
-          setHasNotifications(true);
-
-          const latest = questions[0];
-          const qTime = new Date(latest.question_timestamp).getTime();
-
-          if (qTime > lastCheckTimeRef.current) {
-            addToast({
-              type: 'warning',
-              title: 'New Question Received!',
-              message: `From ${latest.participations?.users?.username || 'User'}: ${latest.subject.substring(0, 30)}...`,
-              duration: Infinity
-            });
-            lastCheckTimeRef.current = Date.now();
-          }
-        } else {
-          setHasNotifications(false);
-        }
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : '';
-        const isAuthenticationError = message.includes('Unauthorized') || message.includes('Missing') || message.includes('permission');
-        if (isAuthenticationError) {
-          handleAuthenticationExpired();
-          return;
-        }
-        console.error('Failed to check notifications', error);
-      }
+    const handleAuthenticationExpired = (): void => {
+      if (authenticationExpiredRef.current) return;
+      authenticationExpiredRef.current = true;
+      router.push(`/${localeFromPathname(pathname)}/auth/login`);
     };
 
-    const handleExternalExpiration = () => {
-      handleAuthenticationExpired();
-    };
-
-    window.addEventListener('cms-authentication-expired', handleExternalExpiration);
-
-      checkNotifications();
-
-    intervalRef.current = setInterval(checkNotifications, 30 * 1000);
-
-    return () => {
-      window.removeEventListener('cms-authentication-expired', handleExternalExpiration);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [addToast, handleAuthenticationExpired, stopPolling]);
-
-  const handleNotificationsClick = () => {
-    const locale = window.location.pathname.split('/')[1] || 'en';
-    router.push(`/${locale}/contests`);
-  };
+    window.addEventListener('cms-authentication-expired', handleAuthenticationExpired);
+    return () => window.removeEventListener('cms-authentication-expired', handleAuthenticationExpired);
+  }, [router, pathname]);
 
   return (
     <header
@@ -108,31 +80,22 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
         className
       )}
     >
-      <div className="relative group">
-        <div className="pointer-events-none absolute inset-y-0 left-0 flex w-11 items-center justify-center sm:w-auto sm:justify-start sm:pl-3">
-          <Search className="h-4 w-4 text-muted-foreground transition-colors group-focus-within:text-primary" />
-        </div>
-        <button
-          type="button"
-          aria-label="Search navigation, entities, and actions (Control plus K)"
-          onClick={() => setPaletteOpen(true)}
-          onFocus={() => setPaletteOpen(true)}
-          className="h-11 w-11 cursor-pointer rounded-full border border-input bg-muted/50 text-sm text-foreground placeholder:text-muted-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:pl-9 sm:pr-14"
-        >
-        </button>
-        <kbd className="pointer-events-none absolute inset-y-0 right-2 my-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex">
+      <button
+        type="button"
+        aria-label="Search navigation, entities, and actions (Control plus K)"
+        onClick={() => setPaletteOpen(true)}
+        className="group flex h-11 w-11 cursor-pointer items-center justify-center gap-2 rounded-full border border-input bg-muted/50 text-sm text-foreground outline-none transition-colors hover:bg-muted focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 sm:h-9 sm:w-64 sm:justify-start sm:px-3"
+      >
+        <Search className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-focus-visible:text-primary" aria-hidden />
+        <span className="hidden flex-1 truncate text-left text-muted-foreground sm:inline" aria-hidden>
+          Search…
+        </span>
+        <kbd className="ml-auto hidden h-5 items-center rounded border border-border bg-muted px-1.5 font-mono text-xs font-semibold text-muted-foreground sm:inline-flex" aria-hidden>
           ⌘K
         </kbd>
-      </div>
+      </button>
       <ThemeToggle />
-      <Button variant="ghost" size="sm" iconOnly tooltip="Notifications" onClick={handleNotificationsClick}>
-        <span className="relative flex">
-          <Bell className="size-4" />
-          {hasNotifications && (
-            <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-destructive animate-pulse" />
-          )}
-        </span>
-      </Button>
+      <HeaderNotifications permissionKeys={permissionKeys} />
       <div className="flex items-center gap-3 pl-4 border-l border-border">
         <div className="text-right hidden md:block">
           <p className="text-sm font-medium text-foreground">{username || 'Admin User'}</p>

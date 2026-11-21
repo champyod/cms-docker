@@ -636,15 +636,21 @@ class StupidSandbox(SandboxBase):
             return self.exec_time
         return None
 
-    # TODO - It always returns None, since I have no way to check
-    # memory usage (libev doesn't have wait4() support)
+    # libev has no wait4() support, so ru_maxrss cannot be read and there is
+    # no way to learn how much memory this sandbox used. Returning None would
+    # silently turn every memory reading into N/A and hide the fact that the
+    # sandbox implementation itself cannot report memory at all; raising makes
+    # the forfeited capability visible at the point it is selected.
     def get_memory_used(self) -> int | None:
         """Return the memory used by the sandbox.
 
-        return: memory used by the sandbox (in bytes).
+        raise: NotImplementedError, as libev gives no way to read it.
 
         """
-        return None
+        raise NotImplementedError(
+            "StupidSandbox cannot measure memory usage: libev has no "
+            "wait4() support, so ru_maxrss is unavailable. Selecting this "
+            "sandbox implementation forfeits memory reporting.")
 
     def get_killing_signal(self) -> int:
         """Return the signal that killed the sandboxed process.
@@ -1233,9 +1239,21 @@ class IsolateSandbox(SandboxBase):
         return: memory used by the sandbox (in bytes).
 
         """
+        # "cg-mem" is the peak of the whole cgroup, which isolate can only
+        # compute by reading the cgroup's memory.peak file: that file exists
+        # on Linux 6.8 and later only, so on older kernels isolate never emits
+        # "cg-mem" at all. "max-rss" is always emitted, but it is the
+        # ru_maxrss of the sandbox main process, so it under-reports
+        # evaluations that fork: on this host it read 268008 KiB against a
+        # 262144 KiB limit, a close but non-identical proxy. Scoring never
+        # compares it against the limit (isolate enforces the limit itself),
+        # so falling back to it only affects the memory we display.
         if 'cg-mem' in self.log:
             # Isolate returns memory measurements in KiB.
             return int(self.log['cg-mem'][0]) * 1024
+        if 'max-rss' in self.log:
+            # Isolate returns memory measurements in KiB.
+            return int(self.log['max-rss'][0]) * 1024
         return None
 
     @with_log

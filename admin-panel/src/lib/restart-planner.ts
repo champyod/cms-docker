@@ -1,108 +1,229 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { getRepoRoot } from './repo-root';
+import { composeLocationFlags, type HostComposeLocation } from './compose-location';
+import { buildWorkerControlCommand, scopedServiceList } from './compose-command';
+import type { DeploymentMode } from './deployment-mode';
+import { collectContestServices, getRestartPolicies } from './restart-policies';
+import {
+  asService,
+  profilesForServices,
+  servicesForProfiles,
+  type ComposeProfile,
+} from './restart-service-scope';
 
-export interface RestartPolicies {
-    dependencies: Record<string, string[]>;
-    env_triggers: Record<string, string[]>;
-}
-
-export async function getRestartPolicies(): Promise<RestartPolicies | null> {
-    const policyPath = path.join(getRepoRoot(), 'config', 'restart_policies.json');
-    try {
-        const content = await fs.readFile(policyPath, 'utf-8');
-        return JSON.parse(content);
-    } catch (e) {
-        console.error('Failed to read restart policies:', e);
-        return null;
-    }
-}
+export type { RestartPolicies } from './restart-policies';
+export { analyzeContainerDependencies, getRestartPolicies } from './restart-policies';
 
 export type RestartCommandPlan =
   | { skip: true; message: string }
   | { skip: false; command: string };
 
-function collectContestServices(filteredList: string[], policies: RestartPolicies | null): string[] {
-  const contestServices: string[] = [];
+/** The unified project the make targets and `./cms` deploy, plus the optional overlays they pick up. */
+export const COMPOSE_BASE_FILE = 'docker-compose.yml';
+export const COMPOSE_OVERRIDE_FILE = 'docker-compose.override.yml';
+export const COMPOSE_EXPOSE_FILE = 'docker-compose.expose.yml';
 
-  filteredList.forEach(service => {
-    if (service.startsWith('cms-contest-web-server-')) {
-      const contestId = service.replace('cms-contest-web-server-', '');
-      contestServices.push(`cms-contest-web-server-${contestId}`);
-      contestServices.push(`cms-ranking-web-server-${contestId}`);
-    } else {
-      contestServices.push(service);
-    }
+/** The optional `-f` overlays, in the order the Makefile's wildcard lists them. */
+const COMPOSE_OPTIONAL_FILES = [COMPOSE_OVERRIDE_FILE, COMPOSE_EXPOSE_FILE] as const;
 
-    const dependencyKey = service.startsWith('cms-contest-web-server-') ? 'cms-contest-web-server' : service;
-    if (policies && policies.dependencies[dependencyKey]) {
-      policies.dependencies[dependencyKey].forEach(dep => {
-        if (!contestServices.includes(dep)) {
-          contestServices.push(dep);
-        }
-      });
-    }
-  });
-
-  return contestServices;
+/**
+ * The `-f` list the Makefile builds with `$(wildcard docker-compose.yml docker-compose.override.yml
+ * docker-compose.expose.yml)`. Mirroring it matters: passing any `-f` disables compose's automatic
+ * override merge, so a list missing a present overlay silently drops the binds and ports that
+ * overlay applies. Each overlay is optional, hence the per-file existence check the wildcard does.
+ * `root` is a parameter so the overlay branches are testable without writing into the repository.
+ */
+export async function buildComposeFileFlags(root: string = getRepoRoot()): Promise<string> {
+  const presence = await Promise.all(
+    COMPOSE_OPTIONAL_FILES.map(file =>
+      fs.access(path.join(root, file)).then(() => true, () => false),
+    ),
+  );
+  const files = [COMPOSE_BASE_FILE, ...COMPOSE_OPTIONAL_FILES.filter((_, index) => presence[index])];
+  return files.map(file => `-f ${file}`).join(' ');
 }
 
-export async function analyzeContainerDependencies(containerNames: string[]): Promise<string[]> {
-  // Why: container bulk restart must preview transitive dependents (database -> log service -> workers) so operator sees full impact before confirming
-  const policies = await getRestartPolicies();
-  if (!policies) return [...containerNames];
-  const expanded = new Set<string>(containerNames);
-  const queue = [...containerNames];
-  while (queue.length > 0) {
-    const current = queue.shift() as string;
-    const key = current.startsWith('cms-contest-web-server-') ? 'cms-contest-web-server' : current;
-    const dependents = policies.dependencies[key] ?? policies.dependencies[current];
-    if (dependents) {
-      for (const dependent of dependents) {
-        if (!expanded.has(dependent)) {
-          expanded.add(dependent);
-          queue.push(dependent);
-        }
-      }
-    }
+/** One compose invocation the panel runs, described the way the Makefile's stack targets are. */
+interface ComposeRestartTarget {
+  /** Profiles the `up` enables, exactly as the matching make target selects them. */
+  profiles: readonly ComposeProfile[];
+  /** Flags specific to this stack's recreate, in the order the panel already used them. */
+  upFlags: readonly string[];
+  /** Services both commands are scoped to; empty means the whole enabled stack. */
+  services: readonly string[];
+}
+
+const CORE_RESTART: ComposeRestartTarget = {
+  profiles: ['core'],
+  upFlags: ['--force-recreate'],
+  services: servicesForProfiles(['core']),
+};
+
+const ADMIN_RESTART: ComposeRestartTarget = {
+  profiles: ['core', 'admin'],
+  upFlags: ['--force-recreate'],
+  services: servicesForProfiles(['core', 'admin']),
+};
+
+const CONTEST_RESTART: ComposeRestartTarget = {
+  profiles: ['core', 'contest'],
+  upFlags: ['--remove-orphans', '--force-recreate'],
+  services: servicesForProfiles(['core', 'contest']),
+};
+
+/**
+ * The stacks an 'all' restart brings up. The worker profile stays out because the fleet lives in
+ * per-shard projects (cw<n>) the panel cannot recreate: the container name cms-worker-<shard>
+ * already belongs to them, so an `up` here would collide. buildRestartCommand restarts the fleet
+ * through scripts/__admin_worker_control.sh instead, as a worker restart already does.
+ */
+const ALL_RESTART: ComposeRestartTarget = {
+  profiles: ['core', 'admin', 'contest', 'monitor'],
+  upFlags: [],
+  services: servicesForProfiles(['core', 'admin', 'contest', 'monitor']),
+};
+
+/**
+ * Renders one compose restart for a deployment mode, mirroring the Makefile's stack targets:
+ * img pulls then recreates with --no-build, src builds and recreates in one step. Building when
+ * the deployment meant to pull is what replaces a registry image with a local build, so the mode —
+ * not a hardcoded flag — decides.
+ *
+ * The pull is best-effort, exactly like the Makefile's `pull || true`: the host may already hold
+ * the image the stack should run, and the recreate is what the operator asked for, so a registry
+ * outage must not skip it. The pull is parenthesised so `&&` binds to the group — the flat form
+ * `pull || true && up` also recreates, but it would swallow a failure of a preceding step (the
+ * worker fleet in the 'all' plan) into `true` and still run the compose half against a broken fleet.
+ */
+function buildComposeRestart(
+  target: ComposeRestartTarget,
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string {
+  const profiles = target.profiles.length > 0
+    ? ` ${target.profiles.map(profile => `--profile ${profile}`).join(' ')}`
+    : '';
+  const scope = target.services.length > 0 ? ` ${target.services.join(' ')}` : '';
+  // Why: the panel issues this compose from inside its own container, where a relative bind source
+  // would otherwise resolve against the container's /repo-root mount — a host path the daemon does
+  // not have. Leading the invocation with the host project directory (and the env file that belongs
+  // to it) makes the relative binds resolve as they do for the make targets. Empty on the host, so
+  // the command stays byte-for-byte what it was.
+  const globalFlags = composeLocationFlags(location);
+  const invocation = `docker compose ${globalFlags.length > 0 ? `${globalFlags} ` : ''}${files}${profiles}`;
+  const recreate = [
+    invocation,
+    'up -d',
+    mode === 'img' ? '--no-build' : '--build',
+    ...target.upFlags,
+  ].join(' ') + scope;
+
+  if (mode === 'src') {
+    return recreate;
   }
-  return Array.from(expanded);
+  return `(${invocation} pull${scope} || true) && ${recreate}`;
 }
 
-async function buildCustomRestartCommand(customList: string[], files: string): Promise<RestartCommandPlan> {
+/** One force-recreate scoped to exactly these services, under the profiles that expose them. */
+function scopedRecreate(
+  services: readonly string[],
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string {
+  return buildComposeRestart(
+    { profiles: profilesForServices(services), upFlags: ['--force-recreate'], services },
+    files,
+    mode,
+    location,
+  );
+}
+
+/**
+ * The worker-fleet half. Why a contest-stack request names every shard: that recreation previously
+ * included the workers through the merged files, so this keeps the coverage without handing the
+ * fleet to the non-fleet project.
+ */
+function customWorkerCommand(needsContestStack: boolean, workers: readonly string[]): string[] {
+  if (!needsContestStack && workers.length === 0) return [];
+  const allWorkers = needsContestStack || workers.some(service => service === 'worker' || service === 'cms-worker');
+  return [buildWorkerControlCommand('restart', allWorkers ? [] : workers.map(service => service.slice('cms-worker-'.length)))];
+}
+
+/** The compose half of a custom restart: the contest stack when asked, plus the services outside it. */
+function customComposeCommands(
+  scopedServices: readonly string[],
+  needsContestStack: boolean,
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): string[] {
+  if (!needsContestStack) {
+    return scopedServices.length > 0 ? [scopedRecreate(scopedServices, files, mode, location)] : [];
+  }
+  const commands = [buildComposeRestart(CONTEST_RESTART, files, mode, location)];
+  // Why: the contest-stack recreation covers only the core and contest profiles, so a request that
+  // also names services outside them — a database change cascades to the contest web server and to
+  // the admin panel — would otherwise leave those services (the panel above all) on stale config.
+  const outsideContestStack = scopedServices.filter(service => !CONTEST_RESTART.services.includes(service));
+  if (outsideContestStack.length > 0) commands.push(scopedRecreate(outsideContestStack, files, mode, location));
+  return commands;
+}
+
+async function buildCustomRestartCommand(
+  customList: string[],
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
+): Promise<RestartCommandPlan> {
   const needsContestStack = customList.includes('contest-stack') || customList.some(s => s.startsWith('cms-contest-web-server'));
   // Why: filter keeps only safe service names and strips contest-stack sentinel so docker compose receives valid service identifiers
   const filteredList = customList.filter(s => s !== 'contest-stack' && /^[a-zA-Z0-9_-]+$/.test(s));
 
-  if (needsContestStack) {
-    return { skip: false, command: `docker compose ${files} up -d --remove-orphans --force-recreate` };
-  }
-  if (filteredList.length === 0) {
+  if (filteredList.length === 0 && !needsContestStack) {
     return { skip: true, message: 'Nothing to restart.' };
   }
 
   const policies = await getRestartPolicies();
-  const contestServices = collectContestServices(filteredList, policies);
-
-  return { skip: false, command: `docker compose ${files} up -d --force-recreate ${contestServices.join(' ')}` };
+  const services = collectContestServices(filteredList, policies);
+  const isWorker = (service: string): boolean => /^(?:worker|cms-worker(?:-\d+)?)$/.test(service);
+  const workers = services.filter(isWorker);
+  // Why the protected services are dropped here too: this list arrives from the caller, so a
+  // custom restart naming redis-rate-limit would otherwise reach the container the guard in
+  // lib/protected-containers.ts exists to protect.
+  const scopedServices = scopedServiceList(services.filter(service => !isWorker(service)).map(asService));
+  const commands = [
+    ...customWorkerCommand(needsContestStack, workers),
+    ...customComposeCommands(scopedServices, needsContestStack, files, mode, location),
+  ];
+  // Why an empty plan is a skip and not an empty command: dropping a protected service can leave
+  // nothing to act on, and an empty shell string would be executed rather than reported.
+  if (commands.length === 0) return { skip: true, message: 'Nothing to restart.' };
+  return { skip: false, command: commands.join(' && ') };
 }
 
 export async function buildRestartCommand(
   type: 'all' | 'core' | 'admin' | 'worker' | 'custom',
   customList: string[] | undefined,
-  files: string
+  files: string,
+  mode: DeploymentMode,
+  location: HostComposeLocation | null,
 ): Promise<RestartCommandPlan> {
   if (type === 'core') {
-    return { skip: false, command: 'docker compose -f docker-compose.core.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildComposeRestart(CORE_RESTART, files, mode, location) };
   }
   if (type === 'admin') {
-    return { skip: false, command: 'docker compose -f docker-compose.admin.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildComposeRestart(ADMIN_RESTART, files, mode, location) };
   }
   if (type === 'worker') {
-    return { skip: false, command: 'docker compose -f docker-compose.worker.yml up -d --build --force-recreate' };
+    return { skip: false, command: buildWorkerControlCommand('restart') };
   }
   if (type === 'custom' && customList && customList.length > 0) {
-    return buildCustomRestartCommand(customList, files);
+    return buildCustomRestartCommand(customList, files, mode, location);
   }
-  return { skip: false, command: `docker compose ${files} up -d --build` };
+  const workerCommand = buildWorkerControlCommand('restart');
+  const composeRestart = buildComposeRestart(ALL_RESTART, files, mode, location);
+  return { skip: false, command: `${workerCommand} && ${composeRestart}` };
 }

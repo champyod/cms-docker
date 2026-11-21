@@ -1,0 +1,82 @@
+# cargo-deny policy — one file for every Cargo tree in this repository.
+#
+# WHY one file at the root: `ranking-web/` and `backend/` are separate Cargo
+# workspaces but they ship in the same product, so what may enter a release is
+# the same question in both. The CI job names this file explicitly
+# (`--config deny.toml`) so a crate cannot dodge the gate by living under a
+# directory whose config discovery never walks up to the root.
+#
+# Schema target: cargo-deny 0.20, the version the `deny` CI job installs.
+
+[advisories]
+# Version 2 schema: `vulnerability`/`unmaintained` as severity strings are gone;
+# a finding fails the run and the only way to keep one is `ignore` below.
+version = 2
+# A yanked crate in a lockfile cannot be reproduced from the index, so it is not
+# something to ship silently.
+yanked = "deny"
+# Unmaintained advisories count for every crate this workspace actually pulls in,
+# not for the whole index — an unused crate's status is not this repo's problem.
+unmaintained = "workspace"
+# Deliberate, reviewed exceptions go here with a comment saying why and until
+# when. Empty means any advisory on any crate fails the job.
+ignore = []
+
+[licenses]
+version = 2
+# Permissive licences only. These images are distributed as binaries with no
+# source offer attached, so a copyleft dependency would make the published
+# image undistributable — that is a release blocker, not a style preference.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "CC0-1.0",
+    # webpki-roots ships Mozilla's CA bundle under CDLA-Permissive-2.0: a
+    # permissive data licence with no source-offer obligation, so it is
+    # compatible with shipping these images.
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MIT-0",
+    "Unicode-3.0",
+    "Unlicense",
+    "Zlib",
+]
+# This workspace's own crates are unpublished and ship as part of the image,
+# not through a registry. Their licence is the repository's own (LICENSE.txt);
+# requiring a licence expression on them would be checking this repo against
+# itself, not checking what it depends on.
+private = { ignore = true }
+# Licence detection is heuristic (LICENSE files, SPDX headers); below this
+# confidence the crate is reported instead of guessed at.
+confidence-threshold = 0.9
+# Per-crate licence overrides, each needing a reason. Empty: a crate that does
+# not fit the allow list above should be replaced, not excused.
+exceptions = []
+
+[bans]
+# Duplicate versions are visible in the log but not fatal: a transitive
+# duplicate is usually not fixable from this repository, and failing on it
+# trains people to ignore the job.
+multiple-versions = "warn"
+# A wildcard dependency means the build resolves differently tomorrow than it
+# does today, which defeats the lockfile and the SBOM's point.
+wildcards = "deny"
+# Crates that must never appear in the graph, whatever the reason. Empty for now;
+# this is where a banned crate is recorded once it is banned.
+deny = []
+skip = []
+skip-tree = []
+
+[sources]
+# Everything must come from crates.io. A crate pulled from an unknown registry or
+# a git branch is a supply-chain path nobody reviews, and a git dependency is
+# pinned to whatever the branch said when it was resolved.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

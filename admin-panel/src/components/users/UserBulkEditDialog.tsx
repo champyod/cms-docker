@@ -2,9 +2,13 @@
 
 import { Download, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
+import { CredentialTemplateField } from '@/components/core/CredentialTemplateField';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { PasswordKindSelector } from '@/components/core/PasswordFieldWithKind';
-import { BulkEditPreviewTable, ContestSection, ProfileSection, TeamSection } from './bulkEditSections';
+import type { Dictionary } from '@/lib/dictionary';
+import { BulkEditPreviewTable, ContestSection, IpAllowlistSection, ProfileSection, TeamSection } from './bulkEditSections';
 import { buildEditExportCsv, type ContestOption, type SelectedUser } from './bulkEditActions';
 import { useBulkEditActions } from './useBulkEditActions';
 
@@ -12,30 +16,46 @@ interface UserBulkEditDialogProps {
   isOpen: boolean;
   onClose: () => void;
   selectedUsers: SelectedUser[];
+  unavailableCount?: number;
   contests: ContestOption[];
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   onSuccess: () => void;
 }
 
-export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, onSuccess }: UserBulkEditDialogProps) {
+export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailableCount = 0, contests, canReadContests, navigation, onSuccess }: UserBulkEditDialogProps) {
   const {
-    loading, statusMessage, errorMessage,
+    loading, statusMessage, errorMessage, failures, credentialChangeCount,
     selectedContestId, setSelectedContestId,
     teamContestId, setTeamContestId,
     teamCode, setTeamCode,
+    ipContestId, setIpContestId,
+    ip, setIp,
     timezone, setTimezone,
     emailDomain, setEmailDomain,
     passwordKind, setPasswordKind,
+    usernameTemplate, setUsernameTemplate,
+    passwordTemplate, setPasswordTemplate,
+    usernameConfig, setUsernameConfig,
+    passwordConfig, setPasswordConfig,
     rows, teamsOptions,
     revealedIds, revealingIds, allRevealed,
     revealRowPassword, toggleAllRevealed,
     runRegenerate, exportSelectedRows,
     runContestMutation, runTeamSet, runTeamRemoveAny,
+    runIpAllowlist,
     runTimezoneUpdate, runEmailDomainUpdate, runEmailClear,
     applyCredentials,
   } = useBulkEditActions({ selectedUsers, contests, onSuccess, onClose });
 
   const handleExportSelectedRows = (): void => {
     exportSelectedRows(`users-selected-${Date.now()}.csv`, buildEditExportCsv);
+  };
+
+  // Why the guard: an apply already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved write.
+  const cancel = (): void => {
+    if (!loading) onClose();
   };
 
   return (
@@ -45,11 +65,17 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         if (!open) onClose();
       }}
       title="Edit Selected Users"
+      description={navigation.people.users.label}
       className="sm:max-w-6xl"
     >
       <div className="space-y-4">
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-xs">
           Selected: {rows.length} user(s)
+          {unavailableCount > 0 && (
+            <span className="text-warning">
+              {' '}— {unavailableCount} selected row(s) are not loaded and cannot be edited
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -57,39 +83,74 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           <PasswordKindSelector kind={passwordKind} onKind={setPasswordKind} />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0}>
-            Regenerate Username
-          </Button>
-          <Button variant="ghost" icon={Wand2} onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0}>
-            Regenerate Password
-          </Button>
-          <Button variant="secondary" icon={Download} onClick={handleExportSelectedRows} disabled={rows.length === 0}>
-            Export CSV
-          </Button>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <CredentialTemplateField
+            label="Username template"
+            value={usernameTemplate}
+            onChange={setUsernameTemplate}
+            config={usernameConfig}
+            onConfigChange={setUsernameConfig}
+            symbolsAllowed={false}
+            placeholder="camp1*"
+          />
+          <CredentialTemplateField
+            label="Password template"
+            value={passwordTemplate}
+            onChange={setPasswordTemplate}
+            config={passwordConfig}
+            onConfigChange={setPasswordConfig}
+            placeholder="*"
+          />
+          <p className="text-xs text-muted-foreground sm:col-span-2">
+            Each * becomes a random run, and a blank template is one full random run. Regenerating
+            overwrites the credentials of every selected row.
+          </p>
         </div>
 
-        <ContestSection
-          contests={contests}
-          selectedContestId={selectedContestId}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onContestIdChange={setSelectedContestId}
-          onRunContestMutation={runContestMutation}
-        />
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Username" onClick={() => runRegenerate('username')} disabled={loading || rows.length === 0} />
+          <Button variant="ghost" icon={Wand2} iconOnly tooltip="Regenerate Password" onClick={() => runRegenerate('password')} disabled={loading || rows.length === 0} />
+          <Button variant="secondary" icon={Download} iconOnly tooltip="Export CSV" onClick={handleExportSelectedRows} disabled={rows.length === 0} />
+        </div>
 
-        <TeamSection
-          contests={contests}
-          teamContestId={teamContestId}
-          teamCode={teamCode}
-          teamsOptions={teamsOptions}
-          loading={loading}
-          hasRows={rows.length > 0}
-          onTeamContestIdChange={setTeamContestId}
-          onTeamCodeChange={setTeamCode}
-          onRunTeamSet={runTeamSet}
-          onRunTeamRemoveAny={runTeamRemoveAny}
-        />
+        {canReadContests && (
+          <ContestSection
+            contests={contests}
+            selectedContestId={selectedContestId}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onContestIdChange={setSelectedContestId}
+            onRunContestMutation={runContestMutation}
+          />
+        )}
+
+        {canReadContests && (
+          <TeamSection
+            contests={contests}
+            teamContestId={teamContestId}
+            teamCode={teamCode}
+            teamsOptions={teamsOptions}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onTeamContestIdChange={setTeamContestId}
+            onTeamCodeChange={setTeamCode}
+            onRunTeamSet={runTeamSet}
+            onRunTeamRemoveAny={runTeamRemoveAny}
+          />
+        )}
+
+        {canReadContests && (
+          <IpAllowlistSection
+            contests={contests}
+            contestId={ipContestId}
+            ip={ip}
+            loading={loading}
+            hasRows={rows.length > 0}
+            onContestIdChange={setIpContestId}
+            onIpChange={setIp}
+            onRunIpAllowlist={runIpAllowlist}
+          />
+        )}
 
         <ProfileSection
           timezone={timezone}
@@ -103,8 +164,23 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
           onRunEmailClear={runEmailClear}
         />
 
-        {statusMessage && <div className="rounded-lg border border-success/30 bg-success/10 p-3 text-xs text-success">{statusMessage}</div>}
-        {errorMessage && <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">{errorMessage}</div>}
+        {statusMessage && <InlineAlert tone="success" density="compact" className="border-success/30">{statusMessage}</InlineAlert>}
+        {errorMessage && <InlineAlert tone="destructive" density="compact" className="border-destructive/30">{errorMessage}</InlineAlert>}
+
+        {failures.length > 0 && (
+          <InlineAlert tone="destructive" density="compact" className="border-destructive/30">
+            <div className="space-y-1">
+              <div>{failures.length} credential update(s) were rejected</div>
+              <div className="max-h-32 overflow-auto">
+                {failures.map((failure) => (
+                  <div key={`${failure.id ?? 'unknown'}-${failure.reason}`}>
+                    User {failure.id ?? 'unknown'}: {failure.reason}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </InlineAlert>
+        )}
 
         <BulkEditPreviewTable
           rows={rows}
@@ -116,19 +192,27 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, contests, o
         />
 
         <div className="flex items-center justify-end gap-2">
-          <Button variant="positiveOutline" onClick={() => applyCredentials(false)} disabled={loading || rows.length === 0}>
-            Apply Credentials
+          <Button
+            variant="positiveOutline"
+            onClick={() => applyCredentials(false)}
+            disabled={loading || credentialChangeCount === 0}
+            title={credentialChangeCount === 0 ? 'Nothing has changed yet' : undefined}
+          >
+            {credentialChangeCount === 0 ? 'Apply Credentials' : `Apply Credentials (${credentialChangeCount})`}
           </Button>
         </div>
       </div>
-      <DialogFooter className="mt-4 pt-4 border-t border-border">
-        <Button variant="negativeOutline" onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button variant="positiveOutline" loading={loading} onClick={() => applyCredentials(true)} disabled={loading}>
-          Done
-        </Button>
-      </DialogFooter>
+      <ModalFooter
+        className="mt-4 pt-4 border-t border-border"
+        cancelLabel="Cancel"
+        cancelVariant="negativeOutline"
+        confirmLabel="Done"
+        confirmVariant="positiveOutline"
+        onCancel={cancel}
+        onConfirm={(): void => void applyCredentials(true)}
+        confirmLoading={loading}
+        confirmDisabled={loading}
+      />
     </Dialog>
   );
 }

@@ -1,12 +1,16 @@
 'use client';
 
 import type { ComponentType, FormEvent, ReactNode } from 'react';
-import { Button } from '@/components/core/Button';
 import { Dialog } from '@/components/core/Dialog';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { Calendar, Shield, Cpu, Clock, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FIELD_TO_TAB_MAP } from './types';
 import type { ContestModalTab, ExistingContest } from './types';
+
+const CONTEST_FORM_ID = 'contest-form';
 
 interface ContestModalShellProps {
   contest?: ExistingContest | null;
@@ -76,7 +80,7 @@ function SidebarTabs({
   setActiveTab,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'activeTab' | 'setActiveTab'>) {
   return (
-    <div className="w-64 shrink-0 space-y-2 overflow-y-auto border-r border-border bg-muted/20 p-4 max-sm:flex max-sm:w-full max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:space-y-0 max-sm:overflow-x-auto max-sm:border-r-0 max-sm:border-b">
+    <>
       {TABS.map(tab => (
         <TabButton
           key={tab.id}
@@ -86,33 +90,26 @@ function SidebarTabs({
           onSelect={() => setActiveTab(tab.id)}
         />
       ))}
-    </div>
+    </>
   );
 }
 
 function ContentBanners({ validationErrors, error }: Pick<ContestModalShellProps, 'validationErrors' | 'error'>) {
   if (validationErrors.size > 0) {
     return (
-      <div className="sticky top-0 z-10 mb-6 flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-destructive" />
-          <span className="font-bold">Please fix the following {validationErrors.size} errors before saving:</span>
-        </div>
+      <InlineAlert tone="destructive" title={`Please fix the following ${validationErrors.size} errors before saving:`} className="sticky top-0 z-10 mb-6">
         <ul className="list-disc space-y-1 pl-6 text-xs opacity-90">
           {Array.from(validationErrors.entries()).map(([field, msg]) => (
             <li key={field}>{msg}</li>
           ))}
         </ul>
-      </div>
+      </InlineAlert>
     );
   }
 
   if (error) {
     return (
-      <div className="sticky top-0 z-10 mb-6 flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-sm text-destructive backdrop-blur-md">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-destructive" />
-        {error}
-      </div>
+      <InlineAlert tone="destructive" title={error} className="sticky top-0 z-10 mb-6">{null}</InlineAlert>
     );
   }
 
@@ -120,27 +117,20 @@ function ContentBanners({ validationErrors, error }: Pick<ContestModalShellProps
 }
 
 function ShellFooter({ contest, loading, onClose }: Pick<ContestModalShellProps, 'contest' | 'loading' | 'onClose'>) {
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
   return (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={onClose}
-        disabled={loading}
-      >
-        Cancel
-      </Button>
-      <Button
-        type="submit"
-        form="contest-form"
-        variant="positive"
-        loading={loading}
-        disabled={loading}
-        className="min-w-32"
-      >
-        {contest ? 'Save Changes' : 'Create Contest'}
-      </Button>
-    </>
+    <ModalFooter
+      formId={CONTEST_FORM_ID}
+      cancelLabel="Cancel"
+      confirmLabel={contest ? 'Save Changes' : 'Create Contest'}
+      onCancel={cancel}
+      onConfirm={() => undefined}
+      confirmLoading={loading}
+    />
   );
 }
 
@@ -153,16 +143,17 @@ function ShellBody({
   children,
 }: Pick<ContestModalShellProps, 'validationErrors' | 'error' | 'activeTab' | 'setActiveTab' | 'onSubmit' | 'children'>) {
   return (
-    <div className="flex min-h-0 flex-1 overflow-hidden max-sm:flex-col">
-      <SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />
-      <div className="relative flex-1 overflow-y-auto p-4 sm:p-8">
+    <ResponsiveModalShell
+      sidebar={<SidebarTabs validationErrors={validationErrors} activeTab={activeTab} setActiveTab={setActiveTab} />}
+    >
+      <div className="p-4 sm:p-8">
         <ContentBanners validationErrors={validationErrors} error={error} />
 
-        <form id="contest-form" onSubmit={onSubmit} className="space-y-8 pb-20">
+        <form id={CONTEST_FORM_ID} onSubmit={onSubmit} className="space-y-8 pb-20">
           {children}
         </form>
       </div>
-    </div>
+    </ResponsiveModalShell>
   );
 }
 
@@ -185,7 +176,7 @@ export function ContestModalShell({
       }}
       title={contest ? 'Edit Contest' : 'Create New Contest'}
       footer={<ShellFooter contest={contest} loading={loading} onClose={onClose} />}
-      className="flex max-h-[70vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl"
+      className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-h-[70vh] sm:max-w-4xl"
     >
       <ShellBody
         validationErrors={validationErrors} error={error} activeTab={activeTab}

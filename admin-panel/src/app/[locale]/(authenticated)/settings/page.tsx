@@ -1,35 +1,29 @@
-import { checkPermission } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { notFound } from 'next/navigation';
-import { EnvConfigView } from '@/components/settings/EnvConfigView';
-import { MonitorConfigSection } from '@/components/settings/MonitorConfigSection';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { notFound, redirect } from 'next/navigation';
 
-export default async function SettingsPage({
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
+
+const LEGACY_PATH = '/settings';
+
+/**
+ * Why this route still exists: the System Settings screen keeps its old address
+ * so existing bookmarks, chord history, and links land on the canonical module
+ * route. Only a reader whose permissions fail closed is concealed; a 401 and any
+ * unexpected storage failure keep propagating.
+ */
+export default async function SettingsRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('settings:update', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
+}): Promise<never> {
+  try {
+    const [{ locale }, effective] = await Promise.all([params, getRoutePermissions()]);
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.settings.title}</Text>
-        <Text variant="muted">{dict.settings.subtitle}</Text>
-      </Stack>
-
-      <EnvConfigView />
-
-      <MonitorConfigSection />
-    </Stack>
-  );
 }

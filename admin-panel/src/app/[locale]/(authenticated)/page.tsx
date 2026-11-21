@@ -1,29 +1,33 @@
-import { checkPermission } from '@/lib/permissions';
 import { getDictionary } from '@/i18n';
-import { notFound } from 'next/navigation';
+import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { Card } from '@/components/core/Card';
 import {
   Users,
   Trophy,
   FileCode,
   Activity,
-  ArrowUpRight,
   Clock,
 } from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
+import { PageSurface } from '@/components/core/PageSurface';
 import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
-import { PageContent, PageHeader, Grid, Stack } from '@/components/core/Layout';
+import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import { EmptyState } from '@/components/core/EmptyState';
+// Why the bare form: this page is a server component, so the activity row cannot read the
+// reviewer's own zone from a client context; the zone of record is the one this process renders in.
+import { formatInZone } from '@/lib/timezone';
 
 async function getStats() {
+  const now = new Date();
   const [
     usersCount,
     contestsCount,
     activeContestsCount,
     submissionsCount,
-    pendingSubmissions
+    pendingSubmissions,
+    activeContesters
   ] = await Promise.all([
     prisma.users.count(),
     prisma.contests.count(),
@@ -44,6 +48,14 @@ async function getStats() {
           }
         }
       }
+    }),
+    prisma.participations.count({
+      where: {
+        contests: {
+          start: { lte: now },
+          stop: { gte: now }
+        }
+      }
     })
   ]);
 
@@ -52,7 +64,8 @@ async function getStats() {
     contestsCount,
     activeContestsCount,
     submissionsCount,
-    pendingSubmissions
+    pendingSubmissions,
+    activeContesters
   };
 }
 
@@ -92,12 +105,7 @@ export default async function DashboardPage({
 }) {
   const { locale } = await paramsPromise;
   const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('all:all', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
-  }
+  // No guard: the registry declares this route open to every signed-in admin.
 
   const [stats, serviceStatus, recentActivity] = await Promise.all([
     getStats(),
@@ -106,12 +114,11 @@ export default async function DashboardPage({
   ]);
 
   return (
-    <PageContent>
-      <PageHeader 
-        title={dict.dashboard.welcome}
-        description={dict.dashboard.description}
-      />
-
+    <PageSurface
+      breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
+      title={dict.dashboard.welcome}
+      description={dict.dashboard.description}
+    >
       <Grid cols={4}>
         <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -119,16 +126,17 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalUsers}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalUsers}</Text>
               <Text variant="h1">{stats.usersCount}</Text>
             </Stack>
-            <div className="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+            <div className="p-2 bg-primary/10 rounded-lg text-primary">
               <Users className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-green-400">
-            <ArrowUpRight className="w-4 h-4" />
-            <Text variant="small" color="text-green-400">Active Contesters</Text>
+          <Stack direction="row" align="center" gap={2} className="z-10">
+            <Text variant="small" color="text-muted-foreground">
+              {stats.activeContesters} enrolled in running contests
+            </Text>
           </Stack>
         </Card>
 
@@ -138,16 +146,16 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalContests}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalContests}</Text>
               <Text variant="h1">{stats.contestsCount}</Text>
             </Stack>
-            <div className="p-2 bg-amber-500/10 rounded-lg text-amber-400">
+            <div className="p-2 bg-warning/10 rounded-lg text-warning">
               <Trophy className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-amber-400">
+          <Stack direction="row" align="center" gap={2} className="z-10 text-warning">
             <Activity className="w-4 h-4" />
-            <Text variant="small" color="text-amber-400">{stats.activeContestsCount} Active Now</Text>
+            <Text variant="small" color="text-warning">{stats.activeContestsCount} Active Now</Text>
           </Stack>
         </Card>
 
@@ -157,16 +165,16 @@ export default async function DashboardPage({
           </div>
           <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
             <Stack gap={2}>
-              <Text variant="small" color="text-neutral-400">{dict.dashboard.stats.totalSubmissions}</Text>
+              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalSubmissions}</Text>
               <Text variant="h1">{stats.submissionsCount}</Text>
             </Stack>
-            <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+            <div className="p-2 bg-info/10 rounded-lg text-info">
               <FileCode className="w-5 h-5" />
             </div>
           </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-neutral-400">
+          <Stack direction="row" align="center" gap={2} className="z-10 text-muted-foreground">
             <Clock className="w-4 h-4" />
-            <Text variant="small" color="text-neutral-400">{stats.pendingSubmissions} Pending</Text>
+            <Text variant="small" color="text-muted-foreground">{stats.pendingSubmissions} Pending</Text>
           </Stack>
         </Card>
 
@@ -185,18 +193,18 @@ export default async function DashboardPage({
             <Stack gap={3}>
               {recentActivity.map((item) => (
                 <Stack key={item.id} direction="row" align="center" gap={4} className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <div className="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+                  <div className="p-2 bg-info/10 rounded-lg text-info">
                     <FileCode className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <Text variant="small">
-                      <span className="font-medium text-indigo-400">{item.username}</span>
+                      <span className="font-medium text-primary">{item.username}</span>
                       {' submitted to '}
-                      <span className="font-medium text-amber-400">{item.taskName}</span>
+                      <span className="font-medium text-warning">{item.taskName}</span>
                     </Text>
                   </div>
                   <Text variant="muted" className="whitespace-nowrap">
-                    {item.timestamp ? new Date(item.timestamp).toLocaleString() : ''}
+                    {item.timestamp ? formatInZone(item.timestamp.toISOString()) : ''}
                   </Text>
                 </Stack>
               ))}
@@ -206,6 +214,6 @@ export default async function DashboardPage({
           )}
         </Card>
       </Stack>
-    </PageContent>
+    </PageSurface>
   );
 }

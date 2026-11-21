@@ -60,10 +60,12 @@ export async function effectiveAfterGroupChange(
   }
 }
 
+// 'clear' models the removal of an override, which re-grants whatever the deny was holding back,
+// so the caller must be able to grant that result just as it must for 'allow'.
 export async function effectiveAfterOverride(
   adminId: number,
   permissionKey: string,
-  effect: 'allow' | 'deny',
+  effect: 'allow' | 'deny' | 'clear',
 ): Promise<ReadonlySet<string> | null> {
   try {
     const [groupKeys, existingOverrides] = await Promise.all([
@@ -71,7 +73,7 @@ export async function effectiveAfterOverride(
       overridesForAdmin(adminId),
     ]);
     const filtered = existingOverrides.filter((override) => override.permissionKey !== permissionKey);
-    filtered.push({ permissionKey, effect });
+    if (effect !== 'clear') filtered.push({ permissionKey, effect });
     return resolveEffectivePermissions(groupKeys, filtered);
   } catch {
     return null;

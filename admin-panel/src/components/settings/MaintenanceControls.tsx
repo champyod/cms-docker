@@ -1,14 +1,54 @@
 'use client';
 
-import { useState } from 'react';
-import { restartServices, updateServer } from '@/app/actions/services';
-import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
+import { useEffect, useState } from 'react';
 import type { ReactElement } from 'react';
-import { Card } from '@/components/core/Card';
+import { ArrowUpCircle, Download, Package } from 'lucide-react';
+import { toast } from 'sonner';
+import { pullLatestImages, rebuildImages } from '@/app/actions/docker-ops';
+import { getDeploymentMode, updateServer } from '@/app/actions/services';
 import { Button } from '@/components/core/Button';
-import { RefreshCw, Download, Package, ArrowUpCircle } from 'lucide-react';
+import { Card } from '@/components/core/Card';
+import { RestartControls } from '@/components/settings/RestartControls';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
+import { FALLBACK_DEPLOYMENT_MODE, deploymentModeCopyKey, type DeploymentModeSetting } from '@/lib/deployment-mode';
+import { interpolate } from '@/lib/interpolate';
+
+type DeploymentModeRead = { loaded: false } | { loaded: true; setting: DeploymentModeSetting };
+
+// Reads config.toml rather than process.env: only `./cms config sync` copies the value into .env.
+function useDeploymentModeSetting(): DeploymentModeRead {
+  const [read, setRead] = useState<DeploymentModeRead>({ loaded: false });
+
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      const setting = await getDeploymentMode().catch((): DeploymentModeSetting => ({
+        mode: FALLBACK_DEPLOYMENT_MODE,
+        resolved: false,
+      }));
+      setRead({ loaded: true, setting });
+    })();
+  }, []);
+
+  return read;
+}
+
+export function DeploymentModeNote(): ReactElement | null {
+  const read = useDeploymentModeSetting();
+  const copy = useDictionary().settings.deploymentMode;
+
+  if (!read.loaded) return null;
+  return (
+    <p className="text-sm text-muted-foreground" role="status">
+      {copy[deploymentModeCopyKey(read.setting)]}
+    </p>
+  );
+}
 
 export function ManualServiceControlCard(): ReactElement {
+  const copy = useDictionary();
+
   return (
     <Card className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -17,15 +57,8 @@ export function ManualServiceControlCard(): ReactElement {
           <p className="text-muted-foreground text-sm mt-1">Force restart services if needed.</p>
         </div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <RestartButton type="core" label="Core Stack" />
-        <RestartButton type="admin" label="Admin Stack" />
-        <RestartButton type="worker" label="Worker Stack" />
-        <RestartButton type="all" label="All Services" />
-      </div>
-      <p className="text-xs text-muted-foreground mt-4">
-        Note: Contest instances are managed in <strong>Infrastructure → Deployments</strong> page.
-      </p>
+      <RestartControls />
+      <p className="text-xs text-muted-foreground mt-4">{copy.settings.serviceControl.contestManagedElsewhere}</p>
     </Card>
   );
 }
@@ -60,107 +93,88 @@ export function MaintenanceUpdatesCard(): ReactElement {
 }
 
 function UpdateServerButton(): ReactElement {
-  const [updating, setUpdating] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const confirm = useConfirm();
+  const { fullServerUpdateConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleUpdate = async (): Promise<void> => {
-    if (!confirm('This will pull the latest images, restart all services, and update the database schema. The server will be unavailable for a few minutes. Continue?')) return;
-    setUpdating(true);
+    if (!(await confirm(fullServerUpdateConfirm()))) return;
+    setIsUpdating(true);
     try {
       const res = await updateServer();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      // The action's own message is server-side English; only the panel's fallbacks are localised here.
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to trigger update');
+      toast.error(toasts.updateFailed);
     }
-    setUpdating(false);
+    setIsUpdating(false);
   };
 
   return (
     <Button
       onClick={() => void handleUpdate()}
-      disabled={updating}
-      loading={updating}
+      disabled={isUpdating}
+      loading={isUpdating}
       icon={ArrowUpCircle}
       className="w-full justify-center"
     >
-      {updating ? 'Updating Server...' : 'Full Server Update'}
-    </Button>
-  );
-}
-
-function RestartButton({ type, label }: { type: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
-  const [restarting, setRestarting] = useState(false);
-
-  const handleRestart = async (): Promise<void> => {
-    if (!confirm(`Are you sure you want to ${label}? This will temporarily disrupt service.`)) return;
-    setRestarting(true);
-    try {
-      const res = await restartServices(type);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
-    } catch {
-      alert('Failed to restart');
-    }
-    setRestarting(false);
-  };
-
-  return (
-    <Button
-      variant="positiveOutline"
-      onClick={() => void handleRestart()}
-      disabled={restarting}
-      loading={restarting}
-      icon={RefreshCw}
-    >
-      {restarting ? 'Restarting...' : label}
+      {isUpdating ? 'Updating Server...' : 'Full Server Update'}
     </Button>
   );
 }
 
 function PullImagesButton(): ReactElement {
-  const [pulling, setPulling] = useState(false);
+  const [isPulling, setIsPulling] = useState(false);
+  const confirm = useConfirm();
+  const { pullImagesConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handlePull = async (): Promise<void> => {
-    if (!confirm('Pull latest images from registry? This may take several minutes.')) return;
-    setPulling(true);
+    if (!(await confirm(pullImagesConfirm()))) return;
+    setIsPulling(true);
     try {
       const res = await pullLatestImages();
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to pull images');
+      toast.error(toasts.pullFailed);
     }
-    setPulling(false);
+    setIsPulling(false);
   };
 
   return (
     <Button
       variant="secondary"
       onClick={() => void handlePull()}
-      disabled={pulling}
-      loading={pulling}
+      disabled={isPulling}
+      loading={isPulling}
       icon={Download}
       className="w-full justify-center"
     >
-      {pulling ? 'Pulling Images...' : 'Pull Latest Images'}
+      {isPulling ? 'Pulling Images...' : 'Pull Latest Images'}
     </Button>
   );
 }
 
-function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all', label: string }): ReactElement {
-  const [rebuilding, setRebuilding] = useState(false);
+function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 'all'; label: string }): ReactElement {
+  const [isRebuilding, setIsRebuilding] = useState(false);
+  const confirm = useConfirm();
+  const { rebuildStackConfirm } = useConfirmationCopy();
+  const toasts = useDictionary().toasts.serviceControl;
 
   const handleRebuild = async (): Promise<void> => {
-    if (!confirm(`Rebuild ${label} stack from source? This may take 5-10 minutes.`)) return;
-    setRebuilding(true);
+    if (!(await confirm(rebuildStackConfirm(stack)))) return;
+    setIsRebuilding(true);
     try {
       const res = await rebuildImages(stack);
-      if (res.success) alert(res.message);
-      else alert('Error: ' + res.error);
+      if (res.success) toast.success(res.message);
+      else toast.error(interpolate(toasts.actionFailed, { error: res.error }));
     } catch {
-      alert('Failed to rebuild');
+      toast.error(toasts.rebuildFailed);
     }
-    setRebuilding(false);
+    setIsRebuilding(false);
   };
 
   return (
@@ -168,11 +182,11 @@ function RebuildButton({ stack, label }: { stack: 'core' | 'admin' | 'worker' | 
       variant="secondary"
       size="sm"
       onClick={() => void handleRebuild()}
-      disabled={rebuilding}
-      loading={rebuilding}
+      disabled={isRebuilding}
+      loading={isRebuilding}
       icon={Package}
     >
-      {rebuilding ? 'Building...' : label}
+      {isRebuilding ? 'Building...' : label}
     </Button>
   );
 }

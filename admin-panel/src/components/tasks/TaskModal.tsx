@@ -1,15 +1,21 @@
 'use client';
 
-import { createContext, useContext, useMemo, useState, useEffect } from 'react';
-import { FileCode, Clock, Cpu, FileType, CheckSquare } from 'lucide-react';
+import { createContext, useContext, useMemo, useState } from 'react';
+import { FileCode, Clock, Cpu, FileType, FileText, CheckSquare } from 'lucide-react';
+import { toast } from 'sonner';
 import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
-import { useToast } from '@/components/providers/ToastProvider';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
-import { Button } from '@/components/core/Button';
+import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { InlineAlert } from '@/components/core/InlineAlert';
 import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
+import { hasEffectivePermission } from '@/lib/permission-engine';
+import { uploadStatements, type QueuedStatement } from '@/lib/statement-upload';
+import { StatementQueueField } from './StatementQueueField';
 import { GeneralTab, GradingTab, LimitsTab, TokensTab, LanguagesTab } from './task-modal-sections';
 
 // Why: child tab components can consume this context to wrap individual fields with RestrictedField.
@@ -38,17 +44,18 @@ interface TaskRecord {
   max_user_test_number: number | null;
   min_submission_interval: unknown;
   min_user_test_interval: unknown;
+  evaluation_throttle_delay_s: number | null;
 }
 
 interface TaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   task?: TaskRecord | null;
-  onSuccess: () => void;
+  onSuccess: (createdTaskId?: number) => void;
   permissionKeys?: readonly string[];
 }
 
-type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages';
+type Tab = 'general' | 'grading' | 'limits' | 'tokens' | 'languages' | 'statements';
 
 const TAB_CONFIG: Array<{ id: Tab; label: string; icon: typeof FileCode }> = [
   { id: 'general', label: 'General', icon: FileCode },
@@ -56,6 +63,7 @@ const TAB_CONFIG: Array<{ id: Tab; label: string; icon: typeof FileCode }> = [
   { id: 'limits', label: 'Limits', icon: Clock },
   { id: 'tokens', label: 'Tokens', icon: Cpu },
   { id: 'languages', label: 'Files & Languages', icon: FileType },
+  { id: 'statements', label: 'Statements', icon: FileText },
 ];
 
 const EMPTY_FORM: TaskData = {
@@ -77,6 +85,8 @@ const EMPTY_FORM: TaskData = {
   max_user_test_number: null,
   min_submission_interval: null,
   min_user_test_interval: null,
+  // null is the tri-state's "inherit the contest's delay"; the create then writes a NULL.
+  evaluation_throttle_delay_s: null,
 };
 
 function mapTaskToForm(task: TaskRecord): TaskData {
@@ -106,13 +116,14 @@ function mapTaskToForm(task: TaskRecord): TaskData {
         : null,
     min_submission_interval: parseIntervalToSeconds(task.min_submission_interval) ?? null,
     min_user_test_interval: parseIntervalToSeconds(task.min_user_test_interval) ?? null,
+    evaluation_throttle_delay_s: task.evaluation_throttle_delay_s,
   };
 }
 
 export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: TaskModalProps): React.JSX.Element | null {
-  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('general');
   const [formData, setFormData] = useState<TaskData>(EMPTY_FORM);
+  const [statementQueue, setStatementQueue] = useState<QueuedStatement[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -121,34 +132,54 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
     return getFieldAccess('tasks', perms);
   }, [permissionKeys]);
 
-  useEffect(() => {
-    if (task) setFormData(mapTaskToForm(task));
-    else setFormData(EMPTY_FORM);
+  const canCreateStatement = useMemo(
+    () => hasEffectivePermission(new Set(permissionKeys ?? []), 'statement:create'),
+    [permissionKeys],
+  );
+
+  const [prevTask, setPrevTask] = useState<TaskRecord | null | undefined>(undefined);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (task !== prevTask || isOpen !== prevOpen) {
+    setPrevTask(task);
+    setPrevOpen(isOpen);
+    setFormData(task ? mapTaskToForm(task) : EMPTY_FORM);
+    setStatementQueue([]);
     setError('');
-  }, [task, isOpen]);
+  }
+
+  const runAction = useActionFeedback();
 
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      const result = task
-        ? await apiClient.put(`/api/tasks/${task.id}`, formData)
-        : await apiClient.post('/api/tasks', formData);
-      if (result.success) {
-        addToast({
-          type: 'success',
-          title: task ? 'Task updated' : 'Task created',
-          message: task ? 'Task updated successfully' : 'Task created successfully',
-        });
-        onSuccess();
-        onClose();
-      } else {
+      const result = await runAction(
+        {
+          pending: task ? 'Updating task...' : 'Creating task...',
+          success: task ? 'Task updated' : 'Task created',
+          failure: 'Save failed',
+          description: task ? 'Task updated successfully' : 'Task created successfully',
+        },
+        () =>
+          task
+            ? apiClient.put(`/api/tasks/${task.id}`, formData)
+            : apiClient.post('/api/tasks', formData)
+      );
+      if (!result) return;
+      if (!result.success) {
         setError(result.error ?? 'An error occurred');
+        return;
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'An unexpected error occurred';
-      setError(message);
+      const savedTaskId = task ? task.id : (typeof result.id === 'number' ? result.id : undefined);
+      // The task is already saved, so a statement failure is reported without
+      // blocking the close — the file can be re-added from the Overview tab.
+      if (savedTaskId !== undefined && statementQueue.length > 0) {
+        const { failed } = await uploadStatements(savedTaskId, statementQueue);
+        if (failed.length > 0) toast.error(`Task saved, but these statements failed: ${failed.join(', ')}`);
+      }
+      onSuccess(savedTaskId);
+      onClose();
     } finally {
       setLoading(false);
     }
@@ -168,6 +199,12 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
 
   if (!isOpen) return null;
 
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
+
   return (
     <FieldAccessContext.Provider value={fieldAccess}>
       <Dialog
@@ -177,49 +214,63 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
         }}
         title={task ? 'Edit Task' : 'Create New Task'}
         footer={
-          <>
-            <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-              Cancel
-            </Button>
-            <Button type="submit" form="task-form" variant="positive" loading={loading} disabled={loading} className="min-w-32">
-              {task ? 'Save Changes' : 'Create Task'}
-            </Button>
-          </>
+          <ModalFooter
+            formId="task-form"
+            cancelLabel="Cancel"
+            confirmLabel={task ? 'Save Changes' : 'Create Task'}
+            onCancel={cancel}
+            confirmLoading={loading}
+            confirmDisabled={loading}
+          />
         }
-        className="flex max-h-[70vh] w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-4xl"
+        className="flex w-full flex-col gap-0 p-0 sm:max-h-[70vh] sm:max-w-4xl"
       >
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden sm:flex-row">
-          <div className="w-full shrink-0 space-y-2 overflow-y-auto border-b border-border bg-muted/20 p-4 max-sm:flex max-sm:flex-row max-sm:flex-wrap max-sm:gap-1 max-sm:overflow-x-auto sm:w-64 sm:border-b-0 sm:border-r sm:block">
-            {TAB_CONFIG.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
-                  activeTab === tab.id
-                    ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                )}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="relative flex-1 overflow-y-auto p-8">
+        <ResponsiveModalShell
+          sidebar={
+            <>
+              {TAB_CONFIG.filter((tab) => tab.id !== 'statements' || canCreateStatement).map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
+                    activeTab === tab.id
+                      ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  <tab.icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              ))}
+            </>
+          }
+        >
+          <div className="p-8">
             <form id="task-form" onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-              {error && <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
-              {activeTab === 'general' && <GeneralTab formData={formData} onChange={setFormData} />}
+              {error && <InlineAlert tone="destructive" className="rounded-xl border-destructive/20 text-destructive">{error}</InlineAlert>}
+              {activeTab === 'general' && (
+                <div className="space-y-6">
+                  {/* The type lives on the task's dataset, so a task dialog cannot show
+                      it as a field — say where the decision is made instead. */}
+                  <p className="text-xs text-muted-foreground">
+                    Task type is set on the task&apos;s dataset, not here — the dataset chooses Batch, Communication or TwoSteps.
+                  </p>
+                  <GeneralTab formData={formData} onChange={setFormData} />
+                </div>
+              )}
               {activeTab === 'grading' && <GradingTab formData={formData} onChange={setFormData} />}
               {activeTab === 'limits' && <LimitsTab formData={formData} onChange={setFormData} />}
               {activeTab === 'tokens' && <TokensTab formData={formData} onChange={setFormData} />}
               {activeTab === 'languages' && (
                 <LanguagesTab formData={formData} onChange={setFormData} onToggleLanguage={handleLanguageToggle} onToggleFormat={handleFormatToggle} />
               )}
+              {activeTab === 'statements' && (
+                <StatementQueueField queue={statementQueue} onChange={setStatementQueue} disabled={loading} />
+              )}
             </form>
           </div>
-        </div>
+        </ResponsiveModalShell>
       </Dialog>
     </FieldAccessContext.Provider>
   );

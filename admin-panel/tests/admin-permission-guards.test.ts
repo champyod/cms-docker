@@ -162,16 +162,14 @@ describe('runtime — mocked server actions enforce guards', () => {
     vi.doMock('@/lib/auth', () => ({
       getSession: vi.fn(async () => ({ userId: '1', username: 'caller', expiresAt: new Date().toISOString() })),
     }));
-    vi.doMock('@/lib/permission-engine', async () => {
-      const actual = await vi.importActual<typeof import('@/lib/permission-engine')>('@/lib/permission-engine');
-      return {
-        ...actual,
-        getTargetEffectivePermissions: vi.fn(async () => ({
-          status: 'resolved' as const,
-          effective: new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
-        })),
-      };
-    });
+    // WHY this module and not '@/lib/permission-engine': the target-grant read needs Prisma, so it
+    // lives in the server module; permission-engine stays pure for the client bundle.
+    vi.doMock('@/lib/server/target-permissions', () => ({
+      getTargetEffectivePermissions: vi.fn(async () => ({
+        status: 'resolved' as const,
+        effective: new Set<string>(PERMISSION_REGISTRY.map((d) => d.key)),
+      })),
+    }));
     vi.doMock('@/lib/prisma', () => ({
       prisma: {
         admins: {
@@ -277,5 +275,30 @@ describe('runtime — mocked server actions enforce guards', () => {
     const res = await setAdminOverride(1, 'all:all', 'allow', 'escalate');
     expect(res.success).toBe(false);
     if (!res.success) expect(res.error).toMatch(/Cannot grant/);
+  });
+});
+
+describe('removing an override re-grants, so it is grant-checked like an allow', () => {
+  it('a deny hides a held permission, and removing it restores the group grant', () => {
+    const groupKeys = ['contest:delete'];
+    const withDeny = resolveEffectivePermissions(groupKeys, [
+      { permissionKey: 'contest:delete', effect: 'deny' },
+    ]);
+    expect(withDeny.has('contest:delete')).toBe(false);
+    // This is exactly what clearing the deny does, which is why the caller must hold the result.
+    expect(resolveEffectivePermissions(groupKeys, []).has('contest:delete')).toBe(true);
+  });
+
+  it('clearAdminOverride verifies the resulting set before it deletes the row', () => {
+    const src = readSource('src/app/actions/adminPermissions.ts');
+    const body = src.slice(src.indexOf('export async function clearAdminOverride'));
+    expect(body).toContain('assertClearAllowed');
+    // A guard that runs after the delete would be decoration.
+    expect(body.indexOf('assertClearAllowed')).toBeLessThan(body.indexOf('.delete('));
+  });
+
+  it('an unverifiable resulting set is refused rather than treated as grantable', () => {
+    const src = readSource('src/app/actions/adminPermissions.ts');
+    expect(src).toContain('resultingEffective === null');
   });
 });

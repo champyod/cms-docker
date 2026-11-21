@@ -33,7 +33,7 @@ import difflib
 from cms.db import Dataset, File, Submission
 from cms.grading.languagemanager import safe_get_lang_filename
 from cmscommon.datetime import make_datetime
-from .base import BaseHandler, FileHandler, require_permission
+from .base import BaseHandler, FileHandler, first_contest, require_permission
 
 
 logger = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class SubmissionHandler(BaseHandler):
     def get(self, submission_id, dataset_id=None):
         submission = self.safe_get_item(Submission, submission_id)
         task = submission.task
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         if dataset_id is not None:
             dataset = self.safe_get_item(Dataset, dataset_id)

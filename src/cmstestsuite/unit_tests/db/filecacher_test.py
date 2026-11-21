@@ -155,7 +155,7 @@ class TestFileCacherBase:
         if not os.path.exists(cache_path):
             self.fail("File not stored in local cache.")
 
-    def test_file_life(self):
+    def test_it_stores_retrieves_and_deletes_a_file(self):
         """Send a ~100B random binary file to the storage through
         FileCacher as a file-like object. FC should cache the content
         locally.
@@ -239,14 +239,14 @@ class TestFileCacherBase:
             with self.assertRaises(Exception):
                 self.file_cacher.get_file(self.digest)
 
-    def test_fetch_missing_file(self):
+    def test_it_fails_when_fetching_a_missing_digest(self):
         """Get unexisting file from FileCacher.
 
         """
         with self.assertRaises(Exception):
             self.file_cacher.get_file(self.digest)
 
-    def test_file_as_content(self):
+    def test_it_stores_and_retrieves_a_file_as_content(self):
         """Send a ~100B random binary file to the storage through
         FileCacher as a string. FC should cache the content locally.
 
@@ -287,7 +287,7 @@ class TestFileCacherBase:
             else:
                 self.fail("Content differ.")
 
-    def test_big_file(self):
+    def test_it_stores_and_retrieves_a_large_file(self):
         """Put a ~10MB file into the storage (using a specially
         crafted file-like object).
 
@@ -316,7 +316,7 @@ class TestFileCacherBase:
 
         self.file_cacher.delete(self.digest)
 
-    def test_file_duplicates(self):
+    def test_it_keeps_a_single_copy_of_duplicate_files(self):
         """Send multiple copies of the a file into FileCacher.
 
         Generates a random file and attempts to store them into the FileCacher.

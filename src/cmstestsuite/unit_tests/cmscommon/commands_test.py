@@ -25,22 +25,22 @@ from cmscommon.commands import pretty_print_cmdline
 
 class TestPrettyPrintCmdline(unittest.TestCase):
 
-    def test_success(self):
+    def test_it_joins_the_arguments_with_spaces(self):
         self.assertEqual(
             pretty_print_cmdline(["ls", "-al", "file"]),
             "ls -al file")
 
-    def test_spaces(self):
+    def test_it_single_quotes_an_argument_containing_spaces(self):
         self.assertEqual(
             pretty_print_cmdline(["ls", "-al", "file with spaces"]),
             "ls -al 'file with spaces'")
 
-    def test_quotes(self):
+    def test_it_escapes_single_quotes_inside_an_argument(self):
         self.assertEqual(
             pretty_print_cmdline(["ls", "-al", "file'with'quotes"]),
             """ls -al 'file'"'"'with'"'"'quotes'""")
 
-    def test_double_quotes(self):
+    def test_it_preserves_double_quotes_inside_a_single_quoted_argument(self):
         self.assertEqual(
             pretty_print_cmdline(["ls", "-al", "file\"with\"dblquotes"]),
             """ls -al 'file"with"dblquotes'""")

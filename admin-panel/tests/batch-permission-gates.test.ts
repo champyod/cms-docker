@@ -16,6 +16,11 @@ describe('batch permission gates (static)', () => {
     expect(src).not.toContain('verifyApiPermission("user:create")');
   });
 
+  it('bulk enrollment requires participation:create', () => {
+    const src = read('src/app/api/users/bulk/route.ts');
+    expect(src).toContain("verifyApiPermission('participation:create')");
+  });
+
   it('handleExportCurrent is gated on password:reveal and audits password:reveal', () => {
     const src = read('src/app/api/users/batch/credentialActions.ts');
     // handleExportCurrent block must contain password:reveal both as gate and audit verb
@@ -39,9 +44,6 @@ describe('batch permission gates (static)', () => {
     expect(src).toContain("verifyApiPermission('participation:delete')");
     expect(src).toContain("verb: 'participation:create'");
     expect(src).toContain("verb: 'participation:delete'");
-    // contest participation ops must not use the old coarse participation:update verb
-    // (team ops correctly still use participation:update — don't assert globally)
-    const contestVerbs = [...src.matchAll(/handleContest[\s\S]*?revalidateUserContestPages\(\)/g)].join('');
     // simpler: just ensure both correct verbs exist; team verbs covered separately
     expect(src).toMatch(/participation:create/);
     expect(src).toMatch(/participation:delete/);
@@ -94,6 +96,9 @@ describe('batch permission enforcement (runtime)', () => {
     });
     vi.doMock('@/lib/prisma', () => ({
       prisma: {
+        admins: {
+          findUnique: vi.fn(async () => null),
+        },
         users: {
           findMany: vi.fn(async () => [{ id: 1, username: 'alice', password: 'plaintext:secret123' }]),
           update: vi.fn(async () => ({})),
@@ -105,12 +110,13 @@ describe('batch permission enforcement (runtime)', () => {
           updateMany: vi.fn(async () => ({ count: 1 })),
         },
         $executeRaw: vi.fn(async () => 1),
+        $executeRawUnsafe: vi.fn(async () => 1),
       },
     }));
     vi.doMock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => {}) }));
     vi.doMock('@/lib/creds-file', async () => {
       const actual = await vi.importActual<typeof import('@/lib/creds-file')>('@/lib/creds-file');
-      return { ...actual, writeCredsCsv: vi.fn(async (c: string) => ({ token: 'tok', downloadUrl: '/api/users/credentials/tok' })) };
+      return { ...actual, writeCredsCsv: vi.fn(async (_content: string) => ({ token: 'tok', downloadUrl: '/api/users/credentials/tok' })) };
     });
     vi.doMock('next/cache', () => ({ revalidatePath: vi.fn() }));
     vi.doMock('@/lib/teams', () => ({ resolveTeamIdByCode: vi.fn(async () => 99) }));

@@ -1,14 +1,113 @@
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
 import { parseInterval } from '@/lib/contest-validation';
 import type { ContestData } from '@/lib/contest-validation';
+import { normalizeLimitValue, normalizeNonNegativeInt } from '@/lib/limits';
+import {
+  AmbiguousZoneTimeError,
+  NonexistentZoneTimeError,
+  utcToZoneWallClock,
+  zoneWallClockToInstant,
+} from '@/lib/timezone';
 import type { ContestFormData, ExistingContest } from './types';
 
-export const formatDateForInput = (date?: Date | string | null) => {
-    if (!date) return '';
-  const d = new Date(date);
-    const pad = (n: number) => n < 10 ? '0' + n : n;
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
+/** The four wall clocks a contest form owns, and the only keys a zone can invalidate. */
+export const CONTEST_TIME_FIELDS = ['start', 'stop', 'analysis_start', 'analysis_stop'] as const;
+
+export type ContestTimeField = (typeof CONTEST_TIME_FIELDS)[number];
+
+/**
+ * The throttle columns nothing consumes yet, plus the timestamp: the modal renders them disabled, so
+ * they are read for display and dropped from every payload rather than written by a control the
+ * operator cannot use.
+ */
+export const RESERVED_THROTTLE_FIELDS = ['evaluation_throttle_window_s', 'evaluation_throttle_max', 'evaluation_final_open', 'evaluation_final_open_at'] as const;
+
+/** The shape every zone-aware contest form shares, whichever tab or modal owns it. */
+export interface ContestTimeFields {
+  timezone: string;
+  start: string;
+  stop: string;
+  analysis_start: string;
+  analysis_stop: string;
+}
+
+/**
+ * Render a stored instant as the `datetime-local` value an operator reads it in. `zone` is the
+ * form's own live zone, so a picker always shows the wall clock that zone names.
+ */
+export function formatDateForInput(date: Date | string | null | undefined, zone?: string): string {
+  if (!date) return '';
+  const iso = date instanceof Date ? date.toISOString() : date;
+  if (Number.isNaN(new Date(iso).getTime())) return '';
+  return utcToZoneWallClock(iso, zone ?? '');
+}
+
+/** Null when the wall clock names an instant; the thrown zone error's message when it names none. */
+function zoneTimeError(value: string, zone: string): string | null {
+  try {
+    zoneWallClockToInstant(value, zone);
+    return null;
+  } catch (error) {
+    if (error instanceof NonexistentZoneTimeError || error instanceof AmbiguousZoneTimeError) return error.message;
+    throw error;
+  }
+}
+
+/**
+ * Why: a wall clock inside a DST gap or a fall-back repeat names no single instant, so the save
+ * must stop at the field instead of storing a shifted time. Each message is the thrown error
+ * verbatim — it names the zone, the jump, or both candidate instants.
+ */
+export function collectZoneTimeErrors(form: ContestTimeFields, zone: string): Map<string, string> {
+  const errors = new Map<string, string>();
+  for (const field of CONTEST_TIME_FIELDS) {
+    const message = zoneTimeError(form[field], zone);
+    if (message !== null) errors.set(field, message);
+  }
+  return errors;
+}
+
+/** Why: an unresolvable wall clock has no instant to move, so the typed value stays for the submit error. */
+function reprojectInstant(value: string, fromZone: string, toZone: string): string {
+  if (zoneTimeError(value, fromZone) !== null) return value;
+  const instant = zoneWallClockToInstant(value, fromZone);
+  return instant === null ? value : utcToZoneWallClock(instant.toISOString(), toZone);
+}
+
+/**
+ * Why: the pickers follow the form's live timezone field, so a zone change must move the four wall
+ * clocks to the same instants in the new zone — never re-read the old digits as a new wall clock.
+ */
+export function rezoneTimeFields<T extends ContestTimeFields>(previous: T, next: T): T {
+  if (next.timezone === previous.timezone) return next;
+  return {
+    ...next,
+    start: reprojectInstant(previous.start, previous.timezone, next.timezone),
+    stop: reprojectInstant(previous.stop, previous.timezone, next.timezone),
+    analysis_start: reprojectInstant(previous.analysis_start, previous.timezone, next.timezone),
+    analysis_stop: reprojectInstant(previous.analysis_stop, previous.timezone, next.timezone),
+  };
+}
+
+/**
+ * Why: tabs and the modal build their payload from wall-clock strings; converting once here means
+ * every contest write stores the instant the form's zone names, with no per-call-site conversion
+ * to forget. A cleared field stays empty so the writer keeps its unchanged-value path. The
+ * payload's own type is preserved, so the strict repo contract and the validation contract each
+ * keep the shape they were written against.
+ */
+export function toZoneInstants<T extends Partial<Record<ContestTimeField, string | Date | null | undefined>>>(
+  payload: T,
+  zone: string,
+): T {
+  const converted = { ...payload };
+  for (const field of CONTEST_TIME_FIELDS) {
+    const value = converted[field];
+    if (typeof value !== 'string' || value === '') continue;
+    converted[field] = zoneWallClockToInstant(value, zone) ?? value;
+  }
+  return converted;
+}
 
 type CommonFormFields = Omit<
   ContestFormData,
@@ -45,7 +144,16 @@ const COMMON_DEFAULTS: CommonFormFields = {
   token_gen_interval: 30, // minutes
   token_gen_max: null,
   max_user_test_number: null,
+  per_user_time: null,
+  min_submission_interval_grace_period: null,
   queue_fairness_penalty_seconds: 0,
+  // Why 0 and false, not null: every one of these columns is NOT NULL DEFAULT 0/false, so the form's
+  // empty state is the column's own zero. The delay is editable; the other four render disabled.
+  evaluation_throttle_delay_s: 0,
+  evaluation_throttle_window_s: 0,
+  evaluation_throttle_max: 0,
+  evaluation_final_open: false,
+  evaluation_final_open_at: '',
   analysis_enabled: false,
 };
 
@@ -58,8 +166,8 @@ export function emptyContestForm(): ContestFormData {
     stop: '',
     languages: [],
     max_submission_number: null,
-    min_submission_interval: 0,
-    min_user_test_interval: 0,
+    min_submission_interval: null,
+    min_user_test_interval: null,
     score_precision: 0,
     analysis_start: '',
     analysis_stop: '',
@@ -71,30 +179,32 @@ export function defaultNewContestForm(): ContestFormData {
   const end = new Date(now.getTime() + 5 * 60 * 60 * 1000);
   const analysisStart = new Date(end.getTime() + 1000);
   const analysisStop = new Date(end.getTime() + 1000 * 60 * 60);
+  const zone = COMMON_DEFAULTS.timezone;
 
   return {
     ...COMMON_DEFAULTS,
     name: '',
     description: '',
-    start: formatDateForInput(now),
-    stop: formatDateForInput(end),
+    start: formatDateForInput(now, zone),
+    stop: formatDateForInput(end, zone),
     languages: [...PROGRAMMING_LANGUAGES],
     max_submission_number: 100,
     min_submission_interval: 60,
     min_user_test_interval: 60,
     score_precision: 2,
-    analysis_start: formatDateForInput(analysisStart),
-    analysis_stop: formatDateForInput(analysisStop),
+    analysis_start: formatDateForInput(analysisStart, zone),
+    analysis_stop: formatDateForInput(analysisStop, zone),
   };
 }
 
 function contestTimingFields(
   contest: ExistingContest
 ): Pick<ContestFormData, 'start' | 'stop' | 'timezone' | 'languages' | 'allowed_localizations'> {
+  const zone = contest.timezone || COMMON_DEFAULTS.timezone;
   return {
-    start: formatDateForInput(contest.start),
-    stop: formatDateForInput(contest.stop),
-    timezone: contest.timezone || 'Asia/Bangkok',
+    start: formatDateForInput(contest.start, zone),
+    stop: formatDateForInput(contest.stop, zone),
+    timezone: zone,
     languages: contest.languages || [],
     allowed_localizations: (contest.allowed_localizations || []).join(', '),
   };
@@ -150,15 +260,32 @@ function contestTokenFields(
   };
 }
 
+/**
+ * A stored interval reads as "no limit" when it is absent or zero — the same rule as typed input,
+ * so a row that holds `0 seconds` shows an empty box rather than a 0 the API would refuse.
+ */
+function storedLimitSeconds(value: ExistingContest['min_submission_interval']): number | null {
+  if (value === null || value === undefined) return null;
+  return normalizeLimitValue(parseInterval(value));
+}
+
 function contestLimitFields(
-  contest: ExistingContest
+  contest: ExistingContest,
+  zone: string
 ): Pick<
   ContestFormData,
   | 'max_submission_number'
   | 'max_user_test_number'
   | 'min_submission_interval'
   | 'min_user_test_interval'
+  | 'per_user_time'
+  | 'min_submission_interval_grace_period'
   | 'queue_fairness_penalty_seconds'
+  | 'evaluation_throttle_delay_s'
+  | 'evaluation_throttle_window_s'
+  | 'evaluation_throttle_max'
+  | 'evaluation_final_open'
+  | 'evaluation_final_open_at'
   | 'score_precision'
   | 'analysis_enabled'
   | 'analysis_start'
@@ -167,13 +294,22 @@ function contestLimitFields(
   return {
     max_submission_number: contest.max_submission_number,
     max_user_test_number: contest.max_user_test_number,
-    min_submission_interval: contest.min_submission_interval == null ? 0 : parseInterval(contest.min_submission_interval),
-    min_user_test_interval: contest.min_user_test_interval == null ? 0 : parseInterval(contest.min_user_test_interval),
+    min_submission_interval: storedLimitSeconds(contest.min_submission_interval),
+    min_user_test_interval: storedLimitSeconds(contest.min_user_test_interval),
+    per_user_time: storedLimitSeconds(contest.per_user_time),
+    min_submission_interval_grace_period: storedLimitSeconds(contest.min_submission_interval_grace_period),
     queue_fairness_penalty_seconds: contest.queue_fairness_penalty_seconds ?? 0,
+    // Why ?? 0: these columns are NOT NULL, so a record the client has not loaded (or an old row)
+    // shows the column's own zero rather than a blank the write cannot express.
+    evaluation_throttle_delay_s: contest.evaluation_throttle_delay_s ?? 0,
+    evaluation_throttle_window_s: contest.evaluation_throttle_window_s ?? 0,
+    evaluation_throttle_max: contest.evaluation_throttle_max ?? 0,
+    evaluation_final_open: contest.evaluation_final_open ?? false,
+    evaluation_final_open_at: contest.evaluation_final_open_at ?? '',
     score_precision: contest.score_precision,
     analysis_enabled: contest.analysis_enabled,
-    analysis_start: formatDateForInput(contest.analysis_start),
-    analysis_stop: formatDateForInput(contest.analysis_stop),
+    analysis_start: formatDateForInput(contest.analysis_start, zone),
+    analysis_stop: formatDateForInput(contest.analysis_stop, zone),
   };
 }
 
@@ -184,12 +320,36 @@ export function formFromContest(contest: ExistingContest): ContestFormData {
     ...contestTimingFields(contest),
     ...contestAccessFields(contest),
     ...contestTokenFields(contest),
-    ...contestLimitFields(contest),
+    ...contestLimitFields(contest, contest.timezone || COMMON_DEFAULTS.timezone),
   };
 }
 
 export function buildPayload(formData: ContestFormData): ContestData {
-  const payload: ContestData = { ...formData };
+  const payload: ContestData = {
+    ...formData,
+    // Why the limits are normalised on the way out as well as at the control: a form can be seeded
+    // from a row an older panel wrote, and the API must never receive the 0 the schema's CHECK
+    // refuses. The two interval columns are plain numbers in the API's ContestData, so a cleared
+    // interval leaves its key absent instead of null — the validator reads an absent key as "no
+    // minimum", which is the same statement.
+    max_submission_number: normalizeLimitValue(formData.max_submission_number),
+    max_user_test_number: normalizeLimitValue(formData.max_user_test_number),
+    token_max_number: normalizeLimitValue(formData.token_max_number),
+    token_gen_max: normalizeLimitValue(formData.token_gen_max),
+    min_submission_interval: normalizeLimitValue(formData.min_submission_interval) ?? undefined,
+    min_user_test_interval: normalizeLimitValue(formData.min_user_test_interval) ?? undefined,
+    per_user_time: normalizeLimitValue(formData.per_user_time),
+    min_submission_interval_grace_period: normalizeLimitValue(formData.min_submission_interval_grace_period),
+    // Why ?? 0 and not the limit rule: the delay column is NOT NULL and its 0 is a real value, so a
+    // cleared box commits the column's own 0 rather than a NULL it cannot hold.
+    evaluation_throttle_delay_s: normalizeNonNegativeInt(formData.evaluation_throttle_delay_s) ?? 0,
+  };
+
+  // Why dropped after the spread: the modal renders the four reserved columns disabled — nothing
+  // reads them yet — so a payload that carried them would let a control the operator cannot use
+  // write the column. The delay stays: it is the one editable member of the family.
+  for (const key of RESERVED_THROTTLE_FIELDS) delete (payload as unknown as Record<string, unknown>)[key];
+
 
   if (typeof payload.allowed_localizations === 'string') {
     payload.allowed_localizations = payload.allowed_localizations
@@ -198,5 +358,5 @@ export function buildPayload(formData: ContestFormData): ContestData {
         .filter((s: string) => s.length > 0);
   }
   payload.queue_fairness_penalty_seconds = Math.max(0, Number(payload.queue_fairness_penalty_seconds ?? 0) || 0);
-  return payload;
+  return toZoneInstants(payload, formData.timezone);
 }

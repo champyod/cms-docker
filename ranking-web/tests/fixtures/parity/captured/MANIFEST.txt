@@ -1,0 +1,5 @@
+captured_at=2026-10-09T12:32:48+00:00
+base_url=http://127.0.0.1:8890
+seed_sha256=19734affd811d8378040250132df91a3961a9749a68bcf21a098d9c6937e4e15
+repo_head=9d6382e497b8b12771ae8bb657ba0d38353d6044
+image=ghcr.io/champyod/cms-docker-core:major-admin-panel

@@ -119,7 +119,7 @@ def accept_submission(
 
     """
     contest = participation.contest
-    assert task.contest is contest
+    assert contest in task.contests
 
     # Check whether the contestant is allowed to submit.
 
@@ -156,6 +156,14 @@ def accept_submission(
                 N_("For this task, you can submit again "
                    "after %d seconds from last submission."),
                 task.min_submission_interval.total_seconds())
+
+    # A task with no active dataset cannot be judged (ProxyService skips it),
+    # so accepting the submission would leave it pending forever.
+
+    if task.active_dataset is None:
+        raise UnacceptableSubmission(
+            N_("Submission not allowed!"),
+            N_("This task is not ready to accept submissions yet."))
 
     # Process the data we received and ensure it's valid.
 
@@ -336,10 +344,13 @@ def accept_user_test(
 
     """
     contest = participation.contest
-    assert task.contest is contest
+    assert contest in task.contests
 
     # Check whether the task is testable.
 
+    # Without an active dataset there is no task type to test against.
+    if task.active_dataset is None:
+        raise TestingNotAllowed()
     task_type = task.active_dataset.task_type_object
     if not task_type.testable:
         raise TestingNotAllowed()

@@ -1,66 +1,55 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 
 import { revealUserPassword } from '@/app/actions/users';
-import { Button } from '@/components/core/Button';
-import { Dialog, DialogFooter } from '@/components/core/Dialog';
-import { PasswordFieldWithKind, type PasswordRevealState } from '@/components/core/PasswordFieldWithKind';
+import { Dialog } from '@/components/core/Dialog';
+import { ModalFooter } from '@/components/core/ModalFooter';
+import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { SavedSecretReveal } from '@/components/core/SavedSecretReveal';
 import { RestrictedField } from '@/components/core/RestrictedField';
-import { useToast } from '@/components/providers/ToastProvider';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { toast } from 'sonner';
 import { apiClient } from '@/lib/apiClient';
 import { getFieldAccess, stripDisallowedFields } from '@/lib/field-permissions';
-import { cn } from '@/lib/utils';
-import { isKnownLanguageCode, normalizeLanguageCode } from '@/lib/constants/languages';
+import type { Dictionary } from '@/lib/dictionary';
+import { normalizeLanguageCode } from '@/lib/constants/languages';
 import type { PasswordKind } from '@/lib/password-format';
-import type { UsersPageRow } from '@/lib/prisma-selects';
+import type { SafeUser } from '@/lib/prisma-selects';
 
 import { EMPTY_USER_FORM, formFromUser, type UserFormState } from './userFormState';
+import { UserIdentityFields } from './UserIdentityFields';
+import { UserPreferredLanguagesField } from './UserPreferredLanguagesField';
+import { UserContestFields } from './UserContestFields';
 
 interface UserModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user?: UsersPageRow | null;
+  user?: SafeUser | null;
   contests?: Array<{ id: number; name: string }>;
+  canReadContests: boolean;
+  navigation: Dictionary['navigation'];
   onSuccess: () => void;
   permissionKeys: readonly string[];
 }
 
-export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, permissionKeys }: UserModalProps) {
+export function UserModal({ isOpen, onClose, user, contests = [], canReadContests, navigation, onSuccess, permissionKeys }: UserModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { addToast } = useToast();
   const [formData, setFormData] = useState<UserFormState>(EMPTY_USER_FORM);
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
-  const [reveal, setReveal] = useState<PasswordRevealState>({ state: 'none' });
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
   const fieldAccess = useMemo(() => getFieldAccess('users', effective), [effective]);
 
-  useEffect(() => {
+  const [prevUser, setPrevUser] = useState<SafeUser | null | undefined>(undefined);
+  const [prevOpen, setPrevOpen] = useState(isOpen);
+  if (user !== prevUser || isOpen !== prevOpen) {
+    setPrevUser(user);
+    setPrevOpen(isOpen);
     setFormData(user ? formFromUser(user) : EMPTY_USER_FORM);
     setPasswordKind('bcrypt');
-    setReveal({ state: 'none' });
-    if (!user || !isOpen) return;
-
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await revealUserPassword(user.id);
-        if (cancelled || !result.success) return;
-        setReveal(
-          result.kind === 'plaintext'
-            ? { state: 'plaintext', value: result.value }
-            : { state: 'bcrypt' }
-        );
-      } catch {
-        if (!cancelled) setReveal({ state: 'none' });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [user, isOpen]);
+  }
 
   const updateForm = (updates: Partial<UserFormState>) => setFormData({ ...formData, ...updates });
 
@@ -116,10 +105,8 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
           });
 
       if (result.success) {
-        addToast({
-          type: 'success',
-          title: user ? 'User updated' : 'User created',
-          message: formData.password
+        toast.success(user ? 'User updated' : 'User created', {
+          description: formData.password
             ? `${formData.username} saved — new password is active immediately.`
             : `${formData.username} saved.`,
         });
@@ -128,17 +115,23 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
       } else {
         const msg = result.error || 'Operation failed';
         setError(msg);
-        addToast({ type: 'error', title: 'Save failed', message: msg });
+        toast.error('Save failed', { description: msg });
       }
     } catch {
       setError('An unexpected error occurred');
-      addToast({ type: 'error', title: 'Save failed', message: 'An unexpected error occurred' });
+      toast.error('Save failed', { description: 'An unexpected error occurred' });
     } finally {
       setLoading(false);
     }
   };
 
-  const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+  const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors dark:[color-scheme:dark]';
+
+  // Why the guard: a submit already in flight cannot be recalled, so cancelling
+  // through it would close the dialog over an unresolved save.
+  const cancel = (): void => {
+    if (!loading) onClose();
+  };
 
   return (
     <Dialog
@@ -147,76 +140,17 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
         if (!open) onClose();
       }}
       title={user ? 'Edit User' : 'Create New User'}
+      description={navigation.people.users.label}
       className="sm:max-w-md"
     >
-      {error && (
-        <div className="mb-4 p-3 border border-destructive/30 bg-destructive/10 rounded-lg text-destructive text-sm">
-          {error}
-        </div>
-      )}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <RestrictedField
-            canRead={fieldAccess.first_name.canRead}
-            canUpdate={fieldAccess.first_name.canUpdate}
-            label="First Name"
-            lockHint="Read-only — you lack user:update"
-          >
-            <input
-              required
-              type="text"
-              value={formData.first_name}
-              onChange={(e) => updateForm({ first_name: e.target.value })}
-              className={cn(inputClassName, 'font-sans')}
-              placeholder="John"
-            />
-          </RestrictedField>
-          <RestrictedField
-            canRead={fieldAccess.last_name.canRead}
-            canUpdate={fieldAccess.last_name.canUpdate}
-            label="Last Name"
-            lockHint="Read-only — you lack user:update"
-          >
-            <input
-              required
-              type="text"
-              value={formData.last_name}
-              onChange={(e) => updateForm({ last_name: e.target.value })}
-              className={cn(inputClassName, 'font-sans')}
-              placeholder="Doe"
-            />
-          </RestrictedField>
-        </div>
-        <RestrictedField
-          canRead={fieldAccess.username.canRead}
-          canUpdate={fieldAccess.username.canUpdate}
-          label="Username"
-          lockHint="Read-only — you lack user:update"
-        >
-          <input
-            required
-            type="text"
-            value={formData.username}
-            onChange={(e) => updateForm({ username: e.target.value })}
-            className={cn(inputClassName, 'font-mono')}
-            placeholder="johndoe"
-          />
-        </RestrictedField>
-
-        <RestrictedField
-          canRead={fieldAccess.email.canRead}
-          canUpdate={fieldAccess.email.canUpdate}
-          label="Email (Optional)"
-          lockHint="Read-only — you lack user:update"
-        >
-          <input
-            type="email"
-            value={formData.email}
-            onChange={(e) => updateForm({ email: e.target.value })}
-            className={cn(inputClassName, 'font-sans')}
-            placeholder="john@example.com"
-          />
-        </RestrictedField>
+      {error && <InlineAlert tone="destructive" density="regular" className="mb-4 border-destructive/30">{error}</InlineAlert>}
+      <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
+        <UserIdentityFields
+          formData={formData}
+          updateForm={updateForm}
+          fieldAccess={fieldAccess}
+          inputClassName={inputClassName}
+        />
 
         <RestrictedField
           canRead={fieldAccess.password.canRead}
@@ -232,8 +166,14 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
             placeholder="••••••••"
             kind={passwordKind}
             onKind={setPasswordKind}
-            reveal={{ ...reveal, onReveal: () => undefined }}
           />
+          {user && (
+            <SavedSecretReveal
+              label="Saved password"
+              canReveal={fieldAccess.password.canRead}
+              onReveal={() => revealUserPassword(user.id)}
+            />
+          )}
         </RestrictedField>
         <RestrictedField
           canRead={fieldAccess.timezone.canRead}
@@ -249,106 +189,34 @@ export function UserModal({ isOpen, onClose, user, contests = [], onSuccess, per
             placeholder="Asia/Bangkok"
           />
         </RestrictedField>
-        <RestrictedField
-          canRead={fieldAccess.preferred_languages.canRead}
-          canUpdate={fieldAccess.preferred_languages.canUpdate}
-          label="Preferred Languages"
-          lockHint="Read-only — you lack user:update"
-        >
-          <div className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              {formData.preferred_languages.length === 0 ? (
-                <span className="text-xs text-muted-foreground">No languages selected.</span>
-              ) : (
-                formData.preferred_languages.map((code) => {
-                  const known = isKnownLanguageCode(code);
-                  return (
-                    <span key={code} className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs', known ? 'border-border bg-muted' : 'border-amber-500/40 bg-amber-500/10 text-amber-700')}>
-                      <span className="font-mono">{code}</span>
-                      {!known ? <span className="text-[10px]">unknown</span> : null}
-                      {fieldAccess.preferred_languages.canUpdate ? (
-                        <button type="button" onClick={() => removePreferredLanguage(code)} className="ml-1 text-muted-foreground hover:text-foreground">×</button>
-                      ) : null}
-                    </span>
-                  );
-                })
-              )}
-            </div>
-            {fieldAccess.preferred_languages.canUpdate ? (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={langDraft}
-                  onChange={(e) => setLangDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addPreferredLanguage();
-                    }
-                  }}
-                  placeholder="en, th, fr…"
-                  className={cn(inputClassName, 'font-mono')}
-                />
-                <Button type="button" variant="secondary" onClick={addPreferredLanguage} disabled={!normalizeLanguageCode(langDraft)}>
-                  Add
-                </Button>
-              </div>
-            ) : null}
-            {(() => {
-              const pending = normalizeLanguageCode(langDraft);
-              if (!pending || isKnownLanguageCode(pending)) return null;
-              return <p className="text-xs text-amber-600">Unrecognised code — will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
-            })()}
-            <p className="text-xs text-muted-foreground">Stored normalized (trim + lowercase). Exact match against statement.language.</p>
-          </div>
-        </RestrictedField>
-        {!user && (
-          <>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Contest (Optional)</label>
-              <select
-                value={formData.contestId}
-                onChange={(e) => updateForm({ contestId: e.target.value })}
-                className={inputClassName}
-                title="Contest"
-              >
-                <option value="">No contest</option>
-                {contests.map((contest) => (
-                  <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Team Code (Optional)</label>
-              <input
-                type="text"
-                value={formData.teamCode}
-                onChange={(e) => updateForm({ teamCode: e.target.value })}
-                className={cn(inputClassName, 'font-mono')}
-                placeholder="TEAM_A"
-              />
-              <p className="text-xs text-muted-foreground">If team code is set, contest must be selected.</p>
-            </div>
-          </>
+        <UserPreferredLanguagesField
+          access={fieldAccess.preferred_languages}
+          languages={formData.preferred_languages}
+          draft={langDraft}
+          inputClassName={inputClassName}
+          onDraftChange={setLangDraft}
+          onAdd={addPreferredLanguage}
+          onRemove={removePreferredLanguage}
+        />
+        {!user && canReadContests && (
+          <UserContestFields
+            contests={contests}
+            contestId={formData.contestId}
+            teamCode={formData.teamCode}
+            inputClassName={inputClassName}
+            onChange={updateForm}
+          />
         )}
-        <DialogFooter className="pt-6">
-          <Button
-            variant="negativeOutline"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="positive"
-            loading={loading}
-            disabled={loading}
-          >
-            {user ? 'Save Changes' : 'Create User'}
-          </Button>
-        </DialogFooter>
+        <ModalFooter
+          formId="user-form"
+          className="pt-6"
+          cancelLabel="Cancel"
+          cancelVariant="negativeOutline"
+          confirmLabel={user ? 'Save Changes' : 'Create User'}
+          onCancel={cancel}
+          confirmLoading={loading}
+          confirmDisabled={loading}
+        />
       </form>
     </Dialog>
   );

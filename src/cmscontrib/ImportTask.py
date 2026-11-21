@@ -42,7 +42,7 @@ import sys
 from cms import utf8_decoder
 from cms.db.contest import Contest
 from cms.db.session import Session
-from cms.db import SessionGen, Task
+from cms.db import ContestTask, SessionGen, Task
 from cms.db.filecacher import FileCacher
 from cmscontrib.importing import ImportDataError, contest_from_db, update_task
 from cmscontrib.loaders import choose_loader, build_epilog
@@ -146,8 +146,8 @@ class TaskImporter:
             if contest is not None:
                 logger.info("Attaching task to contest (id %s.)",
                             self.contest_id)
-                new_task.num = len(contest.tasks)
-                new_task.contest = contest
+                new_task.contest_tasks.append(ContestTask(
+                    contest=contest, num=len(contest.task_contests)))
             session.add(new_task)
             return new_task
 
@@ -156,9 +156,12 @@ class TaskImporter:
                 "Task \"%s\" already exists in database. "
                 "Use --update to update it." % new_task.name)
 
-        if contest is not None and task.contest_id != contest.id:
-            raise ImportDataError(
-                "Task \"%s\" already tied to another contest." % task.name)
+        # A task may belong to several contests; add this contest's membership
+        # if it is missing, without detaching the task from its other contests.
+        if contest is not None and not any(
+                ct.contest_id == contest.id for ct in task.contest_tasks):
+            task.contest_tasks.append(ContestTask(
+                contest=contest, num=len(contest.task_contests)))
 
         if task_has_changed:
             logger.info(

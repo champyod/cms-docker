@@ -33,6 +33,7 @@ import json
 import logging
 import os.path
 import re
+import typing
 
 import collections
 
@@ -48,13 +49,18 @@ import tornado.web
 from sqlalchemy.orm.exc import NoResultFound
 
 from cms import config
-from cms.db import User, Participation, Team
+from cms.db import User, Participation, Team, registerable_teams_query
 from cms.grading.languagemanager import get_language
 from cms.grading.steps import COMPILATION_MESSAGES, EVALUATION_MESSAGES
-from cms.server import multi_contest
+from cms.server import login_refusal, multi_contest
+from cms.server.captcha import extract_provider, extract_token
 from cms.server.contest.authentication import validate_login
 from cms.server.contest.communication import get_communications
-from cmscommon.crypto import hash_password, validate_password
+from cms.server.credits import get_surface
+from cms.server.login_counters import login_attempt_context
+from cms.server.login_refusal import LoginRefusal
+from cmscommon.crypto import BCRYPT_MAX_PASSWORD_BYTES, hash_password, \
+    validate_password
 from cmscommon.datetime import make_datetime, make_timestamp
 from .contest import ContestHandler, api_login_required
 from ..phase_management import actual_phase_required
@@ -66,6 +72,28 @@ logger = logging.getLogger(__name__)
 # Dummy function to mark translatable strings.
 def N_(msgid):
     return msgid
+
+
+def selectable_teams(sql_session, contest) -> list[Team]:
+    """Return the teams a contestant may register into for this contest.
+
+    A team is registerable when a contest_teams row says so for the contest;
+    with no row it falls back to the team's own registerable flag.
+
+    """
+    return registerable_teams_query(
+        sql_session, contest).order_by(Team.name).all()
+
+
+def find_registerable_team(sql_session, contest, team_code: str) -> Team:
+    """Return the team registerable for this contest that carries this code.
+
+    raise: NoResultFound if no team registerable for the contest has the code,
+        so a request naming a staff team is refused instead of honoured.
+
+    """
+    return registerable_teams_query(sql_session, contest).filter(
+        Team.code == team_code).one()
 
 
 class MainHandler(ContestHandler):
@@ -92,6 +120,17 @@ class RegistrationHandler(ContestHandler):
     def post(self):
         if not self.contest.allow_registration:
             raise tornado.web.HTTPError(404)
+
+        # WHY the refusal's own status and not 403: this path already answers
+        # 403 for "the password is not correct", and the browser's jQuery handler
+        # tells the two apart by the code alone.
+        refusal = login_refusal.registration_refusal(self.captcha.verify(
+            self.get_argument("username", ""), self.request.remote_ip,
+            extract_token(self), extract_provider(self)))
+        if refusal is not None:
+            logger.info("CAPTCHA refused on registration from IP %s: %s.",
+                        self.request.remote_ip, refusal.reason)
+            raise tornado.web.HTTPError(refusal.status)
 
         create_new_user = self.get_argument("new_user") == "true"
 
@@ -127,8 +166,7 @@ class RegistrationHandler(ContestHandler):
 
         self.r_params["MAX_INPUT_LENGTH"] = self.MAX_INPUT_LENGTH
         self.r_params["MIN_PASSWORD_LENGTH"] = self.MIN_PASSWORD_LENGTH
-        self.r_params["teams"] = self.sql_session.query(Team)\
-                                     .order_by(Team.name).all()
+        self.r_params["teams"] = selectable_teams(self.sql_session, self.contest)
 
         self.render("register.html", **self.r_params)
 
@@ -152,6 +190,11 @@ class RegistrationHandler(ContestHandler):
                 raise ValueError()
             if not self.MIN_PASSWORD_LENGTH <= len(password) \
                     <= self.MAX_INPUT_LENGTH:
+                raise ValueError()
+            # WHY bytes: bcrypt stores at most 72 bytes, and a longer password
+            # would be hashed as its prefix, so it is refused here — where the
+            # caller gets a 400 — instead of raising out of hash_password().
+            if len(password.encode("utf-8")) > BCRYPT_MAX_PASSWORD_BYTES:
                 raise ValueError()
         except (tornado.web.MissingArgumentError, ValueError):
             raise tornado.web.HTTPError(400)
@@ -185,20 +228,25 @@ class RegistrationHandler(ContestHandler):
             raise tornado.web.HTTPError(404)
 
         # Check if password is correct
-        if not validate_password(user.password, password):
+        if not validate_password(user.password, password, user.username):
+            # WHY count this: joining an existing account is the only
+            # registration path that guesses a credential, so it is the one
+            # that has to escalate into a captcha.
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
             raise tornado.web.HTTPError(403)
 
         return user
 
     def _get_team(self) -> Team | None:
-        # If we have teams, we assume that the 'team' field is mandatory
-        if self.sql_session.query(Team).count() > 0:
+        # If this contest offers registerable teams, we assume that the 'team'
+        # field is mandatory. The count is over the contest's roster, so a
+        # contest whose only teams are staff teams leaves the field optional,
+        # exactly as a contest with no teams does.
+        if registerable_teams_query(self.sql_session, self.contest).count() > 0:
             try:
                 team_code: str = self.get_argument("team")
-                team: Team | None = (
-                    self.sql_session.query(Team).filter(
-                        Team.code == team_code).one()
-                )
+                team: Team | None = find_registerable_team(
+                    self.sql_session, self.contest, team_code)
             except (tornado.web.MissingArgumentError, NoResultFound):
                 raise tornado.web.HTTPError(400)
         else:
@@ -213,18 +261,6 @@ class LoginHandler(ContestHandler):
     """
     @multi_contest
     def post(self):
-        error_args = {"login_error": "true"}
-        next_page: str | None = self.get_argument("next", None)
-        if next_page is not None:
-            error_args["next"] = next_page
-            if next_page != "/":
-                next_page = self.url(*next_page.strip("/").split("/"))
-            else:
-                next_page = self.url()
-        else:
-            next_page = self.contest_url()
-        error_page = self.contest_url(**error_args)
-
         username: str = self.get_argument("username", "")
         password: str = self.get_argument("password", "")
 
@@ -235,25 +271,131 @@ class LoginHandler(ContestHandler):
                            self.request.remote_ip)
             return None
 
+        refusal = self._may_examine_password(username)
+        if refusal is not None:
+            self._refuse(refusal)
+            return
+
         participation, cookie = validate_login(
             self.sql_session, self.contest, self.timestamp, username, password,
             ip_address)
 
+        self._apply_login_cookie(cookie)
+
+        if participation is None:
+            self.captcha.record_failure(username, self.request.remote_ip, login_attempt_context("contest", self.request))
+            self.redirect(self._error_page(login_refusal.CREDENTIALS.reason))
+        else:
+            # WHY record_success here: whoever finally gets the password right
+            # has proven they are not guessing, so the failures behind this
+            # account and address are dropped and a mistyped password cannot
+            # accumulate into a lockout.
+            self.captcha.record_success(username, self.request.remote_ip)
+            self.redirect(self._next_page())
+
+    def _may_examine_password(self, username: str
+                              ) -> typing.Optional[LoginRefusal]:
+        """Return the refusal that stops this attempt, None to examine the password.
+
+        The lockout gate and the captcha gate in the order they have to run in,
+        neither of them charging a failure the attempt did not earn.
+
+        """
+        ip = self.request.remote_ip
+
+        # WHY the lockout first: while it holds it is what refused the attempt,
+        # and a challenge refusal would send the user to fix a captcha that is
+        # not the obstacle while calling the provider for nothing.
+        # WHY not recorded as another failure: the count is already at the
+        # threshold and is never reset while the window is live, so incrementing
+        # it here would slide the window forward on every attempt and turn a
+        # lockout someone waits out into one that never ends for an address that
+        # keeps trying. is_locked is not gated on the captcha being configured,
+        # so a deployment with it off is still refused.
+        if self.captcha.is_locked(username, ip):
+            logger.info("Login refused, account or IP %r locked out from IP %s.",
+                        username, ip)
+            return login_refusal.locked_refusal(
+                self.captcha.counters.retry_after(username, ip))
+
+        # WHY the captcha comes before the credential check: a wrong or forged
+        # answer must not be worth anything to an attacker, so the credentials
+        # are not examined until the challenge has passed.
+        refusal = login_refusal.refusal_for_outcome(self.captcha.verify(
+            username, ip, extract_token(self), extract_provider(self)))
+        if refusal is not None:
+            logger.info("CAPTCHA refused for user %r from IP %s: %s.", username,
+                        ip, refusal.reason)
+        return refusal
+
+    def _next_page(self) -> str:
+        """Return where a successful login leads."""
+        next_page: str | None = self.get_argument("next", None)
+        if next_page is None:
+            return self.contest_url()
+        if next_page == "/":
+            return self.url()
+        return self.url(*next_page.strip("/").split("/"))
+
+    def _error_page(self, reason: str) -> str:
+        """Return the login page URL carrying the refusal's reason.
+
+        WHY the username rides in the redirect: the login page recomputes the
+        captcha from the counters, and a loopback client has no address bucket to
+        read, so without the username the account's own count would be invisible
+        and the widget would stay away while the next attempt is refused for
+        lacking its token.
+
+        """
+        error_args = {"login_error": reason}
+        username = self.get_argument("username", "")
+        if len(username) > 0:
+            error_args["username"] = username
+        next_page: str | None = self.get_argument("next", None)
+        if next_page is not None:
+            error_args["next"] = next_page
+        return self.contest_url(**error_args)
+
+    def _refuse(self, refusal: LoginRefusal) -> None:
+        """Answer one refusal: the status page for a lockout, the form otherwise."""
+        if refusal.status == login_refusal.LOCKED_STATUS:
+            self._refuse_locked_out(refusal)
+            return
+        self.redirect(self._error_page(refusal.reason))
+
+    def _apply_login_cookie(self, cookie: bytes | None) -> None:
+        """Issue the contest's login cookie, or drop the one held.
+
+        A rejected login answers with no cookie value, and that has to clear
+        the stale one instead of leaving it in place for the next request.
+
+        """
         cookie_name = self.contest.name + "_login"
         if cookie is None:
             self.clear_cookie(cookie_name)
-        else:
-            self.set_secure_cookie(
-                cookie_name,
-                cookie,
-                expires_days=None,
-                max_age=config.contest_web_server.cookie_duration,
-            )
+            return
+        self.set_secure_cookie(
+            cookie_name,
+            cookie,
+            expires_days=None,
+            max_age=config.contest_web_server.cookie_duration,
+        )
 
-        if participation is None:
-            self.redirect(error_page)
-        else:
-            self.redirect(next_page)
+    def _refuse_locked_out(self, refusal: LoginRefusal) -> None:
+        """Answer an attempt from a locked-out account or address.
+
+        The status is raised rather than rendered: the surrounding page shows
+        the form again after an ordinary failure, and a lockout is not
+        something the client can talk its way out of on the next try. The
+        registration path in this file uses the same idiom.
+
+        """
+        self.set_header("Retry-After", str(refusal.retry_after))
+        # WHY carried on the handler too: write_error renders the status page,
+        # and it is the only place a locked-out user is told why and for how
+        # long, so the window has to reach the template.
+        self.lockout_retry_after = refusal.retry_after
+        raise tornado.web.HTTPError(refusal.status)
 
 
 class StartHandler(ContestHandler):
@@ -345,4 +487,20 @@ class DocumentationHandler(ContestHandler):
                     COMPILATION_MESSAGES=COMPILATION_MESSAGES,
                     EVALUATION_MESSAGES=EVALUATION_MESSAGES,
                     language_docs=language_docs,
+                    **self.r_params)
+
+
+class CreditsHandler(ContestHandler):
+    """Displays the licence and the bundled third-party software.
+
+    Unauthenticated, like the home page: the footer links here from every page
+    including the login form, and section 13 of the licence addresses every
+    user interacting with the server, not only the ones holding an account.
+    Nothing rendered here is contest- or user-specific.
+
+    """
+    @multi_contest
+    def get(self):
+        self.render("credits.html",
+                    credits_surface=get_surface("contest"),
                     **self.r_params)

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# tests/fixtures/faulty-tool — a staged tool that can be told to fail on demand.
+#
+# WHY: the branches of __backup.sh that report a failed manifest or a stopped rotation are
+# only reachable when a tool the run depends on misbehaves. The filesystem cannot be arranged
+# to reach them, because the script rewrites the permissions of every directory it prunes, and
+# a rename target that is a directory is moved into rather than replaced. A stub is the only
+# lever, and one file staged under several names keeps that lever single-sourced instead of
+# giving jq, mv and rm a fault switch each.
+#
+# The fault is keyed on the command line rather than on what the tool does, so a scenario
+# states which call fails — "--argjson" is the manifest entry, "--slurpfile" the merge,
+# ".manifest." the seed — and every other call that tool makes still reaches the real one. A
+# fault belongs to one tool: the argument naming a superseded backup set is on rm's line for
+# the rotation and on jq's line for nothing, and a pattern that faulted all three at once
+# would break the run somewhere other than the branch under test.
+#
+# STUB_FAULT_<TOOL> is the substring of an argument that makes a call of this tool fail.
+# Unset, this is the real tool.
+# STUB_REAL_<TOOL> is the real tool to delegate to, resolved by the harness: this file cannot
+# find it by name, because the directory holding this file is first on the PATH the run was
+# given and would be found again. <TOOL> is the name this file was invoked as, upper-cased.
+set -u
+
+tool="$(basename "$0")"
+tool_key="${tool^^}"
+tool_key="${tool_key//[^A-Z0-9]/_}"
+fault_var="STUB_FAULT_${tool_key}"
+real_var="STUB_REAL_${tool_key}"
+
+fault="${!fault_var:-}"
+if [[ -n "$fault" ]]; then
+  for argument in "$@"; do
+    if [[ "$argument" == *"${fault}"* ]]; then
+      printf 'stub: %s refused an argument containing %s\n' "$tool" "${fault}" >&2
+      exit 1
+    fi
+  done
+fi
+
+exec "${!real_var:?STUB_REAL_${tool_key} is not set}" "$@"

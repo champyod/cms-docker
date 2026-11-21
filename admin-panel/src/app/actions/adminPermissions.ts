@@ -15,6 +15,7 @@ import {
 import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
 import { prisma } from '@/lib/prisma';
 import type { OverrideEffect } from '@/lib/permission-engine';
+import type { ListSortInput } from '@/lib/list-sorting';
 import type { ActionResult, AdminAccess, AdminAccessSummary, GroupWithPermissions } from '@/lib/admin-access-types';
 
 export type {
@@ -29,6 +30,7 @@ export type {
 export async function getAdminAccess(adminId: number): Promise<ActionResult<AdminAccess>> {
   try {
     await ensurePermission('admin:read');
+    await ensurePermission('permission:read');
     const data = await fetchAdminAccess(adminId);
     if (!data) return { success: false, error: 'Admin not found' };
     return { success: true, data };
@@ -90,7 +92,7 @@ export async function setAdminGroups(
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true, data: { adminId } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -103,11 +105,25 @@ async function assertOverrideAllowed(
   effect: OverrideEffect,
 ): Promise<string | null> {
   if (effect !== 'allow') return null;
+  return assertResultIsGrantable(adminId, permissionKey, effect, 'Cannot grant permissions you do not hold');
+}
+
+// Removing a deny re-grants what it held back, so the same "you cannot grant what you do not hold"
+// test applies; the read is treated as a refusal when it cannot be verified, never as a pass.
+async function assertClearAllowed(adminId: number, permissionKey: string): Promise<string | null> {
+  return assertResultIsGrantable(adminId, permissionKey, 'clear', 'Cannot restore permissions you do not hold');
+}
+
+async function assertResultIsGrantable(
+  adminId: number,
+  permissionKey: string,
+  effect: 'allow' | 'clear',
+  refusal: string,
+): Promise<string | null> {
   const callerEffective = await getPermissions();
   const resultingEffective = await effectiveAfterOverride(adminId, permissionKey, effect);
-  if (resultingEffective && !canCallerGrantResult(callerEffective, resultingEffective)) {
-    return 'Cannot grant permissions you do not hold';
-  }
+  if (resultingEffective === null) return 'Cannot verify the permissions this change would grant';
+  if (!canCallerGrantResult(callerEffective, resultingEffective)) return refusal;
   return null;
 }
 
@@ -159,7 +175,7 @@ export async function setAdminOverride(
 
     await writeOverride(adminId, permissionKey, effect, reason, permission.id);
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true, data: { adminId, permissionKey } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -172,6 +188,9 @@ export async function clearAdminOverride(
 ): Promise<ActionResult<{ adminId: number; permissionKey: string }>> {
   try {
     await ensurePermission('override:set');
+    const blocked = await assertClearAllowed(adminId, permissionKey);
+    if (blocked) return { success: false, error: blocked };
+
     const permission = await prisma.permissions.findUnique({
       where: { key: permissionKey },
       select: { id: true },
@@ -197,17 +216,19 @@ export async function clearAdminOverride(
       result: 'success',
     });
     invalidateAccessCache(String(adminId));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/admins', 'page');
     return { success: true, data: { adminId, permissionKey } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
   }
 }
 
-export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWithPermissions[]>> {
+export async function listGroupsWithPermissions(sort?: ListSortInput): Promise<ActionResult<GroupWithPermissions[]>> {
   try {
     await ensurePermission('group:read');
-    const data = await fetchGroupsWithPermissions();
+    await ensurePermission('permission:read');
+    await ensurePermission('group:list');
+    const data = await fetchGroupsWithPermissions(sort ?? null);
     return { success: true, data };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -218,6 +239,8 @@ export async function listGroupsWithPermissions(): Promise<ActionResult<GroupWit
 export async function listAdminsAccessSummary(): Promise<ActionResult<AdminAccessSummary[]>> {
   try {
     await ensurePermission('admin:read');
+    await ensurePermission('permission:read');
+    await ensurePermission('admin:list');
     const data = await fetchAdminsAccessSummary();
     return { success: true, data };
   } catch (error) {

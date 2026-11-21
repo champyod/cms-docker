@@ -70,7 +70,7 @@ The modern Admin Panel (port 8891) provides a unified interface to manage all wo
 By default, RPC ports are restricted to `127.0.0.1` for security. To enable remote workers:
 1.  **Tailscale (Recommended)**: Run `./cms setup` and provide your Tailscale IP when prompted. This binds services only to the Tailscale interface.
 2.  **Other VPNs**: Follow the same process but provide your VPN interface IP.
-3.  **Public Access (Dangerous)**: Set `TAILSCALE_IP=0.0.0.0` in `config.toml`, then `./cms config sync && make core-img`. This exposes evaluation ports to the entire internet.
+3.  **Public Access (Dangerous)**: Set `INNER_IP=0.0.0.0` in `config.toml`, then `./cms config sync && make core`. This exposes evaluation ports to the entire internet.
 
 ---
 
@@ -179,11 +179,15 @@ Recommended — the fleet flow generates it for you. On the **main server**,
 run:
 
 ```bash
-./cms worker attach <shard-spec> <this-box-ip> <port-spec>
+./cms worker attach <shard-spec> <this-box-ip> <port-spec> [main-ip]
 ```
 
 This registers the box as registry-only fleet rows and prints a block; on
-**this worker box** (this repository checked out), run that block — its
+**this worker box** (this repository checked out), run that block — it sets
+`CORE_SERVICES_HOST` to the main server (prompted with the Tailscale IP
+default, hard-fails when undeterminable), appends the `WORKER_N` rows under
+`[worker]`, checks all six core ports are reachable, then runs cgroup setup
+and deploys. No manual `config.toml` editing on either side. Its
 `./cms config sync` generates `config/cms.toml` with the core services
 pointed at the main server.
 

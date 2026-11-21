@@ -1,7 +1,27 @@
 import { NextRequest } from 'next/server';
 import { revalidatePath } from 'next/cache';
-import { apiError, apiSuccess } from '@/lib/api-utils';
+import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { prisma } from '@/lib/prisma';
 import * as contestService from '@/lib/services/contests';
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+): Promise<Response> {
+  const { authorized, response } = await verifyApiPermission('contest:read');
+  if (!authorized) return response as Response;
+
+  const id = parseInt((await params).id, 10);
+  if (Number.isNaN(id)) return apiError({ message: 'Invalid ID', status: 400 });
+
+  try {
+    const contest = await prisma.contests.findUnique({ where: { id } });
+    if (!contest) return apiError({ message: 'Contest not found', status: 404 });
+    return apiSuccess({ contest });
+  } catch (error: unknown) {
+    return apiError(error);
+  }
+}
 
 export async function PUT(
   req: NextRequest,

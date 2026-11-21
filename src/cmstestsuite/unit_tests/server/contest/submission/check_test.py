@@ -42,7 +42,7 @@ class TestGetSubmissionCount(DatabaseMixin, unittest.TestCase):
             participation = self.participation
         return get_submission_count(self.session, participation, **kwargs)
 
-    def test_bad_arguments(self):
+    def test_it_rejects_inconsistent_contest_and_task_arguments(self):
         # Needs at least one of contest or task.
         with self.assertRaises(ValueError):
             self.call()
@@ -56,7 +56,7 @@ class TestGetSubmissionCount(DatabaseMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call(contest=self.contest, task=other_task)
 
-    def test_count_task(self):
+    def test_it_counts_only_the_submissions_of_the_task(self):
         # No submissions.
         self.assertEqual(self.call(task=self.task1), 0)
 
@@ -87,7 +87,7 @@ class TestGetSubmissionCount(DatabaseMixin, unittest.TestCase):
         self.add_submission_result(submission=s, dataset=d2)
         self.assertEqual(self.call(task=self.task1), 2)
 
-    def test_count_contest(self):
+    def test_it_counts_only_the_submissions_of_the_contest(self):
         # No submissions.
         self.assertEqual(self.call(contest=self.contest), 0)
 
@@ -115,7 +115,7 @@ class TestGetSubmissionCount(DatabaseMixin, unittest.TestCase):
         # Doesn't mix submissions with user tests.
         self.assertEqual(self.call(contest=self.contest, cls=UserTest), 0)
 
-    def test_user_tests(self):
+    def test_it_counts_only_the_user_tests(self):
         # No user tests.
         self.assertEqual(self.call(contest=self.contest, cls=UserTest), 0)
         self.assertEqual(self.call(task=self.task1, cls=UserTest), 0)
@@ -164,7 +164,7 @@ class TestCheckMaxNumber(DatabaseMixin, unittest.TestCase):
         self.calls.append(call(self.session, self.participation, **kwargs))
         return res
 
-    def test_no_limit(self):
+    def test_it_allows_any_number_when_no_limit_is_set(self):
         self.get_submission_count.return_value = 5
         # Test different arguments to ensure they don't cause issues.
         self.assertTrue(self.call(None))
@@ -174,7 +174,7 @@ class TestCheckMaxNumber(DatabaseMixin, unittest.TestCase):
         # Having calls signals an inefficiency.
         self.get_submission_count.assert_not_called()
 
-    def test_limit(self):
+    def test_it_compares_the_count_against_the_limit(self):
         self.get_submission_count.return_value = 5
         # Test different arguments to ensure they are passed to the call.
         self.assertFalse(self.call(0, contest=self.contest))
@@ -185,7 +185,7 @@ class TestCheckMaxNumber(DatabaseMixin, unittest.TestCase):
         # Arguments should have been passed unchanged.
         self.get_submission_count.assert_has_calls(self.calls)
 
-    def test_limit_unrestricted(self):
+    def test_it_ignores_the_limit_for_unrestricted_users(self):
         # Unrestricted users have no limit enforced.
         self.participation.unrestricted = True
         self.get_submission_count.return_value = 5
@@ -217,7 +217,7 @@ class TestGetLatestSubmission(DatabaseMixin, unittest.TestCase):
             participation = self.participation
         return get_latest_submission(self.session, participation, **kwargs)
 
-    def test_bad_arguments(self):
+    def test_it_rejects_inconsistent_contest_and_task_arguments(self):
         # Needs at least one of contest or task.
         with self.assertRaises(ValueError):
             self.call()
@@ -231,7 +231,7 @@ class TestGetLatestSubmission(DatabaseMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             self.call(contest=self.contest, task=other_task)
 
-    def test_retrieve_task(self):
+    def test_it_returns_the_latest_submission_of_the_task(self):
         # No submissions.
         self.assertIsNone(self.call(task=self.task1))
 
@@ -261,7 +261,7 @@ class TestGetLatestSubmission(DatabaseMixin, unittest.TestCase):
         # Doesn't mix submissions with user tests.
         self.assertIsNone(self.call(task=self.task1, cls=UserTest))
 
-    def test_retrieve_contest(self):
+    def test_it_returns_the_latest_submission_of_the_contest(self):
         # No submissions.
         self.assertIsNone(self.call(contest=self.contest))
 
@@ -292,7 +292,7 @@ class TestGetLatestSubmission(DatabaseMixin, unittest.TestCase):
         # Doesn't mix submissions with user tests.
         self.assertIsNone(self.call(contest=self.contest, cls=UserTest))
 
-    def test_user_tests(self):
+    def test_it_returns_the_latest_user_test(self):
         # No user tests.
         self.assertIsNone(self.call(contest=self.contest, cls=UserTest))
         self.assertIsNone(self.call(task=self.task1, cls=UserTest))
@@ -350,7 +350,7 @@ class TestCheckMinInterval(DatabaseMixin, unittest.TestCase):
         self.calls.append(call(self.session, self.participation, **kwargs))
         return res
 
-    def test_no_limit(self):
+    def test_it_allows_a_submission_when_no_interval_is_set(self):
         s = self.add_submission(timestamp=self.at(5), task=self.task,
                                 participation=self.participation)
         self.get_latest_submission.return_value = s
@@ -363,7 +363,7 @@ class TestCheckMinInterval(DatabaseMixin, unittest.TestCase):
         # Having calls signals an inefficiency.
         self.get_latest_submission.assert_not_called()
 
-    def test_limit(self):
+    def test_it_enforces_the_minimum_interval(self):
         s = self.add_submission(timestamp=self.at(5), task=self.task,
                                 participation=self.participation)
         self.get_latest_submission.return_value = s
@@ -374,7 +374,7 @@ class TestCheckMinInterval(DatabaseMixin, unittest.TestCase):
         # Arguments should have been passed unchanged.
         self.get_latest_submission.assert_has_calls(self.calls)
 
-    def test_limit_no_submissions(self):
+    def test_it_allows_a_submission_when_there_are_none_before(self):
         self.get_latest_submission.return_value = None
         # Test different arguments to ensure they are passed to the call.
         self.assertTrue(self.call(1, 4, contest=self.contest, cls=UserTest))
@@ -383,7 +383,7 @@ class TestCheckMinInterval(DatabaseMixin, unittest.TestCase):
         # Arguments should have been passed unchanged.
         self.get_latest_submission.assert_has_calls(self.calls)
 
-    def test_limit_unrestricted(self):
+    def test_it_ignores_the_interval_for_unrestricted_users(self):
         # Unrestricted users have no limit enforced.
         self.participation.unrestricted = True
         s = self.add_submission(timestamp=self.at(5), task=self.task,
@@ -409,27 +409,27 @@ class TestIsLastMinutes(DatabaseMixin, unittest.TestCase):
 
         self.timestamp = make_datetime()
 
-    def test_unconfigured_min_submission_interval_grace_period(self):
+    def test_it_is_false_without_a_configured_grace_period(self):
         self.setup_contest_with_no_user_time()
 
         self.assertFalse(
             is_last_minutes(self.timestamp, self.participation))
 
-    def test_no_per_user_time_and_last_minutes(self):
+    def test_it_is_true_in_the_last_minutes_of_a_traditional_contest(self):
         self.setup_contest_with_no_user_time()
         self.contest.min_submission_interval_grace_period = timedelta(minutes=15)
 
         self.assertTrue(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_no_per_user_time_and_not_last_minutes(self):
+    def test_it_is_false_before_the_last_minutes_of_a_traditional_contest(self):
         self.setup_contest_with_no_user_time()
         self.contest.min_submission_interval_grace_period = timedelta(minutes=10)
 
         self.assertFalse(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_per_user_time_and_last_minutes(self):
+    def test_it_is_true_in_the_last_minutes_of_a_usaco_like_contest(self):
         self.participation.contest.per_user_time = timedelta(hours=5)
         self.participation.contest.start = self.timestamp - timedelta(hours=10)
         self.participation.contest.stop = self.timestamp
@@ -439,7 +439,7 @@ class TestIsLastMinutes(DatabaseMixin, unittest.TestCase):
         self.assertTrue(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_per_user_time_and_not_last_minutes(self):
+    def test_it_is_false_before_the_last_minutes_of_a_usaco_like_contest(self):
         self.participation.contest.per_user_time = timedelta(hours=5)
         self.participation.contest.start = self.timestamp - timedelta(hours=10)
         self.participation.contest.stop = self.timestamp
@@ -449,7 +449,7 @@ class TestIsLastMinutes(DatabaseMixin, unittest.TestCase):
         self.assertFalse(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_consider_extra_time(self):
+    def test_it_is_false_when_extra_time_is_present(self):
         self.setup_contest_with_no_user_time()
 
         self.participation.extra_time = timedelta(seconds=1)
@@ -458,7 +458,7 @@ class TestIsLastMinutes(DatabaseMixin, unittest.TestCase):
         self.assertFalse(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_consider_delay(self):
+    def test_it_is_false_when_the_start_is_delayed(self):
         self.setup_contest_with_no_user_time()
 
         self.participation.delay_time = timedelta(seconds=1)
@@ -467,7 +467,7 @@ class TestIsLastMinutes(DatabaseMixin, unittest.TestCase):
         self.assertFalse(
             is_last_minutes(self.timestamp - timedelta(minutes=15), self.participation))
 
-    def test_unrestricted_participation(self):
+    def test_it_is_false_for_an_unrestricted_participation(self):
         self.setup_contest_with_no_user_time()
         self.participation.unrestricted = True
 

@@ -7,33 +7,60 @@ fi
 
 ###############################################################################
 # CMS Restore Script
-# Usage: cms-restore.sh <dump-file> [--with-volumes <tar>]
+# Usage: cms-restore.sh <dump-file> [--force]
+# - Database-only. There is no volume archive to restore: the database holds the
+#   authoritative copy of every submitted file and testcase, so a dump is the
+#   whole backup set
 # - Restores into SCRATCH containers by default (never touches live cms-database)
-# - --force: stop core profile services, restore into real volume
+# - --force: stop core profile services, restore into the live cms-database
 # - After restore prints verification counts
 ###############################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# ---------------------------------------------------------------------------
+# lib/common.sh contract: log_info/log_warn/log_die, require_disk_free_gb and the
+# disk thresholds all come from the shared library. A missing library is a broken
+# delivery, reported as one, rather than met by a second, divergent copy of the
+# helpers — the fallback here printed `[ERROR]` where every other script prints
+# `[FAIL]`, which is exactly the drift one copy of the helpers prevents.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
-# Load env.  Do not override already-exported.
+# Load env (POSTGRES_* from .env.core).  Do not override already-exported.
 # ---------------------------------------------------------------------------
-if [[ -f "${REPO_ROOT}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.env" 2>/dev/null || true
-  set +a
-fi
+for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.infra"; do
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$env_file" 2>/dev/null || true
+    set +a
+  fi
+done
 
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
 POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
+POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 CONTAINER_DB="cms-database"
-VOLUME_DATA="cms-data"
+
+# WHY every client below announces `system:migration`: every table carries FORCE ROW LEVEL
+# SECURITY and its policy reads `cms.actor`, so an unidentified psql reads 0 rows — which for
+# this script means the verification counts at the end report an empty database after a restore
+# that may have worked. The actor is handed over in the child environment (PGOPTIONS, read by
+# libpq at connect time) rather than prefixed onto statements, so it covers a whole pg_restore
+# replay or a multi-statement -c with nothing wrapped.
+# WHY system:migration and not a narrower identity: replacing a database's entire contents from
+# an archive is seeding, which is the one thing this identity is for. The panel's own restore
+# path names the same identity for the same work
+# (admin-panel/src/app/actions/restore-apply-measure.ts).
 
 # WHY pre-create cms_backup before pg_restore: dumps contain grants to cms_backup
 # which fail with "role does not exist" on a fresh database. Creating a stub
@@ -41,7 +68,7 @@ VOLUME_DATA="cms-data"
 # with password is applied post-restore via __apply_sql.sh --bootstrap-roles.
 ensure_roles_exist() {
   local _ctr="$1"
-  docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
+  docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$_ctr" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -v ON_ERROR_STOP=1 -c \
     "DO \$\$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='cms_backup') THEN CREATE ROLE cms_backup NOLOGIN; END IF; END \$\$;" >/dev/null 2>&1 || log_warn "Failed to pre-create roles in $_ctr (continuing anyway)"
 }
 
@@ -52,22 +79,23 @@ require_disk_free_gb "$REPO_ROOT" 3 5
 # Args
 # ---------------------------------------------------------------------------
 if [[ $# -lt 1 ]]; then
-  log_die "Usage: $0 <dump-file> [--with-volumes <tar>] [--force]"
+  log_die "Usage: $0 <dump-file> [--force]"
 fi
 
 DUMP_FILE="$1"
-WITH_VOLUMES=""
 FORCE=0
 
 shift
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --with-volumes)
-      if [[ -z "$2" ]]; then
-        log_die "--with-volumes requires a tar file argument"
-      fi
-      WITH_VOLUMES="$2"
-      shift 2
+    --with-volumes|--with-volumes=*)
+      # WHY refused rather than ignored: __backup.sh used to accept --with-volumes, and a flag
+      # that is now only warned about is read by the operator as a restore that also put the
+      # volumes back — the opposite of what happened. Silently dropping it is how --force came
+      # to renew unconditionally elsewhere in this codebase. WHY both spellings: the argument
+      # form and the = form are the same flag, and an operator who typed the second was told
+      # "Unknown argument" and had no reason to think the restore had changed.
+      log_die "--with-volumes is not supported: backups are database-only. Every submitted file and testcase is stored in the database (src/cms/db/fsobject.py, keyed by SHA1); the CMS volumes hold only the optional local copy, and no backup set has carried it since the volume archive was removed. Restore the dump alone: $0 <dump-file> [--force]"
       ;;
     --force)
       FORCE=1
@@ -185,7 +213,10 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   ensure_roles_exist "$SCRATCH_CONTAINER"
 
   log_info "Restoring database dump into scratch postgres..."
-  if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$SCRATCH_CONTAINER" \
+  # WHY the owner (and no bypass role) in this mode: the throwaway container is created with
+  # POSTGRES_USER as its superuser, and a superuser is not subject to row-level security, so the
+  # dump's COPY lands. The live path below is the one that needs a bypassing role.
+  if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" \
     pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
     err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
     log_warn "pg_restore failed: $err"
@@ -193,30 +224,17 @@ if [[ "$RESTORE_TARGET" == "scratch" ]]; then
   fi
   log_info "Database restore complete"
 
-  if [[ -n "$WITH_VOLUMES" ]]; then
-    if [[ ! -f "$WITH_VOLUMES" ]]; then
-      log_warn "Volume tar file not found: $WITH_VOLUMES — skipping volume restore"
-    else
-      log_info "Restoring volumes from $WITH_VOLUMES..."
-      docker run --rm -v "$SCRATCH_VOLUME:/volume:z" \
-        -v "$(dirname -- "$WITH_VOLUMES"):/backup:ro" \
-        alpine:3.19 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
-        log_warn "Volume restore from tar had issues"
-      log_info "Volume restore attempted"
-    fi
-  fi
-
   log_info "Running verification queries against scratch container..."
 
   sub_count="0"
   lob_count="0"
 
-  sub_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+  sub_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-  lob_count="$(docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+  lob_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
   log_info "Top 10 tables by rowcount:"
-  docker exec "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
+  docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$SCRATCH_CONTAINER" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
     "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \
     while IFS='|' read -r schema name changes; do
       log_info "  $schema.$name — ~$changes rows"
@@ -247,8 +265,31 @@ docker cp "$DUMP_FILE" "${CONTAINER_DB}:${local_dump}" >/dev/null 2>&1 || \
 ensure_roles_exist "$CONTAINER_DB"
 
 log_info "Restoring database dump into live postgres..."
-if ! docker exec -e PGPASSWORD="$POSTGRES_PASSWORD_VAL" "$CONTAINER_DB" \
-  pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
+
+# WHY the live restore connects as a bypassing role, with what was measured: PostgreSQL refuses
+# COPY FROM into a table that has row-level security enabled for the connecting role ("COPY FROM
+# not supported with row-level security", PG 16), and a custom-format dump replays its data as
+# COPY — after its own `SET row_security = off` preamble, whose failure reads "query would be
+# affected by row-level security policy". Neither is a question about identity: `cms.actor` cannot
+# make COPY evaluate policies, so an owner connection WITH the actor still writes 0 rows into every
+# FORCE-RLS table. Only a role that bypasses the policy can, and this stack already has one for
+# bulk work: cms_backup (BYPASSRLS, member of cmsuser, so it inherits the owner's DML and DDL
+# rights) — the same role the backup side dumps as, for the same reason.
+# WHY not silently keep the owner: a restore that "succeeds" and puts nothing back is the exact
+# failure this script must never report, so a deployment without the backup secret says so here,
+# before the first COPY is attempted.
+RESTORE_ROLE="$POSTGRES_USER_VAL"
+RESTORE_PASSWORD="$POSTGRES_PASSWORD_VAL"
+if [[ -n "$POSTGRES_BACKUP_PASSWORD_VAL" ]]; then
+  RESTORE_ROLE="cms_backup"
+  RESTORE_PASSWORD="$POSTGRES_BACKUP_PASSWORD_VAL"
+else
+  log_warn "POSTGRES_BACKUP_PASSWORD is empty, so the restore connects as ${POSTGRES_USER_VAL} — every table is FORCE-RLS, so pg_restore cannot write a row. Run './cms config sync' to generate the backup role's password."
+fi
+log_info "Restoring as ${RESTORE_ROLE}..."
+
+if ! docker_exec_db "$RESTORE_PASSWORD" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+  pg_restore -U "$RESTORE_ROLE" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
   err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
   log_warn "pg_restore failed: $err"
   log_die "Restore failed"
@@ -264,30 +305,17 @@ else
   log_warn "$APPLY_SQL_SCRIPT missing — cms_backup password not bootstrapped"
 fi
 
-if [[ -n "$WITH_VOLUMES" ]]; then
-  if [[ ! -f "$WITH_VOLUMES" ]]; then
-    log_warn "Volume tar file not found: $WITH_VOLUMES — skipping volume restore"
-  else
-    log_info "Restoring volumes from $WITH_VOLUMES..."
-    # Use a helper container to extract into the live volume
-    docker run --rm -v "$VOLUME_DATA:/volume:z" -v "$(dirname -- "$WITH_VOLUMES"):/backup:ro" \
-      alpine:3.19 sh -c "tar xzf \"/backup/$(basename -- "$WITH_VOLUMES")\" -C /volume" 2>/dev/null || \
-      log_warn "Volume restore from tar had issues"
-    log_info "Volume restore attempted"
-  fi
-fi
-
 log_info "Running verification queries against live container..."
 
 sub_count="0"
 lob_count="0"
 
-sub_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+sub_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM submissions;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
-lob_count="$(docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
+lob_count="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c 'SELECT count(*) FROM pg_largeobject;' 2>/dev/null | tr -d ' \r\n' || echo '0')"
 
 log_info "Top 10 tables by rowcount:"
-docker exec "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
+docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -t -A -c \
   "SELECT schemaname, relname, n_tup_ins + n_tup_upd + n_tup_del as total_changes FROM pg_stat_user_tables ORDER BY total_changes DESC LIMIT 10;" 2>/dev/null | \
   while IFS='|' read -r schema name changes; do
     log_info "  $schema.$name — ~$changes rows"

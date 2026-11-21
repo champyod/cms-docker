@@ -240,7 +240,14 @@ $(document).ready(init);
           </div>
         {% endif %}
 {% endif %}
-        <div class="cr_notice">CMS <a href="http://github.com/cms-dev/cms/">codebase</a> is released under the<br/><a href="http://www.gnu.org/licenses/agpl.txt">GNU Affero General Public License</a>.</div>
+        {# WHY a byline and not the licence offer: this line is read at a glance,
+   so it names the project, its author and its lineage and nothing else. The
+   section 13 offer is visible text on the credits page, which the service keeps
+   one click away. The href is the configured source URL — the project's own
+   address — so the single link is also the source. Kept to one compact block
+   because the sidebar is staff-only chrome whose vertical space belongs to the
+   navigation. #}
+        <div class="cr_notice"><a href="{{ config.global_.source_url }}" rel="author noreferrer" target="_blank">{{ credits.project.name }}{% if credits.project.author %} by {{ credits.project.author }}{% endif %} &middot; a fork of CMS</a></div>
       </div>
 
       <div id="border"></div>

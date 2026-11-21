@@ -26,12 +26,12 @@ from cmscommon.binary import bin_to_hex, hex_to_bin, bin_to_b64, b64_to_bin
 
 class TestBinToHex(unittest.TestCase):
 
-    def test_success(self):
+    def test_it_returns_the_hexadecimal_digits_of_the_bytes(self):
         self.assertEqual(bin_to_hex(b"\x32\x00\xa0"), "3200a0")
         self.assertEqual(bin_to_hex(b"\xFF\xFF\xFF\xFF"), "ffffffff")
         self.assertEqual(bin_to_hex(b"\x00" * 1000), "0" * 2000)
 
-    def test_string(self):
+    def test_it_rejects_a_string_argument(self):
         with self.assertRaises(TypeError):
             bin_to_hex("cms")
 
@@ -43,44 +43,44 @@ class TestHexToBin(unittest.TestCase):
         # The exception type depend on Python's version.
         self.error = binascii.Error
 
-    def test_success(self):
+    def test_it_decodes_the_hexadecimal_digits_into_bytes(self):
         self.assertEqual(hex_to_bin("3200a0"), b"\x32\x00\xa0")
         self.assertEqual(hex_to_bin("ffffffff"), b"\xFF\xFF\xFF\xFF")
         self.assertEqual(hex_to_bin("0" * 2000), b"\x00" * 1000)
 
-    def test_invalid_length(self):
+    def test_it_rejects_an_odd_number_of_digits(self):
         with self.assertRaises(self.error):
             hex_to_bin("000")
 
-    def test_invalid_alphabet(self):
+    def test_it_rejects_non_hexadecimal_digits(self):
         with self.assertRaises(self.error):
             hex_to_bin("cmscms")
 
 
 class TestBinToB64(unittest.TestCase):
 
-    def test_success(self):
+    def test_it_encodes_the_bytes_as_base64(self):
         self.assertEqual(bin_to_b64(b"\x32\x00\xa0"), "MgCg")
         self.assertEqual(bin_to_b64(b"\xFF\xFF\xFF\xFF"), "/////w==")
         self.assertEqual(bin_to_b64(b"\x00" * 3000), "A" * (3000 * 4 // 3))
 
-    def test_string(self):
+    def test_it_rejects_a_string_argument(self):
         with self.assertRaises(TypeError):
             bin_to_b64("cms")
 
 
 class TestB64ToBin(unittest.TestCase):
 
-    def test_success(self):
+    def test_it_decodes_base64_into_bytes(self):
         self.assertEqual(b64_to_bin("MgCg"), b"\x32\x00\xa0")
         self.assertEqual(b64_to_bin("/////w=="), b"\xFF\xFF\xFF\xFF")
         self.assertEqual(b64_to_bin("A" * (3000 * 4 // 3)), b"\x00" * 3000)
 
-    def test_invalid_length(self):
+    def test_it_rejects_a_truncated_base64_string(self):
         with self.assertRaises(binascii.Error):
             b64_to_bin("MgC")
 
-    def test_invalid_alphabet(self):
+    def test_it_ignores_characters_outside_the_base64_alphabet(self):
         # binascii ignores invalid characters
         self.assertEqual(b64_to_bin("M\x00g.C,g\x0a"), b"\x32\x00\xa0")
 

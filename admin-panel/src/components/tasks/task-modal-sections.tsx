@@ -1,6 +1,12 @@
 'use client';
 
 import { Info } from 'lucide-react';
+
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
+import { LimitField } from '@/components/core/LimitField';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
+import { normalizeNonNegativeInt, type LimitFieldName } from '@/lib/limits';
 import type { TaskData } from '@/app/actions/tasks';
 
 export function InfoButton({ text }: { text: string }): React.JSX.Element {
@@ -20,6 +26,36 @@ interface TabProps {
   onChange: (data: TaskData) => void;
 }
 
+/** The limit family the task modal shares with the contest modal, by its own names. */
+type TaskLimitField = Extract<keyof TaskData, LimitFieldName>;
+
+interface LimitRow {
+  readonly name: TaskLimitField;
+  readonly unit?: string;
+}
+
+/** The limits this tab owns, in reading order: the token caps belong to the tokens tab. */
+const LIMIT_ROWS: readonly LimitRow[] = [
+  { name: 'max_submission_number' },
+  { name: 'max_user_test_number' },
+  { name: 'min_submission_interval', unit: 'sec' },
+  { name: 'min_user_test_interval', unit: 'sec' },
+];
+
+/**
+ * Why the patch is typed out: a computed key over a union of field names would widen the object and
+ * the strict task type would refuse it, while this partial is exactly the write it performs.
+ */
+function writeLimit(
+  name: TaskLimitField,
+  next: number | null,
+  formData: TaskData,
+  onChange: (data: TaskData) => void
+): void {
+  const patch: Partial<Record<TaskLimitField, number | null>> = { [name]: next };
+  onChange({ ...formData, ...patch });
+}
+
 export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element {
   return (
     <div className="space-y-6">
@@ -34,7 +70,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
           onChange={(e) => onChange({ ...formData, name: e.target.value })}
           placeholder="e.g., aplusb"
           required
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring transition-colors"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
       <div>
@@ -45,7 +81,7 @@ export function GeneralTab({ formData, onChange }: TabProps): React.JSX.Element 
           onChange={(e) => onChange({ ...formData, title: e.target.value })}
           placeholder="e.g., A Plus B Problem"
           required
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring transition-colors"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
         />
       </div>
     </div>
@@ -64,7 +100,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           <select
             value={formData.score_mode}
             onChange={(e) => onChange({ ...formData, score_mode: e.target.value })}
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <option value="max">Max</option>
             <option value="max_subtask">Max Subtask</option>
@@ -79,7 +115,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           <select
             value={formData.feedback_level}
             onChange={(e) => onChange({ ...formData, feedback_level: e.target.value })}
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <option value="restricted">Restricted</option>
             <option value="oi_restricted">OI Restricted</option>
@@ -94,7 +130,7 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
           value={formData.score_precision ?? ''}
           onChange={(e) => onChange({ ...formData, score_precision: e.target.value ? parseInt(e.target.value, 10) : null })}
           placeholder="0"
-          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+          className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50"
         />
         <p className="text-xs text-muted-foreground mt-1">Number of decimal places for score.</p>
       </div>
@@ -102,56 +138,76 @@ export function GradingTab({ formData, onChange }: TabProps): React.JSX.Element 
   );
 }
 
+/**
+ * The task's half of the throttle family: a tri-state override of the contest's delay.
+ *
+ * Why a box whose blank is a state: blank writes NULL — "inherit the contest's delay" — 0 writes a
+ * real 0, "no delay for this task", and N writes N seconds for this task only. The line under it
+ * names which of the three the current value is, so the operator can tell an inherit from a 0.
+ */
+function ThrottleOverrideField({ formData, onChange }: TabProps): React.JSX.Element {
+  const throttle = useDictionary().limits.throttle;
+  const value = formData.evaluation_throttle_delay_s ?? null;
+  const stateHint = value === null
+    ? throttle.overrideInherit
+    : value === 0
+      ? throttle.overrideNone
+      : interpolate(throttle.overrideSeconds, { seconds: value });
+  return (
+    <div className="space-y-1 md:col-span-2" data-field="evaluation_throttle_delay_s">
+      <label htmlFor="evaluation_throttle_delay_s" className="block text-xs font-bold text-muted-foreground uppercase mb-2">{throttle.overrideLabel} (sec)</label>
+      <input
+        id="evaluation_throttle_delay_s"
+        type="number"
+        min={0}
+        step={1}
+        placeholder={throttle.overridePlaceholder}
+        value={value ?? ''}
+        onChange={(e) => onChange({ ...formData, evaluation_throttle_delay_s: normalizeNonNegativeInt(e.target.value) })}
+        className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
+      />
+      <p className="text-xs text-muted-foreground">{throttle.overrideHint}</p>
+      <p className="text-xs font-medium text-primary">{stateHint}</p>
+    </div>
+  );
+}
+
 export function LimitsTab({ formData, onChange }: TabProps): React.JSX.Element {
+  const limits = useDictionary().limits;
+  // Why the cast to a partial: the label map covers the whole family, the hint map only the
+  // fields that need explaining.
+  const hints: Partial<Record<TaskLimitField, string>> = limits.hints;
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
-            Max Submissions
-            <InfoButton text="Maximum submissions per user. Enter 0 or leave empty for unlimited." />
-          </label>
-          <input
-            type="number"
-            value={formData.max_submission_number ?? ''}
-            onChange={(e) => onChange({ ...formData, max_submission_number: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
+        {LIMIT_ROWS.map((row) => (
+          <LimitField
+            key={row.name}
+            id={row.name}
+            label={limits.fields[row.name]}
+            unit={row.unit}
+            hint={hints[row.name]}
+            value={formData[row.name] ?? null}
+            onChangeValue={(next) => writeLimit(row.name, next, formData, onChange)}
+            unlimitedLabel={limits.unlimited}
           />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">
-            Max User Tests
-            <InfoButton text="Maximum user tests per user. Enter 0 or leave empty for unlimited." />
-          </label>
-          <input
-            type="number"
-            value={formData.max_user_test_number ?? ''}
-            onChange={(e) => onChange({ ...formData, max_user_test_number: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="Unlimited"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min Submission Interval (s)</label>
-          <input
-            type="number"
-            value={formData.min_submission_interval ?? ''}
-            onChange={(e) => onChange({ ...formData, min_submission_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-bold text-muted-foreground uppercase mb-2">Min User Test Interval (s)</label>
-          <input
-            type="number"
-            value={formData.min_user_test_interval ?? ''}
-            onChange={(e) => onChange({ ...formData, min_user_test_interval: e.target.value ? parseInt(e.target.value, 10) : null })}
-            placeholder="0"
-            className="w-full px-4 py-3 bg-muted/50 border border-border rounded-xl text-foreground focus:outline-none focus:border-ring"
-          />
-        </div>
+        ))}
+        <ThrottleOverrideField formData={formData} onChange={onChange} />
+      </div>
+      {/* Why at the tab's foot: it pushes the values the four shared limits hold right now to the
+          other kind (contests), so the button reads as a second way out of the same fields. */}
+      <div className="flex justify-end">
+        <ApplyLimitsButton
+          kinds={['contest']}
+          label={limits.apply.openButton}
+          patch={{
+            max_submission_number: formData.max_submission_number ?? null,
+            max_user_test_number: formData.max_user_test_number ?? null,
+            min_submission_interval: formData.min_submission_interval ?? null,
+            min_user_test_interval: formData.min_user_test_interval ?? null,
+          }}
+        />
       </div>
     </div>
   );

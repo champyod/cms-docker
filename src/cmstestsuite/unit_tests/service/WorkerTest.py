@@ -42,7 +42,7 @@ class TestWorker(unittest.TestCase):
 
     # Testing execute_job.
 
-    def test_execute_job_success(self):
+    def test_it_executes_a_successful_job(self):
         """Executes three successful jobs.
 
         """
@@ -60,7 +60,7 @@ class TestWorker(unittest.TestCase):
         cms.service.Worker.get_task_type.assert_has_calls(calls)
         self.assertEqual(task_type.call_count, n_jobs)
 
-    def test_execute_job_failure(self):
+    def test_it_executes_an_unsuccessful_job(self):
         """Executes two unsuccessful jobs.
 
         """
@@ -81,7 +81,7 @@ class TestWorker(unittest.TestCase):
         self.assertEqual(cms.service.Worker.get_task_type.call_count, n_jobs)
         self.assertEqual(task_type.call_count, n_jobs)
 
-    def test_execute_job_tasktype_raise(self):
+    def test_it_propagates_an_exception_from_the_task_type(self):
         """Executes two jobs raising exceptions.
 
         """
@@ -99,7 +99,7 @@ class TestWorker(unittest.TestCase):
         self.assertEqual(cms.service.Worker.get_task_type.call_count, n_jobs)
         self.assertEqual(task_type.call_count, n_jobs)
 
-    def test_execute_job_subsequent_success(self):
+    def test_it_executes_successive_jobs(self):
         """Executes three successful jobs, then four others.
 
         """
@@ -129,7 +129,7 @@ class TestWorker(unittest.TestCase):
         cms.service.Worker.get_task_type.assert_has_calls(calls_b)
         self.assertEqual(task_type_b.call_count, n_jobs_b)
 
-    def test_execute_job_subsequent_locked(self):
+    def test_it_rejects_a_job_while_another_is_running(self):
         """Executes a long job, then another one that should fail
         because of the lock.
 
@@ -159,7 +159,7 @@ class TestWorker(unittest.TestCase):
                          cms.service.Worker.get_task_type.mock_calls)
         cms.service.Worker.get_task_type.assert_has_calls(calls_a)
 
-    def test_execute_job_failure_releases_lock(self):
+    def test_it_releases_the_lock_after_a_failed_job(self):
         """After a failure, the worker should be able to accept another job.
 
         """
@@ -188,7 +188,7 @@ class TestWorker(unittest.TestCase):
         cms.service.Worker.get_task_type.assert_has_calls(calls_b)
         self.assertEqual(task_type_b.call_count, n_jobs_b)
 
-    def test_execute_job_group_success(self):
+    def test_it_executes_successful_job_groups(self):
         """Executes two successful job groups.
 
         """
@@ -204,7 +204,7 @@ class TestWorker(unittest.TestCase):
         cms.service.Worker.get_task_type.assert_has_calls(calls)
         self.assertEqual(task_type.call_count, sum(n_jobs))
 
-    def test_execute_job_group_mixed_success(self):
+    def test_it_reports_each_job_outcome_in_a_mixed_group(self):
         """Executes three job groups with mixed grades of success.
 
         """
@@ -233,7 +233,7 @@ class TestWorker(unittest.TestCase):
         cms.service.Worker.get_task_type.assert_has_calls(calls)
         self.assertEqual(task_type.call_count, sum(n_jobs))
 
-    def test_execute_job_group_mixed_exceptions(self):
+    def test_it_raises_when_a_job_in_the_group_raises(self):
         """Executes a job group with some exceptions.
 
         """

@@ -1,0 +1,1920 @@
+diff --git a/admin-panel/prisma/schema.prisma b/admin-panel/prisma/schema.prisma
+index 6055c85d..a5e83a87 100644
+--- a/admin-panel/prisma/schema.prisma
++++ b/admin-panel/prisma/schema.prisma
+@@ -22,6 +22,7 @@ model admins {
+   enabled              Boolean
+   last_login_at        DateTime?
+   announcements        announcements[]
++  evaluation_lanes     evaluation_lanes[]
+   messages             messages[]
+   questions            questions[]
+   admin_groups         admin_groups[]
+@@ -146,6 +147,33 @@ model evaluations {
+   @@index([testcase_id], map: "ix_evaluations_testcase_id")
+ }
+ 
++model evaluation_workers {
++  id               Int                @id @default(autoincrement())
++  shard            Int                @unique
++  name             String             @db.VarChar
++  host             String             @db.VarChar
++  port             Int
++  enabled          Boolean            @default(true)
++  last_seen_at     DateTime?          @db.Timestamp(6)
++  evaluation_lanes evaluation_lanes[]
++}
++
++model evaluation_lanes {
++  id                 Int                 @id @default(autoincrement())
++  name               String              @unique @db.VarChar
++  sort_order         Int                 @default(0)
++  created_at         DateTime            @default(now()) @db.Timestamp(6)
++  worker_id          Int?
++  created_by_id      Int?
++  submissions        submissions[]       @relation("lane_submissions")
++  admins             admins?             @relation(fields: [created_by_id], references: [id])
++  evaluation_workers evaluation_workers? @relation(fields: [worker_id], references: [id], onDelete: SetNull)
++
++  @@index([created_by_id], map: "ix_evaluation_lanes_created_by_id")
++  @@index([sort_order], map: "ix_evaluation_lanes_sort_order")
++  @@index([worker_id], map: "ix_evaluation_lanes_worker_id")
++}
++
+ model executables {
+   id                 Int                @id @default(autoincrement())
+   submission_id      Int
+@@ -293,6 +321,7 @@ model submissions {
+   id                 Int                  @id @default(autoincrement())
+   participation_id   Int
+   task_id            Int
++  lane_id            Int?
+   timestamp          DateTime             @db.Timestamp(6)
+   language           String?              @db.VarChar
+   comment            String               @db.VarChar
+@@ -301,11 +330,13 @@ model submissions {
+   executables        executables[]
+   files              files[]
+   submission_results submission_results[]
++  evaluation_lanes   evaluation_lanes?    @relation("lane_submissions", fields: [lane_id], references: [id], onDelete: SetNull)
+   participations     participations       @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+   tasks              tasks                @relation(fields: [task_id], references: [id], onDelete: Cascade)
+   tokens             tokens?
+ 
+   @@unique([participation_id, opaque_id], map: "participation_opaque_unique")
++  @@index([lane_id], map: "ix_submissions_lane_id")
+   @@index([participation_id], map: "ix_submissions_participation_id")
+   @@index([task_id], map: "ix_submissions_task_id")
+ }
+diff --git a/admin-panel/src/app/[locale]/(authenticated)/evaluation/lanes/page.tsx b/admin-panel/src/app/[locale]/(authenticated)/evaluation/lanes/page.tsx
+index 0dbe65b2..e7538500 100644
+--- a/admin-panel/src/app/[locale]/(authenticated)/evaluation/lanes/page.tsx
++++ b/admin-panel/src/app/[locale]/(authenticated)/evaluation/lanes/page.tsx
+@@ -1,5 +1,5 @@
+ import { notFound } from 'next/navigation';
+-import { getLaneBoard, type LaneBoard as LaneBoardData } from '@/app/actions/evaluationLanes';
++import { getLaneBoard, type LaneBoard as LaneBoardData } from '@/app/actions/evaluationLaneBoard';
+ import { PageSurface } from '@/components/core/PageSurface';
+ import { LaneBoard } from '@/components/submissions/LaneBoard';
+ import { getDictionary } from '@/i18n';
+@@ -55,7 +55,7 @@ export default async function EvaluationLanesPage({
+       title={lanesLabel}
+       description={dict.submissions.lanesDescription}
+     >
+-      <LaneBoard board={board} permissionKeys={permissionKeys} />
++      <LaneBoard board={board} permissionKeys={permissionKeys} labels={dict.submissions} locale={locale} />
+     </PageSurface>
+   );
+ }
+diff --git a/admin-panel/src/app/actions/evaluationLanes.ts b/admin-panel/src/app/actions/evaluationLanes.ts
+index dc03fb6d..d1ab1ba4 100644
+--- a/admin-panel/src/app/actions/evaluationLanes.ts
++++ b/admin-panel/src/app/actions/evaluationLanes.ts
+@@ -1,412 +1,209 @@
+-'use server'
++'use server';
+ 
+-import type { Prisma } from '@prisma/client';
+ import { revalidatePath } from 'next/cache';
++
+ import { prisma } from '@/lib/prisma';
+ import { ensurePermission } from '@/lib/permissions';
+ import { recordAudit } from '@/lib/audit';
+ 
+ const MAX_LANE_NAME_LENGTH = 64;
+ const MAX_REASON_LENGTH = 500;
+-/** Why capped: lane state lives only in audit rows, so an uncapped scan grows with
+- * lifetime history. The board is a working view of the current queue, and the
+- * newest rows are the only ones that can still be current. */
+-const LANE_AUDIT_SCAN_LIMIT = 2000;
+-/** Why capped per lane: one busy lane must not crowd the others out of the
+- * response, and assignments arrive newest-first so the head is the live work. */
+-const MAX_ITEMS_PER_LANE = 200;
+-
+-interface ActionResult {
++const LANES_PATH = '/[locale]/evaluation/lanes';
++
++/**
++ * Permission split, using the two existing lane keys rather than adding new ones (the
++ * permission registry pins their count at 205):
++ * - `evaluation:lane_move` administers the lane set — create, reorder, bind a worker — and
++ *   moves a submission that already sits in a lane.
++ * - `evaluation:lane_assign` places a submission that currently has no lane.
++ *
++ * WHY the keys appear as string literals at each call site rather than as constants: the
++ * permission coverage gate (scripts/coverage/scan.ts) reads keys textually out of each
++ * function body, so a key held in a constant is invisible to it and the action is reported
++ * as ungated.
++ */
++
++export interface ActionResult {
+   success: boolean;
+   error?: string;
+-  field?: 'reason' | 'lane' | 'submissionId' | 'contestId';
++  field?: 'reason' | 'lane' | 'submissionId' | 'workerId';
++}
++
++export interface LaneSummary {
++  id: number;
++  name: string;
++  workerId: number | null;
+ }
+ 
+-function validateReasonInput(reason: string): string | null {
++function validateReason(reason: string): string | null {
+   const trimmed = reason.trim();
+-  if (trimmed.length === 0) {
+-    return 'Reason must not be empty';
+-  }
+-  if (trimmed.length > MAX_REASON_LENGTH) {
+-    return `Reason must be at most ${MAX_REASON_LENGTH} characters`;
+-  }
++  if (trimmed.length === 0) return 'Reason must not be empty';
++  if (trimmed.length > MAX_REASON_LENGTH) return `Reason must be at most ${MAX_REASON_LENGTH} characters`;
+   return null;
+ }
+ 
+-function validateLaneInput(submissionId: number, lane: string): string | null {
+-  if (!Number.isInteger(submissionId) || submissionId <= 0) {
+-    return 'Invalid submission id';
+-  }
+-  const trimmed = lane.trim();
+-  if (trimmed.length === 0) {
+-    return 'Lane must not be empty';
+-  }
+-  if (trimmed.length > MAX_LANE_NAME_LENGTH) {
+-    return `Lane must be at most ${MAX_LANE_NAME_LENGTH} characters`;
+-  }
++function validateLaneName(name: string): string | null {
++  const trimmed = name.trim();
++  if (trimmed.length === 0) return 'Lane name must not be empty';
++  if (trimmed.length > MAX_LANE_NAME_LENGTH) return `Lane name must be at most ${MAX_LANE_NAME_LENGTH} characters`;
+   return null;
+ }
+ 
+-export async function assignEvaluationLane(submissionId: number, lane: string, reason: string): Promise<ActionResult> {
+-  await ensurePermission('evaluation:lane_assign');
+-
+-  const reasonError = validateReasonInput(reason);
+-  if (reasonError) {
+-    return { success: false, error: reasonError, field: 'reason' };
+-  }
+-
+-  const validationError = validateLaneInput(submissionId, lane);
+-  if (validationError) {
+-    return { success: false, error: validationError };
+-  }
++/** Prisma's unique-constraint violation, so a duplicate name reads as a conflict, not a crash. */
++function isUniqueViolation(error: unknown): boolean {
++  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'P2002';
++}
+ 
+-  try {
+-    const submission = await prisma.submissions.findUnique({
+-      where: { id: submissionId },
+-      select: { id: true },
+-    });
+-    if (!submission) {
+-      return { success: false, error: 'Submission not found' };
+-    }
++/**
++ * Log the real cause server-side and return a generic message.
++ *
++ * WHY not `error.message`: a driver or Prisma failure carries connection strings, table
++ * names and query fragments, none of which belong in a response the browser can read.
++ */
++function writeFailure(action: string, error: unknown, field?: ActionResult['field']): ActionResult {
++  console.error(`Failed to ${action}`, error);
++  return { success: false, error: `Could not ${action}`, field };
++}
+ 
+-    // Why: no dedicated lane column exists, so the assignment is recorded in the
+-    // tamper-evident audit log until lane persistence lands.
+-    await recordAudit({
+-      verb: 'evaluation:lane_assign',
+-      entity: 'submission',
+-      entityId: String(submissionId),
+-      afterValues: { lane: lane.trim(), reason: reason.trim(), assignedAt: new Date().toISOString() },
+-      result: 'success',
+-    });
+-    revalidatePath('/[locale]/evaluation/submissions');
+-    return { success: true };
+-  } catch (error) {
+-    return { success: false, error: (error as Error).message };
+-  }
++export async function listEvaluationLanes(): Promise<LaneSummary[]> {
++  await ensurePermission('evaluation:list');
++  const lanes = await prisma.evaluation_lanes.findMany({
++    orderBy: [{ sort_order: 'asc' }, { name: 'asc' }],
++    select: { id: true, name: true, worker_id: true },
++  });
++  return lanes.map((lane) => ({ id: lane.id, name: lane.name, workerId: lane.worker_id }));
+ }
+ 
+-export async function moveEvaluationLane(submissionId: number, lane: string, reason: string): Promise<ActionResult> {
++export async function createEvaluationLane(
++  name: string,
++  workerId: number | null,
++  reason: string,
++): Promise<ActionResult> {
+   await ensurePermission('evaluation:lane_move');
+ 
+-  const reasonError = validateReasonInput(reason);
+-  if (reasonError) {
+-    return { success: false, error: reasonError, field: 'reason' };
+-  }
++  const reasonError = validateReason(reason);
++  if (reasonError !== null) return { success: false, error: reasonError, field: 'reason' };
++
++  const nameError = validateLaneName(name);
++  if (nameError !== null) return { success: false, error: nameError, field: 'lane' };
+ 
+-  const validationError = validateLaneInput(submissionId, lane);
+-  if (validationError) {
+-    return { success: false, error: validationError };
++  if (workerId !== null) {
++    const worker = await prisma.evaluation_workers.findUnique({ where: { id: workerId }, select: { id: true } });
++    if (worker === null) return { success: false, error: 'Worker not found', field: 'workerId' };
+   }
+ 
+   try {
+-    const submission = await prisma.submissions.findUnique({
+-      where: { id: submissionId },
++    const highest = await prisma.evaluation_lanes.aggregate({ _max: { sort_order: true } });
++    const lane = await prisma.evaluation_lanes.create({
++      data: { name: name.trim(), worker_id: workerId, sort_order: (highest._max.sort_order ?? -1) + 1 },
+       select: { id: true },
+     });
+-    if (!submission) {
+-      return { success: false, error: 'Submission not found' };
+-    }
+-
+-    // Why: no dedicated lane column exists, so the move is recorded in the
+-    // tamper-evident audit log until lane persistence lands.
+     await recordAudit({
+-      verb: 'evaluation:lane_move',
+-      entity: 'submission',
+-      entityId: String(submissionId),
+-      afterValues: { lane: lane.trim(), reason: reason.trim(), movedAt: new Date().toISOString() },
++      verb: 'evaluation:lane_create',
++      entity: 'evaluation_lane',
++      entityId: String(lane.id),
++      afterValues: { name: name.trim(), worker_id: workerId, reason: reason.trim() },
+       result: 'success',
+     });
+-    revalidatePath('/[locale]/evaluation/submissions');
++    revalidatePath(LANES_PATH, 'page');
+     return { success: true };
+   } catch (error) {
+-    return { success: false, error: (error as Error).message };
++    if (isUniqueViolation(error)) {
++      return { success: false, error: 'A lane with that name already exists', field: 'lane' };
++    }
++    return writeFailure('create lane', error);
+   }
+ }
+ 
+-export async function setFinalOpen(contestId: number, open: boolean, reason: string): Promise<ActionResult> {
+-  await ensurePermission('contest:update');
+-
+-  const reasonError = validateReasonInput(reason);
+-  if (reasonError) {
+-    return { success: false, error: reasonError, field: 'reason' };
+-  }
++export async function setEvaluationLaneWorker(
++  laneId: number,
++  workerId: number | null,
++  reason: string,
++): Promise<ActionResult> {
++  await ensurePermission('evaluation:lane_move');
+ 
+-  if (!Number.isInteger(contestId) || contestId <= 0) {
+-    return { success: false, error: 'Invalid contest id' };
+-  }
++  const reasonError = validateReason(reason);
++  if (reasonError !== null) return { success: false, error: reasonError, field: 'reason' };
+ 
+   try {
+-    const contest = await prisma.contests.findUnique({
+-      where: { id: contestId },
+-      select: { id: true },
++    const lane = await prisma.evaluation_lanes.findUnique({
++      where: { id: laneId },
++      select: { id: true, worker_id: true },
+     });
+-    if (!contest) {
+-      return { success: false, error: 'Contest not found' };
+-    }
++    if (lane === null) return { success: false, error: 'Lane not found', field: 'lane' };
+ 
+-    // Why raw SQL: the throttle columns are not in the generated client yet,
+-    // so the typed update cannot set them.
+-    const stampedAt = open ? new Date() : null;
+-    await prisma.$executeRaw`
+-      UPDATE contests
+-      SET evaluation_final_open = ${open}, evaluation_final_open_at = ${stampedAt}
+-      WHERE id = ${contestId}
+-    `;
++    if (workerId !== null) {
++      const worker = await prisma.evaluation_workers.findUnique({ where: { id: workerId }, select: { id: true } });
++      if (worker === null) return { success: false, error: 'Worker not found', field: 'workerId' };
++    }
+ 
++    await prisma.evaluation_lanes.update({ where: { id: laneId }, data: { worker_id: workerId } });
+     await recordAudit({
+-      verb: 'contest:update',
+-      entity: 'contest',
+-      entityId: String(contestId),
+-      afterValues: { evaluation_final_open: open, reason: reason.trim(), openedAt: new Date().toISOString() },
++      verb: 'evaluation:lane_worker',
++      entity: 'evaluation_lane',
++      entityId: String(laneId),
++      beforeValues: { worker_id: lane.worker_id },
++      afterValues: { worker_id: workerId, reason: reason.trim() },
+       result: 'success',
+     });
+-    revalidatePath('/[locale]/contests', 'page');
++    revalidatePath(LANES_PATH, 'page');
+     return { success: true };
+   } catch (error) {
+-    return { success: false, error: (error as Error).message };
++    return writeFailure('bind lane worker', error);
+   }
+ }
+ 
+-const QUEUE_STATUS_RPC_ENDPOINT = 'http://cms-admin-web-server:25000/rpc/EvaluationService/0/queue_status';
+-const QUEUE_RPC_TIMEOUT_MS = 5000;
+-const QUEUE_SUBMISSION_TYPES: readonly string[] = ['compile', 'evaluate'];
+-const LANE_VERBS: readonly string[] = ['evaluation:lane_assign', 'evaluation:lane_move'];
+-
+-export interface LaneBoardItem {
+-  submissionId: number;
+-  lane: string;
+-  username: string;
+-  taskName: string;
+-  timestamp: string;
+-  waitingCount: number;
+-  assignedBy: number | null;
+-  reason: string | null;
+-}
++/**
++ * Place a submission in a lane, or clear it back to the unassigned bucket.
++ *
++ * The permission depends on where the submission is now: taking a submission off the
++ * unassigned pile is `lane_assign`, changing an established placement is `lane_move`.
++ */
++export async function moveEvaluationLane(
++  submissionId: number,
++  laneId: number | null,
++  reason: string,
++): Promise<ActionResult> {
++  const reasonError = validateReason(reason);
++  if (reasonError !== null) return { success: false, error: reasonError, field: 'reason' };
+ 
+-export interface LaneBoardLane {
+-  lane: string;
+-  items: LaneBoardItem[];
+-}
+-
+-export interface LaneBoard {
+-  lanes: LaneBoardLane[];
+-  waitingSource: 'rpc' | 'database';
+-}
+-
+-interface LaneAssignment {
+-  submissionId: number;
+-  lane: string;
+-  reason: string | null;
+-  assignedBy: number | null;
+-}
+-
+-type BoardSubmission = Prisma.submissionsGetPayload<{
+-  select: {
+-    id: true;
+-    timestamp: true;
+-    tasks: { select: { name: true } };
+-    participations: { select: { user_id: true; users: { select: { username: true } } } };
+-  };
+-}>;
+-
+-export async function getLaneBoard(): Promise<LaneBoard> {
+-  await ensurePermission('evaluation:list');
+-  const assignments = await readLatestLaneAssignments();
+-  // Why early return: with no assignments no waiting counts are needed, so an
+-  // empty board is served without paying for an RPC round trip.
+-  if (assignments.length === 0) {
+-    return { lanes: [], waitingSource: 'database' };
+-  }
+-  const submissions = await prisma.submissions.findMany({
+-    where: { id: { in: assignments.map((assignment) => assignment.submissionId) } },
+-    // Why take at the assignment count: ids are unique, so this can never
+-    // truncate — it pins the query cost to the already-capped assignment list.
+-    take: assignments.length,
+-    select: {
+-      id: true,
+-      timestamp: true,
+-      tasks: { select: { name: true } },
+-      participations: { select: { user_id: true, users: { select: { username: true } } } },
+-    },
+-  });
+-  const queued = await readQueuedSubmissionIds();
+-  const userIds = [...new Set(submissions.map((submission) => submission.participations.user_id))];
+-  const waitingByUser = queued === null ? await countPendingByUserDb(userIds) : await countQueuedByUser(queued);
+-  return { lanes: groupByLane(assignments, submissions, waitingByUser), waitingSource: queued === null ? 'database' : 'rpc' };
+-}
+-
+-async function readLatestLaneAssignments(): Promise<LaneAssignment[]> {
+-  // Why newest-first scan: lanes live only in audit rows, so the latest lane
+-  // verb per submission is its current lane; invalid payloads are skipped so an
+-  // older valid row for the same submission can still win.
+-  const rows = await prisma.audit_log.findMany({
+-    where: { entity: 'submission', verb: { in: [...LANE_VERBS] } },
+-    orderBy: { id: 'desc' },
+-    take: LANE_AUDIT_SCAN_LIMIT,
+-    select: { entity_id: true, actor_id: true, after_values: true },
+-  });
+-  const seen = new Set<number>();
+-  const assignments: LaneAssignment[] = [];
+-  for (const row of rows) {
+-    const submissionId = row.entity_id === null ? NaN : Number(row.entity_id);
+-    if (!Number.isInteger(submissionId) || seen.has(submissionId)) {
+-      continue;
+-    }
+-    const payload = parseLanePayload(row.after_values);
+-    if (payload === null) {
+-      continue;
+-    }
+-    seen.add(submissionId);
+-    assignments.push({ submissionId, lane: payload.lane, reason: payload.reason, assignedBy: row.actor_id });
+-  }
+-  return assignments;
+-}
+-
+-function parseLanePayload(after: Prisma.JsonValue | null): { lane: string; reason: string | null } | null {
+-  if (typeof after !== 'object' || after === null || Array.isArray(after)) {
+-    return null;
+-  }
+-  const record = after as Record<string, Prisma.JsonValue | undefined>;
+-  const lane = record['lane'];
+-  if (typeof lane !== 'string' || lane.trim().length === 0) {
+-    return null;
++  if (!Number.isInteger(submissionId) || submissionId <= 0) {
++    return { success: false, error: 'Invalid submission id', field: 'submissionId' };
+   }
+-  const reason = record['reason'];
+-  return { lane: lane.trim(), reason: typeof reason === 'string' ? reason : null };
+-}
+ 
+-async function readQueuedSubmissionIds(): Promise<Set<number> | null> {
+-  // Why POST {}: the admin web server proxies /rpc/<service>/<shard>/<method>
+-  // with the JSON body as method kwargs, and queue_status takes none.
+-  const controller = new AbortController();
+-  const timer = setTimeout(() => controller.abort(), QUEUE_RPC_TIMEOUT_MS);
+   try {
+-    const response = await fetch(QUEUE_STATUS_RPC_ENDPOINT, {
+-      method: 'POST',
+-      headers: { 'Content-Type': 'application/json' },
+-      body: '{}',
+-      signal: controller.signal,
+-      cache: 'no-store',
++    const submission = await prisma.submissions.findUnique({
++      where: { id: submissionId },
++      select: { id: true, lane_id: true },
+     });
+-    if (!response.ok) {
+-      return null;
++    if (submission === null) return { success: false, error: 'Submission not found', field: 'submissionId' };
++
++    const isFirstPlacement = submission.lane_id === null && laneId !== null;
++    // Why two branches rather than one ternary over constants: the coverage gate reads these
++    // keys textually, so both must appear literally for the action to count as gated.
++    if (isFirstPlacement) {
++      await ensurePermission('evaluation:lane_assign');
++    } else {
++      await ensurePermission('evaluation:lane_move');
+     }
+-    return extractQueuedIds((await response.json()) as unknown);
+-  } catch {
+-    // Why null, not throw: the queue is best-effort context, so any RPC or
+-    // timeout failure drops through to the database pending counts.
+-    return null;
+-  } finally {
+-    clearTimeout(timer);
+-  }
+-}
+ 
+-function extractQueuedIds(body: unknown): Set<number> | null {
+-  // Why strict shape: the proxy answers {data, error}; anything else means the
+-  // service is not really answering, so the database fallback must take over.
+-  if (typeof body !== 'object' || body === null) {
+-    return null;
+-  }
+-  const { data, error } = body as { data?: unknown; error?: unknown };
+-  if (error !== null && error !== undefined) {
+-    return null;
+-  }
+-  if (!Array.isArray(data)) {
+-    return null;
+-  }
+-  const ids = new Set<number>();
+-  for (const entry of data as unknown[]) {
+-    if (typeof entry !== 'object' || entry === null) {
+-      continue;
+-    }
+-    const item = (entry as { item?: unknown }).item;
+-    if (typeof item !== 'object' || item === null) {
+-      continue;
+-    }
+-    const { type, object_id } = item as { type?: unknown; object_id?: unknown };
+-    // Why only submission ops: user-test entries share the queue but belong to
+-    // no submission, so they must not inflate any submitter's waiting count.
+-    if (typeof object_id !== 'number' || !Number.isInteger(object_id)) {
+-      continue;
+-    }
+-    if (typeof type !== 'string' || !QUEUE_SUBMISSION_TYPES.includes(type)) {
+-      continue;
++    if (laneId !== null) {
++      const lane = await prisma.evaluation_lanes.findUnique({ where: { id: laneId }, select: { id: true } });
++      if (lane === null) return { success: false, error: 'Lane not found', field: 'lane' };
+     }
+-    ids.add(object_id);
+-  }
+-  return ids;
+-}
+-
+-async function countQueuedByUser(queued: Set<number>): Promise<Map<number, number>> {
+-  const counts = new Map<number, number>();
+-  if (queued.size === 0) {
+-    return counts;
+-  }
+-  const rows = await prisma.submissions.findMany({
+-    where: { id: { in: [...queued] } },
+-    select: { participations: { select: { user_id: true } } },
+-  });
+-  for (const row of rows) {
+-    const userId = row.participations.user_id;
+-    counts.set(userId, (counts.get(userId) ?? 0) + 1);
+-  }
+-  return counts;
+-}
+-
+-async function countPendingByUserDb(userIds: readonly number[]): Promise<Map<number, number>> {
+-  // Why none-with-scored: a submission awaits evaluation when no result row
+-  // carries a real outcome — covering both never-scored rows and rows whose
+-  // outcome is still null.
+-  const entries = await Promise.all(
+-    userIds.map(async (userId): Promise<[number, number]> => {
+-      const count = await prisma.submissions.count({
+-        where: {
+-          participations: { user_id: userId },
+-          submission_results: { none: { NOT: { evaluation_outcome: null } } },
+-        },
+-      });
+-      return [userId, count];
+-    }),
+-  );
+-  return new Map(entries);
+-}
+ 
+-function groupByLane(
+-  assignments: readonly LaneAssignment[],
+-  submissions: readonly BoardSubmission[],
+-  waitingByUser: ReadonlyMap<number, number>,
+-): LaneBoardLane[] {
+-  const byId = new Map(submissions.map((submission) => [submission.id, submission]));
+-  const groups = new Map<string, LaneBoardItem[]>();
+-  for (const assignment of assignments) {
+-    const submission = byId.get(assignment.submissionId);
+-    // Why skip, not placeholder: the audit row outlives a deleted submission,
+-    // and the board must not show rows that no longer exist.
+-    if (submission === undefined) {
+-      continue;
+-    }
+-    const userId = submission.participations.user_id;
+-    const item: LaneBoardItem = {
+-      submissionId: assignment.submissionId,
+-      lane: assignment.lane,
+-      username: submission.participations.users.username,
+-      taskName: submission.tasks.name,
+-      timestamp: submission.timestamp.toISOString(),
+-      waitingCount: waitingByUser.get(userId) ?? 0,
+-      assignedBy: assignment.assignedBy,
+-      reason: assignment.reason,
+-    };
+-    const laneItems = groups.get(assignment.lane);
+-    if (laneItems === undefined) {
+-      groups.set(assignment.lane, [item]);
+-    } else if (laneItems.length < MAX_ITEMS_PER_LANE) {
+-      laneItems.push(item);
+-    }
++    await prisma.submissions.update({ where: { id: submissionId }, data: { lane_id: laneId } });
++    await recordAudit({
++      verb: isFirstPlacement ? 'evaluation:lane_assign' : 'evaluation:lane_move',
++      entity: 'submission',
++      entityId: String(submissionId),
++      beforeValues: { lane_id: submission.lane_id },
++      afterValues: { lane_id: laneId, reason: reason.trim() },
++      result: 'success',
++    });
++    revalidatePath(LANES_PATH, 'page');
++    return { success: true };
++  } catch (error) {
++    return writeFailure('move submission between lanes', error);
+   }
+-  return [...groups.entries()]
+-    .sort(([left], [right]) => left.localeCompare(right))
+-    .map(([lane, items]) => ({
+-      lane,
+-      items: items.sort((left, right) => right.timestamp.localeCompare(left.timestamp)),
+-    }));
+ }
+diff --git a/admin-panel/src/app/actions/workerConfig.ts b/admin-panel/src/app/actions/workerConfig.ts
+index bc25f413..e73bdb03 100644
+--- a/admin-panel/src/app/actions/workerConfig.ts
++++ b/admin-panel/src/app/actions/workerConfig.ts
+@@ -1,115 +1,25 @@
+ 'use server';
+ 
+ import fs from 'fs/promises';
+-import path from 'path';
++
+ import { ensurePermission } from '@/lib/permissions';
+-import { getRepoRoot } from '@/lib/repo-root';
+ import { recordAudit } from '@/lib/audit';
++import {
++  extractWorkerBlock,
++  findCmsConfigPath,
++  parseWorkerBlock,
++  readConfiguredWorkers,
++  WORKER_HOST_PATTERN,
++} from '@/lib/worker-endpoints';
+ 
+-const HOST_RE = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,62}[a-zA-Z0-9])?$/;
+-
+-async function getCmsConfigPath() {
+-  const possiblePaths = [
+-    path.join(getRepoRoot(), 'config/cms.toml'),
+-    path.join(process.cwd(), 'config', 'cms.toml'),
+-    '/usr/local/etc/cms.toml'
+-  ];
+-
+-  for (const p of possiblePaths) {
+-    try {
+-      await fs.access(p);
+-      return p;
+-    } catch {
+-      // Probing candidate paths: absence of one location is expected, keep scanning
+-    }
+-  }
+-  return null;
+-}
+-
+-function extractWorkerBlock(content: string): string | null {
+-  const keyIndex = content.search(/(^|\n)\s*Worker\s*=\s*\[/);
+-  if (keyIndex === -1) return null;
+-
+-  const openIndex = content.indexOf('[', keyIndex);
+-  if (openIndex === -1) return null;
+-
+-  let depth = 0;
+-  for (let index = openIndex; index < content.length; index += 1) {
+-    const char = content[index];
+-    if (char === '[') depth += 1;
+-    if (char === ']') depth -= 1;
+-    if (depth === 0) {
+-      return content.slice(openIndex + 1, index);
+-    }
+-  }
+-
+-  return null;
+-}
+-
+-function parseWorkersFromBlock(block: string): Array<{ host: string; port: number }> {
+-  const workers: Array<{ host: string; port: number }> = [];
+-  const regex = /\[\s*"([^"]+)"\s*,\s*(\d+)\s*\]/g;
+-
+-  let match = regex.exec(block);
+-  while (match !== null) {
+-    workers.push({ host: match[1], port: parseInt(match[2], 10) });
+-    match = regex.exec(block);
+-  }
+-
+-  return workers;
+-}
+-
+-function parseWorkersFromEnvCore(content: string): Array<{ host: string; port: number }> {
+-  const workers: Array<{ index: number; host: string; port: number }> = [];
+-  const lines = content.split('\n');
+-
+-  for (const line of lines) {
+-    const trimmed = line.trim();
+-    if (!trimmed || trimmed.startsWith('#')) continue;
+-
+-    const match = trimmed.match(/^WORKER_(\d+)=(.+):(\d+)$/);
+-    if (!match) continue;
+-
+-    workers.push({
+-      index: parseInt(match[1], 10),
+-      host: match[2],
+-      port: parseInt(match[3], 10)
+-    });
+-  }
+-
+-  return workers
+-    .sort((a, b) => a.index - b.index)
+-    .map(({ host, port }) => ({ host, port }));
+-}
+-
+-/**
+- * The worker endpoints, taken from cms.toml's Worker block when it declares any and from the
+- * generated env file otherwise. Kept separate from the audit call so the read reports one result
+- * per request rather than one per candidate source.
+- */
+-async function readWorkerEndpoints(configPath: string | null): Promise<WorkerEntry[]> {
+-  if (configPath) {
+-    const content = await fs.readFile(configPath, 'utf-8');
+-    const workerBlock = extractWorkerBlock(content);
+-    if (workerBlock) {
+-      const workers = parseWorkersFromBlock(workerBlock);
+-      if (workers.length > 0) return workers;
+-    }
+-  }
+-
+-  const envCorePath = path.join(getRepoRoot(), '.env');
+-  const envCoreContent = await fs.readFile(envCorePath, 'utf-8');
+-  return parseWorkersFromEnvCore(envCoreContent);
+-}
++type WorkerEntry = { host: string; port: number };
+ 
+-export async function getWorkers() {
++export async function getWorkers(): Promise<WorkerEntry[]> {
+   await ensurePermission('settings:read');
+   await ensurePermission('settings:list');
+ 
+-  const configPath = await getCmsConfigPath();
+-
+   try {
+-    const workers = await readWorkerEndpoints(configPath);
++    const workers = await readConfiguredWorkers();
+     // Why count and not the endpoints: these are the deployment's internal hosts and ports, and
+     // an audit table is the wrong place to keep them. The row answers who asked and how much
+     // the request revealed, which is what a later disclosure has to be weighed against.
+@@ -119,7 +29,7 @@ export async function getWorkers() {
+       afterValues: { count: workers.length },
+       result: 'success',
+     });
+-    return workers;
++    return workers.map(({ host, port }) => ({ host, port }));
+   } catch (error) {
+     console.error('Failed to parse workers from cms.toml', error);
+     await recordAudit({
+@@ -132,16 +42,14 @@ export async function getWorkers() {
+   }
+ }
+ 
+-type WorkerEntry = { host: string; port: number };
+-
+ function findInvalidWorkerEntries(workers: WorkerEntry[]): string[] {
+   const invalidEntries: string[] = [];
+ 
+-  for (const w of workers) {
+-    const validHost = typeof w.host === 'string' && HOST_RE.test(w.host);
+-    const validPort = Number.isInteger(w.port) && w.port >= 1 && w.port <= 65535;
++  for (const worker of workers) {
++    const validHost = typeof worker.host === 'string' && WORKER_HOST_PATTERN.test(worker.host);
++    const validPort = Number.isInteger(worker.port) && worker.port >= 1 && worker.port <= 65535;
+     if (!validHost || !validPort) {
+-      invalidEntries.push(`${w.host}:${w.port}`);
++      invalidEntries.push(`${worker.host}:${worker.port}`);
+     }
+   }
+ 
+@@ -163,7 +71,7 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
+     return { success: false, error: `Invalid hostnames or ports: ${invalidEntries.join(', ')}` };
+   }
+ 
+-  const configPath = await getCmsConfigPath();
++  const configPath = await findCmsConfigPath();
+   if (!configPath) return { success: false, error: 'cms.toml not found' };
+ 
+   try {
+@@ -175,7 +83,7 @@ export async function updateWorkers(workers: { host: string; port: number }[]) {
+     }
+ 
+     const previousBlock = extractWorkerBlock(content);
+-    const previousWorkers = previousBlock ? parseWorkersFromBlock(previousBlock) : [];
++    const previousWorkers = previousBlock === null ? [] : parseWorkerBlock(previousBlock);
+     await fs.writeFile(configPath, updated);
+     await recordAudit({
+       verb: 'settings:update',
+diff --git a/admin-panel/src/components/submissions/CreateLaneDialog.tsx b/admin-panel/src/components/submissions/CreateLaneDialog.tsx
+index 6bd0aa9a..684b3e68 100644
+--- a/admin-panel/src/components/submissions/CreateLaneDialog.tsx
++++ b/admin-panel/src/components/submissions/CreateLaneDialog.tsx
+@@ -2,12 +2,18 @@
+ 
+ import { useState } from 'react';
+ 
+-import { moveEvaluationLane, type LaneBoardItem } from '@/app/actions/evaluationLanes';
++import { createEvaluationLane } from '@/app/actions/evaluationLanes';
++import type { EvaluationWorkerSummary } from '@/app/actions/evaluationWorkers';
+ import { Button } from '@/components/core/Button';
+ import { Dialog } from '@/components/core/Dialog';
+ import { useActionFeedback } from '@/hooks/useActionFeedback';
++import type { Dictionary } from '@/lib/dictionary';
+ 
+-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
++const FIELD_CLASSES =
++  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
++const MAX_LANE_NAME_LENGTH = 64;
++const MAX_REASON_LENGTH = 500;
++const NO_WORKER_VALUE = '';
+ 
+ // Why one wrapper: the dialog stacks three labelled controls, and a per-field
+ // label block is the only thing that differs between them.
+@@ -20,45 +26,110 @@ function DialogField({ id, label, children }: { id: string; label: string; child
+   );
+ }
+ 
+-export function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items: LaneBoardItem[]; laneNames: string[]; onClose: () => void; onDone: () => void }): React.ReactNode {
++export function CreateLaneDialog({
++  workers,
++  laneNames,
++  labels,
++  onClose,
++  onDone,
++}: {
++  workers: readonly EvaluationWorkerSummary[];
++  laneNames: readonly string[];
++  labels: Dictionary['submissions'];
++  onClose: () => void;
++  onDone: () => void;
++}): React.ReactNode {
+   const runAction = useActionFeedback();
+   const [name, setName] = useState('');
+-  const [submissionId, setSubmissionId] = useState(items[0]?.submissionId.toString() ?? '');
++  const [workerValue, setWorkerValue] = useState(NO_WORKER_VALUE);
+   const [reason, setReason] = useState('');
+   const [busy, setBusy] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  const canSubmit = name.trim().length > 0 && reason.trim().length > 0 && !busy;
++
+   const handleCreate = async (): Promise<void> => {
+     setBusy(true);
++    setError(null);
+     try {
+-      // Why a seed submission is required: lanes persist only as audit rows, so a
+-      // lane with no submission cannot be recorded — creation is a move to a new name.
++      const workerId = workerValue === NO_WORKER_VALUE ? null : Number(workerValue);
+       const outcome = await runAction(
+         { pending: 'Creating lane…', success: 'Lane created', failure: 'Lane creation failed' },
+-        () => moveEvaluationLane(Number(submissionId), name.trim(), reason.trim()),
++        () => createEvaluationLane(name.trim(), workerId, reason.trim()),
+       );
+-      if (outcome?.success) onDone();
++      if (outcome?.success) {
++        onDone();
++      } else if (outcome?.error !== undefined) {
++        setError(outcome.error);
++      }
+     } finally {
+       setBusy(false);
+     }
+   };
++
+   return (
+-    <Dialog open={true} onOpenChange={(open) => { if (!open) onClose(); }} title="Create lane" description="New lane names apply to a chosen submission via the move flow.">
++    <Dialog
++      open={true}
++      onOpenChange={(open) => { if (!open) onClose(); }}
++      title={labels.laneCreateTitle}
++      description={labels.laneCreateDescription}
++      pending={busy}
++      footer={
++        <>
++          <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>{labels.laneCancel}</Button>
++          <Button variant="positive" size="sm" loading={busy} disabled={!canSubmit} onClick={() => { void handleCreate(); }}>
++            {labels.laneCreateSubmit}
++          </Button>
++        </>
++      }
++    >
+       <div className="space-y-3">
+-        <DialogField id="create-lane-name" label="Lane name">
+-          <input id="create-lane-name" type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} placeholder="e.g. final" list="create-lane-existing" disabled={busy} className={FIELD_CLASSES} />
++        <DialogField id="create-lane-name" label={labels.laneName}>
++          <input
++            id="create-lane-name"
++            type="text"
++            value={name}
++            onChange={(event) => setName(event.target.value)}
++            maxLength={MAX_LANE_NAME_LENGTH}
++            placeholder={labels.laneNamePlaceholder}
++            list="create-lane-existing"
++            disabled={busy}
++            className={FIELD_CLASSES}
++          />
+         </DialogField>
+-        <datalist id="create-lane-existing">{laneNames.map((lane) => <option key={lane} value={lane} />)}</datalist>
+-        <DialogField id="create-lane-submission" label="Submission">
+-          <select id="create-lane-submission" value={submissionId} onChange={(e) => setSubmissionId(e.target.value)} disabled={busy} className={FIELD_CLASSES}>
+-            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username} — {item.taskName}</option>)}
++        {/* Naming an existing lane is a mistake, not a shortcut, so the list only suggests. */}
++        <datalist id="create-lane-existing">
++          {laneNames.map((lane) => <option key={lane} value={lane} />)}
++        </datalist>
++        <DialogField id="create-lane-worker" label={labels.laneWorker}>
++          <select
++            id="create-lane-worker"
++            value={workerValue}
++            onChange={(event) => setWorkerValue(event.target.value)}
++            disabled={busy}
++            className={FIELD_CLASSES}
++          >
++            <option value={NO_WORKER_VALUE}>{labels.laneWorkerAny}</option>
++            {workers.map((worker) => (
++              <option key={worker.id} value={worker.id}>
++                {worker.name}{worker.connected ? '' : ` — ${labels.laneWorkerUnbound}`}
++              </option>
++            ))}
+           </select>
+         </DialogField>
+-        <DialogField id="create-lane-reason" label="Reason *">
+-          <textarea id="create-lane-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={3} maxLength={500} placeholder="Why is this lane created?" disabled={busy} className={FIELD_CLASSES} />
++        <DialogField id="create-lane-reason" label={labels.laneReason}>
++          <textarea
++            id="create-lane-reason"
++            value={reason}
++            onChange={(event) => setReason(event.target.value)}
++            rows={3}
++            maxLength={MAX_REASON_LENGTH}
++            placeholder={labels.laneCreateReasonPlaceholder}
++            disabled={busy}
++            className={FIELD_CLASSES}
++          />
+         </DialogField>
+-        <div className="flex gap-2">
+-          <Button variant="positive" size="sm" loading={busy} disabled={busy || name.trim().length === 0 || reason.trim().length === 0 || submissionId === ''} onClick={() => { void handleCreate(); }}>Create</Button>
+-          <Button variant="ghost" size="sm" disabled={busy} onClick={onClose}>Cancel</Button>
+-        </div>
++        {error !== null && <p role="alert" className="text-xs text-destructive">{error}</p>}
+       </div>
+     </Dialog>
+   );
+diff --git a/admin-panel/src/components/submissions/LaneBoard.tsx b/admin-panel/src/components/submissions/LaneBoard.tsx
+index 6746b273..750a37ae 100644
+--- a/admin-panel/src/components/submissions/LaneBoard.tsx
++++ b/admin-panel/src/components/submissions/LaneBoard.tsx
+@@ -1,71 +1,78 @@
+ 'use client';
+ 
+ import { DndContext, PointerSensor, useDroppable, useSensor, type DragEndEvent } from '@dnd-kit/core';
+-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+-import { CSS } from '@dnd-kit/utilities';
+ import { useMemo, useState } from 'react';
+ import { useRouter } from 'next/navigation';
+ 
+-import { moveEvaluationLane, type LaneBoard as LaneBoardData, type LaneBoardItem } from '@/app/actions/evaluationLanes';
++import type { LaneBoard as LaneBoardData, LaneBoardItem } from '@/app/actions/evaluationLaneBoard';
++import type { EvaluationWorkerSummary } from '@/app/actions/evaluationWorkers';
+ import { Badge } from '@/components/core/Badge';
+ import { Button } from '@/components/core/Button';
+ import { EmptyState } from '@/components/core/EmptyState';
+-import { CreateLaneDialog } from './CreateLaneDialog';
+-import { MoveLaneSelector } from './MoveLaneSelector';
+-import { useActionFeedback } from '@/hooks/useActionFeedback';
++import type { Dictionary } from '@/lib/dictionary';
+ import { hasEffectivePermission } from '@/lib/permission-engine';
+ import { cn } from '@/lib/utils';
+ 
++import { CreateLaneDialog } from './CreateLaneDialog';
++import { LaneCard, type PendingDrop } from './LaneCard';
++import { LaneWorkerAssignment } from './LaneWorkerAssignment';
++
++const UNASSIGNED_DROP_ID = 'drop:unassigned';
++const LANE_DROP_PREFIX = 'drop:lane:';
++
+ interface LaneBoardProps {
+   board: LaneBoardData;
+   permissionKeys: readonly string[];
++  labels: Dictionary['submissions'];
++  locale: string;
+ }
+ 
+-interface PendingDrop {
+-  submissionId: number;
+-  lane: string;
++/** null targets the unassigned column; undefined means a drop id this board does not own. */
++function readTargetLaneId(dropId: string): number | null | undefined {
++  if (dropId === UNASSIGNED_DROP_ID) return null;
++  if (!dropId.startsWith(LANE_DROP_PREFIX)) return undefined;
++  const laneId = Number(dropId.slice(LANE_DROP_PREFIX.length));
++  return Number.isInteger(laneId) ? laneId : undefined;
+ }
+ 
+-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring';
+-
+-// Why module scope: every card formats its own timestamp, so a per-card formatter
+-// would be rebuilt for each row on every render.
+-const LANE_TIME_FORMAT = new Intl.DateTimeFormat();
+-
+-export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
++export function LaneBoard({ board, permissionKeys, labels, locale }: LaneBoardProps): React.ReactNode {
+   const router = useRouter();
+   const sensor = useSensor(PointerSensor, { activationConstraint: { distance: 4 } });
+-  // Why memoized: the key list is stable for the session, so the gate below rebuilds
+-  // the same Set on every render without reading different data.
+   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+-  // Why lane_move, not lane_assign: every card already has a lane, so any
+-  // placement change is a move — matching how SubmissionList gates its modal.
++  // Why lane_move and not lane_assign: administering the lane set is the wider of the two
++  // keys, and a card that already sits in a lane is a move rather than a first placement.
+   const canMove = hasEffectivePermission(effective, 'evaluation:lane_move');
+   const [expandedId, setExpandedId] = useState<number | null>(null);
+   const [pending, setPending] = useState<PendingDrop | null>(null);
+   const [createOpen, setCreateOpen] = useState(false);
+ 
+-  const laneNames = useMemo(() => board.lanes.map((entry) => entry.lane), [board]);
+-  // Why no windowing: the server caps this board before it reaches here, and the
+-  // sibling lists are paginated rather than virtualized. Row virtualisation would
+-  // also unmount the drag handles dnd-kit measures against, so a drop that looks
+-  // available would no longer be droppable.
+-  const allItems = useMemo(() => board.lanes.flatMap((entry) => entry.items), [board]);
++  const laneOptions = useMemo(
++    () => board.lanes.map((lane) => ({ id: lane.id, name: lane.name })),
++    [board],
++  );
+ 
+   const handleDragEnd = (event: DragEndEvent): void => {
+     const { active, over } = event;
+-    if (!over || !canMove) return;
+-    const sourceLane = active.data.current?.lane as string | undefined;
+-    const rawOver = over.data.current?.lane as string | undefined;
+-    const targetLane = rawOver ?? (typeof over.id === 'string' && over.id.startsWith('lane:') ? over.id.slice(5) : undefined);
+-    if (sourceLane === undefined || targetLane === undefined || sourceLane === targetLane) return;
+-    // Why confirm, not direct move: a lane change needs an audit reason, so the
+-    // drop stages the target and the same move action runs after reason entry.
+-    setPending({ submissionId: Number(active.id), lane: targetLane });
++    if (over === null || !canMove) return;
++
++    const sourceLaneId = (active.data.current?.laneId ?? null) as number | null;
++    const targetLaneId = readTargetLaneId(String(over.id));
++    if (targetLaneId === undefined || targetLaneId === sourceLaneId) return;
++
++    const target = laneOptions.find((lane) => lane.id === targetLaneId);
++    if (targetLaneId !== null && target === undefined) return;
++
++    // Why confirm rather than move on drop: a lane change needs an audited reason, so the drop
++    // stages the target and the same move action runs once the reason is entered.
++    setPending({
++      submissionId: Number(active.id),
++      laneId: targetLaneId,
++      laneName: target?.name ?? labels.laneUnassigned,
++    });
+     setExpandedId(Number(active.id));
+   };
+ 
+-  const refresh = (): void => {
++  const finish = (): void => {
+     setPending(null);
+     router.refresh();
+   };
+@@ -74,31 +81,61 @@ export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
+     <div className="space-y-4">
+       <div className="flex flex-wrap items-center gap-2">
+         <Badge variant={board.waitingSource === 'rpc' ? 'success' : 'neutral'}>
+-          {board.waitingSource === 'rpc' ? 'Live queue' : 'Database fallback'}
++          {board.waitingSource === 'rpc' ? labels.laneSourceLive : labels.laneSourceDatabase}
+         </Badge>
+         {canMove && (
+           <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
+-            Create lane
++            {labels.laneCreate}
+           </Button>
+         )}
+       </div>
+ 
+-      {board.lanes.length === 0 ? (
+-        <EmptyState title="No lanes yet" description="Assign a submission to a lane to start the board." />
++      {board.lanes.length === 0 && board.unassignedTotal === 0 ? (
++        <EmptyState title={labels.laneBoardEmptyTitle} description={labels.laneBoardEmptyDescription} />
+       ) : (
+         <DndContext sensors={[sensor]} onDragEnd={handleDragEnd}>
++          {/* Why no row virtualisation: the server caps every column before it reaches here,
++              and dnd-kit measures the drag handles it mounted — unmounting a row mid-drag
++              turns a live drop target into a dead one. */}
+           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+-            {board.lanes.map((entry) => (
++            <LaneColumn
++              dropId={UNASSIGNED_DROP_ID}
++              laneId={null}
++              workerId={null}
++              workers={board.workers}
++              title={labels.laneUnassigned}
++              subtitle={labels.laneUnassignedHint}
++              count={board.unassignedTotal}
++              items={board.unassigned}
++              laneOptions={laneOptions}
++              labels={labels}
++              locale={locale}
++              canMove={canMove}
++              expandedId={expandedId}
++              pending={pending}
++              onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
++              onDone={finish}
++              onCancelDrop={() => setPending(null)}
++            />
++            {board.lanes.map((lane) => (
+               <LaneColumn
+-                key={entry.lane}
+-                lane={entry.lane}
+-                items={entry.items}
+-                laneNames={laneNames}
++                key={lane.id}
++                dropId={`${LANE_DROP_PREFIX}${lane.id}`}
++                laneId={lane.id}
++                workerId={lane.workerId}
++                workers={board.workers}
++                title={lane.name}
++                subtitle={lane.workerName ?? labels.laneWorkerUnbound}
++                count={lane.items.length}
++                items={lane.items}
++                laneOptions={laneOptions}
++                labels={labels}
++                locale={locale}
+                 canMove={canMove}
+                 expandedId={expandedId}
+                 pending={pending}
+                 onToggle={(id) => setExpandedId((current) => (current === id ? null : id))}
+-                onDone={refresh}
++                onDone={finish}
+                 onCancelDrop={() => setPending(null)}
+               />
+             ))}
+@@ -107,99 +144,65 @@ export function LaneBoard({ board, permissionKeys }: LaneBoardProps) {
+       )}
+ 
+       {createOpen && (
+-        <CreateLaneDialog items={allItems} laneNames={laneNames} onClose={() => setCreateOpen(false)} onDone={() => { setCreateOpen(false); router.refresh(); }} />
++        <CreateLaneDialog
++          workers={board.workers}
++          laneNames={laneOptions.map((lane) => lane.name)}
++          labels={labels}
++          onClose={() => setCreateOpen(false)}
++          onDone={() => { setCreateOpen(false); router.refresh(); }}
++        />
+       )}
+     </div>
+   );
+ }
+ 
+-function LaneColumn({ lane, items, laneNames, canMove, expandedId, pending, onToggle, onDone, onCancelDrop }: {
+-  lane: string; items: LaneBoardItem[]; laneNames: string[]; canMove: boolean;
+-  expandedId: number | null; pending: PendingDrop | null;
++function LaneColumn({
++  dropId, laneId, workerId, workers, title, subtitle, count, items, laneOptions, labels, locale,
++  canMove, expandedId, pending, onToggle, onDone, onCancelDrop,
++}: {
++  dropId: string; laneId: number | null; workerId: number | null; workers: readonly EvaluationWorkerSummary[];
++  title: string; subtitle: string; count: number; items: readonly LaneBoardItem[];
++  laneOptions: readonly { id: number; name: string }[]; labels: Dictionary['submissions']; locale: string;
++  canMove: boolean; expandedId: number | null; pending: PendingDrop | null;
+   onToggle: (id: number) => void; onDone: () => void; onCancelDrop: () => void;
+ }): React.ReactNode {
+-  const { setNodeRef, isOver } = useDroppable({ id: `lane:${lane}`, disabled: !canMove });
++  const { setNodeRef, isOver } = useDroppable({ id: dropId, disabled: !canMove });
++
+   return (
+-    <section ref={setNodeRef} aria-label={`Lane ${lane}`} className={cn('rounded-xl border border-border bg-muted/20 p-3 space-y-3', isOver && 'border-primary ring-2 ring-primary/30')}>
++    <section
++      ref={setNodeRef}
++      aria-label={title}
++      className={cn('rounded-xl border border-border bg-muted/20 p-3 space-y-3', isOver && 'border-primary ring-2 ring-primary/30')}
++    >
+       <h2 className="text-sm font-semibold flex items-center justify-between">
+-        {lane}
+-        <span className="text-xs text-muted-foreground tabular-nums">{items.length}</span>
++        <span>{title}</span>
++        <span className="text-xs text-muted-foreground tabular-nums">{count}</span>
+       </h2>
+-      <SortableContext items={items.map((item) => item.submissionId)} strategy={verticalListSortingStrategy}>
+-        <div className="space-y-2">
+-          {items.map((item) => (
+-            <LaneCard
+-              key={item.submissionId}
+-              item={item}
+-              laneNames={laneNames}
+-              canMove={canMove}
+-              expanded={expandedId === item.submissionId}
+-              pending={pending?.submissionId === item.submissionId ? pending : null}
+-              onToggle={() => onToggle(item.submissionId)}
+-              onDone={onDone}
+-              onCancelDrop={onCancelDrop}
+-            />
+-          ))}
+-        </div>
+-      </SortableContext>
+-    </section>
+-  );
+-}
+-
+-function LaneCard({ item, laneNames, canMove, expanded, pending, onToggle, onDone, onCancelDrop }: {
+-  item: LaneBoardItem; laneNames: string[]; canMove: boolean;
+-  expanded: boolean; pending: PendingDrop | null;
+-  onToggle: () => void; onDone: () => void; onCancelDrop: () => void;
+-}): React.ReactNode {
+-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.submissionId, data: { lane: item.lane }, disabled: !canMove });
+-  return (
+-    <article ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }} className={cn('rounded-lg border border-border bg-background p-3 space-y-1.5', isDragging && 'opacity-50 ring-2 ring-primary/40')}>
+-      <div {...attributes} {...listeners} className={canMove ? 'cursor-grab active:cursor-grabbing' : undefined}>
+-        <div className="flex items-center justify-between gap-2">
+-          <span className="font-mono text-xs text-muted-foreground">#{item.submissionId}</span>
+-          <Badge variant={item.waitingCount > 0 ? 'warning' : 'neutral'}>Waiting {item.waitingCount}</Badge>
+-        </div>
+-        <p className="text-sm font-medium">{item.username}</p>
+-        <p className="text-xs text-muted-foreground">{item.taskName} · {LANE_TIME_FORMAT.format(new Date(item.timestamp))}</p>
+-        {item.reason && <p className="text-xs text-muted-foreground italic truncate" title={item.reason}>Last: {item.reason}</p>}
++      <div className="flex items-center justify-between gap-2">
++        <p className="text-xs text-muted-foreground">{subtitle}</p>
++        {/* Why the null guard: the unassigned bucket is not a lane row, so there is no
++            worker for it to bind to and no lane id to record the change against. */}
++        {laneId !== null && canMove && (
++          <LaneWorkerAssignment laneId={laneId} workerId={workerId} workers={workers} labels={labels} />
++        )}
+       </div>
+-      {canMove && (
+-        <Button variant="ghost" size="sm" onClick={onToggle}>{expanded ? 'Hide move' : 'Move to'}</Button>
+-      )}
+-      {pending && <DropConfirm pending={pending} onDone={onDone} onCancel={onCancelDrop} />}
+-      {expanded && !pending && canMove && (
+-        <MoveLaneSelector submissionId={item.submissionId} lanes={laneNames.filter((name) => name !== item.lane)} canMove={canMove} onMoved={onDone} />
+-      )}
+-    </article>
+-  );
+-}
+-
+-function DropConfirm({ pending, onDone, onCancel }: { pending: PendingDrop; onDone: () => void; onCancel: () => void }): React.ReactNode {
+-  const runAction = useActionFeedback();
+-  const [reason, setReason] = useState('');
+-  const [busy, setBusy] = useState(false);
+-  const handleMove = async (): Promise<void> => {
+-    setBusy(true);
+-    try {
+-      // Why same action as the selector: drop and selector are two entries to one
+-      // move flow, so both call moveEvaluationLane with lane + reason.
+-      const outcome = await runAction(
+-        { pending: 'Moving evaluation lane…', success: 'Lane moved', failure: 'Lane move failed' },
+-        () => moveEvaluationLane(pending.submissionId, pending.lane, reason.trim()),
+-      );
+-      if (outcome?.success) onDone();
+-    } finally {
+-      setBusy(false);
+-    }
+-  };
+-  return (
+-    <div className="rounded-md border border-primary/40 bg-primary/5 p-2 space-y-2">
+-      <p className="text-xs font-medium">Move #{pending.submissionId} to {pending.lane}?</p>
+-      <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500} placeholder="Reason (required)" disabled={busy} className={FIELD_CLASSES} />
+-      <div className="flex gap-2">
+-        <Button variant="positive" size="sm" loading={busy} disabled={busy || reason.trim().length === 0} onClick={() => { void handleMove(); }}>Move</Button>
+-        <Button variant="ghost" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>
++      <div className="space-y-2">
++        {items.map((item) => (
++          <LaneCard
++            key={item.submissionId}
++            item={item}
++            laneOptions={laneOptions}
++            labels={labels}
++            locale={locale}
++            canMove={canMove}
++            expanded={expandedId === item.submissionId}
++            pending={pending?.submissionId === item.submissionId ? pending : null}
++            onToggle={() => onToggle(item.submissionId)}
++            onDone={onDone}
++            onCancelDrop={onCancelDrop}
++          />
++        ))}
+       </div>
+-    </div>
++    </section>
+   );
+ }
+diff --git a/admin-panel/src/components/submissions/MoveLaneDialog.tsx b/admin-panel/src/components/submissions/MoveLaneDialog.tsx
+index 4c50ea9c..40103573 100644
+--- a/admin-panel/src/components/submissions/MoveLaneDialog.tsx
++++ b/admin-panel/src/components/submissions/MoveLaneDialog.tsx
+@@ -1,9 +1,11 @@
+ 'use client';
+ 
+-import { useState } from 'react';
++import { useEffect, useState } from 'react';
+ 
++import { listEvaluationLanes } from '@/app/actions/evaluationLanes';
+ import { Button } from '@/components/core/Button';
+-import { Dialog, DialogFooter } from '@/components/core/Dialog';
++import { Dialog } from '@/components/core/Dialog';
++import { useDictionary } from '@/hooks/useDictionary';
+ import type { Dictionary } from '@/lib/dictionary';
+ 
+ import { MoveLaneSelector } from './MoveLaneSelector';
+@@ -14,36 +16,50 @@ export interface MoveLaneDialogProps {
+   readonly navigation: Dictionary['navigation'];
+ }
+ 
++interface LaneOption {
++  id: number;
++  name: string;
++}
++
+ export function MoveLaneDialog({ submissionId, canMove, navigation }: MoveLaneDialogProps): React.JSX.Element | null {
++  const labels = useDictionary().submissions;
+   const [open, setOpen] = useState(false);
++  const [lanes, setLanes] = useState<readonly LaneOption[]>([]);
++
++  // Why load on open: the lane set is an operator-editable table, so a list captured when the
++  // record page rendered would go stale, and an empty list made the selector offer nothing.
++  useEffect(() => {
++    if (!open) return;
++    let cancelled = false;
++    listEvaluationLanes()
++      .then((rows) => { if (!cancelled) setLanes(rows); })
++      .catch(() => { if (!cancelled) setLanes([]); });
++    return () => { cancelled = true; };
++  }, [open]);
++
+   if (!canMove) return null;
++
+   return (
+     <>
+       <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
+-        Move lane
++        {labels.laneMoveTitle}
+       </Button>
+       <Dialog
+         open={open}
+-        onOpenChange={setOpen}
+-        title={`Move lane — ${navigation.evaluation['submission-record'].label} #${submissionId}`}
+-        description="A lane move is recorded with its reason and can be moved again later."
++        onOpenChange={(next) => setOpen(next)}
++        title={`${labels.laneMoveTitle} — ${navigation.evaluation['submission-record'].label} #${submissionId}`}
++        description={labels.laneCreateDescription}
+       >
+         {/* Why the shared selector: the lane board and this record entry point must
+             enforce one reason rule and one double-submit guard, so the form is not
+-            reimplemented here. The selector validates the reason and refreshes the
+-            record on success; closing here returns focus to the invoking control. */}
++            reimplemented here. */}
+         <MoveLaneSelector
+           submissionId={submissionId}
+-          lanes={[]}
+-          allowCreate
++          lanes={lanes}
++          labels={labels}
+           canMove={canMove}
+           onMoved={() => setOpen(false)}
+         />
+-        <DialogFooter>
+-          <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
+-            Close
+-          </Button>
+-        </DialogFooter>
+       </Dialog>
+     </>
+   );
+diff --git a/admin-panel/src/components/submissions/MoveLaneSelector.tsx b/admin-panel/src/components/submissions/MoveLaneSelector.tsx
+index 3c579147..a9ec6c60 100644
+--- a/admin-panel/src/components/submissions/MoveLaneSelector.tsx
++++ b/admin-panel/src/components/submissions/MoveLaneSelector.tsx
+@@ -6,32 +6,43 @@ import { useRouter } from 'next/navigation';
+ import { moveEvaluationLane } from '@/app/actions/evaluationLanes';
+ import { Button } from '@/components/core/Button';
+ import { useActionFeedback } from '@/hooks/useActionFeedback';
++import type { Dictionary } from '@/lib/dictionary';
+ import { cn } from '@/lib/utils';
+ 
++const FIELD_CLASSES =
++  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
++const MAX_REASON_LENGTH = 500;
++/** The empty option clears the lane rather than naming one. */
++const UNASSIGNED_VALUE = '';
++
+ interface MoveLaneSelectorProps {
+   submissionId: number;
+-  lanes: string[];
+-  onMoved?: () => void;
+-  allowCreate?: boolean;
++  lanes: readonly { id: number; name: string }[];
++  /** Unknown from the record-page entry point, where it only suppresses a no-op move. */
++  currentLaneId?: number | null;
++  labels: Dictionary['submissions'];
+   canMove: boolean;
++  onMoved?: () => void;
+ }
+ 
+-const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20';
+-const MAX_REASON_LENGTH = 500;
+-const MAX_LANE_LENGTH = 64;
+-
+-export function MoveLaneSelector({ submissionId, lanes, onMoved, allowCreate = false, canMove }: MoveLaneSelectorProps): React.ReactNode {
++export function MoveLaneSelector({
++  submissionId,
++  lanes,
++  currentLaneId = null,
++  labels,
++  canMove,
++  onMoved,
++}: MoveLaneSelectorProps): React.ReactNode {
+   const router = useRouter();
+   const runAction = useActionFeedback();
+-  const [lane, setLane] = useState('');
++  const [laneValue, setLaneValue] = useState(UNASSIGNED_VALUE);
+   const [reason, setReason] = useState('');
+   const [reasonError, setReasonError] = useState<string | null>(null);
+   const [isMoving, setIsMoving] = useState(false);
+   const reasonInputRef = useRef<HTMLTextAreaElement>(null);
+ 
+-  if (!canMove) {
+-    return null;
+-  }
++  const selectedLaneId = laneValue === UNASSIGNED_VALUE ? null : Number(laneValue);
++  const isUnchanged = selectedLaneId === currentLaneId;
+ 
+   const handleMove = async (): Promise<void> => {
+     setReasonError(null);
+@@ -39,7 +50,7 @@ export function MoveLaneSelector({ submissionId, lanes, onMoved, allowCreate = f
+     try {
+       const outcome = await runAction(
+         { pending: 'Moving evaluation lane…', success: 'Lane moved', failure: 'Lane move failed' },
+-        () => moveEvaluationLane(submissionId, lane.trim(), reason.trim()),
++        () => moveEvaluationLane(submissionId, selectedLaneId, reason.trim()),
+       );
+       if (outcome?.field === 'reason') {
+         setReasonError(outcome.error ?? 'Invalid reason');
+@@ -48,90 +59,77 @@ export function MoveLaneSelector({ submissionId, lanes, onMoved, allowCreate = f
+         setReason('');
+         router.refresh();
+         onMoved?.();
++      } else if (outcome?.error !== undefined) {
++        setReasonError(outcome.error);
+       }
+     } finally {
+       setIsMoving(false);
+     }
+   };
+ 
++  if (!canMove) {
++    return null;
++  }
++
+   return (
+     <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3">
+-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Move lane</h3>
++      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{labels.laneMoveTitle}</h3>
+       <div className="space-y-1.5">
+-        <label htmlFor="move-lane-name" className="text-sm font-medium text-foreground ml-1">Lane</label>
+-        {allowCreate ? (
+-          <>
+-            <input
+-              id="move-lane-name"
+-              type="text"
+-              value={lane}
+-              onChange={(e) => setLane(e.target.value)}
+-              maxLength={MAX_LANE_LENGTH}
+-              placeholder="e.g. final"
+-              list="move-lane-options"
+-              disabled={isMoving}
+-              className={FIELD_CLASSES}
+-            />
+-            <datalist id="move-lane-options">
+-              {lanes.map((name) => (
+-                <option key={name} value={name} />
+-              ))}
+-            </datalist>
+-          </>
+-        ) : (
+-          <select
+-            id="move-lane-name"
+-            value={lane}
+-            onChange={(e) => setLane(e.target.value)}
+-            disabled={isMoving}
+-            className={FIELD_CLASSES}
+-          >
+-            <option value="">Select a lane</option>
+-            {lanes.map((name) => (
+-              <option key={name} value={name}>{name}</option>
+-            ))}
+-          </select>
+-        )}
++        <label htmlFor="move-lane-name" className="text-sm font-medium text-foreground ml-1">{labels.laneName}</label>
++        <select
++          id="move-lane-name"
++          value={laneValue}
++          onChange={(event) => setLaneValue(event.target.value)}
++          disabled={isMoving}
++          className={FIELD_CLASSES}
++        >
++          <option value={UNASSIGNED_VALUE}>{labels.laneUnassigned}</option>
++          {lanes.map((lane) => (
++            <option key={lane.id} value={lane.id}>{lane.name}</option>
++          ))}
++        </select>
+       </div>
+       <div className="space-y-1.5">
+         <label htmlFor="move-lane-reason" className="text-sm font-medium text-foreground ml-1">
+-          Reason <span aria-hidden="true">*</span>
++          {labels.laneReason} <span aria-hidden="true">*</span>
+         </label>
+         <textarea
+           ref={reasonInputRef}
+           id="move-lane-reason"
+           value={reason}
+-          onChange={(e) => {
+-            setReason(e.target.value);
+-            if (reasonError) setReasonError(null);
++          onChange={(event) => {
++            setReason(event.target.value);
++            if (reasonError !== null) setReasonError(null);
+           }}
+           rows={3}
+           maxLength={MAX_REASON_LENGTH}
+-          placeholder="Why is this submission moved to this lane?"
++          placeholder={labels.laneReasonPlaceholder}
+           disabled={isMoving}
+-          aria-invalid={reasonError ? true : undefined}
+-          aria-describedby={reasonError ? 'move-lane-reason-error move-lane-reason-hint' : 'move-lane-reason-hint'}
++          aria-invalid={reasonError !== null ? true : undefined}
++          aria-describedby={reasonError !== null ? 'move-lane-reason-error move-lane-reason-hint' : 'move-lane-reason-hint'}
+           title={reasonError ?? undefined}
+           className={cn(FIELD_CLASSES, 'min-h-20')}
+         />
+         <div className="flex items-start justify-between gap-2">
+           <div>
+-            {reasonError && (
++            {reasonError !== null && (
+               <p id="move-lane-reason-error" role="alert" className="text-xs text-destructive ml-1">{reasonError}</p>
+             )}
+-            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required — recorded with the lane move.</p>
++            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">{labels.laneReasonHint}</p>
+           </div>
+-          <span className="text-xs text-muted-foreground tabular-nums shrink-0" aria-hidden="true">{reason.length}/{MAX_REASON_LENGTH}</span>
++          <span className="text-xs text-muted-foreground tabular-nums shrink-0" aria-hidden="true">
++            {reason.length}/{MAX_REASON_LENGTH}
++          </span>
+         </div>
+       </div>
+       <Button
+         variant="positive"
+         size="sm"
+         loading={isMoving}
+-        disabled={isMoving}
++        disabled={isMoving || isUnchanged || reason.trim().length === 0}
+         onClick={() => { void handleMove(); }}
+       >
+-        Move
++        {labels.laneMoveSubmit}
+       </Button>
+     </div>
+   );
+diff --git a/admin-panel/src/dictionaries/en.json b/admin-panel/src/dictionaries/en.json
+index d076a86e..9f112704 100644
+--- a/admin-panel/src/dictionaries/en.json
++++ b/admin-panel/src/dictionaries/en.json
+@@ -132,7 +132,33 @@
+     "tableEmptyTitle": "No submissions found",
+     "tableEmptyDescription": "Submissions will appear here once contestants start submitting.",
+     "viewSubmission": "View submission",
+-    "lanesDescription": "Drag submissions between lanes or move them with a reason."
++    "lanesDescription": "Drag submissions between lanes or move them with a reason.",
++    "laneBoardEmptyTitle": "No lanes yet",
++    "laneBoardEmptyDescription": "Create a lane to start organising evaluation work.",
++    "laneCreate": "Create lane",
++    "laneCreateTitle": "Create lane",
++    "laneCreateDescription": "A lane groups submissions for evaluation. Bind a worker to route them to it.",
++    "laneName": "Lane name",
++    "laneNamePlaceholder": "e.g. final",
++    "laneWorker": "Worker",
++    "laneWorkerAny": "Any worker",
++    "laneWorkerUnbound": "No worker bound",
++    "laneCreateReasonPlaceholder": "Why is this lane created?",
++    "laneCreateSubmit": "Create",
++    "laneUnassigned": "Unassigned",
++    "laneUnassignedHint": "Submissions not yet placed in a lane.",
++    "laneWaiting": "Waiting",
++    "laneMoveOpen": "Move to",
++    "laneMoveClose": "Hide move",
++    "laneMoveTitle": "Move lane",
++    "laneMoveSubmit": "Move",
++    "laneCancel": "Cancel",
++    "laneReason": "Reason",
++    "laneReasonHint": "Required, recorded with the lane move.",
++    "laneReasonPlaceholder": "Why is this submission moved to this lane?",
++    "laneSelectPlaceholder": "Select a lane",
++    "laneSourceLive": "Live queue",
++    "laneSourceDatabase": "Database fallback"
+   },
+   "admins": {
+     "title": "Administrators",
+diff --git a/admin-panel/src/dictionaries/th.json b/admin-panel/src/dictionaries/th.json
+index 3b8c697d..309cb43a 100644
+--- a/admin-panel/src/dictionaries/th.json
++++ b/admin-panel/src/dictionaries/th.json
+@@ -132,7 +132,33 @@
+     "tableEmptyTitle": "ไม่พบการส่งคำตอบ",
+     "tableEmptyDescription": "การส่งคำตอบจะปรากฏที่นี่เมื่อผู้เข้าแข่งขันเริ่มส่ง",
+     "viewSubmission": "ดูการส่งคำตอบ",
+-    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล"
++    "lanesDescription": "ลากการส่งคำตอบระหว่างแถว หรือย้ายแถวพร้อมระบุเหตุผล",
++    "laneBoardEmptyTitle": "ยังไม่มีแถว",
++    "laneBoardEmptyDescription": "สร้างแถวเพื่อเริ่มจัดระเบียบงานประเมิน",
++    "laneCreate": "สร้างแถว",
++    "laneCreateTitle": "สร้างแถว",
++    "laneCreateDescription": "แถวใช้จัดกลุ่มการส่งคำตอบเพื่อประเมิน และผูก worker เพื่อส่งงานไปยังแถวนั้น",
++    "laneName": "ชื่อแถว",
++    "laneNamePlaceholder": "เช่น final",
++    "laneWorker": "worker",
++    "laneWorkerAny": "worker ใดก็ได้",
++    "laneWorkerUnbound": "ยังไม่ผูก worker",
++    "laneCreateReasonPlaceholder": "เหตุใดจึงสร้างแถวนี้",
++    "laneCreateSubmit": "สร้าง",
++    "laneUnassigned": "ยังไม่จัดแถว",
++    "laneUnassignedHint": "การส่งคำตอบที่ยังไม่อยู่ในแถวใด",
++    "laneWaiting": "รออยู่",
++    "laneMoveOpen": "ย้ายไป",
++    "laneMoveClose": "ซ่อนการย้าย",
++    "laneMoveTitle": "ย้ายแถว",
++    "laneMoveSubmit": "ย้าย",
++    "laneCancel": "ยกเลิก",
++    "laneReason": "เหตุผล",
++    "laneReasonHint": "จำเป็น และบันทึกพร้อมการย้ายแถว",
++    "laneReasonPlaceholder": "เหตุใดจึงย้ายการส่งคำตอบนี้ไปยังแถวนี้",
++    "laneSelectPlaceholder": "เลือกแถว",
++    "laneSourceLive": "คิวสด",
++    "laneSourceDatabase": "ข้อมูลสำรองจากฐานข้อมูล"
+   },
+   "admins": {
+     "title": "ผู้ดูแลระบบ",
+diff --git a/admin-panel/tests/lane-board-cap.test.ts b/admin-panel/tests/lane-board-cap.test.ts
+index dafeafbc..04fe8587 100644
+--- a/admin-panel/tests/lane-board-cap.test.ts
++++ b/admin-panel/tests/lane-board-cap.test.ts
+@@ -1,108 +1,134 @@
+ import { describe, expect, it, vi, beforeEach } from 'vitest';
+ 
+-interface AuditArgs {
+-  take?: number;
++interface SubmissionRow {
++  id: number;
++  lane_id: number | null;
++  timestamp: Date;
++  tasks: { name: string };
++  participations: { user_id: number; users: { username: string } };
+ }
+ 
+-interface SubmissionArgs {
+-  take?: number;
+-  where: { id: { in: number[] } };
++interface LaneRow {
++  id: number;
++  name: string;
++  worker_id: number | null;
++  evaluation_workers: { id: number; name: string } | null;
+ }
+ 
+-const calls = { audit: [] as AuditArgs[], submissions: [] as SubmissionArgs[] };
+ const stubs = {
+-  auditRows: [] as Array<{ entity_id: string; actor_id: number | null; after_values: unknown }>,
+-  submissions: [] as Array<{
+-    id: number;
+-    timestamp: Date;
+-    tasks: { name: string };
+-    participations: { user_id: number; users: { username: string } };
+-  }>,
++  lanes: [] as LaneRow[],
++  workers: [] as Array<{ id: number; shard: number; name: string; last_seen_at: Date | null }>,
++  submissions: [] as SubmissionRow[],
++  unassignedTotal: 0,
+ };
+ 
+ vi.mock('@/lib/prisma', () => ({
+   prisma: {
++    // Why a throwing stub: lane membership is now a column, and reading audit rows to rebuild it
++    // is the defect this change removes. A regression here must fail loudly, not pass quietly.
+     audit_log: {
+-      findMany: async (args: AuditArgs) => {
+-        calls.audit.push(args);
+-        return args.take === undefined ? stubs.auditRows : stubs.auditRows.slice(0, args.take);
++      findMany: () => {
++        throw new Error('the lane board must not read audit_log');
+       },
+     },
++    evaluation_lanes: {
++      findMany: async () => stubs.lanes,
++    },
++    evaluation_workers: {
++      findMany: async () => stubs.workers,
++    },
+     submissions: {
+-      findMany: async (args: SubmissionArgs) => {
+-        calls.submissions.push(args);
+-        const ids = new Set(args.where.id.in);
+-        return stubs.submissions.filter((row) => ids.has(row.id));
++      findMany: async (args: { where: { lane_id: { in: number[] } | null } }) => {
++        const laneFilter = args.where.lane_id;
++        if (laneFilter === null) {
++          return stubs.submissions.filter((row) => row.lane_id === null);
++        }
++        const ids = new Set(laneFilter.in);
++        return stubs.submissions.filter((row) => row.lane_id !== null && ids.has(row.lane_id));
+       },
+-      count: async () => 0,
++      count: async (args: { where: Record<string, unknown> }) =>
++        'participations' in args.where ? 0 : stubs.unassignedTotal,
+     },
+   },
+ }));
++
+ vi.mock('@/lib/permissions', () => ({ ensurePermission: vi.fn(async () => undefined) }));
+ vi.mock('@/lib/audit', () => ({ recordAudit: vi.fn(async () => undefined) }));
+ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+-vi.stubGlobal('fetch', async () => {
+-  throw new Error('queue RPC unavailable in tests');
+-});
+-
+-const { getLaneBoard } = await import('@/app/actions/evaluationLanes');
++// Why empty: the registry refresh must be a no-op here so the board reads only its own fixtures.
++vi.mock('@/lib/worker-endpoints', () => ({ readConfiguredWorkers: async () => [] }));
++// Why null: an unavailable queue makes the board take the database path, which the stubs serve.
++vi.mock('@/lib/evaluation-rpc', () => ({
++  callEvaluationRpc: async () => null,
++  unwrapRpcEnvelope: () => null,
++}));
+ 
+-function assignmentRow(submissionId: number, lane: string) {
+-  return { entity_id: String(submissionId), actor_id: 7, after_values: { lane, reason: null } };
+-}
++const { getLaneBoard } = await import('@/app/actions/evaluationLaneBoard');
+ 
+-function submissionRow(id: number) {
++function submissionRow(id: number, laneId: number | null): SubmissionRow {
+   return {
+     id,
++    lane_id: laneId,
+     timestamp: new Date('2026-01-01T00:00:00Z'),
+     tasks: { name: 'task-a' },
+     participations: { user_id: id, users: { username: `user${id}` } },
+   };
+ }
+ 
++function laneRow(id: number, name: string): LaneRow {
++  return { id, name, worker_id: 1, evaluation_workers: { id: 1, name: 'worker-a' } };
++}
++
+ beforeEach(() => {
+-  calls.audit = [];
+-  calls.submissions = [];
+-  stubs.auditRows = [];
++  stubs.lanes = [];
++  stubs.workers = [];
+   stubs.submissions = [];
++  stubs.unassignedTotal = 0;
+ });
+ 
+-describe('getLaneBoard bounding', () => {
+-  it('caps the audit scan so lane history cannot grow the response without limit', async () => {
+-    stubs.auditRows = Array.from({ length: 5000 }, (_, index) => assignmentRow(index + 1, 'judge-1'));
++describe('getLaneBoard', () => {
++  it('reads lanes from the lane table instead of rebuilding them from audit rows', async () => {
++    stubs.lanes = [laneRow(1, 'first'), laneRow(2, 'second')];
+ 
+-    await getLaneBoard();
++    const board = await getLaneBoard();
+ 
+-    expect(calls.audit[0].take).toBeGreaterThan(0);
+-    expect(calls.audit[0].take).toBeLessThanOrEqual(2000);
++    expect(board.lanes.map((lane) => lane.name)).toEqual(['first', 'second']);
++    expect(board.lanes[0].workerName).toBe('worker-a');
+   });
+ 
+-  it('pins the submission lookup to the capped assignment count', async () => {
+-    stubs.auditRows = [assignmentRow(1, 'judge-1')];
+-    stubs.submissions = [submissionRow(1)];
++  it('exposes the unassigned bucket so work with no lane is never invisible', async () => {
++    stubs.unassignedTotal = 12;
++    stubs.submissions = [submissionRow(7, null)];
+ 
+-    await getLaneBoard();
++    const board = await getLaneBoard();
+ 
+-    expect(calls.submissions[0].take).toBe(calls.submissions[0].where.id.in.length);
++    expect(board.unassignedTotal).toBe(12);
++    expect(board.unassigned.map((item) => item.submissionId)).toEqual([7]);
++    expect(board.unassigned[0].laneId).toBeNull();
+   });
+ 
+-  it('trims a single lane that exceeds the per-lane item cap', async () => {
+-    stubs.auditRows = Array.from({ length: 260 }, (_, index) => assignmentRow(index + 1, 'judge-1'));
+-    stubs.submissions = Array.from({ length: 260 }, (_, index) => submissionRow(index + 1));
++  it('caps a single lane so one busy lane cannot crowd out the others', async () => {
++    stubs.lanes = [laneRow(1, 'busy')];
++    stubs.submissions = Array.from({ length: 260 }, (_, index) => submissionRow(index + 1, 1));
+ 
+     const board = await getLaneBoard();
+ 
+-    expect(board.lanes).toHaveLength(1);
+     expect(board.lanes[0].items).toHaveLength(200);
+   });
+ 
+-  it('keeps every lane when the total is under the per-lane cap', async () => {
+-    stubs.auditRows = [assignmentRow(1, 'judge-1'), assignmentRow(2, 'judge-2')];
+-    stubs.submissions = [submissionRow(1), submissionRow(2)];
++  it('separates lane items from the unassigned bucket', async () => {
++    stubs.lanes = [laneRow(1, 'first')];
++    stubs.submissions = [submissionRow(1, 1), submissionRow(2, null)];
++
++    const board = await getLaneBoard();
++
++    expect(board.lanes[0].items.map((item) => item.submissionId)).toEqual([1]);
++    expect(board.unassigned.map((item) => item.submissionId)).toEqual([2]);
++  });
+ 
++  it('reports the waiting source as database when the queue RPC is unavailable', async () => {
+     const board = await getLaneBoard();
+ 
+-    expect(board.lanes.map((lane) => lane.lane)).toEqual(['judge-1', 'judge-2']);
+-    expect(board.lanes.every((lane) => lane.items.length === 1)).toBe(true);
++    expect(board.waitingSource).toBe('database');
+   });
+ });
+diff --git a/scripts/__check_rls_coverage.sh b/scripts/__check_rls_coverage.sh
+index 6d4309eb..ea616baa 100644
+--- a/scripts/__check_rls_coverage.sh
++++ b/scripts/__check_rls_coverage.sh
+@@ -54,16 +54,20 @@ if [ ! -s "$tmp_schema" ]; then
+   log_die "no models found in $SCHEMA" 1
+ fi
+ 
+-# WHY: extract table set from ENABLE ROW LEVEL SECURITY across migration history.
++# WHY: extract the RLS-covered table set from migration history. Coverage is the ALTER TABLE
++# ... ENABLE ROW LEVEL SECURITY statement and nothing else. A bare to_regclass('public.X')
++# occurrence is NOT evidence of RLS: the same guard wraps CREATE TABLE, so counting it made a
++# newly created table look covered while it had no policy and no RLS at all — a fail-open hole
++# in the very check written to catch one. The ENABLE regex still matches the EXECUTE-wrapped
++# form used by the generated guards, so the ENABLE form alone is sufficient.
+ # WHY LC_ALL=C on these sorts and on the comms below: collation is machine-dependent, so unpinned
+ # sort/comm disagree about ordering — comm only agrees with inputs sorted its own way — and the
+ # check then passes locally and fails wherever the locale differs from the author's (a real CI failure).
+ tmp_a=$(mktemp)
+ tmp_b=$(mktemp)
+ trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b"' EXIT
+-grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
+ grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
+-cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
++cat "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
+ 
+ # WHY two-direction comm: missing = fail-open security hole (model has no RLS), extra = drift (RLS for a dropped table).
+ missing=$(LC_ALL=C comm -23 "$tmp_schema" "$tmp_mig" || true)
+diff --git a/scripts/__generate_rls_sql.sh b/scripts/__generate_rls_sql.sh
+index 9ec91dbb..1966982a 100644
+--- a/scripts/__generate_rls_sql.sh
++++ b/scripts/__generate_rls_sql.sh
+@@ -70,13 +70,15 @@ tmp_a=$(mktemp)
+ tmp_b=$(mktemp)
+ trap 'rm -f "$tmp_models" "$tmp_covered" "$tmp_a" "$tmp_b"' EXIT
+ 
+-# WHY: collect every table with ENABLE ROW LEVEL SECURITY somewhere in migration history.
+-# Handles both the to_regclass guard form and the direct ALTER TABLE form (including inside EXECUTE).
++# WHY: collect every table that actually has ENABLE ROW LEVEL SECURITY in migration history.
++# Coverage is that statement alone: a bare to_regclass('public.X') occurrence must NOT count,
++# because the same guard wraps CREATE TABLE — counting it marked a brand-new table as covered
++# while it carried no RLS, so this generator emitted nothing for it and the table shipped
++# unprotected. The regex matches the EXECUTE-wrapped form the emitted guards use.
+ # WHY LC_ALL=C on these sorts: the committed migration history is emitted in C order, so anything
+ # emitted below must use that same order, and comm only agrees with inputs sorted the same way.
+-grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
+ grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
+-cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_covered"
++cat "$tmp_b" | LC_ALL=C sort -u > "$tmp_covered"
+ 
+ count=$(wc -l < "$tmp_models" | tr -d ' ')
+ 

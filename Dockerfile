@@ -1,11 +1,22 @@
 # syntax=docker/dockerfile:1
-# Supported combinations: ubuntu:noble, debian:bookworm.
-#
-# Base-image policy: digests are bumped manually (dependabot-style PRs), never
-# via in-build `apt-get upgrade`. To pin an immutable base, resolve the digest
-# (`docker buildx imagetools inspect ubuntu:noble`) and set:
-#   ARG BASE_IMAGE=ubuntu:noble@sha256:<digest>
-ARG BASE_IMAGE=ubuntu:noble
+
+# Base image (ubuntu:noble or debian:bookworm); never apt-upgraded in-build.
+# Base-image policy (docs/decisions/image-digest-pinning.md): the default carries tag+digest
+# so `FROM ${BASE_IMAGE}` resolves to fixed bits, and package drift is handled by bumping the
+# digest (Renovate's dockerfile manager) rather than by an in-build upgrade. An operator
+# override via --build-arg BASE_IMAGE=... must carry its own tag AND @sha256 digest; a bare
+# tag here would reintroduce the float this pin removes.
+ARG BASE_IMAGE=ubuntu:noble@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+
+# The ranking web server is a Rust binary. It is built in a stage of its own
+# because the runtime image must not carry a compiler: the same image also
+# runs untrusted submission tooling, and a toolchain there would widen what
+# a sandbox escape can reach.
+FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS ranking-build
+WORKDIR /build
+COPY ranking-web/ ./
+RUN cargo build --release
+
 FROM ${BASE_IMAGE}
 
 # Default mirror. Override with --build-arg APT_MIRROR=mirror.example.com
@@ -70,15 +81,22 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked <<EOF
 #!/bin/bash -ex
     export DEBIAN_FRONTEND=noninteractive
-    
+
+    # Create the isolate user as a system user before anything installs it: the
+    # apt package's postinst would otherwise assign it the next free uid (1001),
+    # which collides with cmsuser's hardcoded -u 1001 in the later block. A
+    # system uid keeps it out of the regular-user range entirely.
+    getent passwd isolate >/dev/null || \
+        useradd -r -d /var/local/lib/isolate -M -s /usr/sbin/nologin isolate
+
     # Detect Architecture
     ARCH=$(dpkg --print-architecture)
     
-    if [ "\$ARCH" = "amd64" ]; then
+    if [ "$ARCH" = "amd64" ]; then
         echo "Installing Isolate from UCW Repository (AMD64)..."
-        CODENAME=$(source /etc/os-release; echo \$VERSION_CODENAME)
+        CODENAME=$(source /etc/os-release; echo $VERSION_CODENAME)
         echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/isolate.asc]" \
-            "http://www.ucw.cz/isolate/debian/ \${CODENAME}-isolate main" \
+            "http://www.ucw.cz/isolate/debian/ ${CODENAME}-isolate main" \
             >/etc/apt/sources.list.d/isolate.list
         curl https://www.ucw.cz/isolate/debian/signing-key.asc \
             >/etc/apt/keyrings/isolate.asc
@@ -104,6 +122,24 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     if [ -f /etc/isolate ]; then
         sed -i 's@^cg_root .*@cg_root = /sys/fs/cgroup@' /etc/isolate
     fi
+
+    # Provision the sandbox identity unconditionally: the source branch above
+    # only ever creates the isolate group, and the apt package does not set up
+    # subuid/subgid either. Without the isolate user and its subordinate uid
+    # ranges, isolate's user-namespace sandboxing exits 2 with
+    # "User isolate not found in /etc/subuid" on every submission.
+    getent passwd isolate >/dev/null || \
+        useradd -r -d /var/local/lib/isolate -M -s /usr/sbin/nologin isolate
+    mkdir -p /var/local/lib/isolate
+    chown isolate:isolate /var/local/lib/isolate
+    # 231072 is the third block: ubuntu owns 100000-165535 and useradd grants
+    # cmsuser the next block (165536-231071) at :130, so this range collides with neither.
+    grep -q '^isolate:' /etc/subuid || echo 'isolate:231072:65536' >> /etc/subuid
+    grep -q '^isolate:' /etc/subgid || echo 'isolate:231072:65536' >> /etc/subgid
+    # Fail the image build here rather than ship a sandbox that cannot start.
+    getent passwd isolate >/dev/null
+    grep -q '^isolate:' /etc/subuid
+    grep -q '^isolate:' /etc/subgid
 EOF
 
 # Create cmsuser user with least-privilege sudo and access to isolate
@@ -161,8 +197,18 @@ EOF
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 python3 src/install.py venv
 ENV PATH="/home/cmsuser/cms/bin:$PATH"
 
+# Built in the ranking-build stage; the runtime layer stays toolchain-free.
+COPY --from=ranking-build --chown=cmsuser:cmsuser /build/target/release/cms-ranking /home/cmsuser/cms/bin/cms-ranking
+
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
+
+# credits.json sits at the checkout root, outside the installed package, so the
+# loader's upward walk from site-packages never reaches the copy under src/.
+# Place it beside the venv (an ancestor of site-packages) so the walk finds it,
+# and pin CMS_CREDITS_FILE so resolution does not depend on the walk at all.
+COPY --chown=cmsuser:cmsuser credits.json /home/cmsuser/cms/credits.json
+ENV CMS_CREDITS_FILE=/home/cmsuser/cms/credits.json
 
 RUN <<EOF
 #!/bin/bash -ex
@@ -171,7 +217,6 @@ RUN <<EOF
     sed -e 's|/cmsuser:your_password_here@localhost:5432/cmsdb"|/postgres@devdb:5432/cmsdb"|' \
         -e 's/127.0.0.1/0.0.0.0/' \
         ./config/cms.sample.toml >../cms/etc/cms-devdb.toml
-    sed -i 's/127.0.0.1/0.0.0.0/' ../cms/etc/cms_ranking.toml
 EOF
 
 CMD ["/bin/bash"]

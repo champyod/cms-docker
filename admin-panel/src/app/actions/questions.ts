@@ -1,9 +1,9 @@
 'use server'
 
 import { prisma } from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
 import { revalidatePath } from 'next/cache';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
+import { ACTION_PERMISSIONS } from '@/lib/permission-engine';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { recordAudit } from '@/lib/audit';
 
@@ -21,15 +21,20 @@ export async function getQuestions(contestId: number) {
   });
 }
 
+/** How a reply answered the question: the statement settled it, or an answer had to clarify it. */
+export type QuestionResolutionKind = 'clarification_needed' | 'settled_by_statement';
+
 export async function replyToQuestion(questionId: number, adminId: number, data: {
   reply_subject: string;
   reply_text: string;
+  resolution_kind?: QuestionResolutionKind;
 }) {
-  await ensurePermission('question:answer');
+  await ensurePermission(ACTION_PERMISSIONS.replyToQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', {
     reply_subject: data.reply_subject,
     reply_text: data.reply_text,
+    resolution_kind: data.resolution_kind,
   }, permissions);
   if (allowed.reply_subject === undefined || allowed.reply_text === undefined) {
     return { success: false, error: 'Insufficient field permissions' };
@@ -42,6 +47,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
         admin_id: adminId,
         reply_subject: allowed.reply_subject,
         reply_text: allowed.reply_text,
+        resolution_kind: allowed.resolution_kind,
         reply_timestamp: new Date(),
         ignored: false,
       }
@@ -62,7 +68,7 @@ export async function replyToQuestion(questionId: number, adminId: number, data:
 }
 
 export async function ignoreQuestion(questionId: number) {
-  await ensurePermission('question:ignore');
+  await ensurePermission(ACTION_PERMISSIONS.ignoreQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', { ignored: true }, permissions);
   if (allowed.ignored === undefined) {
@@ -90,7 +96,7 @@ export async function ignoreQuestion(questionId: number) {
 }
 
 export async function unignoreQuestion(questionId: number) {
-  await ensurePermission('question:ignore');
+  await ensurePermission(ACTION_PERMISSIONS.unignoreQuestion);
   const permissions = await getPermissions();
   const allowed = stripDisallowedFields('questions', { ignored: false }, permissions);
   if (allowed.ignored === undefined) {
@@ -115,24 +121,4 @@ export async function unignoreQuestion(questionId: number) {
     const e = error as Error;
     return { success: false, error: e.message };
   }
-}
-
-export async function getUnansweredQuestions(contestId: number | null) {
-  await ensurePermission('question:list');
-  const where: Record<string, unknown> = {
-    reply_timestamp: null,
-    ignored: false
-  };
-
-  if (contestId) {
-    where.participations = { contest_id: contestId };
-  }
-
-  return prisma.questions.findMany({
-    where: where as Prisma.questionsWhereInput,
-    include: {
-      participations: { include: { users: { select: { username: true } } } }
-    },
-    orderBy: { question_timestamp: 'desc' }
-  });
 }

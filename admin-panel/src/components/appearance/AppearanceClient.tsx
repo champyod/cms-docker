@@ -1,28 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Image as ImageIcon, Save, Settings2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { Image as ImageIcon, Settings2, ExternalLink } from 'lucide-react';
 import NextImage from 'next/image';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
+import { DisplayTab } from '@/components/appearance/DisplayTab';
 import { Card } from '@/components/core/Card';
-import { Button } from '@/components/core/Button';
-import { PageContent, PageHeader } from '@/components/core/Layout';
-import { useToast } from '@/components/providers/ToastProvider';
-import { readConfigToml, updateConfigToml } from '@/app/actions/appearance';
-import { cn } from '@/lib/utils';
+import { SurfaceLoadState } from '@/components/core/SurfaceLoadState';
+import { Tabs } from '@/components/core/Tabs';
+import { readConfigToml } from '@/app/actions/appearance';
+import { useDictionary } from '@/hooks/useDictionary';
+import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
+import { withBasePath } from '@/lib/base-path';
+import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
+import { buildRoute } from '@/lib/navigation/routes';
 
-type TabKey = 'branding' | 'services';
+type TabKey = 'branding' | 'services' | 'display';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'branding', label: 'Branding' },
   { key: 'services', label: 'Services' },
+  { key: 'display', label: 'Display' },
 ];
-
-interface BrandingFields {
-  rankingLogoPath: string;
-  rankingUsername: string;
-  rankingPassword: string;
-}
 
 const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Ranking', keys: ['RANKING_LISTEN_PORT', 'RANKING_DOMAIN', 'RANKING_LOGO_PATH'] },
@@ -31,92 +32,89 @@ const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
   { title: 'Infrastructure', keys: ['MONITOR_INTERVAL', 'BACKUP_INTERVAL_MINS', 'PROMETHEUS_PORT'] },
 ];
 
-function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {
+function AppearanceTabs({ active, onChange }: { active: TabKey; onChange: (key: TabKey) => void }) {
   return (
-    <div className="flex gap-2 rounded-xl bg-muted p-1 w-fit">
-      {TABS.map((tab) => (
-        <button
-          key={tab.key}
-          type="button"
-          onClick={() => onChange(tab.key)}
-          className={cn(
-            'rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
-            active === tab.key ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
+    <Tabs
+      items={TABS.map((tab) => ({ id: tab.key, label: tab.label }))}
+      activeId={active}
+      ariaLabel="Appearance sections"
+      onSelect={(id) => onChange(id as TabKey)}
+    />
   );
 }
 
-function BrandingTab({
+export interface BrandingFields {
+  rankingLogoPath: string;
+}
+
+/**
+ * The scoreboard's own settings are edited on the Ranking appearance page, which owns every
+ * appearance column, so this tab previews the logo and points at the surface that manages it
+ * rather than carrying a second editor of the same row.
+ */
+export function BrandingTab({
+  logoPreview,
+  logoHref,
   branding,
   onFieldChange,
-  onSave,
-  saving,
-  logoPreview,
 }: {
-  branding: BrandingFields;
-  onFieldChange: (key: keyof BrandingFields, value: string) => void;
-  onSave: () => void;
-  saving: boolean;
   logoPreview: string;
+  logoHref: string;
+  branding?: BrandingFields;
+  onFieldChange?: (key: keyof BrandingFields, value: string) => void;
 }) {
   return (
     <div className="space-y-6">
+      {/* Ranking Logo Card */}
       <Card className="space-y-4">
-        <div className="flex items-center gap-2">
-          <ImageIcon className="size-4 text-primary" />
-          <h2 className="text-sm font-semibold text-foreground">Ranking Logo</h2>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="size-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Scoreboard Branding Logo</h2>
+          </div>
+          <Link href={logoHref} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
+            Manage uploads on Ranking page
+            <ExternalLink className="size-3" />
+          </Link>
         </div>
-        <div className="flex justify-center rounded-xl bg-black/20 p-4">
+        <div className="flex justify-center rounded-xl bg-muted/40 p-4">
           {logoPreview ? (
-            <NextImage alt="Ranking logo preview" src={logoPreview} width={320} height={112} className="max-h-28 w-auto object-contain" unoptimized />
+            <NextImage
+              alt="Ranking logo preview"
+              src={logoPreview}
+              width={320}
+              height={112}
+              className="max-h-28 max-w-full h-auto w-auto object-contain"
+              unoptimized
+            />
           ) : (
-            <span className="text-sm text-muted-foreground">No logo configured — upload on the Ranking page</span>
+            <span className="text-sm text-muted-foreground">
+              No logo configured — upload on the Ranking page
+            </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground">Manage uploads on the Ranking page. This preview is read-only here and busts cache via ?ts.</p>
+        <p className="text-xs text-muted-foreground">
+          Logo assets are centralized in the database and hot-reloaded across instances.
+        </p>
       </Card>
 
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-sm font-semibold text-foreground">Branding Fields (read-only preview — save edits to config.toml)</h2>
-          <Button size="sm" icon={Save} loading={saving} onClick={onSave}>
-            Save to config.toml
-          </Button>
-        </div>
-        <div className="grid gap-4">
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">RANKING_LOGO_PATH</span>
-            <input
-              value={branding.rankingLogoPath}
-              onChange={(e) => onFieldChange('rankingLogoPath', e.target.value)}
-              placeholder='e.g. "./config/assets/logo.png"'
-              className="w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">RANKING_USERNAME</span>
-            <input
-              value={branding.rankingUsername}
-              onChange={(e) => onFieldChange('rankingUsername', e.target.value)}
-              className="w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
-            />
-          </label>
-          <label className="space-y-1">
-            <span className="text-xs font-medium text-muted-foreground">RANKING_PASSWORD</span>
-            <input
-              value={branding.rankingPassword}
-              onChange={(e) => onFieldChange('rankingPassword', e.target.value)}
-              type="password"
-              className="w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60"
-            />
-          </label>
-        </div>
-      </Card>
+      {/* Branding Fields (read-only configuration view) */}
+      {branding ? (
+        <Card className="space-y-4">
+          <h2 className="text-sm font-semibold text-foreground">Branding Assets Path</h2>
+          <div className="grid gap-4">
+            <label className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">RANKING_LOGO_PATH</span>
+              <input
+                value={branding.rankingLogoPath}
+                onChange={(e) => onFieldChange?.('rankingLogoPath', e.target.value)}
+                placeholder='e.g. "./config/assets/logo.png"'
+                className="h-11 w-full rounded-lg border border-input bg-card/50 px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring/60 focus-visible:ring-2 focus-visible:ring-ring/50"
+              />
+            </label>
+          </div>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -138,79 +136,52 @@ function ServicesTab({ values }: { values: Record<string, string> }) {
               </div>
             ))}
           </div>
-          <p className="text-xs text-muted-foreground">Read-only preview. Edit config.toml directly or extend save to these keys.</p>
+          <p className="text-xs text-muted-foreground">
+            Read-only configuration preview loaded from config.toml.
+          </p>
         </Card>
       ))}
     </div>
   );
 }
 
-export function AppearanceClient({ locale }: { locale: string }) {
-  void locale;
-  const { addToast } = useToast();
+export function AppearanceClient(): React.JSX.Element {
+  const dict = useDictionary();
+  const locale = localeFromPathname(usePathname());
   const [active, setActive] = useState<TabKey>('branding');
   const [values, setValues] = useState<Record<string, string>>({});
-  const [branding, setBranding] = useState<BrandingFields>({ rankingLogoPath: '', rankingUsername: '', rankingPassword: '' });
-  const [saving, setSaving] = useState(false);
-  const [logoPreview] = useState<string>(`/api/ranking/logo?ts=${Date.now()}`);
+  const [logoPreview] = useState<string>(() => `/api/ranking/logo?ts=${Date.now()}`);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const result = await readConfigToml();
-      if (cancelled) return;
-      if (result.success) {
-        setValues(result.values);
-        setBranding({
-          rankingLogoPath: (result.values['RANKING_LOGO_PATH'] ?? '').replace(/^"|"$/g, ''),
-          rankingUsername: (result.values['RANKING_USERNAME'] ?? '').replace(/^"|"$/g, ''),
-          rankingPassword: (result.values['RANKING_PASSWORD'] ?? '').replace(/^"|"$/g, ''),
-        });
-      }
-    }
-    void load();
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async (): Promise<void> => {
+    const tomlResult = await readConfigToml();
+
+    if (!tomlResult.success) throw new Error(tomlResult.error);
+    setValues(tomlResult.values);
   }, []);
 
-  const handleFieldChange = useCallback((key: keyof BrandingFields, value: string) => {
-    setBranding((prev) => ({ ...prev, [key]: value }));
-  }, []);
+  const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    try {
-      const updates: Record<string, string> = {};
-      if (branding.rankingLogoPath) updates['RANKING_LOGO_PATH'] = `"${branding.rankingLogoPath}"`;
-      if (branding.rankingUsername) updates['RANKING_USERNAME'] = `"${branding.rankingUsername}"`;
-      if (branding.rankingPassword) updates['RANKING_PASSWORD'] = `"${branding.rankingPassword}"`;
-      if (Object.keys(updates).length === 0) {
-        addToast({ type: 'warning', title: 'Nothing to save', message: 'No branding fields changed.' });
-        return;
-      }
-      const result = await updateConfigToml(updates);
-      if (result.success) {
-        addToast({ type: 'success', title: 'Saved', message: 'config.toml updated. Run config sync to apply.' });
-      } else {
-        addToast({ type: 'error', title: 'Save failed', message: result.error });
-      }
-    } catch (error) {
-      addToast({ type: 'error', title: 'Save failed', message: (error as Error).message });
-    } finally {
-      setSaving(false);
-    }
-  }, [addToast, branding]);
+  if (status.kind !== 'idle') {
+    return (
+      <SurfaceLoadState
+        status={status}
+        loadingTitle={dict['navigation']['system']['appearance']['label']}
+        onRetry={reload}
+        retryLabel={dict.states.retry.label}
+      />
+    );
+  }
 
   return (
-    <PageContent>
-      <PageHeader title="Appearance" description="Branding and system service customization from config.toml (read-only preview, save edits where enabled)." />
-      <TabBar active={active} onChange={setActive} />
+    <div className="space-y-6">
+      <AppearanceTabs active={active} onChange={setActive} />
       {active === 'branding' ? (
-        <BrandingTab branding={branding} onFieldChange={handleFieldChange} onSave={handleSave} saving={saving} logoPreview={logoPreview} />
-      ) : (
+        <BrandingTab logoPreview={withBasePath(logoPreview)} logoHref={buildRoute(locale, 'ranking.board')} />
+      ) : active === 'services' ? (
         <ServicesTab values={values} />
+      ) : (
+        <DisplayTab />
       )}
-    </PageContent>
+    </div>
   );
 }

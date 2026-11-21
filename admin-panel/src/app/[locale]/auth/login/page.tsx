@@ -1,120 +1,41 @@
 'use client';
 
 import React, { useActionState, useCallback, useEffect, useRef, useState } from 'react';
+import { LogoMark } from '@/components/brand/Logo';
 import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
-import { Lock, User, AlertCircle, ShieldCheck } from 'lucide-react';
+import { CaptchaWidget } from '@/components/core/CaptchaWidget';
+import { Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { getCaptchaState, login } from '@/app/actions/auth';
 import { AuthBackground } from '@/components/core/PageBackground';
 import { Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
 import type { CaptchaProvider } from '@/lib/captcha';
 
+const CAPTCHA_SCRIPTS: Record<CaptchaProvider, string> = {
+  turnstile: 'https://challenges.cloudflare.com/turnstile/v0/api.js',
+  hcaptcha: 'https://hcaptcha.com/1/api.js',
+  recaptcha: 'https://www.google.com/recaptcha/api.js',
+};
+
 interface CaptchaUiState {
   required: boolean;
   enabled: boolean;
   provider: CaptchaProvider;
   siteKey: string;
-}
-
-declare global {
-  interface Window {
-    onCaptchaSuccess?: (token: string) => void;
-    onCaptchaExpired?: () => void;
-    turnstile?: { render: (el: string | HTMLElement, opts: Record<string, unknown>) => string; reset: (id?: string) => void };
-    hcaptcha?: { render: (el: string | HTMLElement, opts: Record<string, unknown>) => string; reset: () => void };
-  }
-}
-
-function CaptchaWidget({
-  provider,
-  siteKey,
-  onToken,
-}: {
-  provider: CaptchaProvider;
-  siteKey: string;
-  onToken: (token: string) => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const renderedRef = useRef(false);
-
-  useEffect(() => {
-    if (!siteKey || renderedRef.current) return;
-    const container = containerRef.current;
-    if (!container) return;
-
-    const tryRender = () => {
-      if (renderedRef.current) return;
-      if (provider === 'turnstile' && window.turnstile && container) {
-        container.innerHTML = '';
-        try {
-          window.turnstile.render(container, {
-            sitekey: siteKey,
-            callback: (token: string) => onToken(token),
-            'expired-callback': () => onToken(''),
-            'error-callback': () => onToken(''),
-            theme: 'dark',
-          });
-          renderedRef.current = true;
-        } catch {
-          container.innerHTML = `<div class="cf-turnstile" data-sitekey="${siteKey}" data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired"></div>`;
-        }
-        return;
-      }
-      if (provider === 'hcaptcha' && window.hcaptcha && container) {
-        container.innerHTML = '';
-        try {
-          window.hcaptcha.render(container, {
-            sitekey: siteKey,
-            callback: (token: string) => onToken(token),
-            'expired-callback': () => onToken(''),
-            'error-callback': () => onToken(''),
-            theme: 'dark',
-          });
-          renderedRef.current = true;
-        } catch {
-          container.innerHTML = `<div class="h-captcha" data-sitekey="${siteKey}" data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired"></div>`;
-        }
-      }
-    };
-
-    const interval = window.setInterval(tryRender, 300);
-    tryRender();
-    return () => window.clearInterval(interval);
-  }, [provider, siteKey, onToken]);
-
-  if (provider === 'turnstile') {
-    return (
-      <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 backdrop-blur-sm">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <ShieldCheck className="h-3.5 w-3.5" />
-          <span>Security check required</span>
-        </div>
-        <div ref={containerRef} className="min-h-16 flex items-center justify-center">
-          <div className="cf-turnstile" data-sitekey={siteKey} data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 backdrop-blur-sm">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <ShieldCheck className="h-3.5 w-3.5" />
-        <span>Security check required</span>
-      </div>
-      <div ref={containerRef} className="min-h-16 flex items-center justify-center">
-        <div className="h-captcha" data-sitekey={siteKey} data-callback="onCaptchaSuccess" data-expired-callback="onCaptchaExpired" />
-      </div>
-    </div>
-  );
+  // The two thresholds, so the form can say when the challenge appears and when
+  // the account locks out — the host-level bans are a different layer and are
+  // not counted here.
+  threshold: number;
+  banThreshold: number;
 }
 
 export default function LoginPage() {
   const [state, loginAction, pending] = useActionState(login, null);
   const [captchaToken, setCaptchaToken] = useState('');
   const [captchaUi, setCaptchaUi] = useState<CaptchaUiState | null>(null);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const usernameRef = useRef<HTMLInputElement>(null);
 
   const fetchCaptchaState = useCallback(async (username?: string) => {
@@ -129,6 +50,8 @@ export default function LoginPage() {
         enabled: result.enabled,
         provider: result.provider,
         siteKey: result.siteKey,
+        threshold: result.threshold,
+        banThreshold: result.banThreshold,
       });
     } catch {
       setCaptchaUi(null);
@@ -147,6 +70,8 @@ export default function LoginPage() {
           enabled: true,
           provider: (state.captchaProvider as CaptchaProvider) ?? 'turnstile',
           siteKey: state.captchaSiteKey ?? captchaUi?.siteKey ?? '',
+          threshold: captchaUi?.threshold ?? 0,
+          banThreshold: captchaUi?.banThreshold ?? 0,
         });
         const username = usernameRef.current?.value ?? '';
         if (username) void fetchCaptchaState(username);
@@ -176,14 +101,14 @@ export default function LoginPage() {
   useEffect(() => {
     if (!showCaptcha || !activeSiteKey) return;
     const existing = document.querySelector<HTMLScriptElement>(
-      activeProvider === 'hcaptcha' ? 'script[data-captcha="hcaptcha"]' : 'script[data-captcha="turnstile"]'
+      `script[data-captcha="${activeProvider}"]`
     );
     if (existing) return;
     const script = document.createElement('script');
     script.async = true;
     script.defer = true;
-    script.dataset.captcha = activeProvider === 'hcaptcha' ? 'hcaptcha' : 'turnstile';
-    script.src = activeProvider === 'hcaptcha' ? 'https://hcaptcha.com/1/api.js' : 'https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.dataset.captcha = activeProvider;
+    script.src = CAPTCHA_SCRIPTS[activeProvider];
     document.head.appendChild(script);
   }, [showCaptcha, activeProvider, activeSiteKey]);
 
@@ -196,9 +121,7 @@ export default function LoginPage() {
     <AuthBackground>
       <Card className="w-full max-w-md p-8">
         <Stack align="center" gap={8} className="mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Lock className="w-6 h-6 text-foreground" />
-          </div>
+          <LogoMark className="size-12" />
           <Stack align="center" gap={2}>
             <Text variant="h2">Welcome Back</Text>
             <Text variant="muted">Sign in to access the admin panel</Text>
@@ -208,7 +131,7 @@ export default function LoginPage() {
         <form action={loginAction}>
           <Stack gap={6}>
             {state?.error && (
-              <Stack direction="row" align="center" gap={3} className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+              <Stack direction="row" align="center" gap={3} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm animate-in fade-in slide-in-from-top-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <p>{state.error}</p>
               </Stack>
@@ -223,21 +146,45 @@ export default function LoginPage() {
               required
               onBlur={handleUsernameBlur}
             />
-            <Input
-              name="password"
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              icon={<Lock className="w-4 h-4" />}
-              required
-            />
+            <div className="relative">
+              <Input
+                name="password"
+                label="Password"
+                type={isPasswordVisible ? 'text' : 'password'}
+                placeholder="••••••••"
+                icon={<Lock className="w-4 h-4" />}
+                className="pr-28"
+                required
+              />
+              {/* Why anchored to the bottom row: Input stacks its label above the
+                  field, so the last 44px of this wrapper is the field itself and a
+                  44px icon button centres on it without depending on label height. */}
+              <div className="absolute right-2 bottom-0 flex h-11 items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={isPasswordVisible ? EyeOff : Eye}
+                  iconOnly
+                  tooltip={isPasswordVisible ? 'Hide' : 'Reveal'}
+                  onClick={() => setIsPasswordVisible((previous) => !previous)}
+                />
+              </div>
+            </div>
 
             {showCaptcha && (
               <>
+                {captchaUi && captchaUi.banThreshold > 0 && (
+                  <Text variant="muted" className="text-xs">
+                    A challenge is required after {captchaUi.threshold} failed attempts; the
+                    account and address lock out at {captchaUi.banThreshold}.
+                  </Text>
+                )}
                 <CaptchaWidget provider={activeProvider} siteKey={activeSiteKey} onToken={setCaptchaToken} />
                 <input type="hidden" name="captchaToken" value={captchaToken} />
                 <input type="hidden" name="cf-turnstile-response" value={captchaToken} />
                 <input type="hidden" name="h-captcha-response" value={captchaToken} />
+                <input type="hidden" name="g-recaptcha-response" value={captchaToken} />
+                <input type="hidden" name="captchaProvider" value={activeProvider} />
               </>
             )}
 

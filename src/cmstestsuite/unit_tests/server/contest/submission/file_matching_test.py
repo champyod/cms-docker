@@ -80,7 +80,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
 
     # Test success scenarios.
 
-    def test_success_language_required(self):
+    def test_it_matches_files_for_a_language_specific_format(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # Both languageful and languageless files with and without
@@ -108,7 +108,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                                  "ham": EGGS_CONTENT})
         self.assertIs(language, CPP_LANG)
 
-    def test_success_language_agnostic(self):
+    def test_it_matches_files_for_a_language_agnostic_format(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # Languageless files with and without codename and filename are
@@ -129,7 +129,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
 
     # Test support for language-agnostic formats.
 
-    def test_language_agnostic_always_possible(self):
+    def test_it_allows_no_language_for_a_language_agnostic_format(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # In language-agnostic settings, passing a (non-None) language
@@ -149,7 +149,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
 
     # Tests for issues matching files.
 
-    def test_bad_file(self):
+    def test_it_rejects_files_that_do_not_match_the_format(self):
         self.languages.update({C_LANG})
 
         # Different codename.
@@ -175,7 +175,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                 [ReceivedFile(None, "foo.txt", FOO_CONTENT)],
                 None, {"bar.txt"}, None)
 
-    def test_bad_extension(self):
+    def test_it_rejects_a_filename_with_an_incompatible_extension(self):
         self.languages.update({C_LANG})
 
         # Even when the codename (and, here, but not necessarily, the
@@ -186,7 +186,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                 [ReceivedFile("foo.%l", "foo.cpp", FOO_CONTENT)],
                 "C", {"foo.%l"}, None)
 
-    def test_extension_without_leading_period(self):
+    def test_it_replaces_the_whole_placeholder_with_the_extension(self):
         self.languages.update({PASCAL_LANG})
 
         # Check that the *whole* trailing `.%l` string is replaced with
@@ -213,7 +213,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
         self.assertEqual(files, {"foo.%l": FOO_CONTENT})
         self.assertIs(language, PASCAL_LANG)
 
-    def test_duplicate_files(self):
+    def test_it_rejects_two_files_matching_the_same_codename(self):
         self.languages.update({C_LANG})
 
         # If two files match the same codename (even if through
@@ -224,7 +224,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                  ReceivedFile(None, "foo.c", BAR_CONTENT)],
                 None, {"foo.%l"}, None)
 
-    def test_ambiguous_file(self):
+    def test_it_rejects_or_disambiguates_a_file_matching_several_elements(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # For an admittedly weird submission format, a single file could
@@ -256,7 +256,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                  ReceivedFile(None, "foo.c", FOO_CONTENT)],
                 "C", {"foo.%l", "foo.c"}, None)
 
-    def test_ambiguous_file_2(self):
+    def test_it_rejects_a_file_matching_several_language_specific_elements(self):
         self.languages.update(
             {SELF_OVERLAP_LANG, LONG_OVERLAP_LANG, SHORT_OVERLAP_LANG})
 
@@ -282,7 +282,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
 
     # Tests for language issues and ways to solve them.
 
-    def test_forbidden_language(self):
+    def test_it_rejects_a_language_that_is_not_allowed(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # The (autoguessed) language that would match is forbidden.
@@ -297,7 +297,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                 [ReceivedFile("foo.%l", "foo.c", FOO_CONTENT)],
                 "C", {"foo.%l"}, ["C++", "Py2"])
 
-    def test_missing_extensions(self):
+    def test_it_resolves_an_extensionless_match_only_with_a_language_hint(self):
         self.languages.update({C_LANG, CPP_LANG})
         given_files = [ReceivedFile("foo.%l", None, FOO_CONTENT)]
         submission_format = {"foo.%l"}
@@ -320,7 +320,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
         self.assertEqual(files, {"foo.%l": FOO_CONTENT})
         self.assertIs(language, CPP_LANG)
 
-    def test_ambiguous_extensions(self):
+    def test_it_resolves_two_languages_sharing_an_extension_with_a_hint(self):
         self.languages.update({PY2_LANG, PY3_LANG})
         given_files = [ReceivedFile("foo.%l", "foo.py", FOO_CONTENT)]
         submission_format = {"foo.%l"}
@@ -343,7 +343,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
         self.assertEqual(files, {"foo.%l": FOO_CONTENT})
         self.assertIs(language, PY3_LANG)
 
-    def test_overlapping_extensions(self):
+    def test_it_resolves_overlapping_extensions_with_a_language_hint(self):
         self.languages.update({LONG_OVERLAP_LANG, SHORT_OVERLAP_LANG})
         given_files = [ReceivedFile(None, "foo.suf.fix", FOO_CONTENT)]
         submission_format = {"foo.%l", "foo.suf.%l"}
@@ -368,7 +368,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
 
     # Test some corner cases.
 
-    def test_neither_codename_nor_filename(self):
+    def test_it_rejects_a_file_without_codename_or_filename(self):
         self.languages.update({C_LANG})
 
         # Without neither codename nor filename, there's nothing to base
@@ -384,7 +384,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                 [ReceivedFile(None, None, FOO_CONTENT)],
                 None, {"foo.txt"}, None)
 
-    def test_nonexisting_given_languages(self):
+    def test_it_rejects_a_given_language_that_does_not_exist(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # Passing a language that doesn't exist means the contestant
@@ -394,7 +394,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
                 [ReceivedFile("foo.%l", "foo.c", FOO_CONTENT)],
                 "BadLang", {"foo.%l"}, None)
 
-    def test_nonexisting_allowed_languages(self):
+    def test_it_ignores_nonexisting_allowed_languages(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # Non-existing languages among the allowed languages are seen as
@@ -415,7 +415,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
         self.assertEqual(files, {"foo.%l": FOO_CONTENT})
         self.assertIs(language, C_LANG)
 
-    def test_given_files_empty(self):
+    def test_it_rejects_an_empty_file_list(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # No files vacuously match every submission format for every
@@ -440,7 +440,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
             match_files_and_language(
                 list(), None, {"foo.txt"}, None)
 
-    def test_submission_format_empty(self):
+    def test_it_rejects_any_file_when_the_format_is_empty(self):
         self.languages.update({C_LANG, CPP_LANG})
 
         # If no files are wanted, any file will cause an invalid match.
@@ -462,7 +462,7 @@ class TestMatchFilesAndLanguages(unittest.TestCase):
             match_files_and_language(
                 list(), None, set(), None)
 
-    def test_allowed_languages_empty(self):
+    def test_it_rejects_all_when_no_language_is_allowed(self):
         self.languages.update({C_LANG})
 
         # An empty list of allowed languages means no language allowed:

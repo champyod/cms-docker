@@ -87,8 +87,11 @@ def add_participation(
                     return False
             if password is not None:
                 if is_hashed:
+                    # Already a bcrypt hash: only tag it with its method.
                     password = build_password(password, method)
                 else:
+                    # A raw password: hash_password() is the single entry that
+                    # stores one.
                     password = hash_password(password, method)
 
             participation = Participation(
@@ -140,29 +143,40 @@ def main():
         help="password of the user in plain text")
     password_group.add_argument(
         "-H", "--hashed-password", action="store", type=utf8_decoder,
-        help="password of the user, already hashed using the given algorithm "
-             "(currently only --bcrypt)")
+        help="password of the user, already bcrypt-hashed")
     method_group = parser.add_mutually_exclusive_group()
     method_group.add_argument(
+        "--method", dest="method", action="store", default="bcrypt",
+        help="how to store the password; bcrypt is the only accepted method "
+             "(and the default). Storing a password in plain text is refused: "
+             "it would put the user's secret in the database and the row could "
+             "not log in")
+    method_group.add_argument(
         "--bcrypt", dest="method", action="store_const", const="bcrypt",
-        help="whether the password will be stored in bcrypt-hashed format "
-             "(if omitted it will be stored in plain text)")
+        default=argparse.SUPPRESS,
+        help="deprecated alias for --method bcrypt")
 
     args = parser.parse_args()
 
-    if args.hashed_password is not None and args.method is None:
-        parser.error("hashed password given but no method specified")
+    if args.method != "bcrypt":
+        parser.error(
+            "method %r is not allowed: it would store the password in a form "
+            "that is not a bcrypt hash, leaving the user's secret readable in "
+            "the database. Use the default, --method bcrypt." % args.method)
 
     if args.contest_id is None:
         args.contest_id = ask_for_contest()
 
-    success = add_participation(
-        args.username, args.contest_id,
-        args.ip, args.delay_time, args.extra_time,
-        args.plaintext_password or args.hashed_password,
-        args.method or "plaintext",
-        args.hashed_password is not None, args.team,
-        args.hidden, args.unrestricted)
+    try:
+        success = add_participation(
+            args.username, args.contest_id,
+            args.ip, args.delay_time, args.extra_time,
+            args.plaintext_password or args.hashed_password,
+            args.method,
+            args.hashed_password is not None, args.team,
+            args.hidden, args.unrestricted)
+    except ValueError as error:
+        parser.error(str(error))
     return 0 if success is True else 1
 
 

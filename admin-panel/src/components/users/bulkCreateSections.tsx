@@ -2,10 +2,10 @@
 
 import { AlertTriangle, FileSpreadsheet, Table2, Upload, Wand2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
-import { cn } from '@/lib/utils';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { useDictionary } from '@/hooks/useDictionary';
+import { IpAllowlistInput } from './IpAllowlistInput';
 import { EXPECTED_FIELDS } from './csvTemplate';
-import type { GenerationMode, PreviewRow } from './csvPreview';
 
 export interface BulkSubmitFailure {
   rowIndex: number;
@@ -29,120 +29,66 @@ export function HeaderWarnings({ warnings }: HeaderWarningsProps) {
   if (warnings.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-warning text-xs space-y-1">
+    <InlineAlert tone="warning" density="compact" className="space-y-1 border-warning/30">
       {warnings.map((warning) => (
         <div key={warning} className="flex items-center gap-2">
           <AlertTriangle className="w-3 h-3" /> {warning}
         </div>
       ))}
-    </div>
+    </InlineAlert>
   );
 }
 
-const CARD_FIELDS = ['first_name', 'last_name', 'username', 'password', 'email', 'timezone', 'team'] as const;
-type CardField = (typeof CARD_FIELDS)[number];
-const MAX_VISIBLE_PREVIEW_ROWS = 100;
-
-const CHECKBOX_CLASS = 'size-4 accent-primary cursor-pointer';
-
-interface PreviewTableProps {
-  rows: PreviewRow[];
-  totalRowCount: number;
-  selectedRowIndices: Set<number>;
-  onSelectAll: (checked: boolean) => void;
-  onToggleRow: (rowIndex: number, checked: boolean) => void;
+interface PreviewStateAlertsProps {
+  stalePreview: boolean;
+  blockingSelectedCount: number;
+  skipInvalid: boolean;
+  onReparse: () => void;
+  onToggleSkipInvalid: () => void;
 }
 
-export function PreviewTable({ rows, totalRowCount, selectedRowIndices, onSelectAll, onToggleRow }: PreviewTableProps) {
-  const rowsLeft = Math.max(totalRowCount - MAX_VISIBLE_PREVIEW_ROWS, 0);
-
+export function PreviewStateAlerts({
+  stalePreview,
+  blockingSelectedCount,
+  skipInvalid,
+  onReparse,
+  onToggleSkipInvalid,
+}: PreviewStateAlertsProps) {
   return (
     <>
-      <div className="space-y-3 md:hidden">
-        {rows.length === 0 ? (
-          <MobileCard>
-            <div className="py-2 text-center text-xs text-muted-foreground">No preview rows yet</div>
-          </MobileCard>
-        ) : (
-          rows.map((row) => (
-            <MobileCard key={row.rowIndex}>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  title={`Select row ${row.rowIndex}`}
-                  className={CHECKBOX_CLASS}
-                  checked={selectedRowIndices.has(row.rowIndex)}
-                  onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
-                />
-                <span className="min-w-0 truncate font-medium">{row.first_name} {row.last_name}</span>
-              </label>
-              {CARD_FIELDS.map((field: CardField) => (
-                row[field] ? <MobileCardRow key={field} label={field} value={row[field]} /> : null
-              ))}
-              <MobileCardRow label="Issues" value={row.issues.join(', ') || '-'} />
-            </MobileCard>
-          ))
-        )}
-      </div>
-      <div className="hidden border border-border rounded-lg overflow-hidden md:block">
-        <div className="max-h-80 overflow-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-muted/50 text-muted-foreground sticky top-0 z-10">
-              <tr>
-                <th className="text-left px-2 py-2 w-8">
-                  <input
-                    type="checkbox"
-                    title="Select all rows"
-                    className={CHECKBOX_CLASS}
-                    checked={selectedRowIndices.size > 0 && selectedRowIndices.size === totalRowCount}
-                    onChange={(e) => onSelectAll(e.target.checked)}
-                  />
-                </th>
-                {CARD_FIELDS.map((column: CardField) => (
-                  <th key={column} className="text-left px-2 py-2">{column}</th>
-                ))}
-                <th className="text-left px-2 py-2">Issues</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
-                    No preview rows yet
-                  </td>
-                </tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.rowIndex} className={cn('border-t border-border', selectedRowIndices.has(row.rowIndex) && 'bg-primary/10')}>
-                    <td className="px-2 py-2 text-center">
-                      <input
-                        type="checkbox"
-                        title={`Select row ${row.rowIndex}`}
-                        className={CHECKBOX_CLASS}
-                        checked={selectedRowIndices.has(row.rowIndex)}
-                        onChange={(e) => onToggleRow(row.rowIndex, e.target.checked)}
-                      />
-                    </td>
-                    <td className="px-2 py-2">{row.first_name}</td>
-                    <td className="px-2 py-2">{row.last_name}</td>
-                    <td className="px-2 py-2">{row.username}</td>
-                    <td className="px-2 py-2">{row.password}</td>
-                    <td className="px-2 py-2">{row.email}</td>
-                    <td className="px-2 py-2">{row.timezone}</td>
-                    <td className="px-2 py-2">{row.team}</td>
-                    <td className="px-2 py-2 text-warning">{row.issues.join(', ') || '-'}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {rowsLeft > 0 && (
-          <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border bg-muted/30">
-            ... {rowsLeft} rows left (showing first {MAX_VISIBLE_PREVIEW_ROWS})
-          </div>
-        )}
-      </div>
+      {stalePreview && (
+        <InlineAlert
+          tone="warning"
+          density="compact"
+          className="border-warning/30"
+          actions={
+            <Button variant="secondary" size="sm" onClick={onReparse}>
+              Re-parse now
+            </Button>
+          }
+        >
+          The CSV text changed after this preview was parsed. Re-parse before creating, or the rows
+          created will not match the rows below.
+        </InlineAlert>
+      )}
+
+      {blockingSelectedCount > 0 && (
+        <InlineAlert
+          tone="warning"
+          density="compact"
+          className="border-warning/30"
+          actions={
+            <Button variant="secondary" size="sm" onClick={onToggleSkipInvalid}>
+              {skipInvalid
+                ? `Include ${blockingSelectedCount} invalid row(s)`
+                : `Skip ${blockingSelectedCount} invalid row(s)`}
+            </Button>
+          }
+        >
+          {blockingSelectedCount} selected row(s) cannot be created: a required field is missing or the
+          field count does not match the header.
+        </InlineAlert>
+      )}
     </>
   );
 }
@@ -153,21 +99,21 @@ interface SubmitResultBannerProps {
 }
 
 export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResultBannerProps) {
+  const downloadAction = result.success && result.downloadUrl ? (
+    <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={onDownloadCredentials}>
+      Download Credentials CSV
+    </Button>
+  ) : undefined;
   return (
-    <div className={cn(
-      'rounded-lg border p-3 text-xs',
-      result.success ? 'border-success/30 bg-success/10 text-success' : 'border-destructive/30 bg-destructive/10 text-destructive'
-    )}>
+    <InlineAlert
+      tone={result.success ? 'success' : 'destructive'}
+      density="compact"
+      className={result.success ? 'border-success/30' : 'border-destructive/30'}
+      actions={downloadAction}
+    >
       {result.success ? (
         <div className="space-y-1">
           <div>Created: {result.createdCount} | Failed: {result.failedCount}</div>
-          {result.downloadUrl && (
-            <div className="pt-2">
-              <Button variant="secondary" size="sm" icon={FileSpreadsheet} onClick={onDownloadCredentials}>
-                Download Credentials CSV
-              </Button>
-            </div>
-          )}
           {Array.isArray(result.failed) && result.failed.length > 0 && (
             <div className="max-h-32 overflow-auto">
               {result.failed.map((failure) => (
@@ -179,34 +125,51 @@ export function SubmitResultBanner({ result, onDownloadCredentials }: SubmitResu
       ) : (
         <div>{result.error || 'Bulk create failed'}</div>
       )}
-    </div>
+    </InlineAlert>
   );
 }
 
 interface BulkCreateInputSectionProps {
   contests: Array<{ id: number; name: string }>;
   contestId: number;
+  canReadContests: boolean;
   csvText: string;
   placeholder: string;
+  ip: string;
   onContestIdChange: (contestId: number) => void;
   onCsvTextChange: (text: string) => void;
+  onIpChange: (value: string) => void;
   onDownloadTemplate: () => void;
   onUploadFile: (file: File | undefined) => void;
   onRebuildPreview: () => void;
-  onFillEmpty: (mode: GenerationMode) => void;
+  onFillEmpty: () => void;
 }
 
 const SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
 
 const LABEL_BUTTON_CLASS = 'inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer text-sm transition-colors';
 
+function BulkCreateIpAllowlistField({ value, onChange }: { value: string; onChange: (value: string) => void }): React.JSX.Element {
+  const ipCopy = useDictionary().participation.ip;
+  return (
+    <div className="space-y-1">
+      <label className="text-xs text-muted-foreground">{ipCopy.label}</label>
+      <IpAllowlistInput value={value} onChange={onChange} />
+      <p className="text-xs text-muted-foreground">{ipCopy.hint}</p>
+    </div>
+  );
+}
+
 export function BulkCreateInputSection({
   contests,
   contestId,
+  canReadContests,
   csvText,
   placeholder,
+  ip,
   onContestIdChange,
   onCsvTextChange,
+  onIpChange,
   onDownloadTemplate,
   onUploadFile,
   onRebuildPreview,
@@ -235,20 +198,24 @@ export function BulkCreateInputSection({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <label className="text-xs text-muted-foreground">Contest for team mapping:</label>
-        <select
-          value={contestId}
-          onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
-          className={SELECT_CLASS}
-          title="Contest for team mapping"
-        >
-          <option value={0}>No contest</option>
-          {contests.map((contest) => (
-            <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
-          ))}
-        </select>
-      </div>
+      {canReadContests && (
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-muted-foreground">Contest for team mapping:</label>
+          <select
+            value={contestId}
+            onChange={(event) => onContestIdChange(Number(event.target.value) || 0)}
+            className={SELECT_CLASS}
+            title="Contest for team mapping"
+          >
+            <option value={0}>No contest</option>
+            {contests.map((contest) => (
+              <option key={contest.id} value={contest.id}>#{contest.id} - {contest.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {canReadContests && <BulkCreateIpAllowlistField value={ip} onChange={onIpChange} />}
 
       <textarea
         value={csvText}
@@ -261,16 +228,12 @@ export function BulkCreateInputSection({
         <Button variant="ghost" icon={FileSpreadsheet} onClick={onRebuildPreview}>
           Parse &amp; Preview
         </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('both')}>
-          Random Username + Password
-        </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('username')}>
-          Random Username
-        </Button>
-        <Button variant="ghost" icon={Wand2} onClick={() => onFillEmpty('password')}>
-          Random Password
+        <Button variant="ghost" icon={Wand2} onClick={onFillEmpty}>
+          Fill Empty Credentials
         </Button>
       </div>
     </>
   );
 }
+
+export { PreviewTable } from './bulkCreatePreviewTable';

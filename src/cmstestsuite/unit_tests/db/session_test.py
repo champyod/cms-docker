@@ -34,7 +34,7 @@ def _patch_db(s):
 class TestCustomPsycopg2Connect(unittest.TestCase):
     """Tests for the function custom_psycopg2_connect."""
 
-    def test_network(self, connect):
+    def test_it_connects_over_tcp_with_the_given_parameters(self, connect):
         # Simple TCP connection.
         with _patch_db("postgresql+psycopg2://usrn:pwd@hooost:5433/dbname"):
             r = custom_psycopg2_connection()
@@ -46,7 +46,7 @@ class TestCustomPsycopg2Connect(unittest.TestCase):
                 password="pwd",
                 database="dbname")
 
-    def test_network_missing_port(self, connect):
+    def test_it_defaults_the_port_to_5432_when_absent(self, connect):
         # If port is missing, the default 5432 is used.
         with _patch_db("postgresql+psycopg2://usrn:pwd@hooost/dbname"):
             r = custom_psycopg2_connection()
@@ -58,7 +58,7 @@ class TestCustomPsycopg2Connect(unittest.TestCase):
                 password="pwd",
                 database="dbname")
 
-    def test_unix_domain_socket(self, connect):
+    def test_it_connects_over_a_unix_domain_socket(self, connect):
         with _patch_db("postgresql+psycopg2://usrn:pwd@/dbname"):
             r = custom_psycopg2_connection()
             self.assertIs(r, connect.return_value)
@@ -69,7 +69,7 @@ class TestCustomPsycopg2Connect(unittest.TestCase):
                 password="pwd",
                 database="dbname")
 
-    def test_unix_domain_socket_custom_dir(self, connect):
+    def test_it_uses_the_host_parameter_as_the_socket_directory(self, connect):
         with _patch_db("postgresql+psycopg2://"
                        "usrn:pwd@/dbname?host=/var/postgresql"):
             r = custom_psycopg2_connection()
@@ -81,7 +81,7 @@ class TestCustomPsycopg2Connect(unittest.TestCase):
                 password="pwd",
                 database="dbname")
 
-    def test_missing_password(self, connect):
+    def test_it_accepts_a_missing_password(self, connect):
         with _patch_db("postgresql+psycopg2://u@h:1/db"):
             r = custom_psycopg2_connection()
             self.assertIs(r, connect.return_value)
@@ -92,7 +92,7 @@ class TestCustomPsycopg2Connect(unittest.TestCase):
                 password=None,
                 database="db")
 
-    def test_not_psycopg2(self, connect):
+    def test_it_rejects_a_url_that_is_not_psycopg2(self, connect):
         with _patch_db("sqlite://file"):
             with self.assertRaises(AssertionError):
                 custom_psycopg2_connection()

@@ -46,6 +46,15 @@ from .base import BaseHandler, require_permission
 logger = logging.getLogger(__name__)
 
 
+# The marker a reply leaves on the question (see Question.resolution_kind): the statement
+# itself answered it, or the answer had to say what the statement does not.
+SETTLED_BY_STATEMENT = "settled_by_statement"
+CLARIFICATION_NEEDED = "clarification_needed"
+
+# The quick answer that points the contestant at the statement instead of answering them.
+STATEMENT_QUICK_ANSWER = "nocomment"
+
+
 class QuestionsHandler(BaseHandler):
     """Page to see and send messages to all the contestants.
 
@@ -124,6 +133,9 @@ class QuestionReplyHandler(QuestionActionHandler):
             question.reply_text = ""
 
         question.reply_timestamp = make_datetime()
+        question.resolution_kind = (
+            SETTLED_BY_STATEMENT if reply_subject_code == STATEMENT_QUICK_ANSWER
+            else CLARIFICATION_NEEDED)
         question.admin = self.current_user
 
         if self.try_commit():

@@ -13,7 +13,12 @@
 
 {% if admin is undefined %}
 <h1>Welcome</h1>
-    {% if handler.get_argument("login_error", "") != "" %}
+    {% set login_error = handler.get_argument("login_error", "") %}
+    {% if login_error == "captcha_failed" %}
+<h4 class="alert">The challenge could not be verified. Please try again.</h4>
+    {% elif login_error == "captcha_unavailable" %}
+<h4 class="alert">The challenge service is unreachable. Please try again in a moment.</h4>
+    {% elif login_error != "" %}
 <h4 class="alert">Failed to log in.</h4>
     {% endif %}
 <p>Please log in:</p>
@@ -26,7 +31,7 @@
   <div class="section">
     <label>
       <span>Username</span>
-      <input type="text" name="username" autofocus>
+      <input type="text" name="username" value="{{ handler.get_argument('username', '') }}" autofocus>
     </label>
   </div>
   <div class="section">
@@ -35,6 +40,15 @@
       <input type="password" name="password" autocomplete="current-password">
     </label>
   </div>
+  {# WHY the widget renders only once the captcha is both configured and demanded:
+     showing it before the threshold would make it look mandatory and would block an
+     ordinary user who simply mistyped. The markup is built by cms.server.captcha so
+     the field names stay the ones the panel's client idiom already posts. #}
+  {% if captcha_widget %}
+  <div class="section">
+    {{ captcha_widget|safe }}
+  </div>
+  {% endif %}
   <div class="section">
     <button type="submit">Login</button>
     <button type="reset">Reset</button>

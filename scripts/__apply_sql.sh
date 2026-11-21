@@ -90,8 +90,7 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
     exit 0
   fi
   log_info "applying pre-push capture $CAPTURE_FILE to $DB_NAME via $DB_CONTAINER..."
-  if ! docker exec -i \
-    -e PGPASSWORD="$DB_PASS" \
+  if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
@@ -143,8 +142,7 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
   log_info "applying ${#SQL_FILES[@]} role SQL file(s) to $DB_NAME via $DB_CONTAINER (bootstrap)..."
   for sql_file in "${SQL_FILES[@]}"; do
     log_info "→ $sql_file"
-    if ! docker exec -i \
-      -e PGPASSWORD="$DB_PASS" \
+    if ! docker_exec_db "$DB_PASS" -i \
       "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
       -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
       -f - < "$sql_file"; then
@@ -171,8 +169,7 @@ log_info "applying ${#SQL_FILES[@]} SQL file(s) to $DB_NAME via $DB_CONTAINER...
 
 for sql_file in "${SQL_FILES[@]}"; do
   log_info "→ $sql_file"
-  if ! docker exec -i \
-    -e PGPASSWORD="$DB_PASS" \
+  if ! docker_exec_db "$DB_PASS" -i \
     "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -v "cms_backup_password=$CMS_BACKUP_PASSWORD" \
     -f - < "$sql_file"; then
@@ -199,7 +196,7 @@ else
   for _t in "${_RLS_EXPECTED_TABLES[@]}"; do _RLS_LIST_SQL+=",('$_t')"; done
   _RLS_LIST_SQL="${_RLS_LIST_SQL#,}"
   _RLS_RC=0
-  _RLS_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity;" 2>&1)" || _RLS_RC=$?
+  _RLS_COUNT="$(docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity;" 2>&1)" || _RLS_RC=$?
   if [[ $_RLS_RC -ne 0 ]]; then
     # WHY log_warn not log_die: a docker/psql execution failure (container gone, network hiccup) is infra, not a security verdict — must not mask or fake a gap as pass/fail.
     log_warn "RLS ENABLE check skipped: docker/psql execution failed (exit $_RLS_RC): $_RLS_COUNT"
@@ -207,7 +204,7 @@ else
     _RLS_COUNT_TRIMMED="$(printf '%s' "$_RLS_COUNT" | tr -d '[:space:]')"
     if [[ "$_RLS_COUNT_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_COUNT_TRIMMED" -gt 0 ]]; then
       _RLS_TABLES_RC=0
-      _RLS_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_TABLES_RC=$?
+      _RLS_TABLES="$(docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND NOT c.relrowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_TABLES_RC=$?
       if [[ $_RLS_TABLES_RC -ne 0 ]]; then
         log_die "RLS ENABLE gap: ${_RLS_COUNT_TRIMMED} expected table(s) without RLS (failed to fetch names, psql exit $_RLS_TABLES_RC): $_RLS_TABLES" 1
       fi
@@ -220,14 +217,14 @@ else
     fi
   fi
   _RLS_FORCE_RC=0
-  _RLS_FORCE_COUNT="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity;" 2>&1)" || _RLS_FORCE_RC=$?
+  _RLS_FORCE_COUNT="$(docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT count(*) FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity;" 2>&1)" || _RLS_FORCE_RC=$?
   if [[ $_RLS_FORCE_RC -ne 0 ]]; then
     log_warn "RLS FORCE check skipped: docker/psql execution failed (exit $_RLS_FORCE_RC): $_RLS_FORCE_COUNT"
   else
     _RLS_FORCE_TRIMMED="$(printf '%s' "$_RLS_FORCE_COUNT" | tr -d '[:space:]')"
     if [[ "$_RLS_FORCE_TRIMMED" =~ ^[0-9]+$ ]] && [[ "$_RLS_FORCE_TRIMMED" -gt 0 ]]; then
       _RLS_FORCE_TABLES_RC=0
-      _RLS_FORCE_TABLES="$(docker exec -i -e PGPASSWORD="$DB_PASS" "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_FORCE_TABLES_RC=$?
+      _RLS_FORCE_TABLES="$(docker_exec_db "$DB_PASS" -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -t -A -c "WITH expected(tbl) AS (VALUES ${_RLS_LIST_SQL}) SELECT e.tbl FROM expected e JOIN pg_class c ON c.relname=e.tbl JOIN pg_namespace n ON n.oid=c.relnamespace AND n.nspname='public' WHERE c.relkind='r' AND c.relrowsecurity AND NOT c.relforcerowsecurity ORDER BY e.tbl;" 2>&1)" || _RLS_FORCE_TABLES_RC=$?
       if [[ $_RLS_FORCE_TABLES_RC -ne 0 ]]; then
         log_die "RLS FORCE gap: ${_RLS_FORCE_TRIMMED} expected table(s) with RLS but without FORCE (failed to fetch names, psql exit $_RLS_FORCE_TABLES_RC): $_RLS_FORCE_TABLES" 1
       fi

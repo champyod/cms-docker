@@ -289,8 +289,9 @@ def update_task(old_task: Task, new_task: Task, parent=None, get_statements=True
             update_value_fn=functools.partial(update_dataset, parent=parent))
 
     _update_object(old_task, new_task, {
-        # Since we know it, hardcode to ignore the parent relationship.
-        Task.contest: False,
+        # Contest memberships are managed by the importers, keep them.
+        Task.contest_tasks: False,
+        Task.contests: False,
         # Relationships not to update because not provided by the loader.
         Task.active_dataset: False,
         Task.submissions: False,
@@ -300,7 +301,6 @@ def update_task(old_task: Task, new_task: Task, parent=None, get_statements=True
         Task.datasets: update_datasets_fn,
         Task.attachments: True,
         # Scalar columns exceptions.
-        Task.num: False,
         Task.primary_statements: get_statements,
     }, parent=parent)
 
@@ -314,5 +314,6 @@ def update_contest(old_contest: Contest, new_contest: Contest, parent=None):
         # Tasks and participations are top level objects for the loader, so
         # must be handled differently.
         Contest.tasks: False,
+        Contest.task_contests: False,
         Contest.participations: False,
     }, parent=parent)

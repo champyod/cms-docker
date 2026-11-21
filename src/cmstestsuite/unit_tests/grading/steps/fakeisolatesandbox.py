@@ -55,6 +55,7 @@ class FakeIsolateSandbox(IsolateSandbox):
         exit_status: str,
         signal: int | None = None,
         message: str | None = None,
+        cgroup_memory: int | None = None,
     ):
         """Set the fake data for the corresponding execution.
 
@@ -65,10 +66,13 @@ class FakeIsolateSandbox(IsolateSandbox):
         stdout: content of the sandbox stdout_file.
         stderr: content of the sandbox stderr_file.
         time: CPU time in seconds.
-        memory: memory used in KiB.
+        memory: memory used in KiB, reported by isolate as max-rss.
         exit_status: isolate's two-letter exit status.
         signal: terminating signal if not None
         message: message from isolate
+        cgroup_memory: peak memory of the cgroup in KiB, reported by isolate
+            as cg-mem. If not None, it is emitted next to max-rss, like
+            isolate does on kernels with memory.peak (Linux 6.8 and later).
 
         """
         data = {}
@@ -85,7 +89,9 @@ class FakeIsolateSandbox(IsolateSandbox):
         if memory is not None:
             # isolate reports in KiB
             logs.append("max-rss:%d" % memory)
-            logs.append("cg-mem:%d" % memory)
+        if cgroup_memory is not None:
+            # isolate reports in KiB
+            logs.append("cg-mem:%d" % cgroup_memory)
         if exit_status is not None and exit_status != "OK":
             logs.append("status:%s" % exit_status)
         if signal is not None:

@@ -48,7 +48,7 @@ class TestCompilationStep(unittest.TestCase):
         else:
             self.mock_logger_error.assert_not_called()
 
-    def test_single_command_success(self):
+    def test_it_reports_success_for_a_successful_single_command(self):
         expected_stats = get_stats(
             0.1, 0.5, 1000 * 1024, Sandbox.EXIT_OK, stdout="o", stderr="你好")
         with patch("cms.grading.steps.compilation.generic_step",
@@ -64,7 +64,7 @@ class TestCompilationStep(unittest.TestCase):
         self.assertEqual(text, [COMPILATION_MESSAGES.get("success").message])
         self.assertEqual(stats, expected_stats)
 
-    def test_single_command_compilation_failed_nonzero_return(self):
+    def test_it_reports_failure_when_the_command_returns_nonzero(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but compilation is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -82,7 +82,7 @@ class TestCompilationStep(unittest.TestCase):
         self.assertEqual(text, [COMPILATION_MESSAGES.get("fail").message])
         self.assertEqual(stats, expected_stats)
 
-    def test_single_command_compilation_failed_timeout(self):
+    def test_it_reports_a_timeout_when_the_cpu_time_is_exceeded(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but compilation is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -100,7 +100,7 @@ class TestCompilationStep(unittest.TestCase):
         self.assertEqual(text, [COMPILATION_MESSAGES.get("timeout").message])
         self.assertEqual(stats, expected_stats)
 
-    def test_single_command_compilation_failed_timeout_wall(self):
+    def test_it_reports_a_timeout_when_the_wall_time_is_exceeded(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but compilation is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -118,7 +118,7 @@ class TestCompilationStep(unittest.TestCase):
         self.assertEqual(text, [COMPILATION_MESSAGES.get("timeout").message])
         self.assertEqual(stats, expected_stats)
 
-    def test_single_command_compilation_failed_signal(self):
+    def test_it_reports_the_signal_when_the_command_is_killed(self):
         # This case is a "success" for the sandbox (it's the user's fault),
         # but compilation is unsuccessful (no executable).
         expected_stats = get_stats(
@@ -137,7 +137,7 @@ class TestCompilationStep(unittest.TestCase):
                          [COMPILATION_MESSAGES.get("signal").message, "11"])
         self.assertEqual(stats, expected_stats)
 
-    def test_single_command_sandbox_failed(self):
+    def test_it_reports_a_sandbox_failure_and_logs_it(self):
         with patch("cms.grading.steps.compilation.generic_step",
                    return_value=None):
             success, compilation_success, text, stats = compilation_step(
@@ -150,7 +150,7 @@ class TestCompilationStep(unittest.TestCase):
         self.assertIsNone(text)
         self.assertIsNone(stats)
 
-    def test_multiple_commands_success(self):
+    def test_it_reports_success_for_multiple_commands(self):
         expected_stats = get_stats(
             0.1, 0.5, 1000 * 1024, Sandbox.EXIT_OK, stdout="o", stderr="你好")
         with patch("cms.grading.steps.compilation.generic_step",

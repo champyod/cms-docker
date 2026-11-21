@@ -1,25 +1,26 @@
 'use client';
 
 import { Check, LogOut, PlusCircle, Repeat } from 'lucide-react';
-import { CommandGroup, CommandItem } from '@/components/ui/command';
-import type { NavEntry, NavGroup } from '@/lib/nav-registry';
+import { CommandGroup, CommandItem } from '@/components/core/Command';
+import type { ShellNavItem } from '@/components/navigation/shell-nav';
 import type { EntityHit } from '@/components/palette/entity-searchers';
+import { filterPaletteRows, labelMatches } from './palette-filter';
+
+const SWITCH_CONTEST_LIMIT = 5;
 
 export function NavigationItems({
-  sections,
+  items,
   onSelect,
 }: {
-  sections: Array<{ group: NavGroup; entries: NavEntry[] }>;
-  onSelect: (entry: NavEntry) => void;
+  items: readonly ShellNavItem[];
+  onSelect: (item: ShellNavItem) => void;
 }): React.JSX.Element {
-  // Why: navigation comes from entriesByGroup so any exposeIn:'palette' entry appears here.
-  const entries: NavEntry[] = sections.flatMap((section) => section.entries);
   return (
     <CommandGroup heading="Navigation">
-      {entries.map((entry) => (
-        <CommandItem key={entry.path} value={`nav-${entry.label}`} onSelect={() => onSelect(entry)}>
-          <entry.icon className="text-muted-foreground" />
-          <span>{entry.label}</span>
+      {items.map((item) => (
+        <CommandItem key={item.id} value={`nav-${item.id}`} onSelect={() => onSelect(item)}>
+          <item.icon className="text-muted-foreground" />
+          <span>{item.label}</span>
         </CommandItem>
       ))}
     </CommandGroup>
@@ -41,25 +42,35 @@ export function EntityItems({ loading, hasQuery, hits, onSelect }: { loading: bo
   );
 }
 
-export function ActionItems({ contestsEnabled, availableContests, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element {
+export function ActionItems({ contestsEnabled, canDeploy, availableContests, needle, onCreateContest, onSwitchContest, onSignOut }: { contestsEnabled: boolean; canDeploy: boolean; availableContests: { id: number; name: string; is_active: boolean }[]; needle: string; onCreateContest: () => void; onSwitchContest: (contestId: number) => void; onSignOut: () => void }): React.JSX.Element | null {
+  // Why canDeploy guards the rows: switching recreates the contest stack, so it is offered only to
+  // whoever may deploy, the same key the deploy action enforces.
+  const contestRows = canDeploy ? filterPaletteRows(availableContests, needle, (contest) => contest.name).slice(0, SWITCH_CONTEST_LIMIT) : [];
+  const showCreateContest = contestsEnabled && labelMatches('Create Contest', needle);
+  const showSignOut = labelMatches('Sign Out', needle);
+
+  if (!showCreateContest && !showSignOut && contestRows.length === 0) return null;
+
   return (
     <CommandGroup heading="Actions">
-      {contestsEnabled && (
+      {showCreateContest && (
         <CommandItem value="action-create-contest" onSelect={onCreateContest}>
           <PlusCircle className="text-muted-foreground" />
           <span>Create Contest</span>
         </CommandItem>
       )}
-      {contestsEnabled && availableContests.slice(0, 5).map((contest) => (
+      {contestRows.map((contest) => (
         <CommandItem key={`action-switch-${contest.id}`} value={`action-switch-contest-${contest.id}`} onSelect={() => onSwitchContest(contest.id)}>
           {contest.is_active ? <Check /> : <Repeat className="text-muted-foreground" />}
           <span>{contest.is_active ? `Active: ${contest.name}` : `Switch to ${contest.name}`}</span>
         </CommandItem>
       ))}
-      <CommandItem value="action-sign-out" onSelect={onSignOut}>
-        <LogOut className="text-muted-foreground" />
-        <span>Sign Out</span>
-      </CommandItem>
+      {showSignOut && (
+        <CommandItem value="action-sign-out" onSelect={onSignOut}>
+          <LogOut className="text-muted-foreground" />
+          <span>Sign Out</span>
+        </CommandItem>
+      )}
     </CommandGroup>
   );
 }

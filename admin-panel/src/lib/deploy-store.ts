@@ -1,14 +1,9 @@
 import 'server-only';
 
-import { exec, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import path from 'path';
-import util from 'util';
 
-import { parseDeployPercent, type DeployStatus } from '@/lib/deploy-percent.shared';
-import { DEPLOY_IDLE_TIMEOUT_MS, DEPLOY_OPERATION_ID_REGEX, DEPLOY_WALL_TIMEOUT_MS } from '@/lib/constants/deploy';
-import { getRepoRoot } from '@/lib/repo-root';
 import { logToDiscord } from '@/lib/discord-notifier';
 import {
   cleanStaleOperations,
@@ -17,22 +12,22 @@ import {
   generateOperationId,
   getActiveOperationId,
   getDeployOperationPaths,
+  listDeployOperations,
+  readDeployMeta,
   recordDeployOperationStart,
-  updateDeployMeta,
+  recordDeployProcess,
   type DeployMeta,
-  type DeployPaths,
 } from '@/lib/deploy-operation-store';
-
-const execPromise = util.promisify(exec);
-
-const dockerCompose = ['docker', 'compose', '-f', 'docker-compose.contest.yml', 'up', '-d', '--build', '--force-recreate'];
-const CONFIG_SYNC_COMMAND = 'bash scripts/__config_sync.sh';
-
-// Matches the CONTEST_ID line inside the [contest] section only, keeping any inline comment.
-const CONTEST_ID_LINE_RE = /^(\[contest\][\s\S]*?CONTEST_ID\s*=\s*)(\d+)(.*)$/m;
+import { buildContestDeployCommand, buildDeployScript, type ContestDeployPlan } from '@/lib/deploy-command';
+import { revertActiveContest, runConfigSync } from '@/lib/deploy-config';
+import { readActiveContestId, writeActiveContestId } from '@/lib/active-contest';
+import { fetchDeployStatus } from '@/lib/deploy-status';
+import { getRepoRoot } from '@/lib/repo-root';
 
 export type { DeployStatus } from '@/lib/deploy-percent.shared';
 export { parseDeployPercent, DEPLOY_IDLE_TIMEOUT_MS } from '@/lib/deploy-percent.shared';
+export { buildContestDeployCommand, buildDeployScript, type ContestDeployPlan } from '@/lib/deploy-command';
+export { fetchDeployStatus, type DeployStatusResult } from '@/lib/deploy-status';
 
 export interface DeployContestResult {
   success: boolean;
@@ -41,184 +36,116 @@ export interface DeployContestResult {
   alreadyRunning?: boolean;
 }
 
-export interface DeployStatusResult {
-  success: boolean;
-  status: DeployStatus;
-  contestId?: number;
-  startedAt?: string;
-  log?: string;
-  error?: string;
-  warning?: string;
-  percent?: number | null;
-}
-
-const getConfigTomlPath = (): string => path.join(getRepoRoot(), 'config.toml');
-
-async function readConfigTomlContestId(): Promise<number | null> {
-  const content = await fs.readFile(getConfigTomlPath(), 'utf-8').catch(() => null);
-  if (content === null) return null;
-  const match = content.match(CONTEST_ID_LINE_RE);
-  return match ? parseInt(match[2], 10) : null;
-}
-
-async function updateConfigTomlContestId(contestId: number): Promise<void> {
-  const content = await fs.readFile(getConfigTomlPath(), 'utf-8');
-  const updated = content.replace(CONTEST_ID_LINE_RE, (_match, head: string, _old: string, tail: string) => `${head}${contestId}${tail}`);
-  await fs.writeFile(getConfigTomlPath(), updated);
-}
-
-async function runConfigSync(): Promise<void> {
-  await execPromise(CONFIG_SYNC_COMMAND, { cwd: getRepoRoot() });
-}
-
-async function launchDetachedDeploy(contestId: number, operationId: string): Promise<void> {
+/**
+ * Starts the deploy as a detached shell and lets it report through files only.
+ *
+ * Why a shell: the plan is a `(… pull || true) && … up` sequence and quotes the host paths compose
+ * needs when the panel runs in its container — neither fits into a single argv. Why detached and
+ * unref'd: the build must outlive the request that started it, and the panel process itself.
+ */
+async function launchDetachedDeploy(operationId: string, command: string): Promise<void> {
   const { logPath, donePath, errorPath } = getDeployOperationPaths(operationId);
   await fs.writeFile(logPath, '', { encoding: 'utf-8' });
 
   const logStream = fsSync.createWriteStream(logPath, { flags: 'a' });
-  const child = spawn(dockerCompose[0], dockerCompose.slice(1), {
-    cwd: getRepoRoot(),
-    detached: true,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const child = spawn(
+    'sh',
+    ['-c', buildDeployScript(command), 'cms-deploy', donePath, errorPath],
+    {
+      cwd: getRepoRoot(),
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
 
   child.stdout.pipe(logStream);
   child.stderr.pipe(logStream);
 
-  child.on('close', (code) => {
+  // Only the log stream is closed here: the markers are written by the script itself, which is what
+  // makes the outcome readable after this panel process is gone.
+  child.on('close', () => {
     logStream.end();
-    // Done/error markers are written only on real process exit; resolveDeployStatus gates on their existence.
-    const target = code === 0 ? donePath : errorPath;
-    const content = code === 0 ? JSON.stringify({ completedAt: new Date().toISOString() }) : String(code ?? 1);
-    fs.writeFile(target, content).catch(() => {});
   });
 
   child.unref();
 
-  await logToDiscord('Contest Deploy Started', `Admin triggered async deploy for contest ID **${contestId}**. Operation: \`${operationId}\``, 16753920, true);
+  // The pid is what lets a later process tell "still building" from "gone without a word"; the
+  // process table it was spawned in is what keeps that probe answerable after a panel restart.
+  await recordDeployProcess(operationId, child.pid);
 }
 
-export async function runDeployContest(contestId: number): Promise<DeployContestResult> {
+/**
+ * Settles every operation whose outcome the panel has not applied yet, then discards the records it is
+ * done with.
+ *
+ * Why this exists rather than relying on a live watcher: a watch ends — the panel releases it at its
+ * observation ceiling, the tab closes, the panel restarts — while the deploy's process keeps building
+ * and writes its `.done` when it finishes. Without reconciliation nothing reads that marker: a deploy
+ * that succeeded would leave its contest inactive while its containers serve it, and a finished
+ * operation would keep the guard until it aged out, refusing the next deploy. Every entry point that
+ * asks about deploys runs this first, so a panel that just restarted reaches the truth on its next
+ * request.
+ */
+export async function reconcileDeployOperations(): Promise<void> {
+  for (const { operationId } of await listDeployOperations()) {
+    // fetchDeployStatus is the one resolution rule; reconciliation only applies it to every record.
+    // Every record, including one that already has an outcome: that outcome is a claim, and this is
+    // where a claim whose effects never ran — the panel that took it is gone — gets them applied.
+    await fetchDeployStatus(operationId);
+  }
+  await cleanStaleOperations();
+}
+
+export async function runDeployContest(contestId: number, plan: ContestDeployPlan): Promise<DeployContestResult> {
   try {
     await ensureDeployLogsDir();
-    await cleanStaleOperations();
+    // Why before the guard: a leftover operation that already finished must not block this deploy, and
+    // one that is still running must. Settling also leaves the active row on the contest the database
+    // actually has active, which is the id this deploy records as the one to roll back to.
+    await reconcileDeployOperations();
     if ((await getActiveOperationId()) !== null) return { success: false, alreadyRunning: true, error: 'A deploy is already in progress.' };
 
-    const previousContestId = await readConfigTomlContestId();
-    if (previousContestId === null) return { success: false, error: 'Could not read CONTEST_ID from config.toml.' };
+    const previousContestId = (await readActiveContestId()) ?? undefined;
 
-    await updateConfigTomlContestId(contestId);
+    // The database is the single source of truth for the active contest; config.toml and .env are
+    // derived from it by the sync below. Writing the row is what this deploy actually moves — the
+    // file is only the projection compose reads.
+    await writeActiveContestId(contestId);
     try {
       await runConfigSync();
     } catch (error) {
-      await updateConfigTomlContestId(previousContestId).catch(() => {});
+      await revertActiveContest(previousContestId);
       return { success: false, error: 'Config sync failed: ' + (error as Error).message };
     }
 
     const operationId = generateOperationId();
-    await recordDeployOperationStart(contestId, operationId, previousContestId);
-
+    const meta: DeployMeta = { contestId, startedAt: new Date().toISOString(), previousContestId };
     try {
-      await launchDetachedDeploy(contestId, operationId);
+      await recordDeployOperationStart(operationId, meta);
     } catch (error) {
-      await clearActiveOperation().catch(() => {});
-      await updateConfigTomlContestId(previousContestId).catch(() => {});
+      // The active row already names this contest with nothing recorded behind it: revert rather than
+      // leave the database naming a contest the operation was never told about.
+      await revertActiveContest(previousContestId);
       return { success: false, error: (error as Error).message };
     }
 
+    try {
+      await launchDetachedDeploy(operationId, buildContestDeployCommand(plan));
+    } catch (error) {
+      // Nothing was started, so there is no work to observe: give back the guard this operation just
+      // took (checked inside `clearActiveOperation`) and the active contest.
+      await clearActiveOperation(operationId);
+      await revertActiveContest(previousContestId);
+      return { success: false, error: (error as Error).message };
+    }
+
+    await logToDiscord('Contest Deploy Started', `Admin triggered async deploy for contest ID **${contestId}**. Operation: \`${operationId}\``, 16753920, true);
     return { success: true, operationId };
   } catch (error) {
-    await clearActiveOperation().catch(() => {});
+    // Why this catch releases nothing: everything above it either runs before the guard is taken or
+    // releases it itself. Clearing the lock from here could free a deploy that is still building.
     return { success: false, error: (error as Error).message };
   }
-}
-
-async function getLogLastChangeMs(paths: DeployPaths, meta: DeployMeta): Promise<number> {
-  try {
-    return (await fs.stat(paths.logPath)).mtimeMs;
-  } catch {
-    return new Date(meta.startedAt).getTime();
-  }
-}
-
-// DB is_active flips only here — after docker reported success, never before.
-async function finalizeContestActivation(contestId: number): Promise<void> {
-  const { activateContest } = await import('@/app/actions/contests');
-  const result = await activateContest(contestId);
-  if (!result.success) throw new Error(result.error ?? 'activateContest failed');
-}
-
-async function finalizeCompletedDeploy(paths: DeployPaths, meta: DeployMeta, log: string, percent: number | null): Promise<DeployStatusResult> {
-  if (!meta.finalized) {
-    try {
-      await finalizeContestActivation(meta.contestId);
-    } catch (error) {
-      return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: 'Deploy completed but contest activation failed: ' + (error as Error).message };
-    }
-    await updateDeployMeta(paths.metaPath, meta, { finalized: true });
-  }
-  await clearActiveOperation();
-  await logToDiscord('Contest Deploy Completed', `Contest ID **${meta.contestId}** deployed successfully.`, 3066993);
-  return { success: true, status: 'completed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
-}
-
-type FailureKind = 'failed' | 'wall' | 'idle';
-
-async function rollbackContestId(contestId: number): Promise<string | null> {
-  try {
-    await updateConfigTomlContestId(contestId);
-    await runConfigSync();
-    return null;
-  } catch (error) {
-    return `Rollback to contest #${contestId} failed: ${(error as Error).message}`;
-  }
-}
-
-async function handleTerminalFailure(paths: DeployPaths, meta: DeployMeta, log: string, percent: number | null, kind: FailureKind, exitCode: string | null): Promise<DeployStatusResult> {
-  let warning: string | undefined;
-  if (!meta.reverted && meta.previousContestId !== undefined) {
-    warning = (await rollbackContestId(meta.previousContestId)) ?? undefined;
-    await updateDeployMeta(paths.metaPath, meta, { reverted: true });
-  }
-  await clearActiveOperation();
-  if (kind === 'failed') {
-    await logToDiscord('Contest Deploy Failed', `Contest ID **${meta.contestId}** deploy failed. Exit code: ${exitCode}`, 15158332, true);
-    return { success: false, status: 'failed', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: `Docker process exited with code ${exitCode}.`, warning };
-  }
-  const message = kind === 'wall' ? 'Deploy timed out after 15 minutes (wall clock limit).' : 'Deploy timed out after 5 minutes without log output.';
-  return { success: false, status: 'timeout', contestId: meta.contestId, startedAt: meta.startedAt, log, percent, error: message, warning };
-}
-
-async function resolveDeployStatus(paths: DeployPaths, meta: DeployMeta, log: string): Promise<DeployStatusResult> {
-  const percent = parseDeployPercent(log);
-
-  const doneExists = await fs.access(paths.donePath).then(() => true).catch(() => false);
-  if (doneExists) return finalizeCompletedDeploy(paths, meta, log, percent);
-
-  const errorContent = await fs.readFile(paths.errorPath, 'utf-8').catch(() => null);
-  if (errorContent !== null) return handleTerminalFailure(paths, meta, log, percent, 'failed', errorContent.trim());
-
-  const wallElapsedMs = Date.now() - new Date(meta.startedAt).getTime();
-  if (wallElapsedMs > DEPLOY_WALL_TIMEOUT_MS) return handleTerminalFailure(paths, meta, log, percent, 'wall', null);
-
-  const idleMs = Date.now() - (await getLogLastChangeMs(paths, meta));
-  if (idleMs > DEPLOY_IDLE_TIMEOUT_MS) return handleTerminalFailure(paths, meta, log, percent, 'idle', null);
-
-  return { success: true, status: 'running', contestId: meta.contestId, startedAt: meta.startedAt, log, percent };
-}
-
-export async function fetchDeployStatus(operationId: string): Promise<DeployStatusResult> {
-  if (!DEPLOY_OPERATION_ID_REGEX.test(operationId)) return { success: false, status: 'not_found', error: 'Invalid operation ID.' };
-  const paths = getDeployOperationPaths(operationId);
-  const rawMeta = await fs.readFile(paths.metaPath, 'utf-8').catch(() => null);
-  if (rawMeta === null) return { success: false, status: 'not_found', error: 'Operation not found.' };
-  const meta = JSON.parse(rawMeta) as DeployMeta;
-  const log = await fs.readFile(paths.logPath, 'utf-8').catch(() => '');
-  return resolveDeployStatus(paths, meta, log);
-}
-
-export function getDeployOperationPathsForApi(operationId: string): DeployPaths {
-  return getDeployOperationPaths(operationId);
 }
 
 export interface ActiveDeployOperation {
@@ -230,6 +157,9 @@ export interface ActiveDeployOperation {
 
 // Why: a page refresh must be able to rejoin an in-flight deploy; the lock is cleared only on a terminal result.
 export async function getActiveDeployOperation(): Promise<ActiveDeployOperation | null> {
+  // Why reconcile first: an operation that finished while nobody watched — including across a panel
+  // restart — has to be activated or reverted before the panel concludes that nothing is live.
+  await reconcileDeployOperations();
   const operationId = await getActiveOperationId();
   if (operationId === null) return null;
   const meta = await readDeployMeta(operationId);
@@ -242,9 +172,4 @@ export async function getActiveDeployOperation(): Promise<ActiveDeployOperation 
     startedAt: meta.startedAt,
     percent: status.percent ?? null,
   };
-}
-
-export async function readDeployMeta(operationId: string): Promise<DeployMeta | null> {
-  const raw = await fs.readFile(getDeployOperationPaths(operationId).metaPath, 'utf-8').catch(() => null);
-  return raw === null ? null : (JSON.parse(raw) as DeployMeta);
 }

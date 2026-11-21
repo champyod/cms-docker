@@ -91,7 +91,7 @@ class TestImportUser(DatabaseMixin, unittest.TestCase):
                     contest_ids,
                     (p.contest_id for p in db_participations))
 
-    def test_clean_import(self):
+    def test_it_imports_a_new_user_and_attaches_the_participation(self):
         # Completely new user, import and attach it to the contest.
         username = "new_username"
         last_name = "last_name"
@@ -101,7 +101,7 @@ class TestImportUser(DatabaseMixin, unittest.TestCase):
         self.assertTrue(ret)
         self.assertUserInDb(username, last_name, [self.contest_id])
 
-    def test_clean_import_no_contest(self):
+    def test_it_imports_a_new_user_without_a_participation(self):
         # Completely new user, import but don't create any participation.
         username = "new_username"
         last_name = "last_name"
@@ -111,7 +111,7 @@ class TestImportUser(DatabaseMixin, unittest.TestCase):
         self.assertTrue(ret)
         self.assertUserInDb(username, last_name, [])
 
-    def test_user_exists(self):
+    def test_it_refuses_to_update_an_existing_user(self):
         # Username already present, should not update.
         last_name = "last_name"
         new_user = self.get_user(username=self.username, last_name=last_name)

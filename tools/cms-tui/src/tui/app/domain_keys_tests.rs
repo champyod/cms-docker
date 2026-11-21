@@ -1,100 +1,115 @@
-use super::{App, DomainKeyOutcome};
-use crate::tui::app::Route;
-use crate::tui::pages::domain_fields::APPLY_LABEL;
-use ratatui::crossterm::event::KeyCode;
+//! Assertions on routing around the domain form, and on the argv it hands the script.
+//!
+//! WHY the argv is asserted rather than the process: `__domain.sh` is not something a
+//! unit test may run, and what this layer owns is the argv it is handed. The one thing
+//! asserted here about execution is that the arguments stay SEPARATE — see
+//! `a_shell_metacharacter_stays_inside_one_argument`.
 
-fn on_domain() -> App {
+use super::App;
+use crate::tui::app::Route;
+use crate::tui::pages::domain::DomainAction;
+use crossterm::event::KeyCode;
+
+/// A per-test directory that no other test shares.
+fn scratch(label: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("cms_domain_keys_{label}_{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create scratch dir");
+    dir
+}
+
+/// A fresh app whose domain form is seeded from an empty box.
+fn app_on_empty(label: &str) -> App {
     let mut app = App::new();
-    app.push_route(Route::Domain);
+    app.domain = crate::tui::pages::domain::DomainView::from_disk(&scratch(label));
     app
 }
 
-/// The submit key is a binding rather than a character, so it is aimed at a row that takes no
-/// characters. A form opens on its first row, which is a text row, and `r` typed there has to
-/// stay a letter.
 #[test]
-fn the_submit_key_asks_the_loop_to_run_the_form() {
-    let mut app = on_domain();
-    app.domain.form_mut().focus_row(APPLY_LABEL);
+fn a_shell_metacharacter_stays_inside_one_argument() {
+    // WHY this exact string: `--deploy-hook` is free text, and joining the argv into a
+    // `bash -c` line made `a; id` two commands. Passing argv as a vector keeps it one
+    // argument, so the shell never gets to re-parse an operator's value.
+    let hook = "systemctl reload nginx; id";
+    let setup = crate::core::domain_setup::DomainSetupRequest {
+        deploy_hook: hook.to_string(),
+        ..Default::default()
+    };
+    let args = crate::core::domain_setup::domain_setup_args("setup", &setup);
+    let position = args
+        .iter()
+        .position(|arg| arg == "--deploy-hook")
+        .expect("hook flag is emitted");
+    assert_eq!(args[position + 1], hook, "the value is one argument");
+    assert_eq!(
+        args.iter().filter(|arg| *arg == hook).count(),
+        1,
+        "the value is never split into a second argv entry"
+    );
+}
+
+#[test]
+fn the_domain_page_is_reachable_from_the_ingress_page() {
+    let mut app = App::new();
+    app.push_route(Route::Ingress);
+    assert_eq!(*app.current_route(), Route::Ingress);
+    app.push_route(Route::Domain);
+    assert_eq!(*app.current_route(), Route::Domain);
+    assert_eq!(app.stack_depth(), 3);
+}
+
+#[test]
+fn leaving_the_form_returns_to_the_page_it_was_opened_from() {
+    let mut app = app_on_empty("leave");
+    app.push_route(Route::Ingress);
+    app.push_route(Route::Domain);
+    app.leave_domain();
+    assert_eq!(*app.current_route(), Route::Ingress);
+}
+
+#[test]
+fn a_form_opened_from_the_dashboard_leaves_back_to_the_dashboard() {
+    let mut app = app_on_empty("no-ingress");
+    app.push_route(Route::Domain);
+    app.leave_domain();
+    assert_eq!(
+        *app.current_route(),
+        Route::Dashboard,
+        "leaving undoes the push rather than jumping somewhere new"
+    );
+}
+
+#[test]
+fn the_page_owns_no_action_menu() {
+    let mut app = app_on_empty("menu");
+    app.push_route(Route::Domain);
+    assert!(app.active_menu().is_none());
+}
+
+#[test]
+fn rows_and_the_page_bindings_are_handed_straight_to_the_form() {
+    let mut app = app_on_empty("keys");
+    app.push_route(Route::Domain);
+    assert_eq!(app.handle_domain_key(KeyCode::Down), DomainAction::Edited);
+    assert_eq!(
+        app.handle_domain_key(KeyCode::Char('z')),
+        DomainAction::Edited,
+        "typing belongs to the focused row"
+    );
     assert_eq!(
         app.handle_domain_key(KeyCode::Char('r')),
-        DomainKeyOutcome::Submit
+        DomainAction::Submit,
+        "r runs the plan the form describes"
     );
+    assert_eq!(app.handle_domain_key(KeyCode::Esc), DomainAction::Back);
 }
 
 #[test]
-fn escape_asks_the_loop_to_leave_the_page() {
-    let mut app = on_domain();
-    assert_eq!(app.handle_domain_key(KeyCode::Esc), DomainKeyOutcome::Back);
-}
-
-#[test]
-fn typing_a_character_edits_a_row_instead_of_leaving_the_page() {
-    let mut app = on_domain();
-    app.domain.form_mut().focus_row("--domain");
+fn a_key_the_page_does_not_own_is_left_for_the_global_handler() {
+    let mut app = app_on_empty("ignored");
+    app.push_route(Route::Domain);
     assert_eq!(
-        app.handle_domain_key(KeyCode::Char('x')),
-        DomainKeyOutcome::Edited
-    );
-    assert_eq!(app.domain.form().value_of("--domain"), "x");
-}
-
-/// A dry run must reach nothing but the toast. This is the property that makes a
-/// mis-aimed keystroke on a twenty-row form harmless.
-#[test]
-fn a_dry_run_reports_the_plan_and_changes_nothing() {
-    let mut app = on_domain();
-    app.domain.form_mut().focus_row("--domain");
-    app.handle_domain_key(KeyCode::Char('a'));
-    assert!(!app.domain.is_apply());
-    app.run_domain_form()
-        .expect("the dry run reports without spawning");
-    let toast = app.last_toast.expect("the run reported what it would do");
-    assert!(
-        toast.0.contains("dry run"),
-        "a dry run reported {:?}",
-        toast.0
-    );
-    assert!(app.domain.last_run().iter().any(|arg| arg == "setup"));
-}
-
-#[test]
-fn arming_then_confirming_is_the_only_way_to_reach_a_live_run() {
-    let mut app = on_domain();
-    app.domain.form_mut().focus_row(APPLY_LABEL);
-    assert_eq!(
-        app.handle_domain_key(KeyCode::Char('a')),
-        DomainKeyOutcome::Arming
-    );
-    assert!(!app.domain.is_apply(), "one key armed the run");
-    assert_eq!(
-        app.handle_domain_key(KeyCode::Char('y')),
-        DomainKeyOutcome::Confirmed
-    );
-    assert!(app.domain.is_apply());
-}
-
-/// The recorded argv must be exactly what a run would send, so the page can show what was
-/// launched rather than reconstructing it afterwards.
-#[test]
-fn a_run_records_the_argv_it_would_send() {
-    let mut app = on_domain();
-    app.domain.form_mut().focus_row("--domain");
-    app.handle_domain_key(KeyCode::Char('x'));
-    app.run_domain_form()
-        .expect("the dry run reports without spawning");
-    assert!(
-        app.domain.last_run().iter().any(|arg| arg == "x"),
-        "{:?} does not carry the typed value",
-        app.domain.last_run()
-    );
-}
-
-#[test]
-fn the_domain_page_has_no_menu_of_its_own() {
-    let mut app = on_domain();
-    assert!(
-        app.active_menu().is_none(),
-        "the form owns its keys, so the shared menu keys must not apply"
+        app.handle_domain_key(KeyCode::F(5)),
+        DomainAction::Ignored,
+        "the page must not swallow keys it has no meaning for"
     );
 }

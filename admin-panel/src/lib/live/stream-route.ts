@@ -1,0 +1,178 @@
+import { verifyApiPermission } from '@/lib/api-utils';
+import { encodeLiveEnvelope, type LiveSectionReads } from '@/lib/live/frames';
+import { LIVE_HEARTBEAT_MS, LIVE_STREAM_HEADERS } from '@/lib/constants/live-stream';
+import type { SessionPayload } from '@/lib/auth';
+import type { PermissionKey } from '@/lib/permissions';
+
+/**
+ * What a source says about the frame it just produced.
+ *
+ * Why the source states the read and the route does not stamp it: a frame accumulates what several
+ * poll tracks read, so only the source knows which pass produced this payload and when — the route
+ * only knows when it happened to send it, and dating a carried-forward section by that would be the
+ * misdating the per-section reads exist to avoid. A source with no reads of its own (an alert channel)
+ * states nothing and the route stamps the instant it sends.
+ */
+export interface LiveFrameRead {
+  /** The instant of the read that produced this frame's payload, by the server's clock. */
+  readonly readAt: string;
+  /** The sections the frame carried forward, each with the read that produced it. Omitted when none. */
+  readonly reads?: LiveSectionReads;
+}
+
+export type LiveFrameSink<TFrame> = (frame: TFrame, read?: LiveFrameRead) => void;
+
+/** One connection's wiring: what a source may push, and what it must stop on. */
+export interface LiveConnection<TFrame> {
+  readonly request: Request;
+  readonly session: SessionPayload;
+  readonly emit: LiveFrameSink<TFrame>;
+  readonly isClosed: () => boolean;
+  readonly close: () => void;
+}
+
+export type LiveSourceTeardown = () => void;
+
+/** Wires a connection's data; the returned teardown runs when the client goes away or the stream fails. */
+export type LiveSource<TFrame> = (
+  connection: LiveConnection<TFrame>,
+) => LiveSourceTeardown | Promise<LiveSourceTeardown>;
+
+/**
+ * What a heartbeat carries when nothing changed.
+ *
+ * `restate` repeats the last frame so a snapshot consumer can hold its own watchdog; `empty` sends a
+ * frame the notification client drops, because repeating an alert frame would alert twice.
+ */
+export type LiveHeartbeat = 'restate' | 'empty';
+
+export interface LiveStreamRouteOptions<TFrame> {
+  /** Gate keys, checked in order on every connection; the first refusal becomes the response. */
+  readonly permissions: readonly [PermissionKey, ...PermissionKey[]];
+  readonly heartbeat: LiveHeartbeat;
+  readonly source: LiveSource<TFrame>;
+}
+
+/**
+ * The payload an empty heartbeat carries.
+ *
+ * Why an empty object and not the last frame: repeating an alert frame would alert twice, so a channel
+ * that only ever has news sends a frame the client drops. Why it is still a real frame: an SSE comment
+ * never dispatches `onmessage`, so it could not hold the client's watchdog open.
+ */
+const EMPTY_PAYLOAD = {};
+
+type GateResult = { readonly refusal: Response } | { readonly session: SessionPayload };
+
+/** The gate's answer: the first refused key's response, or the session every key authorised. */
+async function openGate(permissions: readonly [PermissionKey, ...PermissionKey[]]): Promise<GateResult> {
+  const [opening, ...rest] = permissions;
+  const first = await verifyApiPermission(opening);
+  if (!first.authorized) return { refusal: first.response };
+  for (const permission of rest) {
+    const next = await verifyApiPermission(permission);
+    if (!next.authorized) return { refusal: next.response };
+  }
+  return { session: first.session };
+}
+
+/**
+ * Builds one live stream route: the permission gate, the frame shape, the heartbeat, and the cleanup
+ * that a disconnect or a failed source must run.
+ *
+ * Why one builder for every stream: the three routes this replaced each carried their own copy of the
+ * encoder, the closed flag, the abort listener and the heartbeat, and every new surface had to repeat
+ * them. Here a route declares its gate, its heartbeat policy and a source, and nothing else.
+ */
+export function createLiveStreamRoute<TFrame>(
+  options: LiveStreamRouteOptions<TFrame>,
+): (request: Request) => Promise<Response> {
+  return async function liveStreamRoute(request: Request): Promise<Response> {
+    const gate = await openGate(options.permissions);
+    if ('refusal' in gate) return gate.refusal;
+
+    const encoder = new TextEncoder();
+    let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+    let teardown: LiveSourceTeardown | null = null;
+    let heartbeat: ReturnType<typeof setInterval> | null = null;
+    let lastFrame: string | null = null;
+    // The instant of the newest payload this connection has stated; the connection's own opening,
+    // before that. Nothing has been read yet, and the instant says so rather than guessing one. A
+    // source that states its own read sets this; the rest — an alert channel with nothing to date —
+    // leaves the instant the route stamps, because the route did the sending and nothing else did.
+    let statedAt = new Date().toISOString();
+    let closed = false;
+
+    const enqueue = (chunk: string): void => {
+      if (closed || controller === null) return;
+      controller.enqueue(encoder.encode(chunk));
+    };
+
+    const release = (): void => {
+      closed = true;
+      request.signal.removeEventListener('abort', finish);
+      if (heartbeat !== null) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
+      teardown?.();
+      teardown = null;
+    };
+
+    const finish = (): void => {
+      release();
+      const ending = controller;
+      controller = null;
+      ending?.close();
+    };
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(streamController) {
+        controller = streamController;
+        // Why the heartbeat is armed before the first sample: a probe slow enough to outlast its own
+        // interval must not leave the client's watchdog counting down on its own.
+        heartbeat = setInterval(() => {
+          if (options.heartbeat === 'empty') {
+            // Why the empty payload restates the newest stated instant rather than a fresh one: the
+            // channel has nothing new to state, so claiming a read would date data the server did not
+            // re-read. The instant it does carry is what the cue compares a row against.
+            enqueue(`data: ${encodeLiveEnvelope(EMPTY_PAYLOAD, statedAt)}\n\n`);
+            return;
+          }
+          // Why the restated frame is re-sent verbatim, instant included: it names the read that
+          // produced this payload, and re-stamping it would claim a fresh read for data the server has
+          // not re-read.
+          if (lastFrame !== null) enqueue(lastFrame);
+        }, LIVE_HEARTBEAT_MS);
+        try {
+          teardown = await options.source({
+            request,
+            session: gate.session,
+            emit: (frame, read) => {
+              // The source's own read where it states one: it saw the pass that produced the payload.
+              statedAt = read?.readAt ?? new Date().toISOString();
+              lastFrame = `data: ${encodeLiveEnvelope(frame, statedAt, read?.reads)}\n\n`;
+              enqueue(lastFrame);
+            },
+            isClosed: () => closed,
+            close: finish,
+          });
+        } catch {
+          // A source that cannot start ends the stream rather than the page; the client reconnects.
+          finish();
+          return;
+        }
+        // Why the teardown still runs: a source that failed during its own start has already ended the
+        // connection, and its timers must not outlive it.
+        if (closed) release();
+      },
+      cancel() {
+        release();
+        controller = null;
+      },
+    });
+
+    request.signal.addEventListener('abort', finish);
+    return new Response(stream, { headers: LIVE_STREAM_HEADERS });
+  };
+}

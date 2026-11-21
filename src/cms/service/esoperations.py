@@ -32,8 +32,8 @@ import logging
 
 from sqlalchemy import case, literal
 
-from cms.db import Dataset, Evaluation, Submission, SubmissionResult, \
-    Task, Testcase, UserTest, UserTestResult
+from cms.db import Dataset, Evaluation, Participation, Submission, \
+    SubmissionResult, Task, Testcase, UserTest, UserTestResult
 from cms.db.session import Session
 from cms.io import PriorityQueue, QueueItem
 
@@ -317,7 +317,10 @@ def get_submissions_operations(
     if contest_id is None:
         contest_filter = literal(True)
     else:
-        contest_filter = Task.contest_id == contest_id
+        # A task may belong to several contests, so the contest of a submission
+        # (or user test) is read from its participation, not its task.
+        contest_filter = Submission.participation.has(
+            Participation.contest_id == contest_id)
 
     # Retrieve the compilation operations for all submissions without
     # the corresponding result for a dataset to judge. Since we have
@@ -425,7 +428,8 @@ def get_user_tests_operations(
     if contest_id is None:
         contest_filter = literal(True)
     else:
-        contest_filter = Task.contest_id == contest_id
+        contest_filter = UserTest.participation.has(
+            Participation.contest_id == contest_id)
 
     # Retrieve the compilation operations for all user tests without
     # the corresponding result for a dataset to judge. Since we have

@@ -814,31 +814,39 @@ The admin panel mounts `/var/run/docker.sock`. All Docker operations (`getContai
 ### Multi-Stack Architecture
 
 ```
-docker-compose.core.yml              # DB, RPC services, evaluation
-docker-compose.admin.yml             # Admin panel (Next.js + Python)
-docker-compose.contests.generated.yml # Per-contest web servers (generated)
-docker-compose.worker.yml            # Sandboxed workers
-docker-compose.monitor.yml           # Backups, health monitoring
+docker-compose.yml                     # the single project: every stack, each gated by a
+                                       # profile — core, admin, contest, worker, monitor, proxy
+docker-compose.domain.yml              # optional domain front: grader-nginx-proxy + certbot
+docker-compose.waf.yml                 # optional ModSecurity front over the domain stack
+docker-compose.tailscale.yml           # optional funnel, merged on top of docker-compose.yml
+docker-compose.vault.yml / .monitoring.yml / .socket-proxy.yml   # optional extras
+# generated, never tracked:
+#   docker-compose.expose.yml          # the *_BIND_IP / *_PORT_EXTERNAL override (make expose)
+#   docker-compose.override.yml        # local pins (see docker-compose.override.yml.example)
 ```
+
+`*_BIND_IP` is not read by the compose files themselves — the base files publish the front-door ports on `0.0.0.0`, and `scripts/__render_expose.sh` rewrites them into `docker-compose.expose.yml`, one published entry per address. [`docs/ADDRESS-MODEL.md`](docs/ADDRESS-MODEL.md) is authoritative for that model: which key resolves a port, the single-address vs comma-list forms, what wins between `config.toml`, `.env` and the generated override, and how a hand-written `docker-compose.override.yml` joins every stack target. Bring stacks up through `make`/`./cms deploy`, never a bare `docker compose up`, or the configured addresses do not apply.
 
 ### Makefile Targets
 
 ```bash
-make env            # Generate .env, cms.toml, admin-panel/.env
+./cms config sync   # Generate .env, cms.toml, admin-panel/.env
 make core           # Deploy core stack (DEPLOYMENT_TYPE=img → pull+up, else src build)
 make admin          # Deploy admin panel
-make contest        # Deploy contest interfaces (CONTEST_ID canonical)
+make contest        # Deploy contest interfaces (serves the DB active contest)
 make worker         # Deploy workers
 make infra          # Deploy monitor/backup stack (alias: infra → monitor)
+make proxy          # Optional contest nginx front (publishes 80/443 only with NGINX_BIND_IP)
 make pull           # Pull images for ALL profiles (offline-tolerant, warns on failure)
-make stack-stop     # core|admin|contest|worker|infra -stop (contest-down removes containers)
-make stack-clean    # down -v per stack
+make core-stop      # stop one stack (admin-stop, contest-stop, proxy-stop, worker-stop, infra-stop)
+make contest-clean  # down -v one stack (same suffix for every stack above)
 make db-clean       # down -v ALL profiles (destructive)
 make db-reset       # db-clean + core with img override
 make cms-init       # Initialize CMS database
 make admin-create   # Create superadmin account interactively
 make prisma-sync    # Sync Prisma schema to DB
 make lint           # shellcheck/hadolint/yamllint + compose config validation
+make test           # the developer suites in tests/
 make preflight      # Run scripts/__preflight.sh
 make smoke-test     # Run scripts/__smoke-test.sh
 make backup         # Run cms-monitor backup
@@ -859,7 +867,7 @@ Deployment workflow:
 git pull origin main
 
 # 2. Regenerate environment files
-make env
+./cms config sync
 
 # 3. Pull + deploy with pre-built images (production)
 make pull
@@ -878,7 +886,7 @@ The admin panel can:
 - **List/control containers** via Docker socket mount
 - **Edit .env files** on host via `/repo-root` mount
 - **Restart services** via `docker compose` commands
-- **Switch active contest** by editing `.env.contest` and rebuilding
+- **Switch active contest** by marking a row active in the database (`contests.is_active`); the Deployments page writes that row, regenerates `config.toml`/`.env` from it, then recreates the contest stack (CLI: `./cms contest set-active <id>`)
 
 ---
 
@@ -936,7 +944,7 @@ Secret inputs are masked (`tui::input --password`, gum `--password`), validated 
 ./cms fix               # non-interactive repair of missing/insecure config (validate_value + generators)
 ```
 
-Offsite sync config: `.env.infra`/`.env.core` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
+Offsite sync config: `config.toml` `[infra]`, rendered into `.env` — `BACKUP_DIR`, `OFFSITE_TAILNET_NODE`, `OFFSITE_REMOTE_PATH`; optional `OFFSITE_ENCRYPT_KEY` enables GPG-encrypted archives (`.gpg` suffix). Offsite sync sources `__lib/common.sh`, resolves `__offsite-sync.sh`.
 
 ### Input Validation Conventions
 
@@ -1061,16 +1069,16 @@ Every runtime value lives in `config.toml` (seeded from `config.toml.example` on
 
 ### Generated outputs
 
-`make env` (or `./cms config sync`) renders exactly two files from `config.toml`:
+`./cms config sync` renders exactly two files from `config.toml`:
 
 | File | Consumer | Contents |
 |------|----------|----------|
 | `.env` | all compose services and shell scripts | every variable, grouped under `### [section] ###` headers |
 | `admin-panel/.env` | the Next.js server, run outside compose | `DATABASE_URL` (localhost DSN) + `AUTH_SECRET` |
 
-`.env.contest` remains a per-contest override written by the admin panel when switching active contests.
+`.env.contest` is not one of them: it is an optional, operator-maintained per-contest override for a few deploy scripts. `CONTEST_ID` — which contest the stack serves — is a generated cache: the database (`contests.is_active`) authors it, and `./cms config sync` rewrites `config.toml` and `.env` from that row.
 
-Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead.
+Generated files are output-only: never edit them directly — the next `config sync` overwrites them. Change `config.toml` and re-run sync instead. The same chain carries the bind keys: `config.toml` → `.env` → `docker-compose.expose.yml`, so nothing to reconcile between them — see [`docs/ADDRESS-MODEL.md`](docs/ADDRESS-MODEL.md).
 
 ```bash
 # admin-panel/.env
@@ -1215,8 +1223,8 @@ cms-docker/
 | Interval fields show 0 | Use `parseInterval()` helper to parse Postgres interval objects |
 | Toast not showing | Ensure component is wrapped in `ToastProvider` |
 | Notification polling loop | Use `useRef` for mutable state in polling effects, not `useState` in deps |
-| `.env` not applied | Run `make env` to regenerate combined .env files |
-| Contest not switching | Check `.env.contest` format: `CONTESTS_DEPLOY_CONFIG=1:8888` |
+| `.env` not applied | Run `./cms config sync` to regenerate the .env file |
+| Contest not switching | Mark the wanted contest active in the database (`./cms contest set-active <id>`), which syncs config and redeploys the contest stack; confirm `contests.is_active` has exactly one row |
 
 ---
 

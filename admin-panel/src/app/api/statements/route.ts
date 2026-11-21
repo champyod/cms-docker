@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { storeFile } from '@/lib/fsobjects';
 import { recordAudit } from '@/lib/audit';
 import { normalizeLanguageCode } from '@/lib/constants/languages';
+import { validateAssetSize } from '@/lib/asset-upload';
 
 export async function POST(req: NextRequest): Promise<Response> {
   const { authorized, response } = await verifyApiPermission('statement:create');
@@ -18,6 +19,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (!language) return apiError({ message: 'Language is required', status: 400 });
 
     const buffer = Buffer.from(fileData, 'base64');
+    const sizeError = validateAssetSize('statement', buffer.length);
+    if (sizeError) return apiError({ message: sizeError, status: 400 });
+
     const digest = await storeFile(buffer);
 
     await prisma.$executeRaw`

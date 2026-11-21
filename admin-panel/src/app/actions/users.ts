@@ -2,13 +2,22 @@
 
 import { prisma } from '@/lib/prisma';
 import { ensurePermission, getPermissions } from '@/lib/permissions';
-import { getFieldAccess } from '@/lib/field-permissions';
+import { filterReadableFieldsWith, getFieldAccess } from '@/lib/field-permissions';
+import { type ListSortInput } from '@/lib/list-sorting';
+import { userSortOrderBy } from '@/lib/user-sorting';
 import { buildUserSearchWhere, usersPageSelect, type UsersPageRow } from '@/lib/prisma-selects';
+import * as peopleReadModels from '@/lib/people-read-models';
 import { parseStoredPassword } from '@/lib/password-format';
 import { recordAudit } from '@/lib/audit';
 
 const USERS_PER_PAGE = 20;
 const MAX_USERS_PER_PAGE = 100;
+
+// Why: on-demand record read — the User record header fetches its edit payload
+// through this wrapper instead of widening the layout's summary read.
+export async function getUserEditData(userId: number): Promise<Awaited<ReturnType<typeof peopleReadModels.getUserEditData>>> {
+  return peopleReadModels.getUserEditData(userId);
+}
 
 interface UsersPageResult {
   users: UsersPageRow[];
@@ -16,9 +25,29 @@ interface UsersPageResult {
   currentPage: number;
   perPage: number;
   total: number;
+  sort?: ListSortInput;
+  effectivePermissions: ReadonlySet<string>;
 }
 
-export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE }: { page?: number; search?: string; perPage?: number }): Promise<UsersPageResult> {
+/**
+ * Every user id the current search matches, across pages.
+ *
+ * WHY a read of its own and not a page: the users list's header cell promises to select what the
+ * search matches, and a page is only the slice the reader is looking at. The list asks for the full
+ * id set when the operator selects all, so a select-all never silently covers fewer rows than the
+ * filter does.
+ */
+export async function listUserIds(search = ''): Promise<number[]> {
+  await ensurePermission('user:list');
+  const rows = await prisma.users.findMany({
+    where: buildUserSearchWhere(search),
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  return rows.map((row) => row.id);
+}
+
+export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE, sort = null }: { page?: number; search?: string; perPage?: number; sort?: ListSortInput }): Promise<UsersPageResult> {
   await ensurePermission('user:list');
 
   const safePerPage = Math.min(Math.max(Number(perPage) || USERS_PER_PAGE, 1), MAX_USERS_PER_PAGE);
@@ -32,7 +61,7 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
       where,
       skip,
       take: safePerPage,
-      orderBy: { id: 'asc' },
+      orderBy: userSortOrderBy(sort),
       select: usersPageSelect,
     }),
     prisma.users.count({ where }),
@@ -40,16 +69,11 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
 
   // Why: strip fields the caller cannot read (e.g., PII for viewers without user:read)
   const perms = await getPermissions();
-  const access = getFieldAccess('users', perms);
-  const filtered = users.map((u) => {
-    const row: Record<string, unknown> = { ...u };
-    for (const field of Object.keys(access)) {
-      if (!access[field].canRead) {
-        delete row[field];
-      }
-    }
-    return row as unknown as UsersPageRow;
-  });
+  // Why: one access table for the page, built before the map, not one table per user.
+  const usersAccess = getFieldAccess('users', perms);
+  const filtered = users.map((user) =>
+    filterReadableFieldsWith(usersAccess, user as unknown as Record<string, unknown>) as unknown as UsersPageRow,
+  );
 
   return {
     users: filtered,
@@ -57,6 +81,8 @@ export async function getUsers({ page = 1, search = '', perPage = USERS_PER_PAGE
     currentPage: safePage,
     perPage: safePerPage,
     total,
+    sort,
+    effectivePermissions: perms,
   };
 }
 
@@ -66,7 +92,19 @@ export async function revealUserPassword(id: number): Promise<
   await ensurePermission('password:reveal');
   try {
     const row = await prisma.users.findUnique({ where: { id }, select: { password: true } });
-    if (!row) return { success: false, error: 'User not found' };
+    if (!row) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'user',
+        entityId: String(id),
+        beforeValues: { userId: id },
+        // A named reason, not a message: this path failed before any secret was read, and the
+        // reason belongs in the log while whatever the driver said does not.
+        afterValues: { error: 'NotFound' },
+        result: 'failure',
+      });
+      return { success: false, error: 'User not found' };
+    }
     const parsed = parseStoredPassword(row.password);
     await recordAudit({
       verb: 'password:reveal',
@@ -78,7 +116,18 @@ export async function revealUserPassword(id: number): Promise<
     });
     if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
     return { success: true, kind: 'plaintext', value: parsed.value };
-  } catch {
+  } catch (error) {
+    // Why this row exists: a reveal that fails is the shape a break-in attempt takes, and
+    // password:reveal is already a verb whose failure pages Discord. The error name is the whole
+    // payload — a message here can carry the query that was refused.
+    await recordAudit({
+      verb: 'password:reveal',
+      entity: 'user',
+      entityId: String(id),
+      beforeValues: { userId: id },
+      afterValues: { error: error instanceof Error ? error.name : 'UnknownError' },
+      result: 'failure',
+    });
     return { success: false, error: 'Unable to load password' };
   }
 }

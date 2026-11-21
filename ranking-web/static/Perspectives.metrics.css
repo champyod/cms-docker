@@ -1,0 +1,20 @@
+.persp-metrics {
+    text-align: left;
+}
+
+.persp-metrics h3 {
+    margin: 16px 0 4px;
+    font-size: 1em;
+    color: #444444;
+}
+
+.persp-metrics-activity {
+    margin: 0;
+    padding-left: 1.2em;
+    list-style: none;
+}
+
+.persp-metrics-hit {
+    padding: 2px 0;
+    border-bottom: 1px solid #E0E0E3;
+}

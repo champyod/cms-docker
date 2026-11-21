@@ -1,0 +1,308 @@
+use std::collections::HashMap;
+use std::env;
+use std::net::SocketAddr;
+use std::path::PathBuf;
+
+pub const DEFAULT_BIND: &str = "0.0.0.0:8890";
+
+/// Where the image keeps the vendored page. It is the directory the Python package
+/// installs from, so the page and its assets keep one owner across the cutover.
+pub const DEFAULT_STATIC_DIR: &str = "/home/cmsuser/src/ranking-web/static";
+
+/// The Dockerfile pins CMS_CREDITS_FILE to this path; the licence offer must resolve
+/// even when nothing is set in the environment.
+pub const DEFAULT_CREDITS_FILE: &str = "/home/cmsuser/cms/credits.json";
+
+/// Where the panel writes contestant faces, on the volume both containers already share
+/// for the logo. It is a default rather than operator configuration: a directory that is
+/// absent simply yields the bundled dummy, so a deployment that uploads no faces pays
+/// only a probe that misses.
+pub const DEFAULT_AVATAR_DIR: &str = "/var/local/lib/cms/ranking/avatars";
+
+/// The identity of this ranking instance inside the registry. It is the second half of the
+/// `(role, shard)` key the service's own row is read by, so it is deploy configuration — which
+/// instance this is — and never which contest it serves, which is the row's answer.
+pub const DEFAULT_SHARD: u32 = 0;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RankingConfig {
+    pub bind: SocketAddr,
+    /// This instance's shard in the service registry; see [`DEFAULT_SHARD`].
+    pub shard: u32,
+    pub database_url: Option<String>,
+    pub static_dir: Option<PathBuf>,
+    pub credits_file: Option<PathBuf>,
+    pub logo_path: Option<PathBuf>,
+    /// The directory uploaded contestant faces live in, read on every request so a
+    /// replacement takes effect with no restart. A blank value turns faces off, which
+    /// leaves every one of them the bundled dummy the service being replaced served.
+    pub avatar_dir: Option<PathBuf>,
+    /// Signs the console cookie. Absent means the console cannot log anyone in, which
+    /// is a refusal rather than an open door.
+    pub session_secret: Option<String>,
+    pub captcha: CaptchaConfig,
+    /// The Redis the failure counters live in. Absent means the console cannot track
+    /// failures, which is a refusal at login rather than an unguarded door.
+    pub redis_url: Option<String>,
+}
+
+/// Every CAPTCHA key stays in config.toml and is never edited from the panel, as you
+/// decided. `enabled` is the single switch: off means the console accepts a login
+/// without a challenge, which is what a development deployment wants.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptchaConfig {
+    pub enabled: bool,
+    pub threshold: u32,
+    /// The service's provider priority list; the first entry with a complete key
+    /// pair is the one that renders and verifies.
+    pub providers: Vec<CaptchaProvider>,
+    pub keys: HashMap<CaptchaProvider, CaptchaKeys>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptchaKeys {
+    pub site_key: String,
+    pub secret_key: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CaptchaProvider {
+    Turnstile,
+    HCaptcha,
+    Recaptcha,
+}
+
+impl CaptchaProvider {
+    pub fn endpoint(self) -> &'static str {
+        match self {
+            Self::Turnstile => "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            Self::HCaptcha => "https://hcaptcha.com/siteverify",
+            Self::Recaptcha => "https://www.google.com/recaptcha/api/siteverify",
+        }
+    }
+
+    pub(crate) fn wire_name(self) -> &'static str {
+        match self {
+            Self::Turnstile => "turnstile",
+            Self::HCaptcha => "hcaptcha",
+            Self::Recaptcha => "recaptcha",
+        }
+    }
+
+    pub(crate) fn parse(raw: &str) -> Option<Self> {
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "turnstile" => Some(Self::Turnstile),
+            "hcaptcha" => Some(Self::HCaptcha),
+            "recaptcha" => Some(Self::Recaptcha),
+            _ => None,
+        }
+    }
+
+    fn from_wire(raw: &str) -> Self {
+        Self::parse(raw).unwrap_or(Self::Turnstile)
+    }
+}
+
+impl CaptchaConfig {
+    /// The first provider in the chain with a complete key pair.
+    pub fn active(&self) -> Option<(CaptchaProvider, &CaptchaKeys)> {
+        self.providers.iter().find_map(|provider| {
+            self.keys
+                .get(provider)
+                .filter(|keys| !keys.site_key.is_empty() && !keys.secret_key.is_empty())
+                .map(|keys| (*provider, keys))
+        })
+    }
+
+    /// Whether the challenge can be enforced at all.
+    pub fn is_usable(&self) -> bool {
+        self.enabled && self.active().is_some()
+    }
+}
+
+impl Default for CaptchaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: 3,
+            providers: Vec::new(),
+            keys: HashMap::new(),
+        }
+    }
+}
+
+impl Default for RankingConfig {
+    fn default() -> Self {
+        Self {
+            bind: DEFAULT_BIND.parse().expect("the default bind is a literal"),
+            shard: DEFAULT_SHARD,
+            database_url: None,
+            static_dir: None,
+            credits_file: None,
+            logo_path: None,
+            avatar_dir: None,
+            session_secret: None,
+            captcha: CaptchaConfig::default(),
+            redis_url: None,
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum ConfigError {
+    #[error("RANKING_BIND_ADDRESS is not a socket address: {0}")]
+    InvalidBind(String),
+}
+
+impl RankingConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        Self::from_pairs(env::vars())
+    }
+
+    pub fn from_pairs<I, K, V>(pairs: I) -> Result<Self, ConfigError>
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    {
+        let vars: HashMap<String, String> = pairs
+            .into_iter()
+            .map(|(key, value)| (key.into(), value.into()))
+            .collect();
+        Ok(Self {
+            bind: read_bind(&vars)?,
+            shard: read_shard(&vars),
+            database_url: read_database_url(&vars),
+            static_dir: read_path(&vars, "RANKING_STATIC_DIR", DEFAULT_STATIC_DIR),
+            credits_file: read_path(&vars, "CMS_CREDITS_FILE", DEFAULT_CREDITS_FILE),
+            logo_path: read_path(&vars, "RANKING_LOGO_PATH", ""),
+            avatar_dir: read_path(&vars, "RANKING_AVATAR_DIR", DEFAULT_AVATAR_DIR),
+            session_secret: read_secret(&vars),
+            captcha: read_captcha(&vars),
+            redis_url: read_trimmed_optional(&vars, "RANKING_REDIS_URL"),
+        })
+    }
+}
+
+fn read_bind(vars: &HashMap<String, String>) -> Result<SocketAddr, ConfigError> {
+    let raw = vars
+        .get("RANKING_BIND_ADDRESS")
+        .map(String::as_str)
+        .unwrap_or(DEFAULT_BIND);
+    raw.parse::<SocketAddr>()
+        .map_err(|_| ConfigError::InvalidBind(raw.to_string()))
+}
+
+/// An unset or unparsable shard is the first one rather than a refusal: the shard only decides
+/// which row is read, and a typo that refused to start the service would take the board down for a
+/// value that is already the default of every deployment.
+fn read_shard(vars: &HashMap<String, String>) -> u32 {
+    vars.get("RANKING_SHARD")
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .unwrap_or(DEFAULT_SHARD)
+}
+
+fn read_database_url(vars: &HashMap<String, String>) -> Option<String> {
+    vars.get("DATABASE_URL")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+/// An empty value means "not configured" rather than "the current directory", so a
+/// blank variable disables the route it feeds instead of pointing it somewhere
+/// unintended.
+fn read_path(vars: &HashMap<String, String>, key: &str, fallback: &str) -> Option<PathBuf> {
+    let raw = vars.get(key).map(String::as_str).unwrap_or(fallback).trim();
+    if raw.is_empty() {
+        None
+    } else {
+        Some(PathBuf::from(raw))
+    }
+}
+
+fn read_trimmed_optional(vars: &HashMap<String, String>, key: &str) -> Option<String> {
+    let raw = read_trimmed(vars, key);
+    if raw.is_empty() {
+        None
+    } else {
+        Some(raw)
+    }
+}
+
+fn read_captcha(vars: &HashMap<String, String>) -> CaptchaConfig {
+    let legacy = CaptchaProvider::from_wire(
+        vars.get("CAPTCHA_PROVIDER")
+            .map(String::as_str)
+            .unwrap_or("turnstile"),
+    );
+    let mut providers: Vec<CaptchaProvider> = Vec::new();
+    for part in read_trimmed(vars, "CAPTCHA_PROVIDERS").split(',') {
+        if let Some(provider) = CaptchaProvider::parse(part) {
+            if !providers.contains(&provider) {
+                providers.push(provider);
+            }
+        }
+    }
+    if providers.is_empty() {
+        providers.push(legacy);
+    }
+    let mut keys = HashMap::new();
+    for provider in &providers {
+        let prefix = format!("CAPTCHA_{}", provider.wire_name().to_ascii_uppercase());
+        let mut site_key = read_trimmed(vars, &format!("{prefix}_SITE_KEY"));
+        let mut secret_key = read_trimmed(vars, &format!("{prefix}_SECRET_KEY"));
+        // WHY the fallback: a deployment that still sets only the legacy scalar
+        // keys must keep working; they stand in for the legacy provider's entry.
+        if *provider == legacy && site_key.is_empty() && secret_key.is_empty() {
+            site_key = read_trimmed(vars, "CAPTCHA_SITE_KEY");
+            secret_key = read_trimmed(vars, "CAPTCHA_SECRET_KEY");
+        }
+        keys.insert(
+            *provider,
+            CaptchaKeys {
+                site_key,
+                secret_key,
+            },
+        );
+    }
+    CaptchaConfig {
+        enabled: read_flag(vars, "CAPTCHA_ENABLED"),
+        threshold: read_threshold(vars, "CAPTCHA_THRESHOLD", 3),
+        providers,
+        keys,
+    }
+}
+
+/// Anything but 1/true is off: a half-written value must not enable a challenge the
+/// deployment has no keys for.
+fn read_flag(vars: &HashMap<String, String>, key: &str) -> bool {
+    matches!(
+        vars.get(key).map(|value| value.trim().to_ascii_lowercase()),
+        Some(ref value) if value == "1" || value == "true"
+    )
+}
+
+fn read_trimmed(vars: &HashMap<String, String>, key: &str) -> String {
+    vars.get(key)
+        .map(|value| value.trim().to_string())
+        .unwrap_or_default()
+}
+
+fn read_threshold(vars: &HashMap<String, String>, key: &str, fallback: u32) -> u32 {
+    vars.get(key)
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(fallback)
+}
+
+/// The console cannot issue or verify a cookie without this, so an unset value is a
+/// refusal at the login route rather than a session nobody signed.
+fn read_secret(vars: &HashMap<String, String>) -> Option<String> {
+    vars.get("RANKING_SESSION_SECRET")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+#[cfg(test)]
+mod tests;

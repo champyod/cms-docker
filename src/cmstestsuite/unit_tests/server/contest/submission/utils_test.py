@@ -82,7 +82,7 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
             self.session, self.participation, self.task, language, codenames,
             cls)
 
-    def test_success_submission(self):
+    def test_it_returns_the_digests_of_matching_files(self):
         foo_digest = unique_digest()
         baz_digest = unique_digest()
         self.insert_submission("C",
@@ -90,11 +90,11 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
         self.assertEqual(self.call(C_LANG, {"foo.%l", "bar.txt"}),
                          {"foo.%l": foo_digest})
 
-    def test_no_submission(self):
+    def test_it_returns_nothing_without_a_previous_submission(self):
         self.assertEqual(self.call(C_LANG, {"foo.%l", "bar.txt"}),
                          dict())
 
-    def test_previous_submission_wrong_language(self):
+    def test_it_returns_nothing_when_the_language_differs(self):
         foo_digest = unique_digest()
         baz_digest = unique_digest()
         self.insert_submission("Py2",
@@ -102,7 +102,7 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
         self.assertEqual(self.call(C_LANG, {"foo.%l", "bar.txt"}),
                          dict())
 
-    def test_language_agnostic(self):
+    def test_it_returns_the_digests_for_a_language_agnostic_submission(self):
         foo_digest = unique_digest()
         baz_digest = unique_digest()
         self.insert_submission(None,
@@ -110,7 +110,7 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
         self.assertEqual(self.call(None, {"foo.txt", "bar.zip"}),
                          {"foo.txt": foo_digest})
 
-    def test_success_user_test(self):
+    def test_it_returns_the_digests_of_matching_user_test_files(self):
         input_digest = unique_digest()
         foo_digest = unique_digest()
         baz_digest = unique_digest()
@@ -127,12 +127,12 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
                           "foo.%l": foo_digest,
                           "spam.%l": spam_digest})
 
-    def test_no_user_test(self):
+    def test_it_returns_nothing_without_a_previous_user_test(self):
         self.assertEqual(self.call(C_LANG, {"foo.%l", "bar.txt"},
                                    cls=UserTest),
                          dict())
 
-    def test_previous_user_test_wrong_language(self):
+    def test_it_returns_nothing_when_the_user_test_language_differs(self):
         foo_digest = unique_digest()
         baz_digest = unique_digest()
         input_digest = unique_digest()
@@ -147,7 +147,7 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
                                    cls=UserTest),
                          dict())
 
-    def test_managers_can_use_only_primary_extension(self):
+    def test_it_matches_managers_only_by_the_primary_extension(self):
         input_digest = unique_digest()
         foo_digest = unique_digest()
         bar_digest = unique_digest()
@@ -157,7 +157,7 @@ class TestFetchFileDigestsFromPreviousSubmission(DatabaseMixin,
                                    cls=UserTest),
                          {"foo.%l": foo_digest})
 
-    def test_managers_extension_replacement(self):
+    def test_it_replaces_the_full_placeholder_with_the_primary_extension(self):
         input_digest = unique_digest()
         foo_digest = unique_digest()
         bad_digest = unique_digest()
@@ -202,7 +202,7 @@ class TestStoreLocalCopy(DatabaseMixin, FileSystemMixin, unittest.TestCase):
                         return
         self.fail("store_local_copy didn't create any file")
 
-    def test_success(self):
+    def test_it_stores_a_local_copy_of_the_files(self):
         # We use a content that is unique enough to ensure that if we
         # find it in a file it won't be a false positive.
         content = self.generate_content()
@@ -211,7 +211,7 @@ class TestStoreLocalCopy(DatabaseMixin, FileSystemMixin, unittest.TestCase):
                          self.timestamp, {"foo.%l": content})
         self.assertSomeFileContains(content, in_=directory)
 
-    def test_success_many_times(self):
+    def test_it_keeps_copies_from_successive_calls(self):
         # Test that multiple files are allowed in a single call and that
         # successive calls don't overwrite preceding ones.
         content_a = self.generate_content()
@@ -228,7 +228,7 @@ class TestStoreLocalCopy(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertSomeFileContains(content_b, in_=self.base_dir)
         self.assertSomeFileContains(content_c, in_=self.base_dir)
 
-    def test_success_with_data_dir(self):
+    def test_it_resolves_a_relative_path_under_the_data_dir(self):
         content = self.generate_content()
         with patch.object(config.global_, "data_dir", self.base_dir):
             store_local_copy("%s/bar", self.participation, self.task,
@@ -236,7 +236,7 @@ class TestStoreLocalCopy(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertSomeFileContains(content,
                                     in_=os.path.join(self.base_dir, "bar"))
 
-    def test_failure(self):
+    def test_it_raises_when_the_directory_is_not_writable(self):
         # Make read-only.
         os.chmod(self.base_dir, stat.S_IRUSR)
         with self.assertRaises(StorageFailed):

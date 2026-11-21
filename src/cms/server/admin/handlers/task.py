@@ -39,9 +39,10 @@ except:
 
 import tornado.web
 
-from cms.db import Attachment, Dataset, Session, Statement, Submission, Task
+from cms.db import Attachment, ContestTask, Dataset, Session, Statement, \
+    Submission, Task
 from cmscommon.datetime import make_datetime
-from .base import BaseHandler, SimpleHandler, require_permission
+from .base import BaseHandler, SimpleHandler, first_contest, require_permission
 
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class TaskHandler(BaseHandler):
     @require_permission(BaseHandler.AUTHENTICATED)
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         self.r_params = self.render_params()
         self.r_params["task"] = task
@@ -230,7 +231,7 @@ class AddStatementHandler(BaseHandler):
     @require_permission("statement:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         self.r_params = self.render_params()
         self.r_params["task"] = task
@@ -278,7 +279,7 @@ class AddStatementHandler(BaseHandler):
 
         self.sql_session = Session()
         task = self.safe_get_item(Task, task_id)
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         statement = Statement(language, digest, task=task)
         self.sql_session.add(statement)
@@ -318,7 +319,7 @@ class AddAttachmentHandler(BaseHandler):
     @require_permission("attachment:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         self.r_params = self.render_params()
         self.r_params["task"] = task
@@ -396,7 +397,7 @@ class AddDatasetHandler(BaseHandler):
     @require_permission("dataset:create")
     def get(self, task_id):
         task = self.safe_get_item(Task, task_id)
-        self.contest = task.contest
+        self.contest = first_contest(task)
 
         original_dataset = None
         description = "Default"
@@ -502,22 +503,25 @@ class RemoveTaskHandler(BaseHandler):
     @require_permission("task:delete")
     def delete(self, task_id):
         task = self.safe_get_item(Task, task_id)
-        contest_id = task.contest_id
-        num = task.num
+        # Capture the memberships before the task (and its rows) go away, so
+        # each affected contest's numbering can be closed up.
+        memberships = [(ct.contest_id, ct.num) for ct in task.contest_tasks]
 
         self.sql_session.delete(task)
         self.sql_session.flush()
-        # Keeping the tasks' nums to the range 0... n - 1.
-        if contest_id is not None:
-            following_tasks: list[Task] = (
-                self.sql_session.query(Task)
-                .filter(Task.contest_id == contest_id)
-                .filter(Task.num > num)
-                .order_by(Task.num)
+        # Keeping each contest's nums to the range 0... n - 1.
+        for contest_id, num in memberships:
+            if num is None:
+                continue
+            following_tasks = (
+                self.sql_session.query(ContestTask)
+                .filter(ContestTask.contest_id == contest_id)
+                .filter(ContestTask.num > num)
+                .order_by(ContestTask.num)
                 .all()
             )
-            for task in following_tasks:
-                task.num -= 1
+            for contest_task in following_tasks:
+                contest_task.num -= 1
                 self.sql_session.flush()
         if self.try_commit():
             self.service.proxy_service.reinitialize()

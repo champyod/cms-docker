@@ -6,6 +6,8 @@ import { ensurePermission, getPermissions } from '@/lib/permissions';
 import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { cloneDatasetRecords } from '@/lib/dataset-cloning';
+import { isEmptyTaskTypeParams, validateTaskTypeParams, DEFAULT_TASK_TYPE } from '@/lib/tasktype-params';
+import { mebibytesToBytes, parseMemoryLimitMb, parseTimeLimit } from '@/lib/dataset-limits';
 import type { Prisma } from '@prisma/client';
 
 export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<{ include: { testcases: { orderBy: { codename: 'asc' } }; managers: true; tasks_datasets_task_idTotasks: true } }> | null> {
@@ -22,7 +24,7 @@ export async function getDataset(id: number): Promise<Prisma.datasetsGetPayload<
 
 export async function createDataset(
   taskId: number,
-  data: { description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string }
+  data: { description: string; time_limit?: number; memory_limit?: number; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown }
 ): Promise<{ success: boolean; dataset?: Prisma.datasetsGetPayload<Record<string, never>>; error?: string }> {
   await ensurePermission('dataset:create');
   try {
@@ -33,19 +35,34 @@ export async function createDataset(
       memory_limit: data.memory_limit ?? null,
       task_type: data.task_type ?? null,
       score_type: data.score_type ?? null,
+      task_type_parameters: data.task_type_parameters ?? [],
+      score_type_parameters: data.score_type_parameters ?? [],
     }, effectivePermissions);
+
+    const storedTaskType = (allowed.task_type as string) ?? DEFAULT_TASK_TYPE;
+    const taskParams = validateTaskTypeParams(
+      storedTaskType,
+      'task_type_parameters' in allowed ? data.task_type_parameters : [],
+    );
+    if (!taskParams.isValid) return { success: false, error: taskParams.message };
+
+    // Why after the permission strip: the value that is parsed is the one that survived, so an
+    // operator without the field permission still stores NULL rather than the value they sent.
+    const timeLimit = 'time_limit' in allowed ? parseTimeLimit(allowed.time_limit) : { ok: true as const, value: null };
+    if (!timeLimit.ok) return { success: false, error: timeLimit.message };
+    const memoryLimit = 'memory_limit' in allowed ? parseMemoryLimitMb(allowed.memory_limit) : { ok: true as const, value: null };
+    if (!memoryLimit.ok) return { success: false, error: memoryLimit.message };
 
     const dataset = await prisma.datasets.create({
       data: {
         task_id: taskId,
         description: (allowed.description as string) ?? data.description,
-        time_limit: allowed.time_limit !== undefined ? (allowed.time_limit as number | null) : null,
-        memory_limit: allowed.memory_limit !== undefined && allowed.memory_limit
-          ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null,
-        task_type: (allowed.task_type as string) ?? 'Batch',
-        task_type_parameters: [],
+        time_limit: timeLimit.value,
+        memory_limit: mebibytesToBytes(memoryLimit.value),
+        task_type: storedTaskType,
+        task_type_parameters: taskParams.params as Prisma.InputJsonValue,
         score_type: (allowed.score_type as string) ?? 'Sum',
-        score_type_parameters: [],
+        score_type_parameters: (allowed.score_type_parameters as Prisma.InputJsonValue) ?? [],
         autojudge: false,
       },
     });
@@ -138,6 +155,9 @@ export async function deleteDataset(datasetId: number): Promise<{ success: boole
 
 export async function activateDataset(datasetId: number): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:switch');
+  // Why both: activating rewrites the task's active_dataset_id, which the
+  // field map guards with task:switch_dataset, so the action requires it too.
+  await ensurePermission('task:switch_dataset');
   try {
     const dataset = await prisma.datasets.findUnique({ where: { id: datasetId } });
     if (!dataset) return { success: false, error: 'Dataset not found' };
@@ -182,9 +202,39 @@ export async function toggleAutojudge(datasetId: number): Promise<{ success: boo
   }
 }
 
+// Why the stored pair is re-read: the worker consumes task_type and its
+// parameters together, so an edit must validate the combination it leaves
+// behind — a type-only change re-checks the stored list, and an empty stored
+// list gains the new type's defaults rather than stranding the old type's values.
+async function buildTaskTypeParamsUpdate(
+  datasetId: number,
+  allowed: Partial<Record<string, unknown>>,
+  sentParams: unknown,
+): Promise<{ isValid: true; updateData: Record<string, unknown> } | { isValid: false; error: string }> {
+  const hasType = typeof allowed.task_type === 'string' && allowed.task_type !== '';
+  const hasParams = 'task_type_parameters' in allowed;
+  if (!hasType && !hasParams) return { isValid: true, updateData: {} };
+
+  const stored = await prisma.datasets.findUnique({
+    where: { id: datasetId },
+    select: { task_type: true, task_type_parameters: true },
+  });
+  const storedParams = stored?.task_type_parameters;
+  const taskParams = validateTaskTypeParams(
+    hasType ? (allowed.task_type as string) : (stored?.task_type ?? DEFAULT_TASK_TYPE),
+    hasParams ? sentParams : storedParams,
+  );
+  if (!taskParams.isValid) return { isValid: false, error: taskParams.message };
+
+  const updateData: Record<string, unknown> = {};
+  if (hasType) updateData.task_type = allowed.task_type;
+  if (hasParams || isEmptyTaskTypeParams(storedParams)) updateData.task_type_parameters = taskParams.params;
+  return { isValid: true, updateData };
+}
+
 export async function updateDataset(
   datasetId: number,
-  data: { time_limit?: number | null; memory_limit?: number | null; task_type?: string; score_type?: string }
+  data: { time_limit?: number | null; memory_limit?: number | null; task_type?: string; score_type?: string; task_type_parameters?: unknown; score_type_parameters?: unknown }
 ): Promise<{ success: boolean; error?: string }> {
   await ensurePermission('dataset:update');
   try {
@@ -192,12 +242,28 @@ export async function updateDataset(
     const allowed = stripDisallowedFields('datasets', data as Record<string, unknown>, effectivePermissions);
 
     const updateData: Record<string, unknown> = {};
-    if ('time_limit' in allowed) updateData.time_limit = allowed.time_limit;
-    if ('memory_limit' in allowed) {
-      updateData.memory_limit = allowed.memory_limit ? BigInt((allowed.memory_limit as number) * 1024 * 1024) : null;
+    if ('time_limit' in allowed) {
+      const parsed = parseTimeLimit(allowed.time_limit);
+      if (!parsed.ok) return { success: false, error: parsed.message };
+      updateData.time_limit = parsed.value;
     }
-    if ('task_type' in allowed) updateData.task_type = allowed.task_type;
+    if ('memory_limit' in allowed) {
+      const parsed = parseMemoryLimitMb(allowed.memory_limit);
+      if (!parsed.ok) return { success: false, error: parsed.message };
+      updateData.memory_limit = mebibytesToBytes(parsed.value);
+    }
     if ('score_type' in allowed) updateData.score_type = allowed.score_type;
+    if ('score_type_parameters' in allowed) {
+      const scoreParams = allowed.score_type_parameters;
+      if (typeof scoreParams !== 'number' && !Array.isArray(scoreParams)) {
+        return { success: false, error: 'Score parameters must be a number or an array' };
+      }
+      updateData.score_type_parameters = scoreParams;
+    }
+
+    const taskTypeUpdate = await buildTaskTypeParamsUpdate(datasetId, allowed, data.task_type_parameters);
+    if (!taskTypeUpdate.isValid) return { success: false, error: taskTypeUpdate.error };
+    Object.assign(updateData, taskTypeUpdate.updateData);
 
     if (Object.keys(updateData).length === 0) {
       return { success: false, error: 'No permitted fields to update' };

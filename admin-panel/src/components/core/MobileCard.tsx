@@ -22,7 +22,9 @@ export function MobileCardRow({ label, value, className }: MobileCardRowProps) {
   return (
     <div className={cn('flex items-center justify-between gap-3 py-1.5 text-sm', className)}>
       <span className="text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-right font-medium text-foreground">{value}</span>
+      {/* A block wrapper, not a span: a column's render may return a <div>, and a
+          div inside a span is invalid HTML that hydrates differently on the client. */}
+      <div className="min-w-0 text-right font-medium text-foreground">{value}</div>
     </div>
   );
 }

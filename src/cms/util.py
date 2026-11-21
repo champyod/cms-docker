@@ -184,18 +184,19 @@ _ServiceT = typing.TypeVar("_ServiceT", bound="Service")
 
 
 def default_argument_parser(
-    description: str, cls: type[_ServiceT], ask_contest: Callable[[], int] | None = None
+    description: str, cls: type[_ServiceT], contest_scoped: bool = False
 ) -> _ServiceT:
     """Default argument parser for services.
 
-    This has two versions, depending on whether the service needs a
-    contest_id, or not.
+    This has two versions, depending on whether the service serves
+    contests, or not.
 
     description: description of the service.
     cls: service's class.
-    ask_contest: None if the service does not require
-        a contest, otherwise a function that returns a contest_id
-        (after asking the admins?)
+    contest_scoped: whether the service serves contests. Such a service starts bound to
+        the contest its -c argument fixes it to, and to none when the argument is absent —
+        it then resolves its own contest as it works (cms.db.contest_binding), so an
+        operator's edit reaches a running instance without recreating it.
 
     return: an instance of a service.
 
@@ -208,7 +209,7 @@ def default_argument_parser(
     # everything without knowing which is which.
     contest_id_help = "id of the contest to automatically load, " \
                       "or ALL to serve all contests"
-    if ask_contest is None:
+    if not contest_scoped:
         contest_id_help += " (ignored)"
     parser.add_argument("-c", "--contest-id", action="store",
                         type=utf8_decoder, help=contest_id_help)
@@ -221,13 +222,9 @@ def default_argument_parser(
                           "no shard specified for service %s, "
                           "quitting." % (cls.__name__,))
 
-    if ask_contest is None:
+    if not contest_scoped or args.contest_id is None:
         return cls(args.shard)
-    contest_id = contest_id_from_args(args.contest_id, ask_contest)
-    if contest_id is None:
-        return cls(args.shard)
-    else:
-        return cls(args.shard, contest_id)
+    return cls(args.shard, contest_override_from_args(args.contest_id))
 
 
 def contest_id_from_args(
@@ -245,18 +242,29 @@ def contest_id_from_args(
     """
     assert ask_contest is not None
 
+    if args_contest_id is None:
+        return _checked_contest_id(ask_contest())
+    return contest_override_from_args(args_contest_id)
+
+
+def contest_override_from_args(args_contest_id: int | str) -> int | None:
+    """Return the contest a -c argument fixes a service to, None for ALL.
+
+    args_contest_id: the contest_id passed as argument, which the caller has checked is
+        present.
+
+    """
     if args_contest_id == "ALL":
         return None
-    if args_contest_id is not None:
-        try:
-            contest_id = int(args_contest_id)
-        except ValueError:
-            logger.critical("Unable to parse contest id '%s'", args_contest_id)
-            sys.exit(1)
-    else:
-        contest_id = ask_contest()
+    try:
+        return _checked_contest_id(int(args_contest_id))
+    except ValueError:
+        logger.critical("Unable to parse contest id '%s'", args_contest_id)
+        sys.exit(1)
 
-    # Test if there is a contest with the given contest id.
+
+def _checked_contest_id(contest_id: int) -> int:
+    """Return contest_id, or exit when the database names no contest carrying it."""
     from cms.db import is_contest_id
     if not is_contest_id(contest_id):
         logger.critical("There is no contest with the specified id. "

@@ -26,44 +26,21 @@ cd "$REPO_ROOT"
 
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
+# The panel SSE definition, shared with the route table and the funnel-mirror template.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__nginx_sse.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__domain_routes.sh"
+source "${SCRIPT_DIR}/__security_headers.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__acme.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__acme_tls_alpn.sh"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/__cert_import.sh"
 
-# ---------------------------------------------------------------------------
-# External tool guards
-# ---------------------------------------------------------------------------
-# Reports whether <tool> is on PATH, naming what could not be done when it is not.
-# WHY every caller checks first instead of letting the command run: an absent tool
-# is otherwise indistinguishable from the failure the caller was probing for, so a
-# missing curl reads as an unreachable host and a missing envsubst as an empty
-# template.
-require_external() {
-  local tool="$1" purpose="${2:-this check}"
-  if ! command -v "$tool" >/dev/null 2>&1; then
-    log_warn "${tool} not found — cannot run ${purpose}"
-    return 1
-  fi
-  return 0
-}
-
-# The same test as require_external, without the warning. WHY the quiet twin: a
-# preflight row prints its padded label first, and a warning on stderr lands in the
-# middle of that row and reads as a broken line. The row's own SKIPPED text names the
-# missing tool instead.
-_external_present() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-# Runs <command...> under a <seconds> bound when GNU timeout is present. WHY the
-# bound is dropped rather than the lookup when timeout is missing: the bound exists
-# to stop a dead resolver from stalling a status call, and losing it costs a slow
-# answer where skipping it would cost every host reading as unresolved.
-_bounded() {
-  local seconds="$1"
-  shift
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$seconds" "$@"
-  else
-    "$@"
-  fi
+env_val() {
+  awk -F= -v k="$2" '$1==k {v=$0; sub(/^[^=]*=/,"",v); gsub(/^[ \t]+|[ \t\r]+$/,"",v); print v; exit}' "$1" 2>/dev/null || true
 }
 
 # ---------------------------------------------------------------------------
@@ -86,7 +63,7 @@ if [[ -n "$CONFIG_FILE" && ! -f "$CONFIG_FILE" ]]; then
 fi
 if [[ -f "$ENV_FILE" ]]; then
   set -a
-  # shellcheck disable=SC1090
+  # shellcheck disable=SC1091
   source "$ENV_FILE" 2>/dev/null || true
   set +a
 fi
@@ -94,44 +71,109 @@ fi
 # ---------------------------------------------------------------------------
 # Discord alert stub
 # ---------------------------------------------------------------------------
+# discord_payload_json <color> <ts> — the alert body on stdout, with the message on stdin.
+# WHY the message arrives on stdin: it names hosts, domains, ports and certificate paths,
+# and a process command line is readable by every account on the box for as long as the
+# builder lives — the same exposure the webhook token gets, one process earlier.
+discord_payload_json() {
+  python3 -c '
+import json,sys
+msg,clr,ts=sys.stdin.read().rstrip("\n"),int(sys.argv[1]),sys.argv[2]
+body={"embeds":[{"title":"CMS Domain System","description":msg,"color":clr,"timestamp":ts}]}
+print(json.dumps(body))
+' "$1" "$2"
+}
+
+# discord_post <payload_file> <conf_file> <url> — deliver a prepared alert.
+# WHY the webhook lands in a curl config file instead of on the command line: the token in
+# that URL is a credential, and a process command line is readable by every account on the
+# box for as long as the request lives. The body is read from disk for the same reason, so
+# no part of an alert is ever in argv.
+discord_post() {
+  local payload_file="$1" conf_file="$2" url="$3"
+  cat > "$conf_file" <<EOF
+url = "${url}"
+EOF
+  curl -s -H "Content-Type: application/json" -X POST -d "@${payload_file}" -K "$conf_file" >/dev/null 2>&1
+}
+
 discord_alert() {
   local message="${1:-}"
   local color="${2:-3447003}"
   local webhook="${DISCORD_WEBHOOK_URL:-}"
-  [[ -z "$webhook" ]] && { log_info "discord_alert: no DISCORD_WEBHOOK_URL set — skipping"; return 0; }
-  local ts
-  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  if command -v python3 >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; then
-    python3 -c '
-import json,sys
-msg,clr,ts=sys.argv[1],int(sys.argv[2]),sys.argv[3]
-body={"embeds":[{"title":"CMS Domain System","description":msg,"color":clr,"timestamp":ts}]}
-print(json.dumps(body))
-' "$message" "$color" "$ts" | curl -s -H "Content-Type: application/json" -X POST -d @- "$webhook" >/dev/null 2>&1 \
-      || log_warn "Discord webhook POST failed"
-  else
-    log_warn "Discord alert skipped — sending one needs both python3 and curl"
+  if [[ -z "$webhook" ]]; then
+    log_info "discord_alert: no DISCORD_WEBHOOK_URL set — skipping"
+    return 0
   fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    log_warn "python3 not found — cannot send Discord alert"
+    return 0
+  fi
+
+  local payload_file conf_file
+  payload_file="$(mktemp "${TMPDIR:-/tmp}/cms-domain-payload.XXXXXX")" || {
+    log_warn "could not stage the Discord payload"
+    return 0
+  }
+  conf_file="$(mktemp "${TMPDIR:-/tmp}/cms-domain-request.XXXXXX")" || {
+    rm -f -- "$payload_file"
+    log_warn "could not stage the Discord request"
+    return 0
+  }
+  chmod 600 "$payload_file" "$conf_file" 2>/dev/null || true
+
+  # WHY the removal is one statement at the end and not a RETURN trap: a RETURN trap is not
+  # scoped to the function that set it, so it fires at some later function's return, with
+  # this one's locals already gone. Each step below is captured into a status rather than
+  # returned early, so this is the only exit and the payload is never left behind.
+  local build_status=0
+  discord_payload_json "$color" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    > "$payload_file" <<< "$message" || build_status=$?
+  if (( build_status != 0 )); then
+    log_warn "Discord payload could not be built"
+  else
+    discord_post "$payload_file" "$conf_file" "$webhook" || log_warn "Discord webhook POST failed"
+  fi
+  rm -f -- "$payload_file" "$conf_file"
 }
 
 # ---------------------------------------------------------------------------
 # Defaults
 # ---------------------------------------------------------------------------
-DOMAIN_NAME="${DOMAIN_NAME:-cms.local}"
-ADMIN_DOMAIN="${ADMIN_DOMAIN:-admin.cms.local}"
-OJ_DOMAIN="${OJ_DOMAIN:-oj.cms.local}"
-RANKING_DOMAIN="${RANKING_DOMAIN:-ranking.cms.local}"
-CERT_TYPE="${CERT_TYPE:-letsencrypt}"
+# Domains — all optional.
+#
+# Each is independent: any single one is enough to run the proxy, and a deployment
+# that serves only the contest UI leaves admin/oj/ranking empty. They default to
+# empty rather than to a .local name, because a leftover default would be handed
+# to certbot as a SAN and fail validation — a hard error the operator cannot see
+# the cause of. CERT_LINEAGE_DOMAIN is derived from whichever is set, because
+# certbot names the certificate lineage after the first -d it was given and every
+# vhost has to read the certificate from that exact path.
+# ---------------------------------------------------------------------------
+DOMAIN_NAME="${DOMAIN_NAME:-}"
+ADMIN_DOMAIN="${ADMIN_DOMAIN:-}"
+OJ_DOMAIN="${OJ_DOMAIN:-}"
+RANKING_DOMAIN="${RANKING_DOMAIN:-}"
+CERT_LINEAGE_DOMAIN="${CERT_LINEAGE_DOMAIN:-}"
+DOMAIN_CERT_METHOD="${DOMAIN_CERT_METHOD:-letsencrypt}"
 CERT_PATH=""
 KEY_PATH=""
 CERT_EMAIL="${CERT_EMAIL:-}"
 HSTS_MAX_AGE="${HSTS_MAX_AGE:-31536000}"
+# The body ceiling every vhost in config/grader.nginx.conf.template hands to
+# client_max_body_size. WHY 100M and not the 10M three of the four vhosts carried: this
+# one value is the only lever, so any fallback below the largest existing limit would
+# silently shrink the one vhost that needs 100M, and the panel's own 51MB upload cap
+# would still be refused by an unset key. 100M keeps every current vhost working and
+# makes the panel's limit the effective one; an operator who wants the old 10M ceiling
+# sets PROXY_MAX_BODY_SIZE=10M in config.toml [infra].
+PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 REDIS_RATE_LIMIT="${REDIS_RATE_LIMIT:-0}"
 PER_USER_LIMIT="${PER_USER_LIMIT:-1}"
 REDIS_HOST="${REDIS_HOST:-redis-rate-limit}"
 REDIS_PORT="${REDIS_PORT:-6379}"
 MONITORING_ENABLED="${MONITORING_ENABLED:-0}"
-TAILSCALE_IP="${TAILSCALE_IP:-127.0.0.1}"
+INNER_IP="${INNER_IP:-127.0.0.1}"
 WAF_ENABLED="${WAF_ENABLED:-0}"
 WAF_PORT="${WAF_PORT:-8080}"
 WAF_BIND_IP="${WAF_BIND_IP:-127.0.0.1}"
@@ -173,6 +215,14 @@ readonly CERT_RETRY_BACKOFF_CAP=120
 AUTO_RETRY="${AUTO_RETRY:-0}"
 CERT_RETRY_ATTEMPTS="${CERT_RETRY_ATTEMPTS:-$CERT_RETRY_ATTEMPTS_DEFAULT}"
 CERT_RETRY_INTERVAL="${CERT_RETRY_INTERVAL:-$CERT_RETRY_INTERVAL_DEFAULT}"
+# A truthy value here is equivalent to passing --retry-forever: it enables retry
+# and clears the attempt cap, so .env and the TUI form can express "keep trying"
+# without a command-line flag.
+CERT_RETRY_FOREVER="${CERT_RETRY_FOREVER:-0}"
+if [[ "$CERT_RETRY_FOREVER" == "1" ]]; then
+  AUTO_RETRY=1
+  CERT_RETRY_ATTEMPTS=0
+fi
 
 # Extended feature flags — every one defaults off so existing runs are unchanged.
 EXTRA_DOMAINS="${EXTRA_DOMAINS:-}"
@@ -193,19 +243,57 @@ USE_LOCK="${USE_LOCK:-0}"
 # instead of one test.
 SETUP_ISSUE_CERT=1
 SETUP_RENDER_PROXY=1
+# End a live setup by forcing a renewal, so a config change takes effect on the running
+# nginx without a second command. Zero by default: a bare setup must not renew a
+# certificate that is still valid.
+AUTO_RENEW="${AUTO_RENEW:-0}"
 REVOKE_REASON="${REVOKE_REASON:-unspecified}"
-# DNS-01 challenge (optional). An empty DNS_PROVIDER keeps the HTTP-01 webroot path
-# exactly as before; setting it switches issuance to the provider's DNS plugin,
-# which is what a wildcard certificate or a host that cannot answer :80 requires.
-DNS_PROVIDER="${DNS_PROVIDER:-}"
-DNS_CREDENTIALS_FILE="${DNS_CREDENTIALS_FILE:-}"
+# An empty ACME_DNS_PROVIDER keeps HTTP-01; setting it switches issuance to the plugin.
+ACME_DNS_PROVIDER="${ACME_DNS_PROVIDER:-}"
+ACME_DNS_CREDENTIALS_FILE="${ACME_DNS_CREDENTIALS_FILE:-}"
+ACME_CERTBOT_IMAGE="${ACME_CERTBOT_IMAGE:-${CERTBOT_IMAGE:-}}"
+# The pre-namespace names are still read, so an un-synced .env drops DNS-01 no further
+# than one warning telling the operator to run './cms config sync'.
+if [[ -z "${ACME_DNS_PROVIDER}" && -n "${DNS_PROVIDER:-}" ]]; then
+  ACME_DNS_PROVIDER="$DNS_PROVIDER"
+  log_warn "DNS_PROVIDER is deprecated — ACME_DNS_PROVIDER carries it now; run './cms config sync'"
+fi
+if [[ -z "${ACME_DNS_CREDENTIALS_FILE}" && -n "${DNS_CREDENTIALS_FILE:-}" ]]; then
+  ACME_DNS_CREDENTIALS_FILE="$DNS_CREDENTIALS_FILE"
+  log_warn "DNS_CREDENTIALS_FILE is deprecated — ACME_DNS_CREDENTIALS_FILE carries it now; run './cms config sync'"
+fi
 CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
-readonly LE_STAGING_DIRECTORY="https://acme-staging-v02.api.letsencrypt.org/directory"
+# Defaults reproduce what existed before these keys: HTTP-01 through certbot.
+ACME_CHALLENGE="${ACME_CHALLENGE:-http-01}"
+ACME_CLIENT="${ACME_CLIENT:-certbot}"
+ACME_CA="${ACME_CA:-letsencrypt}"
+ACME_DIRECTORY_URL="${ACME_DIRECTORY_URL:-}"
+ACME_TLS_ALPN_ADDRESS="${ACME_TLS_ALPN_ADDRESS:-:443}"
+ACME_LEGO_IMAGE="${ACME_LEGO_IMAGE:-goacme/lego:v5.5.2}"
+ACME_HTTP01_ON_443="${ACME_HTTP01_ON_443:-0}"
+ACME_HANDOVER_TIMEOUT="${ACME_HANDOVER_TIMEOUT:-$ACME_HANDOVER_TIMEOUT_DEFAULT}"
+# `-` not `:-`: an explicit empty window means "never", and 0 means "due on issue".
+ACME_RENEW_AT_UTC="${ACME_RENEW_AT_UTC-$ACME_RENEW_AT_UTC_DEFAULT}"
+ACME_RENEW_BEFORE_DAYS="${ACME_RENEW_BEFORE_DAYS-$ACME_RENEW_BEFORE_DAYS_DEFAULT}"
+# 0 means `renew --due`, which asks the CA; without it the run forces a reissue now.
+RENEW_DUE_ONLY=0
+
+# The configured value of every key a flag can override, captured before argv is read.
+CONFIGURED_DOMAIN_CERT_METHOD="$DOMAIN_CERT_METHOD"
+CONFIGURED_ACME_CHALLENGE="$ACME_CHALLENGE"
+CONFIGURED_ACME_CA="$ACME_CA"
+CONFIGURED_ACME_DIRECTORY_URL="$ACME_DIRECTORY_URL"
+CONFIGURED_ACME_CLIENT="$ACME_CLIENT"
 readonly PORT80_POLL_INTERVAL_S=5
 readonly PORT80_PROBE_TIMEOUT_S=5
 readonly CERT_DIR_NAME="letsencrypt"
 readonly CERT_BACKUP_KEEP=5
 readonly DOMAIN_LOCK_FILE=".domain.lock"
+readonly DOMAIN_PROXY_CONTAINER="grader-nginx-proxy"
+# The timer unit this repo installs. WHY a constant rather than a literal at each site:
+# the name is also the value scripts/__cert_timer.sh enables, and a spelling that drifted
+# between the installer and the status probe would report an installed timer as missing.
+readonly CERT_RENEW_TIMER_UNIT="grader-cert-renew.timer"
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -230,15 +318,22 @@ Commands:
 
 Options (setup, cert, proxy):
   --cert <letsencrypt|provided|selfsigned>  Certificate type (default: letsencrypt)
-  --domain <domain>           Primary domain (default: cms.local)
-  --admin-domain <domain>     Admin subdomain (default: admin.cms.local)
-  --oj-domain <domain>        OJ subdomain (default: oj.cms.local)
-  --ranking-domain <domain>   Ranking subdomain (default: ranking.cms.local)
+  --domain <domain>           Contest/primary host; optional
+  --admin-domain <domain>     Admin panel host; optional
+  --oj-domain <domain>        External OJ host; optional
+  --ranking-domain <domain>   Ranking host; optional
+
+  Every domain is optional and independent — at least one is required, and the rest
+  are simply left unset. An unset domain gets no server block, no DNS name and no
+  SAN on the certificate. Unset by default: a leftover default name would be handed
+  to certbot as a SAN and fail validation.
   --cert-path <path>          Path to fullchain.pem (required for --cert provided)
   --key-path <path>           Path to privkey.pem (required for --cert provided)
   --email <email>             Email for Let's Encrypt registration
   --dry-run                   Print actions without executing (default)
   --apply                     Actually execute changes
+  --auto-renew                End a live run by forcing a renewal, so the running nginx
+                              picks the new certificate up without a second command
   --yes, -y                   Skip optional prompts (HSM/Vault/DNSSEC/mTLS stay disabled)
 
 Retry options (setup, renew):
@@ -253,6 +348,10 @@ Extended options:
   --deploy-hook <command>     Run <command> after a successful issue or renewal
   --staging                   Use the Let's Encrypt staging CA (untrusted certs)
   --force                     Re-issue even when the current certificate is valid
+                              (setup, cert). renew always reissues unless --due
+                              narrows it, so it takes no --force
+  --due                       Renew only what the CA reports as due instead of
+                              reissuing now — what a scheduler passes
   --wait-port80 <seconds>     Wait for HTTP :80 to answer before issuing
   --backup-certs              Snapshot the certificate store before changes
   --lock                      Serialise runs with flock
@@ -264,19 +363,25 @@ Extended options:
                               be reached from Let's Encrypt
   --dns-credentials <file>    Plugin credentials ini; defaults to a file generated
                               from CLOUDFLARE_API_TOKEN for the cloudflare provider
+  --challenge <http-01|dns-01|tls-alpn-01>
+                              Override ACME_CHALLENGE. tls-alpn-01 answers on :443
+                              and needs --acme-client lego
+  --ca <name>                 Override ACME_CA (letsencrypt, letsencrypt-staging,
+                              zerossl, buypass, custom)
+  --acme-server <url>         Override ACME_DIRECTORY_URL, for a CA the --ca list
+                              does not name
+  --acme-client <certbot|lego>
+                              Override ACME_CLIENT; lego is the only tls-alpn-01 client
+  --tls-address <addr>        Override ACME_TLS_ALPN_ADDRESS, the :443 address lego
+                              binds while the proxy is stopped
   --config <file>             Use an alternate env file instead of ./.env
-
-Preflight worker probe:
-  WORKER_HOST                 Host or IP of a remote worker to probe in `preflight`.
-                              Unset by default, and an unset value skips that one
-                              check instead of probing a built-in address.
 
 Optional features (disabled by default — prod stays off):
   HSM_ENABLED=0  Vault, DNSSEC/CAA, mTLS workers are opt-in via prompts
   HSM: --hsm PKCS#11 via config/hsm/* (SoftHSM dev / YubiHSM ~$800 / CloudHSM ~$30/mo)
   Vault: hashicorp/vault:1.15 via --profile vault (or see scripts/__secrets-rotate.sh)
   DNSSEC/CAA: DNS only — see docs/dnssec-caa-guide.md
-  mTLS: TAILSCALE_IP allow ALL when MTLS_WORKERS_ENABLED=0; mTLS only when 1
+  mTLS: INNER_IP allow ALL when MTLS_WORKERS_ENABLED=0; mTLS only when 1
 
 All commands default to dry-run. Use --apply to enforce.
 EOF
@@ -298,7 +403,7 @@ _prompt_optional_features() {
       printf "  HSM module (softhsm|yubihsm|cloudhsm) [%s]: " "$HSM_MODULE"
       read -r ans || true
       [[ -n "$ans" ]] && HSM_MODULE="$ans"
-      printf "  HSM PIN (this run only — nothing here writes .env, so save it there to keep it): "
+      printf "  HSM PIN (config.toml [infra] HSM_PIN — gitignored): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && HSM_PIN="$ans"
       printf "  HSM key label [%s]: " "$HSM_KEY_LABEL"
@@ -314,7 +419,7 @@ _prompt_optional_features() {
       printf "  Vault addr [%s]: " "$VAULT_ADDR"
       read -r ans || true
       [[ -n "$ans" ]] && VAULT_ADDR="$ans"
-      printf "  Vault token (this run only — nothing here writes .env, so save it there to keep it): "
+      printf "  Vault token (config.toml [infra] VAULT_TOKEN — gitignored): "
       read -r -s ans || true; echo ""
       [[ -n "$ans" ]] && VAULT_TOKEN="$ans"
       printf "  Vault path [%s]: " "$VAULT_PATH"
@@ -353,37 +458,145 @@ _prompt_optional_features() {
   fi
 }
 
-# Reports what each optional feature flag is set to and which component acts on it.
-# WHY no line here claims this script performs the work: these flags configure other
-# components — a compose profile, the config sync, the DNS zone. This script passes
-# no --hsm flag to certbot and writes no firewall rule, so a line implying otherwise
-# would be a false promise about what running it achieved.
 _log_optional_features() {
   if [[ "${HSM_ENABLED:-0}" == "1" ]]; then
-    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — started by the hsm profile in docker-compose.domain.yml; this script passes no --hsm flag to certbot"
+    log_info "HSM enabled (module=$HSM_MODULE label=$HSM_KEY_LABEL) — certbot will use --hsm with PKCS#11"
   else
     log_info "HSM disabled (set HSM_ENABLED=1 in config.toml [infra] to enable)"
   fi
   if [[ "${VAULT_ENABLED:-0}" == "1" ]]; then
-    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — started by docker-compose.vault.yml; rotation stays in scripts/__secrets-rotate.sh"
+    log_info "Vault enabled (addr=$VAULT_ADDR path=$VAULT_PATH) — secrets via Vault"
   else
     log_info "Vault disabled (set VAULT_ENABLED=1 in config.toml [infra] to enable; alternative: scripts/__secrets-rotate.sh)"
   fi
   if [[ "${DNSSEC_ENABLED:-0}" == "1" ]] || [[ "${CAA_ENABLED:-0}" == "1" ]]; then
-    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — published in the DNS zone, which this script does not touch; see docs/dnssec-caa-guide.md"
+    log_info "DNSSEC=${DNSSEC_ENABLED} CAA=${CAA_ENABLED} (issuer=$CAA_ISSUER) — see docs/dnssec-caa-guide.md"
   else
     log_info "DNSSEC disabled (set DNSSEC_ENABLED=1 to enable) — CAA disabled (set CAA_ENABLED=1, CAA_ISSUER=letsencrypt.org)"
   fi
   if [[ "${MTLS_WORKERS_ENABLED:-0}" == "1" ]]; then
-    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — mounted by the worker service in docker-compose.yml; the RPC firewall rule belongs to scripts/__firewall-setup.sh"
+    log_info "mTLS workers enabled (CA=$MTLS_CA_CERT) — firewall should restrict RPC to mTLS only"
   else
-    log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — TAILSCALE_IP allow ALL remains)"
+    log_info "mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 to enable — INNER_IP allow ALL remains)"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Setup subcommand
+# Domain helpers
 # ---------------------------------------------------------------------------
+
+# Prints every configured domain, one per line, in render order.
+# WHY this rather than four separate tests at each call site: certbot's SAN list,
+# the ACME vhost, status, preflight and the template filter all need the same set,
+# and the moment they are enumerated separately they drift — an omitted domain
+# shows up as an ACME failure against a name nobody asked for.
+_configured_domains() {
+  local domain
+  for domain in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+    if [[ -n "$domain" ]]; then
+      printf '%s\n' "$domain"
+    fi
+  done
+  # Explicit success: an unset trailing domain would otherwise make the last
+  # `if` false and return non-zero, which is fatal under `set -e`.
+  return 0
+}
+
+# Prints "label=domain" for every configured domain, one per line.
+# WHY the label travels with the name: status and preflight label their rows, and an
+# empty label would print `DNS [] example.com` — which reads as a bug in the script
+# rather than a domain the operator left unset.
+_configured_domain_labels() {
+  local label domain entry
+  for entry in "primary:$DOMAIN_NAME" "admin:$ADMIN_DOMAIN" "oj:$OJ_DOMAIN" "ranking:$RANKING_DOMAIN"; do
+    label="${entry%%:*}"
+    domain="${entry#*:}"
+    if [[ -n "$domain" ]]; then
+      printf '%s=%s\n' "$label" "$domain"
+    fi
+  done
+  return 0
+}
+
+# Derives CERT_LINEAGE_DOMAIN, ACME_HOST_NAMES and PRIMARY_DOMAIN from whatever is set.
+# WHY one place: certbot creates the lineage under the first -d it is handed, every
+# vhost reads the certificate from that path, and the :80 vhost has to answer for
+# every SAN. All three are consequences of the same configured set, so they are
+# computed once here rather than reassembled at each use.
+_resolve_domain_targets() {
+  PRIMARY_DOMAIN="$DOMAIN_NAME"
+  CERT_LINEAGE_DOMAIN="${CERT_LINEAGE_DOMAIN:-$DOMAIN_NAME}"
+
+  local first="" domain
+  while read -r domain; do
+    [[ -z "$first" ]] && first="$domain"
+  done < <(_configured_domains)
+
+  # The lineage belongs to the primary when there is one, since certbot is handed
+  # -d "$DOMAIN_NAME" first and names the directory after it.
+  [[ -z "$CERT_LINEAGE_DOMAIN" ]] && CERT_LINEAGE_DOMAIN="$first"
+  ACME_HOST_NAMES="$(_configured_domains | paste -sd' ' -)"
+  [[ -n "$ACME_HOST_NAMES" ]] || ACME_HOST_NAMES="_"
+}
+
+# Fails when no domain is configured at all.
+# WHY: without one there is no name to issue a certificate for, no server_name to
+# route on, and no SAN to validate — every later step would fail in a less obvious
+# place, so the setup refuses at the point where the cause is still visible.
+_require_at_least_one_domain() {
+  if [[ -z "$ACME_HOST_NAMES" || "$ACME_HOST_NAMES" == "_" ]]; then
+    log_die "no domain configured — pass at least one of --domain, --admin-domain, --oj-domain, --ranking-domain" 1
+  fi
+}
+
+# Prints every configured domain as a shell-safe space-separated list, for logs.
+_domain_list() {
+  # Mirrors build_cert_domains: EXTRA_DOMAINS becomes a SAN entry, so a dry-run
+  # preview that omitted them would show fewer names than the real certbot call.
+  local domain extra
+  local all=()
+  while read -r domain; do
+    all+=("$domain")
+  done < <(_configured_domains)
+  for extra in $EXTRA_DOMAINS; do
+    all+=("$extra")
+  done
+  ((${#all[@]} > 0)) || return 0
+  printf '%s\n' "${all[@]}" | paste -sd' ' -
+}
+
+# ---------------------------------------------------------------------------
+# Template block filter
+# ---------------------------------------------------------------------------
+
+# Strips regions marked `# @block <name>` … `# @end block` for domains that are not
+# configured, so an unset domain never produces an empty server_name. Reads stdin and
+# writes stdout, so it composes in the envsubst pipeline.
+#
+# WHY stripping beats guarding with envsubst: a `${VAR}` that expands to nothing is
+# still emitted, and `server_name ;` is a syntax error that takes the whole config
+# down — including the vhosts that were fine. Removing the region means the output is
+# valid nginx for any subset of the four domains.
+_filter_optional_blocks() {
+  awk -v enabled_primary="$DOMAIN_NAME" \
+      -v enabled_admin="$ADMIN_DOMAIN" \
+      -v enabled_oj="$OJ_DOMAIN" \
+      -v enabled_ranking="$RANKING_DOMAIN" '
+    /^# @block / {
+      name = $3
+      keep = 1
+      if (name == "primary") keep = (enabled_primary != "")
+      if (name == "admin")   keep = (enabled_admin   != "")
+      if (name == "oj")      keep = (enabled_oj      != "")
+      if (name == "ranking") keep = (enabled_ranking != "")
+      if (keep) print
+      next
+    }
+    /^# @end block/ { name = ""; keep = 1; next }
+    { if (keep || name == "") print }
+  '
+}
+
 # Announces which of the two concerns this run is scoped to. Emitted only for the
 # narrowed scopes, so a bare `setup` logs exactly what it logged before.
 _log_setup_scope() {
@@ -408,7 +621,7 @@ _ensure_cert_store_dir() {
 }
 
 _issue_certificate() {
-  case "$CERT_TYPE" in
+  case "$DOMAIN_CERT_METHOD" in
     letsencrypt)
       _setup_letsencrypt
       ;;
@@ -419,9 +632,26 @@ _issue_certificate() {
       _setup_selfsigned
       ;;
     *)
-      log_die "unknown cert type: $CERT_TYPE — use letsencrypt, provided, or selfsigned" 1
+      log_die "unknown cert type: $DOMAIN_CERT_METHOD — use letsencrypt, provided, or selfsigned" 1
       ;;
   esac
+}
+
+# ---------------------------------------------------------------------------
+# Setup subcommand
+# ---------------------------------------------------------------------------
+# Announces what this run is about, before anything changes.
+_log_setup_banner() {
+  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
+  log_info "Configured domains: $(_domain_list)"
+  [[ -n "$OJ_DOMAIN" ]] || log_info "OJ domain not set — OJ vhost and SAN omitted"
+  log_info "Certificate lineage: $CERT_LINEAGE_DOMAIN"
+  log_info "Certificate type: $DOMAIN_CERT_METHOD"
+  _log_setup_scope
+  _prompt_optional_features
+  _log_optional_features
+  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
+  return 0
 }
 
 # Runs one pass of the domain setup sequence. <issue_certificate> is the
@@ -430,66 +660,75 @@ _issue_certificate() {
 # never a second copy of it.
 _run_setup_scope() {
   local issue_certificate="$1" render_proxy="$2"
-  # The lineage directory is named after the primary host, so the four domains in the
-  # list below and the directory certbot files the certificate under are one fact.
-  local cert_lineage="$DOMAIN_NAME"
+  _resolve_domain_targets
+  _require_at_least_one_domain
+  _log_setup_banner
 
-  log_info "Domain setup — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
-  log_info "Primary: $DOMAIN_NAME  Admin: $ADMIN_DOMAIN  OJ: $OJ_DOMAIN  Ranking: $RANKING_DOMAIN"
-  log_info "Certificate lineage: $cert_lineage"
-  log_info "Certificate type: $CERT_TYPE"
-  _log_setup_scope
-  _prompt_optional_features
-  _log_optional_features
-  [[ "$LE_STAGING" == "1" ]] && log_warn "Let's Encrypt STAGING mode — issued certificates are not browser-trusted"
-
-  # WHY the check belongs to the certificate half alone: the email is a
-  # certbot registration argument, and the port-80 probe exists because the HTTP-01
-  # challenge has to be answerable. Neither has anything to do with writing an
-  # nginx config, so `proxy` must not be asked for an email or blocked on :80.
-  if [[ "$issue_certificate" == "1" ]] && [[ "$CERT_TYPE" == "letsencrypt" ]]; then
-    [[ -n "$CERT_EMAIL" ]] || log_die "CERT_EMAIL is required for letsencrypt — set env or pass --email" 1
-    _preflight_port80
+  # Only the certificate half: the email and the :80 probe belong to issuance, not to
+  # writing an nginx config, so `proxy` must not be asked for either.
+  if [[ "$issue_certificate" == "1" ]] && [[ "$DOMAIN_CERT_METHOD" == "letsencrypt" ]]; then
+    acme_describe_run
   fi
 
-  # WHY the backup and the store directory are part of the certificate half: both
-  # exist for the certificate store, and the proxy half must not even create the
-  # directory it was told not to touch.
+  # Only the certificate half, because the proxy half must not create a store it was
+  # told not to touch.
   if [[ "$issue_certificate" == "1" ]]; then
     _backup_certificates
     _ensure_cert_store_dir
+    cert_migrate_flat_store
   fi
 
-  # WHY the three nginx steps are gated one at a time rather than as a block: the
-  # cert scope drops the render and, with it, the validation that gates that render,
-  # while the proxy scope drops only the issuance between them. A block could not
-  # express either shape. The order is unchanged, so a bare run renders, issues and
-  # validates exactly as it always did.
+  # The three steps are gated one at a time: the cert scope drops the render, the proxy
+  # scope drops the issuance, and a block could express neither.
   [[ "$render_proxy" == "1" ]] && _render_nginx_config
-
   [[ "$issue_certificate" == "1" ]] && _issue_certificate
-
   [[ "$render_proxy" == "1" ]] && _validate_nginx_config
 
-  # Explicit success: under the cert scope the last gate above is a false test, so
-  # the function would otherwise return non-zero and abort the run at the call site.
+  # Explicit success: the last gate is false under the cert scope, and set -e would abort.
   return 0
 }
 
 # Ends a setup: the reload belongs to the proxy half and nothing else.
 _run_setup_tail() {
-  # Reloaded only here: issuance and validation do not, so a plain `setup` still picks
-  # up the renewed certificate the same way it did before, from the rendered config.
-  if [[ "$SETUP_ISSUE_CERT" == "0" ]] && [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
+  # nginx picks up a new certificate only on reload; `cert` promises to leave it alone.
+  if [[ "$SETUP_RENDER_PROXY" == "1" ]]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
       log_info "[dry-run] would reload the running nginx container"
     else
       _reload_running_nginx
     fi
   fi
+  _run_auto_renew
 
-  discord_alert "Domain setup completed for ${DOMAIN_NAME} (cert: ${CERT_TYPE})" 65280
+  discord_alert "Domain setup completed for $(_domain_list) (cert: ${DOMAIN_CERT_METHOD})" 65280
   log_info "Domain setup complete"
+}
+
+# Ends a live run by forcing a renewal, so a config change takes effect on the running
+# nginx without a second command.
+#
+# WHY a dry run only announces it: renewing is the one step here that talks to the ACME
+# server, and a preview must not spend a rate-limit slot. It also must not call
+# cmd_renew, which opens with its own mode banner and would print a second, unrelated
+# header after the setup it belongs to.
+#
+# WHY the cert-only scope is excluded: cmd_renew ends by reloading nginx, and `cert`
+# promises nginx is left alone. A cert-only run that reloaded nginx would break that
+# promise, so the flag is honoured only where a reload was already in scope.
+_run_auto_renew() {
+  [[ "$AUTO_RENEW" == "1" ]] || return 0
+  [[ "$SETUP_RENDER_PROXY" == "1" ]] || return 0
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] --auto-renew: would force-renew the certificate for ${CERT_LINEAGE_DOMAIN}"
+    return 0
+  fi
+  # WHY the flag is cleared around the call: cmd_renew has no path back into the setup
+  # scope, but a renew that somehow re-entered one would renew again. Clearing it makes
+  # the recursion impossible rather than merely unlikely.
+  local was_auto_renew="$AUTO_RENEW"
+  AUTO_RENEW=0
+  cmd_renew
+  AUTO_RENEW="$was_auto_renew"
 }
 
 # WHY the scope is the command and not a flag: a run either issues a certificate, writes
@@ -534,21 +773,60 @@ _retry_certbot() {
 # ---------------------------------------------------------------------------
 # Certificate argument builders
 # ---------------------------------------------------------------------------
-# Populates CERT_DOMAINS with every -d name (the four configured hosts plus any
-# --extra-domains) so certonly and renew build identical SAN lists.
-build_cert_domains() {
-  CERT_DOMAINS=(-d "$DOMAIN_NAME" -d "$ADMIN_DOMAIN" -d "$OJ_DOMAIN" -d "$RANKING_DOMAIN")
-  local extra
-  for extra in $EXTRA_DOMAINS; do
-    CERT_DOMAINS+=(-d "$extra")
-  done
+# Populates CERT_DOMAINS with a -d for every domain that is actually configured,
+# plus any --extra-domains, so certonly and renew build identical SAN lists.
+# WHY the emptiness test per domain: passing `-d ""` for an unset domain makes
+# certbot request a SAN with no name, which fails validation for the whole
+# certificate — not just the missing name. An unconfigured domain has to be absent
+# from the command line entirely.
+# Hostnames the service registry exposes over TLS, one per line.
+#
+# WHY a rendered file and not a query: this script runs on the host and never reads the
+# database, so ./cms config sync publishes the list beside the routes it renders. Prints
+# nothing when the file is absent, which is how a deployment that never used the registry
+# certifies exactly as it did before.
+wired_tls_hostnames() {
+  local file="${REPO_ROOT}/config/generated/exposed-hosts.txt"
+  [[ -f "$file" ]] || return 0
+  grep -v '^[[:space:]]*$' "$file" 2>/dev/null || true
+  return 0
 }
 
-# Populates CERTBOT_FLAGS with the shared invocation flags. --staging, --force and
-# --deploy-hook each append only when requested, so the default call is unchanged.
+build_cert_domains() {
+  CERT_DOMAINS=()
+  local domain extra host named=" "
+  while read -r domain; do
+    [[ -n "$domain" ]] || continue
+    CERT_DOMAINS+=(-d "$domain")
+    named="$named$domain "
+  done < <(_configured_domains)
+  for extra in $EXTRA_DOMAINS; do
+    CERT_DOMAINS+=(-d "$extra")
+    named="$named$extra "
+  done
+  # A contest hostname joins the same lineage certificate every domain vhost already
+  # shares. WHY the space-delimited dedup: repeating a name certbot already has would ask
+  # for the same SAN twice, while an exact match keeps a name that merely ends with
+  # another from being skipped.
+  while read -r host; do
+    [[ -n "$host" ]] || continue
+    [[ "$named" == *" $host "* ]] && continue
+    CERT_DOMAINS+=(-d "$host")
+    named="$named$host "
+  done < <(wired_tls_hostnames)
+  # Explicit success: CERT_DOMAINS must carry at least one -d or certbot is called
+  # with no names at all, which fails with an error that names no domain.
+  (( ${#CERT_DOMAINS[@]} > 0 )) || log_die "no domain to certify — configure at least one domain" 1
+  return 0
+}
+
+# Populates CERTBOT_FLAGS with the shared invocation flags. The ACME directory, --force
+# and --deploy-hook each append only when requested, so the default call is unchanged.
 build_certbot_flags() {
   CERTBOT_FLAGS=(--email "$CERT_EMAIL" --agree-tos --non-interactive)
-  [[ "$LE_STAGING" == "1" ]] && CERTBOT_FLAGS+=(--server "$LE_STAGING_DIRECTORY")
+  local server_url
+  server_url="$(acme_resolve_directory)"
+  [[ -n "$server_url" ]] && CERTBOT_FLAGS+=(--server "$server_url")
   [[ "$FORCE_RENEWAL" == "1" ]] && CERTBOT_FLAGS+=(--force-renewal)
   [[ -n "$DEPLOY_HOOK" ]] && CERTBOT_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
   # Explicit success: as the last statement, a false [[ ]] above would otherwise
@@ -556,11 +834,42 @@ build_certbot_flags() {
   return 0
 }
 
-# Populates RENEW_FLAGS for `certbot renew`. `--server` and `--email` do not belong
-# on renew and are deliberately omitted here.
+# Populates RENEW_FLAGS; `--server` and `--email` do not belong on renew.
 build_renew_flags() {
-  RENEW_FLAGS=(--force-renewal)
+  RENEW_FLAGS=()
+  [[ "$RENEW_DUE_ONLY" == "1" ]] || RENEW_FLAGS+=(--force-renewal)
   [[ -n "$DEPLOY_HOOK" ]] && RENEW_FLAGS+=(--deploy-hook "$DEPLOY_HOOK")
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# DNS-01 challenge (optional)
+# ---------------------------------------------------------------------------
+# Populates DNS_CHALLENGE_ARGS with the certbot flags for DNS-01, and
+# DNS_CREDENTIALS_RESOLVED with the credentials file, when ACME_DNS_PROVIDER is set.
+# WHY the credentials file is generated: certbot's DNS plugins read an ini holding
+# an API token, and requiring the operator to hand-write one is the step they skip —
+# CLOUDFLARE_API_TOKEN is turned into exactly the file the cloudflare plugin expects.
+# An empty ACME_DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
+DNS_CHALLENGE_ARGS=()
+DNS_CREDENTIALS_RESOLVED=""
+_resolve_dns_challenge() {
+  DNS_CHALLENGE_ARGS=()
+  DNS_CREDENTIALS_RESOLVED=""
+  [[ -n "$ACME_DNS_PROVIDER" ]] || return 0
+
+  local creds="$ACME_DNS_CREDENTIALS_FILE"
+  if [[ -z "$creds" && "$ACME_DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+    creds="$(_cert_store_dir)/cloudflare.ini"
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+      mkdir -p "$(dirname -- "$creds")"
+      ( umask 077; printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_TOKEN" > "$creds" )
+    fi
+  fi
+  [[ -n "$creds" ]] || log_die "DNS-01 ($ACME_DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
+
+  DNS_CREDENTIALS_RESOLVED="$creds"
+  DNS_CHALLENGE_ARGS=(--dns-"$ACME_DNS_PROVIDER" --dns-"$ACME_DNS_PROVIDER"-credentials "$creds")
   return 0
 }
 
@@ -576,16 +885,12 @@ _wait_for_port80() {
   (( timeout > 0 )) || return 0
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would wait up to ${timeout}s for port 80 at ${DOMAIN_NAME}"
-    return 0
-  fi
-
-  if ! require_external curl "the port 80 wait"; then
+    log_info "[dry-run] would wait up to ${timeout}s for port 80 at $CERT_LINEAGE_DOMAIN"
     return 0
   fi
 
   while (( elapsed < timeout )); do
-    if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${DOMAIN_NAME}/" 2>/dev/null; then
+    if curl -sf -o /dev/null --max-time "$PORT80_PROBE_TIMEOUT_S" "http://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
       log_info "port 80 reachable after ${elapsed}s"
       return 0
     fi
@@ -603,9 +908,6 @@ _wait_for_port80() {
 # cannot race over the same certificate store.
 _acquire_run_lock() {
   [[ "$USE_LOCK" == "1" ]] || return 0
-  if ! command -v flock >/dev/null 2>&1; then
-    log_die "flock not found — cannot serialise runs; install util-linux or drop --lock" 1
-  fi
   exec 9>"${REPO_ROOT}/${DOMAIN_LOCK_FILE}"
   if ! flock -n 9; then
     log_die "another run holds ${DOMAIN_LOCK_FILE} — refusing to start" 1
@@ -625,7 +927,7 @@ _cert_store_dir() {
 # since it is where the older provided/self-signed paths used to write.
 _cert_fullchain_path() {
   local lineage flat
-  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/fullchain.pem"
+  lineage="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}/fullchain.pem"
   flat="$(_cert_store_dir)/live/fullchain.pem"
   if [[ -f "$lineage" ]]; then
     printf '%s' "$lineage"
@@ -638,7 +940,7 @@ _cert_fullchain_path() {
 
 _cert_privkey_path() {
   local lineage flat
-  lineage="$(_cert_store_dir)/live/${DOMAIN_NAME}/privkey.pem"
+  lineage="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}/privkey.pem"
   flat="$(_cert_store_dir)/live/privkey.pem"
   if [[ -f "$lineage" ]]; then
     printf '%s' "$lineage"
@@ -649,25 +951,16 @@ _cert_privkey_path() {
   fi
 }
 
-# Prints the notAfter date of <cert_file>, or nothing when there is no certificate
-# or no openssl to read it with. WHY the guard belongs here rather than at the call
-# sites: three readers need this value, and without openssl all three would see an
-# empty string and report an expired certificate where the truth is an unread one.
-_cert_expiry_date() {
-  local cert_file="$1"
-  [[ -f "$cert_file" ]] || return 0
-  if ! command -v openssl >/dev/null 2>&1; then
-    log_warn "openssl not found — expiry of ${cert_file} is unknown, not expired"
-    return 0
-  fi
-  openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//'
-}
-
-# Prints remaining validity in whole days, or -1 when it cannot be determined.
+# Prints remaining validity in whole days, or -1 when no certificate is present.
 _cert_days_left() {
-  local cert_file expiry expiry_epoch now_epoch
+  local cert_file
   cert_file="$(_cert_fullchain_path)"
-  expiry="$(_cert_expiry_date "$cert_file")"
+  if [[ ! -f "$cert_file" ]]; then
+    printf '%s' "-1"; return 0
+  fi
+
+  local expiry expiry_epoch now_epoch
+  expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
   if [[ -z "$expiry" ]]; then
     printf '%s' "-1"; return 0
   fi
@@ -731,72 +1024,14 @@ _json_escape() {
 }
 
 # ---------------------------------------------------------------------------
-# DNS-01 challenge (optional)
-# ---------------------------------------------------------------------------
-# Populates DNS_CHALLENGE_ARGS with the certbot flags for DNS-01, and
-# DNS_CREDENTIALS_RESOLVED with the credentials file, when DNS_PROVIDER is set.
-# WHY the credentials file is generated: certbot's DNS plugins read an ini holding
-# an API token, and requiring the operator to hand-write one is the step they skip —
-# CLOUDFLARE_API_TOKEN is turned into exactly the file the cloudflare plugin expects.
-# An empty DNS_PROVIDER leaves both empty, so the HTTP-01 webroot path is unchanged.
-#
-# WHY the generated file is safe to write: it lands inside the certificate store,
-# which is gitignored, and umask 077 keeps it unreadable to other users. The token is
-# never logged — only the provider name appears in any message.
-DNS_CHALLENGE_ARGS=()
-DNS_CREDENTIALS_RESOLVED=""
-_resolve_dns_challenge() {
-  DNS_CHALLENGE_ARGS=()
-  DNS_CREDENTIALS_RESOLVED=""
-  [[ -n "$DNS_PROVIDER" ]] || return 0
-
-  local creds="$DNS_CREDENTIALS_FILE"
-  if [[ -z "$creds" && "$DNS_PROVIDER" == "cloudflare" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
-    creds="$(_cert_store_dir)/cloudflare.ini"
-    if [[ "$DRY_RUN" -eq 0 ]]; then
-      mkdir -p "$(dirname -- "$creds")"
-      ( umask 077; printf 'dns_cloudflare_api_token = %s\n' "$CLOUDFLARE_API_TOKEN" > "$creds" )
-    fi
-  fi
-  [[ -n "$creds" ]] || log_die "DNS-01 ($DNS_PROVIDER) requires --dns-credentials or CLOUDFLARE_API_TOKEN" 1
-
-  DNS_CREDENTIALS_RESOLVED="$creds"
-  DNS_CHALLENGE_ARGS=(--dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials "$creds")
-  return 0
-}
-
-# ---------------------------------------------------------------------------
 # Let's Encrypt setup
 # ---------------------------------------------------------------------------
-_setup_letsencrypt() {
-  if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would run certbot certonly for $DOMAIN_NAME, $ADMIN_DOMAIN, $OJ_DOMAIN, $RANKING_DOMAIN"
-    return 0
-  fi
-
-  build_cert_domains
-  build_certbot_flags
-  _resolve_dns_challenge
-
-  local cert_dir
-  cert_dir="$(_cert_store_dir)"
-  mkdir -p "${cert_dir}/www"
-
-  # HTTP-01 only: waiting on :80 is pointless when validation is a TXT record.
-  if [[ -z "$DNS_PROVIDER" ]]; then
-    _wait_for_port80
-  fi
-
-  if ! command -v certbot >/dev/null 2>&1; then
-    log_warn "certbot not found on host — attempting via docker"
-    _run_certbot_docker
-    return
-  fi
-
-  # --config-dir points certbot at the store the proxy bind-mounts, so the
-  # lineage lands at <store>/live/<domain>/ — the path nginx reads. The former
-  # --cert-path/--key-path were no-ops outside `certonly --csr`.
-  if [[ -n "$DNS_PROVIDER" ]]; then
+# Runs certbot certonly on the host with the challenge the configuration selected.
+# --config-dir points certbot at the store the proxy bind-mounts, so the lineage lands at
+# <store>/live/<domain>/ — the path nginx reads.
+_run_certbot_certonly() {
+  local cert_dir="$1"
+  if [[ -n "$ACME_DNS_PROVIDER" ]]; then
     _retry_certbot certbot certonly "${DNS_CHALLENGE_ARGS[@]}" \
       "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
       --config-dir "$cert_dir" \
@@ -810,6 +1045,40 @@ _setup_letsencrypt() {
   log_info "Let's Encrypt certificates obtained"
 }
 
+_setup_letsencrypt() {
+  # TLS-ALPN-01 never reaches certbot; lego owns its own preview and handover.
+  if [[ "$ACME_CHALLENGE" == "tls-alpn-01" ]]; then
+    acme_issue_tls_alpn
+    return 0
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log_info "[dry-run] would run certbot certonly for $(_domain_list)"
+    return 0
+  fi
+
+  build_cert_domains
+  build_certbot_flags
+  _resolve_dns_challenge
+
+  local cert_dir
+  cert_dir="$(_cert_store_dir)"
+  mkdir -p "${cert_dir}/www"
+
+  # Probing :80 only means something when validation happens there.
+  if [[ "$ACME_CHALLENGE" == "http-01" ]]; then
+    _wait_for_port80
+  fi
+
+  if ! command -v certbot >/dev/null 2>&1; then
+    log_warn "certbot not found on host — attempting via docker"
+    _run_certbot_docker
+    return
+  fi
+
+  _run_certbot_certonly "$cert_dir"
+}
+
 _run_certbot_docker() {
   local cert_dir
   cert_dir="$(_cert_store_dir)"
@@ -818,13 +1087,13 @@ _run_certbot_docker() {
   # The store root is mounted at /etc/letsencrypt so certbot's lineage appears at
   # <store>/live/<domain>/; mounting <store>/live here (the earlier form) nested
   # a second live/ level and nginx never saw the certificate.
-  if [[ -n "$DNS_PROVIDER" ]]; then
+  if [[ -n "$ACME_DNS_PROVIDER" ]]; then
     _retry_certbot docker run --rm \
       -v "${cert_dir}:/etc/letsencrypt" \
       -v "${cert_dir}/www:/var/www/certbot" \
       -v "${DNS_CREDENTIALS_RESOLVED}:/etc/letsencrypt/dns-creds.ini:ro" \
-      "${CERTBOT_IMAGE:-certbot/dns-$DNS_PROVIDER}" certonly \
-      --dns-"$DNS_PROVIDER" --dns-"$DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
+      "${ACME_CERTBOT_IMAGE:-certbot/dns-$ACME_DNS_PROVIDER}" certonly \
+      --dns-"$ACME_DNS_PROVIDER" --dns-"$ACME_DNS_PROVIDER"-credentials /etc/letsencrypt/dns-creds.ini \
       "${CERT_DOMAINS[@]}" "${CERTBOT_FLAGS[@]}" \
       || log_die "certbot docker run failed" 1
   else
@@ -853,18 +1122,17 @@ _setup_provided_cert() {
     log_die "private key file not found: $KEY_PATH" 1
   fi
 
-  if ! command -v openssl >/dev/null 2>&1; then
-    log_warn "openssl not found — provided certificate installed without a trust check"
-  elif ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
+  if ! openssl verify -untrusted "$CERT_PATH" "$CERT_PATH" >/dev/null 2>&1; then
     log_warn "certificate failed openssl verify — may not be trusted by clients"
   else
     log_info "certificate passed openssl verify"
   fi
+  cert_validate_supplied_certificate "$CERT_PATH" "$KEY_PATH"
 
   # The lineage directory nginx reads, not a flat live/ level: nginx requests
   # live/<domain>/fullchain.pem, so a flat copy is invisible to it.
   local dest_dir
-  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
+  dest_dir="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would copy $CERT_PATH -> ${dest_dir}/fullchain.pem"
     log_info "[dry-run] would copy $KEY_PATH -> ${dest_dir}/privkey.pem"
@@ -882,16 +1150,10 @@ _setup_provided_cert() {
 # ---------------------------------------------------------------------------
 _setup_selfsigned() {
   local dest_dir
-  dest_dir="$(_cert_store_dir)/live/${DOMAIN_NAME}"
+  dest_dir="$(_cert_store_dir)/live/${CERT_LINEAGE_DOMAIN}"
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would generate self-signed cert for $DOMAIN_NAME"
+    log_info "[dry-run] would generate self-signed cert for $CERT_LINEAGE_DOMAIN"
     return 0
-  fi
-
-  # Guarded before the directory is created so a host without openssl is not left
-  # with an empty lineage directory that later reads as a half-installed cert.
-  if ! command -v openssl >/dev/null 2>&1; then
-    log_die "openssl not found — cannot generate a self-signed certificate" 1
   fi
 
   mkdir -p "$dest_dir"
@@ -899,10 +1161,10 @@ _setup_selfsigned() {
     -newkey rsa:2048 \
     -keyout "${dest_dir}/privkey.pem" \
     -out "${dest_dir}/fullchain.pem" \
-    -subj "/CN=${DOMAIN_NAME}/O=CMS/C=TH" \
+    -subj "/CN=${CERT_LINEAGE_DOMAIN}/O=CMS/C=TH" \
     2>/dev/null
   chmod 600 "${dest_dir}/privkey.pem"
-  log_info "self-signed certificate generated for $DOMAIN_NAME"
+  log_info "self-signed certificate generated for $CERT_LINEAGE_DOMAIN"
 }
 
 # ---------------------------------------------------------------------------
@@ -919,6 +1181,7 @@ _render_nginx_config() {
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would render $template -> $output"
+    log_info "[dry-run] domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | ACME server_name: $ACME_HOST_NAMES"
     log_info "[dry-run] variables: DOMAIN_NAME=$DOMAIN_NAME HSTS_MAX_AGE=$HSTS_MAX_AGE REDIS_RATE_LIMIT=$REDIS_RATE_LIMIT PER_USER_LIMIT=$PER_USER_LIMIT REDIS_HOST=$REDIS_HOST REDIS_PORT=$REDIS_PORT MONITORING_ENABLED=$MONITORING_ENABLED WAF_ENABLED=$WAF_ENABLED WAF_PORT=$WAF_PORT WAF_PARANOIA=$WAF_PARANOIA WAF_ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND WAF_RULE_ENGINE=$WAF_RULE_ENGINE"
     if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
       log_info "[dry-run] WAF_ENABLED=1 — waf fronting note: grader-waf (OWASP CRS, PARANOIA=$WAF_PARANOIA, ANOMALY_INBOUND=$WAF_ANOMALY_INBOUND, RULE_ENGINE=$WAF_RULE_ENGINE) fronts grader-nginx-proxy via cms-network BACKEND=http://grader-nginx-proxy:80; host port ${WAF_BIND_IP}:${WAF_PORT} → 80 when --profile waf is used. See docs/waf-tuning.md"
@@ -929,22 +1192,53 @@ _render_nginx_config() {
   fi
 
   export DOMAIN_NAME ADMIN_DOMAIN OJ_DOMAIN RANKING_DOMAIN HSTS_MAX_AGE
+  export CERT_LINEAGE_DOMAIN ACME_HOST_NAMES
   export CONTEST_LISTEN_PORT ADMIN_LISTEN_PORT RANKING_LISTEN_PORT OJ_BACKEND_PORT
   export RANKING_AUTH_DIRECTIVES="${RANKING_AUTH_DIRECTIVES:-}"
+  # The shared SSE definition (scripts/__nginx_sse.sh) the funnel-mirror template consumes.
+  export SSE_ENDPOINT_PATTERN SSE_PROXY_DIRECTIVES
 
   local redis_upstream_block redis_lua_placeholder per_user_login per_user_ranking
 
   if [[ "${REDIS_RATE_LIMIT:-0}" == "1" ]]; then
-    redis_upstream_block=$(cat <<EOF
+    redis_upstream_block=$(cat <<'EOF'
 # Redis distributed rate limit — enabled (REDIS_RATE_LIMIT=1)
-# Docker DNS resolver for future OpenResty lua-resty-redis (request-time resolution; nginx starts even if redis absent)
-resolver 127.0.0.11 valid=10s ipv6=off;
-resolver_timeout 3s;
+# The DNS resolver redis would use is emitted once by the route table (${ROUTE_RESOLVER});
+# a second resolver here is a duplicate directive nginx rejects outright.
 # Upstream deferred to lua request-time connect to avoid startup DNS failure when redis absent
-# upstream redis_rate_limit_backend { server ${REDIS_HOST}:${REDIS_PORT} max_fails=2 fail_timeout=10s; }
+# upstream redis_rate_limit_backend { server __REDIS_BACKEND__ max_fails=2 fail_timeout=10s; }
 # Local limit_req remains as primary until OpenResty image with resty.redis is deployed
+#
+# FAILURE BEHAVIOUR — for NGINX, a Redis outage cannot degrade or block anything,
+# because no nginx request path reads Redis. The upstream above is commented out and
+# the token bucket below is commented out too, so the rendered config contains no
+# `access_by_lua*`, no `lua_shared_dict`, and no redis upstream at all: with
+# REDIS_RATE_LIMIT=1 no redis-related directive is emitted at all. From nginx the
+# container starts, passes `redis-cli ping`, and is never contacted.
+#
+# This answers the fail-open / fail-closed question for nginx: neither. Verified by
+# rendering with REDIS_RATE_LIMIT=1 and filtering comments out of the result — zero
+# active redis or lua directives. nginx therefore starts normally whether Redis is up
+# or down, and nginx-side rate limiting is entirely the local `limit_req` zones.
+#
+# THE CONTAINER IS NOT GLOBAL — the contest web server does read it, when it is
+# configured to (LOGIN_RATE_LIMIT_REDIS_* -> [<server>.captcha]). That reader is the
+# Python login failure counter, not nginx, so none of the nginx claims above change.
+# Its outage behaviour is the one decided for it: the counters fall back to counting
+# in process and the captcha is demanded on every attempt, so an unreachable store
+# taxes an attacker rather than lifting the restriction. Do not read the nginx
+# fail-open verdict as applying to it.
+#
+# The commented token bucket is written to fail OPEN if it is ever enabled as-is:
+# its guard has no else branch, and ngx.exit(503) sits inside the success branch,
+# so an unreachable Redis would skip the check. It also calls require() and
+# red:connect() without pcall, so a failure would raise a Lua error (HTTP 500)
+# rather than degrade. Fix both before enabling — see docs/waf-tuning.md.
 EOF
 )
+    # Delimiter quoted so the backtick spans in the block stay literal; the one
+    # dynamic reference is substituted here.
+    redis_upstream_block="${redis_upstream_block//__REDIS_BACKEND__/${REDIS_HOST}:${REDIS_PORT}}"
     redis_lua_placeholder=$(cat <<'EOLUA'
 # Redis rate limiting active: future OpenResty path would use lua-resty-redis token bucket here
 # lua_shared_dict redis_limit 10m;
@@ -975,11 +1269,11 @@ EOLUA
     nginx_metrics_location=$(cat <<EOF
 # Monitoring enabled (MONITORING_ENABLED=1) — stub_status for Prometheus
 # Scraped as nginx:80/metrics from prometheus job "nginx" (cms-network internal)
-# Restricted to loopback + Tailscale IP
+# Restricted to loopback + the inner peer address
 location /metrics {
     stub_status;
     allow 127.0.0.1;
-    allow ${TAILSCALE_IP:-127.0.0.1};
+    allow ${INNER_IP:-127.0.0.1};
     deny all;
     access_log off;
 }
@@ -990,18 +1284,14 @@ EOF
   fi
   export NGINX_METRICS_LOCATION="$nginx_metrics_location"
 
-  # Guarded before the redirect, not after: `> "$output"` truncates the rendered
-  # config the instant the shell opens it, so an absent or failing envsubst would
-  # replace a working nginx config with a zero-byte file. Failing here keeps the
-  # previous config intact and says which package is missing.
-  if ! command -v envsubst >/dev/null 2>&1; then
-    log_die "envsubst not found — ${template} was not rendered; install gettext" 1
-  fi
-  if ! envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${HSTS_MAX_AGE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION}' < "$template" > "$output"; then
-    log_warn "envsubst failed — ${output} is incomplete and must not be published"
-    return 0
-  fi
-  log_info "nginx config rendered: $output (REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
+  _acme_export_challenge_locations
+
+  _domain_routes_build
+  _security_headers_build
+
+  envsubst '${DOMAIN_NAME} ${ADMIN_DOMAIN} ${OJ_DOMAIN} ${RANKING_DOMAIN} ${CERT_LINEAGE_DOMAIN} ${ACME_HOST_NAMES} ${HSTS_MAX_AGE} ${PROXY_MAX_BODY_SIZE} ${CONTEST_LISTEN_PORT} ${ADMIN_LISTEN_PORT} ${RANKING_LISTEN_PORT} ${OJ_BACKEND_PORT} ${RANKING_AUTH_DIRECTIVES} ${REDIS_UPSTREAM_BLOCK} ${REDIS_LUA_PLACEHOLDER} ${PER_USER_LOGIN_DIRECTIVES} ${PER_USER_RANKING_DIRECTIVES} ${NGINX_METRICS_LOCATION} ${ACME_HTTP01_CHALLENGE_ON_80} ${ACME_HTTP01_CHALLENGE_ON_443} ${ROUTE_RESOLVER} ${PRIMARY_ROUTE_BLOCKS} ${ADMIN_ROUTE_BLOCKS} ${OJ_ROUTE_BLOCKS} ${RANKING_ROUTE_BLOCKS} ${PRIMARY_UPSTREAM} ${PRIMARY_UPSTREAM_SET} ${SERVER_TOKENS_DIRECTIVE} ${OCSP_STAPLING_DIRECTIVES} ${CSP_HEADER} ${HSTS_HEADER} ${LOCATION_SECURITY_HEADERS} ${SSE_ENDPOINT_PATTERN} ${SSE_PROXY_DIRECTIVES}' < "$template" \
+    | _filter_optional_blocks > "$output"
+  log_info "nginx config rendered: $output (domains: $(_domain_list) | lineage: $CERT_LINEAGE_DOMAIN | REDIS_RATE_LIMIT=${REDIS_RATE_LIMIT} PER_USER_LIMIT=${PER_USER_LIMIT} MONITORING_ENABLED=${MONITORING_ENABLED} WAF_ENABLED=${WAF_ENABLED:-0})"
   if [[ "${WAF_ENABLED:-0}" == "1" ]]; then
     log_info "WAF_ENABLED=1 — grader-waf is fronting grader-nginx-proxy (PARANOIA=${WAF_PARANOIA} ANOMALY_INBOUND=${WAF_ANOMALY_INBOUND} RULE_ENGINE=${WAF_RULE_ENGINE}, host ${WAF_BIND_IP}:${WAF_PORT}→80 when --profile waf up). CAPTCHA remains active alongside WAF."
   else
@@ -1012,39 +1302,59 @@ EOF
 # ---------------------------------------------------------------------------
 # Nginx config validation
 # ---------------------------------------------------------------------------
+# Whether a systemd timer is enabled, checking the USER manager first and falling back
+# to the system one.
+#
+# WHY the user manager comes first: this repo's own units are installed by
+# __cert_timer.sh with `systemctl --user enable --now` and are enabled for a user unit,
+# so the system manager cannot see them at all. Probed on a real enabled user timer:
+# `systemctl --user is-enabled` returns "enabled", while the bare form returns
+# "not-found" with exit 4. Asking only the system manager therefore reported an
+# installed timer as absent — the one false answer this status line must never give.
+# The fallback keeps a host where the unit was installed system-wide still readable.
+_timer_is_enabled() {
+  local unit="$1"
+  systemctl --user is-enabled "$unit" 2>/dev/null | grep -q '^enabled$' && return 0
+  systemctl is-enabled "$unit" 2>/dev/null | grep -q '^enabled$' && return 0
+  return 1
+}
+
+# The domain proxy by exact container name, or empty when it is down. The contest
+# front door is also an nginx container, so "the first nginx one" is the wrong proxy.
+_running_domain_proxy() {
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DOMAIN_PROXY_CONTAINER"; then
+    printf '%s' "$DOMAIN_PROXY_CONTAINER"
+  fi
+}
+
 _validate_nginx_config() {
   if [[ "$DRY_RUN" -eq 1 ]]; then
     log_info "[dry-run] would run nginx -t inside docker"
     return 0
   fi
 
-  if ! require_external docker "the nginx config test"; then
+  local container
+  container="$(_running_domain_proxy)"
+  if [[ -z "$container" ]]; then
+    log_warn "domain proxy (${DOMAIN_PROXY_CONTAINER}) is not running — skipping nginx -t"
     return 0
   fi
-  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q 'nginx'; then
-    local container
-    container="$(docker ps --format '{{.Names}}' | grep 'nginx' | head -1)"
-    if docker exec "$container" nginx -t 2>&1; then
-      log_info "nginx config test passed in $container"
-    else
-      log_warn "nginx config test failed in $container"
-    fi
+  if docker exec "$container" nginx -t 2>&1; then
+    log_info "nginx config test passed in $container"
   else
-    log_warn "no nginx container running — skipping nginx -t"
+    log_die "nginx config test FAILED in $container — the rendered config would not load, so the proxy must not be reloaded onto it. Fix the config and re-run." 1
   fi
 }
 
-# Reloads the first running nginx container so it picks up a freshly rendered config
-# or a renewed certificate. A container that is not running is not an error: the
-# caller has already produced the config on disk, and whether the proxy is up right
-# now is a separate question answered by status/preflight.
+# Reloads the domain proxy so it re-resolves its upstreams: a redeployed backend has a
+# new container IP, and nginx caches the old one until it reloads. A proxy that is not
+# running is not an error — the rendered config is already on disk.
 _reload_running_nginx() {
-  require_external docker "the nginx reload" || return 0
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx || return 0
-  local nginx_container
-  nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
-  docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
-  log_info "nginx reloaded in $nginx_container"
+  local container
+  container="$(_running_domain_proxy)"
+  [[ -n "$container" ]] || return 0
+  docker exec "$container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
+  log_info "nginx reloaded in $container"
 }
 
 # ---------------------------------------------------------------------------
@@ -1057,30 +1367,46 @@ _preflight_port80() {
     return 0
   fi
 
-  require_external curl "the port 80 reachability check" || return 0
-  if ! curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
-    log_warn "port 80 may not be reachable at $DOMAIN_NAME — LE challenge could fail"
-  else
-    log_info "port 80 reachable at $DOMAIN_NAME"
-  fi
+  # WHY every configured domain and not just the primary: one certificate carries
+  # every SAN, so Let's Encrypt validates each name against :80. A name that does
+  # not answer spends one of the 5 failed validations per hour allowed per account
+  # and hostname, so all of them are probed up front.
+  local domain checked=0
+  while read -r domain; do
+    checked=$((checked + 1))
+    if curl -sf -o /dev/null --max-time 5 "http://${domain}/" 2>/dev/null; then
+      log_info "port 80 reachable at $domain"
+    else
+      log_warn "port 80 may not be reachable at $domain — LE challenge could fail"
+    fi
+  done < <(_configured_domains)
+
+  (( checked > 0 )) || log_warn "no domain configured — nothing to probe on port 80"
+  return 0
 }
 
 # ---------------------------------------------------------------------------
 # Status subcommand
 # ---------------------------------------------------------------------------
 cmd_status() {
+  _resolve_domain_targets
+
   if [[ "$JSON_OUTPUT" == "1" ]]; then
     cmd_status_json
     return 0
   fi
-  log_info "Domain status for $DOMAIN_NAME"
+  log_info "Domain status for $(_domain_list)"
   _log_optional_features
   echo ""
 
-  _status_dns "$DOMAIN_NAME" "primary"
-  _status_dns "$ADMIN_DOMAIN" "admin"
-  _status_dns "$OJ_DOMAIN" "oj"
-  _status_dns "$RANKING_DOMAIN" "ranking"
+  # WHY only configured domains are probed: an unset name resolves nowhere and would
+  # be reported as NOT RESOLVED, which reads as a DNS fault on the operator's side
+  # when in fact they never asked for that name.
+  local entry label domain
+  while read -r entry; do
+    label="${entry%%=*}"; domain="${entry#*=}"
+    _status_dns "$domain" "$label"
+  done < <(_configured_domain_labels)
   echo ""
 
   _status_cert_expiry
@@ -1089,10 +1415,10 @@ cmd_status() {
   _status_renewal_timer
   echo ""
 
-  _status_connectivity "$DOMAIN_NAME" "primary"
-  _status_connectivity "$ADMIN_DOMAIN" "admin"
-  _status_connectivity "$OJ_DOMAIN" "oj"
-  _status_connectivity "$RANKING_DOMAIN" "ranking"
+  while read -r entry; do
+    label="${entry%%=*}"; domain="${entry#*=}"
+    _status_connectivity "$domain" "$label"
+  done < <(_configured_domain_labels)
 }
 
 _status_dns() {
@@ -1121,11 +1447,11 @@ _status_cert_expiry() {
     return 0
   fi
 
-  cert_expiry="$(_cert_expiry_date "$cert_file")"
+  cert_expiry="$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | sed 's/notAfter=//')"
   [[ -n "$cert_expiry" ]] && log_info "Certificate expiry: $cert_expiry"
 
   days_left="$(_cert_days_left)"
-  if [[ -z "$cert_expiry" ]]; then
+  if (( days_left < 0 )); then
     return 0
   fi
   if (( days_left < 7 )); then
@@ -1139,19 +1465,39 @@ _status_cert_expiry() {
 
 _status_renewal_timer() {
   case "$(_renewal_mechanism)" in
-    grader-cert-renew.timer) log_info "Renewal timer: grader-cert-renew.timer is enabled" ;;
+    "${CERT_RENEW_TIMER_UNIT}") log_info "Renewal timer: ${CERT_RENEW_TIMER_UNIT} is enabled" ;;
     certbot.timer)           log_info "Renewal timer: certbot.timer is enabled" ;;
     certbot-container)       log_info "Renewal timer: certbot container is running" ;;
-    unknown)                 log_warn "Renewal timer: cannot tell — neither systemctl nor docker is available" ;;
+    lego)                    _report_lego_certificate_renewal ;;
+    external)                _report_unmanaged_certificate ;;
     *)                       log_warn "No renewal mechanism detected (grader-cert-renew.timer, certbot.timer or certbot container)" ;;
   esac
 }
 
+# The renewal status of a certificate lego owns: the handover window, then whatever will
+# evaluate it. WHY both: ownership answers who issued the certificate, scheduling answers
+# whether the window is ever looked at, and the second question had no answer on the
+# status line until a timer could be installed to answer it.
+#
+# WHY the timer unit name comes from CERT_RENEW_TIMER_UNIT rather than a literal: the
+# same name is what scripts/__cert_timer.sh enables, and a spelling that drifted between
+# the installer and this probe would report an installed timer as missing.
+#
+# WHY only the repo's own timer counts: certbot owns no renewal config for this lineage,
+# so an enabled certbot.timer would never look at this certificate — crediting it would
+# repeat the false reassurance this line replaces.
+_report_lego_certificate_renewal() {
+  acme_report_lego_renewal
+  if _timer_is_enabled "$CERT_RENEW_TIMER_UNIT"; then
+    log_info "Renewal timer: ${CERT_RENEW_TIMER_UNIT} is enabled"
+  else
+    log_warn "Renewal timer: none installed — nothing will evaluate the lego handover window"
+    log_warn "  install one with: ./cms domain setup --install-timer"
+  fi
+}
+
 _status_connectivity() {
   local domain="$1" label="$2"
-  if ! require_external curl "the HTTPS probe"; then
-    return 0
-  fi
   if curl -Ikso /dev/null --max-time 5 "https://${domain}/" 2>/dev/null; then
     log_info "HTTPS [$label] $domain — reachable"
   else
@@ -1168,35 +1514,37 @@ _status_connectivity() {
 _resolve_host() {
   local host="$1" lookup_timeout_s=3
   if command -v dig >/dev/null 2>&1; then
-    _bounded "$lookup_timeout_s" dig +short "$host" 2>/dev/null | head -1 || true
+    timeout "$lookup_timeout_s" dig +short "$host" 2>/dev/null | head -1 || true
   elif command -v getent >/dev/null 2>&1; then
-    _bounded "$lookup_timeout_s" getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}' || true
+    timeout "$lookup_timeout_s" getent hosts "$host" 2>/dev/null | head -1 | awk '{print $1}' || true
   fi
   return 0
 }
 
 # Prints the detected renewal mechanism: grader-cert-renew.timer, certbot.timer,
-# certbot-container, unknown or none. WHY grader-cert-renew first: it is the unit this
-# repo ships (config/systemd/), so a host that installs only it must not be reported
-# as having no renewal mechanism. WHY unknown is distinct from none: with neither
-# systemctl nor docker there is nothing to ask, and reporting "no renewal mechanism"
-# there would blame the host for a missing tool.
+# certbot-container or none. WHY grader-cert-renew first: it is the unit this repo
+# ships (config/systemd/), and the earlier check only knew certbot.timer, so a
+# correctly configured host reported "no renewal mechanism".
 _renewal_mechanism() {
-  if command -v systemctl >/dev/null 2>&1; then
-    if systemctl is-enabled grader-cert-renew.timer 2>/dev/null | grep -q enabled; then
-      printf 'grader-cert-renew.timer'; return 0
-    elif systemctl is-enabled certbot.timer 2>/dev/null | grep -q enabled; then
-      printf 'certbot.timer'; return 0
+  # Name the owner before any timer: certbot ignores a lineage it has no config for.
+  if [[ -f "$(_cert_fullchain_path)" ]] \
+     && [[ ! -f "$(_cert_store_dir)/renewal/${CERT_LINEAGE_DOMAIN}.conf" ]]; then
+    if acme_cert_is_lego_issued; then
+      printf 'lego'
+    else
+      printf 'external'
     fi
+    return 0
   fi
-  if command -v docker >/dev/null 2>&1; then
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
-      printf 'certbot-container'; return 0
-    fi
-  elif ! command -v systemctl >/dev/null 2>&1; then
-    printf 'unknown'; return 0
+  if _timer_is_enabled "$CERT_RENEW_TIMER_UNIT"; then
+    printf '%s' "$CERT_RENEW_TIMER_UNIT"
+  elif _timer_is_enabled certbot.timer; then
+    printf 'certbot.timer'
+  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    printf 'certbot-container'
+  else
+    printf 'none'
   fi
-  printf 'none'
 }
 
 # ---------------------------------------------------------------------------
@@ -1207,19 +1555,24 @@ _renewal_mechanism() {
 # parsing log lines.
 cmd_status_json() {
   local dns_json="" host resolved
-  for host in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
+  # WHY only configured domains: an unset name is emitted as an empty string today,
+  # which a consumer reads as "DNS is broken for this name" rather than "not in use".
+  # The key stays the domain so existing consumers keep working.
+  while read -r host; do
     resolved="$(_resolve_host "$host")"
     dns_json+="\"$(_json_escape "$host")\":\"$(_json_escape "${resolved:-}")\","
-  done
+  done < <(_configured_domains)
   dns_json="${dns_json%,}"
 
-  local days_left expiry
+  local days_left expiry renewal_state
   days_left="$(_cert_days_left)"
-  expiry="$(_cert_expiry_date "$(_cert_fullchain_path)")"
+  expiry="$(openssl x509 -enddate -noout -in "$(_cert_fullchain_path)" 2>/dev/null | sed 's/notAfter=//' || true)"
+  renewal_state="$(_renewal_mechanism)"
 
-  printf '{"domain":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s"}\n' \
-    "$(_json_escape "$DOMAIN_NAME")" "$dns_json" \
-    "$days_left" "$(_json_escape "$expiry")" "$(_renewal_mechanism)"
+  printf '{"domains":"%s","primary":"%s","dns":{%s},"certificate":{"days_left":%s,"expiry":"%s"},"renewal":"%s","renewal_managed":%s}\n' \
+    "$(_json_escape "$(_domain_list)")" "$(_json_escape "$PRIMARY_DOMAIN")" "$dns_json" \
+    "$days_left" "$(_json_escape "$expiry")" "$renewal_state" \
+    "$(acme_render_renewal_managed_json "$renewal_state")"
 }
 
 # ---------------------------------------------------------------------------
@@ -1228,16 +1581,13 @@ cmd_status_json() {
 # Exits non-zero when the certificate is missing or expires within the threshold,
 # so a monitor or cron job can alert on it.
 cmd_check_expiry() {
+  _resolve_domain_targets
   local threshold="${CHECK_EXPIRY_DAYS:-0}" days_left
   (( threshold > 0 )) || threshold="$CHECK_EXPIRY_DAYS_DEFAULT"
-  # Guarded before the read so a host without openssl learns exactly that, instead
-  # of being told the certificate is missing when it only cannot be examined.
-  command -v openssl >/dev/null 2>&1 \
-    || log_die "openssl not found — certificate expiry cannot be read" 1
   days_left="$(_cert_days_left)"
 
   if (( days_left < 0 )); then
-    log_warn "certificate check failed: no certificate found for ${DOMAIN_NAME}"
+    log_warn "certificate check failed: no certificate found for ${CERT_LINEAGE_DOMAIN}"
     exit 1
   fi
   if (( days_left < threshold )); then
@@ -1251,6 +1601,7 @@ cmd_check_expiry() {
 # Revoke subcommand
 # ---------------------------------------------------------------------------
 cmd_revoke() {
+  _resolve_domain_targets
   log_info "Certificate revocation — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
   local cert_file key_file
   cert_file="$(_cert_fullchain_path)"
@@ -1270,91 +1621,99 @@ cmd_revoke() {
   _retry_certbot certbot revoke --cert-path "$cert_file" --key-path "$key_file" \
     --reason "$REVOKE_REASON" --non-interactive \
     || log_die "certbot revoke failed" 1
-  discord_alert "Certificate revoked for ${DOMAIN_NAME}" 16711680
+  discord_alert "Certificate revoked for ${CERT_LINEAGE_DOMAIN}" 16711680
   log_info "Revocation complete"
 }
 
 # ---------------------------------------------------------------------------
 # Renew subcommand
 # ---------------------------------------------------------------------------
+# Renews a lineage certbot already has a renewal config for.
+_run_certbot_renew() {
+  if command -v certbot >/dev/null 2>&1; then
+    _retry_certbot certbot renew ${RENEW_FLAGS[@]+"${RENEW_FLAGS[@]}"} --cert-name "$CERT_LINEAGE_DOMAIN" || log_die "certbot renew failed" 1
+    log_info "certificates renewed via certbot"
+    return 0
+  fi
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
+    local container
+    container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
+    _retry_certbot docker exec "$container" certbot renew ${RENEW_FLAGS[@]+"${RENEW_FLAGS[@]}"} || log_die "certbot renew failed in container" 1
+    log_info "certificates renewed via certbot container ($container)"
+    return 0
+  fi
+  log_die "no certbot found on host or in docker" 1
+}
+
 cmd_renew() {
+  _resolve_domain_targets
+  acme_validate_config
+  if [[ "$ACME_CHALLENGE" == "tls-alpn-01" && "$DOMAIN_CERT_METHOD" == "letsencrypt" ]]; then
+    _renew_via_tls_alpn
+    return 0
+  fi
   log_info "Certificate renewal — mode: $([ "$DRY_RUN" -eq 1 ] && echo 'DRY-RUN' || echo 'APPLY')"
 
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    log_info "[dry-run] would force-renew certificates for $DOMAIN_NAME"
+    log_info "[dry-run] would force-renew certificates for $CERT_LINEAGE_DOMAIN"
     return 0
   fi
 
   _backup_certificates
   build_renew_flags
 
-  if command -v certbot >/dev/null 2>&1; then
-    _retry_certbot certbot renew "${RENEW_FLAGS[@]}" --cert-name "$DOMAIN_NAME" || log_die "certbot renew failed" 1
-    log_info "certificates renewed via certbot"
-  elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q certbot; then
-    local container
-    container="$(docker ps --format '{{.Names}}' | grep certbot | head -1)"
-    _retry_certbot docker exec "$container" certbot renew "${RENEW_FLAGS[@]}" || log_die "certbot renew failed in container" 1
-    log_info "certificates renewed via certbot container ($container)"
-  else
-    log_die "no certbot found on host or in docker" 1
+  # certbot discovers renewals by renewal/<lineage>.conf, so without one it never renews.
+  if [[ ! -f "$(_cert_store_dir)/renewal/${CERT_LINEAGE_DOMAIN}.conf" ]]; then
+    acme_report_unrenewable_certificate
+    return 0
   fi
 
-  # Reload nginx to pick up new certs
-  if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' 2>/dev/null | grep -q nginx; then
-    local nginx_container
-    nginx_container="$(docker ps --format '{{.Names}}' | grep nginx | head -1)"
-    docker exec "$nginx_container" nginx -s reload 2>/dev/null || log_warn "nginx reload failed"
-    log_info "nginx reloaded in $nginx_container"
-  fi
-
-  discord_alert "Certificates renewed for ${DOMAIN_NAME}" 65280
+  _run_certbot_renew
+  _reload_running_nginx
+  discord_alert "Certificates renewed for ${CERT_LINEAGE_DOMAIN}" 65280
   log_info "Renewal complete"
 }
 
 # ---------------------------------------------------------------------------
 # Preflight subcommand — 9-check matrix
 # ---------------------------------------------------------------------------
-# Runs one preflight check and applies the result to the counters. <severity> is hard
-# (a failed check aborts preflight) or soft (a failed check is only a warning).
-# WHY a third state exists: a check whose tool is absent can neither pass nor fail,
-# and recording only pass/fail would report a missing nc as an unreachable worker. A
-# check returns 2 to mean skipped.
-_tally_check() {
-  local severity="$1" rc=0
-  shift
-  "$@" || rc=$?
-  case "$rc" in
-    0) PREFLIGHT_PASS=$(( PREFLIGHT_PASS + 1 )) ;;
-    2) PREFLIGHT_SKIPPED=$(( PREFLIGHT_SKIPPED + 1 )) ;;
-    *) if [[ "$severity" == hard ]]; then
-         PREFLIGHT_FAIL=$(( PREFLIGHT_FAIL + 1 ))
-       else
-         PREFLIGHT_WARN=$(( PREFLIGHT_WARN + 1 ))
-       fi ;;
-  esac
-  return 0
-}
-
 cmd_preflight() {
-  log_info "Preflight checks for $DOMAIN_NAME"
+  _resolve_domain_targets
+  log_info "Preflight checks for $(_domain_list)"
   _log_optional_features
   echo ""
-  PREFLIGHT_PASS=0; PREFLIGHT_WARN=0; PREFLIGHT_FAIL=0; PREFLIGHT_SKIPPED=0
+  local pass=0 warn=0 fail=0
 
-  _tally_check hard _check_ssh
-  _tally_check hard _check_tailscale
-  _tally_check soft _check_worker_rpc
-  _tally_check hard _check_database
-  _tally_check soft _check_dns
-  _tally_check soft _check_http80
-  _tally_check soft _check_https443
-  _tally_check soft _check_domain_paths
-  _tally_check soft _check_funnel
+  # 1. SSH LAN
+  _check_ssh && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
+
+  # 2. Tailscale
+  _check_tailscale && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
+
+  # 3. Remote worker RPC
+  _check_worker_rpc && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 4. Database
+  _check_database && { pass=$((pass + 1)); } || { fail=$((fail + 1)); }
+
+  # 5. DNS resolution
+  _check_dns && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 6. HTTP port 80
+  _check_http80 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 7. HTTPS port 443
+  _check_https443 && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 8. Domain paths
+  _check_domain_paths && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
+
+  # 9. Funnel still works
+  _check_funnel && { pass=$((pass + 1)); } || { warn=$((warn + 1)); }
 
   echo ""
-  log_info "Preflight results: PASS=$PREFLIGHT_PASS  WARN=$PREFLIGHT_WARN  FAIL=$PREFLIGHT_FAIL  SKIPPED=$PREFLIGHT_SKIPPED"
-  if (( PREFLIGHT_FAIL > 0 )); then
+  log_info "Preflight results: PASS=$pass  WARN=$warn  FAIL=$fail"
+  if (( fail > 0 )); then
     log_warn "Some checks failed — review above output"
     exit 1
   fi
@@ -1362,7 +1721,6 @@ cmd_preflight() {
 
 _check_ssh() {
   printf '  %-30s' "SSH LAN:"
-  _external_present ss || { printf 'SKIPPED (ss not installed)\n'; return 2; }
   if ss -tlnp 2>/dev/null | grep -q ':22 '; then
     printf 'PASS (port 22 listening)\n'
     return 0
@@ -1374,8 +1732,7 @@ _check_ssh() {
 
 _check_tailscale() {
   printf '  %-30s' "Tailscale:"
-  _external_present tailscale || { printf 'SKIPPED (tailscale not installed)\n'; return 2; }
-  if tailscale status >/dev/null 2>&1; then
+  if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
     local ts_ip
     ts_ip="$(tailscale ip -4 2>/dev/null || echo 'unknown')"
     printf 'PASS (%s)\n' "$ts_ip"
@@ -1386,19 +1743,10 @@ _check_tailscale() {
   fi
 }
 
-# WHY WORKER_HOST has no default address: a probe that quietly targets a hardcoded
-# host reports on a machine this deployment does not own, and the address is the one
-# thing an operator must be able to change per site. Unset means "no worker to
-# probe", which is skipped rather than failed.
 _check_worker_rpc() {
   printf '  %-30s' "Remote worker RPC:"
-  local worker_host="${WORKER_HOST:-}"
+  local worker_host="${WORKER_HOST:?set WORKER_HOST to the worker node address}"
   local worker_port="${WORKER_RPC_PORT:-26000}"
-  if [[ -z "$worker_host" ]]; then
-    printf 'SKIPPED (set WORKER_HOST in the env file to probe a worker)\n'
-    return 2
-  fi
-  _external_present nc || { printf 'SKIPPED (nc not installed)\n'; return 2; }
   if nc -zw3 "$worker_host" "$worker_port" 2>/dev/null; then
     printf 'PASS (%s:%s)\n' "$worker_host" "$worker_port"
     return 0
@@ -1410,7 +1758,6 @@ _check_worker_rpc() {
 
 _check_database() {
   printf '  %-30s' "Database:"
-  _external_present docker || { printf 'SKIPPED (docker not installed)\n'; return 2; }
   if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'cms-database'; then
     local health
     health="$(docker inspect -f '{{.State.Health.Status}}' cms-database 2>/dev/null || echo 'unknown')"
@@ -1423,9 +1770,12 @@ _check_database() {
 }
 
 _check_dns() {
-  printf '  %-30s' "DNS ($DOMAIN_NAME):"
-  _external_present getent || { printf 'SKIPPED (getent not installed)\n'; return 2; }
-  if getent hosts "$DOMAIN_NAME" >/dev/null 2>&1; then
+  # WHY the lineage name and not the primary: when a deployment configures only
+  # admin or only ranking, the primary is empty and probing it would report a DNS
+  # failure for a name that was never requested. The lineage is by construction a
+  # domain that exists.
+  printf '  %-30s' "DNS ($CERT_LINEAGE_DOMAIN):"
+  if getent hosts "$CERT_LINEAGE_DOMAIN" >/dev/null 2>&1; then
     printf 'PASS\n'
     return 0
   else
@@ -1435,9 +1785,8 @@ _check_dns() {
 }
 
 _check_http80() {
-  printf '  %-30s' "HTTP :80 ($DOMAIN_NAME):"
-  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
-  if curl -sf -o /dev/null --max-time 5 "http://${DOMAIN_NAME}/" 2>/dev/null; then
+  printf '  %-30s' "HTTP :80 ($CERT_LINEAGE_DOMAIN):"
+  if curl -sf -o /dev/null --max-time 5 "http://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
   else
@@ -1447,9 +1796,8 @@ _check_http80() {
 }
 
 _check_https443() {
-  printf '  %-30s' "HTTPS :443 ($DOMAIN_NAME):"
-  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
-  if curl -Ikso /dev/null --max-time 5 "https://${DOMAIN_NAME}/" 2>/dev/null; then
+  printf '  %-30s' "HTTPS :443 ($CERT_LINEAGE_DOMAIN):"
+  if curl -Ikso /dev/null --max-time 5 "https://${CERT_LINEAGE_DOMAIN}/" 2>/dev/null; then
     printf 'PASS\n'
     return 0
   else
@@ -1460,16 +1808,21 @@ _check_https443() {
 
 _check_domain_paths() {
   printf '  %-30s' "Domain paths:"
-  _external_present curl || { printf 'SKIPPED (curl not installed)\n'; return 2; }
-  local ok=1
-  for d in "$DOMAIN_NAME" "$ADMIN_DOMAIN" "$OJ_DOMAIN" "$RANKING_DOMAIN"; do
-    if ! curl -Ikso /dev/null --max-time 5 "https://${d}/" 2>/dev/null; then
+  local ok=1 domain checked=0
+  while read -r domain; do
+    checked=$((checked + 1))
+    if ! curl -Ikso /dev/null --max-time 5 "https://${domain}/" 2>/dev/null; then
       ok=0
       break
     fi
-  done
+  done < <(_configured_domains)
+
+  if [[ "$checked" -eq 0 ]]; then
+    printf 'WARN (no domain configured)\n'
+    return 1
+  fi
   if [[ "$ok" -eq 1 ]]; then
-    printf 'PASS (all domains reachable)\n'
+    printf 'PASS (%d domain(s) reachable)\n' "$checked"
     return 0
   else
     printf 'WARN (some domains unreachable)\n'
@@ -1479,8 +1832,7 @@ _check_domain_paths() {
 
 _check_funnel() {
   printf '  %-30s' "Funnel:"
-  _external_present tailscale || { printf 'SKIPPED (tailscale not installed)\n'; return 2; }
-  if tailscale serve status 2>/dev/null | grep -q 'https'; then
+  if command -v tailscale >/dev/null 2>&1 && tailscale serve status 2>/dev/null | grep -q 'https'; then
     printf 'PASS\n'
     return 0
   else
@@ -1505,7 +1857,7 @@ esac
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --cert)       CERT_TYPE="$2"; shift 2 ;;
+    --cert)       DOMAIN_CERT_METHOD="$2"; shift 2 ;;
     --domain)     DOMAIN_NAME="$2"; shift 2 ;;
     --admin-domain) ADMIN_DOMAIN="$2"; shift 2 ;;
     --oj-domain)  OJ_DOMAIN="$2"; shift 2 ;;
@@ -1516,6 +1868,7 @@ while [[ $# -gt 0 ]]; do
     --dry-run)    DRY_RUN=1; shift ;;
     --apply)      DRY_RUN=0; shift ;;
     --yes|-y)     AUTO_YES=1; shift ;;
+    --auto-renew) AUTO_RENEW=1; shift ;;
     --auto-retry) AUTO_RETRY=1; shift ;;
     --retry-attempts) CERT_RETRY_ATTEMPTS="$2"; shift 2 ;;
     --retry-interval) CERT_RETRY_INTERVAL="$2"; shift 2 ;;
@@ -1523,15 +1876,29 @@ while [[ $# -gt 0 ]]; do
     --extra-domains) EXTRA_DOMAINS="$2"; shift 2 ;;
     --deploy-hook) DEPLOY_HOOK="$2"; shift 2 ;;
     --staging)    LE_STAGING=1; shift ;;
-    --force)      FORCE_RENEWAL=1; shift ;;
+    --force)
+      # WHY a refusal rather than a silent no-op: build_renew_flags already adds
+      # --force-renewal unless --due withholds it, so on renew this flag could never
+      # change the run. Saying so, and naming the flag that does, is the difference
+      # between an operator who knows what happened and one who thinks they forced it.
+      if [[ "$cmd" == "renew" ]]; then
+        log_die "--force is not accepted on renew: renew force-renews by default. Use --due to renew only what the CA reports as due instead, or drop --force — a plain renew already reissues now" 2
+      fi
+      FORCE_RENEWAL=1; shift ;;
+    --due)        RENEW_DUE_ONLY=1; shift ;;
     --wait-port80) WAIT_PORT80_TIMEOUT="$2"; shift 2 ;;
     --backup-certs) BACKUP_CERTS=1; shift ;;
     --lock)       USE_LOCK=1; shift ;;
     --json)       JSON_OUTPUT=1; shift ;;
     --days)       CHECK_EXPIRY_DAYS="$2"; shift 2 ;;
     --reason)     REVOKE_REASON="$2"; shift 2 ;;
-    --dns)        DNS_PROVIDER="$2"; shift 2 ;;
-    --dns-credentials) DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
+    --dns)        ACME_DNS_PROVIDER="$2"; shift 2 ;;
+    --dns-credentials) ACME_DNS_CREDENTIALS_FILE="$2"; shift 2 ;;
+    --challenge)  ACME_CHALLENGE="$2"; shift 2 ;;
+    --ca)         ACME_CA="$2"; shift 2 ;;
+    --acme-server) ACME_DIRECTORY_URL="$2"; shift 2 ;;
+    --acme-client) ACME_CLIENT="$2"; shift 2 ;;
+    --tls-address) ACME_TLS_ALPN_ADDRESS="$2"; shift 2 ;;
     --config)     CONFIG_FILE="$2"; shift 2 ;;
     --help|-h)    usage; exit 0 ;;
     *)            log_die "unknown option: $1 — see --help" 1 ;;
@@ -1542,6 +1909,12 @@ done
 [[ "$CERT_RETRY_INTERVAL" =~ ^[0-9]+$ ]] || log_die "--retry-interval must be a non-negative integer" 1
 [[ "$WAIT_PORT80_TIMEOUT" =~ ^[0-9]+$ ]] || log_die "--wait-port80 must be a non-negative integer" 1
 [[ "$CHECK_EXPIRY_DAYS" =~ ^[0-9]+$ ]] || log_die "--days must be a non-negative integer" 1
+
+acme_report_config_override "--cert" "$CONFIGURED_DOMAIN_CERT_METHOD" "$DOMAIN_CERT_METHOD"
+acme_report_config_override "--challenge" "$CONFIGURED_ACME_CHALLENGE" "$ACME_CHALLENGE"
+acme_report_config_override "--ca" "$CONFIGURED_ACME_CA" "$ACME_CA"
+acme_report_config_override "--acme-server" "$CONFIGURED_ACME_DIRECTORY_URL" "$ACME_DIRECTORY_URL"
+acme_report_config_override "--acme-client" "$CONFIGURED_ACME_CLIENT" "$ACME_CLIENT"
 
 _acquire_run_lock
 

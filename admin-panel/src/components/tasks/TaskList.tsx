@@ -1,63 +1,91 @@
-'use client';
+﻿'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useSyncedState } from '@/hooks/useSyncedState';
-import { useRouter, usePathname } from 'next/navigation';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/core/Table';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
+import { usePathname } from 'next/navigation';
+import { useAppRouter } from '@/hooks/useAppRouter';
+import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
-import { Edit2, Trash2, Plus, FileText, Database, ExternalLink, AlertTriangle } from 'lucide-react';
+import { RowActions, rowActionGroupLabel, type RowAction } from '@/components/core/RowActions';
+import { Pencil, Trash2, Plus, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { ROW_SELECTED_CLASSES } from '@/hooks/useShortcuts';
+import { ROW_SELECTED_CLASSES } from '@/hooks/shortcut-rows';
 import { EmptyState } from '@/components/core/EmptyState';
-import { MobileCard, MobileCardRow } from '@/components/core/MobileCard';
+import type { ListSortInput } from '@/lib/list-sorting';
 import { TaskModal } from './TaskModal';
+import { TaskBulkAssignDialog } from './TaskBulkAssignDialog';
+import { buildTaskColumns, type TaskRow } from './taskColumns';
+import { RecordListPager } from '@/components/list/RecordListPager';
+import { BulkActionBar } from '@/components/core/BulkActionBar';
+import { ApplyLimitsButton } from '@/components/limits/ApplyLimitsButton';
+import { useListSelection } from '@/hooks/useListSelection';
 import { apiClient } from '@/lib/apiClient';
-import { hasEffectivePermission } from '@/lib/permission-engine';
-import type { TaskDiagnostic } from '@/lib/task-diagnostics';
-
-interface TaskRow {
-  id: number;
-  name: string;
-  title: string;
-  contests: { name: string } | null;
-  statements: Array<{ id: number }>;
-  datasets_datasets_task_idTotasks: Array<{ id: number }>;
-  _count: { submissions: number };
-  diagnostics: TaskDiagnostic[];
-}
+import { unsetLimitPatch } from '@/lib/limit-patch';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
+import { buildRoute } from '@/lib/navigation/routes';
+import { useConfirm } from '@/hooks/useConfirm';
+import { useConfirmationCopy } from '@/hooks/useConfirmationCopy';
+import { useDictionary } from '@/hooks/useDictionary';
 
 interface TaskListProps {
   initialTasks: TaskRow[];
   totalPages: number;
+  currentPage: number;
   permissionKeys: readonly string[];
+  initialSort?: ListSortInput;
 }
 
-export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React.JSX.Element {
-  const router = useRouter();
+function buildTaskRowActions(
+  task: TaskRow,
+  onEdit: (task: TaskRow) => void,
+  onDelete: (id: number) => void,
+): RowAction[] {
+  return [
+    { key: 'edit', label: 'Edit task', icon: Pencil, onClick: () => onEdit(task), permission: ACTION_PERMISSIONS.updateTask, className: 'text-muted-foreground hover:text-primary' },
+    { key: 'delete', label: 'Delete task', icon: Trash2, onClick: () => { void onDelete(task.id); }, permission: ACTION_PERMISSIONS.deleteTask, className: 'text-muted-foreground hover:text-destructive' },
+  ];
+}
+
+export function TaskList({ initialTasks, totalPages, currentPage, permissionKeys, initialSort }: TaskListProps): React.JSX.Element {
+  const router = useAppRouter();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] ?? 'en';
   const [tasks] = useSyncedState(initialTasks);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
+  const confirm = useConfirm();
+  const { destructiveConfirm, removeTaskFromContestConfirm } = useConfirmationCopy();
+  const dict = useDictionary();
 
   const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const canCreateTasks = hasEffectivePermission(effective, 'task:create');
-  const canManageTasks = hasEffectivePermission(effective, 'task:update');
-  const canDeleteTasks = hasEffectivePermission(effective, 'task:delete');
+  const canCreateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.createTask);
+  const canUpdateTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTask);
+  const canDeleteTasks = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteTask);
+  // Why both: the assign route and the service it reuses demand task:update and
+  // task:switch_dataset, so the bar only offers what the writer will accept.
+  const canAssignToContest = canUpdateTasks && effective.has('task:switch_dataset');
+
+  const taskIds = useMemo(() => tasks.map((task) => task.id), [tasks]);
+  const selection = useListSelection('tasks.list', taskIds);
 
   const handleEdit = (task: TaskRow): void => {
-    if (!canManageTasks) return;
+    if (!canUpdateTasks) return;
     setSelectedTask(task);
     setIsModalOpen(true);
   };
 
+  const runAction = useActionFeedback();
+
   const handleDelete = async (id: number): Promise<void> => {
     if (!canDeleteTasks) return;
-    if (confirm('Are you sure you want to delete this task? This is IRREVERSIBLE.')) {
-      const result = await apiClient.delete(`/api/tasks/${id}`);
-      if (result.success) window.location.reload();
-      else alert(`Failed to delete task: ${result.error}`);
-    }
+    if (!(await confirm(destructiveConfirm('task')))) return;
+    const result = await runAction(
+      { pending: 'Deleting task...', success: 'Task deleted', failure: 'Failed to delete task' },
+      () => apiClient.delete(`/api/tasks/${id}`)
+    );
+    if (result?.success) router.refresh();
   };
 
   const handleCreate = (): void => {
@@ -66,9 +94,45 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
     setIsModalOpen(true);
   };
 
-  const handleSuccess = (): void => {
-    window.location.reload();
+  const handleAssigned = (): void => {
+    selection.clear();
+    router.refresh();
   };
+
+  const handleUnassign = async (): Promise<void> => {
+    if (!canAssignToContest || selection.selectedCount === 0) return;
+    if (!(await confirm(removeTaskFromContestConfirm()))) return;
+    const result = await runAction(
+      { pending: 'Unassigning tasks...', success: 'Tasks unassigned', failure: 'Failed to unassign tasks' },
+      () => apiClient.post('/api/tasks/batch', { action: 'assign', taskIds: [...selection.selectedIds], contestIds: [] }),
+    );
+    if (result?.success) handleAssigned();
+  };
+
+  const handlePageChange = (next: number): void => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('page', String(next));
+    router.push(url.toString());
+  };
+
+  const applySort = (next: ListSortInput): void => {
+    const url = new URL(window.location.href);
+    if (next !== null && next !== undefined) {
+      url.searchParams.set('sort', next.key);
+      url.searchParams.set('dir', next.direction);
+    } else {
+      url.searchParams.delete('sort');
+      url.searchParams.delete('dir');
+    }
+    url.searchParams.set('page', '1');
+    router.push(url.toString());
+  };
+
+  const handleOpenTask = useCallback((id: number) => {
+    router.push(buildRoute(locale, 'tasks.record', { id }));
+  }, [router, locale]);
+
+  const columns = useMemo(() => buildTaskColumns({ selection, onOpen: handleOpenTask }), [selection, handleOpenTask]);
 
   return (
     <div className="space-y-6">
@@ -81,111 +145,73 @@ export function TaskList({ initialTasks, permissionKeys }: TaskListProps): React
         )}
       </div>
 
-      <div className="border border-border rounded-xl overflow-hidden bg-card">
-        <Table
-          mobileCards={tasks.map((task) => (
-            <MobileCard key={task.id}>
-              <MobileCardRow label="ID" value={`#${task.id}`} />
-              <MobileCardRow label="Name" value={task.name} />
-              <MobileCardRow label="Title" value={task.title} />
-              <MobileCardRow label="Contest" value={task.contests ? task.contests.name : 'Unassigned'} />
-              <MobileCardRow label="Submissions" value={task._count?.submissions ?? 0} />
-              {canManageTasks && (
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                  <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
-                </div>
-              )}
-            </MobileCard>
-          ))}
-        >
-          <TableHeader>
-            <TableRow className="border-b border-border hover:bg-muted/50">
-              <TableHead className="text-muted-foreground">ID</TableHead>
-              <TableHead className="text-muted-foreground">Name</TableHead>
-              <TableHead className="text-muted-foreground">Title</TableHead>
-              <TableHead className="text-muted-foreground">Contest</TableHead>
-              <TableHead className="text-muted-foreground">Resources</TableHead>
-              <TableHead className="text-muted-foreground">Submissions</TableHead>
-              <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tasks.map((task) => {
-              const hasErrors = task.diagnostics.some((d) => d.type === 'error');
-              return (
-                <TableRow key={task.id} data-shortcut-row className={cn('border-b border-border hover:bg-muted/50 transition-colors', hasErrors && 'opacity-60', ROW_SELECTED_CLASSES)}>
-                  <TableCell className="font-mono text-muted-foreground text-xs text-nowrap">#{task.id}</TableCell>
-                  <TableCell className="font-medium text-foreground max-w-36">
-                    <div className="flex items-center gap-2">
-                      {task.diagnostics.length > 0 && (
-                        <div className="group relative">
-                          <AlertTriangle className={cn('w-4 h-4 cursor-help shrink-0', hasErrors ? 'text-destructive' : 'text-warning')} />
-                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block z-50 min-w-48 p-2 bg-popover border border-border rounded-lg shadow-xl text-xs space-y-1">
-                            <p className="font-bold border-b border-border pb-1 mb-1">Task Issues</p>
-                            {task.diagnostics.map((d, i) => (
-                              <div key={i} className={`flex gap-1.5 ${d.type === 'error' ? 'text-destructive' : 'text-warning'}`}>
-                                <span>•</span>
-                                <span>{d.message}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      <button onClick={() => router.push(`/${locale}/tasks/${task.id}`)} data-shortcut-primary className={cn('flex items-center gap-2 hover:text-primary transition-colors truncate', hasErrors && 'text-muted-foreground')}>
-                        {task.name}
-                        <ExternalLink className="w-3 h-3 opacity-50" />
-                      </button>
-                    </div>
-                  </TableCell>
-                  <TableCell className={`max-w-48 truncate ${hasErrors ? 'text-muted-foreground italic' : 'text-muted-foreground'}`} title={task.title}>
-                    {task.title}
-                  </TableCell>
-                  <TableCell>
-                    {task.contests ? (
-                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20">{task.contests.name}</span>
-                    ) : (
-                      <span className="text-muted-foreground text-xs italic">Unassigned</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1" title="Statements">
-                        <FileText className="w-3 h-3" />
-                        <span>{task.statements.length}</span>
-                      </div>
-                      <div className="flex items-center gap-1" title="Datasets">
-                        <Database className="w-3 h-3" />
-                        <span>{task.datasets_datasets_task_idTotasks.length}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{task._count?.submissions ?? 0}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      {canManageTasks && (
-                        <Button variant="ghost" size="sm" icon={Edit2} iconOnly tooltip="Edit task" onClick={() => handleEdit(task)} className="text-muted-foreground hover:text-primary" />
-                      )}
-                      {canDeleteTasks && (
-                        <Button variant="ghost" size="sm" icon={Trash2} iconOnly tooltip="Delete task" onClick={() => handleDelete(task.id)} className="text-muted-foreground hover:text-destructive" />
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {tasks.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="py-12">
-                  <EmptyState icon={FileText} title="No tasks found" description="Create your first task to get started." />
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      {/* Why one bar with two gates: assignment additionally needs task:switch_dataset while
+          editing limits needs task:update alone, so each group renders behind its own gate and an
+          operator who may not move tasks still reaches the limits entry. */}
+      {canUpdateTasks && (
+        <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
+          {canAssignToContest && (
+            <>
+              <Button variant="secondary" onClick={() => setIsAssignOpen(true)}>Assign to contest</Button>
+              <Button variant="secondary" onClick={() => { void handleUnassign(); }}>Unassign</Button>
+            </>
+          )}
+          {/* Why both kinds: the row selection seeds this list's own kind, and Q4 lets the operator
+              add the other kind in the same picker instead of opening a second dialog. */}
+          <ApplyLimitsButton
+            kinds={['contest', 'task']}
+            preselected={{ task: [...selection.selectedIds] }}
+            initiallyTouched={false}
+            patch={unsetLimitPatch()}
+            label={dict.limits.apply.editButton}
+            onSuccess={() => router.refresh()}
+          />
+        </BulkActionBar>
+      )}
 
-      <TaskModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} task={selectedTask as unknown as Parameters<typeof TaskModal>[0]['task']} onSuccess={handleSuccess} permissionKeys={permissionKeys} />
+      <ResponsiveTable
+        columns={columns}
+        rows={tasks}
+        getRowKey={(task) => task.id}
+        getRowClassName={(task) => cn(
+          'border-b border-border hover:bg-muted/50 transition-colors cursor-pointer',
+          task.diagnostics.some((d) => d.type === 'error') && 'opacity-60',
+          ROW_SELECTED_CLASSES,
+        )}
+        getRowProps={(task) => ({
+          'data-shortcut-row': task.id,
+          tabIndex: 0,
+          onClick: () => router.push(buildRoute(locale, 'tasks.record', { id: task.id })),
+          onKeyDown: (event) => {
+            if (event.key === 'Enter' && event.target === event.currentTarget) {
+              router.push(buildRoute(locale, 'tasks.record', { id: task.id }));
+            }
+          },
+        })}
+        renderRowActions={(task) => (
+          <RowActions
+            ariaLabel={rowActionGroupLabel(dict, 'tasks')}
+            permissionKeys={permissionKeys}
+            actions={buildTaskRowActions(task, handleEdit, handleDelete)}
+          />
+        )}
+        sort={initialSort}
+        onSortChange={applySort}
+        emptyState={<EmptyState icon={FileText} title="No tasks found" />}
+      />
+
+      {totalPages > 1 && (
+        <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
+      )}
+
+      <TaskModal isOpen={isModalOpen} onClose={() => { setIsModalOpen(false); setSelectedTask(null); }} task={selectedTask as never} onSuccess={() => { setIsModalOpen(false); router.refresh(); }} permissionKeys={permissionKeys} />
+
+      <TaskBulkAssignDialog
+        isOpen={isAssignOpen}
+        onClose={() => setIsAssignOpen(false)}
+        taskIds={[...selection.selectedIds]}
+        onSuccess={handleAssigned}
+      />
     </div>
   );
 }

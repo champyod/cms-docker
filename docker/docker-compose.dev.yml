@@ -1,6 +1,6 @@
 services:
   devdb:
-    image: docker.io/postgres:15
+    image: docker.io/postgres:15@sha256:5a407822929c3789ff5154d3d35bd7e2090318149344c8a3d4ca942b035822ed
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
     volumes:
@@ -18,6 +18,6 @@ services:
     command: >
       wait-for-it devdb:5432 -- bash
     ports:
-      - 8888:8888
-      - 8889:8889
-      - 8890:8890
+      - 127.0.0.1:8888:8888
+      - 127.0.0.1:8889:8889
+      - 127.0.0.1:8890:8890

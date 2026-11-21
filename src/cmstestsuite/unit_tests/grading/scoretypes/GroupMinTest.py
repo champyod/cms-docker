@@ -40,51 +40,51 @@ class TestGroupMin(ScoreTypeTestMixin, unittest.TestCase):
             "3_1": False,
         }
 
-    def test_paramaters_correct(self):
+    def test_it_accepts_well_formed_parameters(self):
         """Test that correct parameters do not throw."""
         GroupMin([], self._public_testcases)
         GroupMin([[40, 2], [60.0, 2]], self._public_testcases)
         GroupMin([[40, "1_*"], [60.0, "2_*"]], self._public_testcases)
 
-    def test_paramaters_invalid_types(self):
+    def test_it_rejects_ill_typed_parameters(self):
         with self.assertRaises(ValueError):
             GroupMin([1], self._public_testcases)
         with self.assertRaises(ValueError):
             GroupMin(1, self._public_testcases)
 
-    def test_paramaters_invalid_wrong_item_len(self):
+    def test_it_rejects_a_group_with_a_wrong_item_count(self):
         with self.assertRaises(ValueError):
             GroupMin([[]], self._public_testcases)
         with self.assertRaises(ValueError):
             GroupMin([[1]], self._public_testcases)
 
     @unittest.skip("Not yet detected.")
-    def test_paramaters_invalid_wrong_item_len_not_caught(self):
+    def test_it_rejects_a_group_with_extra_items(self):
         with self.assertRaises(ValueError):
             GroupMin([[1, 2, 3]], self._public_testcases)
 
-    def test_parameter_invalid_wrong_max_score_type(self):
+    def test_it_rejects_a_max_score_that_is_not_a_number(self):
         with self.assertRaises(ValueError):
             GroupMin([["a", 10]], self._public_testcases)
 
-    def test_parameter_invalid_wrong_testcases_type(self):
+    def test_it_rejects_a_testcases_selector_of_the_wrong_type(self):
         with self.assertRaises(ValueError):
             GroupMin([[100, 1j]], self._public_testcases)
 
-    def test_parameter_invalid_inconsistent_testcases_type(self):
+    def test_it_rejects_inconsistent_testcases_selector_types(self):
         with self.assertRaises(ValueError):
             GroupMin([[40, 10], [40, "1_*"]], self._public_testcases)
 
     @unittest.skip("Not yet detected.")
-    def test_paramaters_invalid_testcases_too_many(self):
+    def test_it_rejects_a_group_covering_too_many_testcases(self):
         with self.assertRaises(ValueError):
             GroupMin([[100, 20]], self._public_testcases)
 
-    def test_parameter_invalid_testcases_regex_no_match_type(self):
+    def test_it_rejects_a_regex_that_matches_no_testcase(self):
         with self.assertRaises(ValueError):
             GroupMin([[100, "9_*"]], self._public_testcases)
 
-    def test_max_scores_regexp(self):
+    def test_it_computes_max_scores_for_regex_defined_groups(self):
         """Test max score is correct when groups are regexp-defined."""
         s1, s2, s3 = 10.5, 30.5, 59
         parameters = [[0, "0_*"], [s1, "1_*"], [s2, "2_*"], [s3, "3_*"]]
@@ -108,7 +108,7 @@ class TestGroupMin(ScoreTypeTestMixin, unittest.TestCase):
         self.assertEqual(GroupMin(parameters, public_testcases).max_scores(),
                          (s1 + s2 + s3, 0, header))
 
-    def test_max_scores_number(self):
+    def test_it_computes_max_scores_for_number_defined_groups(self):
         """Test max score is correct when groups are number-defined."""
         s1, s2, s3 = 10.5, 30.5, 59
         parameters = [[0, 1], [s1, 2], [s2, 2], [s3, 2]]
@@ -132,7 +132,7 @@ class TestGroupMin(ScoreTypeTestMixin, unittest.TestCase):
         self.assertEqual(GroupMin(parameters, public_testcases).max_scores(),
                          (s1 + s2 + s3, 0.0, header))
 
-    def test_compute_score(self):
+    def test_it_computes_the_score_of_a_submission(self):
         s1, s2, s3 = 10.5, 30.5, 59
         parameters = [[0, "0_*"], [s1, "1_*"], [s2, "2_*"], [s3, "3_*"]]
         gmin = GroupMin(parameters, self._public_testcases)

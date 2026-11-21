@@ -1,0 +1,329 @@
+# Security feed — Renovate (version PRs) + Diun (stale images) + the two scanners.
+#
+# ADDITIVE: this file never replaces docker-compose.yml and edits no file the base stack owns.
+#
+# Enable with ONE command:  make security-up        (dry run first: make security-dry-run)
+# Off-switch:               make security-off
+# The supported procedure is docs/SECURITY-FEED.md -> Operating; the command is implemented in
+# Makefile + scripts/__security_stack.sh, which is what keeps the invocation scoped.
+#
+# DO NOT enable this overlay with a bare `up -d` over the merged project. The label blocks at the
+# bottom of this file add Diun's opt-in labels to admin-panel-next, nginx-proxy, database,
+# redis-rate-limit, monitor and worker; a label is part of a container's config hash, so an unscoped
+# `--profile security up -d` RECREATES every one of them — a full restart of the panel, the proxy and
+# the database, on a box mid-contest, to turn on an optional feed. The supported command names the
+# nine overlay services explicitly and passes --no-deps.
+#
+# Disabled by default twice over: nothing here starts without its profile, and the long-running
+# containers do no work until SECURITY_ENABLED=1 — documented in config.toml.example [infra] beside
+# MONITORING_ENABLED, values in .env.security.
+#
+# Host interaction, the complete list: /:/rootfs:ro on security-scan and
+# /var/run/docker.sock:ro on diun. Both read-only; nothing in this file writes to the host.
+# Every published port is bound to 127.0.0.1.
+#
+# The payload shape, the source enum and the endpoint are fixed by docs/SECURITY-FEED.md.
+# One script builds and POSTs that body for every producer: docker/security-scan/lib/feed.sh.
+#
+# Image pin policy (docs/decisions/image-digest-pinning.md): renovate and diun are
+# third-party and carry tag+digest; the scanner below is our own image.
+# WHY no digest on our own images: ${IMG_TAG} is how a deploy selects the build CI just
+# pushed, so pinning a digest would freeze the feed to one commit — the tag is the selector.
+
+x-security-scan: &security-scan
+  build:
+    context: ./docker/security-scan
+    dockerfile: Dockerfile
+  # WHY `cms-docker-security-scan`: every other image this repository builds is named
+  # `${github.repository}-<part>` by the workflow's metadata step. This one said
+  # `cms-security-scan`, which no workflow ever produced — so the overlay started by failing with
+  # `No such image` on the first host it ran on.
+  image: ghcr.io/champyod/cms-docker-security-scan:${IMG_TAG:-major-admin-panel}
+
+services:
+
+  # Renovate opens the version PRs. It has no findings webhook upstream and this file does not
+  # invent one — its half of the feed is PRs plus the dependency dashboard issue.
+  renovate:
+    image: ghcr.io/renovatebot/renovate:44.181.3@sha256:00f4f69be3060d6ad1ff3481a0e44490aba37ab17c501cbf2de179bc3751dc78
+    container_name: cms-renovate
+    restart: on-failure
+    profiles:
+      - security
+    environment:
+      RENOVATE_PLATFORM: github
+      RENOVATE_TOKEN: ${RENOVATE_TOKEN:-}
+      # WHY required rather than autodiscover: a token that can see more than this repo would
+      # otherwise open PRs in every repo it can reach.
+      RENOVATE_REPOSITORIES: ${RENOVATE_REPOSITORIES:-}
+      RENOVATE_AUTODISCOVER: "false"
+      RENOVATE_CONFIG_FILE: /usr/src/app/renovate.json
+      RENOVATE_CACHE_DIR: /tmp/renovate/cache
+      RENOVATE_INTERVAL_SECONDS: ${RENOVATE_INTERVAL_SECONDS:-86400}
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      LOG_LEVEL: ${RENOVATE_LOG_LEVEL:-info}
+    volumes:
+      # Read-only: the config is the repo's, so the container and a local `renovate` run
+      # cannot disagree about policy.
+      - ./renovate.json:/usr/src/app/renovate.json:ro
+      - renovate-cache:/tmp/renovate/cache
+    # WHY a loop: the Renovate CLI processes the repos and EXITS, so periodicity has to come
+    # from the container command. SECURITY_ENABLED is read inside the container ($$ escapes
+    # compose interpolation), so the config-level switch works without editing this file.
+    command:
+      - sh
+      - -c
+      - |
+        while :; do
+          if [ "$$SECURITY_ENABLED" = "1" ]; then
+            renovate || echo "renovate: run failed; next attempt in $$RENOVATE_INTERVAL_SECONDS s" >&2
+          else
+            echo "renovate: SECURITY_ENABLED=0 — idle"
+          fi
+          sleep "$$RENOVATE_INTERVAL_SECONDS"
+        done
+    networks:
+      - cms-network
+
+  # Diun compares what is RUNNING against what the registry serves now.
+  diun:
+    image: crazymax/diun:4.33.1@sha256:8cc638b4c54e8a0c47898a51b20dae73037ad43310168b5da543a311dc668f77
+    container_name: cms-diun
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      # Plural PROVIDERS: that is the env prefix Diun documents for the provider block
+      # (`DIUN_PROVIDERS_DOCKER` enables it, sub-options configure it).
+      DIUN_PROVIDERS_DOCKER: "true"
+      DIUN_PROVIDERS_DOCKER_ENDPOINT: "unix:///var/run/docker.sock"
+      # Watch every running container: no service here carries a `diun.enable` label, so the old
+      # false made Diun inspect nothing while logging a healthy "Jobs completed" every 6h.
+      # A service that must stay unwatched opts out with `diun.enable: "false"`.
+      DIUN_PROVIDERS_DOCKER_WATCHBYDEFAULT: "true"
+      DIUN_WATCH_SCHEDULE: "${DIUN_WATCH_SCHEDULE:-0 */6 * * *}"
+      DIUN_WATCH_FIRSTCHECKNOTIF: "true"
+      DIUN_WATCH_WORKERS: "4"
+      # NOT the panel endpoint: Diun's body is not the contract body, so it posts to the
+      # translator below, which is the only thing that maps one onto the other.
+      DIUN_NOTIF_WEBHOOK_ENDPOINT: "http://diun-bridge:8099/cgi-bin/diun"
+      DIUN_NOTIF_WEBHOOK_METHOD: "POST"
+      DIUN_LOG_LEVEL: "info"
+    volumes:
+      # Read-only: Diun only lists and inspects containers.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # WHY Diun gets state: its bolt db records what it has already seen, and without it every
+      # restart re-announces every watched image as "new".
+      - diun-data:/data
+    networks:
+      - cms-network
+
+  # The Diun translator. Same image as the scanners (one build, one POST path), different mode.
+  diun-bridge:
+    <<: *security-scan
+    container_name: cms-diun-bridge
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      SECURITY_HOST: ${SECURITY_HOST:-cms}
+      PANEL_URL: ${PANEL_URL:-http://admin-panel-next:3000}
+      SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+      SECURITY_BRIDGE_PORT: "${SECURITY_BRIDGE_PORT:-8099}"
+    ports:
+      # Loopback only: the port exists so an operator can POST a sample Diun body at the
+      # translator by hand (docs/SECURITY-FEED.md → Operating), not to expose the feed.
+      - "${SECURITY_BRIDGE_BIND_IP:-127.0.0.1}:${SECURITY_BRIDGE_PORT:-8099}:8099"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8099/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - cms-network
+    command: ["diun-bridge"]
+
+  # The scanners: osv over the checked-out repo, trivy over the host root read-only.
+  # `docker compose run --rm security-scan osv|rootfs|all` for one run by hand.
+  security-scan:
+    <<: *security-scan
+    container_name: cms-security-scan
+    restart: on-failure
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      SECURITY_HOST: ${SECURITY_HOST:-cms}
+      PANEL_URL: ${PANEL_URL:-http://admin-panel-next:3000}
+      SECURITY_FEED_TOKEN: ${SECURITY_FEED_TOKEN:-}
+      SECURITY_SCAN_SCHEDULE: "${SECURITY_SCAN_SCHEDULE:-0 3 * * *}"
+      # The cache volume is the only writable path in the container; HOME keeps osv-scanner
+      # from looking for a cache under a read-only /root.
+      HOME: /tmp
+    volumes:
+      # The repo as checked out — osv-scanner reads lockfiles, never writes.
+      - ./:/src:ro
+      # THE host interaction of this whole overlay: read-only, and the scan only reads the
+      # package database (--pkg-types os), so it cannot modify a host package even in theory.
+      - /:/rootfs:ro
+      # The one writable mount: trivy's vulnerability DB cache, so a nightly run does not
+      # re-download ~100 MB and a scan cannot touch anything else.
+      - security-scan-cache:/var/cache/security-scan
+      # ZAP's reports, owned by the container that writes them. Read-only here: the dast mode
+      # reads the newest file and posts it, and has no business rewriting a report.
+      - dast-reports:/var/cache/security-scan/dast:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    # Everything is dropped except the two caps busybox crond needs to switch to the
+    # crontab's user for each job. Without them crond starts, logs nothing and silently never
+    # runs a scan — verified by running this image with `--cap-drop ALL` alone.
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID
+      - SETGID
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    command: ["schedule"]
+
+  # The passive DAST producer: ZAP's baseline scan of the public site. Passive ONLY — no
+  # zap-full-scan.py, no payloads, no authenticated crawl — because the target is a live contest
+  # site and an active scan there would be an attack on it, run nightly, by us.
+  #
+  # It writes a report and nothing else. The scanner reads that file and posts it through
+  # feed.sh like every other producer, so the feed keeps one HTTP path and one mapper per source.
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable@sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
+    container_name: cms-zap-baseline
+    restart: unless-stopped
+    profiles:
+      - security
+    environment:
+      SECURITY_ENABLED: ${SECURITY_ENABLED:-0}
+      # The public site the base stack serves; a deployment with a real domain sets this in
+      # .env.security. It has to resolve from inside the container — DAST is a view from outside.
+      DAST_TARGET: ${DAST_TARGET:-https://${CONTEST_DOMAIN:-contest.cms.local}}
+      # UTC start, ahead of the scanner's 03:00 run so that run reads tonight's report and not
+      # yesterday's. Off-peak: the spider is visible to contestants, so it runs at the quietest hour.
+      DAST_AT_UTC: ${DAST_AT_UTC:-02:20}
+      # -T: a hard ceiling on ZAP's start plus the passive scan, so a hung target cannot hold
+      # the report volume forever.
+      DAST_MINUTES: ${DAST_MINUTES:-20}
+    volumes:
+      # The only writable mount this service has, and the only file it leaves behind.
+      - dast-reports:/zap/wrk
+    # WHY root: the image runs as uid 1000 and Docker creates a named volume root-owned, so the
+    # report directory would not be writable. All capabilities are dropped and no host path is
+    # mounted; the container's only write target is the volume above.
+    user: "0"
+    # The image's healthcheck probes a ZAP daemon this service never starts: it is a batch loop,
+    # so an inherited probe reports a healthy wait as unhealthy and wakes the operator for nothing.
+    healthcheck:
+      disable: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    entrypoint: ["/bin/sh", "-c"]
+    # WHY a loop and not cron: the image ships no crond, and zap-baseline.py exits when the scan
+    # ends, so the period has to come from the container — the same shape as renovate above.
+    command:
+      - |
+        if [ "$$SECURITY_ENABLED" != "1" ]; then
+          echo "zap: SECURITY_ENABLED=0 — idle"; exec sleep infinity
+        fi
+        while :; do
+          now=$$(date -u +%s)
+          at=$$(date -u -d "today $$DAST_AT_UTC" +%s 2>/dev/null || true)
+          if [ -z "$$at" ]; then at=$$((now + 86400)); fi
+          if [ "$$at" -le "$$now" ]; then at=$$((at + 86400)); fi
+          echo "zap: next passive scan $$(date -u -d @$$at +%Y-%m-%dT%H:%M:%SZ)"
+          sleep $$((at - now))
+          # WHY a bare filename: zap-baseline.py resolves -J inside /zap/wrk, so an absolute path
+          # becomes /zap/wrk/zap/wrk/… and ZAP writes no report at all (measured on the pinned image).
+          name="zap-baseline-$$(date -u +%Y%m%dT%H%M%SZ).json"
+          zap-baseline.py -t "$$DAST_TARGET" -J "$$name" -T "$$DAST_MINUTES" -I \
+            || echo "zap: baseline exited $$? — the report may be partial, and the scanner will not resolve on it"
+          find /zap/wrk -name 'zap-baseline-*.json' -mtime +14 -delete 2>/dev/null || true
+        done
+
+  # The security signal: the one external channel for the facts that must not wait (a lapsed waiver,
+  # an unwaived CRITICAL, a stale or unreadable backup), deduplicated and rate-limited by the panel's
+  # own read path. It is the poller image's SECOND ENTRY POINT, not a second image: the decision has
+  # to use `readPatchingSnapshot` and `logToDiscord`, and a re-implementation elsewhere would be a
+  # second definition of "expired" and "stale".
+  #
+  # WHY its own profile: `--profile security` starts the feed (Renovate, Diun, the scanners) without
+  # starting a notifier. Turning the channel on is then one explicit decision, and `make security-up`
+  # makes it together with the feed (`SECURITY_ARGS=--feed-only` starts the feed without it).
+  #
+  # WHY no host mount and no docker socket: it reads Postgres, Prometheus and one webhook. Nothing on
+  # the host is touched, and the container is read-only with every capability dropped.
+  security-signal:
+    build:
+      context: .
+      dockerfile: docker/scheduler/Dockerfile
+    image: ghcr.io/champyod/cms-docker-scheduler:${IMG_TAG:-major-admin-panel}
+    container_name: cms-security-signal
+    restart: unless-stopped
+    profiles:
+      - security-signal
+    depends_on:
+      # WHY required: false: `database` is in the core profile, and this service has its own, so
+      # compose would otherwise refuse to build the model when only `--profile security-signal` is
+      # selected (the CI gate validates the overlay exactly that way). When the base stack is up it
+      # is honoured; when it is not, the process retries on its own tick.
+      database:
+        condition: service_healthy
+        required: false
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-cmsuser}:${POSTGRES_PASSWORD:-cmspassword}@database:5432/${POSTGRES_DB:-cmsdb}
+      # The same webhook the backup and lockout alerts already use — one channel, one implementation.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      DISCORD_ROLE_ID: ${DISCORD_ROLE_ID:-}
+      # The backup scripts' own stale window, so the publisher-liveness check uses the same number
+      # they used to write `cms_backup_stale`/`cms_offsite_stale`. Nothing here re-defines "stale".
+      BACKUP_STALE_HOURS: ${BACKUP_STALE_HOURS:-26}
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus:9090}
+      SECURITY_SIGNAL_INTERVAL_SECONDS: ${SECURITY_SIGNAL_INTERVAL_SECONDS:-60}
+      SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS: ${SECURITY_SIGNAL_PROMETHEUS_TIMEOUT_MS:-1500}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - "no-new-privileges:true"
+    networks:
+      - cms-network
+    command: ["node", "bootstrap.mjs", "security-signal"]
+
+networks:
+  cms-network:
+    name: cms-network
+    driver: bridge
+
+volumes:
+  diun-data:
+    name: cms-diun-data
+  dast-reports:
+    name: cms-dast-reports
+  renovate-cache:
+    name: cms-renovate-cache
+  security-scan-cache:
+    name: cms-security-scan-cache

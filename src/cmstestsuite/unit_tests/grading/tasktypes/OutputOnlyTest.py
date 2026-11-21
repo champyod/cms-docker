@@ -67,7 +67,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertEqual(job.text, text)
         self.assertEqual(job.plus, stats)
 
-    def test_diff_success(self):
+    def test_it_evaluates_the_output_with_the_diff_comparator(self):
         tt, job = self.prepare(["diff"], {
             "output_001.txt": FILE_001,
             "output_023.txt": FILE_023
@@ -79,7 +79,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
             self.file_cacher, job, None, user_output_digest="digest of 023")
         self.assertResultsInJob(job, True, str(OUTCOME), TEXT, {})
 
-    def test_diff_missing_file(self):
+    def test_it_reports_a_missing_output_file(self):
         tt, job = self.prepare(["diff"], {
             "output_001.txt": FILE_001,
         })
@@ -90,7 +90,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertResultsInJob(job,
                                 True, str(0.0), ["File not submitted"], {})
 
-    def test_diff_failure(self):
+    def test_it_propagates_a_failed_evaluation(self):
         tt, job = self.prepare(["diff"], {
             "output_001.txt": FILE_001,
             "output_023.txt": FILE_023
@@ -103,7 +103,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
             self.file_cacher, job, None, user_output_digest="digest of 023")
         self.assertResultsInJob(job, False, None, None, None)
 
-    def test_comparator_success(self):
+    def test_it_evaluates_the_output_with_the_checker(self):
         tt, job = self.prepare(["comparator"], {
             "output_001.txt": FILE_001,
             "output_023.txt": FILE_023

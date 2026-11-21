@@ -3,7 +3,9 @@
 import { revalidatePath } from 'next/cache';
 import { prisma } from '@/lib/prisma';
 import { recordAudit, assertReasonForDestructive } from '@/lib/audit';
-import { ensurePermission, invalidateAccessCache } from '@/lib/permissions';
+import { ensurePermission, getPermissions, invalidateAccessCache } from '@/lib/permissions';
+import { hasEffectivePermission, ACTION_PERMISSIONS } from '@/lib/permission-engine';
+import { ROOT_ACTOR_GROUP_NAME } from '@/lib/permission-groups';
 
 type ActionResult<T> = { success: true; data: T } | { success: false; error: string };
 
@@ -22,6 +24,12 @@ async function resolvePermissionIds(permissionKeys: readonly string[]): Promise<
     select: { id: true },
   });
   return rows.map((row) => row.id);
+}
+
+async function assertCanGrant(permissionKeys: readonly string[]): Promise<void> {
+  const effective = await getPermissions();
+  const denied = permissionKeys.filter((key) => !hasEffectivePermission(effective, key));
+  if (denied.length > 0) throw new Error('Cannot grant permissions you do not hold: ' + denied.join(', '));
 }
 
 async function affectedAdminIds(groupId: number): Promise<number[]> {
@@ -45,7 +53,8 @@ export async function createGroup(
   reason: string,
 ): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:create');
+    await ensurePermission(ACTION_PERMISSIONS.createGroup);
+    await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
 
@@ -71,7 +80,7 @@ export async function createGroup(
       reason,
       result: 'success',
     });
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/groups', 'page');
     return { success: true, data: { id: group.id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -86,7 +95,8 @@ export async function updateGroup(
   reason: string,
 ): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:update');
+    await ensurePermission(ACTION_PERMISSIONS.updateGroup);
+    await assertCanGrant(permissionKeys);
     const trimmedName = name.trim();
     if (!trimmedName) return { success: false, error: 'A group name is required' };
 
@@ -116,6 +126,16 @@ export async function updateGroup(
       };
     }
 
+    // Why: the root actor group is seed-maintained grant material — reshaping it
+    // would strip the attribution identity every script-side action logs under,
+    // the same way removing all:all from Superadmin would strip superadmins.
+    if (existing.name === ROOT_ACTOR_GROUP_NAME) {
+      return {
+        success: false,
+        error: 'Cannot edit the root actor group — the seed maintains it, and script-action attribution resolves through it',
+      };
+    }
+
     const beforeKeys = existing.group_permissions.map((link) => link.permissions.key);
     const permissionIds = await resolvePermissionIds(permissionKeys);
     await prisma.$transaction(async (tx) => {
@@ -141,7 +161,7 @@ export async function updateGroup(
       result: 'success',
     });
     invalidateAdmins(await affectedAdminIds(id));
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/groups', 'page');
     return { success: true, data: { id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -150,7 +170,7 @@ export async function updateGroup(
 
 export async function deleteGroup(id: number, reason: string): Promise<ActionResult<{ id: number }>> {
   try {
-    await ensurePermission('group:delete');
+    await ensurePermission(ACTION_PERMISSIONS.deleteGroup);
     const destructive = assertReasonForDestructive('group:delete', reason);
     if (!destructive.ok) return { success: false, error: destructive.error };
 
@@ -173,6 +193,16 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
       };
     }
 
+    // Why: the root actor group is the system actor's grant material. Deleting it
+    // (or its links, which the delete cascades) would leave every script-side
+    // action attributed to an admin with no permissions — insert-only by design.
+    if (existing.name === ROOT_ACTOR_GROUP_NAME) {
+      return {
+        success: false,
+        error: 'Cannot delete the root actor group — the system actor attribution resolves through it',
+      };
+    }
+
     const adminIds = await affectedAdminIds(id);
     // Why: deleting a group cascades only the admin_groups and group_permissions links — the permission
     // rows are shared definitions and must survive, and seeded groups are ordinary rows with no guard (except the Superadmin anchor).
@@ -192,7 +222,7 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
       result: 'success',
     });
     invalidateAdmins(adminIds);
-    revalidatePath('/[locale]/admins', 'page');
+    revalidatePath('/[locale]/administration/groups', 'page');
     return { success: true, data: { id } };
   } catch (error) {
     return { success: false, error: (error as Error).message };

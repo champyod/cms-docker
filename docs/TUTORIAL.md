@@ -41,15 +41,21 @@ Run the automated setup script:
 
 Open your browser:
 
-- **Modern Admin Panel**: http://your-ip:8891 (Login with your admin account)
+- **Modern Admin Panel**: http://127.0.0.1:8891 (Login with your admin account — loopback on the host, or over the tailnet)
 - **Contest Interface**: http://your-ip:8888
 - **Scoreboard**: http://your-ip:8890
+
+The admin panel is published on loopback because it takes a caller's identity from a
+header only the proxy writes, so a routable address would let anyone on that network
+name themselves; reaching it from another machine goes through `tailscale serve` or the
+proxy, and widening the bind means setting `ADMIN_NEXT_BIND_IP` — a security decision,
+not a convenience.
 
 ## Step 4: Create Your First Contest
 
 ### Using Modern Admin Panel (Port 8891)
 
-1. Navigate to http://your-ip:8891
+1. Navigate to http://127.0.0.1:8891 (on the host itself, or over the tailnet)
 2. Click **"Contest"** → **"Contests"** in the sidebar.
 3. Click **"Create New Contest"**
 4. Fill in:
@@ -235,12 +241,12 @@ docker ps
 docker restart cms-contest-web-server-1
 
 # Restart all core services
-make core-img
+make core
 
 # Restart everything
 docker compose down
 make pull
-make core-img admin-img contest-img worker-img
+make core admin contest worker
 ```
 
 ## Common Tasks
@@ -254,9 +260,9 @@ or the fleet TUI — never by hand-editing `.env.*` (generated files):
 # Interactive fleet editor: add worker entries (hostname:port)
 ./cms worker edit
 
-# Regenerate .env.* and restart core
+# Regenerate .env and restart core
 ./cms config sync
-make core-img
+make core
 ```
 
 On the main server, attach each worker box (prints the worker-side block):
@@ -339,7 +345,7 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 3. If needed, reset database:
    ```bash
    make db-clean
-   make core-img
+   make core
    make cms-init
    ```
 
@@ -355,7 +361,7 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 2. Regenerate and restart:
    ```bash
    ./cms config sync
-   make core-img
+   make core
    ```
 
 ## Next Steps
@@ -369,10 +375,10 @@ so `--scale` cannot multiply it). Add shards via the fleet:
 ```bash
 # Daily Operations
 ./cms config sync     # Regenerate configuration from config.toml
-make core-img         # Start/restart core services
-make admin-img        # Start/restart admin panel
-make contest-img      # Start/restart contest interface
-make worker-img       # Start/restart workers
+make core              # Start/restart core services
+make admin             # Start/restart admin panel
+make contest           # Start/restart contest interface
+make worker            # Start/restart workers
 
 # Maintenance
 make pull             # Pull latest images
@@ -382,7 +388,7 @@ make cms-init         # Initialize database
 # Monitoring
 docker ps             # List running containers
 docker logs <name>    # View logs
-make infra-img        # Start monitoring (Discord alerts)
+make infra           # Start monitoring (Discord alerts)
 
 # Service Control
 make {service}-stop   # Stop service

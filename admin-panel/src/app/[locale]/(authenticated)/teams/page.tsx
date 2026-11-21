@@ -1,36 +1,17 @@
-import { getTeams } from '@/app/actions/teams';
-import { TeamList } from '@/components/teams/TeamList';
-import { checkPermission, getPermissions } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { notFound } from 'next/navigation';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { notFound, redirect } from 'next/navigation';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 
-export default async function TeamsPage({
-  params,
-}: {
-  params: Promise<{ locale: string }>;
-}) {
+export default async function LegacyTeamsPage({ params }: { params: Promise<{ locale: string }> }): Promise<never> {
   const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('team:list', false);
-
-  // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
-    notFound();
+  let effective: ReadonlySet<string>;
+  try {
+    effective = await requirePermission('team:list');
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const permissions = await getPermissions();
-  const teams = await getTeams();
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.teams.title}</Text>
-        <Text variant="muted">{dict.teams.subtitle}</Text>
-      </Stack>
-
-      <TeamList initialTeams={teams} permissionKeys={Array.from(permissions)} />
-    </Stack>
-  );
+  const target = resolveLegacyRedirect(locale, '/teams', effective);
+  if (!target) notFound();
+  redirect(target);
 }

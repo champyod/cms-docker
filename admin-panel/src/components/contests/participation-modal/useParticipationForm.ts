@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { getParticipationDetails, updateParticipation } from '@/app/actions/participations';
+import { useState, useEffect } from 'react';
+import { getParticipationDetails } from '@/app/actions/participation-reads';
+import { updateParticipation } from '@/app/actions/participations';
+import { useActionFeedback } from '@/hooks/useActionFeedback';
 import type { PasswordKind } from '@/lib/password-format';
 
 export interface ParticipationFormData {
@@ -26,24 +28,33 @@ export function useParticipationForm(isOpen: boolean, participationId: number) {
   const [error, setError] = useState('');
   const [formData, setFormData] = useState<ParticipationFormData>(INITIAL);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await getParticipationDetails(participationId) as { team_id: number | null; hidden: boolean; unrestricted: boolean; extra_time_seconds: number; delay_time_seconds: number; ip_string: string; starting_time: string } | null;
-      if (data) {
-        setFormData({ team_id: data.team_id, hidden: data.hidden, unrestricted: data.unrestricted, extra_time_seconds: data.extra_time_seconds, delay_time_seconds: data.delay_time_seconds, ip: data.ip_string, starting_time: data.starting_time, password: '', password_kind: 'plaintext' });
-      }
-    } catch {
-      setError('Failed to load participation data');
-    } finally {
-      setLoading(false);
+  const loadKey = isOpen && participationId ? participationId : null;
+  const [prevLoadKey, setPrevLoadKey] = useState<number | null>(loadKey);
+  if (loadKey !== prevLoadKey) {
+    setPrevLoadKey(loadKey);
+    if (loadKey !== null) {
+      setLoading(true);
+      setError('');
     }
-  }, [participationId]);
+  }
 
   useEffect(() => {
-    if (isOpen && participationId) void load();
-  }, [isOpen, participationId, load]);
+    if (loadKey === null) return;
+    void (async () => {
+      try {
+        const data = await getParticipationDetails(loadKey) as { team_id: number | null; hidden: boolean; unrestricted: boolean; extra_time_seconds: number; delay_time_seconds: number; ip_string: string; starting_time: string } | null;
+        if (data) {
+          setFormData({ team_id: data.team_id, hidden: data.hidden, unrestricted: data.unrestricted, extra_time_seconds: data.extra_time_seconds, delay_time_seconds: data.delay_time_seconds, ip: data.ip_string, starting_time: data.starting_time, password: '', password_kind: 'plaintext' });
+        }
+      } catch {
+        setError('Failed to load participation data');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [loadKey]);
+
+  const runAction = useActionFeedback();
 
   const submit = async (onSuccess: () => void, onClose: () => void): Promise<void> => {
     setError('');
@@ -58,11 +69,22 @@ export function useParticipationForm(isOpen: boolean, participationId: number) {
         payload.password = formData.password;
         payload.passwordKind = formData.password_kind;
       }
-      const result = await updateParticipation(participationId, payload);
-      if (result.success) { onSuccess(); onClose(); }
-      else setError(result.error || 'Failed to update participation');
-    } catch {
-      setError('An unexpected error occurred');
+      const result = await runAction(
+        {
+          pending: 'Saving participation...',
+          success: 'Participation saved',
+          failure: 'Save failed',
+          description: 'Settings updated successfully.',
+        },
+        () => updateParticipation(participationId, payload)
+      );
+      if (!result) return;
+      if (result.success) {
+        onSuccess();
+        onClose();
+      } else {
+        setError(result.error || 'Failed to update participation');
+      }
     } finally {
       setSaving(false);
     }

@@ -2,6 +2,7 @@
 
 import { Users, Clock, Network, Calendar, Key } from 'lucide-react';
 import { PasswordFieldWithKind } from '@/components/core/PasswordFieldWithKind';
+import { useDictionary } from '@/hooks/useDictionary';
 import type { ParticipationFormData } from './useParticipationForm';
 
 const LABEL_CLASSES = 'mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground';
@@ -14,6 +15,7 @@ interface Props {
 }
 
 export function ParticipationFormFields({ formData, onChange, teams }: Props) {
+  const ipCopy = useDictionary().participation.ip;
   return (
     <>
       <div>
@@ -44,9 +46,9 @@ export function ParticipationFormFields({ formData, onChange, teams }: Props) {
         </div>
       </div>
       <div>
-        <label className={LABEL_CLASSES}><Network className="h-3 w-3" /> IP Address / Subnet</label>
-        <input type="text" value={formData.ip} onChange={(e) => onChange({ ip: e.target.value })} placeholder="e.g., 192.168.1.0/24, 10.0.0.1" className={FIELD_CLASSES} />
-        <p className="mt-1 text-xs text-muted-foreground">Comma-separated list of IPs or subnets in CIDR notation</p>
+        <label className={LABEL_CLASSES}><Network className="h-3 w-3" /> {ipCopy.label}</label>
+        <input type="text" value={formData.ip} onChange={(e) => onChange({ ip: e.target.value })} placeholder={ipCopy.placeholder} className={FIELD_CLASSES} />
+        <p className="mt-1 text-xs text-muted-foreground">{ipCopy.hint}</p>
       </div>
       <div>
         <label className={LABEL_CLASSES}><Calendar className="h-3 w-3" /> Starting Time (USACO-style)</label>

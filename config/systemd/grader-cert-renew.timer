@@ -1,10 +1,11 @@
 [Unit]
-Description=CMS SSL Certificate Renewal (every 12 hours)
+Description=CMS SSL Certificate Renewal (hourly check)
 
 [Timer]
-OnCalendar=*:00/12:00
+# Hourly so a twelve-hour tick cannot pass ACME_RENEW_AT_UTC and miss it by twelve.
+OnCalendar=*-*-* *:00:00
 Persistent=true
-RandomizedDelaySec=900
+RandomizedDelaySec=600
 
 [Install]
 WantedBy=timers.target

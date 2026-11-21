@@ -43,9 +43,9 @@ fi
 log_info "Database Maintenance: Starting robust initialization..."
 log_info "Checking database connectivity..."
 
-if ! docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" >/dev/null 2>&1; then
+if ! docker_exec_db "$DB_PASS" -i cms-database psql -U "$DB_USER" -d "$DB_NAME" -c "SELECT 1" >/dev/null 2>&1; then
   log_warn "Authentication failed or DB unreachable. Attempting password sync..."
-  if ! docker exec -i -e PGPASSWORD="$DB_PASS" -e CMS_DB_PWD="$DB_PASS" -e CMS_DB_USER="$DB_USER" cms-database bash -c "psql -v pwd=\"\$CMS_DB_PWD\" -v dbuser=\"\$CMS_DB_USER\" -U \"\$CMS_DB_USER\" -d postgres -c \"ALTER USER :\\\"dbuser\\\" WITH PASSWORD :'pwd';\"" >/dev/null 2>&1; then
+  if ! docker_exec_db "$DB_PASS" CMS_DB_PWD="$DB_PASS" CMS_DB_USER="$DB_USER" -i cms-database bash -c "psql -v pwd=\"\$CMS_DB_PWD\" -v dbuser=\"\$CMS_DB_USER\" -U \"\$CMS_DB_USER\" -d postgres -c \"ALTER USER :\\\"dbuser\\\" WITH PASSWORD :'pwd';\"" >/dev/null 2>&1; then
     log_warn "Automatic password sync failed. If this is a fresh install, this is normal. Continuing to schema check."
   fi
 else
@@ -53,7 +53,7 @@ else
 fi
 
 # Check if initialization is needed — quoted, pipefail-safe.
-if docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name = 'contests'" 2>/dev/null | grep -q "1"; then
+if docker_exec_db "$DB_PASS" -i cms-database psql -U "$DB_USER" -d "$DB_NAME" -tAc "SELECT 1 FROM information_schema.tables WHERE table_name = 'contests'" 2>/dev/null | grep -q "1"; then
   log_info "CMS Core Schema detected. Skipping cmsInitDB."
 else
   log_info "CMS Core Schema not found. Running cmsInitDB..."
@@ -62,7 +62,7 @@ else
 fi
 
 log_info "Applying Admin UI schema patches..."
-if ! docker exec -i -e PGPASSWORD="$DB_PASS" cms-database psql -U "$DB_USER" -d "$DB_NAME" < "scripts/__fix_db_schema.sql"; then
+if ! docker_exec_db "$DB_PASS" -i cms-database psql -U "$DB_USER" -d "$DB_NAME" < "scripts/__fix_db_schema.sql"; then
   log_die "Failed to apply __fix_db_schema.sql" 1
 fi
 

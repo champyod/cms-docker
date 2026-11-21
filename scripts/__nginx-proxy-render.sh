@@ -5,8 +5,27 @@
 # otherwise        -> plain HTTP :80 server proxying to CWS.
 set -eu
 
+# WHY sourced and not inlined: the panel's SSE directives and endpoint pattern are one shared
+# definition across every proxy that fronts the panel; compose mounts this file read-only.
+# shellcheck source=/dev/null
+. "${SSE_SNIPPET:-/usr/local/bin/nginx-sse.sh}"
+
+# WHY sourced: the panel's colour naming rule is one definition shared with the domain route
+# table and the swap script; compose mounts this file read-only beside the SSE snippet.
+# shellcheck source=/dev/null
+. "${ADMIN_PANEL_SNIPPET:-/usr/local/bin/admin-panel-target.sh}"
+
+# The colour this proxy dials. It comes from compose (.env), so a restart of this proxy lands
+# on the colour the box is configured for; the live flip is the domain front's job, which can
+# re-render and reload without restarting.
+ADMIN_PANEL_COLOUR="${ADMIN_PANEL_COLOUR:-a}"
+admin_panel_colour_valid "$ADMIN_PANEL_COLOUR" \
+  || { echo "ADMIN_PANEL_COLOUR='${ADMIN_PANEL_COLOUR}' is not a colour (a|b)" >&2; exit 1; }
+ADMIN_PANEL_CONTAINER="$(admin_panel_container "$ADMIN_PANEL_COLOUR")"
+ADMIN_NEXT_LISTEN_PORT="${ADMIN_NEXT_LISTEN_PORT:-3000}"
+
 PROXY_COMMON='
-    client_max_body_size 10M;
+    client_max_body_size @PROXY_MAX_BODY_SIZE@;
     client_body_buffer_size 128k;
     proxy_connect_timeout 90;
     proxy_send_timeout 90;
@@ -19,6 +38,29 @@ PROXY_COMMON='
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;'
 
+# WHY: the admin panel keys its login rate limit on the address the nearest
+# proxy asserted — the rightmost X-Forwarded-For hop, then X-Real-IP. This
+# gateway asserts $remote_addr itself, so the panel sees exactly one entry the
+# caller never influenced, even when another proxy sits in front of it.
+PROXY_ADMIN_PANEL='
+    client_max_body_size @PROXY_MAX_BODY_SIZE@;
+    client_body_buffer_size 128k;
+    proxy_connect_timeout 90;
+    proxy_send_timeout 90;
+    proxy_read_timeout 90;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;'
+
+# The funnel gateway in front of the panel serves the panel's long-lived endpoints too, so the
+# shared SSE directives land here rather than as a fourth copy of the same values.
+SSE_LOCATION="$(printf '    location ~ ^/%s {\n%s\n        proxy_pass http://admin_panel_next;\n        proxy_redirect off;\n    }' "$SSE_ENDPOINT_PATTERN" "$SSE_PROXY_DIRECTIVES")"
+
+RANKING_LISTEN_PORT="${RANKING_LISTEN_PORT:-8890}"
 RANKING_AUTH="${RANKING_AUTH_DIRECTIVES:-}"
 
 FUNNEL_SERVERS=""
@@ -30,7 +72,8 @@ server {
     server_name _;
     auth_basic           \"@FUNNEL_REALM@\";
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
-$PROXY_COMMON
+$PROXY_ADMIN_PANEL
+$SSE_LOCATION
     location / {
         proxy_pass http://admin_panel_next;
         proxy_redirect off;
@@ -43,7 +86,7 @@ server {
     auth_basic_user_file /etc/nginx/funnel.htpasswd;
 $PROXY_COMMON
     location / {
-        proxy_pass http://cms-ranking-web-server:8890;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT;
         proxy_redirect off;
     }
 }"
@@ -54,10 +97,15 @@ if [ "${ENABLE_TLS:-false}" = "true" ]; then
 server {
     listen 80;
     server_name ${NGINX_HOST};
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
     return 301 https://\$host\$request_uri;
 }
 server {
-    listen 443 ssl http2;
+    listen 443 ssl;
+    http2 on;
     server_name ${NGINX_HOST};
     ssl_certificate /etc/nginx/ssl/cert.pem;
     ssl_certificate_key /etc/nginx/ssl/key.pem;
@@ -77,7 +125,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -104,6 +152,10 @@ server {
     listen 80 default_server;
     server_name ${NGINX_HOST};
 $PROXY_COMMON
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        allow all;
+    }
     location = /login {
         limit_req zone=cms_login burst=20 nodelay;
         proxy_set_header Host \$host;
@@ -118,7 +170,7 @@ $PROXY_COMMON
     }
     location /ranking/ {
         $RANKING_AUTH
-        proxy_pass http://cms-ranking-web-server:8890/;
+        proxy_pass http://cms-ranking-web-server:$RANKING_LISTEN_PORT/;
         proxy_redirect off;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -141,8 +193,20 @@ $PROXY_COMMON
 }"
 fi
 
+# The body ceiling for the contest and admin vhosts this script renders. WHY the same
+# 100M default the domain proxy uses: it has to agree with config/grader.nginx.conf.template,
+# and a smaller fallback here would refuse the panel's 51MB upload while the domain proxy
+# accepted it, so the limit would move with which proxy fronts the request.
+PROXY_MAX_BODY_SIZE="${PROXY_MAX_BODY_SIZE:-100M}"
 export PROXY_COMMON HTTP_SERVER FUNNEL_SERVERS
+export ADMIN_PANEL_CONTAINER ADMIN_NEXT_LISTEN_PORT
 REALM="${FUNNEL_REALM:-CMS restricted}"
 REALM_SAFE=$(printf '%s' "$REALM" | sed 's/[&|/]/\\&/g')
-envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS}' < /etc/nginx/templates/default.conf.template | sed "s|@FUNNEL_REALM@|$REALM_SAFE|g" > /etc/nginx/conf.d/default.conf
+# WHY @PROXY_MAX_BODY_SIZE@ is a sentinel and not ${PROXY_MAX_BODY_SIZE}: the two blocks
+# above are single-quoted so nginx's own $host and $scheme survive the shell, which means
+# envsubst expands PROXY_COMMON to text that still reads ${PROXY_MAX_BODY_SIZE} and never
+# looks at it again — one pass, no recursion. nginx would then be handed a literal
+# ${PROXY_MAX_BODY_SIZE} as its body size and refuse to start. The same substitution pass
+# that already resolves @FUNNEL_REALM@ resolves this one.
+envsubst '${CONTEST_LISTEN_PORT} ${PROXY_COMMON} ${HTTP_SERVER} ${FUNNEL_SERVERS} ${ADMIN_PANEL_CONTAINER} ${ADMIN_NEXT_LISTEN_PORT}' < /etc/nginx/templates/default.conf.template | sed -e "s|@FUNNEL_REALM@|$REALM_SAFE|g" -e "s|@PROXY_MAX_BODY_SIZE@|$PROXY_MAX_BODY_SIZE|g" > /etc/nginx/conf.d/default.conf
 exec nginx -g 'daemon off;'

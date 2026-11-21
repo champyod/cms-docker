@@ -9,7 +9,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const result = await taskService.createTaskViaApi(data);
     if (!result.success) return apiError({ message: result.error ?? 'Task creation failed', status: 400 });
     revalidatePath('/[locale]/tasks', 'page');
-    return apiSuccess({ message: 'Task created successfully' });
+    return apiSuccess({ message: 'Task created successfully', id: result.id });
   } catch (error: unknown) {
     const e = error as { status?: number; message?: string };
     if (e.status === 401 || e.status === 403 || e.status === 400) return apiError({ message: e.message, status: e.status });

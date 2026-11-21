@@ -3,33 +3,72 @@ export function isDiscordWebhookConfigured(): boolean {
     return Boolean(webhookUrl && webhookUrl.trim().length > 0);
 }
 
+/**
+ * How long a POST may hold its caller.
+ *
+ * WHY a timeout at all: callers on a request path (the security feed's ingest) await this, and a
+ * webhook that accepts the connection and never answers would otherwise keep the request open until
+ * the platform's own timeout. Discord answers in well under a second; eight is generous.
+ */
+const DISCORD_TIMEOUT_MS = 8_000;
+
 export async function getDiscordWebhookStatus(): Promise<{ configured: boolean }> {
     return { configured: isDiscordWebhookConfigured() };
 }
 
-export async function logToDiscord(title: string, message: string, color: number = 3447003, mention: boolean = false) {
+/**
+ * Posts one embed to the configured webhook and reports whether the receiver accepted it.
+ *
+ * WHY it returns a boolean and does not throw: every existing caller treats a notification as best
+ * effort — a backup that succeeded must not be marked failed because Discord was down — so throwing
+ * would change their behaviour. But the security channel deduplicates on "this fact was told to a
+ * human", and a message that never arrived must not be recorded as delivered: the caller checks the
+ * result and only then writes its record. `false` means "not delivered" for every reason (no
+ * webhook configured, a rejected POST, a DNS failure), and the caller retries on its next tick.
+ *
+ * WHY `response.ok` and not just "fetch resolved": a 404 on a rotated webhook resolves with an error
+ * body, and treating that as delivered is how a channel goes quiet without anyone noticing.
+ *
+ * WHY `footer` is optional and last: the scan announcement puts the run's clock and its destination
+ * in the embed's subtext, where a reader's eye goes last; every existing caller keeps its signature.
+ */
+export async function logToDiscord(
+    title: string,
+    message: string,
+    color: number = 3447003,
+    mention: boolean = false,
+    footer?: string,
+): Promise<boolean> {
     const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
-    if (!webhookUrl) return;
+    if (!webhookUrl) return false;
 
     try {
         const roleId = process.env.DISCORD_ROLE_ID;
-        const payload: { embeds: Array<{ title: string; description: string; color: number; timestamp: string }>; content?: string } = {
+        const payload: { embeds: Array<{ title: string; description: string; color: number; timestamp: string; footer?: { text: string } }>; content?: string } = {
             embeds: [{
                 title,
                 description: message,
                 color,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                ...(footer === undefined ? {} : { footer: { text: footer } }),
             }]
         };
         if (mention && roleId) {
             payload.content = `<@&${roleId}>`;
         }
-        await fetch(webhookUrl, {
+        const response = await fetch(webhookUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(DISCORD_TIMEOUT_MS)
         });
+        if (!response.ok) {
+            console.error(`Failed to send discord log: HTTP ${String(response.status)}`);
+            return false;
+        }
+        return true;
     } catch (e) {
         console.error('Failed to send discord log:', e);
+        return false;
     }
 }

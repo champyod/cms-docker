@@ -1,6 +1,6 @@
 use super::route::{Route, WorkingPopup};
 use super::state::App;
-use ratatui::crossterm::{
+use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -158,7 +158,11 @@ impl App {
         }
     }
 
-    pub(crate) fn set_toast(&mut self, message: &str) {
+    /// Shows a transient status message.
+    ///
+    /// WHY public: the exposure chooser applies its change outside this module and still
+    /// has to report the result the same way a script run does.
+    pub fn set_toast(&mut self, message: &str) {
         self.last_toast = Some((message.to_string(), 50));
     }
 }

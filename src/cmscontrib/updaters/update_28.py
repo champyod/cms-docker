@@ -22,7 +22,16 @@ Used by DumpImporter and DumpUpdater.
 
 This updater specifies the method contestant passwords are hashed with.
 
+A version-27 dump stores the password verbatim, so this updater still *reads* a
+raw password — that is the only place it exists. It must not write one back:
+prefixing it with "plaintext:" would keep the secret readable in the imported
+database and such rows no longer authenticate (the login path refuses the
+plaintext method). The old value is therefore hashed here, and only the bcrypt
+hash is written back into the dump.
+
 """
+
+from cmscommon.crypto import hash_password
 
 
 class Updater:
@@ -37,9 +46,9 @@ class Updater:
                 continue
 
             if v["_class"] == "User":
-                v["password"] = "plaintext:%s" % v["password"]
+                v["password"] = hash_password(v["password"])
 
             if v["_class"] == "Participation" and v["password"] is not None:
-                v["password"] = "plaintext:%s" % v["password"]
+                v["password"] = hash_password(v["password"])
 
         return self.objs

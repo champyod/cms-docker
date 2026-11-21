@@ -5,12 +5,12 @@
 
 pub mod catalog;
 pub mod config;
-pub mod config_schema;
-pub mod config_schema_kinds;
 pub mod dispatch;
 pub mod docker;
-pub mod docker_targets;
+pub mod domain_renew;
 pub mod domain_setup;
+pub mod expose;
+pub mod expose_input;
 pub mod model;
 pub mod runner;
 pub mod scripts;

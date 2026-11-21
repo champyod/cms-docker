@@ -9,7 +9,6 @@ import {
   upsertTomlValue,
   validateDiscordRoleId,
   validateDiscordWebhookUrl,
-  validateNotificationEnvUpdates,
 } from '@/lib/discord-webhook';
 
 const WEBHOOK_URL = `https://discord.com/api/webhooks/${'1'.repeat(18)}/${'a'.repeat(24)}`;
@@ -205,5 +204,13 @@ describe('config.toml writes', () => {
     const updated = upsertTomlValue('[core]\nCMS_DOMAIN = "cms.local"\n', 'infra', 'DISCORD_ROLE_ID', '5'.repeat(18));
     expect(readTomlValue(updated, 'infra', 'DISCORD_ROLE_ID')).toBe('5'.repeat(18));
     expect(readTomlValue(updated, 'core', 'CMS_DOMAIN')).toBe('cms.local');
+  });
+
+  it('drops a trailing comment from an unquoted value', () => {
+    expect(readTomlValue('[core]\nCOOKIE_DURATION = 10800         # num; seconds\n', 'core', 'COOKIE_DURATION')).toBe('10800');
+  });
+
+  it('drops a trailing comment after a quoted value', () => {
+    expect(readTomlValue('[infra]\nCONTEST_WEB_CPU_LIMIT = "2"     # str\n', 'infra', 'CONTEST_WEB_CPU_LIMIT')).toBe('2');
   });
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import { apiClient } from '@/lib/apiClient';
-import { openServerDownload } from './bulkEditActions';
+import { openServerDownload } from '@/lib/csv-download';
 import type { BatchActionResult, ContestOption, SelectedUser } from './bulkEditActions';
 
 interface BatchDeps {
@@ -12,6 +12,8 @@ interface BatchDeps {
   selectedContestId: number;
   teamContestId: number;
   teamCode: string;
+  ipContestId: number;
+  ip: string;
   timezone: string;
   emailDomain: string;
   setLoading: (value: boolean) => void;
@@ -64,7 +66,7 @@ export function useBulkBatch(deps: BatchDeps) {
         deps.setLoading(false);
         return;
       }
-      if (result.downloadUrl) openServerDownload(result.downloadUrl);
+      if (result.downloadUrl) openServerDownload(result.downloadUrl, `users-plaintext-${Date.now()}.csv`);
       deps.setStatusMessage(
         typeof result.count === 'number' && result.count > 0
           ? `Exported ${result.count} plain-text password(s)`
@@ -148,12 +150,23 @@ export function useBulkBatch(deps: BatchDeps) {
     );
   };
 
+  const runIpAllowlist = (): void => {
+    if (deps.selectedUserIds.length === 0 || !deps.ipContestId) return;
+    if (!requireValue(deps.ip, 'IP allowlist', deps.setErrorMessage)) return;
+    void runBatchAction(
+      { action: 'participation', mode: 'ip', contestId: deps.ipContestId, ip: deps.ip.trim(), userIds: deps.selectedUserIds },
+      (result) => `Updated the IP allowlist for ${result.updatedCount ?? 0} user(s)`,
+      { fallbackError: 'Failed to update the IP allowlist' }
+    );
+  };
+
   return {
     runBatchAction,
     exportCurrentPasswords,
     runContestMutation,
     runTeamSet,
     runTeamRemoveAny,
+    runIpAllowlist,
     runTimezoneUpdate,
     runEmailDomainUpdate,
     runEmailClear,

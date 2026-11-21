@@ -1,3 +1,7 @@
+// Key grammar: `${module}:${verb}`. Most keys come from MODULES x STANDARD_VERBS.
+// DOMAIN_VERBS adds compound verbs (`admin:password:update`) and domain-only
+// modules (`password`, `override`) that are deliberately absent from MODULES.
+// `all:all` is appended explicitly as the audited wildcard, not a bypass.
 export interface PermissionDefinition {
   key: string;
   module: string;
@@ -19,6 +23,7 @@ const MODULES: readonly string[] = [
   'permission',
   'audit',
   'contest',
+  'contestant_group',
   'task',
   'dataset',
   'testcase',
@@ -55,6 +60,10 @@ const MODULES: readonly string[] = [
 // `${module}:${verb}`; verbs already covered by CRUD (audit:read, container:read)
 // are deduped during the build so the registry stays key-unique.
 const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
+  { module: 'admin', verb: 'password:update' },
+  // Why a login key: signing in to this web server is its own capability, so a group
+  // can hold ranking rights without opening the admin surface to its members.
+  { module: 'admin', verb: 'login' },
   { module: 'contest', verb: 'switch' },
   { module: 'task', verb: 'switch_dataset' },
   { module: 'dataset', verb: 'switch' },
@@ -70,17 +79,64 @@ const DOMAIN_VERBS: readonly { module: string; verb: string }[] = [
   { module: 'password', verb: 'reveal' },
   { module: 'container', verb: 'read' },
   { module: 'container', verb: 'control' },
+  // waf:control is live: the container guard no longer refuses grader-waf, so a gate reads it.
+  // domain:control stays reserved — the TLS/ingress containers are still refused structurally.
+  { module: 'waf', verb: 'control' },
+  { module: 'domain', verb: 'control' },
+  // Why per-surface security verbs: one coarse read key could not separate "may lift a block" from
+  // "may reconfigure the WAF", so each surface owns exactly the verbs its actions check.
+  { module: 'security', verb: 'read' },
+  { module: 'waf', verb: 'read' },
+  { module: 'waf', verb: 'config' },
+  { module: 'ban', verb: 'read' },
+  { module: 'ban', verb: 'unban' },
+  { module: 'lockout', verb: 'read' },
+  { module: 'lockout', verb: 'unlock' },
+  // Why its own verb: a permanent exemption is a standing access decision, so it
+  // must not ride on lockout:unlock, which only resets a counter anyone can re-earn.
+  { module: 'lockout', verb: 'exempt' },
+  { module: 'tls', verb: 'read' },
+  { module: 'tls', verb: 'renew' },
+  // Why a waive verb beside the read: accepting a finding is an access decision with a
+  // review date, so the read key that opens the patching page must not write it down.
+  { module: 'patching', verb: 'read' },
+  { module: 'patching', verb: 'waive' },
   { module: 'service', verb: 'restart' },
   { module: 'service', verb: 'deploy' },
   { module: 'deployment', verb: 'deploy' },
-  { module: 'ranking', verb: 'snapshot' },
+  { module: 'ranking', verb: 'appearance' },
+  { module: 'ranking', verb: 'override' },
   { module: 'maintenance', verb: 'enable' },
   { module: 'maintenance', verb: 'disable' },
+  // Why domain verbs, not a module: the backup subsystem does not map onto CRUD.
+  // Superadmin carries every backup key except backup:schedule, and the engine
+  // carve-out keeps schedule out of the all:all expansion, so scheduling a
+  // recurring backup always takes a deliberate per-admin grant.
+  { module: 'backup', verb: 'list' },
+  { module: 'backup', verb: 'read' },
+  { module: 'backup', verb: 'create' },
+  { module: 'backup', verb: 'restore' },
+  { module: 'backup', verb: 'schedule' },
+  { module: 'backup', verb: 'settle' },
+  { module: 'backup', verb: 'delete' },
   { module: 'appearance', verb: 'update' },
   { module: 'monitor', verb: 'test' },
   { module: 'audit', verb: 'read' },
   { module: 'group', verb: 'assign' },
   { module: 'override', verb: 'set' },
+  // Why lane verbs: queue-time evaluation lane control, enforced by
+  // lane actions gated on their own keys (evaluation:lane_assign,
+  // evaluation:lane_move). No submission:create/delete here — those
+  // stay system-reserved per RESERVED_KEYS.
+  { module: 'evaluation', verb: 'lane_assign' },
+  { module: 'evaluation', verb: 'lane_move' },
+  // Why username verbs: the display username feature has no CRUD
+  // surface of its own — the policy is read and set per scope, and
+  // an admin may set a contestant's alias — so each action is gated
+  // on its own compound key rather than on username CRUD keys.
+  { module: 'username', verb: 'policy:read' },
+  { module: 'username', verb: 'policy:update' },
+  { module: 'username', verb: 'set' },
 ];
 
 function describePermission(module: string, verb: string): string {
@@ -115,196 +171,92 @@ function buildRegistry(): PermissionDefinition[] {
 
 export const PERMISSION_REGISTRY: readonly PermissionDefinition[] = buildRegistry();
 
-function crud(moduleName: string): string[] {
-  return STANDARD_VERBS.map((verb) => `${moduleName}:${verb}`);
+// Why this list exists: these exact keys describe capabilities with no admin
+// path — rows are written by workers (compile/evaluate), the contest flow
+// (token consumption, user-test runs) or the seed (permission rows). Every
+// other registry key must be enforced by at least one gate call
+// (ensurePermission, checkPermission, verifyApiPermission, requirePermission,
+// hasEffectivePermission) or field-map entry; the coverage test enforces that.
+// task:switch_dataset left this list by being wired into assignTaskToContest
+// and activateDataset; evaluation/submissionresult delete left it via recalculate.
+const RESERVED_KEYS: readonly { key: string; reason: string }[] = [
+  { key: 'evaluation:create', reason: 'Worker creates evaluation rows on scoring.' },
+  { key: 'evaluation:update', reason: 'Worker updates evaluation rows on scoring.' },
+  { key: 'submissionresult:create', reason: 'Worker creates result rows on scoring.' },
+  { key: 'submissionresult:update', reason: 'Worker updates result rows on scoring.' },
+  { key: 'executable:create', reason: 'Worker creates build artifacts on recompile.' },
+  { key: 'executable:update', reason: 'Worker refreshes build artifacts on recompile.' },
+  { key: 'executable:delete', reason: 'Worker replaces build artifacts on recompile.' },
+  { key: 'file:create', reason: 'Contest flow stores submitted files on upload.' },
+  { key: 'file:update', reason: 'Contest flow refreshes stored files on resubmit.' },
+  { key: 'file:delete', reason: 'Worker replaces stored files on recompile.' },
+  { key: 'token:create', reason: 'Contest flow records consumed tokens automatically.' },
+  { key: 'token:update', reason: 'Contest flow owns token rows; admins never edit them.' },
+  { key: 'token:delete', reason: 'Contest flow owns token rows; admins never remove them.' },
+  { key: 'token:issue', reason: 'No issuance path checks this key.' },
+  { key: 'token:revoke', reason: 'No revocation path checks this key.' },
+  { key: 'usertest:create', reason: 'Contestants create user-test runs.' },
+  { key: 'usertest:update', reason: 'Contest flow owns user-test rows; admins never edit them.' },
+  { key: 'usertest:delete', reason: 'Contest flow owns user-test rows; admins never remove them.' },
+  { key: 'permission:create', reason: 'Seed manages permission rows; admins never create them.' },
+  { key: 'permission:update', reason: 'Seed manages permission rows; admins never edit them.' },
+  { key: 'permission:delete', reason: 'Seed manages permission rows; admins never remove them.' },
+  { key: 'audit:create', reason: 'System appends audit rows on every action; admins never write them directly.' },
+  { key: 'audit:update', reason: 'Audit log is immutable; no update path exists by design.' },
+  { key: 'audit:delete', reason: 'Audit log is immutable; no delete path exists by design.' },
+  { key: 'appearance:create', reason: 'Single config file updated in place; no create path exists.' },
+  { key: 'appearance:delete', reason: 'Single config file updated in place; no delete path exists.' },
+  { key: 'attachment:update', reason: 'Attachments upsert via the create path; no update path exists.' },
+  { key: 'container:create', reason: 'Containers come from compose; no admin create path exists.' },
+  { key: 'container:delete', reason: 'Containers come from compose; no admin delete path exists.' },
+  { key: 'domain:control', reason: 'TLS/ingress containers are a platform security boundary; the panel renews through the host agent under tls:renew, so no gate reads this key.' },
+  { key: 'deployment:create', reason: 'Deploy operations are spawned by deploy, not created as rows.' },
+  { key: 'deployment:update', reason: 'Deploy operations are immutable once spawned.' },
+  { key: 'deployment:delete', reason: 'Deploy operations are settled, never deleted via UI.' },
+  { key: 'dataset:list', reason: 'Datasets are read through the Task Datasets tab under task:read plus dataset:read; every datasets field is gated on dataset:read, so no list path checks this key.' },
+  { key: 'env:create', reason: 'Fixed env file set updated in place; no create path exists.' },
+  { key: 'env:delete', reason: 'Fixed env file set updated in place; no delete path exists.' },
+  { key: 'fsobject:list', reason: 'Storage layer read via statement/attachment flows; no list path exists.' },
+  { key: 'fsobject:create', reason: 'Storage layer written via storeFile inside statement/attachment flows.' },
+  { key: 'fsobject:update', reason: 'Content-addressed blobs are immutable; no update path exists.' },
+  { key: 'fsobject:delete', reason: 'Content-addressed blobs are never deleted via UI.' },
+  { key: 'maintenance:list', reason: 'No maintenance rows exist; operations only.' },
+  { key: 'maintenance:read', reason: 'No maintenance rows exist; operations only.' },
+  { key: 'maintenance:create', reason: 'No maintenance rows exist; operations only.' },
+  { key: 'maintenance:delete', reason: 'No maintenance rows exist; operations only.' },
+  { key: 'maintenance:disable', reason: 'No disable path exists; enable/disable split kept for parity.' },
+  { key: 'manager:update', reason: 'Managers upsert via the create path; no update path exists.' },
+  { key: 'message:update', reason: 'Messages are immutable once sent; no update path exists.' },
+  { key: 'message:delete', reason: 'Messages are immutable once sent; no delete path exists.' },
+  { key: 'question:create', reason: 'Contestants ask questions; admins only answer or ignore.' },
+  { key: 'question:update', reason: 'Replies write via the answer path; no generic update exists.' },
+  { key: 'question:delete', reason: 'Questions are never deleted via UI.' },
+  { key: 'ranking:create', reason: 'Ranking rows are computed, never created via UI.' },
+  { key: 'ranking:delete', reason: 'Ranking rows are computed, never deleted via UI.' },
+  { key: 'resource:create', reason: 'Resources are discovered, never created via UI.' },
+  { key: 'resource:update', reason: 'Resources are discovered, never updated via UI.' },
+  { key: 'resource:delete', reason: 'Resources are discovered, never deleted via UI.' },
+  { key: 'service:create', reason: 'Services come from compose; no admin create path exists.' },
+  { key: 'service:update', reason: 'Services come from compose; no admin update path exists.' },
+  { key: 'service:delete', reason: 'Services come from compose; no admin delete path exists.' },
+  { key: 'settings:create', reason: 'Fixed config keys updated in place; no create path exists.' },
+  { key: 'settings:delete', reason: 'Fixed config keys updated in place; no delete path exists.' },
+  { key: 'submission:create', reason: 'Contestants submit; admins never create submissions.' },
+  { key: 'submission:delete', reason: 'Submissions are immutable; admins never delete them.' },
+  { key: 'submissionresult:list', reason: 'No admin list path exists; results are read through the Results tab under submissionresult:read.' },
+  { key: 'maintenance:enable', reason: 'Enable fallback retired; triggerManualBackup enforces strict backup:create instead.' },
+  { key: 'backup:read', reason: 'Backup rows listed via backup:list; no single-read path exists.' },
+];
+
+export interface ReservedPermission {
+  key: string;
+  reason: string;
 }
 
-export const DEFAULT_GROUPS: readonly GroupDefinition[] = [
-  {
-    name: 'Superadmin',
-    description: 'Unrestricted access to every permission in the registry.',
-    permissions: PERMISSION_REGISTRY.map((definition) => definition.key),
-  },
-  {
-    name: 'Contest Manager',
-    description: 'Runs contests end to end, from creation through ranking.',
-    permissions: [
-      ...crud('contest'),
-      'contest:switch',
-      'task:list',
-      'task:create',
-      'task:read',
-      'task:update',
-      'task:delete',
-      'task:switch_dataset',
-      'participation:list',
-      'participation:create',
-      'participation:read',
-      'participation:update',
-      'participation:delete',
-      'dataset:list',
-      'dataset:read',
-      'dataset:switch',
-      'statement:list',
-      'statement:read',
-      'statement:update',
-      'submission:list',
-      'submission:read',
-      'ranking:list',
-      'ranking:read',
-      'ranking:snapshot',
-      'testcase:list',
-      'testcase:read',
-      'user:list',
-      'user:read',
-      'team:list',
-      'team:read',
-      'question:list',
-      'question:read',
-      'question:answer',
-      'message:list',
-      'message:read',
-      'message:send',
-      'announcement:list',
-      'announcement:read',
-      'announcement:create',
-      'announcement:update',
-      'announcement:publish',
-    ],
-  },
-  {
-    name: 'Problem Setter',
-    description: 'Authors tasks, datasets, statements and test data.',
-    permissions: [
-      ...crud('task'),
-      'task:switch_dataset',
-      ...crud('dataset'),
-      'dataset:switch',
-      ...crud('testcase'),
-      ...crud('statement'),
-      ...crud('attachment'),
-      ...crud('evaluation'),
-      'contest:list',
-      'contest:read',
-      'submission:list',
-      'submission:read',
-      'executable:list',
-      'executable:read',
-    ],
-  },
-  {
-    name: 'Judge',
-    description: 'Reviews and reprocesses submissions and evaluations.',
-    permissions: [
-      'contest:list',
-      'contest:read',
-      'task:list',
-      'task:read',
-      'submission:list',
-      'submission:create',
-      'submission:read',
-      'submission:rejudge',
-      'submission:download',
-      'submission:recompute',
-      'submissionresult:list',
-      'submissionresult:read',
-      'evaluation:list',
-      'evaluation:read',
-      'ranking:list',
-      'ranking:read',
-      'user:list',
-      'user:read',
-    ],
-  },
-  {
-    name: 'Viewer',
-    description: 'Read-only access to public contest data.',
-    permissions: [
-      'contest:list',
-      'contest:read',
-      'task:list',
-      'task:read',
-      'submission:list',
-      'submission:read',
-      'ranking:list',
-      'ranking:read',
-      'user:list',
-      'user:read',
-      'team:list',
-      'team:read',
-      'participation:list',
-      'participation:read',
-      'announcement:list',
-      'announcement:read',
-    ],
-  },
-  {
-    name: 'Data Correction',
-    description: 'Repairs submissions, evaluations and participant records.',
-    permissions: [
-      'contest:list',
-      'contest:read',
-      'submission:list',
-      'submission:read',
-      'submission:rejudge',
-      'submission:download',
-      'submission:recompute',
-      'submissionresult:list',
-      'submissionresult:read',
-      'submissionresult:update',
-      'evaluation:list',
-      'evaluation:read',
-      'evaluation:update',
-      'user:list',
-      'user:read',
-      'user:update',
-      'team:list',
-      'team:create',
-      'team:read',
-      'team:update',
-      'participation:list',
-      'participation:create',
-      'participation:read',
-      'participation:update',
-    ],
-  },
-  {
-    name: 'Storage Admin',
-    description: 'Manages files, objects and container/service infrastructure.',
-    permissions: [
-      ...crud('file'),
-      ...crud('fsobject'),
-      ...crud('attachment'),
-      ...crud('executable'),
-      'dataset:read',
-      'container:read',
-      'container:control',
-      'service:restart',
-      'service:deploy',
-      'deployment:list',
-      'deployment:read',
-      'deployment:deploy',
-      'resource:list',
-      'resource:read',
-      'resource:update',
-    ],
-  },
-  {
-    name: 'Messaging',
-    description: 'Handles clarifications, messages and announcements.',
-    permissions: [
-      ...crud('message'),
-      'message:send',
-      ...crud('announcement'),
-      'announcement:publish',
-      'question:list',
-      'question:read',
-      'question:answer',
-      'question:ignore',
-      'user:list',
-      'user:read',
-      'contest:list',
-      'contest:read',
-    ],
-  },
-];
+function buildReserved(): readonly ReservedPermission[] {
+  return RESERVED_KEYS.map((entry) => ({ ...entry }));
+}
+
+export const RESERVED_PERMISSIONS: readonly ReservedPermission[] = buildReserved();
+
+// DEFAULT_GROUPS lives in './permission-groups' (split for the 250-line limit).

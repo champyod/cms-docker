@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# tests/fixtures/docker-restore — the docker a restore suite puts on the PATH.
+#
+# WHY a second fixture and not tests/fixtures/docker: that one answers a backup run by
+# writing an archive on stdout, which is the whole question a backup suite asks. A restore
+# asks whether the dump came back, so this one runs the pg_restore/verification sequence
+# and answers the psql count queries — which is what makes "the database is back" a fact
+# about the shipped script rather than about a recorded command line.
+#
+# WHY there is no helper-container branch any more: a restore no longer unpacks anything.
+# The only `docker run` the script issues is the scratch postgres container, which is
+# started and never inspected.
+#
+# It never reaches a network and never reads a credential.
+set -u
+
+printf '%s\n' "$*" >> "${STUB_LOG}"
+
+case "${1:-}" in
+  ps)
+    printf '%s\n' "${STUB_CONTAINER:-cms-database}"
+    exit 0
+    ;;
+  pull|volume|stop|rm|kill|start|restart)
+    exit 0
+    ;;
+  cp)
+    printf 'PGRESTORE-STUB-PAYLOAD\n' > "${!#}"
+    exit 0
+    ;;
+  exec)
+    shift
+    container=""
+    command_name=""
+    seen_container=0
+    # WHY the container is whatever follows the -e pairs rather than a fixed name: the
+    # scratch restore execs into cms-restore-scratch-db and the live one into cms-database,
+    # and a fixture that only knows the second name answers neither run's verification
+    # queries — it silently returns nothing, which reads as a restore that counted zero
+    # submissions rather than as a stub that was never asked.
+    while [[ $# -gt 0 ]]; do
+      if (( ! seen_container )); then
+        if [[ "$1" == "-e" ]]; then shift 2; continue; fi
+        container="$1"
+        seen_container=1
+        shift
+        continue
+      fi
+      if [[ -z "$command_name" ]]; then command_name="$1"; fi
+      break
+    done
+    case "$command_name" in
+      pg_isready) exit 0 ;;
+      psql)
+        # The verification queries are SELECT count(*) ...; a number is the whole answer.
+        if [[ "$*" == *"count(*)"* ]]; then printf '7\n'; exit 0; fi
+        exit 0
+        ;;
+      *) exit 0 ;;
+    esac
+    ;;
+  run)
+    shift
+    # The scratch postgres container: started, never inspected. A restore issues no other
+    # `docker run`, so anything else here is a helper the script should not be launching.
+    if [[ "$*" == *"-d postgres:15"* ]]; then exit 0; fi
+    printf 'stub: unexpected helper container: %s\n' "$*" >&2
+    exit 1
+    ;;
+esac
+exit 0

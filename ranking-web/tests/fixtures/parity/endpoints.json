@@ -1,0 +1,127 @@
+{
+  "derived_from": [
+    "src/cmsranking/RankingWebServer.py (RoutingHandler, StoreHandler, SubListHandler, HistoryHandler, ScoreHandler, ImageHandler, RootHandler, PublicConfigHandler, CreditsHandler, main)",
+    "src/cmsranking/Config.py PublicConfig"
+  ],
+  "top_level": {
+    "GET /": {
+      "handler": "RootHandler",
+      "auth": "none",
+      "content_type": "text/html",
+      "body": "the static Ranking.html",
+      "headers": [
+        "Last-Modified from the file mtime"
+      ]
+    },
+    "GET /history": {
+      "handler": "HistoryHandler",
+      "auth": "none",
+      "accept": "application/json required, otherwise 406",
+      "body": "JSON array of [user, task, time, score] merged by time across every user/task"
+    },
+    "GET /scores": {
+      "handler": "ScoreHandler",
+      "auth": "none",
+      "accept": "application/json required, otherwise 406",
+      "body": "JSON object {user: {task: score}} containing only scores strictly greater than 0.0",
+      "headers": [
+        "Timestamp: %.6f seconds since the epoch"
+      ]
+    },
+    "GET /events": {
+      "handler": "DataWatcher",
+      "auth": "none",
+      "content_type": "text/event-stream",
+      "see": "events.json"
+    },
+    "GET /logo": {
+      "handler": "ImageHandler",
+      "auth": "none",
+      "body": "content negotiated over Accept among image/png, image/jpeg, image/gif and image/bmp; falls back to the static logo.png as image/png",
+      "headers": [
+        "Last-Modified from the file mtime"
+      ],
+      "resolution_order": "explicit logo path, then lib_dir logo.<ext>, then the static fallback (main(), lines 656-672)"
+    },
+    "GET /config": {
+      "handler": "PublicConfigHandler",
+      "auth": "none",
+      "body": "JSON of PublicConfig with sorted keys",
+      "shape": {
+        "show_id_column": "boolean",
+        "source_url": "string"
+      },
+      "quirk": "the handler also prints the config to stdout"
+    },
+    "GET /credits": {
+      "handler": "CreditsHandler",
+      "auth": "none",
+      "body": "JSON {project, license, surface} read from credits.json for the surface named ranking"
+    }
+  },
+  "data_crud": {
+    "mount_prefixes": {
+      "/contests": "contest",
+      "/tasks": "task",
+      "/teams": "team",
+      "/users": "user",
+      "/submissions": "submission",
+      "/subchanges": "subchange"
+    },
+    "auth": "HTTP Basic; a failed check answers 401 with the configured realm",
+    "GET /<prefix>/": {
+      "body": "JSON array of every entity",
+      "headers": [
+        "Timestamp: %.6f"
+      ]
+    },
+    "GET /<prefix>/<key>": {
+      "body": "JSON entity"
+    },
+    "PUT /<prefix>/<key>": {
+      "success": 204,
+      "errors": {
+        "key not matching ^[A-Za-z0-9_]+$": 403,
+        "content-type other than application/json": 415,
+        "unparseable JSON or invalid data": 400
+      }
+    },
+    "PUT /<prefix>/": {
+      "success": 204,
+      "body": "JSON array merged into the store"
+    },
+    "DELETE /<prefix>/<key>": {
+      "success": 204,
+      "unknown_key": 404
+    },
+    "DELETE /<prefix>/": {
+      "success": 204,
+      "effect": "clears the store"
+    }
+  },
+  "other_mounts": {
+    "/sublist/<user_id>": {
+      "handler": "SubListHandler",
+      "auth": "none",
+      "note": "the per-user submission list the page polls"
+    },
+    "/faces/<name>": {
+      "handler": "ImageHandler",
+      "fallback": "static img/face.png"
+    },
+    "/flags/<name>": {
+      "handler": "ImageHandler",
+      "fallback": "static img/flag.png"
+    },
+    "everything else": {
+      "handler": "SharedDataMiddleware",
+      "note": "serves the static directory, GET and HEAD only"
+    }
+  },
+  "derived_not_captured": [
+    "the exact error body of each 4xx",
+    "GET /<prefix>/<key> on an unknown key",
+    "the logo resolution order when several extensions exist",
+    "the byte content of every static asset"
+  ]
+}

@@ -3,16 +3,25 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { ensurePermission } from '@/lib/permissions';
+import { VIEW_VERB_SUFFIX } from '@/lib/audit';
+import { auditSortOrderBy } from '@/lib/audit-sorting';
+import type { ListSortInput } from '@/lib/list-sorting';
+import { loadActorNames } from '@/lib/admin-names';
+import { loadEntityNames, entityNameKey } from '@/lib/entity-names';
+import { resolveDisplayZone, zoneDayRange } from '@/lib/timezone';
 
 const AUDIT_PAGE_SIZE = 50;
 
 export interface AuditLogRow {
   id: string;
   actor_id: number | null;
+  actor_name: string | null;
   timestamp: string;
   verb: string;
   entity: string;
   entity_id: string | null;
+  entity_name: string | null;
+  ip: string | null;
   result: string;
   reason: string | null;
 }
@@ -44,23 +53,49 @@ interface ActionFailure {
 export type AuditLogResult = AuditLogSuccess | ActionFailure;
 export type AuditDetailResult = AuditDetailSuccess | ActionFailure;
 
-function serializeRow(row: {
-  id: bigint;
+export interface SubmissionHistoryEntry {
+  id: string;
   actor_id: number | null;
-  timestamp: Date;
+  actor_name: string | null;
+  timestamp: string;
   verb: string;
-  entity: string;
-  entity_id: string | null;
   result: string;
   reason: string | null;
-}): AuditLogRow {
+  before_values: unknown;
+  after_values: unknown;
+}
+
+export type SubmissionHistoryResult =
+  | { success: true; data: SubmissionHistoryEntry[] }
+  | ActionFailure;
+
+const SUBMISSION_HISTORY_LIMIT = 100;
+
+function serializeRow(
+  row: {
+    id: bigint;
+    actor_id: number | null;
+    timestamp: Date;
+    verb: string;
+    entity: string;
+    entity_id: string | null;
+    ip: string | null;
+    result: string;
+    reason: string | null;
+  },
+  actorNames: ReadonlyMap<number, string>,
+  entityNames: ReadonlyMap<string, string>,
+): AuditLogRow {
   return {
     id: row.id.toString(),
     actor_id: row.actor_id,
+    actor_name: row.actor_id === null ? null : (actorNames.get(row.actor_id) ?? null),
     timestamp: row.timestamp.toISOString(),
     verb: row.verb,
     entity: row.entity,
     entity_id: row.entity_id,
+    entity_name: row.entity_id === null ? null : (entityNames.get(entityNameKey(row.entity, row.entity_id)) ?? null),
+    ip: row.ip,
     result: row.result,
     reason: row.reason,
   };
@@ -71,20 +106,33 @@ export async function getAuditLog({
   pageSize = AUDIT_PAGE_SIZE,
   actorId,
   entity,
+  entityId,
   verb,
+  result,
+  ip,
+  showViews = false,
+  search,
   fromDate,
   toDate,
+  sort,
 }: {
   page?: number;
   pageSize?: number;
   actorId?: string;
   entity?: string;
+  entityId?: string;
   verb?: string;
+  result?: string;
+  ip?: string;
+  showViews?: boolean;
+  search?: string;
   fromDate?: string;
   toDate?: string;
+  sort?: ListSortInput;
 }): Promise<AuditLogResult> {
   try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
 
     const where: Prisma.audit_logWhereInput = {};
     if (actorId) {
@@ -92,14 +140,28 @@ export async function getAuditLog({
       if (Number.isFinite(parsed)) where.actor_id = parsed;
     }
     if (entity) where.entity = entity;
+    if (entityId) where.entity_id = entityId;
     if (verb) where.verb = { contains: verb, mode: 'insensitive' };
+    if (result === 'success' || result === 'failure') where.result = result;
+    if (ip) where.ip = { contains: ip, mode: 'insensitive' };
+    // Why derived and not stored: the verb suffix is the one source of truth for a page load,
+    // and the page hides them by default so real actions are not buried under :view traffic.
+    if (!showViews) where.NOT = { verb: { endsWith: VIEW_VERB_SUFFIX } };
+    if (search) {
+      const contains = { contains: search, mode: 'insensitive' as const };
+      where.OR = [{ verb: contains }, { reason: contains }, { entity: contains }];
+    }
     if (fromDate || toDate) {
-      where.timestamp = {};
-      if (fromDate) where.timestamp.gte = new Date(fromDate);
-      if (toDate) {
-        const end = new Date(toDate);
-        end.setHours(23, 59, 59, 999);
-        where.timestamp.lte = end;
+      // Why the range is built by the day helper: a date-only filter value is a day in the reader's
+      // own zone (no contest owns an audit row), not a UTC midnight — `new Date(day)` reads it as
+      // UTC and silently drops or adds hours for a day that is not the server's midnight.
+      const dayRange = zoneDayRange(fromDate, toDate, resolveDisplayZone(null));
+      if (dayRange.gte !== null && dayRange.lte !== null) {
+        where.timestamp = { gte: dayRange.gte, lte: dayRange.lte };
+      } else if (dayRange.gte !== null) {
+        where.timestamp = { gte: dayRange.gte };
+      } else if (dayRange.lte !== null) {
+        where.timestamp = { lte: dayRange.lte };
       }
     }
 
@@ -109,7 +171,7 @@ export async function getAuditLog({
         where,
         skip,
         take: pageSize,
-        orderBy: { id: 'desc' },
+        orderBy: auditSortOrderBy(sort ?? null),
         select: {
           id: true,
           actor_id: true,
@@ -117,17 +179,24 @@ export async function getAuditLog({
           verb: true,
           entity: true,
           entity_id: true,
+          ip: true,
           result: true,
           reason: true,
         },
       }),
       prisma.audit_log.count({ where }),
     ]);
+    const actorNames = await loadActorNames(
+      rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
+    );
+    const entityNames = await loadEntityNames(
+      rows.map((row) => ({ entity: row.entity, entity_id: row.entity_id })),
+    );
 
     return {
       success: true,
       data: {
-        entries: rows.map(serializeRow),
+        entries: rows.map((row) => serializeRow(row, actorNames, entityNames)),
         total,
         totalPages: Math.ceil(total / pageSize),
       },
@@ -141,6 +210,7 @@ export async function getAuditLog({
 export async function getDistinctEntities(): Promise<{ success: true; data: string[] } | ActionFailure> {
   try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
     const rows = await prisma.audit_log.findMany({
       distinct: ['entity'],
       select: { entity: true },
@@ -153,9 +223,9 @@ export async function getDistinctEntities(): Promise<{ success: true; data: stri
   }
 }
 
-export async function getAuditEntry(id: number): Promise<AuditDetailResult> {
-  try {
+export async function getAuditEntry(id: number): Promise<AuditDetailResult> {  try {
     await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
 
     const row = await prisma.audit_log.findUnique({
       where: { id: BigInt(id) },
@@ -165,10 +235,15 @@ export async function getAuditEntry(id: number): Promise<AuditDetailResult> {
       return { success: false, error: 'Audit entry not found' };
     }
 
+    const actorNames = await loadActorNames(
+      row.actor_id === null ? [] : [row.actor_id],
+    );
+    const entityNames = await loadEntityNames([{ entity: row.entity, entity_id: row.entity_id }]);
+
     return {
       success: true,
       data: {
-        ...serializeRow(row),
+        ...serializeRow(row, actorNames, entityNames),
         before_values: row.before_values,
         after_values: row.after_values,
         ip: row.ip,
@@ -179,6 +254,54 @@ export async function getAuditEntry(id: number): Promise<AuditDetailResult> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch audit entry';
+    return { success: false, error: message };
+  }
+}
+
+function serializeHistoryRow(
+  row: {
+    id: bigint;
+    actor_id: number | null;
+    timestamp: Date;
+    verb: string;
+    result: string;
+    reason: string | null;
+    before_values: unknown;
+    after_values: unknown;
+  },
+  actorNames: ReadonlyMap<number, string>,
+): SubmissionHistoryEntry {
+  return {
+    id: row.id.toString(),
+    actor_id: row.actor_id,
+    actor_name: row.actor_id === null ? null : (actorNames.get(row.actor_id) ?? null),
+    timestamp: row.timestamp.toISOString(),
+    verb: row.verb,
+    result: row.result,
+    reason: row.reason,
+    before_values: row.before_values ?? null,
+    after_values: row.after_values ?? null,
+  };
+}
+
+/** One submission's audit trail, newest first, for the record page history tab. */
+export async function getSubmissionHistory(submissionId: number): Promise<SubmissionHistoryResult> {
+  try {
+    await ensurePermission('audit:read');
+    await ensurePermission('audit:list');
+
+    const rows = await prisma.audit_log.findMany({
+      where: { entity: 'submission', entity_id: String(submissionId) },
+      orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+      take: SUBMISSION_HISTORY_LIMIT,
+    });
+    const actorNames = await loadActorNames(
+      rows.map((row) => row.actor_id).filter((id): id is number => id !== null),
+    );
+
+    return { success: true, data: rows.map((row) => serializeHistoryRow(row, actorNames)) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to fetch submission history';
     return { success: false, error: message };
   }
 }

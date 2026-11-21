@@ -1,6 +1,7 @@
-//! Declarative command catalog — single source for key, target and argument
-//! metadata. Every CLI command declares its dispatch key, script/make target
-//! and argument specs here so the CLI and TUI can render from one table.
+//! Declarative command catalog — single source for key, target and argument metadata.
+//!
+//! Every CLI command declares its dispatch key, script/make target and argument specs
+//! here so the CLI and TUI can render from one table.
 
 use super::dispatch::{DispatchKey, DispatchTarget};
 
@@ -20,14 +21,19 @@ pub(crate) const SCRIPT_TAILSCALE_SERVE: &str = "__tailscale_serve.sh";
 pub(crate) const SCRIPT_DOMAIN: &str = "__domain.sh";
 pub(crate) const SCRIPT_FUNNEL: &str = "__funnel.sh";
 pub(crate) const SCRIPT_CREATE_CONTESTS: &str = "__create_contests.sh";
+pub(crate) const SCRIPT_CONTEST_SET_ACTIVE: &str = "__contest_set_active.sh";
 pub(crate) const SCRIPT_CONFIG_SYNC: &str = "__config_sync.sh";
+pub(crate) const SCRIPT_DB_ADMIN: &str = "__db_admin.sh";
+pub(crate) const SCRIPT_DB_USE: &str = "__db_use.sh";
 
 pub(crate) const MAKE_CMS_INIT: &str = "cms-init";
 pub(crate) const MAKE_DB_RESET: &str = "db-reset";
 pub(crate) const MAKE_DB_CLEAN: &str = "db-clean";
+pub(crate) const MAKE_DB_MIGRATE: &str = "db-migrate";
 pub(crate) const MAKE_PRISMA_SYNC: &str = "prisma-sync";
 pub(crate) const MAKE_ADMIN_CREATE: &str = "admin-create";
 pub(crate) const MAKE_BACKUP: &str = "backup";
+pub(crate) const MAKE_CERT_TIMER_INSTALL: &str = "cert-timer-install";
 
 /// Describes a single accepted argument for documentation and TUI rendering.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -58,6 +64,11 @@ pub(crate) const ARGS_SECRET_FLAG: &[ArgSpec] = &[ArgSpec {
     name: "flag",
     required: true,
     description: "Secrets subcommand flag",
+}];
+pub(crate) const ARGS_CONTEST_ID: &[ArgSpec] = &[ArgSpec {
+    name: "id",
+    required: true,
+    description: "Contest id to activate",
 }];
 pub(crate) const ARGS_WORKER: &[ArgSpec] = &[ArgSpec {
     name: "args",
@@ -125,11 +136,76 @@ pub(crate) const ARGS_DOMAIN_SETUP: &[ArgSpec] = &[
         required: false,
         description: "Skip prompts",
     },
+    ArgSpec {
+        name: "auto-retry",
+        required: false,
+        description: "Retry issuance on failure",
+    },
+    ArgSpec {
+        name: "retry-attempts",
+        required: false,
+        description: "Retry cap (0 = unlimited)",
+    },
+    ArgSpec {
+        name: "retry-interval",
+        required: false,
+        description: "Seconds before first retry",
+    },
+    ArgSpec {
+        name: "retry-forever",
+        required: false,
+        description: "Retry without an attempt cap",
+    },
+    ArgSpec {
+        name: "wait-port80",
+        required: false,
+        description: "Wait for :80 before issuing",
+    },
+    ArgSpec {
+        name: "extra-domains",
+        required: false,
+        description: "Extra SAN hostnames",
+    },
+    ArgSpec {
+        name: "dns",
+        required: false,
+        description: "DNS-01 provider",
+    },
+    ArgSpec {
+        name: "dns-credentials",
+        required: false,
+        description: "DNS-01 credential file",
+    },
+    ArgSpec {
+        name: "staging",
+        required: false,
+        description: "Use the Let's Encrypt test CA",
+    },
+    ArgSpec {
+        name: "deploy-hook",
+        required: false,
+        description: "Command run after renewal",
+    },
+    ArgSpec {
+        name: "force",
+        required: false,
+        description: "Reissue a still-valid cert",
+    },
+    ArgSpec {
+        name: "backup-certs",
+        required: false,
+        description: "Back up the cert store",
+    },
+    ArgSpec {
+        name: "lock",
+        required: false,
+        description: "Hold a flock during the run",
+    },
 ];
 pub(crate) const ARGS_DOMAIN_VERB: &[ArgSpec] = &[ArgSpec {
     name: "verb",
     required: true,
-    description: "Domain verb (status|renew|preflight)",
+    description: "Domain verb (status|renew|preflight|check-expiry|revoke)",
 }];
 pub(crate) const ARGS_DOMAIN_CHECK_EXPIRY: &[ArgSpec] = &[
     ArgSpec {

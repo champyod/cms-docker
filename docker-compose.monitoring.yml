@@ -8,9 +8,9 @@
 
 services:
   prometheus:
-    image: prom/prometheus:v2.52.0
+    image: prom/prometheus:v2.52.0@sha256:5c435642ca4d8427ca26f4901c11114023004709037880cd7860d5b7176aa731
     container_name: grader-prometheus
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     command:
@@ -34,9 +34,9 @@ services:
       start_period: 15s
 
   grafana:
-    image: grafana/grafana:11.2.2
+    image: grafana/grafana:11.2.2@sha256:d5133220d770aba5cb655147b619fa8770b90f41d8489a821d33b1cd34d16f89
     container_name: grader-grafana
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     environment:
@@ -67,9 +67,9 @@ services:
       start_period: 20s
 
   node-exporter:
-    image: prom/node-exporter:v1.8.2
+    image: prom/node-exporter:v1.8.2@sha256:4032c6d5bfd752342c3e631c2f1de93ba6b86c41db6b167b9a35372c139e7706
     container_name: grader-node-exporter
-    restart: on-failure:5
+    restart: unless-stopped
     profiles:
       - monitoring
     command:
@@ -77,10 +77,21 @@ services:
       - "--path.sysfs=/host/sys"
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)"
+      # WHY the textfile collector: it is how a fact that only a script knows becomes a
+      # Prometheus series without adding a service. The backup and offsite runs write
+      # backups/metrics/cms_backup.prom (see publish_backup_metrics in scripts/__lib/common.sh),
+      # and this reads it — so "how old is the newest backup" is scraped by the job that is
+      # already here, with no exporter to run and nothing in the production stack restarted.
+      - "--collector.textfile.directory=/metrics"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/host:ro,rslave
+      # WHY read-only and why this directory: the writers are the backup run and the offsite
+      # sync, both of which already own the archive tree, so the file is published where the
+      # facts are rather than in a second location that can drift. Read-only because the
+      # exporter's only job is to read it.
+      - ./backups/metrics:/metrics:ro
     networks:
       - cms-network
     # No host ports — scraped internally as node-exporter:9100

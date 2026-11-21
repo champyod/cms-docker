@@ -44,10 +44,18 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       admin: ${{ steps.filter.outputs.admin }}
       monitor: ${{ steps.filter.outputs.monitor }}
+      # WHY this line is the whole point: a filter block without an output mapping evaluates
+      # nothing the jobs can see, so the build reported "skipped" and looked green while the
+      # image was never produced. The map is what hands the filter's answer to `if:`.
+      security_scan: ${{ steps.filter.outputs.security_scan }}
+      scheduler: ${{ steps.filter.outputs.scheduler }}
       rust: ${{ steps.filter.outputs.rust }}
+      rust_ranking: ${{ steps.filter.outputs.rust_ranking }}
+      rust_backend: ${{ steps.filter.outputs.rust_backend }}
+      core_db_identity: ${{ steps.filter.outputs.core_db_identity }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
         id: filter
         with:
           filters: |
@@ -64,8 +72,45 @@ jobs:
             monitor:
               - 'docker/monitor/**'
               - 'scripts/__monitor.sh'
+            # The security overlay's own image. Without this filter nothing built it, so the
+            # compose overlay named an image that did not exist anywhere.
+            security_scan:
+              - 'docker/security-scan/**'
+              - '.github/workflows/ci.yml'
+            scheduler:
+              - 'admin-panel/src/scheduler/**'
+              - 'admin-panel/src/lib/**'
+              - 'admin-panel/prisma/**'
+              - 'admin-panel/package.json'
+              - 'admin-panel/tsconfig.json'
+              - 'docker/scheduler/**'
             rust:
               - 'tools/cms-tui/**'
+              - '.tools/cms-tui/**'
+              - '.github/workflows/ci.yml'
+            rust_ranking:
+              - 'ranking-web/**'
+              # The advisory policy is a gate on this tree, so editing it must re-run it.
+              - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            # The Rust backend workspace. Absent from this branch today (it lives on
+            # the backend feature branch), so this filter is inert until it lands —
+            # it must not be dropped, or that workspace arrives with no gate at all.
+            rust_backend:
+              - 'backend/**'
+              - 'deny.toml'
+              - '.github/workflows/ci.yml'
+            # The core's database identity. Every input the gate consumes is here: the hook and
+            # the modules it imports, the constraint that pins SQLAlchemy, the suite that pins the
+            # hook, the migration that turns an unidentified transaction into an empty result set,
+            # and the role SQL its bootstrap applies.
+            core_db_identity:
+              - 'src/cms/db/**'
+              - 'src/cmscommon/**'
+              - 'src/constraints.txt'
+              - 'tests/test_rls_actor*.py'
+              - 'admin-panel/prisma/migrations/**'
+              - 'admin-panel/prisma/sql/**'
               - '.github/workflows/ci.yml'
 
   lint:
@@ -75,7 +120,7 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install linters
         run: |
@@ -93,7 +138,7 @@ jobs:
       - name: ShellCheck
         run: |
           files=()
-          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh'; do
+          for pattern in 'scripts/*.sh' 'tools/*.sh' 'src/tools/*.sh' 'docker/*.sh' 'src/docker/*.sh' 'tests/*.sh' 'tests/__lib/*.sh' 'tests/fixtures/*'; do
             for f in ${pattern}; do
               [ -f "$f" ] && files+=("$f")
             done
@@ -134,21 +179,31 @@ jobs:
           fi
           # Overlay stacks reference services from a base stack
           # (e.g. docker-compose.tailscale.yml depends on contest-web-server
-          # from docker-compose.contest.yml), so they must be validated
+          # from docker-compose.yml), so they must be validated
           # merged with their base instead of standalone.
           declare -A OVERLAY_BASE=(
-            [docker-compose.tailscale.yml]=docker-compose.contest.yml
-            [docker-compose.waf.yml]=docker-compose.contest.yml
+            [docker-compose.tailscale.yml]=docker-compose.yml
+            [docker-compose.waf.yml]=docker-compose.domain.yml
+            # The security overlay only adds `diun.enable` labels to base services; validated
+            # standalone those services would have no image, so merge with the base stack.
+            [docker-compose.security.yml]=docker-compose.yml
+          )
+          # An overlay whose target is profile-gated has to enable those profiles, or
+          # compose reports the gated service as undefined instead of validating it.
+          declare -A OVERLAY_PROFILES=(
+            [docker-compose.tailscale.yml]="--profile core --profile contest"
+            [docker-compose.security.yml]="--profile security"
           )
           for f in docker-compose*.yml docker/docker-compose*.yml; do
             [ -f "$f" ] || continue
             if [ -n "${OVERLAY_BASE[$f]:-}" ]; then
               base="${OVERLAY_BASE[$f]}"
+              profiles="${OVERLAY_PROFILES[$f]:-}"
               echo "::group::docker compose config -q -- $base + $f"
               if [ "${#ENV_ARGS[@]}" -gt 0 ]; then
-                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" config -q
+                docker compose "${ENV_ARGS[@]}" -f "$base" -f "$f" $profiles config -q
               else
-                docker compose -f "$base" -f "$f" config -q
+                docker compose -f "$base" -f "$f" $profiles config -q
               fi
             else
               echo "::group::docker compose config -q -- $f"
@@ -170,24 +225,251 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: VAR_SPEC parity
-        run: bash scripts/__check_spec_parity.sh
+      # One runner for all six: the comment step re-runs this exact script, so the list of gates
+      # exists once and the comment can never talk about a gate the job did not run.
+      - name: Run the repository gates
+        run: bash scripts/__gates.sh
 
-      - name: Audit coverage
-        run: bash scripts/__check_audit_coverage.sh
+      # A red gate that only says "failed" sends the author to the log to find which of six broke.
+      - name: Comment the failing gate on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__gates.sh > "${RUNNER_TEMP}/gates.txt" 2>&1
+          bash scripts/__pr_comment.sh \
+            --marker cms-gates \
+            --title "Repository gates: one or more failed" \
+            --body-file "${RUNNER_TEMP}/gates.txt"
 
-      - name: Permission parity
-        run: bash scripts/__check_permission_parity.sh
+  # Runs the repo suites, which nothing else does; they need a checkout, not a stack.
+  suites:
+    name: Suites (repo tests/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: RLS coverage
-        run: bash scripts/__check_rls_coverage.sh
+      # The harness fails (not skips) when a tool it stages is missing.
+      - name: Install suite prerequisites
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends jq
 
-      - name: RLS SQL freshness
-        run: bash scripts/__generate_rls_sql.sh --check
+      # The proxy-body-size suite imports the panel's testcase limits via `bun -e`.
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      # Needs DISK_FLOOR_GB free outside the checkout for its scratch tree.
+      # `pipefail` keeps make's exit status through the tee; the tee is what lets the comment below
+      # quote this run instead of paying 12 minutes to repeat it.
+      - name: Run the repo suites
+        run: |
+          set -o pipefail
+          make test 2>&1 | tee "${RUNNER_TEMP}/suites.txt"
+
+      # The last gate that only failed: the suite that broke was named only inside the job log.
+      - name: Comment the failing suite on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__pr_comment.sh \
+            --marker cms-suites \
+            --title "Repo suites: one or more failed" \
+            --body-file "${RUNNER_TEMP}/suites.txt"
+
+  # WHY a job of its own: every table is row-level secured on `cms.actor`, so a core process that
+  # does not stamp its transactions reads nothing and writes nothing — an empty result set, not an
+  # error. tests/test_rls_actor_identity.py is the only CI-detectable guard on
+  # src/cms/db/session.py, and it SKIPS on a bare python3, which is exactly what `suites` runs
+  # (hermetic `env -i`, no core dependencies). Without this job a regression in the after_begin
+  # hook would reach production silently, so the suite gets its pinned dependencies and a real
+  # Postgres and its failure fails the required check. Path-gated: only a change that can break it
+  # pays for it.
+  core-db-identity:
+    name: Core DB identity (RLS actor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.core_db_identity == 'true'
+    permissions:
+      contents: read
+    # WHY postgres:15 and not 16: 15 is the major the stack runs (docker-compose.yml). 16 refuses
+    # `ALTER ROLE cmsuser NOSUPERUSER` on the image's bootstrap superuser — the one statement
+    # 20260912000500_owner_hardening exists to make — and an owner that keeps SUPERUSER bypasses
+    # every policy created here, so the database would stop being the one production has.
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: cmsuser
+          POSTGRES_PASSWORD: ci-not-a-secret
+          POSTGRES_DB: cmsdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # The URL the suite's live half drives. cmsuser is the role the core connects as, so the
+      # session below runs under the production policies, not a test-only grant.
+      CMS_RLS_TEST_DATABASE_URL: postgresql+psycopg2://cmsuser:ci-not-a-secret@127.0.0.1:5432/cmsdb
+      # psql speaks libpq, not SQLAlchemy URLs (+psycopg2 is not a libpq scheme), so the schema
+      # steps reach the same database through these instead.
+      PGHOST: 127.0.0.1
+      PGUSER: cmsuser
+      PGPASSWORD: ci-not-a-secret
+      PGDATABASE: cmsdb
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # WHY here and not at job level: `runner` is not an available context in a job's `env`, and
+      # these two paths must sit outside the checkout so nothing is written into the working tree.
+      # CMS_CONFIG is where the core looks for its configuration; the suite cannot import without
+      # it (see the write step below).
+      - name: Point the job at its scratch paths
+        run: |
+          echo "CMS_CONFIG=${RUNNER_TEMP}/cms.toml" >> "$GITHUB_ENV"
+          echo "CORE_VENV=${RUNNER_TEMP}/core-venv" >> "$GITHUB_ENV"
+
+      # 3.11 is the core's floor (src/pyproject.toml requires-python >=3.11) and the version its
+      # constraints were frozen on; SQLAlchemy 1.3 is not supported above it.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.11'
+
+      # psycopg2 has no wheel — it compiles against libpq — and postgresql-client is what the
+      # schema steps drive. Named here rather than assumed from the runner image, so the build
+      # cannot drift with it.
+      - name: Install libpq and the Postgres client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpq-dev postgresql-client
+
+      # WHY the whole constraints file: importing cms.db loads the models, which load the core's
+      # real dependency set, so a partial install would make the suite SKIP — a green tick that
+      # proves nothing. This is the same install the image builds with.
+      - name: Install the core's pinned dependencies
+        run: |
+          python3 -m venv "$CORE_VENV"
+          "$CORE_VENV/bin/python" -m pip install --upgrade pip wheel
+          "$CORE_VENV/bin/python" -m pip install -r src/constraints.txt
+          # The suite's assertions are meaningless against a different SQLAlchemy, and its
+          # sessionmaker semantics are 1.3's, so assert the pin rather than trust the resolver.
+          pinned="$(awk -F'==' '$1=="SQLAlchemy"{print $2}' src/constraints.txt)"
+          "$CORE_VENV/bin/python" -c \
+            'import sqlalchemy, sys; assert sqlalchemy.__version__ == sys.argv[1], sqlalchemy.__version__' \
+            "$pinned"
+          echo "SQLAlchemy ${pinned} installed"
+
+      # WHY a file rather than a committed fixture: it carries a URL that only exists inside this
+      # job. These are the only two values the loader requires — a database, and a secret that is
+      # not the shipped default (cms.conf.ConfigError refuses that one).
+      - name: Write the CMS configuration the suite imports
+        run: |
+          cat > "$CMS_CONFIG" <<'TOML'
+          [database]
+          url = "postgresql+psycopg2://cmsuser:ci-not-a-secret@127.0.0.1:5432/cmsdb"
+
+          [web_server]
+          secret_key = "core-db-identity-gate-not-a-real-secret"
+
+          [services]
+          TOML
+
+      # WHY rebuild the schema at all: the live half drives the application's own sessionmaker, and
+      # a transaction that is stamped looks exactly like one that is not unless the policies are
+      # there to act on it. cmsInitDB makes the core's tables (the call the image makes at
+      # install), the role bootstrap makes cms_backup (a migration grants to it and fails by name
+      # if it is missing), and the committed migrations put the policies over `cms.actor`.
+      - name: Create the core's schema
+        run: PYTHONPATH=src "$CORE_VENV/bin/python" -c 'from cms.db.init import init_db; init_db()'
+
+      # WHY this DROP: SQLAlchemy 1.3 creates every named type in the metadata on
+      # metadata.before_create, so cmsInitDB emits the enums of the prisma-owned username tables it
+      # deliberately does not create — and the migration that owns them creates them with their
+      # tables, where CREATE TYPE is not IF NOT EXISTS. Releasing the two restores the order the
+      # migration history assumes, and is a no-op the day cmsInitDB stops over-emitting them.
+      - name: Release the enum types cmsInitDB emits for prisma-owned tables
+        run: psql -q -v ON_ERROR_STOP=1 -c 'DROP TYPE IF EXISTS username_policy_scope, username_policy'
+
+      - name: Bootstrap the database roles
+        run: |
+          for role_sql in admin-panel/prisma/sql/20260820120000_db_roles.sql \
+                          admin-panel/prisma/sql/20260820125000_backup_role.sql; do
+            echo "-- $role_sql"
+            psql -q -v ON_ERROR_STOP=1 -v cms_backup_password=ci-not-a-secret -f "$role_sql" >/dev/null
+          done
+
+      # WHY psql and not `prisma migrate deploy`: the chain is plain SQL, and the only thing the CLI
+      # adds is _prisma_migrations bookkeeping this gate never reads. Filename order is timestamp
+      # order, the order the CLI applies them in; the ranking job applies its migrations the same
+      # way. ON_ERROR_STOP is what turns a failed migration into a failed job.
+      - name: Apply the committed migrations
+        run: |
+          applied=0
+          for migration in admin-panel/prisma/migrations/*/migration.sql; do
+            psql -q -v ON_ERROR_STOP=1 -f "$migration" >/dev/null
+            applied=$((applied + 1))
+          done
+          echo "applied ${applied} migrations"
+
+      # WHY read the result and not the exit codes: every policy statement is guarded by
+      # DROP POLICY IF EXISTS, so a migration that skipped a missing table still "succeeds" — the
+      # same reason scripts/__apply_sql.sh re-reads pg_class after applying. This asks the committed
+      # migration which tables it writes a policy for and requires each of them to have one.
+      - name: Require every policy the migration names to exist
+        run: |
+          actor_migration="$(ls -d admin-panel/prisma/migrations/*_rls_actor_policies)/migration.sql"
+          tables="$(grep -oE 'CREATE POLICY [a-z_]+ ON public\.[a-z_]+' "$actor_migration" \
+            | sed 's/.*public\.//' | LC_ALL=C sort -u | tr '\n' ' ')"
+          test -n "$tables" || { echo "::error::no policies parsed out of $actor_migration"; exit 1; }
+          missing="$(psql -v ON_ERROR_STOP=1 -tAc "
+            WITH expected(t) AS (SELECT unnest(string_to_array('${tables}', ' ')))
+            SELECT t FROM expected e
+             WHERE NOT EXISTS (SELECT 1 FROM pg_policies p
+                                WHERE p.schemaname = 'public' AND p.tablename = e.t)")"
+          if [ -n "$missing" ]; then
+            echo "::error::tables named by the actor-policy migration with no policy: ${missing}"
+            exit 1
+          fi
+          echo "every table named by $(basename "$(dirname "$actor_migration")") has a policy"
+
+      # The command the suite's header documents, with its live half switched on.
+      - name: Run the actor identity suite
+        run: |
+          set -o pipefail
+          "$CORE_VENV/bin/python" tests/test_rls_actor_identity.py 2>&1 | tee "$RUNNER_TEMP/rls-actor.log"
+
+      # WHY a skip fails here: the suite turns a missing dependency into a loud SKIP and exit 0 —
+      # right for `make test` on a bare python3 (that is what its header promises), wrong for the
+      # gate whose whole purpose is to run it, where a skip is a green tick proving nothing.
+      - name: Fail if the suite skipped instead of running
+        run: |
+          log="$RUNNER_TEMP/rls-actor.log"
+          if grep -qE '^SKIP:|set CMS_RLS_TEST_DATABASE_URL to run the live half' "$log"; then
+            echo "::error::the suite skipped — this job exists to run it"
+            exit 1
+          fi
+          grep -q 'Ran [1-9][0-9]* test' "$log" || { echo "::error::the suite ran no tests"; exit 1; }
+          grep 'Ran ' "$log"
 
   # WHY a separate job: nothing else type-checks or tests the admin panel, so a
   # type error or a failing unit test could reach main unnoticed. The secret
@@ -202,14 +484,14 @@ jobs:
       contents: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           # The secret scan diffs the commits of this event, which needs them
           # present locally instead of a single-commit shallow clone.
           fetch-depth: 0
 
       - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
 
       - name: Install dependencies
         working-directory: admin-panel
@@ -223,6 +505,10 @@ jobs:
         working-directory: admin-panel
         run: bunx prisma generate
 
+      - name: Lint (eslint)
+        working-directory: admin-panel
+        run: bun run lint
+
       - name: Type check
         working-directory: admin-panel
         run: bunx tsc --noEmit
@@ -231,20 +517,180 @@ jobs:
         working-directory: admin-panel
         run: bun run test
 
-      # WHY advisory: the pinned dependency tree already carries known advisories,
-      # so a blocking audit would fail every run for reasons unrelated to the
-      # change under review. The findings stay visible in the log and summary.
+      # WHY: the served favicons and logos are committed copies of brand/, so drift needs its own gate.
+      - name: Brand drift
+        working-directory: admin-panel
+        run: bun run icons:check
+
+      # WHY the audit's ignore list is rendered rather than written here: a CVE id or GHSA id that
+      # suppresses a finding is a waiver row with an owner, a reason and a review date (see the
+      # `waivers` job, which fails the build once one lapses). This only turns the live `osv`
+      # waivers into the flags the command below may take.
+      - name: Waiver suppressions for the audit
+        run: bash scripts/__security_waivers.sh render --audit-ids "$RUNNER_TEMP/waiver-audit-ids"
+
+      # WHY blocking now: the tree audits clean at high/critical except the advisories the waiver
+      # table owns. The ids this run may skip are rendered from security/waivers.json — the export
+      # of the panel's `security_waivers` table — so a suppression has an owner, a reason and a
+      # review date, and a new advisory with no waiver still fails the run. There is no `--ignore`
+      # literal here: an id nobody waived cannot reach this command.
       - name: Dependency audit
         working-directory: admin-panel
-        continue-on-error: true
-        run: bun audit --audit-level=high
+        run: |
+          args=()
+          # One id per line; an empty file means nothing is waived, so the audit runs with no
+          # skips at all rather than with an empty flag.
+          while IFS= read -r id; do
+            if [ -n "$id" ]; then args+=(--ignore "$id"); fi
+          done < "$RUNNER_TEMP/waiver-audit-ids"
+          if [ "${#args[@]}" -eq 0 ]; then
+            bun audit --audit-level=high
+          else
+            bun audit --audit-level=high "${args[@]}"
+          fi
 
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Findings land in the log and job summary, so the job needs no write scopes.
           GITLEAKS_ENABLE_COMMENTS: "false"
+
+  # WHY a job of its own for the waivers: P5 removed the two hand-kept suppression lists, and a
+  # waiver is only a decision *with a date* if something fails when the date passes. This is that
+  # something — it runs on a checkout alone (no panel, no database, no credential, no network),
+  # reading `security/waivers.json`, which the panel's own read path renders from the one waiver
+  # table. A lapsed waiver, an export nobody has re-rendered in a month, or a hand-edited entry
+  # without a review date fails here, naming the ids and the dates.
+  waivers:
+    name: Waivers (review dates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name != 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      - name: Fail on a waiver past its review date
+        run: bash scripts/__security_waivers.sh check
+
+      # A review date is a promise with a name on it; the comment carries it to the PR rather than
+      # leaving the author to read a job log. Rendered by the same upsert the container scan uses.
+      - name: Comment the expired waiver on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          bash scripts/__security_waivers.sh check > "${RUNNER_TEMP}/waiver-gate.txt" 2>&1
+          bash scripts/__pr_comment.sh \
+            --marker cms-waiver-gate \
+            --title "Waiver gate: a waiver is past its review date" \
+            --body-file "${RUNNER_TEMP}/waiver-gate.txt"
+
+  # WHY: the image jobs build and push but never inspect what ships — OS package
+  # CVEs in the base image and Dockerfile misconfigurations (root user, secrets
+  # baked into layers) only surface once someone pulls and runs the image.
+  container-scan:
+    name: Trivy (image CVEs, Dockerfile misconfig)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name != 'workflow_dispatch'
+    # A red scan is only useful if the author can read why without opening the job: the comment
+    # below needs this one write, and nothing here needs contents beyond read.
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+
+      # The image scan's suppressions ARE the waiver table: this writes `.trivyignore` from the
+      # committed export on every run, so no CVE id can be ignored by editing a file. `.trivyignore`
+      # is generated output (gitignored) — the ids live in `security_waivers`, not in the tree.
+      - name: Render the waiver suppressions
+        run: bash scripts/__security_waivers.sh render --trivy .trivyignore
+
+      # Plain docker build (not buildx) so the image lands in the local daemon
+      # where trivy can read it.
+      - name: Build admin panel image
+        run: docker build -t cms-admin-panel:scan ./admin-panel
+
+      # ignore-unfixed: base-image packages with no released fix would fail
+      # every run forever; exit-code 1 makes real, fixable CRITICAL/HIGH fail.
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cms-admin-panel:scan
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          vuln-type: os,library
+          exit-code: "1"
+          # The table is written before the action exits, so the comment step can quote what failed
+          # instead of pointing at a log.
+          format: table
+          output: trivy-image.txt
+
+      # WHY a comment: a failing check with no explanation sends the author into the job log to
+      # reconstruct what broke. Same facts, on the surface they are already looking at. Upserted by
+      # marker so a re-run replaces last night's numbers instead of stacking comments.
+      - name: Comment the finding on the pull request
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
+        env:
+          REPORT: trivy-image.txt
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- cms-container-scan -->';
+            const report = fs.existsSync(process.env.REPORT)
+              ? fs.readFileSync(process.env.REPORT, 'utf8').trim()
+              : '';
+            const head = [
+              marker,
+              '### Container scan: fixable CRITICAL/HIGH in the image this PR ships',
+              '',
+              'Fix or waive before merging — the waivers come from the panel table, so',
+              '`security/waivers.json` is the only place a suppression is written.',
+              '',
+            ].join('\n');
+            const trimmed = report.length > 55000
+              ? report.slice(0, 55000) + '\n… (trimmed; see the job log for the rest)'
+              : report;
+            const body = trimmed
+              ? `${head}\`\`\`\n${trimmed}\n\`\`\``
+              : `${head}_No table was produced — open the job log; the scan itself may have failed._`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.data.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      # CRITICAL only: hadolint (lint job) already owns style-level Dockerfile
+      # findings, and misconfig severity mappings are the noisiest part of
+      # trivy config — fail only on what would leak or escalate outright.
+      - name: Trivy Dockerfile/compose misconfig scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL
+          exit-code: "1"
+          skip-setup-trivy: true
 
   # WHY: nothing else in this repository builds or tests the TUI crate. Every
   # other layer has a gate that fails on drift; this one did not, so the command
@@ -257,10 +703,10 @@ jobs:
     if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust == 'true'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
 
       # The crate pins its target to musl in .cargo/config.toml, so the target
       # must exist before any cargo command runs.
@@ -268,7 +714,7 @@ jobs:
         run: rustup target add x86_64-unknown-linux-musl
 
       - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cargo/registry
@@ -293,6 +739,239 @@ jobs:
         working-directory: tools/cms-tui
         run: cargo test
 
+  # WHY a second Rust job rather than an extra step in the one above: the two
+  # crates have different targets and different rebuild triggers, and the
+  # ranking service is a server whose failure mode is an empty scoreboard in
+  # front of an audience, so it earns its own signal.
+  rust-ranking:
+    name: Rust ranking (fmt, clippy, build, test)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust_ranking == 'true'
+    # WHY a service: three tests in this crate need a database, and an ignored
+    # test is a claim nobody checks. The service makes the SQL path real, so a
+    # query that no longer matches the schema fails here instead of in a contest.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ranking_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      # The failure counters live in Redis, as they do in the stack's own
+      # redis-rate-limit service, so the counter tests need one too.
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RANKING_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/ranking_test
+      RANKING_TEST_REDIS_URL: redis://localhost:6379
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ranking-web/target
+          key: ${{ runner.os }}-cargo-ranking-${{ hashFiles('ranking-web/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-ranking-
+
+      # Every ranking migration in timestamp order, so new ones auto-apply and the database
+      # tests see a deployment's schema. The rehearsal applies the same set itself.
+      #
+      # WHY this is strict now: these migrations used to be applied with `psql -f` and no
+      # ON_ERROR_STOP, so every statement that reached for the classic CMS schema failed
+      # silently and the job tested against whatever happened to apply. That is how a board
+      # read that refused on a table the tests never created passed review locally and failed
+      # in a rehearsal. The two files below genuinely need the classic schema, which this
+      # repository does not ship, so their failure is named here by its exact signature and
+      # nothing else is tolerated: a new migration that fails is a red job, not a quiet gap.
+      - name: Apply the ranking migrations
+        run: bash scripts/__apply_ranking_migrations.sh "$RANKING_TEST_DATABASE_URL"
+
+      - name: Format check
+        working-directory: ranking-web
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: ranking-web
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Test
+        working-directory: ranking-web
+        run: cargo test --all-targets -- --include-ignored
+
+      # The tab bar's overflow rule and the views' aggregations are pure JavaScript with
+      # no Rust counterpart, so they are exercised on their own rather than left to the
+      # browser. Runs on the ranking paths filter this job already owns.
+      # WHY a glob and not the directory: --test takes file paths or glob patterns, not a
+      # bare directory — the runner's Node treats that as a module to load and fails with
+      # "Cannot find module .../tests".
+      - name: Perspective logic tests
+        run: node --test "ranking-web/static/tests/*.test.js"
+
+      # The rehearsal drives the release binary over HTTP against a database of its own:
+      # this job's database already carries the schema, and these migrations are not
+      # idempotent, so a second one is created instead of re-applying them. It is the
+      # only place the whole surface — entity reads, byte framing, events, protected
+      # mode — runs end to end against a real Postgres and Redis.
+      - name: Build the release binary for the rehearsal
+        working-directory: ranking-web
+        run: cargo build --release
+
+      - name: Acceptance rehearsal
+        run: |
+          psql "${RANKING_TEST_DATABASE_URL%/*}/postgres" -c 'CREATE DATABASE ranking_e2e' || true
+          RANKING_E2E_DATABASE_URL="${RANKING_TEST_DATABASE_URL%/*}/ranking_e2e" \
+          RANKING_E2E_REDIS_URL="${RANKING_TEST_REDIS_URL}" \
+            bash ranking-web/tests/e2e/ranking_e2e.sh
+
+  # WHY a job of its own: nothing in this repository read a Rust advisory, licence
+  # or source policy. A CVE in a transitive crate, a copyleft licence that makes a
+  # published image undistributable, or a crate resolved from a git fork could all
+  # reach a release with every other job green. It is path-gated on the two Cargo
+  # trees (and on deny.toml itself) so a panel-only PR never pays for it.
+  deny:
+    name: Advisories, licences, sources (cargo-deny)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: >-
+      github.event_name != 'workflow_dispatch' &&
+      (needs.changes.outputs.rust_ranking == 'true' || needs.changes.outputs.rust_backend == 'true')
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # WHY a pinned release binary and not `cargo install`: building it would add
+      # minutes to every run and would float with whatever toolchain the runner
+      # happens to have, so a new advisory-database format could break the gate
+      # without anyone changing this repository. The tarball is checksummed.
+      - name: Install cargo-deny 0.20.2
+        run: |
+          url=https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz
+          curl -fsSL -o /tmp/cargo-deny.tar.gz "$url"
+          echo "9f12ed4c49936e09b48bf862b595cde2fe64fcbd9d74dfacac6131ca824c8d5f  /tmp/cargo-deny.tar.gz" \
+            | sha256sum --check --strict -
+          tar xzf /tmp/cargo-deny.tar.gz -C /tmp
+          sudo install -m 0755 /tmp/cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny /usr/local/bin/cargo-deny
+          cargo-deny --version
+
+      # cargo-deny resolves the manifest from the working directory, so each tree is
+      # checked from inside itself. --config is explicit and relative to that
+      # directory: the policy lives at the root, and discovery walking up from a
+      # workspace is exactly the failure mode that would let a crate ship unpoliced.
+      - name: cargo-deny (ranking-web)
+        if: needs.changes.outputs.rust_ranking == 'true'
+        working-directory: ranking-web
+        run: cargo-deny --config ../deny.toml --all-features check
+
+      # WHY the lockfile check comes first: cargo-deny audits the graph a lockfile
+      # pins. Without one it would resolve a fresh graph and report on a dependency
+      # set nobody ships, which is worse than no gate because it looks like one.
+      # A workspace that arrives with no committed lockfile fails here, by name.
+      #
+      # WHY the directory is tested before the run and not via working-directory:
+      # the rust_backend filter also fires on deny.toml and this file, while
+      # backend/ only exists on the branches that carry the Rust core. A missing
+      # working-directory fails the step before any shell runs, so a policy
+      # change would be reported as a broken backend instead of a skipped tree.
+      # An absent tree is announced; an absent lockfile is still an error.
+      - name: cargo-deny (backend workspace)
+        if: needs.changes.outputs.rust_backend == 'true'
+        run: |
+          if [ ! -d backend ]; then
+            echo "::notice::backend/ is not present on this ref; there is no Rust core workspace to audit here."
+            exit 0
+          fi
+          cd backend
+          if [ ! -f Cargo.lock ]; then
+            echo "::error::backend/Cargo.lock is missing — there is no graph to audit."
+            echo "The workspace has no committed lockfile: commit one rather than skip this gate."
+            exit 1
+          fi
+          cargo-deny --config ../deny.toml check
+
+  # ./cms execs .tools/cms-tui/cms-tui-linux-<arch> before it will build from source,
+  # so that checked-in binary is what an operator actually runs. Without this job it
+  # stays at whatever the last person committed, and a merged change to the CLI looks
+  # like it did nothing: the new flags are in the source and absent from the binary.
+  release-binary:
+    name: Refresh vendored cms-tui
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: changes
+    if: github.event_name != 'workflow_dispatch' && needs.changes.outputs.rust == 'true'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+
+      - name: Install musl target
+        run: rustup target add x86_64-unknown-linux-musl
+
+      # A static build, because the box it runs on may not have the same libc. The
+      # repository's own .cargo/config.toml pins musl and strips, which is what makes
+      # the committed binary reproducible enough to diff meaningfully.
+      - name: Build release binary
+        working-directory: tools/cms-tui
+        run: cargo build --release
+
+      - name: Install into .tools
+        run: |
+          install -Dm755 tools/cms-tui/target/x86_64-unknown-linux-musl/release/cms-tui \
+            .tools/cms-tui/cms-tui-linux-x86_64
+          .tools/cms-tui/cms-tui-linux-x86_64 domain --help >/dev/null
+
+      # WHY the binary is committed rather than downloaded: `./cms` prefers it over a
+      # local build, so removing it would make every operator without cargo fall back
+      # to a bootstrap path that needs a toolchain they may not have.
+      - name: Commit when the binary changed
+        run: |
+          if git diff --quiet -- .tools/cms-tui/; then
+            echo "vendored binary already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .tools/cms-tui/cms-tui-linux-x86_64
+          # WHY the message lives in a variable: a multi-line string inside this block
+          # scalar ends the YAML block early, and the workflow then fails to parse.
+          msg="build(cms-tui): refresh the vendored binary
+
+          ./cms runs this file before it builds from source, so a CLI change only
+          reaches the operator once this binary is rebuilt."
+          git commit -m "${msg}"
+          git push
+
   # Each image builds as its own PARALLEL job (kept separate on purpose — the
   # images are large and serialising them would multiply wall-clock time).
   # Skipped areas show as skipped, not failed.
@@ -305,27 +984,30 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       # raphael.js is vendored in the repo; verify integrity instead of
       # fetching it at build time (no network dependency in the build).
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -333,7 +1015,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for CMS Core
         id: meta-core
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
           tags: |
@@ -342,7 +1024,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push CMS Core
-        uses: docker/build-push-action@v5
+        id: build-core
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -352,6 +1035,32 @@ jobs:
           labels: ${{ steps.meta-core.outputs.labels }}
           cache-from: type=gha,scope=core
           cache-to: type=gha,mode=max,scope=core
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-core
+          DIGEST: ${{ steps.build-core.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-worker:
     name: Build worker image
@@ -362,25 +1071,28 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Verify vendored ranking frontend assets
         run: |
-          test -f src/cmsranking/static/lib/raphael.js || { echo "::error::src/cmsranking/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
-          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  src/cmsranking/static/lib/raphael.js" | sha256sum --check --strict -
+          test -f ranking-web/static/lib/raphael.js || { echo "::error::ranking-web/static/lib/raphael.js is missing (expected vendor of https://cdnjs.cloudflare.com/ajax/libs/raphael/2.3.0/raphael.min.js)"; exit 1; }
+          echo "4da6e9aca75e3576d27ac0962ccadc6d6483cd486901d70d3dee50e77ae7f588  ranking-web/static/lib/raphael.js" | sha256sum --check --strict -
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -388,7 +1100,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for CMS Worker
         id: meta-worker
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
           tags: |
@@ -406,7 +1118,8 @@ jobs:
           fi
 
       - name: Build and push CMS Worker
-        uses: docker/build-push-action@v5
+        id: build-worker
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./Dockerfile
@@ -416,6 +1129,32 @@ jobs:
           labels: ${{ steps.meta-worker.outputs.labels }}
           cache-from: type=gha,scope=worker
           cache-to: type=gha,mode=max,scope=worker
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-worker
+          DIGEST: ${{ steps.build-worker.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-admin:
     name: Build admin panel image
@@ -426,20 +1165,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -447,7 +1189,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Admin Panel (Next.js)
         id: meta-admin
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
           tags: |
@@ -456,7 +1198,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push Admin Panel
-        uses: docker/build-push-action@v5
+        id: build-admin
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: ./admin-panel
           file: ./admin-panel/Dockerfile
@@ -466,6 +1209,37 @@ jobs:
           labels: ${{ steps.meta-admin.outputs.labels }}
           cache-from: type=gha,scope=admin
           cache-to: type=gha,mode=max,scope=admin
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          # WHY this must name the image the build step pushed: it named `-admin`, a
+          # repository that holds no image at all. cosign signs a digest you hand it, so
+          # the step stayed green while the image that actually ships carried no
+          # signature — and the deploy gate then refused every panel deploy. tests/
+          # test_ci_signing_parity.sh compares this value against the metadata step.
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-admin-panel
+          DIGEST: ${{ steps.build-admin.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
 
   build-and-push-monitor:
     name: Build monitor image
@@ -476,20 +1250,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Log in to the Container registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -497,7 +1274,7 @@ jobs:
 
       - name: Extract metadata (tags, labels) for Monitor
         id: meta-monitor
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
           tags: |
@@ -506,7 +1283,8 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
 
       - name: Build and push Monitor
-        uses: docker/build-push-action@v5
+        id: build-monitor
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
         with:
           context: .
           file: ./docker/monitor/Dockerfile
@@ -516,3 +1294,256 @@ jobs:
           labels: ${{ steps.meta-monitor.outputs.labels }}
           cache-from: type=gha,scope=monitor
           cache-to: type=gha,mode=max,scope=monitor
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-monitor
+          DIGEST: ${{ steps.build-monitor.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  # Built only by the removed build-and-push workflow; folded in so it still ships.
+  build-and-push-scheduler:
+    name: Build scheduler image
+    needs: changes
+    if: needs.changes.outputs.scheduler == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Backup Scheduler
+        id: meta-scheduler
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Backup Scheduler
+        id: build-scheduler
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: .
+          file: ./docker/scheduler/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-scheduler.outputs.tags }}
+          labels: ${{ steps.meta-scheduler.outputs.labels }}
+          cache-from: type=gha,scope=scheduler
+          cache-to: type=gha,mode=max,scope=scheduler
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets. The deploy path verifies
+      # this signature against the identity/issuer below before it upgrades anything.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag: a tag can be moved, a digest
+      # cannot, and the deploy gate verifies exactly this digest.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-scheduler
+          DIGEST: ${{ steps.build-scheduler.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  # The security overlay's scanner: Trivy + osv-scanner + the feed/rootfs/diun-bridge entry
+  # points. Built like every other image — SBOM, provenance, keyless signature — because the
+  # deploy gate refuses an image it cannot verify, including this one.
+  build-and-push-security-scan:
+    name: Build security scan image
+    needs: changes
+    if: needs.changes.outputs.security_scan == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate. Nothing long-lived is stored.
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Log in to the Container registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Security scan
+        id: meta-security-scan
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-security-scan
+          tags: |
+            type=ref,event=branch
+            type=sha,format=long
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' || github.ref_name == 'major/admin-panel' }}
+
+      - name: Build and push Security scan
+        id: build-security-scan
+        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5.4.0
+        with:
+          context: ./docker/security-scan
+          file: ./docker/security-scan/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-security-scan.outputs.tags }}
+          labels: ${{ steps.meta-security-scan.outputs.labels }}
+          cache-from: type=gha,scope=security-scan
+          cache-to: type=gha,mode=max,scope=security-scan
+          # WHY: the registry keeps the build's own provenance (max detail) and
+          # an SPDX SBOM beside the image, so what ships traces back to this run.
+          provenance: mode=max
+          sbom: true
+
+      # Keyless signing: cosign exchanges this job's OIDC token for a short-lived
+      # Fulcio certificate and pushes the signature to the registry, so no signing
+      # key exists in this repository or in its secrets.
+      - name: Install cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+        with:
+          # Pinned, so the binary that signs is the binary the deploy gate expects.
+          cosign-release: 'v2.5.2'
+
+      # Signs the DIGEST the build pushed, not the tag.
+      - name: Sign the pushed digest
+        if: github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-security-scan
+          DIGEST: ${{ steps.build-security-scan.outputs.digest }}
+        run: |
+          test -n "${DIGEST}" || { echo "::error::the build step reported no digest — nothing to sign"; exit 1; }
+          cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  # Single required check: passes when every other job succeeded or was skipped.
+  gate:
+    name: CI
+    if: always()
+    needs:
+      - changes
+      - lint
+      - gates
+      - suites
+      # The core's RLS identity: its failure must reach the required check, not land as "skipped".
+      - core-db-identity
+      - panel
+      # A waiver failure must reach the required check, or an expired suppression would land as
+      # "skipped" and the build would go green on it.
+      - waivers
+      - container-scan
+      - rust
+      # rust-ranking was missing here: its failure never reached the required check.
+      - rust-ranking
+      - deny
+      - release-binary
+      - build-and-push-core
+      - build-and-push-worker
+      - build-and-push-admin
+      - build-and-push-monitor
+      - build-and-push-scheduler
+      # The overlay's scanner: a missing image here is how the security stack failed to start.
+      - build-and-push-security-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every upstream job to have succeeded or been skipped
+        run: |
+          declare -A result=(
+            [changes]="${{ needs.changes.result }}"
+            [lint]="${{ needs.lint.result }}"
+            [gates]="${{ needs.gates.result }}"
+            [suites]="${{ needs.suites.result }}"
+            [core-db-identity]="${{ needs.core-db-identity.result }}"
+            [panel]="${{ needs.panel.result }}"
+            [waivers]="${{ needs.waivers.result }}"
+            [container-scan]="${{ needs.container-scan.result }}"
+            [rust]="${{ needs.rust.result }}"
+            [rust-ranking]="${{ needs.rust-ranking.result }}"
+            [deny]="${{ needs.deny.result }}"
+            [release-binary]="${{ needs.release-binary.result }}"
+            [build-and-push-core]="${{ needs.build-and-push-core.result }}"
+            [build-and-push-worker]="${{ needs.build-and-push-worker.result }}"
+            [build-and-push-admin]="${{ needs.build-and-push-admin.result }}"
+            [build-and-push-monitor]="${{ needs.build-and-push-monitor.result }}"
+            [build-and-push-scheduler]="${{ needs.build-and-push-scheduler.result }}"
+          )
+          failed=0
+          for job in "${!result[@]}"; do
+            outcome="${result[$job]}"
+            case "$outcome" in
+              success|skipped) ;;
+              *) echo "::error::$job did not succeed ($outcome)"; failed=1 ;;
+            esac
+          done
+          if (( failed != 0 )); then
+            echo "one or more jobs failed — open the failing job above for the step"
+            exit 1
+          fi
+          echo "all jobs succeeded or were skipped"

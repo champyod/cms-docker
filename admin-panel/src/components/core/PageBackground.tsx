@@ -1,8 +1,11 @@
 import { cn } from "@/lib/utils";
 
-export function PageBackground({ className, children }: { className?: string, children?: React.ReactNode }) {
+// Why the rest props: the authenticated shell needs a stable identity attribute
+// on this element so a test and a reader's own tooling can find the shell root
+// without matching on the gradient classes.
+export function PageBackground({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
     return (
-        <div className={cn("min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-neutral-950 overflow-hidden relative", className)}>
+        <div {...rest} className={cn("min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-neutral-900 via-black to-neutral-950 overflow-hidden relative", className)}>
              <div className="absolute top-0 left-0 w-full h-96 bg-indigo-600/10 blur-3xl rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2" />
              <div className="absolute bottom-0 right-0 w-96 h-96 bg-cyan-600/5 blur-2xl rounded-full pointer-events-none translate-y-1/2" />
              {children}

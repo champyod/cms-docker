@@ -207,8 +207,8 @@ class SpoolExporter:
                                   key=lambda username: (scores[username],
                                                         username),
                                   reverse=True)
-        sorted_tasks = sorted(self.contest.tasks,
-                              key=lambda task: task.num)
+        sorted_tasks = [contest_task.task
+                        for contest_task in self.contest.task_contests]
 
         with open(os.path.join(self.spool_dir, "ranking.txt"),
                   "wt", encoding="utf-8") as ranking_file, \

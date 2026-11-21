@@ -38,18 +38,18 @@ class TestFormatStatusText(unittest.TestCase):
     def setUp(self):
         self._tr = DummyTranslation()
 
-    def test_success_no_placeholders(self):
+    def test_it_returns_the_text_when_there_are_no_placeholders(self):
         self.assertEqual(format_status_text([]), "N/A")
         self.assertEqual(format_status_text([""]), "")
         self.assertEqual(format_status_text(["ASD"]), "ASD")
         self.assertEqual(format_status_text(["你好"]), "你好")
 
-    def test_success_with_placeholders(self):
+    def test_it_substitutes_the_placeholders(self):
         self.assertEqual(format_status_text(["%s", "ASD"]), "ASD")
         self.assertEqual(format_status_text(["ASD%s\n%s", "QWE", "123"]),
                          "ASDQWE\n123")
 
-    def test_success_with_translator(self):
+    def test_it_translates_before_substituting(self):
         self.assertEqual(format_status_text([""], self._tr), "")
         self.assertEqual(format_status_text(["ASD"], self._tr), "ESD")
         # Translation is applied before formatting.
@@ -58,7 +58,7 @@ class TestFormatStatusText(unittest.TestCase):
             format_status_text(["AAA %s\n%s", "AAA", "AE"], self._tr),
             "EEE AAA\nAE")
 
-    def test_failure(self):
+    def test_it_reports_when_the_placeholders_cannot_be_filled(self):
         # Not enough elements for the placeholders.
         self.assertEqual(format_status_text(["%s"]), "N/A")
         self.assertEqual(format_status_text(["%s"], self._tr), "N/E")

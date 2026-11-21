@@ -38,7 +38,7 @@ Deploy stacks in this order:
    - **Build method**: "Upload" or "Web editor"
 
 3. **Upload/Paste Compose File**
-   - Upload: Choose `docker-compose.core.yml`
+   - Upload: Choose `docker-compose.yml` (set `COMPOSE_PROFILES=core` as a stack variable)
    - Or paste the contents in web editor
 
 4. **Add Environment Variables**
@@ -88,13 +88,12 @@ Deploy stacks in this order:
 
 1. **Create New Stack**
    - Name: `cms-admin`
-   - Upload/paste `docker-compose.admin.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=admin` as a stack variable)
 
 2. **Environment Variables**
 
    ```
    CMS_CONFIG=/usr/local/etc/cms.toml
-   CMS_RANKING_CONFIG=/usr/local/etc/cms_ranking.toml
    ADMIN_LISTEN_ADDRESS=0.0.0.0
    ADMIN_LISTEN_PORT=8889
    ADMIN_PORT_EXTERNAL=8889
@@ -116,7 +115,7 @@ Deploy stacks in this order:
    - Follow prompts to set password
 
 5. **Access Admin Interface**
-   - Modern Admin Panel (Next.js): `http://your-server-ip:8891` — manage everything here
+   - Modern Admin Panel (Next.js): `http://127.0.0.1:8891` — manage everything here (loopback on the host, or over the tailnet; widening the bind means setting `ADMIN_NEXT_BIND_IP`, a security decision, since the panel takes a caller's identity from a header only the proxy writes)
    - Classic Admin (legacy Python): `http://your-server-ip:8889`
    - Login with created credentials
 
@@ -132,7 +131,7 @@ Deploy stacks in this order:
 
 1. **Create New Stack**
    - Name: `cms-contest-1`
-   - Upload/paste `docker-compose.contest.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=contest` as a stack variable)
 
 2. **Generate Secret Key**
    
@@ -188,7 +187,7 @@ Repeat the process for each contest:
 
 1. **Create New Stack**
    - Name: `cms-worker-0`
-   - Upload/paste `docker-compose.worker.yml`
+   - Upload/paste `docker-compose.yml` (set `COMPOSE_PROFILES=worker` as a stack variable)
 
 2. **Environment Variables**
 
@@ -379,6 +378,22 @@ Use Nginx or Traefik for load balancing.
    - Select volume (e.g., `cms-database-data`)
    - Click "Export"
 
+### Backup Destinations
+
+Scheduled and manual backups write into a destination configured in `config.toml`:
+
+```toml
+[backup]
+BACKUP_LOCATIONS = '[{"id":"default","label":"Primary volume","path":"./backups"}]'
+BACKUP_DEFAULT_LOCATION = "default"
+```
+
+- `BACKUP_LOCATIONS` is a JSON list of `{id, label, path}` — the destinations the admin panel's Backup & Restore page offers.
+- `BACKUP_DEFAULT_LOCATION` is the id a new schedule preselects. It must be an id the list carries, not a path.
+- A `path` outside the repository root has to be bind-mounted into **both** `cms-monitor` (which writes the archives) and `cms-admin-panel-next` (which lists and restores them) before it can be used. A path only the panel can see lists archives that no backup ever writes to.
+
+> This configuration surface is being replaced by a table the panel manages directly. Until that lands, the values above are the source of truth.
+
 2. **Stack Configuration Backup**
    - Go to "Stacks"
    - Click stack name
@@ -470,7 +485,7 @@ Use Nginx or Traefik for load balancing.
      "description": "Contest web server",
      "repository": {
        "url": "https://github.com/your-repo",
-       "stackfile": "docker-compose.contest.yml"
+       "stackfile": "docker-compose.yml"
      },
      "env": [
        {

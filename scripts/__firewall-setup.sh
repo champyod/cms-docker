@@ -15,16 +15,21 @@
 #   __firewall-setup.sh --apply     enforce rules
 #   __firewall-setup.sh --revert    flush custom rules
 
-set -eu
-# pipefail only if available
-if (set -o pipefail 2>/dev/null); then
-    set -o pipefail
-fi
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
-# shellcheck source=/dev/null
+# ---------------------------------------------------------------------------
+# lib/common.sh — the one source of log_info/log_warn/log_die. A missing library
+# is a broken delivery and is reported as one, so a second copy of the helpers
+# cannot drift from the one the rest of the scripts run.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
@@ -323,6 +328,7 @@ case "$MODE" in
     log_info "Firewall apply mode (enforcing)"
     echo ""
 
+    # Require root
     if [[ $EUID -ne 0 ]]; then
       log_die "firewall --apply requires root — run with sudo" 1
     fi
@@ -331,6 +337,7 @@ case "$MODE" in
       log_die "SSH_LAN_CIDR is unset — the rules would drop SSH on ${SSH_IFACE}. Set it to the LAN you administer from and re-run." 1
     fi
 
+    # Run preflight checks
     if ! preflight_checks; then
       log_die "preflight checks failed — aborting to prevent lockout" 1
     fi

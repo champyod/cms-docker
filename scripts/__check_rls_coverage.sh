@@ -60,7 +60,8 @@ fi
 # check then passes locally and fails wherever the locale differs from the author's (a real CI failure).
 tmp_a=$(mktemp)
 tmp_b=$(mktemp)
-trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b"' EXIT
+tmp_pol=$(mktemp)
+trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b" "$tmp_pol"' EXIT
 grep -h "to_regclass('public\." "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | grep -o "to_regclass('public\.[^']*')" | sed "s/.*public\.//;s/'.*//" | LC_ALL=C sort -u > "$tmp_a" || : > "$tmp_a"
 grep -hE 'ALTER TABLE public\.[A-Za-z_][A-Za-z0-9_]* ENABLE ROW LEVEL SECURITY' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n 's/.*ALTER TABLE public\.\([A-Za-z_][A-Za-z0-9_]*\) ENABLE ROW LEVEL SECURITY.*/\1/p' | LC_ALL=C sort -u > "$tmp_b" || : > "$tmp_b"
 cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
@@ -68,6 +69,33 @@ cat "$tmp_a" "$tmp_b" | LC_ALL=C sort -u > "$tmp_mig"
 # WHY two-direction comm: missing = fail-open security hole (model has no RLS), extra = drift (RLS for a dropped table).
 missing=$(LC_ALL=C comm -23 "$tmp_schema" "$tmp_mig" || true)
 extra=$(LC_ALL=C comm -13 "$tmp_schema" "$tmp_mig" || true)
+
+# WHY a policy check on top of the enable check: ENABLE+FORCE without any policy makes the
+# table return zero rows to the owner and reject its inserts — a silent failure the
+# enable-only check cannot see.
+grep -hE 'CREATE POLICY [A-Za-z_][A-Za-z0-9_]* ON public\.' "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null \
+  | sed -n 's/.*CREATE POLICY [A-Za-z_][A-Za-z0-9_]* ON public\.\([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' \
+  | LC_ALL=C sort -u > "$tmp_pol" || : > "$tmp_pol"
+no_policy=$(LC_ALL=C comm -23 "$tmp_b" "$tmp_pol" || true)
+
+# WHY a permissive-surface check: coverage and "has a policy" are both satisfied by
+# `FOR ALL ... USING (true) WITH CHECK (true)` — the exact body that made RLS decorative. So the
+# committed policy set is checked for two things it must NOT contain, and one symmetric set it must:
+#   1. no whole-table tautology anywhere,
+#   2. a SELECT-only tautology on a table the generator did not declare as public-board-readable,
+#   3. and the declared public-board set exactly equal to the tables that carry one.
+# The allowlist is read from the generator, not restated here, so there is one list.
+tmp_region=$(mktemp)
+tmp_perm=$(mktemp)
+tmp_allow=$(mktemp)
+trap 'rm -f "$tmp_schema" "$tmp_mig" "$tmp_chk" "$tmp_a" "$tmp_b" "$tmp_pol" "$tmp_region" "$tmp_perm" "$tmp_allow"' EXIT
+cat "$MIGRATIONS_DIR"/*/migration.sql 2>/dev/null | sed -n '/^-- BEGIN GENERATED POLICY SET/,/^-- END GENERATED POLICY SET/p' > "$tmp_region" || : > "$tmp_region"
+# Tables carrying a bare `FOR SELECT ... USING (true)`.
+sed -n 's/^CREATE POLICY [A-Za-z_][A-Za-z0-9_]* ON public\.\([A-Za-z_][A-Za-z0-9_]*\) FOR SELECT TO cmsuser USING (true);$/\1/p' "$tmp_region" | LC_ALL=C sort -u > "$tmp_perm" || : > "$tmp_perm"
+permissive=$(printf '%s\n' "$(sed -n 's/^PUBLIC_BOARD_READ="\(.*\)"$/\1/p' "$GENERATOR" | tr ' ' '\n' | sed '/^$/d' | LC_ALL=C sort -u)")
+printf '%s\n' "$permissive" > "$tmp_allow"
+undeclared=$(LC_ALL=C comm -23 "$tmp_perm" "$tmp_allow" || true)
+tautology=$(grep -cE 'FOR ALL TO cmsuser USING \(true\) WITH CHECK \(true\)' "$tmp_region" || true)
 
 rc=0
 # WHY also verify generator coverage: every model must be covered somewhere in migration history.
@@ -94,6 +122,33 @@ if [ -n "$extra" ]; then
   fi
   printf '%s\n' "$extra" | while IFS= read -r e; do
     [ -n "$e" ] && printf '  extra RLS for unknown table: %s\n' "$e" >&2
+  done
+  rc=1
+fi
+if [ -n "$no_policy" ]; then
+  if [ "$stale" -eq 0 ] && [ -z "$missing" ] && [ -z "$extra" ]; then
+    printf 'RLS coverage FAILED:\n' >&2
+  fi
+  printf '%s\n' "$no_policy" | while IFS= read -r t; do
+    [ -n "$t" ] && printf '  FORCE RLS without a policy: %s\n' "$t" >&2
+  done
+  rc=1
+fi
+
+if [ "$tautology" -ne 0 ]; then
+  if [ "$stale" -eq 0 ] && [ -z "$missing" ] && [ -z "$extra" ] && [ -z "$no_policy" ]; then
+    printf 'RLS coverage FAILED:\n' >&2
+  fi
+  printf '  whole-table tautology (USING (true) WITH CHECK (true)) on %s table(s) — RLS is decorative there\n' "$tautology" >&2
+  rc=1
+fi
+
+if [ -n "$undeclared" ]; then
+  if [ "$stale" -eq 0 ] && [ -z "$missing" ] && [ -z "$extra" ] && [ -z "$no_policy" ] && [ "$tautology" -eq 0 ]; then
+    printf 'RLS coverage FAILED:\n' >&2
+  fi
+  printf '%s\n' "$undeclared" | while IFS= read -r t; do
+    [ -n "$t" ] && printf '  permissive SELECT on a table the generator does not declare public-board-readable: %s\n' "$t" >&2
   done
   rc=1
 fi

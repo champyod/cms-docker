@@ -4,11 +4,6 @@
 > No compose change needed — DNS only. Prod stays off unless explicitly enabled.
 > TUI prompts in `scripts/__domain.sh` ask, never force. Local overrides gitignored.
 
-> **Examples use `example.com`.** Every zone, host and mailbox below is a
-> placeholder — substitute your own at each step. The commands are otherwise
-> identical, and the parent-zone and reporting steps depend on whoever operates
-> your DNS, not on a fixed registry.
-
 ## Why
 
 - **DNSSEC:** signed zone prevents DNS spoofing / BGP hijack at resolver. Required if you serve `grader.example.com` on tailscale + public both.
@@ -19,7 +14,7 @@
 
 ## Prerequisites
 
-- DNS control for `grader.example.com` (your DNS host operator or registrar).
+- DNS control for `grader.example.com` (MWIT computer center or your registrar).
 - DNS host that supports DNSSEC signing (Cloudflare signing itself, or BIND9 / Knot with inline-signing, or registrar DNSSEC feature).
 - Access to **parent** to publish `DS` (delegation signer) — without DS, chain breaks.
 - `dig`, `delv`, `ldns-verify-zone` installed for validation.
@@ -40,7 +35,7 @@ dnssec-keygen -a ECDSAP256SHA256 -n ZONE grader.example.com   # ZSK
 
 ### 2. Sign zone and publish DS
 
-1. Publish the KSK's `DS` at the **parent** zone (via your DNS host operator).
+1. Publish the KSK's `DS` at the **parent** (`.ac.th` via MWIT computer center).
    Get DS with:
 
    ```bash
@@ -105,9 +100,10 @@ Multiple `issue` lines mean OR (any listed may issue).
 ### 3. Enable locally
 
 ```bash
-# config.toml [infra] or .env.local (gitignored)
-CAA_ENABLED=1
-CAA_ISSUER=letsencrypt.org
+# config.toml [infra] (gitignored) — the only config source; .env is generated from it
+#   CAA_ENABLED = 1
+#   CAA_ISSUER  = "letsencrypt.org"
+./cms config sync
 ```
 
 ### 4. Validate
@@ -126,22 +122,24 @@ dig CAA grader.example.com +short
 
 ---
 
-## Coordination Checklist (for your DNS host operator)
+## Coordination Checklist (for MWIT / computer center)
 
-- [ ] Confirm who can publish DS at the parent zone
+- [ ] Confirm who can publish DS at `.ac.th` parent
 - [ ] Agree on ZSK/KSK roll calendar and on-call for emergency DS roll
-- [ ] Confirm CAA is supported at DNS host (some hosts strip CAA)
+- [ ] Confirm CAA is supported at DNS host (some .ac.th hosts strip CAA)
 - [ ] Test in staging DNS zone before promoting to `grader.example.com`
 
 ---
 
-## How to Enable via Env + Check
+## How to Enable via config.toml + Check
 
 ```bash
 # enable (optional, not for prod by default — asked in TUI)
-echo 'DNSSEC_ENABLED=1' >> .env.local   # gitignored
-echo 'CAA_ENABLED=1'     >> .env.local
-echo 'CAA_ISSUER=letsencrypt.org' >> .env.local
+# config.toml [infra] (gitignored):
+#   DNSSEC_ENABLED = 1
+#   CAA_ENABLED    = 1
+#   CAA_ISSUER     = "letsencrypt.org"
+./cms config sync
 
 # check status (logs without forcing)
 ./scripts/__domain.sh status

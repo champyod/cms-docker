@@ -31,7 +31,8 @@ import logging
 from sqlalchemy import func, not_, literal_column
 
 from cms import config, ServiceCoord, get_service_shards
-from cms.db import SessionGen, Dataset, Submission, SubmissionResult, Task
+from cms.db import SessionGen, Dataset, Participation, Submission, \
+    SubmissionResult, Task
 from cms.io import WebService, rpc_method
 from cms.service import EvaluationService
 from cmscommon.binary import hex_to_bin
@@ -138,8 +139,14 @@ class AdminWebServer(WebService):
                 .join(Task, Dataset.task_id == Task.id)\
                 .filter(Task.active_dataset_id == SubmissionResult.dataset_id)
             if contest_id is not None:
+                # A task may belong to several contests, so the contest of a
+                # submission is read from its participation, not its task.
                 base_query = base_query\
-                    .filter(Task.contest_id == contest_id)
+                    .join(Submission,
+                          SubmissionResult.submission_id == Submission.id)\
+                    .join(Participation,
+                          Submission.participation_id == Participation.id)\
+                    .filter(Participation.contest_id == contest_id)
 
             compiled = base_query.filter(SubmissionResult.filter_compiled())
             evaluated = compiled.filter(SubmissionResult.filter_evaluated())
@@ -175,7 +182,9 @@ class AdminWebServer(WebService):
                 .join(Task, Submission.task_id == Task.id)
             if contest_id is not None:
                 total_query = total_query\
-                    .filter(Task.contest_id == contest_id)
+                    .join(Participation,
+                          Submission.participation_id == Participation.id)\
+                    .filter(Participation.contest_id == contest_id)
             queries['total'] = total_query
 
             # Add a "key" column for keeping track of each stats, in case they

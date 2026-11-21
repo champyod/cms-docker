@@ -15,6 +15,16 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# ---------------------------------------------------------------------------
+# lib/common.sh contract: log_info/log_warn/log_die, require_disk_free_gb and the
+# disk thresholds all come from the shared library. A missing library is a broken
+# delivery, reported as one, rather than met by a second, divergent copy of the
+# helpers that could disagree with the script the container actually runs.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/__lib/common.sh"
 
@@ -22,14 +32,16 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 require_disk_free_gb "$PWD" 3 5
 
 # ---------------------------------------------------------------------------
-# Load env.  Do not override already-exported.
+# Load env (POSTGRES_* from .env.core).  Do not override already-exported.
 # ---------------------------------------------------------------------------
-if [[ -f "${REPO_ROOT}/.env" ]]; then
-  set -a
-  # shellcheck disable=SC1091
-  source "${REPO_ROOT}/.env" 2>/dev/null || true
-  set +a
-fi
+for env_file in "${REPO_ROOT}/.env.core" "${REPO_ROOT}/.env" "${REPO_ROOT}/.env.infra"; do
+  if [[ -f "$env_file" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$env_file" 2>/dev/null || true
+    set +a
+  fi
+done
 
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
@@ -52,8 +64,11 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
   log_warn "         ensure docker daemon has cms-database running and .env exists with creds"
 fi
 
-if [[ ! -f "${REPO_ROOT}/.env" ]]; then
-  log_die ".env not found — cannot determine PostgreSQL credentials for drill (run: make env)"
+# Either file supplies the PostgreSQL credentials: a checkout that splits its
+# secrets into .env.core is as able to run the drill as one that keeps them in
+# .env, so neither layout alone is a reason to refuse.
+if [[ ! -f "${REPO_ROOT}/.env.core" && ! -f "${REPO_ROOT}/.env" ]]; then
+  log_die "Neither .env.core nor .env found — cannot determine PostgreSQL credentials for drill (run: make env)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -64,10 +79,9 @@ mkdir -p "$DRILLS_DIR"
 
 DRILLS_BACKUP_ROOT="${DRILLS_DIR}/backups"
 DRILLS_BACKUP_DB_DIR="${DRILLS_BACKUP_ROOT}/db"
-DRILLS_BACKUP_VOL_DIR="${DRILLS_BACKUP_ROOT}/volumes"
 DRILLS_MANIFEST="${DRILLS_BACKUP_ROOT}/manifest.json"
 
-mkdir -p "$DRILLS_BACKUP_DB_DIR" "$DRILLS_BACKUP_VOL_DIR"
+mkdir -p "$DRILLS_BACKUP_DB_DIR"
 
 log_info "Running backup into drills/ subdir ..."
 export BACKUP_DIR="$DRILLS_BACKUP_ROOT"
@@ -81,7 +95,20 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER_DB"; the
   log_warn "cms-database container not running — backup will likely fail, but proceeding anyway"
 fi
 
-bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || log_warn "Backup script exited with non-zero (may be expected if db issues)"
+# WHY the status is captured rather than flattened into one warning: exit 3 is the
+# contract's "the dump was kept but the manifest does not record this run". A dump that
+# no manifest entry points at is not one a restore can find, so the drill must not go on
+# to report a pass over it.
+BACKUP_PARTIAL=0
+BACKUP_STATUS=0
+bash "${SCRIPT_DIR}/__backup.sh" "" 2>&1 || BACKUP_STATUS=$?
+
+if [ "$BACKUP_STATUS" -eq 3 ]; then
+  log_warn "Backup reported PARTIAL (exit 3): the dump was kept but the manifest does not record this run."
+  BACKUP_PARTIAL=1
+elif [ "$BACKUP_STATUS" -ne 0 ]; then
+  log_warn "Backup script exited with status ${BACKUP_STATUS} (may be expected if db issues)"
+fi
 
 # ---------------------------------------------------------------------------
 # Find the dump file and manifest that were just created
@@ -92,7 +119,7 @@ fi
 
 log_info "Manifest found at $DRILLS_MANIFEST"
 
-# Manifest format: {ts, db_dump, db_sha256, vol_tar, vol_sha256, pg_version, sizes}
+# Manifest format: {ts, db_dump, db_sha256, pg_version, tables, sizes, kind}
 LATEST_TS="$(python3 -c "
 import json
 with open('$DRILLS_MANIFEST') as f:
@@ -125,16 +152,6 @@ else:
     print('0')
 ")"
 
-EXPECTED_VOL_BYTES="$(python3 -c "
-import json
-with open('$DRILLS_MANIFEST') as f:
-    data = json.load(f)
-if isinstance(data, list) and data:
-    print(data[-1]['sizes']['vol_bytes'])
-else:
-    print('0')
-")"
-
 EXPECTED_PG_VER="$(python3 -c "
 import json
 with open('$DRILLS_MANIFEST') as f:
@@ -145,7 +162,7 @@ else:
     print('unknown')
 ")"
 
-log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTED_VOL_BYTES pg_version=$EXPECTED_PG_VER"
+log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES pg_version=$EXPECTED_PG_VER"
 
 # ---------------------------------------------------------------------------
 # Run cms-restore.sh into scratch container
@@ -168,12 +185,17 @@ if echo "$RESTORE_OUTPUT" | grep -q "Submissions count:"; then
 fi
 
 log_info "Actual from restore: submissions=$ACTUAL_SUB_COUNT pg_largeobject=$ACTUAL_LOB_COUNT"
-log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES vol_bytes=$EXPECTED_VOL_BYTES pg_version=$EXPECTED_PG_VER"
+log_info "Expected from manifest: db_bytes=$EXPECTED_DB_BYTES pg_version=$EXPECTED_PG_VER"
 
 # ---------------------------------------------------------------------------
 # Assertions: counts >0 and match manifest numbers
 # ---------------------------------------------------------------------------
 PASS=1
+
+if [ "$BACKUP_PARTIAL" -eq 1 ]; then
+  log_warn "FAIL: backup was partial (exit 3) — the dump was kept but the manifest does not record it, so a restore could not have found it"
+  PASS=0
+fi
 
 if [[ "$ACTUAL_SUB_COUNT" -le 0 ]]; then
   log_warn "FAIL: Submissions count is $ACTUAL_SUB_COUNT, expected > 0"

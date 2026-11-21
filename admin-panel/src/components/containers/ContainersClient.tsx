@@ -1,477 +1,206 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { Card } from '@/components/core/Card';
-import { Button } from '@/components/core/Button';
-import { Dialog } from '@/components/core/Dialog';
-import {
-  Box, RefreshCw, RotateCcw, CheckCircle2, AlertCircle,
-  Layers, HelpCircle, Trash2, Terminal, X
-} from 'lucide-react';
+import { Box, RefreshCw, RotateCcw, CheckCircle2, AlertCircle, Layers, HelpCircle, Trash2, ScrollText, X } from 'lucide-react';
 import Link from 'next/link';
-import { getContainers, controlContainer, runCompose, ContainerInfo } from '@/app/actions/docker';
-import {
-  getContainerConfig,
-  updateContainerConfig,
-  resetRestartCount,
-  getContainerRestartCount,
-  syncContainerConfigWithDocker,
-  ContainerRestartConfig
-} from '@/app/actions/containerConfig';
-import {
-  analyzeRestartRequirements,
-  analyzeContainerDependencies,
-} from '@/app/actions/services';
-import { getDiscordWebhookStatus } from '@/lib/discord-notifier';
-import { useToast } from '@/components/providers/ToastProvider';
-import { cn } from '@/lib/utils';
-import { LogViewerModal } from '@/components/containers/LogViewerModal';
-import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
-import { StatsCard } from '@/components/containers/StatsCard';
-import { StackActionButton } from '@/components/containers/StackActionButton';
-import { SystemLogsPanel } from '@/components/containers/SystemLogsPanel';
-import { ContainerRow } from '@/components/containers/ContainerRow';
-import { EmptyState } from '@/components/core/EmptyState';
-import { SkeletonTable } from '@/components/core/Skeleton';
 import { usePathname } from 'next/navigation';
 import { motion } from 'motion/react';
 
-export function ContainersClient() {
-  const [containers, setContainers] = useState<ContainerInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [selectedContainer, setSelectedContainer] = useState<{ id: string, name: string } | null>(null);
-  const [settingsContainer, setSettingsContainer] = useState<{ id: string, name: string } | null>(null);
-  const [containerConfig, setContainerConfig] = useState<ContainerRestartConfig>({});
-  const [restartCounts, setRestartCounts] = useState<Record<string, number>>({});
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [isDiscordConfigured, setIsDiscordConfigured] = useState<boolean | null>(null);
-  const [hasShownDiscordToast, setHasShownDiscordToast] = useState(false);
-  const [showBulkRestartDialog, setShowBulkRestartDialog] = useState(false);
-  const [showBulkRemoveDialog, setShowBulkRemoveDialog] = useState(false);
-  const [showBulkLogsDialog, setShowBulkLogsDialog] = useState(false);
-  const [restartPreview, setRestartPreview] = useState<string[]>([]);
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const { addToast } = useToast();
+import { Card } from '@/components/core/Card';
+import { Button } from '@/components/core/Button';
+import { EmptyState } from '@/components/core/EmptyState';
+import { RowFreshness } from '@/components/core/RowFreshness';
+import { SkeletonTable } from '@/components/core/Skeleton';
+import { BulkDialogs } from '@/components/containers/BulkDialogs';
+import { LogViewerModal } from '@/components/containers/LogViewerModal';
+import { ContainerSettingsModal } from '@/components/containers/ContainerSettingsModal';
+import { StatsCard, StatsCardSkeleton } from '@/components/containers/StatsCard';
+import { ContainerStackControls } from '@/components/containers/ContainerStackControls';
+import { ContainerRow } from '@/components/containers/ContainerRow';
+import { useContainersController } from '@/components/containers/useContainersController';
+import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlot';
+import { useDictionary } from '@/hooks/useDictionary';
+import { interpolate } from '@/lib/interpolate';
+import { buildRoute } from '@/lib/navigation/routes';
+import { cn } from '@/lib/utils';
+
+const DEFAULT_RESTART_CONFIG = { autoRestart: false, maxRestarts: 5, currentRestarts: 0 } as const;
+const DEFAULT_ROW_CONFIG = { ...DEFAULT_RESTART_CONFIG, discordNotifications: true };
+/** The number of slots the stat grid has; its placeholders are laid out from the same count. */
+const STAT_CARD_SLOT_COUNT = 4;
+
+export function ContainersClient(): React.JSX.Element {
+  const dict = useDictionary();
+  const pageCopy = dict.containers;
+  const controller = useContainersController();
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
+  const docsPath = buildRoute(locale, 'system.docs');
 
-  const loadContainers = useCallback(async () => {
-    setLoading(true);
-    try {
-      const data = await getContainers();
-      setContainers(data);
+  const selectedCount = controller.selectedIds.size;
+  const selectedNames = controller.containers
+    .filter((container) => controller.selectedIds.has(container.id))
+    .map((container) => container.name);
 
-      const config = await getContainerConfig();
-
-      for (const container of data) {
-        if (container.isCmsContainer && !config[container.id]) {
-          await syncContainerConfigWithDocker(container.id);
-        }
-      }
-
-      const updatedConfig = await getContainerConfig();
-      setContainerConfig(updatedConfig);
-
-      const counts: Record<string, number> = {};
-      for (const container of data) {
-        const count = await getContainerRestartCount(container.id);
-        counts[container.id] = count;
-      }
-      setRestartCounts(counts);
-    } catch {
-      addToast({
-        title: 'Error',
-        message: 'Permission denied. Requires superadmin access.',
-        type: 'error'
-      });
-    }
-    setLoading(false);
-  }, [addToast]);
-
-  const checkDiscordStatus = useCallback(async (): Promise<void> => {
-    try {
-      const status = await getDiscordWebhookStatus();
-      setIsDiscordConfigured(status.configured);
-    } catch {
-      setIsDiscordConfigured(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    queueMicrotask(() => void loadContainers());
-    queueMicrotask(() => void checkDiscordStatus());
-    const interval = setInterval(loadContainers, 10000);
-    return () => clearInterval(interval);
-  }, [loadContainers, checkDiscordStatus]);
-
-  const handleToggleSelection = useCallback((containerId: string): void => {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(containerId)) next.delete(containerId);
-      else next.add(containerId);
-      return next;
-    });
-  }, []);
-
-  const handleClearSelection = (): void => {
-    setSelectedIds(new Set());
-  };
-
-  const maybeShowDiscordGuard = useCallback((): void => {
-    if (isDiscordConfigured === false && !hasShownDiscordToast) {
-      addToast({ title: 'Discord not configured', message: 'Webhook is empty — notifications will be skipped until configured in settings.', type: 'warning' });
-      setHasShownDiscordToast(true);
-    }
-  }, [isDiscordConfigured, hasShownDiscordToast, addToast]);
-
-  const handleOpenBulkRestart = async (): Promise<void> => {
-    maybeShowDiscordGuard();
-    const selectedNames = containers.filter((container) => selectedIds.has(container.id)).map((container) => container.name);
-    try {
-      // Why: analyzeRestartRequirements expands env triggers, container dependencies expands direct service graph; both give full impact preview
-      const envResult = await analyzeRestartRequirements(selectedNames);
-      const containerExpanded = await analyzeContainerDependencies(selectedNames);
-      const combined = Array.from(new Set([...envResult.requiredRestarts, ...containerExpanded]));
-      setRestartPreview(combined.length > 0 ? combined : selectedNames);
-    } catch {
-      setRestartPreview(selectedNames);
-    }
-    setShowBulkRestartDialog(true);
-  };
-
-  const handleConfirmBulkRestart = async (): Promise<void> => {
-    setBulkLoading(true);
-    const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      const result = await controlContainer(id, 'restart');
-      if (!result.success) {
-        addToast({ title: 'Error', message: result.error ?? 'Failed to restart container', type: 'error' });
-      }
-    }
-    addToast({ title: 'Success', message: `Restart triggered for ${ids.length} containers`, type: 'success' });
-    setBulkLoading(false);
-    setShowBulkRestartDialog(false);
-    handleClearSelection();
-    loadContainers();
-  };
-
-  const handleConfirmBulkRemove = async (): Promise<void> => {
-    maybeShowDiscordGuard();
-    setBulkLoading(true);
-    const ids = Array.from(selectedIds);
-    for (const id of ids) {
-      const result = await controlContainer(id, 'stop');
-      if (!result.success) {
-        addToast({ title: 'Error', message: result.error ?? 'Failed to stop container', type: 'error' });
-      }
-    }
-    addToast({ title: 'Success', message: `Stop triggered for ${ids.length} containers`, type: 'success' });
-    setBulkLoading(false);
-    setShowBulkRemoveDialog(false);
-    handleClearSelection();
-    loadContainers();
-  };
-
-  const handleConfirmBulkLogs = (): void => {
-    const firstId = Array.from(selectedIds)[0];
-    const first = containers.find((container) => container.id === firstId);
-    if (first) setSelectedContainer({ id: first.id, name: first.name });
-    setShowBulkLogsDialog(false);
-  };
-
-  const handleControl = async (id: string, action: 'start' | 'stop' | 'restart') => {
-    maybeShowDiscordGuard();
-    setActionLoading(id);
-    const res = await controlContainer(id, action);
-    if (res.success) {
-      addToast({ title: 'Success', message: `Container ${action}ed successfully`, type: 'success' });
-      loadContainers();
-    } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
-    }
-    setActionLoading(null);
-  };
-
-  const handleCompose = async (
-    action: 'up' | 'down' | 'restart' | 'build',
-    serviceType?: 'core' | 'admin' | 'contest' | 'worker'
-  ) => {
-    maybeShowDiscordGuard();
-    setActionLoading('compose');
-    const res = await runCompose(action, serviceType);
-    if (res.success) {
-      addToast({ title: 'Success', message: `Compose ${action} completed`, type: 'success' });
-      loadContainers();
-    } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
-    }
-    setActionLoading(null);
-  };
-
-  const handleToggleAutoRestart = async (containerId: string, currentValue: boolean) => {
-    const res = await updateContainerConfig(containerId, {
-      autoRestart: !currentValue,
-    });
-    if (res.success) {
-      addToast({
-        title: 'Success',
-        message: `Auto-restart ${!currentValue ? 'enabled' : 'disabled'}`,
-        type: 'success'
-      });
-      loadContainers();
-    } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
-    }
-  };
-
-  const handleResetRestartCount = async (containerId: string) => {
-    const res = await resetRestartCount(containerId);
-    if (res.success) {
-      addToast({ title: 'Success', message: 'Restart count reset', type: 'success' });
-      loadContainers();
-    } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
-    }
-  };
-
-  const handleToggleDiscordNotifications = async (containerId: string, currentValue: boolean) => {
-    const res = await updateContainerConfig(containerId, {
-      discordNotifications: !currentValue,
-    });
-    if (res.success) {
-      addToast({
-        title: 'Success',
-        message: `Discord notifications ${!currentValue ? 'enabled' : 'disabled'}`,
-        type: 'success'
-      });
-      loadContainers();
-    } else {
-      addToast({ title: 'Error', message: res.error, type: 'error' });
-    }
-  };
-
-  const selectedCount = selectedIds.size;
-  const selectedNames = containers.filter((container) => selectedIds.has(container.id)).map((container) => container.name);
+  // Why one controller serves both places: these controls read the compose action and the refresh
+  // the controller just ran, so they are published from the panel that owns it rather than rebuilt
+  // from a second instance in the header.
+  usePublishModuleActions(
+    'infrastructure.containers',
+    <div className="flex items-center gap-3">
+      <Button onClick={() => void controller.handleCompose('up')} disabled={controller.actionLoading === 'compose'}>
+        <Layers className="w-4 h-4 mr-2" /> {pageCopy.upAll}
+      </Button>
+      <Button variant="secondary" onClick={controller.refresh} disabled={controller.loading}>
+        <RefreshCw className={cn('w-4 h-4', controller.loading && 'animate-spin')} />
+      </Button>
+      <Link
+        href={`${docsPath}#services`}
+        className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground"
+        title={dict.docs.viewDocumentation}
+      >
+        <HelpCircle className="w-5 h-5" />
+      </Link>
+    </div>,
+  );
 
   return (
     <div className="space-y-8">
-      {selectedContainer && (
-        <LogViewerModal
-          containerId={selectedContainer.id}
-          containerName={selectedContainer.name}
-          onClose={() => setSelectedContainer(null)}
-        />
-      )}
-      {settingsContainer && (
-        <ContainerSettingsModal
-          containerId={settingsContainer.id}
-          containerName={settingsContainer.name}
-          config={containerConfig[settingsContainer.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0 }}
-          onClose={() => setSettingsContainer(null)}
-          onUpdate={loadContainers}
-        />
-      )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold text-foreground tracking-tight">Container Control Center</h1>
-            <Link href={`/${locale}/docs#services`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title="View Documentation">
-              <HelpCircle className="w-5 h-5" />
-            </Link>
-          </div>
-          <p className="text-muted-foreground mt-1">Manage and monitor Docker services in real-time.</p>
-        </div>
-        <div className="flex gap-3">
-          <Button
-            onClick={() => handleCompose('up')}
-            disabled={actionLoading === 'compose'}
-          >
-            <Layers className="w-4 h-4 mr-2" /> Up All
-          </Button>
-          <Button
-            variant="secondary"
-            onClick={loadContainers}
-            disabled={loading}
-          >
-            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} />
-          </Button>
-        </div>
-      </div>
+        {controller.selectedContainer && (
+          <LogViewerModal
+            containerId={controller.selectedContainer.id}
+            containerName={controller.selectedContainer.name}
+            onClose={() => controller.setSelectedContainer(null)}
+          />
+        )}
+        {controller.settingsContainer && (
+          <ContainerSettingsModal
+            containerId={controller.settingsContainer.id}
+            containerName={controller.settingsContainer.name}
+            config={controller.containerConfig[controller.settingsContainer.id] ?? DEFAULT_RESTART_CONFIG}
+            onClose={() => controller.setSettingsContainer(null)}
+            onUpdate={controller.refresh}
+          />
+        )}
 
-      {selectedCount > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-card border border-border rounded-xl shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-bold text-foreground">{selectedCount} selected</span>
-            {isDiscordConfigured === false && (
-              <span className="px-2 py-1 bg-warning/10 border border-warning/20 text-warning text-xs font-bold rounded-full">Discord not configured</span>
-            )}
-            <button onClick={handleClearSelection} className="p-1 hover:bg-accent rounded-full text-muted-foreground">
-              <X className="w-4 h-4" />
-            </button>
+        {selectedCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-card border border-border rounded-xl shadow-sm">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold text-foreground">
+                {interpolate(pageCopy.selected, { count: selectedCount })}
+              </span>
+              {controller.isDiscordConfigured === false && (
+                <span className="px-2 py-1 bg-warning/10 border border-warning/20 text-warning text-xs font-bold rounded-full">
+                  {pageCopy.discordBadge}
+                </span>
+              )}
+              <Button variant="ghost" iconOnly icon={X} tooltip={pageCopy.clearSelection} aria-label={pageCopy.clearSelection} onClick={controller.handleClearSelection} className="rounded-full" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="positiveOutline" size="sm" onClick={() => void controller.handleOpenBulkRestart()} disabled={controller.bulkLoading} tooltip={pageCopy.restartSelection}>
+                <motion.span
+                  animate={controller.bulkLoading ? { rotate: 360 } : { rotate: 0 }}
+                  transition={controller.bulkLoading ? { repeat: Infinity, duration: 1, ease: 'linear' } : { duration: 0.2 }}
+                  className="flex"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </motion.span>
+                {pageCopy.restart}
+              </Button>
+              <Button variant="negativeOutline" size="sm" onClick={controller.handleOpenBulkRemove} tooltip={pageCopy.stopSelection}>
+                <Trash2 className="w-4 h-4" />
+                {pageCopy.remove}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={controller.handleOpenBulkLogs} tooltip={pageCopy.logsSelection}>
+                <ScrollText className="w-4 h-4" />
+                {pageCopy.logs}
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button variant="positiveOutline" size="sm" onClick={handleOpenBulkRestart} disabled={bulkLoading} tooltip="Restart selected containers">
-              <motion.span animate={bulkLoading ? { rotate: 360 } : { rotate: 0 }} transition={bulkLoading ? { repeat: Infinity, duration: 1, ease: 'linear' } : { duration: 0.2 }} className="flex">
-                <RotateCcw className="w-4 h-4" />
-              </motion.span>
-              Restart
-            </Button>
-            <Button variant="negativeOutline" size="sm" onClick={() => { maybeShowDiscordGuard(); setShowBulkRemoveDialog(true); }} tooltip="Stop selected containers">
-              <Trash2 className="w-4 h-4" />
-              Remove
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => setShowBulkLogsDialog(true)} tooltip="View logs for selection">
-              <Terminal className="w-4 h-4" />
-              Logs
-            </Button>
-          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Why placeholders and not zeros: no frame has arrived, so there is no count to state. */}
+          {controller.loading ? (
+            Array.from({ length: STAT_CARD_SLOT_COUNT }, (_, index) => <StatsCardSkeleton key={index} />)
+          ) : (
+            <>
+              <StatsCard icon={Box} label={pageCopy.stats.total} value={controller.containers.length} color="primary" />
+              <StatsCard icon={CheckCircle2} label={pageCopy.stats.running} value={controller.containers.filter((c) => c.state === 'running').length} color="success" />
+              <StatsCard icon={AlertCircle} label={pageCopy.stats.stopped} value={controller.containers.filter((c) => c.state !== 'running').length} color="destructive" />
+              <StatsCard icon={RotateCcw} label={pageCopy.stats.uptime} value="99.9%" color="info" />
+            </>
+          )}
         </div>
-      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard icon={Box} label="Total" value={containers.length} color="primary" />
-        <StatsCard icon={CheckCircle2} label="Running" value={containers.filter(c => c.state === 'running').length} color="success" />
-        <StatsCard icon={AlertCircle} label="Stopped" value={containers.filter(c => c.state !== 'running').length} color="destructive" />
-        <StatsCard icon={RotateCcw} label="Uptime" value="99.9%" color="info" />
-      </div>
-
-      <Card className="overflow-hidden">
-        <div className="p-4 border-b border-border bg-muted/50 flex items-center justify-between">
+        <Card className="overflow-hidden">
+          <div className="p-4 border-b border-border bg-muted/50 flex items-center justify-between">
             <h2 className="font-bold text-foreground flex items-center gap-2">
-                <Layers className="w-4 h-4 text-primary" />
-                Active Containers
+              <Layers className="w-4 h-4 text-primary" />
+              {pageCopy.activeContainers}
             </h2>
-        </div>
-        <div className="divide-y divide-border">
-          {containers.map((container) => (
-            <ContainerRow
-              key={container.id}
-              container={container}
-              config={containerConfig[container.id] || { autoRestart: false, maxRestarts: 5, currentRestarts: 0, discordNotifications: true }}
-              restartCount={restartCounts[container.id] || 0}
-              actionLoading={actionLoading}
-              onViewLogs={setSelectedContainer}
-              onOpenSettings={setSettingsContainer}
-              onControl={handleControl}
-              onToggleAutoRestart={handleToggleAutoRestart}
-              onResetRestartCount={handleResetRestartCount}
-              onToggleDiscordNotifications={handleToggleDiscordNotifications}
-              isSelected={selectedIds.has(container.id)}
-              onToggleSelection={handleToggleSelection}
-            />
-          ))}
-
-          {containers.length === 0 && loading && (
-            <div className="p-6">
-              <SkeletonTable rows={4} cols={1} />
-            </div>
-          )}
-
-          {containers.length === 0 && !loading && (
-            <EmptyState
-              icon={Box}
-              title="No Docker containers found on this host."
-              className="border-none"
-            />
-          )}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6 space-y-4">
-              <h3 className="font-bold text-foreground">Stack Controls</h3>
-              <p className="text-sm text-muted-foreground">Manage complete service groups via Docker Compose.</p>
-              <div className="grid grid-cols-2 gap-3">
-                  <StackActionButton label="All Services" onRestart={() => handleCompose('restart')} onUp={() => handleCompose('up')} onBuild={() => handleCompose('build')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Core Stack" onRestart={() => handleCompose('restart', 'core')} onUp={() => handleCompose('up', 'core')} onBuild={() => handleCompose('build', 'core')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Admin Stack" onRestart={() => handleCompose('restart', 'admin')} onUp={() => handleCompose('up', 'admin')} onBuild={() => handleCompose('build', 'admin')} isLoading={actionLoading === 'compose'} />
-                  <StackActionButton label="Worker Stack" onRestart={() => handleCompose('restart', 'worker')} onUp={() => handleCompose('up', 'worker')} onBuild={() => handleCompose('build', 'worker')} isLoading={actionLoading === 'compose'} />
-              </div>
-          </Card>
-
-          <SystemLogsPanel containers={containers} />
-      </div>
-
-      <Dialog
-        open={showBulkRestartDialog}
-        onOpenChange={(open) => { if (!open) setShowBulkRestartDialog(false); }}
-        title="Confirm Restart"
-        description={`${selectedCount} containers selected`}
-        footer={
-          <div className="flex justify-end gap-3 w-full">
-            <Button variant="ghost" onClick={() => setShowBulkRestartDialog(false)}>Cancel</Button>
-            <Button variant="positive" onClick={handleConfirmBulkRestart} loading={bulkLoading}>
-              <RotateCcw className="w-4 h-4 mr-2" />
-              Confirm Restart
-            </Button>
           </div>
-        }
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">This will restart the selected containers and their dependents.</p>
-          <div className="bg-muted/40 border border-border rounded-lg p-3">
-            <div className="text-xs font-bold text-muted-foreground mb-1">This will restart:</div>
-            <div className="text-sm font-mono text-foreground break-words">
-              {restartPreview.length > 0 ? restartPreview.join(' -> ') : selectedNames.join(', ')}
-            </div>
-            {restartPreview.length > 1 && (
-              <div className="text-xs text-muted-foreground mt-1">Includes dependent services via restart policies</div>
+          <div className="divide-y divide-border">
+            {controller.containers.map((container) => (
+              <RowFreshness
+                key={container.id}
+                readAt={controller.containerReadAt}
+                surfaceReadAt={controller.surfaceReadAt}
+                streamStatus={controller.streamStatus}
+              >
+                <ContainerRow
+                  container={container}
+                  config={controller.containerConfig[container.id] ?? DEFAULT_ROW_CONFIG}
+                  restartCount={controller.restartCounts[container.id] ?? 0}
+                  actionLoading={controller.actionLoading}
+                  onViewLogs={controller.setSelectedContainer}
+                  onOpenSettings={controller.setSettingsContainer}
+                  onControl={controller.handleControl}
+                  onToggleAutoRestart={controller.handleToggleAutoRestart}
+                  onResetRestartCount={controller.handleResetRestartCount}
+                  onToggleDiscordNotifications={controller.handleToggleDiscordNotifications}
+                  isSelected={controller.selectedIds.has(container.id)}
+                  // Why protected rows cannot be selected: bulk stop/restart is aimed at the selection,
+                  // and the security boundary must not be reachable through a bulk action at all.
+                  onToggleSelection={container.protected ? undefined : controller.handleToggleSelection}
+                />
+              </RowFreshness>
+            ))}
+
+            {controller.containers.length === 0 && controller.loading && (
+              <div className="p-6">
+                <SkeletonTable rows={4} cols={1} />
+              </div>
+            )}
+
+            {controller.containers.length === 0 && !controller.loading && (
+              <EmptyState icon={Box} title={pageCopy.emptyTitle} className="border-none" />
             )}
           </div>
-          {isDiscordConfigured === false && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-xs text-warning">Discord not configured — notifications will be skipped</div>
-          )}
-        </div>
-      </Dialog>
+        </Card>
 
-      <Dialog
-        open={showBulkRemoveDialog}
-        onOpenChange={(open) => { if (!open) setShowBulkRemoveDialog(false); }}
-        title="Confirm Stop"
-        description={`${selectedCount} containers selected`}
-        footer={
-          <div className="flex justify-end gap-3 w-full">
-            <Button variant="ghost" onClick={() => setShowBulkRemoveDialog(false)}>Cancel</Button>
-            <Button variant="negative" onClick={handleConfirmBulkRemove} loading={bulkLoading}>
-              <Trash2 className="w-4 h-4 mr-2" />
-              Confirm Stop
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">This will stop the selected containers. You can start them again from the control center.</p>
-          <div className="bg-muted/40 border border-border rounded-lg p-3 text-sm font-mono text-foreground break-words">
-            {selectedNames.join(', ')}
-          </div>
-          {isDiscordConfigured === false && (
-            <div className="bg-warning/10 border border-warning/20 rounded-lg p-2 text-xs text-warning">Discord not configured — notifications will be skipped</div>
-          )}
-        </div>
-      </Dialog>
+        <ContainerStackControls
+          containers={controller.containers}
+          loading={controller.loading}
+          actionLoading={controller.actionLoading}
+          onCompose={controller.handleCompose}
+        />
 
-      <Dialog
-        open={showBulkLogsDialog}
-        onOpenChange={(open) => { if (!open) setShowBulkLogsDialog(false); }}
-        title="View Logs"
-        description={`${selectedCount} containers selected`}
-        footer={
-          <div className="flex justify-end gap-3 w-full">
-            <Button variant="ghost" onClick={() => setShowBulkLogsDialog(false)}>Cancel</Button>
-            <Button variant="secondary" onClick={handleConfirmBulkLogs}>
-              <Terminal className="w-4 h-4 mr-2" />
-              View Logs
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">Open logs for the first selected container. Use individual rows for more containers.</p>
-          <div className="bg-muted/40 border border-border rounded-lg p-3 text-sm font-mono text-foreground break-words">
-            {selectedNames.join(', ')}
-          </div>
-        </div>
-      </Dialog>
-    </div>
+        <BulkDialogs
+          copy={pageCopy.bulk}
+          selectedCount={selectedCount}
+          selectedNames={selectedNames}
+          restartPreview={controller.restartPreview}
+          isDiscordConfigured={controller.isDiscordConfigured}
+          bulkLoading={controller.bulkLoading}
+          showRestart={controller.showBulkRestartDialog}
+          showRemove={controller.showBulkRemoveDialog}
+          showLogs={controller.showBulkLogsDialog}
+          setShowRestart={controller.setShowBulkRestartDialog}
+          setShowRemove={controller.setShowBulkRemoveDialog}
+          setShowLogs={controller.setShowBulkLogsDialog}
+          onConfirmRestart={() => void controller.handleConfirmBulkRestart()}
+          onConfirmRemove={() => void controller.handleConfirmBulkRemove()}
+          onConfirmLogs={controller.handleConfirmBulkLogs}
+        />
+      </div>
   );
 }

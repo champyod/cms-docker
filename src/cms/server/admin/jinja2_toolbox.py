@@ -38,7 +38,10 @@ def safe_parse_authentication(auth: str) -> tuple[str, str]:
     try:
         method, password = parse_authentication(auth)
     except ValueError:
-        method, password = "plaintext", ""
+        # An unparsable stored value has no method to show. Default to bcrypt:
+        # it is the only method a password may be written with, so the edit form
+        # does not advertise (or preselect) plaintext storage.
+        method, password = "bcrypt", ""
     return method, password
 
 

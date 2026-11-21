@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Asia/Bangkok",
+  "schedule": ["after 10pm and before 6am every weekday"],
+  "labels": ["dependencies", "renovate"],
+  "prConcurrentLimit": 8,
+  "prHourlyLimit": 4,
+  "separateMinorPatch": true,
+  "docker-compose": {
+    "enabled": true,
+    "managerFilePatterns": ["/(^|/)(?:docker-)?compose[^/]*\\.ya?ml$/"]
+  },
+  "packageRules": [
+    {
+      "description": "Digest pinning is the decision in docs/decisions/image-digest-pinning.md: every third-party base image carries its readable tag PLUS an @sha256 digest, so the tag stays legible in the file while the bits are fixed. Renovate is the only thing that moves either — it re-resolves the digest when it bumps a tag, and opens a digest-only PR when the tag has not moved but the registry serves new bits. tests/test_image_pins.sh fails on a floating reference, so a hand edit that drops a digest cannot merge.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "pinDigests": true
+    },
+    {
+      "description": "Our own images (ghcr.io/champyod/*, incl. cms-docker-* and cms-security-scan) are built by this repo's CI and selected at deploy time by ${IMG_TAG}. A digest would freeze the stack to one build, so pinning them is wrong by design and Renovate must not propose it — the same reason tests/test_image_pins.sh exempts them.",
+      "matchManagers": ["dockerfile", "docker-compose"],
+      "matchPackageNames": ["/^ghcr\\.io\\/champyod\\//"],
+      "enabled": false
+    },
+    {
+      "description": "One PR per week for every compose base image: they are read together when the stack is upgraded, and eleven separate PRs is how the stack drifts half-updated",
+      "groupName": "compose base images",
+      "matchManagers": ["docker-compose"],
+      "separateMinorPatch": false
+    },
+    {
+      "description": "Dockerfile base images move together with the compose ones they must match",
+      "groupName": "docker base images",
+      "matchManagers": ["dockerfile"]
+    },
+    {
+      "description": "Actions are pinned by tag in .github/workflows; one PR keeps the CI change reviewable",
+      "groupName": "github actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "description": "The panel ships from bun.lock in one directory; grouped so a bump is tested against the suite once",
+      "groupName": "admin panel dependencies",
+      "matchFileNames": ["admin-panel/**"]
+    },
+    {
+      "description": "Python constraints are pinned by constraints.txt; minor and patch land together",
+      "groupName": "python dependencies",
+      "matchManagers": ["pip_requirements", "pip-compile", "pep621"]
+    },
+    {
+      "description": "Rust lockfiles in ranking-web and tools/cms-tui",
+      "groupName": "rust dependencies",
+      "matchManagers": ["cargo"]
+    }
+  ]
+}

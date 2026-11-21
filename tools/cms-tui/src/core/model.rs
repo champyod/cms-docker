@@ -98,7 +98,7 @@ impl AppState {
         }
     }
 
-    fn seed_services() -> Vec<Service> {
+    const fn seed_services() -> Vec<Service> {
         Vec::new()
     }
 

@@ -24,7 +24,8 @@ import unittest
 from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
 
 from cms.db import Participation
-from cmscommon.crypto import validate_password
+from cmscommon.crypto import hash_password, parse_authentication, \
+    validate_password
 from cmscontrib.AddParticipation import add_participation
 
 
@@ -63,35 +64,35 @@ class TestAddParticipation(DatabaseMixin, unittest.TestCase):
         else:
             self.assertEqual(p.team.code, team_code)
 
-    def test_success(self):
+    def test_it_adds_the_participation_for_the_user(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd")
 
-    def test_success_with_team(self):
+    def test_it_stores_the_team_code_on_the_participation(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, self.team.code, False, False))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd",
                                      team_code=self.team.code)
 
-    def test_user_not_found(self):
+    def test_it_fails_when_the_user_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username + "_", self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
 
-    def test_contest_not_found(self):
+    def test_it_fails_when_the_contest_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username, self.contest.id + 1, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
 
-    def test_team_not_found(self):
+    def test_it_fails_when_the_team_is_missing(self):
         self.assertFalse(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, self.team.code + "_", False, False))
 
-    def test_already_exists(self):
+    def test_it_keeps_the_existing_participation_unchanged(self):
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, None, None, None,
             "pwd", "bcrypt", False, None, False, False))
@@ -100,13 +101,17 @@ class TestAddParticipation(DatabaseMixin, unittest.TestCase):
         # Second add_participation should fail without changing values.
         self.assertFalse(add_participation(
             self.user.username, self.contest.id + 1, "1.2.3.4", 60, 120,
-            "other_pwd", "plaintext", True, self.team.code, True, True))
+            parse_authentication(hash_password("other_pwd"))[1], "bcrypt",
+            True, self.team.code, True, True))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd")
 
-    def test_other_values(self):
+    def test_it_stores_the_optional_participation_fields(self):
+        # is_hashed=True: the payload is already the bcrypt hash the row will
+        # hold, so the assertion below authenticates with the same secret.
         self.assertTrue(add_participation(
             self.user.username, self.contest.id, "1.2.3.4", 60, 120,
-            "pwd", "plaintext", True, None, True, True))
+            parse_authentication(hash_password("pwd"))[1], "bcrypt", True,
+            None, True, True))
         self.assertParticipationInDb(self.user.id, self.contest.id, "pwd",
                                      delay_time=60, extra_time=120,
                                      hidden=True, unrestricted=True,

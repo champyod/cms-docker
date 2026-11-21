@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { getTeams } from '@/app/actions/teams';
+import { PASSWORD_CONFIG, USERNAME_CONFIG, type GeneratorConfig } from '@/lib/credential-template';
+import { downloadCsvFile } from '@/lib/csv-download';
 import type { PasswordKind } from '@/lib/password-format';
-import { submitCredentialUpdates } from './bulkEditActions';
-import type { ContestOption, SelectedUser } from './bulkEditActions';
-import { makePassword, makeUsername } from './csvPreview';
+import { collectCredentialUpdates, regenerateCredentials, submitCredentialUpdates } from './bulkEditActions';
+import type { BatchFailure, ContestOption, RegenerateMode, SelectedUser } from './bulkEditActions';
 import { useBulkReveal } from './useBulkReveal';
 import { useBulkBatch } from './useBulkBatch';
 
@@ -26,12 +27,19 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   const [selectedContestId, setSelectedContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamContestId, setTeamContestId] = useState<number>(contests[0]?.id ?? 0);
   const [teamCode, setTeamCode] = useState('');
+  const [ipContestId, setIpContestId] = useState<number>(contests[0]?.id ?? 0);
+  const [ip, setIp] = useState('');
   const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [emailDomain, setEmailDomain] = useState('');
   const [passwordKind, setPasswordKind] = useState<PasswordKind>('bcrypt');
+  const [usernameTemplate, setUsernameTemplate] = useState('');
+  const [passwordTemplate, setPasswordTemplate] = useState('');
+  const [usernameConfig, setUsernameConfig] = useState<GeneratorConfig>(USERNAME_CONFIG);
+  const [passwordConfig, setPasswordConfig] = useState<GeneratorConfig>(PASSWORD_CONFIG);
   const [rows, setRows] = useState(selectedUsers);
   const [teamsOptions, setTeamsOptions] = useState<string[]>([]);
   const [renderedUsers, setRenderedUsers] = useState<SelectedUser[] | null>(null);
+  const [failures, setFailures] = useState<BatchFailure[]>([]);
   if (renderedUsers !== selectedUsers) {
     setRenderedUsers(selectedUsers);
     setRows(selectedUsers.map((user) => ({ ...user, password: null })));
@@ -54,6 +62,13 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   }, [contests, teamContestId]);
 
   useEffect(() => {
+    if (contests.length === 0 || contests.some((contest) => contest.id === ipContestId)) return;
+    queueMicrotask(() => {
+      setIpContestId(contests[0].id);
+    });
+  }, [contests, ipContestId]);
+
+  useEffect(() => {
     const fetchTeams = async (): Promise<void> => {
       if (!teamContestId) {
         setTeamsOptions([]);
@@ -70,6 +85,10 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
   }, [teamContestId]);
 
   const selectedUserIds = useMemo(() => rows.map((row) => row.id), [rows]);
+  const credentialChangeCount = useMemo(
+    () => collectCredentialUpdates(rows, selectedUsers).length,
+    [rows, selectedUsers],
+  );
 
   const batch = useBulkBatch({
     rows,
@@ -79,6 +98,8 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     selectedContestId,
     teamContestId,
     teamCode,
+    ipContestId,
+    ip,
     timezone,
     emailDomain,
     setLoading,
@@ -87,49 +108,65 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     onSuccess,
   });
 
-  const runRegenerate = (mode: 'username' | 'password'): void => {
+  // Why the templates are read on the call: regeneration is the operator's action, so the
+  // fields must render as they stand now, after any later edit to them.
+  const runRegenerate = (mode: RegenerateMode): void => {
     if (selectedUserIds.length === 0) return;
     setLoading(true);
     setErrorMessage('');
     setStatusMessage('');
-    const used = new Set<string>();
-    setRows((previous) =>
-      previous.map((user) => {
-        if (!selectedUserIds.includes(user.id)) return user;
-        const next = { ...user };
-        if (mode === 'username') next.username = makeUsername(next.first_name || '', next.last_name || '', used);
-        if (mode === 'password') next.password = makePassword();
-        return next;
-      })
-    );
+    const templates = { username: usernameTemplate, password: passwordTemplate, usernameConfig, passwordConfig };
+    setRows((previous) => regenerateCredentials(previous, mode, templates));
     setStatusMessage(`Locally regenerated ${mode} for ${selectedUserIds.length} user(s)`);
     setLoading(false);
   };
 
   const exportSelectedRows = (filename: string, buildCsv: (rows: SelectedUser[]) => string): void => {
     if (rows.length === 0) return;
-    openCsvDownload(buildCsv(rows), filename);
+    downloadCsvFile(filename, buildCsv(rows));
   };
 
   const applyCredentials = (closeAfter: boolean): Promise<void> =>
-    submitCredentialUpdates(rows, closeAfter, onClose, onSuccess, { setLoading, setErrorMessage, setStatusMessage }, passwordKind);
+    submitCredentialUpdates(
+      rows,
+      selectedUsers,
+      closeAfter,
+      onClose,
+      onSuccess,
+      { setLoading, setErrorMessage, setStatusMessage, setFailures },
+      passwordKind,
+    );
 
   return {
     loading,
     statusMessage,
     errorMessage,
+    failures,
+    credentialChangeCount,
     selectedContestId,
     setSelectedContestId,
     teamContestId,
     setTeamContestId,
     teamCode,
     setTeamCode,
+    ipContestId,
+    setIpContestId,
+    ip,
+    setIp,
     timezone,
     setTimezone,
     emailDomain,
     setEmailDomain,
     passwordKind,
     setPasswordKind,
+    usernameTemplate,
+    setUsernameTemplate,
+    passwordTemplate,
+    setPasswordTemplate,
+    usernameConfig,
+    setUsernameConfig,
+    passwordConfig,
+    setPasswordConfig,
     rows,
     teamsOptions,
     revealedIds,
@@ -149,21 +186,9 @@ export function useBulkEditActions({ selectedUsers, contests, onSuccess, onClose
     runContestMutation: batch.runContestMutation,
     runTeamSet: batch.runTeamSet,
     runTeamRemoveAny: batch.runTeamRemoveAny,
+    runIpAllowlist: batch.runIpAllowlist,
     runTimezoneUpdate: batch.runTimezoneUpdate,
     runEmailDomainUpdate: batch.runEmailDomainUpdate,
     runEmailClear: batch.runEmailClear,
   };
-}
-
-function openCsvDownload(content: string, filename: string): void {
-  const bom = '\uFEFF';
-  const blob = new Blob([bom + content], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.setAttribute('download', filename);
-  document.body.appendChild(anchor);
-  anchor.click();
-  document.body.removeChild(anchor);
-  URL.revokeObjectURL(url);
 }

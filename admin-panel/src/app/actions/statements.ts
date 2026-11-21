@@ -7,9 +7,6 @@ import { recordAudit } from '@/lib/audit';
 import { stripDisallowedFields } from '@/lib/field-permissions';
 import { storeFile } from '@/lib/fsobjects';
 
-import { STATEMENT_LANGUAGES } from '@/lib/constants';
-export { STATEMENT_LANGUAGES };
-
 export async function getStatements(taskId: number) {
   await ensurePermission('statement:list');
 
@@ -78,6 +75,7 @@ export async function deleteStatement(statementId: number) {
 
 export async function getAttachments(taskId: number) {
   await ensurePermission('attachment:list');
+  await ensurePermission('attachment:read');
 
   return prisma.attachments.findMany({
     where: { task_id: taskId },
@@ -141,7 +139,7 @@ export async function getFileByDigest(digest: string): Promise<{ data: string } 
 
   try {
     const result = await prisma.$queryRaw<{ data: Buffer }[]>`
-      SELECT lo_get(lob_oid) as data FROM fsobjects WHERE digest = ${digest}
+      SELECT lo_get(loid) as data FROM fsobjects WHERE digest = ${digest}
     `;
 
     if (result.length === 0) return null;

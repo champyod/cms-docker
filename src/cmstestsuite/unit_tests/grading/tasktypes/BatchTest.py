@@ -46,7 +46,7 @@ class TestGetCompilationCommands(TaskTypeTestMixin, unittest.TestCase):
         self.setUpMocks("Batch")
         self.languages.update({LANG_1, LANG_2})
 
-    def test_alone(self):
+    def test_it_returns_the_commands_for_alone_mode(self):
         tt = Batch(["alone", ["", ""], "diff"])
         cc = tt.get_compilation_commands(["foo.%l"])
         self.assertEqual(cc, {
@@ -56,7 +56,7 @@ class TestGetCompilationCommands(TaskTypeTestMixin, unittest.TestCase):
                 COMPILATION_COMMAND_2, ["foo.l2"], "foo.ext"),
         })
 
-    def test_grader(self):
+    def test_it_returns_the_commands_for_grader_mode_with_a_grader(self):
         tt = Batch(["grader", ["", ""], "diff"])
         cc = tt.get_compilation_commands(["foo.%l"])
         self.assertEqual(cc, {
@@ -66,7 +66,7 @@ class TestGetCompilationCommands(TaskTypeTestMixin, unittest.TestCase):
                 COMPILATION_COMMAND_2, ["foo.l2", "grader.l2"], "foo.ext"),
         })
 
-    def test_alone_two_files(self):
+    def test_it_returns_the_commands_for_alone_mode_with_two_files(self):
         tt = Batch(["alone", ["", ""], "diff"])
         cc = tt.get_compilation_commands(["foo.%l", "bar.%l"])
         self.assertEqual(cc, {
@@ -76,7 +76,7 @@ class TestGetCompilationCommands(TaskTypeTestMixin, unittest.TestCase):
                 COMPILATION_COMMAND_2, ["foo.l2", "bar.l2"], "bar_foo.ext"),
         })
 
-    def test_grader_two_files(self):
+    def test_it_returns_the_commands_for_grader_mode_with_two_files(self):
         tt = Batch(["grader", ["", ""], "diff"])
         cc = tt.get_compilation_commands(["foo.%l", "bar.%l"])
         self.assertEqual(cc, {
@@ -136,7 +136,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         self.assertEqual(job.text, text)
         self.assertEqual(job.plus, plus)
 
-    def test_alone_success(self):
+    def test_it_compiles_the_single_source_and_stores_the_executable(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"],
                                {"foo.%l": FILE_FOO_L1})
         sandbox = self.expect_sandbox()
@@ -159,7 +159,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         sandbox.get_file_to_storage.assert_called_once_with("foo", ANY)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_alone_failure_missing_file(self):
+    def test_it_skips_the_sandbox_when_the_source_file_is_missing(self):
         # For some reason the user submission is missing. This should not
         # happen and is the admin's (or CMS') fault. No sandbox should be
         # created. We test this with alone, but would be the same for grader.
@@ -170,7 +170,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         self.compilation_step.assert_not_called()
         self.assertResultsInJob(job)
 
-    def test_alone_success_two_files(self):
+    def test_it_compiles_two_sources_and_stores_the_executable(self):
         # Same as for a missing file.
         tt, job = self.prepare(["alone", ["", ""], "diff"],
                                {"foo.%l": FILE_FOO_L1, "bar.%l": FILE_BAR_L1})
@@ -195,7 +195,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         sandbox.get_file_to_storage.assert_called_once_with("bar_foo", ANY)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_alone_compilation_failure(self):
+    def test_it_reports_a_user_compilation_failure(self):
         # Compilation failure, but sandbox succeeded. It's the user's fault.
         tt, job = self.prepare(
             ["alone", ["", ""], "diff"],
@@ -212,7 +212,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         # Still, we delete the sandbox, since it's not an error.
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_alone_sandbox_failure(self):
+    def test_it_reports_a_sandbox_failure_and_keeps_the_sandbox(self):
         # Sandbox (or CMS) failure. It's the admins' fault.
         tt, job = self.prepare(
             ["alone", ["", ""], "diff"],
@@ -227,7 +227,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         # We preserve the sandbox to let admins check the problem.
         sandbox.cleanup.assert_called_once_with(delete=False)
 
-    def test_grader_success(self):
+    def test_it_compiles_with_the_grader_and_a_header(self):
         # We sprinkle in also a header, that should be copied, but not the
         # other grader.
         tt, job = self.prepare(["grader", ["", ""], "diff"],
@@ -259,7 +259,7 @@ class TestCompile(TaskTypeTestMixin, unittest.TestCase):
         sandbox.get_file_to_storage.assert_called_once_with("foo", ANY)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_grader_failure_missing_grader(self):
+    def test_it_skips_the_sandbox_when_the_grader_is_missing(self):
         # Grader is missing from the managers, this is a configuration error.
         # No sandbox should be created.
         tt, job = self.prepare(["grader", ["", ""], "diff"],
@@ -334,7 +334,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertEqual(job.text, text)
         self.assertEqual(job.plus, stats)
 
-    def test_stdio_diff_success(self):
+    def test_it_evaluates_stdio_output_with_the_diff_comparator(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         sandbox = self.expect_sandbox()
 
@@ -367,7 +367,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertResultsInJob(job)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_stdio_diff_failure_missing_file(self):
+    def test_it_skips_evaluation_when_the_executable_is_missing(self):
         # For some reason the executable is missing. This should not happen
         # and is the admin's (or CMS') fault. No sandbox should be created.
         tt, job = self.prepare(["alone", ["", ""], "diff"], {})
@@ -378,7 +378,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.eval_output.assert_not_called()
         self.assertResultsInJob(job)
 
-    def test_stdio_diff_failure_two_files(self):
+    def test_it_skips_evaluation_when_there_are_too_many_executables(self):
         # Same as for a missing file.
         tt, job = self.prepare(["alone", ["", ""], "diff"],
                                {"foo": EXE_FOO, "foo2": EXE_FOO})
@@ -389,7 +389,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.eval_output.assert_not_called()
         self.assertResultsInJob(job)
 
-    def test_stdio_diff_evaluation_step_submission_failure_(self):
+    def test_it_reports_a_failed_execution_without_evaluating_the_output(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         self.evaluation_step.return_value = (True, False, STATS_RE)
         sandbox = self.expect_sandbox()
@@ -402,7 +402,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.eval_output.assert_not_called()
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_stdio_diff_evaluation_step_sandbox_failure_(self):
+    def test_it_reports_a_sandbox_failure_and_keeps_the_sandbox(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         self.evaluation_step.return_value = (False, None, None)
         sandbox = self.expect_sandbox()
@@ -414,7 +414,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.eval_output.assert_not_called()
         sandbox.cleanup.assert_called_once_with(delete=False)
 
-    def test_stdio_diff_eval_output_failure_(self):
+    def test_it_reports_an_output_evaluation_failure_and_keeps_the_sandbox(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         self.eval_output.return_value = (False, None, None, None)
         sandbox = self.expect_sandbox()
@@ -426,7 +426,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         # for evaluation_step to allow debugging.
         sandbox.cleanup.assert_called_once_with(delete=False)
 
-    def test_stdio_diff_get_output_success(self):
+    def test_it_stores_the_user_output_when_requested(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         job.get_output = True
         sandbox = self.expect_sandbox()
@@ -442,7 +442,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.evaluation_step.assert_called_once()
         self.eval_output.assert_called_once()
 
-    def test_stdio_diff_only_execution_success(self):
+    def test_it_runs_the_execution_without_evaluating_the_output(self):
         tt, job = self.prepare(["alone", ["", ""], "diff"], {"foo": EXE_FOO})
         job.only_execution = True
         self.expect_sandbox()
@@ -454,7 +454,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.eval_output.assert_not_called()
         self.assertEqual(job.success, True)
 
-    def test_fileio_diff_success(self):
+    def test_it_evaluates_file_io_output_with_the_diff_comparator(self):
         tt, job = self.prepare(["alone", ["myin", "myout"], "diff"],
                                {"foo": EXE_FOO})
         sandbox = self.expect_sandbox()
@@ -488,7 +488,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertResultsInJob(job)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_stdio_checker_success(self):
+    def test_it_evaluates_stdio_output_with_the_checker(self):
         tt, job = self.prepare(["alone", ["", ""], "comparator"],
                                {"foo": EXE_FOO})
         sandbox = self.expect_sandbox()
@@ -503,7 +503,7 @@ class TestEvaluate(TaskTypeTestMixin, unittest.TestCase):
         self.assertResultsInJob(job)
         sandbox.cleanup.assert_called_once_with(delete=True)
 
-    def test_fileio_checker_success(self):
+    def test_it_evaluates_file_io_output_with_the_checker(self):
         tt, job = self.prepare(["alone", ["myin", "myout"], "comparator"],
                                {"foo": EXE_FOO})
         sandbox = self.expect_sandbox()

@@ -26,3 +26,13 @@ ALTER TABLE evaluations ADD COLUMN IF NOT EXISTS admin_text VARCHAR;
 
 -- Add contest-level queue fairness penalty (seconds)
 ALTER TABLE contests ADD COLUMN IF NOT EXISTS queue_fairness_penalty_seconds INTEGER NOT NULL DEFAULT 0;
+
+-- Add contest-level evaluation throttle policy (throttle family)
+ALTER TABLE contests ADD COLUMN IF NOT EXISTS evaluation_throttle_delay_s INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contests ADD COLUMN IF NOT EXISTS evaluation_throttle_window_s INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contests ADD COLUMN IF NOT EXISTS evaluation_throttle_max INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE contests ADD COLUMN IF NOT EXISTS evaluation_final_open BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE contests ADD COLUMN IF NOT EXISTS evaluation_final_open_at TIMESTAMP;
+
+-- Add task-level evaluation throttle delay override (seconds, NULL means inherit)
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS evaluation_throttle_delay_s INTEGER;

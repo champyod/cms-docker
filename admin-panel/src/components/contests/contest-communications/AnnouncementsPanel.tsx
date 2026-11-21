@@ -1,7 +1,10 @@
 'use client';
 
+import { useMemo } from 'react';
 import { Plus, Send, Trash2 } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
+import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 
 export interface AnnouncementRow {
   id: number;
@@ -16,6 +19,7 @@ interface Props {
   showForm: boolean;
   subject: string;
   text: string;
+  permissionKeys: readonly string[];
   onShowForm: (v: boolean) => void;
   onSubject: (v: string) => void;
   onText: (v: string) => void;
@@ -25,15 +29,17 @@ interface Props {
 
 const FIELD_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
 
-function formatTime(date: Date | string): string {
-  return new Date(date).toLocaleString();
-}
-
-export function AnnouncementsPanel({ announcements, showForm, subject, text, onShowForm, onSubject, onText, onCreate, onDelete }: Props) {
+export function AnnouncementsPanel({ announcements, showForm, subject, text, permissionKeys, onShowForm, onSubject, onText, onCreate, onDelete }: Props): React.JSX.Element {
+  // Why the contest zone: an announcement times the contest's own schedule, so it reads in the
+  // contest's wall clock rather than whichever zone the announcing staff member sits in.
+  const formatTime = useFormatTimestamp();
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canPublish = hasEffectivePermission(effective, ACTION_PERMISSIONS.createAnnouncement);
+  const canDelete = hasEffectivePermission(effective, ACTION_PERMISSIONS.deleteAnnouncement);
   return (
     <div className="space-y-4">
-      <Button variant="positiveOutline" size="sm" icon={Plus} onClick={() => onShowForm(true)}>New Announcement</Button>
-      {showForm && (
+      {canPublish && <Button variant="positiveOutline" size="sm" icon={Plus} onClick={() => onShowForm(true)}>New Announcement</Button>}
+      {canPublish && showForm && (
         <div className="space-y-3 rounded-lg bg-muted/30 p-4">
           <input type="text" value={subject} onChange={(e) => onSubject(e.target.value)} placeholder="Subject" className={FIELD_CLASSES} />
           <textarea value={text} onChange={(e) => onText(e.target.value)} placeholder="Message content..." rows={3} className={FIELD_CLASSES} />
@@ -53,7 +59,7 @@ export function AnnouncementsPanel({ announcements, showForm, subject, text, onS
                   <div className="mt-1 text-sm text-muted-foreground">{ann.text}</div>
                   <div className="mt-2 text-xs text-muted-foreground">{formatTime(ann.timestamp)} by {ann.admins?.username || 'System'}</div>
                 </div>
-                <button onClick={() => onDelete(ann.id)} aria-label={`Delete announcement ${ann.subject}`} title="Delete" className="flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                {canDelete && <Button variant="ghost" iconOnly icon={Trash2} tooltip="Delete" aria-label={`Delete announcement ${ann.subject}`} onClick={() => onDelete(ann.id)} className="shrink-0 rounded-lg hover:text-destructive" />}
               </div>
             </div>
           ))}

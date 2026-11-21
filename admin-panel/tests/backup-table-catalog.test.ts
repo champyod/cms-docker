@@ -1,0 +1,487 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+import { ADMIN_TABLE, BACKUP_TABLE_NAMES, BACKUP_TABLES, GRANT_TABLES, SCHEDULE_TABLE, isLargeObjectDependency, validateTableSelection, withRequiredTables } from '@/lib/backup-table-catalog';
+
+const SCHEMA_SOURCE = readFileSync(fileURLToPath(new URL('../prisma/schema.prisma', import.meta.url)), 'utf8');
+
+/**
+ * schema.prisma models the catalog leaves out on purpose.
+ *
+ * `audit_log` is the append-only, hash-chained record of what was authorized and
+ * by whom. Its rows are only meaningful as the ordered result of real events, so
+ * replaying them into a restore would put actions in the trail that never
+ * happened, and replaying only part of it would break the chain outright. It is
+ * never restored; a restore is written to the trail by the actions it performs,
+ * which is the only honest way for it to appear there.
+ *
+ * The seven ranking_* projection tables are excluded for the same reason as
+ * `audit_log`: they hold what the proxy pushed to the scoreboard, which is
+ * derived from the contests, participations and submissions a restore already
+ * carries. Restoring the projection would either duplicate the rebuild or
+ * contradict the contest data restored beside it. `ranking_hidden` is the one
+ * projection table that carries no push-only entity: it is derived from
+ * participations.hidden, so a restore rebuilds it from the rows it already holds.
+ *
+ * The three ranking control tables are NOT excluded. The appearance row, the
+ * override rows and the shown set are operator decisions that exist nowhere
+ * else, so they belong in the catalog.
+ *
+ * `contest_usernames_history` is excluded for the same reason as
+ * `audit_log`: it is the append-only trail of display username changes,
+ * and replaying it into a restore would put changes in the trail that
+ * never happened on the restored database.
+ *
+ * `login_surfaces` is a fixed lookup seeded by its own migration and read only to
+ * label an attempt's surface key, so a restored database already holds the four
+ * rows and a dump would carry nothing a restore needs. The seed is write-if-absent,
+ * so a restore keeps the seeded label rather than a hand-edited one.
+ *
+ * `security_findings` is excluded for the same reason as `security_blocks`: it is the
+ * live result of the producers' scans, not panel state, so a restore must let the next
+ * push rebuild it instead of replaying findings that may already be fixed. The waivers
+ * that decide what those findings mean are NOT excluded — they exist nowhere else.
+ *
+ * `security_host_modules` is excluded for the same reason as `security_findings`: it is what the
+ * rootfs scan last observed on a box, not panel state. A restore must let the next push rewrite
+ * it, because replaying a snapshot would make every kernel reachability verdict an assertion
+ * about a machine that has since rebooted — and in the safe-looking direction, since a module
+ * loaded after the snapshot would read `absent`.
+ *
+ * `audit_log_retention` is excluded for the same reason as `audit_log`: it is the ledger of which
+ * id boundaries retention pruned and where the chain re-anchored, so every row in it names a row in
+ * the log and a sequence id that a partial restore has no reason to reproduce. Restored on its own
+ * it would either point at nothing or — worse — at different rows, and the verifier would report a
+ * gap that the restore created rather than one an operator caused. It travels with the log instead,
+ * in `backups/db/audit-log-<ts>.dump`, which carries both tables together.
+ */
+const MODELS_OUTSIDE_CATALOG: ReadonlySet<string> = new Set([
+  'audit_log',
+  'audit_log_retention',
+  'security_blocks',
+  'security_findings',
+  'security_host_modules',
+  'contest_usernames_history',
+  'login_surfaces',
+  'ranking_contests',
+  'ranking_tasks',
+  'ranking_teams',
+  'ranking_users',
+  'ranking_submissions',
+  'ranking_subchanges',
+  'ranking_hidden',
+]);
+
+/** The tasks/datasets cycle no dump order can satisfy; see the catalog header. */
+const UNSATISFIABLE_EDGES: ReadonlyArray<readonly [string, string]> = [['tasks', 'datasets']];
+
+interface SchemaModel {
+  readonly primaryKey: readonly string[];
+  readonly foreignKeys: readonly string[];
+}
+
+function parsePrimaryKey(modelBody: string): readonly string[] {
+  const composite = modelBody.match(/@@id\(\[([^\]]+)\]/);
+  if (composite?.[1] !== undefined) return composite[1].split(',').map((column) => column.trim());
+  const inline = modelBody.match(/^[ \t]+(\w+)[ \t]+\S+[ \t]+@id\b/m);
+  return inline?.[1] !== undefined ? [inline[1]] : [];
+}
+
+function parseForeignKeys(modelBody: string): readonly string[] {
+  return modelBody
+    .split('\n')
+    .map((line) => line.match(/^[ \t]+\w+[ \t]+(\w+)\??[ \t]+@relation\([^)]*fields:/)?.[1])
+    .filter((parent): parent is string => parent !== undefined);
+}
+
+function parseSchemaModels(source: string): Map<string, SchemaModel> {
+  const models = new Map<string, SchemaModel>();
+  for (const [, modelName, body] of source.matchAll(/^model\s+(\w+)\s*\{([\s\S]*?)^\}/gm)) {
+    models.set(modelName, { primaryKey: parsePrimaryKey(body), foreignKeys: parseForeignKeys(body) });
+  }
+  return models;
+}
+
+function missingParentWarnings(warnings: readonly string[]): readonly string[] {
+  return warnings.filter((warning) => warning.includes('references '));
+}
+
+const SCHEMA_MODELS = parseSchemaModels(SCHEMA_SOURCE);
+
+function positionOf(name: string): number {
+  return BACKUP_TABLE_NAMES.indexOf(name);
+}
+
+describe('BACKUP_TABLES', () => {
+  it('is non-empty and free of duplicate names', () => {
+    expect(BACKUP_TABLES.length).toBeGreaterThan(0);
+    expect(new Set(BACKUP_TABLE_NAMES).size).toBe(BACKUP_TABLE_NAMES.length);
+  });
+
+  it('gives every table a label and at least one primary key column', () => {
+    for (const table of BACKUP_TABLES) {
+      expect(table.label.length).toBeGreaterThan(0);
+      expect(table.pk.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('orders tasks before datasets so datasets.task_id has a parent', () => {
+    expect(positionOf('tasks')).toBeLessThan(positionOf('datasets'));
+  });
+
+  it('orders submissions before submission_results so its composite id has a parent', () => {
+    expect(positionOf('submissions')).toBeLessThan(positionOf('submission_results'));
+  });
+
+  it('orders testcases before evaluations, which references it', () => {
+    expect(positionOf('testcases')).toBeLessThan(positionOf('evaluations'));
+  });
+
+  it('orders user_test_results before user_test_executables, which references it', () => {
+    expect(positionOf('user_test_results')).toBeLessThan(positionOf('user_test_executables'));
+  });
+
+  it('places admins before every table that names it as the row author', () => {
+    for (const child of ['announcements', 'messages', 'questions', 'admin_groups', 'admin_permission_overrides', 'contest_usernames', 'username_policies']) {
+      expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf(child));
+    }
+  });
+
+  it('orders each grant table after both of its parents', () => {
+    expect(positionOf('groups')).toBeLessThan(positionOf('group_permissions'));
+    expect(positionOf('permissions')).toBeLessThan(positionOf('group_permissions'));
+    expect(positionOf('groups')).toBeLessThan(positionOf('admin_groups'));
+    expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf('admin_groups'));
+    expect(positionOf('permissions')).toBeLessThan(positionOf('admin_permission_overrides'));
+    expect(positionOf(ADMIN_TABLE)).toBeLessThan(positionOf('admin_permission_overrides'));
+  });
+
+  it('places fsobjects last because it carries the large objects', () => {
+    expect(positionOf('fsobjects')).toBe(BACKUP_TABLE_NAMES.length - 1);
+    expect(BACKUP_TABLES.at(-1)?.needsLargeObjects).toBe(true);
+  });
+
+  it('flags admins and the grant tables sensitive, and nothing else', () => {
+    const flagged = BACKUP_TABLES.filter((table) => 'sensitive' in table && table.sensitive).map((table) => table.name);
+    expect(flagged).toEqual([ADMIN_TABLE, 'permissions', 'groups', 'group_permissions', 'admin_groups', 'admin_permission_overrides']);
+    expect(GRANT_TABLES).toEqual(flagged.filter((name) => name !== ADMIN_TABLE));
+  });
+});
+
+describe('schema parity', () => {
+  it('gives every catalog table the primary key its schema model declares', () => {
+    for (const table of BACKUP_TABLES) {
+      expect(SCHEMA_MODELS.get(table.name)?.primaryKey, `model ${table.name} is missing from schema.prisma`).toEqual(table.pk);
+    }
+  });
+
+  it('accounts for every schema model, so a new table fails the suite until it is placed', () => {
+    const uncovered = [...SCHEMA_MODELS.keys()].filter((name) => !BACKUP_TABLE_NAMES.includes(name) && !MODELS_OUTSIDE_CATALOG.has(name));
+    expect(uncovered).toEqual([]);
+  });
+
+  it('does not exclude a model that schema.prisma no longer declares', () => {
+    expect([...MODELS_OUTSIDE_CATALOG].filter((name) => !SCHEMA_MODELS.has(name))).toEqual([]);
+  });
+
+  it('keeps admins, the grant tables and the backup tables out of no exclusion', () => {
+    for (const name of [ADMIN_TABLE, ...GRANT_TABLES, SCHEDULE_TABLE, 'backup_runs']) {
+      expect(BACKUP_TABLE_NAMES).toContain(name);
+      expect(MODELS_OUTSIDE_CATALOG.has(name)).toBe(false);
+    }
+  });
+
+  it('confirms admins declares no parent of its own, so it is a catalog root', () => {
+    expect(SCHEMA_MODELS.get(ADMIN_TABLE)?.foreignKeys).toEqual([]);
+  });
+
+  it('confirms backup_runs.scheduleId is a bare scalar with no foreign key', () => {
+    expect(SCHEMA_MODELS.get('backup_runs')?.foreignKeys).toEqual([]);
+  });
+});
+
+describe('foreign-key order', () => {
+  it('places every catalog parent before its child', () => {
+    const outOfOrder: string[] = [];
+    for (const [child, model] of SCHEMA_MODELS) {
+      if (!BACKUP_TABLE_NAMES.includes(child)) continue;
+      for (const parent of model.foreignKeys) {
+        if (!BACKUP_TABLE_NAMES.includes(parent)) continue;
+        if (UNSATISFIABLE_EDGES.some(([cycleChild, cycleParent]) => cycleChild === child && cycleParent === parent)) continue;
+        if (positionOf(parent) >= positionOf(child)) outOfOrder.push(`${parent} before ${child}`);
+      }
+    }
+    expect(outOfOrder).toEqual([]);
+  });
+
+  it('exempts only cycle edges that schema.prisma still declares', () => {
+    const stale = UNSATISFIABLE_EDGES.filter(([child, parent]) => !SCHEMA_MODELS.get(child)?.foreignKeys.includes(parent));
+    expect(stale).toEqual([]);
+  });
+});
+
+describe('validateTableSelection', () => {
+  it('accepts a known subset with no unknown names', () => {
+    const result = validateTableSelection(['contests', 'users', 'teams']);
+    expect(result.valid).toBe(true);
+    expect(result.unknown).toEqual([]);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('rejects an empty selection that would dump the entire database', () => {
+    const result = validateTableSelection([]);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual([]);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('-t');
+    expect(result.warnings[0]).toContain('entire database');
+  });
+
+  it('reports the sensitivity warnings and nothing else for the whole catalog', () => {
+    const result = validateTableSelection([...BACKUP_TABLE_NAMES]);
+    expect(result.valid).toBe(true);
+    expect(result.unknown).toEqual([]);
+    const warned = result.warnings.join('\n');
+    expect(warned).toContain(ADMIN_TABLE);
+    expect(warned).toContain('admin_groups');
+    expect(warned).toContain(SCHEDULE_TABLE);
+    expect(missingParentWarnings([...result.warnings])).toEqual([]);
+  });
+
+  it('rejects a name outside the catalog', () => {
+    const result = validateTableSelection(['contests', 'pg_catalog; DROP TABLE admins']);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual(['pg_catalog; DROP TABLE admins']);
+  });
+
+  it('rejects a shell glob that would widen the selection', () => {
+    const result = validateTableSelection(['contests', 'contest*']);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual(['contest*']);
+  });
+
+  it('deduplicates repeated unknown names', () => {
+    const result = validateTableSelection(['nope', 'nope']);
+    expect(result.unknown).toEqual(['nope']);
+  });
+
+  it('short-circuits every warning while a name is unknown', () => {
+    const result = validateTableSelection(['datasets', 'files', 'contest*']);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual(['contest*']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('warns that submissions without fsobjects loses its content blobs', () => {
+    const result = validateTableSelection([
+      'contests',
+      'users',
+      'teams',
+      'tasks',
+      'participations',
+      'submissions',
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('fsobjects');
+  });
+
+  it('warns when a child is selected without its parent', () => {
+    const result = validateTableSelection(['datasets']);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('tasks');
+  });
+
+  it('names the one missing parent of a multi-parent child', () => {
+    const result = validateTableSelection([
+      'contests',
+      'users',
+      'teams',
+      'tasks',
+      'participations',
+      'datasets',
+      'submissions',
+      'testcases',
+      'evaluations',
+      'fsobjects',
+    ]);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('submission_results');
+  });
+
+  it('names every missing parent of a child that needs two', () => {
+    const result = validateTableSelection(['contests', 'participations']);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toHaveLength(1);
+    expect(result.warnings[0]).toContain('teams');
+    expect(result.warnings[0]).toContain('users');
+  });
+
+  it('warns about announcements missing contests, and only then', () => {
+    expect(missingParentWarnings(validateTableSelection([ADMIN_TABLE, 'contests', 'announcements']).warnings)).toEqual([]);
+    const warnings = missingParentWarnings(validateTableSelection([ADMIN_TABLE, 'announcements']).warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('contests');
+  });
+
+  it('warns that a missing admins nulls the reference instead of failing the restore', () => {
+    for (const name of ['announcements', 'messages', 'questions']) {
+      const warnings = missingParentWarnings(validateTableSelection([name]).warnings);
+      const adminWarning = warnings.find((warning) => warning.includes(ADMIN_TABLE));
+      expect(adminWarning, `${name} reported no admins warning`).toBeDefined();
+      expect(adminWarning).toContain('set to NULL');
+      expect(adminWarning).not.toContain('fail its foreign keys');
+    }
+  });
+
+  it('warns about both grant parents of a grant table selected alone', () => {
+    const result = validateTableSelection(['admin_groups']);
+    expect(result.valid).toBe(true);
+    const warnings = missingParentWarnings(result.warnings);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(ADMIN_TABLE);
+    expect(warnings[0]).toContain('groups');
+  });
+
+  it('stays silent about grant parents once both are selected', () => {
+    const result = validateTableSelection([ADMIN_TABLE, 'groups', 'admin_groups']);
+    expect(missingParentWarnings(result.warnings)).toEqual([]);
+  });
+
+  it('warns about fsobjects for whichever flagged consumer is selected', () => {
+    const consumers = BACKUP_TABLES.filter((table) => table.needsLargeObjects && table.name !== 'fsobjects');
+    expect(consumers.length).toBeGreaterThan(0);
+    for (const table of consumers) {
+      expect(validateTableSelection([table.name]).warnings.some((warning) => warning.includes('fsobjects'))).toBe(true);
+    }
+  });
+
+  it('stays silent about large objects once fsobjects is selected', () => {
+    const result = validateTableSelection(['contests', 'users', 'teams', 'tasks', 'participations', 'submissions', 'fsobjects']);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('stays silent about large objects when no flagged table is selected', () => {
+    const result = validateTableSelection(['contests', 'users', 'teams', 'participations']);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toEqual([]);
+  });
+});
+
+describe('sensitivity warnings', () => {
+  it('says admins carries login hashes and rewrites the username, hash and enabled flag', () => {
+    const warning = validateTableSelection([ADMIN_TABLE]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(warning).toContain('password hash');
+    expect(warning).toContain('username');
+    expect(warning).toContain('enabled');
+  });
+
+  it('says privileges travel only when the grant tables are co-selected', () => {
+    const alone = validateTableSelection([ADMIN_TABLE]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(alone).toContain('none are restored');
+    expect(alone).toContain('empty database has none at all');
+    const withGrants = validateTableSelection([ADMIN_TABLE, ...GRANT_TABLES]).warnings.find((entry) => entry.includes(ADMIN_TABLE));
+    expect(withGrants).toContain('Privileges do travel');
+    expect(withGrants).toContain('admin_groups');
+  });
+
+  it('names every selected grant table and points at the validate report', () => {
+    const result = validateTableSelection([...GRANT_TABLES]);
+    const warning = result.warnings.find((entry) => entry.includes('who may act'));
+    expect(warning).toBeDefined();
+    for (const table of GRANT_TABLES) expect(warning).toContain(`"${table}"`);
+    expect(warning).toContain('validate report');
+  });
+
+  it('says a restored enabled schedule resumes firing under the poller', () => {
+    const result = validateTableSelection([SCHEDULE_TABLE]);
+    expect(result.valid).toBe(true);
+    const warning = result.warnings.find((entry) => entry.includes('resumes firing'));
+    expect(warning).toContain(SCHEDULE_TABLE);
+    expect(warning).toContain('interval');
+  });
+
+  it('says nothing about privilege while no sensitive table is selected', () => {
+    const result = validateTableSelection(['contests', 'users', 'teams']);
+    expect(result.warnings.join(' ')).not.toContain('who may act');
+  });
+});
+
+/**
+ * One warning serves every path that can be handed an empty selection, and the
+ * paths disagree about what to do about it: the manual run, export and restore
+ * paths refuse, while the schedule path now accepts it and resolves the whole
+ * catalog at the argv boundary. Only the consequence is common, so only the
+ * consequence may be in the text.
+ */
+describe('the empty-selection warning', () => {
+  const warning = validateTableSelection([]).warnings[0];
+
+  it('claims the whole database, which every path that reads it agrees on', () => {
+    expect(warning).toContain('entire database');
+  });
+
+  it('does not claim an empty selection is rejected, which the schedule path no longer does', () => {
+    expect(warning).not.toMatch(/reject/i);
+  });
+
+  it('keeps the pg_dump mechanism the manual, export and restore operator needs', () => {
+    expect(warning).toContain('-t');
+  });
+
+  it('still returns valid === false for the paths that depend on the refusal', () => {
+    const result = validateTableSelection([]);
+    expect(result.valid).toBe(false);
+    expect(result.unknown).toEqual([]);
+    expect(result.warnings).toEqual([warning]);
+  });
+
+  it('is reached only by the empty selection, never by a selection that passed', () => {
+    expect(validateTableSelection(['contests']).warnings).not.toContain(warning);
+    expect(validateTableSelection([...BACKUP_TABLE_NAMES]).warnings).not.toContain(warning);
+  });
+});
+describe('withRequiredTables', () => {
+  it('pulls fsobjects in when a consumer of the large-object subtree is selected', () => {
+    expect(withRequiredTables(['submissions'])).toContain('fsobjects');
+  });
+
+  it('does not pull fsobjects in for a table with no large object of its own', () => {
+    expect(withRequiredTables(['admins', 'admin_groups'])).not.toContain('fsobjects');
+  });
+
+  it('releases fsobjects again once the last consumer is deselected', () => {
+    expect(withRequiredTables(['admins'])).not.toContain('fsobjects');
+  });
+
+  it('returns catalog order, so the dump still restores parents first', () => {
+    const result = withRequiredTables(['files', 'submissions']);
+    expect(result).toContain('submissions');
+    expect(result).toContain('fsobjects');
+    expect(result).toContain('files');
+    expect(result.indexOf('submissions')).toBeLessThan(result.indexOf('files'));
+  });
+
+  it('leaves a selection untouched when no dependency applies', () => {
+    expect(withRequiredTables(['contests', 'tasks'])).toEqual(
+      BACKUP_TABLES.filter((table) => ['contests', 'tasks'].includes(table.name)).map((table) => table.name),
+    );
+  });
+
+  it('never drops a table the caller already selected', () => {
+    expect(withRequiredTables(BACKUP_TABLE_NAMES)).toEqual(BACKUP_TABLE_NAMES);
+  });
+});
+
+describe('isLargeObjectDependency', () => {
+  it('reports fsobjects as a dependency only while a consumer is selected', () => {
+    expect(isLargeObjectDependency('fsobjects', ['submissions'])).toBe(true);
+    expect(isLargeObjectDependency('fsobjects', ['admins'])).toBe(false);
+  });
+
+  it('is false for every other table, dependency or not', () => {
+    expect(isLargeObjectDependency('submissions', ['submissions'])).toBe(false);
+  });
+});

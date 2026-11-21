@@ -50,10 +50,15 @@ except:
 import tornado.web
 
 from cms import config, TOKEN_MODE_MIXED
-from cms.db import Contest, Submission, Task, UserTest
+from cms.db import Contest, ContestTask, Submission, Task, UserTest
+from cms.db.username import get_display_name
 from cms.locale import filter_language_codes
 from cms.server import FileHandlerMixin
+from cms.server.captcha import Captcha
+from cms.server.login_exemption import is_login_exempt
+from cms.server.login_lockout_ledger import record_login_lockout
 from cms.server.contest.authentication import authenticate_request
+from cms.server.credits import load_credits
 from cmscommon.datetime import get_timezone
 from .base import BaseHandler
 from ..phase_management import compute_actual_phase
@@ -75,11 +80,29 @@ class ContestHandler(BaseHandler):
 
     """
 
+    _cws_captcha: Captcha | None = None
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.contest_url: Url = None
         self.contest: Contest
         self.impersonated_by_admin = False
+
+    @property
+    def captcha(self) -> Captcha:
+        """Return the CWS's adaptive login captcha.
+
+        Built once per process and cached on the class: the failure counters it
+        carries are process-wide, exactly as the admin panel's are, and
+        rebuilding it per request would reset them on every page load.
+
+        """
+        if ContestHandler._cws_captcha is None:
+            ContestHandler._cws_captcha = Captcha(
+                config.contest_web_server.captcha,
+                lockout_sink=record_login_lockout,
+                is_exempt=is_login_exempt)
+        return ContestHandler._cws_captcha
 
     def prepare(self):
         self.choose_contest()
@@ -211,6 +234,14 @@ class ContestHandler(BaseHandler):
             ret["participation"] = participation
             ret["user"] = participation.user
 
+            # WHY: the navbar shows the display username the
+            # contestant chose for this contest when the policy
+            # allows one; get_display_name falls back to the real
+            # name, so every page agrees with the ranking.
+            ret["display_name"] = get_display_name(
+                self.sql_session, self.contest.id,
+                participation.user)
+
             res = compute_actual_phase(
                 self.timestamp, self.contest.start, self.contest.stop,
                 self.contest.analysis_start if self.contest.analysis_enabled
@@ -227,17 +258,32 @@ class ContestHandler(BaseHandler):
             if ret["actual_phase"] == 0:
                 ret["phase"] = 0
 
-            # set the timezone used to format timestamps
-            ret["timezone"] = get_timezone(participation.user, self.contest)
+        # the timezone must be set on the pre-login pages too, which carry no user
+        user = self.current_user.user if self.current_user is not None else None
+        ret["timezone"] = get_timezone(user, self.contest)
 
         # some information about token configuration
         ret["tokens_contest"] = self.contest.token_mode
+
+        # WHY every CWS page carries these: the widget belongs to the login and
+        # registration forms, which live in templates shared by several
+        # handlers, so the facts are computed once here.
+        ret.update(self.captcha.render_params(
+            self.get_argument("username", ""), self.request.remote_ip))
 
         t_tokens = set(t.token_mode for t in self.contest.tasks)
         if len(t_tokens) == 1:
             ret["tokens_tasks"] = next(iter(t_tokens))
         else:
             ret["tokens_tasks"] = TOKEN_MODE_MIXED
+
+        # WHY every CWS page carries these two: AGPL-13 requires the offer of
+        # the Corresponding Source to reach the users interacting with this
+        # server, so the footer needs the deployment's own source URL, which a
+        # self-hosted fork configures, and the licence identity, which must not
+        # be typed into a template where it can drift from the credits file.
+        ret["config"] = config
+        ret["credits"] = load_credits()
 
         return ret
 
@@ -257,7 +303,7 @@ class ContestHandler(BaseHandler):
 
         """
         return self.sql_session.query(Task) \
-            .filter(Task.contest == self.contest) \
+            .filter(Task.contest_tasks.any(ContestTask.contest == self.contest)) \
             .filter(Task.name == task_name) \
             .one_or_none()
 

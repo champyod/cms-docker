@@ -25,15 +25,25 @@ import unittest
 from datetime import timedelta
 from unittest.mock import patch
 
-from cmstestsuite.unit_tests.databasemixin import DatabaseMixin
+from cmstestsuite.unit_tests.databasemixin import DatabaseMixin, \
+    DatabaseObjectGeneratorMixin
 
 from cms import config
+from cms.conf import CaptchaConfig
+from cms.server.captcha import Captcha, CaptchaOutcome
 from cms.server.contest.authentication import validate_login, \
     authenticate_request
-# Prefer build_password (which defaults to a plaintext method) over
-# hash_password (which defaults to bcrypt) as it is a lot faster.
-from cmscommon.crypto import build_password, hash_password
+from cms.server.login_counter_backend import InProcessBackend
+from cms.server.login_counters import FAILURE_WINDOW, LoginFailureCounters
+from cmscommon.crypto import hash_password
 from cmscommon.datetime import make_datetime
+
+
+# A routable, non-loopback address: a loopback client is exempt from the
+# per-IP bucket, which is the exemption the escalation cases below must not
+# accidentally lean on.
+LOCKOUT_IP = "203.0.113.7"
+BAN_THRESHOLD = 5
 
 
 class TestValidateLogin(DatabaseMixin, unittest.TestCase):
@@ -45,7 +55,7 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.contest = self.add_contest(allow_password_authentication=True)
         self.add_user(username="otheruser")
         self.user = self.add_user(
-            username="myuser", password=build_password("mypass"))
+            username="myuser", password=hash_password("mypass"))
         self.participation = self.add_participation(
             contest=self.contest, user=self.user)
 
@@ -86,52 +96,74 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.assertIsNone(authenticated_participation)
         self.assertIsNone(cookie)
 
-    def test_successful_login(self):
+    def test_it_authenticates_a_valid_username_and_password(self):
         self.assertSuccess("myuser", "mypass", "127.0.0.1")
 
-    def test_no_user(self):
+    def test_a_bcrypt_password_logs_in_with_the_address_allowed(self):
+        # WHY the fixture contest is not enough: it keeps the default IP
+        # restriction, which refuses a participation that lists no IP before the
+        # password result is what decides the login. This is the end-to-end
+        # proof that a bcrypt row still authenticates.
+        self.contest.ip_restriction = False
+        self.assertSuccess("myuser", "mypass", "127.0.0.1")
+
+    def test_a_password_stored_in_plaintext_cannot_log_in(self):
+        # WHY: a "plaintext:" row is the password itself, so authenticating it
+        # would hand the account to anyone who can read the database. The
+        # address is allowed explicitly so the refusal can only come from the
+        # credential.
+        self.contest.ip_restriction = False
+        # A legacy row is constructed literally here: this test exists to prove
+        # that such a row can no longer log in, so it must not go through the
+        # builder (which refuses to write one).
+        self.user.password = "plaintext:mypass"
+
+        self.assertFailure("myuser", "mypass", "127.0.0.1")
+        self.assertFailure("myuser", "wrongpass", "127.0.0.1")
+
+    def test_it_rejects_an_unknown_user(self):
         self.assertFailure("myotheruser", "mypass", "127.0.0.1")
 
-    def test_no_participation_for_user_in_contest(self):
+    def test_it_rejects_a_user_without_a_participation_in_the_contest(self):
         other_contest = self.add_contest(allow_password_authentication=True)
         other_user = self.add_user(
-            username="myotheruser", password=build_password("mypass"))
+            username="myotheruser", password=hash_password("mypass"))
         self.add_participation(contest=other_contest, user=other_user)
 
         self.assertFailure("myotheruser", "mypass", "127.0.0.1")
 
-    def test_participation_specific_password(self):
-        self.participation.password = build_password("myotherpass")
+    def test_the_participation_password_overrides_the_user_password(self):
+        self.participation.password = hash_password("myotherpass")
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
         self.assertSuccess("myuser", "myotherpass", "127.0.0.1")
 
-    def test_unallowed_password_authentication(self):
+    def test_it_rejects_password_login_when_it_is_disallowed(self):
         self.contest.allow_password_authentication = False
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_unallowed_hidden_participation(self):
+    def test_it_rejects_a_hidden_participation_when_they_are_blocked(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
 
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_invalid_password_stored_in_user(self):
-        # It's invalid, as it's not created by build_password.
+    def test_it_does_not_raise_on_an_invalid_user_password(self):
+        # It's invalid, as it has no method prefix.
         self.user.password = "mypass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "mypass", "127.0.0.1")
 
-    def test_invalid_password_stored_in_participation(self):
-        # It's invalid, as it's not created by build_password.
+    def test_it_does_not_raise_on_an_invalid_participation_password(self):
+        # It's invalid, as it has no method prefix.
         self.participation.password = "myotherpass"
 
         # Mainly checks that no exception is raised.
         self.assertFailure("myuser", "myotherpass", "127.0.0.1")
 
-    def test_ip_lock(self):
+    def test_it_enforces_the_participation_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
@@ -153,35 +185,74 @@ class TestValidateLogin(DatabaseMixin, unittest.TestCase):
         self.participation.ip = None
         self.assertSuccess("myuser", "mypass", "10.0.0.1")
 
-    def test_deactivated_ip_lock(self):
+    def test_it_ignores_the_ip_restriction_when_disabled(self):
         self.contest.ip_restriction = False
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
         self.assertSuccess("myuser", "mypass", "10.0.1.1")
 
-    def test_successful_impersonation(self):
+    def test_it_impersonates_with_a_valid_admin_token(self):
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_unsuccessful_impersonation(self):
+    def test_it_rejects_impersonation_with_a_bad_admin_token(self):
         self.assertFailure("myuser", "", "127.0.0.1", "bad-admin-token")
 
-    def test_impersonation_overrides_unallowed_password_authentication(self):
+    def test_impersonation_overrides_the_password_authentication_block(self):
         self.contest.allow_password_authentication = False
 
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_impersonation_overrides_unallowed_hidden_participation(self):
+    def test_impersonation_overrides_the_hidden_participation_block(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
 
         self.assertSuccess("myuser", "", "127.0.0.1", "admin-token")
 
-    def test_impersonation_overrides_ip_lock(self):
+    def test_impersonation_overrides_the_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
         self.assertSuccess("myuser", "mypass", "10.0.0.1", "admin-token")
         self.assertSuccess("myuser", "mypass", "10.0.1.1", "admin-token")
+
+    # --- last_login_at stamping ---
+
+    def test_successful_password_login_stamps_last_login_at(self):
+        # WHY flush-and-expire: without a flush the column write stays in the
+        # identity map; without expire we read back the in-memory value, not
+        # the one the session would commit to the DB, so the assertion would
+        # pass even if the Column declaration were missing.
+        self.session.flush()
+        self.session.expire(self.user)
+
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "mypass", ipaddress.ip_address("127.0.0.1"))
+
+        self.session.flush()
+        self.session.refresh(self.user)
+
+        self.assertIsNotNone(self.user.last_login_at)
+        self.assertEqual(self.user.last_login_at, self.timestamp)
+
+    def test_failed_login_does_not_stamp_last_login_at(self):
+        # Ensure the column stays untouched when the password is wrong so that
+        # the timestamp always reflects a proven credential, not any attempt.
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "wrongpassword", ipaddress.ip_address("127.0.0.1"))
+
+        self.assertIsNone(self.user.last_login_at)
+
+    def test_impersonation_does_not_stamp_last_login_at(self):
+        # WHY excluded: impersonation proves the admin token, not the user's
+        # own password, so the timestamp must not reflect admin activity.
+        validate_login(
+            self.session, self.contest, self.timestamp,
+            "myuser", "", ipaddress.ip_address("127.0.0.1"),
+            admin_token="admin-token")
+
+        self.assertIsNone(self.user.last_login_at)
 
 
 class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
@@ -192,7 +263,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.add_contest()
         self.contest = self.add_contest()
         self.user = self.add_user(
-            username="myuser", password=build_password("mypass"))
+            username="myuser", password=hash_password("mypass"))
         self.participation = self.add_participation(
             contest=self.contest, user=self.user)
         _, self.cookie = validate_login(
@@ -286,7 +357,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.assertIs(impersonated, False)
 
     @patch.object(config.contest_web_server, "cookie_duration", 10)
-    def test_cookie_contains_timestamp(self):
+    def test_the_cookie_authenticates_until_it_expires(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
 
@@ -305,7 +376,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
             timestamp=self.timestamp + timedelta(seconds=14),
             cookie=new_cookie)
 
-    def test_cookie_contains_password(self):
+    def test_the_cookie_is_validated_against_the_current_passwords(self):
         self.contest.ip_autologin = False
 
         # Cookies are of no use if one cannot login by password.
@@ -314,19 +385,19 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.contest.allow_password_authentication = True
 
         # Cookies contain the password, which is validated every time.
-        self.user.password = build_password("newpass")
+        self.user.password = hash_password("newpass")
         self.assertFailure()
 
         # Contest-specific passwords take precedence over global ones.
-        self.participation.password = build_password("mypass")
+        self.participation.password = hash_password("mypass")
         self.assertSuccessAndCookieRefreshed()
 
         # And they do so in the negative case too.
-        self.user.password = build_password("mypass")
-        self.participation.password = build_password("newpass")
+        self.user.password = hash_password("mypass")
+        self.participation.password = hash_password("newpass")
         self.assertFailure()
 
-    def test_ip_autologin(self):
+    def test_it_authenticates_by_ip_autologin(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
 
@@ -338,7 +409,7 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
         self.assertFailure()
 
-    def test_ip_autologin_with_ambiguous_addresses(self):
+    def test_it_refuses_ip_autologin_when_the_address_is_ambiguous(self):
         # If two users have the same IP address neither of them can autologin.
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
@@ -369,43 +440,43 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.contest.block_hidden_participations = False
         self.assertFailure()
 
-    def test_invalid_password_in_database(self):
+    def test_it_fails_on_an_invalid_stored_password(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.user.password = "not a valid password"
         self.assertFailure()
 
-        self.user.password = build_password("mypass")
+        self.user.password = hash_password("mypass")
         self.participation.password = "not a valid password"
         self.assertFailure()
 
-    def test_invalid_cookie(self):
+    def test_it_fails_on_an_invalid_or_missing_cookie(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.assertFailure(cookie=None)
         self.assertFailure(cookie="not a valid cookie")
 
-    def test_authorization_header(self):
+    def test_it_authenticates_with_the_authorization_header(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = True
         self.assertSuccess(cookie=None, authorization=self.cookie)
 
-    def test_no_user(self):
+    def test_it_fails_when_the_user_no_longer_exists(self):
         self.session.delete(self.user)
         self.assertFailure(db_flush=False)
 
-    def test_no_participation_for_user_in_contest(self):
+    def test_it_fails_when_the_participation_no_longer_exists(self):
         self.session.delete(self.participation)
         self.assertFailure()
 
-    def test_hidden_user(self):
+    def test_it_fails_for_a_hidden_participation_when_blocked(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = True
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
         self.assertFailure()
 
-    def test_ip_lock(self):
+    def test_it_enforces_the_ip_restriction(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = True
         self.contest.ip_restriction = True
@@ -427,29 +498,221 @@ class TestAuthenticateRequest(DatabaseMixin, unittest.TestCase):
         self.participation.ip = None
         self.assertSuccessAndCookieRefreshed()
 
-    def test_impersonate(self):
+    def test_it_impersonates_with_the_admin_cookie(self):
         self.contest.ip_autologin = False
         self.contest.allow_password_authentication = False
         self.assertImpersonationSuccess()
 
-    def test_impersonate_overridden_by_ip_autologin(self):
+    def test_ip_autologin_takes_precedence_over_impersonation(self):
         self.contest.ip_autologin = True
         self.contest.allow_password_authentication = False
 
         self.participation.ip = [ipaddress.ip_network("10.0.0.1/32")]
         self.assertSuccessAndCookieCleared(cookie=self.impersonated_cookie)
 
-    def test_impersonation_overrides_unallowed_hidden_participation(self):
+    def test_impersonation_overrides_the_hidden_participation_block(self):
         self.contest.block_hidden_participations = True
         self.participation.hidden = True
         self.assertImpersonationSuccess()
 
-    def test_impersonation_overrides_ip_lock(self):
+    def test_impersonation_overrides_the_ip_restriction(self):
         self.contest.ip_restriction = True
         self.participation.ip = [ipaddress.ip_network("10.0.0.0/24")]
 
         self.assertImpersonationSuccess(ip_address="10.0.0.1")
         self.assertImpersonationSuccess(ip_address="10.0.1.1")
+
+
+class ManualClock:
+    """A clock the tests move by hand.
+
+    A failure window is measured in minutes, so letting one lapse by waiting
+    would make the suite slow and flaky. Driving the clock the backend already
+    accepts keeps the assertion on the behaviour rather than on a private
+    timestamp rewritten behind the code's back.
+    """
+
+    def __init__(self, now=1000.0):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def build_captcha(clock=None, **overrides):
+    """Return a Captcha with injected counters and a stubbed verifier.
+
+    WHY built here rather than through ContestHandler's captcha property: that
+    property caches one Captcha on the class for the whole process, so a test
+    reading it would observe whatever an earlier test left there. Injecting the
+    counters keeps every case below independent of that shared state.
+    """
+    values = {
+        "enabled": True,
+        "provider": "turnstile",
+        "site_key": "site-key",
+        "secret_key": "secret",
+        "threshold": 3,
+        "ban_threshold": BAN_THRESHOLD,
+    }
+    values.update(overrides)
+    counts = LoginFailureCounters(
+        backend=InProcessBackend(clock=clock) if clock is not None
+        else InProcessBackend())
+    return Captcha(CaptchaConfig(**values), counters=counts,
+                   verify=lambda *_args: True)
+
+
+class TestLoginLockout(DatabaseObjectGeneratorMixin, unittest.TestCase):
+    """The lockout the login handlers gate on before validating a password.
+
+    Both handlers ask the Captcha whether an account and address are refused
+    and skip the credential check when it says yes, so the captcha's report is
+    the whole boundary: nothing below it would refuse anything.
+
+    WHY the object generator mixin rather than DatabaseMixin: the account under
+    test only has to exist, and the generator builds it without a session, so
+    the lockout behaviour is decided without standing a database up. What the
+    lockout reads is the captcha's own state, not the participation.
+    """
+
+    def setUp(self):
+        self.captcha = build_captcha()
+        self.user = self.get_user(
+            username="myuser", password=hash_password("mypass"))
+        self.contest = self.get_contest(allow_password_authentication=True)
+        self.participation = self.get_participation(
+            contest=self.contest, user=self.user)
+
+    def fail_login(self, captcha, username="myuser", ip_address=LOCKOUT_IP):
+        """Refuse one login attempt, as a handler refusing a password does.
+
+        WHY nothing here asks the captcha to verify a token: a refusal past
+        the threshold is answered before validate_login is ever reached, and
+        an answer the captcha itself produces would test the captcha rather
+        than the lockout. The handlers likewise never record a failure on an
+        attempt they refuse for the lockout, so neither does this, which
+        keeps the counter a count of wrong passwords, not of refusals.
+        """
+        captcha.record_failure(username, ip_address)
+
+    def answer_login(self, captcha, username="myuser", ip_address=LOCKOUT_IP):
+        """Answer the lockout query of one attempt, as a handler does."""
+        return captcha.is_locked(username, ip_address)
+
+    def assertDemandsAToken(self, captcha, username="myuser",
+                            ip_address=LOCKOUT_IP):
+        """Assert this captcha stops the attempt before the password is read.
+
+        The captcha threshold sits below the ban threshold, so a run of
+        failures passes through a demand for a token on the way to the
+        refusal: an account can be challenged and still be guessable, and
+        the lockout is what bounds that guessing.
+        """
+        self.assertIs(captcha.verify(username, ip_address, "good"),
+                      CaptchaOutcome.ALLOWED)
+
+    def assertLocksOut(self, captcha, username="myuser",
+                       ip_address=LOCKOUT_IP):
+        """Assert this captcha refuses the attempt, and return nothing."""
+        self.assertTrue(self.answer_login(captcha, username, ip_address))
+
+    def assertNotLockedOut(self, captcha, username="myuser",
+                           ip_address=LOCKOUT_IP):
+        """Assert this captcha lets the attempt reach the password."""
+        self.assertFalse(self.answer_login(captcha, username, ip_address))
+
+    def test_the_ban_threshold_refuses_the_attempt(self):
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+
+        # One failure short of the ban the attempt is only challenged, and a
+        # client that answers the challenge can still get in.
+        self.assertDemandsAToken(self.captcha)
+        self.assertNotLockedOut(self.captcha)
+
+        self.fail_login(self.captcha)
+        self.assertLocksOut(self.captcha)
+
+    def test_every_attempt_past_the_threshold_stays_refused(self):
+        # A count that restarted at the threshold re-armed itself on the next
+        # attempt, so the sixth guess was counted as the first and the account
+        # stayed guessable without limit: that is what the retained count buys.
+        for _ in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha)
+        for _ in range(3):
+            self.fail_login(self.captcha)
+            self.assertLocksOut(self.captcha)
+
+    def test_a_successful_login_clears_the_failures_behind_it(self):
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+
+        self.captcha.record_success("myuser", LOCKOUT_IP)
+
+        self.assertNotLockedOut(self.captcha)
+        self.assertEqual(self.captcha.counters.count("myuser", LOCKOUT_IP), 0)
+
+    def test_rotating_usernames_still_escalates_the_address(self):
+        # The per-account bucket is what an attacker on one account exhausts
+        # first, so rotating usernames must not buy a fresh allowance: every
+        # failure also feeds the address bucket.
+        for index in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha, username="user-%d" % index)
+
+        self.assertLocksOut(self.captcha, username="user-0")
+        self.assertLocksOut(self.captcha, username="user-never-attempted")
+
+    def test_the_lockout_holds_with_no_captcha_configured(self):
+        # is_enabled() is False by default and for a deployment that sets
+        # nothing, so a lockout gated on it would be inert exactly where it is
+        # most needed. The refusal has to survive a captcha that cannot be
+        # demanded at all.
+        self.captcha = build_captcha(enabled=False, site_key="", secret_key="")
+        self.assertFalse(self.captcha.is_enabled())
+
+        for _ in range(BAN_THRESHOLD):
+            self.fail_login(self.captcha)
+
+        self.assertLocksOut(self.captcha)
+        self.fail_login(self.captcha)
+        self.assertLocksOut(self.captcha)
+
+    def test_a_lapsed_window_releases_the_lockout(self):
+        # A user who mistyped a few times, walked away and came back must not
+        # be held out forever, so the count has to lapse on its own.
+        clock = ManualClock()
+        self.captcha = build_captcha(clock=clock)
+        for _ in range(BAN_THRESHOLD - 1):
+            self.fail_login(self.captcha)
+        self.assertNotLockedOut(self.captcha)
+
+        clock.advance(FAILURE_WINDOW + 1)
+
+        self.assertEqual(self.captcha.counters.count("myuser", LOCKOUT_IP), 0)
+        self.assertNotLockedOut(self.captcha)
+
+    def test_the_crossing_threshold_reports_the_lockout_once(self):
+        # The panel's block list can only show a lockout the counters report, so
+        # the attempt that crosses the ban threshold tells the sink. It tells it
+        # once: the count is retained, so reporting on every later failure would
+        # write a row per guess for a lockout already in the ledger.
+        reported = []
+        counters = LoginFailureCounters(
+            backend=InProcessBackend(),
+            lockout_sink=lambda username, ip, window:
+            reported.append((username, ip, window)))
+
+        for _ in range(BAN_THRESHOLD - 1):
+            counters.record_failure("myuser", LOCKOUT_IP)
+        self.assertEqual(reported, [])
+
+        counters.record_failure("myuser", LOCKOUT_IP)
+        counters.record_failure("myuser", LOCKOUT_IP)
+        self.assertEqual(reported, [("myuser", LOCKOUT_IP, FAILURE_WINDOW)])
 
 
 if __name__ == "__main__":

@@ -1,0 +1,5 @@
+{
+  "project": { "name": "CMS Docker", "url": "https://example.invalid/fork" },
+  "license": { "id": "AGPL-3.0" },
+  "surfaces": { "ranking": { "title": "Ranking" } }
+}

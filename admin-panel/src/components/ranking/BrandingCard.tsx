@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 
 import { Card } from '@/components/core/Card';
-import { useToast } from '@/components/providers/ToastProvider';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 const ACCEPTED_TYPES = '.png,.jpg,.jpeg,.gif,.bmp';
@@ -16,6 +16,9 @@ interface BrandingCardProps {
   loading: boolean;
   onUpload: (file: File) => Promise<void>;
   error?: string;
+  readOnly: boolean;
+  /** Scoreboard display name shown below the logo */
+  displayName?: string;
 }
 
 function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: () => void }) {
@@ -24,7 +27,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
       <button
         type="button"
         onClick={onClick}
-        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-black/20 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+        className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
       >
         No ranking logo — click to upload
       </button>
@@ -32,7 +35,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
   }
 
   return (
-    <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-black/20 p-4">
+    <button type="button" onClick={onClick} className="flex w-full justify-center rounded-xl bg-muted/40 p-4">
       <Image alt="Ranking logo" src={previewUrl} width={320} height={128} className="max-h-32 w-auto object-contain" unoptimized />
     </button>
   );
@@ -40,20 +43,19 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
 
 function LoadingOverlay() {
   return (
-    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/30 backdrop-blur-sm">
+    <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-muted/60 backdrop-blur-sm">
       <Loader2 className="h-8 w-8 animate-spin text-foreground" aria-label="Uploading" />
     </div>
   );
 }
 
-export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingCardProps) {
+export function BrandingCard({ previewUrl, loading, onUpload, error, readOnly, displayName }: BrandingCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const { addToast } = useToast();
 
   const handleClick = useCallback(() => {
-    if (loading) return;
+    if (loading || readOnly) return;
     inputRef.current?.click();
-  }, [loading]);
+  }, [loading, readOnly]);
 
   const handleChange = useCallback(
     async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,17 +66,19 @@ export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingC
         await onUpload(file);
       } catch (err) {
         const message = (err as Error).message || 'Upload failed';
-        addToast({ type: 'error', title: 'Upload failed', message });
+        toast.error('Upload failed', { description: message });
       }
     },
-    [addToast, onUpload],
+    [onUpload],
   );
 
   return (
     <Card className="space-y-4">
       <div>
         <h2 className="text-sm font-semibold tracking-tight text-foreground">Ranking Branding</h2>
-        <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
+        {!readOnly && (
+          <p className="text-xs text-muted-foreground">Click the preview to upload a new ranking logo. Accepted: png, jpg, jpeg, gif, bmp (max 5MB).</p>
+        )}
       </div>
 
       <div className="relative">
@@ -83,6 +87,13 @@ export function BrandingCard({ previewUrl, loading, onUpload, error }: BrandingC
         </div>
         {loading && <LoadingOverlay />}
       </div>
+
+      {displayName ? (
+        <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 text-center">
+          <p className="text-sm font-semibold text-foreground">{displayName}</p>
+          <p className="text-xs text-muted-foreground">Scoreboard name shown under logo</p>
+        </div>
+      ) : null}
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 

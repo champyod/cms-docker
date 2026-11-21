@@ -26,6 +26,14 @@ pub enum DispatchKey {
     DbClean,
     /// `./cms db sync`
     DbSync,
+    /// `./cms db migrate`
+    DbMigrate,
+    /// `./cms db create <name>`
+    DbCreate,
+    /// `./cms db rename <old> <new>`
+    DbRename,
+    /// `./cms db use <name>`
+    DbUse,
     /// `./cms admin-create`
     AdminCreate,
     /// `./cms status`
@@ -78,6 +86,8 @@ pub enum DispatchKey {
     FunnelStatus,
     /// `./cms contest create`
     ContestCreate,
+    /// `./cms contest set-active <id>`
+    ContestSetActive,
     /// `./cms update-server`
     UpdateServer,
     /// `./cms domain setup`
@@ -90,6 +100,8 @@ pub enum DispatchKey {
     DomainStatus,
     /// `./cms domain renew`
     DomainRenew,
+    /// `./cms domain {setup|cert|renew} --install-timer`
+    DomainCertTimerInstall,
     /// `./cms domain preflight`
     DomainPreflight,
     /// `./cms domain check-expiry`
@@ -129,6 +141,10 @@ mod tests {
         DispatchKey::DbReset,
         DispatchKey::DbClean,
         DispatchKey::DbSync,
+        DispatchKey::DbMigrate,
+        DispatchKey::DbCreate,
+        DispatchKey::DbRename,
+        DispatchKey::DbUse,
         DispatchKey::AdminCreate,
         DispatchKey::Status,
         DispatchKey::Monitor,
@@ -155,12 +171,14 @@ mod tests {
         DispatchKey::FunnelRemove,
         DispatchKey::FunnelStatus,
         DispatchKey::ContestCreate,
+        DispatchKey::ContestSetActive,
         DispatchKey::UpdateServer,
         DispatchKey::DomainSetup,
         DispatchKey::DomainCert,
         DispatchKey::DomainProxy,
         DispatchKey::DomainStatus,
         DispatchKey::DomainRenew,
+        DispatchKey::DomainCertTimerInstall,
         DispatchKey::DomainPreflight,
         DispatchKey::DomainCheckExpiry,
         DispatchKey::DomainRevoke,
@@ -186,6 +204,14 @@ mod tests {
         assert_eq!(
             target(DispatchKey::DbInit),
             Some(&DispatchTarget::Make("cms-init"))
+        );
+    }
+
+    #[test]
+    fn db_migrate_target_is_make_db_migrate() {
+        assert_eq!(
+            target(DispatchKey::DbMigrate),
+            Some(&DispatchTarget::Make("db-migrate"))
         );
     }
 }

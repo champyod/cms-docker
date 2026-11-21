@@ -132,7 +132,6 @@ function LanguagesGrid({ formData, onLanguageToggle }: Pick<GeneralTabProps, 'fo
       {PROGRAMMING_LANGUAGES.map(langStr => {
         const lang = langStr;
         const isSelected = formData.languages.includes(lang);
-        const displayName = langStr.split(' / ')[0].trim();
         return (
           <button
             key={lang}
@@ -145,7 +144,7 @@ function LanguagesGrid({ formData, onLanguageToggle }: Pick<GeneralTabProps, 'fo
                 : 'bg-muted/30 text-muted-foreground hover:bg-muted'
             )}
           >
-            {displayName}
+            {langStr}
           </button>
         );
       })}

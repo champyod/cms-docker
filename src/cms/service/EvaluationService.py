@@ -40,11 +40,12 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from cms import ServiceCoord, get_service_shards
+from cms.db import NO_OVERRIDE, NoOverride, contest_binding
 from cms.db.session import Session
 from cms.io.priorityqueue import QueueEntry, QueueEntryDict, QueueItem
 from cmscommon.datetime import make_timestamp
 from cms.db import SessionGen, Contest, Digest, Dataset, Evaluation, Participation, Submission, \
-    SubmissionResult, Testcase, UserTest, UserTestResult, get_submissions, \
+    SubmissionResult, Task, Testcase, UserTest, UserTestResult, get_submissions, \
     get_submission_results, get_datasets_to_judge
 from cms.grading.Job import Job, JobGroup
 from cms.io import Executor, TriggeredService, rpc_method
@@ -57,6 +58,22 @@ from .workerpool import WorkerPool
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_throttle_delay_seconds(
+    task_delay: int | None, contest_delay: int | None, legacy_penalty: int | None
+) -> float:
+    """Pick the fairness delay with new columns first, legacy as fallback.
+
+    Task override wins when set; otherwise the contest throttle delay wins
+    when positive; otherwise the legacy contest penalty applies.
+
+    """
+    if task_delay is not None:
+        return max(0.0, float(task_delay))
+    if contest_delay is not None and float(contest_delay) > 0:
+        return float(contest_delay)
+    return max(0.0, float(legacy_penalty or 0))
 
 
 class EvaluationExecutor(Executor[ESOperation]):
@@ -251,10 +268,10 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
     RESULT_CACHE_SIZE = 100
     # The maximum time since the last result before processing.
     MAX_FLUSHING_TIME_SECONDS = 2
-    def __init__(self, shard: int, contest_id: int | None = None):
+    def __init__(self, shard: int, contest_id: "int | None | NoOverride" = NO_OVERRIDE):
         super().__init__(shard)
 
-        self.contest_id = contest_id
+        self._contest_override = contest_id
 
         # Cache holding the results from the worker until they are
         # written to the DB.
@@ -300,6 +317,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                          EvaluationService.WORKER_CONNECTION_CHECK_TIME
                          .total_seconds(),
                          immediately=False)
+
+    @property
+    def contest_id(self) -> int | None:
+        """The contest this service evaluates, re-read from the registry for every pass.
+
+        None means every contest, the multicontest mode this service supports.
+        """
+        return contest_binding(self.name, self.shard, self._contest_override)
 
     def submission_enqueue_operations(self, submission: Submission, archive_sandbox: bool = False) -> int:
         """Push in queue the operations required by a submission.
@@ -356,12 +381,20 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
             return timedelta(0)
 
         with SessionGen() as session:
-            penalty_seconds = session.query(Contest.queue_fairness_penalty_seconds)\
+            contest_row = session.query(
+                Contest.evaluation_throttle_delay_s,
+                Contest.queue_fairness_penalty_seconds)\
                 .join(Participation, Participation.contest_id == Contest.id)\
                 .filter(Participation.id == submission.participation_id)\
+                .first()
+            task_delay = session.query(Task.evaluation_throttle_delay_s)\
+                .filter(Task.id == submission.task_id)\
                 .scalar()
 
-            effective_penalty_seconds = float(penalty_seconds or 0)
+            contest_delay = contest_row[0] if contest_row is not None else None
+            legacy_penalty = contest_row[1] if contest_row is not None else None
+            effective_penalty_seconds = _resolve_throttle_delay_seconds(
+                task_delay, contest_delay, legacy_penalty)
             if effective_penalty_seconds <= 0:
                 return timedelta(0)
 
@@ -470,6 +503,32 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
         # enqueue() returns the number of successful pushes.
         return super().enqueue(operation, priority, timestamp) > 0
 
+    def _requeue_lost_operations(
+        self,
+        operations: list[ESOperation],
+        to_ignore: bool | list[ESOperation],
+        reason: str,
+    ):
+        """Put again in the queue the operations a worker did not
+        manage to execute, preserving their original priority and
+        timestamp.
+
+        operations: the operations that were assigned to the worker.
+        to_ignore: what the release of the worker returned, i.e. the
+            operations whose result is to be ignored, if any.
+        reason: why the operations are put again in the queue.
+
+        """
+        if not isinstance(to_ignore, list):
+            to_ignore = []
+        for operation in operations:
+            if operation in to_ignore:
+                continue
+            logger.info("Operation %s put again in the queue because of %s.",
+                        operation, reason)
+            priority, timestamp = operation.side_data
+            self.enqueue(operation, priority, timestamp)
+
     @with_post_finish_lock
     def action_finished(self, data: dict, shard: int, error=None):
         """Callback from a worker, to signal that is finished some
@@ -477,8 +536,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
 
         data: the JobGroup, exported to dict.
         shard: the shard finishing the action.
+        error: the error reported by the worker, if any.
 
         """
+        pool = self.get_executor().pool
+        # We grab the operations before releasing the worker, because
+        # the release clears them: if the worker failed we need them to
+        # put them again in the queue.
+        assigned_operations = pool.get_worker_operations(shard)
         # We notify the pool that the worker is available again for
         # further work (no matter how the current request turned out,
         # even if the worker encountered an error). If the pool
@@ -487,39 +552,37 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
         # this method and do nothing because in that case we know the
         # operation has returned to the queue and perhaps already been
         # reassigned to another worker.
-        to_ignore = self.get_executor().pool.release_worker(shard)
+        to_ignore = pool.release_worker(shard)
         if to_ignore is True:
             logger.info("Ignored result from worker %s as requested.", shard)
             return
 
-        job_group = None
-        job_group_success = True
         if error is not None:
             logger.error(
                 "Received error from Worker (see above), job group lost.")
-            job_group_success = False
+            self._requeue_lost_operations(assigned_operations, to_ignore,
+                                          "worker error")
+            return
 
-        else:
-            try:
-                job_group = JobGroup.import_from_dict(data)
-            except Exception:
-                logger.error("Couldn't build JobGroup for data %s.", data,
-                             exc_info=True)
-                job_group_success = False
+        try:
+            job_group = JobGroup.import_from_dict(data)
+        except Exception:
+            logger.error("Couldn't build JobGroup for data %s.", data,
+                         exc_info=True)
+            return
 
-        if job_group_success:
-            for job in job_group.jobs:
-                operation = job.operation
-                if job.success:
-                    logger.info("`%s' succeeded.", operation)
-                else:
-                    logger.error("`%s' failed, see worker logs and (possibly) "
-                                 "sandboxes at '%s'.",
-                                 operation, " ".join(job.sandboxes))
-                if isinstance(to_ignore, list) and operation in to_ignore:
-                    logger.info("`%s' result ignored as requested", operation)
-                else:
-                    self.result_cache.add(operation, Result(job, job.success))
+        for job in job_group.jobs:
+            operation = job.operation
+            if job.success:
+                logger.info("`%s' succeeded.", operation)
+            else:
+                logger.error("`%s' failed, see worker logs and (possibly) "
+                             "sandboxes at '%s'.",
+                             operation, " ".join(job.sandboxes))
+            if isinstance(to_ignore, list) and operation in to_ignore:
+                logger.info("`%s' result ignored as requested", operation)
+            else:
+                self.result_cache.add(operation, Result(job, job.success))
 
     @with_post_finish_lock
     def write_results(self, items: list[tuple[ESOperation, Result]]):
@@ -743,7 +806,10 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
                 submission_id=submission_result.submission_id,
                 dataset_id=submission_result.dataset_id)
 
-        # If compilation failed for our fault, we log the error.
+        # If compilation failed for our fault, we log the error (and, once the
+        # retry cap is reached, move it to a terminal state: a result with no
+        # outcome and no tries left is excluded by every re-queue filter, so it
+        # would otherwise sit in COMPILING with no recovery).
         elif submission_result.compilation_outcome is None:
             logger.warning("Worker failed when compiling submission "
                            "%d(%d).",
@@ -752,9 +818,14 @@ class EvaluationService(TriggeredService[ESOperation, EvaluationExecutor]):
             if submission_result.compilation_tries >= \
                     EvaluationService.MAX_COMPILATION_TRIES:
                 logger.error("Maximum number of failures reached for the "
-                             "compilation of submission %d(%d).",
+                             "compilation of submission %d(%d); marking it "
+                             "failed so it leaves COMPILING.",
                              submission_result.submission_id,
                              submission_result.dataset_id)
+                submission_result.set_compilation_outcome(False)
+                self.scoring_service.new_evaluation(
+                    submission_id=submission_result.submission_id,
+                    dataset_id=submission_result.dataset_id)
 
         # Otherwise, error.
         else:

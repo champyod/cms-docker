@@ -1,13 +1,23 @@
 import { getSession, type SessionPayload } from './auth';
 import { getFreshPermissions, type PermissionKey } from '@/lib/permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
+import { actorlessApiResponse } from '@/lib/actor-error-surface';
 import { NextResponse } from 'next/server';
+import { unstable_rethrow } from 'next/navigation';
 
 // Why: `?: undefined` on the absent branch mirrors TypeScript's inferred shape for the old
 // return values, so existing destructuring call sites (`{ authorized, response }`) keep compiling.
 export type ApiAuthResult =
   | { authorized: false; response: NextResponse; session?: undefined }
   | { authorized: true; session: SessionPayload; response?: undefined };
+
+/** Keep only the positive integer ids of a batch request, dropping anything else. */
+export function parseIdList(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((id: unknown) => Number(id))
+    .filter((id: number) => Number.isInteger(id) && id > 0);
+}
 
 export function sanitize<T>(value: T | undefined | null): T | null {
   if (value === undefined || value === null || value === '$undefined') return null;
@@ -47,27 +57,53 @@ interface KnownApiError {
   status?: number;
   message?: string;
   errors?: unknown;
+  path?: string;
+  syscall?: string;
+}
+
+/** The errno codes a filesystem refusal carries; a read's ENOENT is a missing record, not one. */
+const FILESYSTEM_ERRNO_CODES = new Set(['EACCES', 'EPERM', 'EROFS', 'ENOSPC', 'EDQUOT', 'EBUSY']);
+
+// A refusing path is a conflict with the target, not a crash, and 403 means the account.
+const FILESYSTEM_REFUSED_STATUS = 409;
+
+function describeFilesystemFailure(err: KnownApiError): string {
+  const operation = err.syscall ?? 'access';
+  return `${err.code}: cannot ${operation} ${err.path ?? 'the target path'}`;
 }
 
 export function apiError(error: unknown): NextResponse {
+  // WHY first: a redirect or notFound a handler threw is control flow, not a fault. Without this
+  // the catch-all below turns a legitimate redirect into a 500 with a digest.
+  unstable_rethrow(error);
+
+  // WHY before the log line: an actorless request is an unauthenticated caller, not a fault. It
+  // leaves a 401 with no digest and nothing to log; every other error keeps the path below.
+  const actorless = actorlessApiResponse(error);
+  if (actorless !== undefined) return actorless;
+
   console.error('API Error:', error);
   const err = error as KnownApiError;
   const code = err.code;
   let message: string;
+  let status = err.status || 500;
   if (code === 'P2002') {
     message = 'A record with these details already exists';
   } else if (code === 'P2025') {
     message = 'Record not found';
+  } else if (code !== undefined && FILESYSTEM_ERRNO_CODES.has(code)) {
+    message = describeFilesystemFailure(err);
+    status = err.status ?? FILESYSTEM_REFUSED_STATUS;
   } else if (err.status != null && err.status < 500) {
     message = err.message || 'An unexpected error occurred';
   } else {
     message = 'An unexpected error occurred';
   }
-  const status = err.status || 500;
   const extra = err.errors ? { errors: err.errors } : {};
   return NextResponse.json({ success: false, error: message, ...extra }, { status });
 }
 
 export function apiSuccess(data?: object): NextResponse {
+  if (Array.isArray(data)) return NextResponse.json({ success: true, data });
   return NextResponse.json({ success: true, ...data });
 }

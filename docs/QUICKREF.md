@@ -9,11 +9,11 @@ manual paths. This card covers day-2 operations only.
 ### Start Services
 ```bash
 make pull              # Pull latest images
-make core-img          # Start core services
-make admin-img         # Start admin panel
-make contest-img       # Start contest interface
-make worker-img        # Start workers
-make infra-img         # Start monitoring
+make core              # Start core services
+make admin             # Start admin panel
+make contest           # Start contest interface
+make worker            # Start workers
+make infra             # Start monitoring
 ```
 
 ### Stop Services
@@ -29,7 +29,14 @@ make infra-stop        # Stop monitoring
 make cms-init          # Initialize database
 make admin-create      # Create admin account
 make db-clean          # FULL RESET (deletes all data!)
+./cms db create <name>      # Create a database, empty (run ./cms db migrate after). Stops cms-database briefly.
+./cms db rename <old> <new> # Rename one (stops cms-database briefly); repoint every [db_<profile>] POSTGRES_DB, then ./cms config sync
+./cms db use <profile>      # Point the stack at another database (repoints, config sync, restacks)
+./cms db migrate            # Schema + roles + RLS on the ACTIVE database, then verify (empty or partial DBs both fine)
 ```
+`db create` / `db rename` mutate the server: type `yes` at the prompt, or run them with `CONFIRM_DB_ADMIN=yes`. Add `--dry-run` to print the SQL without touching the container. Both stop `cms-database` for the statement — no role here holds `CREATEDB`, so the statement runs in single-user mode — and the container is started again afterwards, including when the statement fails. Neither verb repoints a profile or applies migrations.
+
+Full rotation order: `./cms db create <name>` → `./cms db use <profile>` → `./cms db migrate`. After a `rename` there is no `use` to run — repoint `POSTGRES_DB`, `./cms config sync`, then `./cms deploy core` (services keep the old name until they are recreated). Details: [DB-ROTATION.md](DB-ROTATION.md).
 
 ## Service URLs
 - **Modern Admin**: http://localhost:8891
@@ -48,7 +55,7 @@ make db-clean          # FULL RESET (deletes all data!)
 ./cms config sync
 
 # Restart services
-make core-img
+make core
 
 # Non-interactive fleet deploy / status
 ./cms worker deploy
@@ -95,7 +102,7 @@ docker logs cms-database -f
 
 # Reset database (WARNING: Deletes all data!)
 make db-clean
-make core-img
+make core
 make cms-init
 ```
 
@@ -104,7 +111,7 @@ Edit `config.toml`:
 ```ini
 POSTGRES_PORT_EXTERNAL=5433  # Change from 5432
 ```
-Then: `./cms config sync && make core-img`
+Then: `./cms config sync && make core`
 
 ### Submissions Stuck
 ```bash
@@ -139,12 +146,148 @@ tar -xzf config-backup.tar.gz
 ./cms config sync
 ```
 
+### Offsite copy (encrypted)
+
+```bash
+bash scripts/__offsite-sync.sh --dry-run   # print what would be sent, send nothing
+bash scripts/__offsite-sync.sh --apply     # encrypt, verify, rsync
+```
+
+The run **refuses to ship without `OFFSITE_ENCRYPT_KEY`**: it exits 1, names the missing key,
+and sends nothing. The old behaviour — no key, so the plain `*.tar.gz` goes over rsync and the
+log still reads "Offsite sync complete" — is gone; a plaintext copy now has to be asked for:
+
+```bash
+OFFSITE_ALLOW_PLAINTEXT=1 bash scripts/__offsite-sync.sh --apply   # one run, printed loudly
+```
+
+The override prints a banner naming what is exposed, marks the completion line `PLAINTEXT`, and
+records `cms_offsite_last_ship_encrypted 0`. It is not a `config.toml` key on purpose: it is typed
+for one run, so `./cms config sync` can never switch it on permanently.
+
+What a run does with a key:
+
+1. encrypts each `backups/*.tar.gz` with `gpg --symmetric` (AES256) into a private staging
+   directory, the passphrase arriving on a file descriptor (`--passphrase-fd 3`) and never on a
+   command line, so `/proc/<pid>/cmdline` has nothing to read;
+2. proves the result before it sends it — gpg must parse it as symmetric ciphertext, its gzip
+   header must be gone, and the key must decrypt it back to the archive byte for byte;
+3. rsyncs the ciphertext and checks the status. A failed ssh, encryption, verification or rsync
+   exits non-zero, names the archive and the status, and records **no** offsite success.
+
+How old the copies are (this is the part that used to be invisible):
+
+```bash
+cat backups/metrics/cms_backup.prom     # written by every backup run and every offsite sync
+```
+
+`cms_backup_last_success_timestamp_seconds`, `cms_backup_stale`, `cms_offsite_last_ship_timestamp_seconds`,
+`cms_offsite_stale` and `cms_offsite_last_ship_encrypted` are read by node-exporter's textfile
+collector in `docker-compose.monitoring.yml` (`--collector.textfile.directory=/metrics`) and
+exported on the endpoint Prometheus already scrapes. Age is `time() - <timestamp>`; `0` means
+*never*, not 1970. The thresholds are `BACKUP_STALE_HOURS` (default 26), the same number the
+monitor's own staleness warning uses.
+
+## Audit log — durability, retention and proof
+
+The audit log is append-only in the database, not just in the application. Four commands cover it,
+and they are the whole operator surface.
+
+### What stops a rewrite
+
+| Attempt | Result |
+|---|---|
+| `UPDATE audit_log …` | `permission denied for table audit_log` — the grant is gone, and a guard trigger refuses it a second time |
+| `DELETE FROM audit_log …` | `audit_log is append-only: DELETE refused (actor=…)` — only `system:audit-retention` may delete, and only past the window |
+| `TRUNCATE audit_log` | refused. Row security never covered `TRUNCATE`, so before this change one statement emptied the log |
+| `ALTER TABLE audit_log DISABLE TRIGGER …` | `must be owner of table audit_log` — once the owner separation has been applied |
+
+The hash chain is a *detection* control: it makes a rewrite visible. The refusals above are what
+stop one. They are separate on purpose — see "Owner separation" below for the one step that needs a
+maintenance window.
+
+### Verify the chain
+
+```bash
+make audit-verify            # exit 0 intact · 1 broken (names the row) · 2 could not be checked
+make audit-verify | grep -E 'prevention|WARN'
+```
+
+Exit 2 is not a pass: an unreadable log has not been verified. The run also prints the *prevention*
+posture (`triggers=…`, `owner=…`, `ownerSeparated=…`) because a chain that verifies while the app
+role could still disable the guard is detection without prevention.
+
+What it recomputes: every row's `entry_hash` from the row's own columns, using
+`admin-panel/src/lib/audit-chain.ts` — the same module `recordAudit()` writes with, so the recipe
+cannot drift. Rows written before 2026-10-26 were hashed over the caller's entry object (which
+omitted the resolved `ip`/session); those verify under the legacy recipe and are counted separately
+as `legacyRecipe=N` rather than quietly passed.
+
+Known limit, stated rather than hidden: deleting the **newest** rows leaves a shorter but internally
+consistent chain that nothing inside the log can detect. Retention only ever deletes from the front,
+and proving the tip needs a copy off the box — which is what the offsite copy is for.
+
+### Retention — 400 days, and why
+
+`public.cms_audit_retention_days()` returns **400** and is the only place the number lives; the
+trigger, the service and the verifier all read it. 400 days covers one full contest cycle — the
+contest, an appeal filed months later, the off-season review, and the same contest the following
+year — which is the horizon a dispute actually appears on. Changing it is a migration, i.e. a
+recorded decision, not an environment variable.
+
+Retention is the only thing that deletes, it runs as the `audit-retention` service, and every run
+writes one `audit_log_retention` anchor (the boundary id + hash) so the gap it leaves is provable
+afterwards:
+
+```bash
+make audit-status            # window, cutoff, eligible rows, last prune; non-zero when overdue
+make audit-retention APPLY=1 # the same prune the service runs, by hand
+docker compose --profile core --profile audit up -d audit-retention   # the scheduled path
+```
+
+`make audit-status` saying `RETENTION OVERDUE: N row(s)` means the service has not run — either it
+is not started (`docker ps | grep cms-audit-retention`) or it is failing (`docker logs
+cms-audit-retention`). Nothing prunes in a request path.
+
+### Prove a backup still carries a valid log
+
+Every backup writes `backups/db/audit-log-<ts>.dump` beside the database dump — the log is
+deliberately **not** in the selective restore catalog (replaying audit rows into a restored database
+would put actions in the trail that never happened there), so this artifact is the only copy. It is
+small and it is the one thing that exists nowhere else.
+
+```bash
+make backup
+make audit-restore-verify                       # newest archive; checksum → restore → verify
+make audit-restore-verify DUMP=backups/db/audit-log-20261025-120000.dump
+```
+
+The script refuses to restore an archive whose `.sha256` does not match, restores into a scratch
+database it creates and drops, runs the same verifier against it, and exits non-zero if any step
+cannot be shown to have worked. `make audit-restore-verify` is the answer to "can you prove the
+chain is intact after a restore" — run it after any restore drill.
+
+### Owner separation (one-time, needs a maintenance window)
+
+A guard trigger is only as strong as the role that owns the table: the owner may `DISABLE TRIGGER`
+or `NO FORCE ROW LEVEL SECURITY`, and no trigger refuses its own owner. The cluster has no
+superuser by design (`postgres --single` is the only route — see `docs/DB-ROTATION.md`), so moving
+`audit_log` and its guard functions to `cms_audit_owner` is a deliberate step:
+
+```bash
+make audit-owner-bootstrap CONFIRM=1      # stops cms-database briefly, applies, restarts, verifies
+```
+
+Until it runs, `make audit-verify` prints `ownerSeparated=false` and warns: the *trigger* still
+refuses UPDATE/DELETE/TRUNCATE, but the role that owns the table could disable it. `scripts/__backup.sh`
+and every migration are unaffected by this step — only a future `ALTER TABLE audit_log` needs the
+owner.
+
 ## Configuration Files
 
 - `config.toml` - **Source of truth** (single config; edit this)
 - `.env` - Generated by `./cms config sync` — do not edit directly (unified env for all stacks)
 - `config/cms.toml` - Generated CMS config
-- `config/cms_ranking.toml` - Ranking config
 
 ## Important Commands
 
@@ -165,16 +308,16 @@ docker restart <name>  # Restart container
    ```bash
    make db-clean
    make pull
-   make core-img
+   make core
    sleep 10
    make cms-init
    make admin-create
-   make admin-img contest-img worker-img
+   make admin contest worker
    ```
 
 2. **Config Corruption**:
    ```bash
-   rm config/cms.toml config/cms_ranking.toml
+   rm config/cms.toml
    ./cms config sync
    docker restart cms-log-service
    ```
@@ -183,7 +326,7 @@ docker restart <name>  # Restart container
    ```bash
    docker compose down
    docker system prune -f
-   make core-img
+   make core
    ```
 
 ## Documentation

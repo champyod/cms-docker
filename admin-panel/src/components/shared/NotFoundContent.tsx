@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { buildRoute } from '@/lib/navigation/routes';
+
 export function NotFoundContent() {
   const pathname = usePathname();
   const locale = pathname?.split('/')[1] || 'en';
@@ -18,7 +20,7 @@ export function NotFoundContent() {
           </p>
         </div>
         <Link
-          href={`/${locale}`}
+          href={buildRoute(locale, 'home')}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary text-sm font-medium transition-colors"
         >
           Go to Dashboard

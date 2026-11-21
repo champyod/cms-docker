@@ -1,62 +1,30 @@
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 
-import { checkPermission, getPermissions } from '@/lib/permissions';
-import { getDictionary } from '@/i18n';
-import { listGroupsWithPermissions } from '@/app/actions/adminPermissions';
-import { GroupList } from '@/components/groups/GroupList';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { getRoutePermissions } from '@/lib/navigation/page-authorization';
+import { resolveLegacyRedirect } from '@/lib/navigation/redirects';
+import { AuthorizationError } from '@/lib/server/authorization';
 
-export default async function GroupsPage({
+const LEGACY_PATH = '/groups';
+
+/**
+ * Why this route still exists: the Groups section used to share the tabbed
+ * /permissions page, so the old address stays reachable for existing bookmarks,
+ * chord history, and links. Only a reader whose permissions fail closed is
+ * concealed; a 401 and any unexpected storage failure keep propagating.
+ */
+export default async function GroupsRedirectPage({
   params,
 }: {
   params: Promise<{ locale: string }>;
-}): Promise<React.JSX.Element> {
-  const { locale } = await params;
-  const dict = await getDictionary(locale);
-  const hasPermission = await checkPermission('group:list', false);
-
-  if (!hasPermission) {
-    notFound();
+}): Promise<never> {
+  try {
+    const { locale } = await params;
+    const effective = await getRoutePermissions();
+    const target = resolveLegacyRedirect(locale, LEGACY_PATH, effective);
+    if (target === null) notFound();
+    redirect(target);
+  } catch (error: unknown) {
+    if (error instanceof AuthorizationError && error.status === 403) notFound();
+    throw error;
   }
-
-  const [groupsResult, effective] = await Promise.all([
-    listGroupsWithPermissions(),
-    getPermissions(),
-  ]);
-
-  const groups = groupsResult.success ? groupsResult.data : [];
-  const permissionKeys = Array.from(effective);
-
-  return (
-    <Stack gap={8}>
-      <Stack gap={2}>
-        <Text variant="h1">{dict.groups?.title ?? 'Groups Management'}</Text>
-        <Text variant="muted">{dict.groups?.subtitle ?? 'Create and manage permission groups.'}</Text>
-      </Stack>
-
-      <GroupList
-        groups={groups}
-        permissionKeys={permissionKeys}
-        dict={dict.groups ?? {
-          title: 'Groups Management',
-          subtitle: 'Create and manage permission groups.',
-          createGroup: 'Create Group',
-          editGroup: 'Edit Group',
-          name: 'Name',
-          description: 'Description',
-          isSeeded: 'Seeded',
-          permissions: 'Permissions',
-          save: 'Save',
-          cancel: 'Cancel',
-          reasonPlaceholder: 'Reason for this change (required)',
-          deleteConfirm: 'Are you sure you want to delete this group? This action cannot be undone.',
-          noGroups: 'No groups found',
-          noGroupsDescription: 'Create a group to get started.',
-          deleteTooltip: 'Delete group',
-          editTooltip: 'Edit group',
-        }}
-      />
-    </Stack>
-  );
 }

@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" version="2.0"><channel>
+<title>Ubuntu security notices</title>
+<link>https://ubuntu.com/security/notices/rss.xml</link>
+<description>Recent content on Ubuntu security notices</description>
+<lastBuildDate>Tue, 10 Nov 2026 03:35:08 +0000</lastBuildDate>
+<item><title>USN-9100-1: nginx vulnerability</title><link>https://ubuntu.com/security/notices/USN-9100-1</link><description>It was discovered that nginx incorrectly handled certain requests.</description><guid isPermaLink="false">https://ubuntu.com/security/notices/USN-9100-1</guid><pubDate>Mon, 09 Nov 2026 18:33:50 +0000</pubDate></item>
+<item><title><![CDATA[USN-9101-1: yodl vulnerability]]></title><link>https://ubuntu.com/security/notices/USN-9101-1</link><description>A package this fleet does not run.</description><pubDate>Tue, 10 Nov 2026 08:00:00 +0000</pubDate></item>
+<item><title>USN-9102-1: linux vulnerability</title><link>https://ubuntu.com/security/notices/USN-9102-1</link><description>Outside the window.</description><pubDate>Thu, 01 Oct 2026 00:00:00 +0000</pubDate></item>
+<item><title>USN-9103-1: openssl vulnerability</title><link>https://ubuntu.com/security/notices/USN-9103-1</link><description>In the window, with a package we run.</description><pubDate>Tue, 10 Nov 2026 07:30:00 +0000</pubDate></item>
+</channel></rss>

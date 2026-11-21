@@ -1,0 +1,42 @@
+import type { GroupWithPermissions } from '@/app/actions/adminPermissions';
+import type { ListSortInput } from '@/lib/list-sorting';
+
+export interface GroupsDict {
+  title: string;
+  createGroup: string;
+  editGroup: string;
+  name: string;
+  description: string;
+  isSeeded: string;
+  permissions: string;
+  save: string;
+  cancel: string;
+  reasonPlaceholder: string;
+  deleteConfirm: string;
+  noGroups: string;
+  noGroupsDescription: string;
+  deleteTooltip: string;
+  editTooltip: string;
+  loadFailed: string;
+}
+
+export interface GroupListProps {
+  groups: GroupWithPermissions[];
+  permissionKeys: readonly string[];
+  dict: GroupsDict;
+  sort?: ListSortInput;
+}
+
+export interface GroupFormData {
+  name: string;
+  description: string;
+  permissionKeys: string[];
+  reason: string;
+}
+
+export const EMPTY_FORM: GroupFormData = {
+  name: '',
+  description: '',
+  permissionKeys: [],
+  reason: '',
+};

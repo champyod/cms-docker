@@ -1,0 +1,112 @@
+{
+  "derived_from": [
+    "src/cmsranking/User.py",
+    "src/cmsranking/Team.py",
+    "src/cmsranking/Task.py",
+    "src/cmsranking/Contest.py",
+    "src/cmsranking/Submission.py",
+    "src/cmsranking/Subchange.py",
+    "src/cmsranking/Entity.py"
+  ],
+  "note": "get() returns the instance __dict__ minus 'key'. Submission.get() also drops score, token and extra, so those never cross the wire on that entity. Subchange.get() drops score, token and extra only when they are null.",
+  "key_rule": {
+    "charset": "^[A-Za-z0-9_]+$",
+    "source": "RankingWebServer.py StoreHandler.put/delete reject any other key; put returns 403, delete returns 404"
+  },
+  "entities": {
+    "user": {
+      "wire": [
+        "f_name",
+        "l_name",
+        "team"
+      ],
+      "types": {
+        "f_name": "string",
+        "l_name": "string",
+        "team": "string|null"
+      }
+    },
+    "team": {
+      "wire": [
+        "name"
+      ],
+      "types": {
+        "name": "string"
+      }
+    },
+    "task": {
+      "wire": [
+        "name",
+        "short_name",
+        "contest",
+        "max_score",
+        "score_precision",
+        "extra_headers",
+        "order",
+        "score_mode"
+      ],
+      "types": {
+        "name": "string",
+        "short_name": "string",
+        "contest": "string (user key reference)",
+        "max_score": "float",
+        "score_precision": "integer >= 0",
+        "extra_headers": "list of string",
+        "order": "integer",
+        "score_mode": "string"
+      }
+    },
+    "contest": {
+      "wire": [
+        "name",
+        "begin",
+        "end",
+        "score_precision"
+      ],
+      "types": {
+        "name": "string",
+        "begin": "integer (unix timestamp)",
+        "end": "integer (unix timestamp), not less than begin",
+        "score_precision": "integer >= 0"
+      }
+    },
+    "submission": {
+      "wire": [
+        "user",
+        "task",
+        "time"
+      ],
+      "types": {
+        "user": "string",
+        "task": "string",
+        "time": "integer (unix timestamp)"
+      },
+      "dropped_by_get": [
+        "score",
+        "token",
+        "extra"
+      ]
+    },
+    "subchange": {
+      "wire": [
+        "submission",
+        "time",
+        "score?",
+        "token?",
+        "extra?"
+      ],
+      "types": {
+        "submission": "string",
+        "time": "integer (unix timestamp)",
+        "score": "float, optional",
+        "token": "boolean, optional",
+        "extra": "list of string, optional"
+      },
+      "dropped_by_get": [
+        "score",
+        "token",
+        "extra when null"
+      ]
+    }
+  }
+}

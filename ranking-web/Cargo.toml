@@ -1,0 +1,37 @@
+[package]
+name = "cms-ranking"
+version = "0.1.0"
+edition = "2021"
+# WHY: this crate is never published; it ships inside the image. Declaring that
+# is what lets deny.toml's `[licenses] private.ignore` tell this repository's own
+# (AGPL-3.0) code apart from a third-party AGPL dependency, which stays denied.
+publish = false
+
+[dependencies]
+axum = "0.8"
+bcrypt = "0.17"
+dotenvy = "0.15"
+hex = "0.4"
+hmac = "0.12"
+redis = { version = "0.27", features = ["connection-manager", "tokio-comp"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.9", default-features = false, features = ["derive", "json", "postgres", "runtime-tokio"] }
+sha2 = "0.10"
+subtle = "2"
+thiserror = "2"
+tower-http = { version = "0.6", features = ["fs"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+askama = "0.16.1"
+
+[dev-dependencies]
+# The cache's belt test drives the clock instead of sleeping through the interval, which needs
+# tokio's paused-time test utilities. Dev-only: the production build never gets this feature.
+tokio = { version = "1", features = ["test-util"] }
+tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+strip = true
+lto = true

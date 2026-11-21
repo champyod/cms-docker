@@ -1,15 +1,17 @@
 # Optional Features — HSM / Vault / DNSSEC-CAA / mTLS
 
-All four are **available but disabled by default** (`=0`), asked in `scripts/__domain.sh` TUI (max customizability, never forced), local overrides gitignored, so prod stays off unless explicitly enabled. No breaking change when off — existing domain/redis/captcha/prometheus behavior is unchanged.
+All four are **available but disabled by default** (`=0`), asked in `scripts/__domain.sh` TUI (max customizability, never forced). The flags live in `config.toml` `[infra]` like every other key, so prod stays off unless explicitly enabled. No breaking change when off — existing domain/redis/captcha/prometheus behavior is unchanged.
 
-| # | Feature | Env flag (default) | Enable via | Compose profile |
+| # | Feature | Config flag (default) | Enable via | Compose profile |
 |---|---------|--------------------|------------|-----------------|
-| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | `hsm` — `docker compose -f docker-compose.domain.yml --profile hsm up -d` |
+| 1 | HSM | `HSM_ENABLED=0` | `HSM_ENABLED=1 ./scripts/__domain.sh setup --apply` — prompts for `HSM_MODULE`/`HSM_PIN`/`HSM_KEY_LABEL` | none — no container provides the token; certbot and nginx reach it through PKCS#11 (see §1) |
 | 2 | Vault | `VAULT_ENABLED=0` | `VAULT_ENABLED=1` with `VAULT_ADDR`/`VAULT_TOKEN`/`VAULT_PATH` | `vault` — `docker compose -f docker-compose.vault.yml --profile vault up -d` |
 | 3 | DNSSEC + CAA | `DNSSEC_ENABLED=0`, `CAA_ENABLED=0` | `DNSSEC_ENABLED=1` / `CAA_ENABLED=1` (`CAA_ISSUER=letsencrypt.org`) | none — DNS only (see `docs/dnssec-caa-guide.md`) |
 | 4 | mTLS workers | `MTLS_WORKERS_ENABLED=0` | `MTLS_WORKERS_ENABLED=1` with `MTLS_CA_CERT` etc. | worker service env `MTLS_*` — no extra profile; volumes documented in `docker-compose.yml` |
 
-Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `config/hsm/*`, `*.db`, `config/vault/data/`, `config/mtls/*`, `*.pem.local`, `config/*.pem` (see `.gitignore`).
+There is **one** generated file: `.env`, written by `./cms config sync` from `config.toml`. Do not append to `.env` or to a `.env.local` — the sync overwrites `.env`, and nothing reads a local override file. `config.toml` itself is gitignored, which is where the secrets below belong.
+
+Local artefacts are **gitignored**: `config/hsm/*`, `*.db`, `config/vault/data/`, `config/mtls/*`, `*.pem.local`, `config/*.pem` (see `.gitignore`).
 
 ---
 
@@ -23,19 +25,26 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 - **Increase / lost:** without HSM, TLS key on filesystem could leak via backup/log snapshot; with HSM, even host compromise without PIN does not yield key — but loss of token without backup loses key permanently (keep wrapped backup).
 - **How to enable:**
   ```bash
-  # local (gitignored)
-  echo 'HSM_ENABLED=1' >> .env.local
-  echo 'HSM_MODULE=softhsm' >> .env.local   # softhsm | yubihsm | cloudhsm
-  echo 'HSM_PIN=1234'        >> .env.local
-  echo 'HSM_KEY_LABEL=grader-privkey' >> .env.local
+  # config.toml [infra]  (config.toml is gitignored)
+  #   HSM_ENABLED   = 1
+  #   HSM_MODULE    = "softhsm"        # softhsm | yubihsm | cloudhsm
+  #   HSM_PIN       = "<pin>"
+  #   HSM_KEY_LABEL = "grader-privkey"
+  ./cms config sync        # render .env and the HSM-facing config
+
   # or TUI: ./scripts/__domain.sh setup --apply  # asks Enable HSM? [y/N]
 
-  # run with profile
-  docker compose -f docker-compose.domain.yml --profile hsm up -d
+  # There is no `hsm` compose service: the token store is a PKCS#11 module, not a daemon,
+  # so nothing has to run alongside the stack. The former `image: opencrypto/softhsm`
+  # service never resolved (that repository does not exist) and was removed by
+  # docs/decisions/image-digest-pinning.md rather than left as an unpinnable name.
+  # SoftHSM for dev: install the package on the host that runs certbot, keep the token DB
+  # at config/hsm/tokens/ (gitignored). Hardware: YubiHSM via yubico/yubihsm if you script
+  # it — pin that image by tag+digest like every other third-party image.
   # certbot HSM issuance (example)
   certbot certonly --hsm --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-pin "$HSM_PIN" -d "$DOMAIN_NAME"
   ```
-  When disabled: `scripts/__domain.sh` logs `HSM disabled (set HSM_ENABLED=1 to enable)`.
+  When disabled: `scripts/__domain.sh` logs `HSM disabled (set HSM_ENABLED=1 in config.toml [infra] to enable)`.
 
 ## 2. Vault — HashiCorp Vault for secrets
 
@@ -47,16 +56,18 @@ Local real secrets/artefacts are **gitignored**: `.env.local`, `.env.*.local`, `
 - **Increase / lost:** secrets become auditable + rotatable without redeploy; but Vault downtime blocks rotation/lookup — keep `.env` fallback documented.
 - **How to enable:**
   ```bash
-  echo 'VAULT_ENABLED=1' >> .env.local
-  echo 'VAULT_ADDR=http://vault:8200' >> .env.local
-  echo 'VAULT_TOKEN=hvs....'     >> .env.local
-  echo 'VAULT_PATH=secret/cms'   >> .env.local
+  # config.toml [infra]
+  #   VAULT_ENABLED = 1
+  #   VAULT_ADDR    = "http://vault:8200"
+  #   VAULT_TOKEN   = "hvs...."
+  #   VAULT_PATH    = "secret/cms"
+  ./cms config sync
 
   docker compose -f docker-compose.vault.yml --profile vault up -d
   # alternative inline: docker compose -f docker-compose.domain.yml --profile vault up -d
   # without Vault: keep using __secrets-rotate.sh (header mentions Vault as alternative)
   ```
-  When disabled: logs `Vault disabled (set VAULT_ENABLED=1 … alternative: scripts/__secrets-rotate.sh)`. `.env.local` / `.env.*.local` are gitignored.
+  When disabled: logs `Vault disabled (set VAULT_ENABLED=1 in config.toml [infra] to enable; alternative: scripts/__secrets-rotate.sh)`.
 
 ## 3. DNSSEC + CAA — DNS integrity + CA restriction (DNS only)
 
@@ -64,19 +75,19 @@ Full why/price/pros/cons and the rollover runbook live in
 [dnssec-caa-guide.md](dnssec-caa-guide.md) — kept there, not duplicated here.
 
 - **Flags:** `DNSSEC_ENABLED=0`, `CAA_ENABLED=0`, `CAA_ISSUER=letsencrypt.org` — DNS-only, no compose change.
-- **Enable:** set the flags in `.env.local`, publish the CAA record and the `DS` at the parent zone per the guide, then verify with `dig +dnssec` (AD flag) and `dig CAA`.
+- **Enable:** set those keys in `config.toml` `[infra]` and run `./cms config sync`, publish the CAA record and the `DS` at the parent zone per the guide, then verify with `dig +dnssec` (AD flag) and `dig CAA`.
 - **Status:** `__domain.sh status` logs `DNSSEC=… CAA=…`.
 
 ## 4. mTLS — mutual TLS for worker RPC (beyond Tailscale)
 
-- **Why:** authenticate workers with client certs, not just `TAILSCALE_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
+- **Why:** authenticate workers with client certs, not just the `INNER_IP` allowlist; defense-in-depth at RPC boundary (ports `29000`, `28000`, … `26000`).
 - **Price:** `$0` self-signed CA via `openssl`; alternatives free (CF Zero Trust).
 - **Pros:** worker identity `CN=worker-0` via cert, revocation via CRL, rotated independently of tailnet.
 - **Cons:** cert distribution to every worker node, rotation + CRL/OCSP plumbing.
 - **Maintenance:** CA at `config/mtls/ca.pem` (generate `openssl req -x509 -newkey rsa:4096`); worker certs at `config/mtls/worker-*.pem`; rotate ~ yearly; share CRL at `config/mtls/crl.pem`. All `*.pem.local` gitignored.
 - **Increase / lost:** without mTLS, any tailnet peer (or `0.0.0.0` if mis-set) can reach RPC; with mTLS, stolen tailnet key alone is insufficient — but lost CA key can issue rogue workers (guard CA).
-- **Interaction with `TAILSCALE_IP`:**
-  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `TAILSCALE_IP` allow ALL — existing behavior.
+- **Interaction with `INNER_IP`:**
+  - `MTLS_WORKERS_ENABLED=0` (default): firewall / `cms.toml` stays `INNER_IP` allow ALL — existing behavior.
   - `MTLS_WORKERS_ENABLED=1`: firewall SHOULD restrict RPC to mTLS only (e.g. `iptables -A INPUT -p tcp --dport 26000 -m conntrack …` or nginx `ssl_verify_client on`). See runbook below.
 - **How to enable:**
   ```bash
@@ -86,24 +97,26 @@ Full why/price/pros/cons and the rollover runbook live in
   openssl req -newkey rsa:2048 -nodes -keyout config/mtls/worker-key.pem.local -out /tmp/worker.csr -subj /CN=worker-0
   openssl x509 -req -in /tmp/worker.csr -CA config/mtls/ca.pem.local -CAkey config/mtls/ca-key.pem.local -CAcreateserial -out config/mtls/worker.pem.local -days 365
 
-  echo 'MTLS_WORKERS_ENABLED=1' >> .env.local
-  echo 'MTLS_CA_CERT=config/mtls/ca.pem.local' >> .env.local
-  echo 'MTLS_WORKER_CERT=config/mtls/worker.pem.local' >> .env.local
-  echo 'MTLS_WORKER_KEY=config/mtls/worker-key.pem.local' >> .env.local
+  # config.toml [core]
+  #   MTLS_WORKERS_ENABLED = 1
+  #   MTLS_CA_CERT         = "config/mtls/ca.pem.local"
+  #   MTLS_WORKER_CERT     = "config/mtls/worker.pem.local"
+  #   MTLS_WORKER_KEY      = "config/mtls/worker-key.pem.local"
+  ./cms config sync
 
   # compose mounts are commented but documented in worker service — uncomment to enforce:
   # - ${MTLS_CA_CERT}:/etc/cms/mtls/ca.pem:ro
   # Then restart with that mount + enforce ssl_verify_client at proxy
   ```
-  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … TAILSCALE_IP allow ALL remains)`.
+  When disabled: logs `mTLS workers disabled (set MTLS_WORKERS_ENABLED=1 … INNER_IP allow ALL remains)`.
 
 ---
 
 ## TUI / Script Behavior (never forced)
 
 - `scripts/__domain.sh setup` prompts for each of the four if not already set, only on TTY, skipped with `--yes` / `-y` or non-TTY (CI).
-- `scripts/__domain.sh {status,preflight}` always logs a one-liner per feature (`… disabled (set …=1 to enable)` or `… enabled …`) without failing when off.
-- `scripts/__secrets-rotate.sh` header notes Vault as alternative; `.env.local` and `.env.*.local` are gitignored for local secrets.
+- `scripts/__domain.sh {status,preflight}` always logs a one-liner per feature (`… disabled (set …=1 in config.toml [infra] to enable)` or `… enabled …`) without failing when off.
+- `scripts/__secrets-rotate.sh` header notes Vault as alternative; the secrets above sit in gitignored `config.toml`.
 
 ## Validate (no breaking change when off)
 
@@ -114,5 +127,5 @@ docker compose -f docker-compose.domain.yml config > /dev/null
 docker compose -f docker-compose.vault.yml --profile vault config | grep -q vault
 grep -q 'HSM_ENABLED = 0' config.toml.example && grep -q 'VAULT_ENABLED = 0' config.toml.example
 grep -q 'DNSSEC_ENABLED = 0' config.toml.example && grep -q 'MTLS_WORKERS_ENABLED = 0' config.toml.example
-git check-ignore -q .env.local config/hsm/tokens/foo.db config/mtls/ca.pem.local && echo "gitignore ok"
+git check-ignore -q config.toml config/hsm/tokens/foo.db config/mtls/ca.pem.local && echo "gitignore ok"
 ```

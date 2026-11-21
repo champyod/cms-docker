@@ -93,7 +93,7 @@ class TestProxyService(DatabaseMixin, unittest.TestCase):
         result.ranking_score_details = ["100"]
         return result
 
-    def test_startup(self):
+    def test_it_sends_the_data_in_the_right_order_at_startup(self):
         """Test that data is sent in the right order at startup."""
         ProxyService(0, self.contest.id)
 

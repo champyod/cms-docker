@@ -14,16 +14,21 @@
 #   bans after 5 fails regardless (nginx-http-auth maxretry=5). Keep CAPTCHA
 #   optional via CAPTCHA_ENABLED=0 by default so prod stays off unless enabled.
 
-set -eu
-# pipefail only if available
-if (set -o pipefail 2>/dev/null); then
-    set -o pipefail
-fi
+set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "$REPO_ROOT"
 
-# shellcheck source=/dev/null
+# ---------------------------------------------------------------------------
+# lib/common.sh — the one source of log_info/log_warn/log_die. A missing library
+# is a broken delivery and is reported as one, so a second copy of the helpers
+# cannot drift from the one the rest of the scripts run.
+# ---------------------------------------------------------------------------
+if [[ ! -f "${SCRIPT_DIR}/__lib/common.sh" ]]; then
+  printf '[FAIL] %s\n' "missing ${SCRIPT_DIR}/__lib/common.sh — deliver scripts/__lib beside this script" >&2
+  exit 1
+fi
+# shellcheck disable=SC1091
 source "${SCRIPT_DIR}/__lib/common.sh"
 
 # ---------------------------------------------------------------------------
@@ -31,7 +36,20 @@ source "${SCRIPT_DIR}/__lib/common.sh"
 # ---------------------------------------------------------------------------
 JAIL_SOURCE="${REPO_ROOT}/config/fail2ban/jail.d/grader.conf"
 JAIL_DEST="/etc/fail2ban/jail.d/grader.conf"
-LOG_PATHS=("/var/log/nginx" "/var/log")
+# The nginx proxies write into named Docker volumes (cms-nginx-logs-domain,
+# cms-nginx-logs-contest), so the host path is under the Docker root and there
+# is no /var/log/nginx. The jail carries this placeholder; it is substituted at
+# apply/check time with the volumes' host glob.
+LOG_GLOB_PLACEHOLDER="__NGINX_LOG_GLOB__"
+DOCKER_VOLUME_GLOB="volumes/cms-nginx-logs-*/_data/*error*.log"
+
+docker_root() {
+  docker info --format '{{.DockerRootDir}}' 2>/dev/null || printf '/var/lib/docker'
+}
+
+nginx_log_glob() {
+  printf '%s/%s' "$(docker_root)" "$DOCKER_VOLUME_GLOB"
+}
 
 # ---------------------------------------------------------------------------
 # Usage
@@ -48,7 +66,8 @@ Jails:
   nginx-http-auth   maxretry=5 bantime=1800 findtime=300
   nginx-limit-req   maxretry=10 bantime=300 findtime=300
 
-Log paths: /var/log/nginx/*error*.log (inside nginx-logs volume)
+Log path: the nginx logs inside the named Docker volumes (cms-nginx-logs-domain,
+          cms-nginx-logs-contest), resolved from the Docker root at run time.
 
 The config source is at config/fail2ban/jail.d/grader.conf.
 Deployed to /etc/fail2ban/jail.d/grader.conf on the host.
@@ -71,6 +90,7 @@ cmd_check() {
 
   local ok=1
 
+  # Check source config exists
   printf '  %-40s' "Jail config source:"
   if [[ -f "$JAIL_SOURCE" ]]; then
     printf 'EXISTS (%s)\n' "$JAIL_SOURCE"
@@ -79,6 +99,7 @@ cmd_check() {
     ok=0
   fi
 
+  # Check jail config syntax (basic validation)
   printf '  %-40s' "Jail config syntax:"
   if [[ -f "$JAIL_SOURCE" ]]; then
     if grep -q '\[nginx-http-auth\]' "$JAIL_SOURCE" && grep -q '\[nginx-limit-req\]' "$JAIL_SOURCE"; then
@@ -91,6 +112,7 @@ cmd_check() {
     printf 'SKIP (no config)\n'
   fi
 
+  # Check fail2ban is installed
   printf '  %-40s' "fail2ban installed:"
   if command -v fail2ban-client >/dev/null 2>&1; then
     local version
@@ -101,19 +123,30 @@ cmd_check() {
     ok=0
   fi
 
-  for log_path in "${LOG_PATHS[@]}"; do
-    printf '  %-40s' "Log path $log_path:"
-    if [[ -d "$log_path" ]]; then
-      if [[ -w "$log_path" ]] || [[ -O "$log_path" ]]; then
-        printf 'WRITABLE\n'
-      else
-        printf 'EXISTS (not writable by current user — sudo may be needed)\n'
-      fi
-    else
-      printf 'NOT FOUND (will be created by nginx container)\n'
-    fi
-  done
+  # Check the jail carries the placeholder the apply path substitutes
+  printf '  %-40s' "Placeholder present:"
+  if [[ -f "$JAIL_SOURCE" ]] && grep -q "$LOG_GLOB_PLACEHOLDER" "$JAIL_SOURCE"; then
+    printf 'YES (%s)\n' "$LOG_GLOB_PLACEHOLDER"
+  else
+    printf 'NO (the jail must carry %s)\n' "$LOG_GLOB_PLACEHOLDER"
+    ok=0
+  fi
 
+  # Check the resolved nginx log glob matches the volume logs
+  local glob matches
+  glob="$(nginx_log_glob)"
+  printf '  %-40s' "nginx log glob:"
+  printf '%s\n' "$glob"
+  printf '  %-40s' "  matches:"
+  # shellcheck disable=SC2086
+  matches="$(compgen -G "$glob" || true)"
+  if [[ -n "$matches" ]]; then
+    printf 'logs present\n'
+  else
+    printf 'NO MATCH (nginx not started yet, or the Docker root moved)\n'
+  fi
+
+  # Check destination directory
   printf '  %-40s' "Target dir /etc/fail2ban/jail.d/:"
   if [[ -d "/etc/fail2ban/jail.d" ]]; then
     printf 'EXISTS\n'
@@ -121,6 +154,7 @@ cmd_check() {
     printf 'NOT FOUND (will be created on --apply)\n'
   fi
 
+  # Check if jail already deployed
   printf '  %-40s' "Deployed jail config:"
   if [[ -f "$JAIL_DEST" ]]; then
     printf 'EXISTS\n'
@@ -143,6 +177,7 @@ cmd_apply() {
   log_info "fail2ban apply mode"
   echo ""
 
+  # Verify source exists
   if [[ ! -f "$JAIL_SOURCE" ]]; then
     log_die "jail config not found: $JAIL_SOURCE" 1
   fi
@@ -154,27 +189,37 @@ cmd_apply() {
     return 1
   fi
 
-  if ! sudo -n true 2>/dev/null; then
-    log_warn "sudo not available without password — cannot deploy to /etc/fail2ban/"
+  # WHY the pre-check and not a prompt per step: --apply is also reached from the TUI,
+  # where a password dialog would hang, and run_privileged prints the command to run.
+  if ! can_escalate; then
+    log_warn "not root and sudo is not available without a password — cannot deploy to /etc/fail2ban/"
     log_warn "Run with: sudo $0 --apply"
     return 1
   fi
 
-  sudo mkdir -p /etc/fail2ban/jail.d
+  # Create target directory if needed
+  run_privileged mkdir -p /etc/fail2ban/jail.d
 
-  sudo cp -f "$JAIL_SOURCE" "$JAIL_DEST"
-  sudo chmod 644 "$JAIL_DEST"
-  log_info "deployed $JAIL_SOURCE -> $JAIL_DEST"
+  # Deploy the jail with the resolved volume log path
+  local rendered
+  rendered="$(mktemp)"
+  sed "s#${LOG_GLOB_PLACEHOLDER}#$(nginx_log_glob)#g" "$JAIL_SOURCE" > "$rendered"
+  run_privileged cp -f "$rendered" "$JAIL_DEST"
+  rm -f "$rendered"
+  run_privileged chmod 644 "$JAIL_DEST"
+  log_info "deployed $JAIL_SOURCE -> $JAIL_DEST (log path $(nginx_log_glob))"
 
-  if sudo fail2ban-client reload 2>/dev/null; then
+  # Reload fail2ban
+  if run_privileged fail2ban-client reload 2>/dev/null; then
     log_info "fail2ban reloaded"
   else
     log_warn "fail2ban-client reload failed — restart manually: systemctl restart fail2ban"
   fi
 
-  if sudo fail2ban-client status 2>/dev/null; then
+  # Verify jails are active
+  if run_privileged fail2ban-client status 2>/dev/null; then
     log_info "fail2ban status:"
-    sudo fail2ban-client status 2>/dev/null || true
+    run_privileged fail2ban-client status 2>/dev/null || true
   fi
 
   log_info "fail2ban jail config applied"

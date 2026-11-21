@@ -1,19 +1,15 @@
 'use client';
 
-import { cn } from '@/lib/utils';
-
-export const LABEL_CLASSES = 'text-xs font-bold uppercase tracking-widest text-muted-foreground';
-
-export const FIELD_BASE =
-  'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
-
-export const FIELD_ERROR = 'border-destructive focus-visible:ring-destructive/20';
-
-export function fieldClasses(hasError: boolean): string {
-  return cn(FIELD_BASE, hasError && FIELD_ERROR);
-}
-
-export function ErrorText({ errors, field }: { errors: Map<string, string>; field: string }) {
-  if (!errors.has(field)) return null;
-  return <p className="text-xs text-destructive">{errors.get(field)}</p>;
-}
+/**
+ * Why this module is a re-export now: the shared LimitField is a core component, and the core
+ * boundary test forbids core from importing a feature folder, so the one definition of the field
+ * look lives at `@/components/core/fieldStyles` and the contestants that already import this path
+ * keep working unchanged.
+ */
+export {
+  ErrorText,
+  FIELD_BASE,
+  FIELD_ERROR,
+  LABEL_CLASSES,
+  fieldClasses,
+} from '@/components/core/fieldStyles';

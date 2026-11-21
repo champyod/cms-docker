@@ -7,7 +7,7 @@ export interface TaskDiagnostic {
 
 export function buildDiagnosticsForLoadedTask(task: {
   active_dataset_id: number | null;
-  contest_id: number | null;
+  contest_tasks: Array<{ contest_id: number }>;
   statements: Array<{ id: number }>;
   datasets_datasets_task_idTotasks: Array<{ id: number; _count: { testcases: number } }>;
 }): TaskDiagnostic[] {
@@ -19,8 +19,8 @@ export function buildDiagnosticsForLoadedTask(task: {
     if (!activeDataset) diagnostics.push({ type: 'error', message: 'Active dataset not found.' });
     else if (activeDataset._count.testcases === 0) diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
   }
-  if (task.statements.length === 0) diagnostics.push({ type: 'error', message: 'No statements found.' });
-  if (!task.contest_id) diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
+  if (task.statements.length === 0) diagnostics.push({ type: 'warning', message: 'No statements found.' });
+  if (task.contest_tasks.length === 0) diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
   return diagnostics;
 }
 
@@ -29,6 +29,7 @@ export async function computeTaskDiagnostics(taskId: number): Promise<TaskDiagno
     where: { id: taskId },
     include: {
       statements: { select: { id: true } },
+      contest_tasks: { select: { contest_id: true } },
       datasets_datasets_task_idTotasks: { include: { testcases: { select: { id: true } } } },
     },
   });
@@ -47,9 +48,9 @@ export async function computeTaskDiagnostics(taskId: number): Promise<TaskDiagno
     diagnostics.push({ type: 'error', message: 'Active dataset has no test cases.' });
   }
   if (task.statements.length === 0) {
-    diagnostics.push({ type: 'error', message: "No statements found. Users won't see instructions." });
+    diagnostics.push({ type: 'warning', message: "No statements found. Users won't see instructions." });
   }
-  if (!task.contest_id) {
+  if (task.contest_tasks.length === 0) {
     diagnostics.push({ type: 'warning', message: 'Not assigned to any contest.' });
   }
   return diagnostics;

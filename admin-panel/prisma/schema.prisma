@@ -26,6 +26,9 @@ model admins {
   questions            questions[]
   admin_groups         admin_groups[]
   permission_overrides admin_permission_overrides[]
+  username_policies    username_policies[]
+  contest_usernames    contest_usernames[]
+  contest_usernames_history contest_usernames_history[]
 }
 
 model announcements {
@@ -89,11 +92,29 @@ model contests {
   min_submission_interval_grace_period             Unsupported("interval")?
   min_user_test_interval                           Unsupported("interval")?
   queue_fairness_penalty_seconds                   Int                      @default(0)
+  /// The evaluation throttle family: declared by the classic ORM (src/cms/db/contest.py) and created
+  /// by the DDL in scripts/__fix_db_schema.sql, NOT by a Prisma migration. The columns already exist
+  /// in every live database, so a migration here would fail against one that has them and against a
+  /// fresh one whose schema the same fix script builds. Do not generate a migration for these (or the
+  /// task override below): mirror them so the panel's reads and writes can name them, the way
+  /// contests_single_active_key documents its own out-of-band index.
+  evaluation_throttle_delay_s                      Int                      @default(0)
+  evaluation_throttle_window_s                     Int                      @default(0)
+  evaluation_throttle_max                          Int                      @default(0)
+  evaluation_final_open                            Boolean                  @default(false)
+  evaluation_final_open_at                         DateTime?                @db.Timestamp(6)
+  /// At most one contest may be flagged active. The invariant is a partial unique index
+  /// (contests_single_active_key), which Prisma cannot express, so it lives only in
+  /// 20261015153000_single_active_contest and has no counterpart here — `prisma migrate dev` must
+  /// not read that absence as an index to drop.
   is_active                                        Boolean                  @default(false)
   score_precision                                  Int
   announcements                                    announcements[]
   participations                                   participations[]
-  tasks                                            tasks[]
+  contest_tasks                                    contest_tasks[]
+  contest_usernames                                contest_usernames[]
+  contest_teams                                    contest_teams[]
+  services                                         services[]
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -223,6 +244,7 @@ model participations {
   questions     questions[]
   submissions   submissions[]
   user_tests    user_tests[]
+  contest_usernames contest_usernames[]
 
   @@unique([contest_id, user_id])
   @@index([contest_id], map: "ix_participations_contest_id")
@@ -238,6 +260,8 @@ model questions {
   ignored            Boolean
   reply_subject      String?        @db.VarChar
   reply_text         String?        @db.VarChar
+  /// Null until an admin answers, and on every row written before the column existed.
+  resolution_kind    question_resolution_kind?
   participation_id   Int
   admin_id           Int?
   admins             admins?        @relation(fields: [admin_id], references: [id])
@@ -313,8 +337,6 @@ model submissions {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model tasks {
   id                                            Int                      @id @default(autoincrement())
-  num                                           Int?
-  contest_id                                    Int?
   name                                          String                   @unique @db.VarChar
   title                                         String                   @db.VarChar
   submission_format                             String[]                 @db.VarChar
@@ -331,6 +353,9 @@ model tasks {
   max_user_test_number                          Int?
   min_submission_interval                       Unsupported("interval")?
   min_user_test_interval                        Unsupported("interval")?
+  /// The per-task throttle override: NULL inherits the contest's delay, 0 is "no delay for this
+  /// task". Created by scripts/__fix_db_schema.sql — no migration (see the contests model's note).
+  evaluation_throttle_delay_s                   Int?
   feedback_level                                feedback_level
   score_precision                               Int
   score_mode                                    score_mode
@@ -340,13 +365,24 @@ model tasks {
   statements                                    statements[]
   submissions                                   submissions[]
   datasets_tasks_id_active_dataset_idTodatasets datasets?                @relation("tasks_id_active_dataset_idTodatasets", fields: [id, active_dataset_id], references: [task_id, id], onDelete: SetNull, onUpdate: SetNull, map: "fk_active_dataset_id")
-  contests                                      contests?                @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  contest_tasks                                 contest_tasks[]
   user_tests                                    user_tests[]
 
-  @@unique([contest_id, name])
-  @@unique([contest_id, num])
   @@unique([id, active_dataset_id])
-  @@index([contest_id], map: "ix_tasks_contest_id")
+}
+
+/// The membership of a task in a contest, carrying the per-contest ordering.
+/// A task may belong to many contests; this join table is the source of truth.
+model contest_tasks {
+  contest_id Int
+  task_id    Int
+  num        Int?
+  contests   contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  tasks      tasks    @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@id([contest_id, task_id])
+  @@unique([contest_id, num])
+  @@index([task_id], map: "ix_contest_tasks_task_id")
 }
 
 model teams {
@@ -355,8 +391,24 @@ model teams {
   name           String           @db.VarChar
   organization   String?
   leader_id      Int?
+  registerable   Boolean          @default(true)
   leader         users?           @relation("team_leader", fields: [leader_id], references: [id])
   participations participations[]
+  contest_teams  contest_teams[]
+}
+
+/// The registration roster of a contest: a row overrides the team's own
+/// registerable flag for that contest; a team with no row falls back to
+/// teams.registerable, so a contest with no rows keeps today's behaviour.
+model contest_teams {
+  contest_id   Int
+  team_id      Int
+  registerable Boolean  @default(true)
+  contests     contests @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  teams        teams    @relation(fields: [team_id], references: [id], onDelete: Cascade)
+
+  @@id([contest_id, team_id])
+  @@index([team_id], map: "ix_contest_teams_team_id")
 }
 
 model testcases {
@@ -482,6 +534,46 @@ model monitor_targets {
   @@map("monitor_targets")
 }
 
+/// One archived run of a backup schedule, or of a backup an admin triggered by
+/// hand. `scheduleId` stays NULL for manual runs and is deliberately not a
+/// relation: run history outlives the schedule it came from, so deleting a
+/// schedule must not delete the audit trail.
+model backup_runs {
+  id         String    @id @default(cuid())
+  scheduleId String?
+  kind       String
+  tables     String[]  @db.VarChar
+  status     String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  message    String?
+  manifestTs String?
+
+  @@index([startedAt], map: "ix_backup_runs_started_at")
+  @@map("backup_runs")
+}
+
+/// A recurring selective backup. `nextRunAt` is what the backup poller compares
+/// against the clock, so it is indexed together with `enabled`: every poll asks
+/// for exactly `enabled = true AND nextRunAt <= now`.
+model backup_schedules {
+  id           String            @id @default(cuid())
+  name         String            @unique
+  tables       String[]          @db.VarChar
+  intervalMins Int
+  enabled      Boolean           @default(true)
+  lastRunAt    DateTime?
+  nextRunAt    DateTime
+  /// Legacy pointer kept as a plain column for the retired locations layer: the
+  /// one tree is whatever BACKUP_DIR mounts, so the value is always NULL/default.
+  locationId   String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@index([enabled, nextRunAt], map: "ix_backup_schedules_enabled_next_run_at")
+  @@map("backup_schedules")
+}
+
 model users {
   id                  Int              @id @default(autoincrement())
   first_name          String           @db.VarChar
@@ -497,6 +589,8 @@ model users {
   country             String?
   participations      participations[]
   led_teams           teams[]          @relation("team_leader")
+  contestant_group_memberships contestant_group_memberships[]
+  contest_usernames   contest_usernames[]
 }
 
 enum compilation_outcome {
@@ -524,6 +618,11 @@ enum token_mode {
   disabled
   finite
   infinite
+}
+
+enum question_resolution_kind {
+  clarification_needed
+  settled_by_statement
 }
 
 model permissions {
@@ -605,3 +704,556 @@ model audit_log {
   @@index([entity], map: "ix_audit_log_entity")
   @@index([timestamp], map: "ix_audit_log_timestamp")
 }
+
+/// The retention ledger: one row per prune run, written by the retention service
+/// alone and never deleted.
+///
+/// WHY this is not a column on `audit_log`: the row recording a prune would be the
+/// first row the next prune removes, so the proof that a gap is a decision has to
+/// live outside the chain it cuts. Each row anchors the boundary — the last id and
+/// hash that were removed and the first id that remains — so a verifier can tell a
+/// retention gap from a deleted row.
+///
+/// `entry_hash`/`prev_hash` chain these rows to each other with the same recipe as
+/// `audit_log`, so removing an anchor is as detectable as editing a log row.
+model audit_log_retention {
+  id                BigInt   @id @default(autoincrement())
+  performed_at      DateTime @default(now()) @db.Timestamp(6)
+  /// The window in force when the run happened; the constant lives in
+  /// public.cms_audit_retention_days().
+  window_days       Int
+  /// Rows strictly older than this were eligible.
+  cutoff            DateTime @db.Timestamp(6)
+  deleted_count     Int
+  first_deleted_id  BigInt?
+  last_deleted_id   BigInt?
+  last_deleted_hash String?  @db.VarChar
+  /// Lowest audit_log.id still present after the run; NULL when the log is empty.
+  retained_from_id  BigInt?
+  actor             String   @db.VarChar
+  entry_hash        String?  @db.VarChar
+  prev_hash         String?  @db.VarChar
+
+  @@index([performed_at], map: "ix_audit_log_retention_performed_at")
+}
+
+/// A group of contestants. Unlike the RBAC `groups`, which hold
+/// admin permissions, these groups hold contestants only: a
+/// username policy on a group applies to every member, which is
+/// how the display username feature is toggled in bulk.
+model contestant_groups {
+  id          Int                            @id @default(autoincrement())
+  name        String                         @unique @db.VarChar
+  description String?                        @db.VarChar
+  created_at  DateTime                       @default(now())
+  memberships contestant_group_memberships[]
+}
+
+/// The membership of a contestant in a contestant group.
+model contestant_group_memberships {
+  id              Int                @id @default(autoincrement())
+  user_id         Int
+  group_id        Int
+  created_at      DateTime           @default(now())
+  contestant_groups contestant_groups @relation(fields: [group_id], references: [id], onDelete: Cascade)
+  users           users              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, group_id])
+  @@index([user_id], map: "ix_contestant_group_memberships_user_id")
+  @@index([group_id], map: "ix_contestant_group_memberships_group_id")
+}
+
+/// Whether a contestant may configure their display username,
+/// resolved with the precedence contest > user > group; the
+/// absence of a row for a scope means "unset" and the
+/// resolution falls through to the next level.
+model username_policies {
+  id         Int                    @id @default(autoincrement())
+  scope      username_policy_scope
+  scope_id   Int
+  policy     username_policy
+  updated_at DateTime               @default(now())
+  updated_by Int?
+  admins     admins?                @relation(fields: [updated_by], references: [id], onDelete: SetNull)
+
+  @@unique([scope, scope_id])
+  @@index([scope_id], map: "ix_username_policies_scope_id")
+  @@index([updated_by], map: "ix_username_policies_updated_by")
+}
+
+/// The current display username of a contestant in a contest,
+/// shown by the contest pages and the rankings instead of their
+/// real name. The login username is untouched.
+model contest_usernames {
+  id                  Int            @id @default(autoincrement())
+  participation_id    Int            @unique
+  contest_id          Int
+  user_id             Int
+  username            String         @db.VarChar
+  updated_at          DateTime       @default(now())
+  updated_by_admin_id Int?
+  admins              admins?        @relation(fields: [updated_by_admin_id], references: [id], onDelete: SetNull)
+  contests            contests       @relation(fields: [contest_id], references: [id], onDelete: Cascade)
+  participations      participations @relation(fields: [participation_id], references: [id], onDelete: Cascade)
+  users               users          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([contest_id, username])
+  @@index([contest_id], map: "ix_contest_usernames_contest_id")
+  @@index([user_id], map: "ix_contest_usernames_user_id")
+  @@index([updated_by_admin_id], map: "ix_contest_usernames_updated_by_admin_id")
+}
+
+/// The append-only history of the display username changes, for
+/// audit and dispute resolution.
+model contest_usernames_history {
+  id              Int       @id @default(autoincrement())
+  contest_id      Int
+  user_id         Int
+  username        String?   @db.VarChar
+  set_at          DateTime  @default(now()) @db.Timestamp(6)
+  set_by_admin_id Int?
+  admins          admins?   @relation(fields: [set_by_admin_id], references: [id], onDelete: SetNull)
+
+  @@index([contest_id], map: "ix_contest_usernames_history_contest_id")
+  @@index([user_id], map: "ix_contest_usernames_history_user_id")
+  @@index([set_by_admin_id], map: "ix_contest_usernames_history_set_by_admin_id")
+}
+
+enum username_policy_scope {
+  contest
+  user
+  group
+}
+
+enum username_policy {
+  allow
+  deny
+}
+
+/// One security block event — a fail2ban ban, a login lockout or a WAF block.
+/// A row is written per event, never per failed attempt: the login counter stays
+/// in memory so a brute-force run cannot amplify into database writes.
+model security_blocks {
+  id         BigInt          @id @default(autoincrement())
+  kind       String          @db.VarChar
+  source     String          @db.VarChar
+  ip         String?         @db.VarChar
+  subject    String?         @db.VarChar
+  surface_id Int?
+  detail     Json?
+  started_at DateTime        @default(now())
+  expires_at DateTime?
+  ended_at   DateTime?
+  ended_by   Int?
+  active     Boolean         @default(true)
+  created_at DateTime        @default(now())
+  surfaces   login_surfaces? @relation(fields: [surface_id], references: [id], onDelete: SetNull)
+
+  @@index([active, kind], map: "ix_security_blocks_active_kind")
+  @@index([ip], map: "ix_security_blocks_ip")
+  @@index([started_at], map: "ix_security_blocks_started_at")
+  @@index([surface_id], map: "ix_security_blocks_surface_id")
+  @@map("security_blocks")
+}
+
+/// The login faces a failed attempt can come from. The Redis counter namespace
+/// says only which store family a counter belongs to — `cms:login:` is shared by
+/// the contest, classic-admin and panel faces — so this table names the precise
+/// face and its label. An attempt carries only its key; the panel resolves the id
+/// and label from here, so a new face is a row, not a code branch.
+model login_surfaces {
+  id         Int               @id @default(autoincrement())
+  key        String            @unique @db.VarChar
+  label      String            @db.VarChar
+  created_at DateTime          @default(now()) @db.Timestamp(6)
+  blocks     security_blocks[]
+
+  @@map("login_surfaces")
+}
+
+/// One row per thing a security producer says is out of date or known-vulnerable,
+/// keyed by the producer's own stable identity: `(source, key)`. The producers POST
+/// their full current set, so a row that stops being reported is RESOLVED (a
+/// timestamp), never deleted — history stays readable and the audit trail keeps its
+/// subject. `severity` is null when a producer has none (Diun reports drift, not a
+/// CVE); `available` is the version or digest that fixes it, when the producer knows.
+model security_findings {
+  id          Int       @id @default(autoincrement())
+  /// diun | rootfs | osv — the producer that reported this row.
+  source      String    @db.VarChar
+  /// Stable identity within the source, chosen by the producer (image ref, CVE+package).
+  key         String    @db.VarChar
+  /// image | os-package | dependency | advisory.
+  kind        String    @db.VarChar
+  /// CRITICAL | HIGH | MEDIUM | LOW | UNKNOWN, or null when the producer reports no rating.
+  severity    String?   @db.VarChar
+  /// Image reference, package name or dependency name.
+  subject     String    @db.VarChar
+  installed   String?   @db.VarChar
+  /// The version that fixes it, when known.
+  available   String?   @db.VarChar
+  title       String?   @db.VarChar
+  url         String?   @db.VarChar
+  /// Which box reported it, for diun and rootfs.
+  host        String?   @db.VarChar
+  /// reachable | unreachable | unknown — the classifier's verdict, stored once at ingest.
+  reachability String   @default("unknown") @db.VarChar
+  detail      Json?
+  first_seen  DateTime  @default(now())
+  last_seen   DateTime  @updatedAt
+  /// Set by a `complete: true` push that no longer mentions the row. Never a delete.
+  resolved_at DateTime?
+
+  /// Open while this row's verdict is 'reachable' under a waiver written when it was not.
+  flip security_finding_flips?
+
+  @@unique([source, key])
+  @@index([resolved_at, severity])
+  @@map("security_findings")
+}
+
+/// The waiver a flipped verdict defeats: one row per finding whose reachability became
+/// 'reachable' while a live waiver still covered it. A waiver is keyed on the CVE and
+/// carries no host, so it cannot follow a verdict — this row is the only place that
+/// remembers the decision was taken when the code path was NOT running.
+model security_finding_flips {
+  id           Int       @id @default(autoincrement())
+  /// One episode per finding: a later flip re-opens this row instead of piling up history.
+  finding_id   Int       @unique
+  /// Copied at detection, so a filter by host or by severity never joins the feed.
+  host         String?   @db.VarChar
+  severity     String?   @db.VarChar
+  /// The producer's key at the moment of the flip: what a message names without a second read.
+  finding_key  String    @db.VarChar
+  /// The verdict it held before: unreachable | unknown, never reachable.
+  from_verdict String    @db.VarChar
+  /// The live decision that covers it; a waiver that ends stops the flip counting.
+  waiver_id    Int
+  /// When the verdict became reachable under that decision.
+  flipped_at   DateTime  @default(now())
+  /// Set when the verdict leaves 'reachable' or the row resolves; open while both hold.
+  cleared_at   DateTime?
+
+  finding      security_findings @relation(fields: [finding_id], references: [id], onDelete: Cascade)
+
+  @@index([cleared_at, severity])
+  @@index([cleared_at, host])
+  @@map("security_finding_flips")
+}
+
+/// A decision with a date: this finding (or this CVE a finding carries) is accepted
+/// until `review_by`, then it renders as EXPIRED and counts on the overview. A waiver
+/// is the ONLY waiver mechanism — it replaces `.trivyignore` and `bun audit --ignore`,
+/// because a waived row is still shown, while an ignored one disappears.
+/// Ending is not deleting: `ended_at` keeps the decision and its author readable.
+model security_waivers {
+  id         Int       @id @default(autoincrement())
+  source     String    @db.VarChar
+  /// The finding key, or a CVE id the finding carries.
+  match      String    @db.VarChar
+  reason     String
+  /// Mandatory: a waiver without a review date is how a hole becomes permanent.
+  review_by  DateTime
+  created_by Int
+  created_at DateTime  @default(now())
+  ended_at   DateTime?
+
+  @@index([source, match])
+  @@map("security_waivers")
+}
+
+/// The kernel modules a host actually runs, as the rootfs scan reported them: one row
+/// per host, replaced on every accepted push. Both lists are kept rather than one
+/// verdict per module, because "blacklisted AND currently loaded" is a real state
+/// (ksmbd on the production hosts) and the reader is what applies loaded-wins.
+model security_host_modules {
+  /// The box that reported it — the whole identity of the row.
+  host           String   @id
+  /// The release the loaded list came from, e.g. 6.12.9-1-cachyos.
+  kernel_release String   @db.VarChar
+  /// Names in /proc/modules at scan time.
+  loaded         String[]
+  /// Names an /etc/modprobe.d rule blacklists or installs /bin/true.
+  blocked        String[]
+  /// When the panel recorded this state, not when the scan began.
+  recorded_at    DateTime @default(now()) @db.Timestamptz(6)
+
+  @@map("security_host_modules")
+}
+
+/// The ranking projection the proxy pushes: one table per entity kind, so the
+/// wire shape and the consistency rules stay readable instead of hiding inside a
+/// jsonb blob.
+///
+/// No foreign keys on purpose. The pusher sends kinds in dependency order and
+/// the Python store treated a dangling reference as one entity to drop, never as
+/// a failed write; a constraint here would turn a push-order slip into a lost
+/// submission.
+model ranking_contests {
+  key             String   @id @db.VarChar
+  name            String   @db.VarChar
+  begin           Int
+  end             Int
+  score_precision Int
+  /// The contest's own id, pushed with the projection. The projected key is the encoded
+  /// contest *name*, so this is the only handle that survives a rename.
+  contest_id      Int?
+  updated_at      DateTime @default(now())
+
+  @@index([contest_id], map: "ix_ranking_contests_contest_id")
+  @@map("ranking_contests")
+}
+
+model ranking_tasks {
+  key             String   @id @db.VarChar
+  name            String   @db.VarChar
+  short_name      String   @db.VarChar
+  contest         String   @db.VarChar
+  /// The contest's own id, pushed with the projection. WHY beside the encoded contest *name*:
+  /// the reader scopes the columns it draws by the stable handle the config names, and a renamed
+  /// contest moves the encoded name while the id stays put, so scoping on the name alone orphans
+  /// every column of a renamed contest.
+  contest_id      Int?
+  max_score       Float
+  score_precision Int
+  extra_headers   Json
+  display_order   Int
+  score_mode      String   @db.VarChar
+  updated_at      DateTime @default(now())
+
+  @@index([contest], map: "ix_ranking_tasks_contest")
+  @@index([contest_id], map: "ix_ranking_tasks_contest_id")
+  @@index([display_order], map: "ix_ranking_tasks_order")
+  @@map("ranking_tasks")
+}
+
+model ranking_teams {
+  key        String   @id @db.VarChar
+  name       String   @db.VarChar
+  updated_at DateTime @default(now())
+
+  @@map("ranking_teams")
+}
+
+model ranking_users {
+  key        String   @id @db.VarChar
+  f_name     String   @db.VarChar
+  l_name     String   @db.VarChar
+  team       String?  @db.VarChar
+  updated_at DateTime @default(now())
+
+  @@index([team], map: "ix_ranking_users_team")
+  @@map("ranking_users")
+}
+
+model ranking_submissions {
+  key        String   @id @db.VarChar
+  user       String   @db.VarChar
+  task       String   @db.VarChar
+  time       Int
+  updated_at DateTime @default(now())
+
+  @@index([user, task], map: "ix_ranking_submissions_user_task")
+  @@index([time], map: "ix_ranking_submissions_time")
+  @@map("ranking_submissions")
+}
+
+model ranking_subchanges {
+  key        String   @id @db.VarChar
+  submission String   @db.VarChar
+  time       Int
+  score      Float?
+  token      Boolean?
+  extra      Json?
+  updated_at DateTime @default(now())
+
+  @@index([submission], map: "ix_ranking_subchanges_submission")
+  @@index([time], map: "ix_ranking_subchanges_time")
+  @@map("ranking_subchanges")
+}
+
+/// A participation the panel hid, projected as a tombstone the board filters out.
+///
+/// WHY a table rather than a delete: the board row is driven by ranking_submissions, so
+/// dropping the ranking_users row leaves the row on the board and its scores in the
+/// ledger. Both writers reach this table — the proxy's full push and the panel's mirror —
+/// and the reader folds a row into the same hide rule the override rows already use.
+///
+/// WHY scoped by contest id and not by the encoded contest name ranking_tasks carries:
+/// the reader's only contest handle is RANKING_CONTEST_ID, the same CMS contest id
+/// ranking_overrides.contest_id holds, so this is the one column it can filter on. The
+/// key is (key, contest_id) because a username may be hidden in one contest and ranked
+/// in another.
+model ranking_hidden {
+  key        String   @db.VarChar
+  contest_id Int
+  updated_at DateTime @default(now())
+
+  @@id([key, contest_id])
+  @@index([contest_id], map: "ix_ranking_hidden_contest")
+  @@map("ranking_hidden")
+}
+
+/// One row, id 1: what the panel decides about how the scoreboard looks.
+/// Appearance is operator configuration, so unlike the projection above it
+/// belongs in a backup and in the restore preview.
+model ranking_settings {
+  id            Int      @id @default(1)
+  title         String?  @db.VarChar
+  subtitle      String?  @db.VarChar
+  organisation  String?  @db.VarChar
+  /// The explicit per-contest wording override, keyed by the contest the config shows:
+  /// `{ "<contestId>": { "title": "...", "subtitle": "..." } }`. Only the entries an operator
+  /// wrote exist; an absent entry means the contest's own name and dates are the words.
+  wording_overrides Json?
+  /// The short display name shown below the logo on the public scoreboard.
+  /// When absent, the scoreboard falls back to the title field.
+  display_name  String?  @db.VarChar
+  logo_asset    String?  @db.VarChar
+  favicon_asset String?  @db.VarChar
+  theme         Json?
+  columns       Json?
+  score_format  Json?
+  footer_text   String?  @db.VarChar
+  credits_text  String?  @db.VarChar
+  /// The full credit list the panel edits, when it has one. Absent means the vendored
+  /// credits.json is the list; the source-offer line is never taken from here.
+  credits       Json?
+  /// The perspective tabs the board shows, in order. Absent means the built-in
+  /// defaults; the serving side normalises whatever is stored here.
+  perspectives  Json?
+  access_mode   String   @default("public") @db.VarChar
+  updated_at    DateTime @default(now())
+  updated_by    Int?
+
+  @@map("ranking_settings")
+}
+
+/// One manual change to what the scoreboard shows. A row is ended, never
+/// deleted, so "who hid this row and why" outlives the correction.
+model ranking_overrides {
+  id          BigInt    @id @default(autoincrement())
+  contest_id  Int
+  target_kind String    @db.VarChar
+  target_key  String    @db.VarChar
+  action      String    @db.VarChar
+  payload     Json?
+  reason      String?   @db.VarChar
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  created_by  Int?
+  ended_at    DateTime?
+  ended_by    Int?
+
+  @@index([active], map: "ix_ranking_overrides_active")
+  @@index([contest_id, active, target_kind], map: "ix_ranking_overrides_contest")
+  @@index([target_kind, target_key], map: "ix_ranking_overrides_target")
+  @@map("ranking_overrides")
+}
+
+/// What the board is told to show: one row per thing the operator has added to the shown set.
+/// The database is the single source of truth for the board's contents, so the ranking renders
+/// exactly these and never the CMS-classic "active contest" default.
+///
+/// WHY its own table rather than a `show` verb on ranking_overrides: **config** is what the board
+/// shows and **override** is the exception that wins over it, so they are two surfaces — folding
+/// the shown set into the override table would make one word do both jobs again, which is the
+/// defect this table removes.
+///
+/// WHY a (kind, key) pair rather than one column: a target is a pair, so a second kind of shown
+/// thing can be added without a migration, and a reader that does not know a kind refuses it
+/// visibly instead of guessing which namespace the key belongs to.
+model ranking_config {
+  id          BigInt    @id @default(autoincrement())
+  /// The namespace the key lives in. Only `contest` is read today: the board's unit of "what to
+  /// show" is the contest, and everything inside a shown contest is its projected content.
+  target_kind String    @db.VarChar
+  /// The target's handle. For `contest` it is the CMS contest id, spelled as text: the id
+  /// survives a contest rename, which the encoded contest *name* the projection files rows under
+  /// does not. Stored as text so a future kind's key needs no schema change.
+  target_key  String    @db.VarChar
+  reason      String?   @db.VarChar
+  /// Ending is not deleting: a row keeps its author and its reason, the audit shape
+  /// ranking_overrides already carries, so "who showed this and why" outlives the correction.
+  active      Boolean   @default(true)
+  created_at  DateTime  @default(now())
+  created_by  Int?
+  ended_at    DateTime?
+  ended_by    Int?
+
+  @@index([target_kind, target_key], map: "ix_ranking_config_target")
+  @@index([active], map: "ix_ranking_config_active")
+  @@map("ranking_config")
+}
+
+/// One service instance this deployment runs: what role it holds, which shard it
+/// is, where it lives, and which DB profile it dials. The database authors this,
+/// together with wirings; config.toml keeps only the DB pointer and secrets.
+///
+/// WHY two ports: a contest web server answers HTTP on one port (what a front door
+/// proxies to) and its peers call it on another (the CMS RPC port). One `port`
+/// column would make the renderer proxy to the RPC port, so they stay separate and
+/// each stays nullable — an evaluation service has no HTTP port at all.
+model services {
+  id         Int       @id @default(autoincrement())
+  name       String    @unique @db.VarChar
+  role       String    @db.VarChar
+  shard      Int       @default(0)
+  host       String    @db.VarChar
+  http_port  Int?
+  rpc_port   Int?
+  db_profile String    @default("default") @db.VarChar
+  contest_id Int?
+  enabled    Boolean   @default(true)
+  /// Null means the global IMG_TAG, so one row pins its own tag without a second deployment.
+  image       String?   @db.VarChar
+  /// always | missing | never.
+  pull_policy String    @default("missing") @db.VarChar
+  created_at DateTime  @default(now()) @db.Timestamp(6)
+  updated_at DateTime  @updatedAt @db.Timestamp(6)
+  contests   contests? @relation(fields: [contest_id], references: [id], onDelete: SetNull)
+  wire_from  wirings[] @relation("wiring_from")
+  wire_to    wirings[] @relation("wiring_to")
+  contest_exposures contest_exposures[]
+
+  @@index([role], map: "ix_services_role")
+  @@index([contest_id], map: "ix_services_contest_id")
+  @@index([role, shard], map: "ix_services_role_shard")
+}
+
+/// A directed link between two services. `relation` names what the link means
+/// (drains, fronts, proxies) so the renderer never infers intent from the roles.
+model wirings {
+  id              Int      @id @default(autoincrement())
+  from_service_id Int
+  to_service_id   Int
+  relation        String   @db.VarChar
+  enabled         Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.Timestamp(6)
+  from_service    services @relation("wiring_from", fields: [from_service_id], references: [id], onDelete: Cascade)
+  to_service      services @relation("wiring_to", fields: [to_service_id], references: [id], onDelete: Cascade)
+
+  @@unique([from_service_id, to_service_id, relation])
+  @@index([from_service_id], map: "ix_wirings_from_service_id")
+  @@index([to_service_id], map: "ix_wirings_to_service_id")
+}
+
+/// Where one service answers. A service may hold several rows: one per hostname,
+/// per path prefix, or per tailnet name, which is what makes every exposure form
+/// in the design a data question rather than a code branch. A null hostname is a
+/// path-only exposure, answered at a path of the vhost its service's contest
+/// already owns — or of the deployment's own host, for a service no contest owns.
+model contest_exposures {
+  id         Int      @id @default(autoincrement())
+  service_id Int
+  hostname   String?  @db.VarChar
+  path       String   @default("/") @db.VarChar
+  tls        Boolean  @default(true)
+  tailnet    String?  @db.VarChar
+  created_at DateTime @default(now()) @db.Timestamp(6)
+  services   services @relation(fields: [service_id], references: [id], onDelete: Cascade)
+
+  @@unique([service_id, hostname, path])
+  @@index([service_id], map: "ix_contest_exposures_service_id")
+}
+

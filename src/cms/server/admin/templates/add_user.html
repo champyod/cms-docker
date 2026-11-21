@@ -33,13 +33,12 @@
       </tr>
       <tr>
         <td>
-          <span class="info" title="Contestant password. Caution: stored in plain text."></span>
+          <span class="info" title="Contestant password. Stored only as a bcrypt hash."></span>
           Password
         </td>
         <td>
           <input type="text" name="password" />
           <select name="method">
-            <option value="plaintext">Plain text</option>
             <option value="bcrypt" selected>Hashed (bcrypt)</option>
           </select>
         </td>

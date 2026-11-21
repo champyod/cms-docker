@@ -62,12 +62,12 @@ class TestAddStatement(DatabaseMixin, FileSystemMixin, unittest.TestCase):
             .filter(Statement.language == language).all()
         self.assertEqual(len(db_statements), 0)
 
-    def test_success(self):
+    def test_it_adds_the_statement_for_the_language(self):
         path = self.write_file("statement.pdf", _CONTENT_1)
         self.assertTrue(add_statement(self.task.name, "en", path, False))
         self.assertStatementInDb("en", _DIGEST_1)
 
-    def test_success_another_statement(self):
+    def test_it_adds_a_second_statement_for_another_language(self):
         path = self.write_file("statement.pdf", _CONTENT_1)
         self.assertTrue(add_statement(self.task.name, "en", path, False))
 
@@ -77,17 +77,17 @@ class TestAddStatement(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertStatementInDb("en", _DIGEST_1)
         self.assertStatementInDb("zh_TW", _DIGEST_2)
 
-    def test_no_file(self):
+    def test_it_fails_when_the_file_is_missing(self):
         path = self.get_path("statement.pdf")
         self.assertFalse(add_statement(self.task.name, "en", path, False))
         self.assertStatementNotInDb("en")
 
-    def test_not_pdf(self):
+    def test_it_rejects_a_file_that_is_not_a_pdf(self):
         path = self.write_file("statement.txt", _CONTENT_1)
         self.assertFalse(add_statement(self.task.name, "en", path, False))
         self.assertStatementNotInDb("en")
 
-    def test_dont_overwrite(self):
+    def test_it_refuses_to_overwrite_an_existing_statement(self):
         path = self.write_file("statement.pdf", _CONTENT_1)
         self.assertTrue(add_statement(self.task.name, "en", path, False))
         self.assertStatementInDb("en", _DIGEST_1)
@@ -97,7 +97,7 @@ class TestAddStatement(DatabaseMixin, FileSystemMixin, unittest.TestCase):
         self.assertFalse(add_statement(self.task.name, "en", path, False))
         self.assertStatementInDb("en", _DIGEST_1)
 
-    def test_overwrite(self):
+    def test_it_overwrites_the_statement_when_forced(self):
         path = self.write_file("statement.pdf", _CONTENT_1)
         self.assertTrue(add_statement(self.task.name, "en", path, False))
         self.assertStatementInDb("en", _DIGEST_1)

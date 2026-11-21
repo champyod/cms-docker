@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset='utf-8'/>
+        <link rel="shortcut icon" href="img/favicon.ico" />
+        <link rel='stylesheet' href='Ranking.css'>
+        <title>Credits</title>
+        <style>
+/* WHY the styles are here and not in Ranking.css: that stylesheet lays the
+   scoreboard out as fixed, absolutely positioned panels, which has nothing to
+   offer a standalone page. The values below are taken from it so this page
+   looks like it belongs to the same application. */
+            #Credits {
+                max-width: 60em;
+                margin: 2em auto;
+                padding: 0 1.5em;
+                color: #444444;
+            }
+            #Credits h1 {
+                font-size: 1.8em;
+                color: black;
+            }
+            #Credits h2 {
+                font-size: 1.3em;
+                margin-top: 1.5em;
+                color: black;
+            }
+            #Credits .Credits_byline {
+                font-size: 16px;
+                color: #444444;
+                margin-top: 0.5em;
+            }
+            #Credits a {
+                color: #00A3DA;
+            }
+            #Credits table {
+                width: 100%;
+                border-spacing: 2px;
+            }
+            #Credits th,
+            #Credits td {
+                padding: 0.25em 0.5em;
+                text-align: left;
+                vertical-align: top;
+            }
+            #Credits thead th {
+                background-color: #ECECEF;
+                border: 1px #D0D0D2 solid;
+                border-radius: 4px;
+            }
+            #Credits tbody tr:nth-child(even) {
+                background-color: #FFFFFF;
+            }
+            #Credits tbody tr:nth-child(odd) {
+                background-color: #F2F2F3;
+            }
+            #Credits code {
+                background-color: #F2F2F3;
+                border-radius: 3px;
+                padding: 0 0.25em;
+            }
+            /* The licence offer is one line at the foot, not the subject of the page:
+               who built what comes first, and section 13 still gets its statement. */
+            #Credits .Credits_licence {
+                margin-top: 2em;
+                padding-top: 0.75em;
+                border-top: 1px #D0D0D2 solid;
+                font-size: 0.9em;
+                color: #666666;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="Credits">
+            <h1>Credits</h1>
+            <p><a href="./">&laquo; Back to the scoreboard</a></p>
+            <div id="Credits_body"></div>
+        </div>
+        <script>
+var Credits = new function () {
+    var self = this;
+
+    self.CREDITS_URL = "credits";
+    self.CONFIG_URL = "config";
+    self.CONTRIBUTOR_COLUMNS = ["Name", "Contribution"];
+    self.COMPONENT_COLUMNS = ["Software", "Holder", "Licence"];
+
+    self.el = function (tag, text) {
+        var element = document.createElement(tag);
+        if (text !== undefined) {
+            element.appendChild(document.createTextNode(text));
+        }
+        return element;
+    };
+
+    self.link = function (text, url, rel) {
+        var element = self.el("a", text);
+        element.href = url;
+        element.target = "_blank";
+        element.rel = rel || "noopener noreferrer";
+        return element;
+    };
+
+    // A cell is either plain text or {text, url}; the table builders never have to
+    // know which, so a row reads as its data rather than as markup.
+    self.cell = function (value) {
+        if (value !== null && typeof value === "object") {
+            return self.td_link(value);
+        }
+        return self.el("td", value === undefined || value === null ? "" : String(value));
+    };
+
+    self.td_link = function (value) {
+        var td = self.el("td");
+        td.appendChild(self.link(value.text, value.url, value.rel));
+        return td;
+    };
+
+    self.table = function (columns, rows) {
+        var table = self.el("table");
+        var head = self.el("thead");
+        var headRow = self.el("tr");
+        for (var c = 0; c < columns.length; c += 1) {
+            headRow.appendChild(self.el("th", columns[c]));
+        }
+        head.appendChild(headRow);
+        table.appendChild(head);
+        var body = self.el("tbody");
+        for (var r = 0; r < rows.length; r += 1) {
+            var row = self.el("tr");
+            for (var i = 0; i < rows[r].length; i += 1) {
+                row.appendChild(self.cell(rows[r][i]));
+            }
+            body.appendChild(row);
+        }
+        table.appendChild(body);
+        return table;
+    };
+
+    // The same words the sidebar carries, expanded with the upstream name: the page
+    // is read at leisure, so the full lineage is worth spelling out here.
+    self.byline_text = function (data) {
+        var project = data.project;
+        var text = project["name"];
+        if (project["author"]) {
+            text += " by " + project["author"];
+        }
+        var attribution = data.surface["attribution"] || [];
+        if (attribution.length > 0) {
+            text += " · " + attribution[0]["text"];
+        }
+        return text;
+    };
+
+    self.contributor_rows = function (data) {
+        var rows = [];
+        var project = data.project;
+        if (project["author"]) {
+            rows.push([
+                { text: project["author"], url: project["url"] },
+                "Maintainer of this project"
+            ]);
+        }
+        if (project["upstream"]) {
+            rows.push([
+                { text: project["upstream"]["name"], url: project["upstream"]["url"] },
+                "Upstream project this forks"
+            ]);
+        }
+        return rows;
+    };
+
+    self.component_rows = function (assets) {
+        var rows = [];
+        for (var i = 0; i < assets.length; i += 1) {
+            var asset = assets[i];
+            var licence = asset["license_id"];
+            if (asset["license_urls"] && asset["license_urls"].length > 0) {
+                licence = { text: asset["license_id"], url: asset["license_urls"][0], rel: "license noreferrer" };
+            }
+            rows.push([asset["name"], asset["holder"], licence]);
+        }
+        return rows;
+    };
+
+    // One line, kept because section 13 of the licence requires the offer — but it is
+    // a footnote under the contributors, not the opening of the page.
+    self.licence_line = function (data, config) {
+        var line = self.el("p");
+        line.className = "Credits_licence";
+        line.appendChild(self.el("span", data.project["name"] + " is released under the "));
+        line.appendChild(self.link(data.license["name"], data.license["url"], "license noreferrer"));
+        line.appendChild(self.el("span", " (" + data.license["spdx_id"] + "). Corresponding source: "));
+        line.appendChild(self.link(config["source_url"], config["source_url"], "license noreferrer"));
+        line.appendChild(self.el("span", "."));
+        return line;
+    };
+
+    self.render = function (data, config) {
+        var body = document.getElementById("Credits_body");
+        var byline = self.el("p", self.byline_text(data));
+        byline.className = "Credits_byline";
+        body.appendChild(byline);
+        body.appendChild(self.el("h2", "Contributors"));
+        body.appendChild(self.table(self.CONTRIBUTOR_COLUMNS, self.contributor_rows(data)));
+        body.appendChild(self.el("h2", "Components"));
+        body.appendChild(self.table(self.COMPONENT_COLUMNS, self.component_rows(data["surface"]["assets"])));
+        body.appendChild(self.licence_line(data, config));
+    };
+
+    self.report_failure = function (error) {
+        console.error("Error while loading the credits of this scoreboard:", error);
+        document.getElementById("Credits_body").appendChild(
+            self.el("p", "The credits of this scoreboard could not be loaded."));
+    };
+
+    self.checked = function (response) {
+        if (!response.ok) {
+            throw new Error("HTTP " + response.status + " for " + response.url);
+        }
+        return response.json();
+    };
+
+    self.load = function () {
+        Promise.all([
+            fetch(self.CREDITS_URL).then(self.checked),
+            fetch(self.CONFIG_URL).then(self.checked)
+        ]).then(function (results) {
+            self.render(results[0], results[1]);
+        }, self.report_failure);
+    };
+}();
+
+Credits.load();
+        </script>
+    </body>
+</html>

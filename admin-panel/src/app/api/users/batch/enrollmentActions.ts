@@ -2,15 +2,20 @@ import { revalidatePath } from 'next/cache';
 import type { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { apiError, apiSuccess, verifyApiPermission } from '@/lib/api-utils';
+import { getFreshPermissions } from '@/lib/permissions';
+import { insertParticipation } from '@/lib/participation-insert';
+import { resolveAllowlistInput } from '@/app/actions/participation-settings';
 import { resolveTeamIdByCode } from '@/lib/teams';
+import { assignTeamToParticipants } from '@/lib/panel-actions';
 import type { BatchActionRequest } from './credentialActions';
 import { recordAudit } from '@/lib/audit';
+import { resyncRankingUsers, resyncShownRankingUsers } from '@/lib/ranking-projection';
 
 const CONTEST_MODES = ['add', 'remove'] as const;
 const TEAM_MODES = ['set', 'remove-any'] as const;
 
 function revalidateUserContestPages(): void {
-  revalidatePath('/[locale]/users', 'page');
+  revalidatePath('/[locale]/people/users', 'page');
   revalidatePath('/[locale]/contests', 'page');
 }
 
@@ -22,19 +27,23 @@ function isValidId(id: number): boolean {
   return Number.isInteger(id) && id > 0;
 }
 
-async function addUsersToContest(contestId: number, userIds: number[]): Promise<number> {
+async function addUsersToContest(contestId: number, userIds: number[], validIps: string[]): Promise<number> {
   let addedCount = 0;
 
   for (const userId of userIds) {
-    const inserted = await prisma.$executeRaw`
-      INSERT INTO participations (contest_id, user_id, hidden, unrestricted, delay_time, extra_time)
-      VALUES (${contestId}, ${userId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-      ON CONFLICT (contest_id, user_id) DO NOTHING
-    `;
+    const inserted = await insertParticipation(contestId, userId, null, validIps);
     if (inserted > 0) addedCount += 1;
   }
 
   return addedCount;
+}
+
+async function resolveContestAddAllowlist(
+  raw: unknown,
+  userId: string,
+): Promise<{ validIps: string[]; error?: string }> {
+  const permissions = (await getFreshPermissions(userId)) ?? new Set<string>();
+  return resolveAllowlistInput(raw, permissions);
 }
 
 export async function handleContest({ body, userIds }: BatchActionRequest): Promise<NextResponse> {
@@ -55,15 +64,19 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
 
   if (mode === 'add') {
     // WHY participation:create: this inserts participations rows.
-    const { authorized, response } = await verifyApiPermission('participation:create');
+    const { authorized, response, session } = await verifyApiPermission('participation:create');
     if (!authorized) return response;
 
-    const addedCount = await addUsersToContest(contestId, userIds);
+    const { validIps, error } = await resolveContestAddAllowlist(body.ip, session.userId);
+    if (error) return apiError({ message: error, status: 400 });
+
+    const addedCount = await addUsersToContest(contestId, userIds, validIps);
+    await resyncRankingUsers(contestId);
     await recordAudit({
       verb: 'participation:create',
       entity: 'contest',
       entityId: String(contestId),
-      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount },
+      afterValues: { action: 'batch-contest-add', contestId, userIds, addedCount, ip: validIps },
       result: 'success',
     });
     revalidateUserContestPages();
@@ -80,6 +93,7 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
       user_id: { in: userIds },
     },
   });
+  await resyncRankingUsers(contestId);
 
   await recordAudit({
     verb: 'participation:delete',
@@ -93,18 +107,7 @@ export async function handleContest({ body, userIds }: BatchActionRequest): Prom
 }
 
 async function assignTeamToUsers(contestId: number, teamId: number, userIds: number[]): Promise<number> {
-  let updatedCount = 0;
-  for (const userId of userIds) {
-    const affected = await prisma.$executeRaw`
-      INSERT INTO participations (contest_id, user_id, team_id, hidden, unrestricted, delay_time, extra_time)
-      VALUES (${contestId}, ${userId}, ${teamId}, false, false, '0 seconds'::interval, '0 seconds'::interval)
-      ON CONFLICT (contest_id, user_id) DO UPDATE
-      SET team_id = EXCLUDED.team_id
-    `;
-    if (affected > 0) updatedCount += 1;
-  }
-
-  return updatedCount;
+  return assignTeamToParticipants(prisma, contestId, teamId, userIds);
 }
 
 async function removeUsersFromAnyTeam(userIds: number[]): Promise<number> {
@@ -138,6 +141,7 @@ async function assignTeamByCode(
 
   const teamId = await resolveTeamIdByCode(teamCode);
   const updatedCount = await assignTeamToUsers(contestId, teamId, userIds);
+  await resyncRankingUsers(contestId);
 
   await recordAudit({
     verb: 'participation:update',
@@ -168,6 +172,7 @@ export async function handleTeam({ body, userIds }: BatchActionRequest): Promise
 
   if (mode === 'remove-any') {
     const updatedCount = await removeUsersFromAnyTeam(userIds);
+    await resyncShownRankingUsers();
     await recordAudit({
       verb: 'participation:update',
       entity: 'team',

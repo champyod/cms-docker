@@ -17,6 +17,7 @@ warn() { printf '%s [UPDATE][WARN] %s\n' "$(date +'%Y-%m-%d %H:%M:%S')" "$*" >&2
 TIMESTAMP="$(date +%Y%m%d-%H%M%S)"
 RECORD_FILE="/tmp/cms-update-${TIMESTAMP}.txt"
 DB_HEALTH_TIMEOUT=120
+SERVICE_HEALTH_TIMEOUT=180
 
 log "Starting non-interactive server update..."
 
@@ -89,6 +90,13 @@ log "Detected deployment type: ${DEPLOY_TYPE}"
 # ---------------------------------------------------------------------------
 # (c) Preflight checks — abort cleanly before touching running services
 # ---------------------------------------------------------------------------
+# WHY: preflight hard-fails when the monitor's uid cannot write the backup root,
+# so the ownership is repaired here first — at most one sudo prompt — and an
+# update self-heals instead of only being blocked.
+if ! ensure_backup_dir_perms; then
+    warn "Backup root not usable by the monitor; preflight below will block this update."
+fi
+
 PREFLIGHT_SCRIPT="scripts/__preflight.sh"
 if [ ! -x "$PREFLIGHT_SCRIPT" ]; then
     log_die "scripts/__preflight.sh not found or not executable; refusing to update."
@@ -100,9 +108,33 @@ log "Running preflight checks..."
 # (d) Safety backup before mutating anything
 # ---------------------------------------------------------------------------
 BACKUP_SCRIPT="scripts/__backup.sh"
+# WHY the host archive root is handed to the script instead of letting it read BACKUP_DIR:
+# __backup.sh sources .env, whose BACKUP_DIR is the in-container path (/app/backups) that
+# compose bind-mounts the host tree onto, while this run happens on the host — where
+# nothing is mounted at /app and mkdir on that root fails. BACKUP_HOST_DIR is the same
+# override ensure_backup_dir_perms and the preflight repair and check.
+BACKUP_ROOT_HOST="${BACKUP_HOST_DIR:-${REPO_ROOT}/backups}"
 if [ -x "$BACKUP_SCRIPT" ]; then
+    # WHY refuse instead of skipping: an update with no rollback point is worse than a clear
+    # refusal, and a box with no local database has to be told what it is missing.
+    if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+        log_die "no local cms-database to back up before the update — this box is a worker, or its database is down. Run './cms update-server' on the main box, or start cms-database here, then re-run."
+    fi
     log "Running safety backup..."
-    "$BACKUP_SCRIPT" || log_die "Backup failed; aborting update."
+    # WHY the status is read instead of collapsed into one "backup failed" line: the backup
+    # contract separates "no usable backup" (1) from "the dump was kept but the run is not
+    # whole" (3), and the two need different advice from the operator. Exit 3 leaves a
+    # database-only rollback point — a restore from it brings back rows but none of the
+    # uploaded files and submissions blobs that live in the volume — which is exactly the
+    # fact an operator must see before an update touches the services.
+    BACKUP_STATUS=0
+    "$BACKUP_SCRIPT" --root "$BACKUP_ROOT_HOST" || BACKUP_STATUS=$?
+    if [ "$BACKUP_STATUS" -eq 3 ]; then
+        log_die "Backup partial (exit 3): the database dump was kept but the volume archive is missing. Aborting update — a rollback from this backup would not restore uploaded files or submissions."
+    fi
+    if [ "$BACKUP_STATUS" -ne 0 ]; then
+        log_die "Backup failed (exit ${BACKUP_STATUS}); no usable dump was kept. Aborting update."
+    fi
 else
     warn "__backup.sh missing or not executable — SKIPPING SAFETY BACKUP."
     warn "Continuing WITHOUT a fresh backup. Consider Ctrl+C now."
@@ -150,47 +182,63 @@ fi
 log "Detected active stacks: core=$HAS_CORE admin=$HAS_ADMIN contest=$HAS_CONTEST worker=$HAS_WORKER infra=$HAS_INFRA"
 
 update_worker_shards() {
-    local mode="$1" shard_name idx env_file
-    local shard_count
-    shard_count="$(docker ps -a --format '{{.Names}}' | grep -c '^cms-worker-[0-9]\+$' || true)"
-    shard_count="${shard_count:-0}"
-    if [ "$shard_count" -gt 0 ]; then
-        log "Updating $shard_count worker shard(s)..."
-        for shard_name in $(docker ps -a --format '{{.Names}}' | grep '^cms-worker-[0-9]\+$'); do
-            idx=${shard_name#cms-worker-}
-            env_file="workers/.env.worker.instance$idx"
-            if [ -f "$env_file" ]; then
-                log "Restarting shard $idx..."
-                if [ "$mode" = "img" ]; then
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --no-build
-                else
-                    log "Restarting shard $idx (source build)..."
-                    docker compose --env-file "$env_file" -p "cms-worker-$idx" -f docker-compose.worker.yml up -d --build
-                fi
-            fi
-        done
-    elif [ "$mode" = "img" ]; then
-        make worker-img
+    # WHY delegate to the canonical deploy path instead of re-running compose
+    # here: shards are owned by per-shard compose projects (cw<N>) that only
+    # __worker_tui.sh creates. A re-deploy from this script under a different
+    # project name and compose file made compose treat the live containers as
+    # foreign and attempt to CREATE them again, aborting the whole update with
+    # a "container name already in use" conflict. Going through the same entry
+    # point as `make worker` keeps project name, compose file, the shard
+    # registry (which shards exist, which are remote-only) and pull/build mode
+    # in one place, so the update path can no longer drift from a normal
+    # deploy.
+    local mode="$1"
+    if [ "$mode" = "img" ]; then
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img worker
     else
         make worker
     fi
 }
 
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    log "Pulling latest images for active stacks..."
-    [ "$HAS_CORE" = true ] && make pull-core
-    [ "$HAS_ADMIN" = true ] && make pull-admin
-    [ "$HAS_CONTEST" = true ] && make pull-contest
-    [ "$HAS_WORKER" = true ] && make pull-worker
-    [ "$HAS_INFRA" = true ] && make pull-infra
+    log "Pulling latest images..."
+    make pull
 fi
+
+# ---------------------------------------------------------------------------
+# (e2) Schema sync — applied BEFORE any service restarts
+# WHY this ordering is the invariant the update path has to hold: a service reads the
+# schema its own migrations author as it boots, and caches a load that fails instead of
+# retrying it, so a stack started first stays quietly broken for the rest of the run.
+# On 2026-10-15 the stacks were restarted before this sync: cms-ranking-web-server booted
+# against the un-migrated schema, logged `relation "ranking_hidden" does not exist` once
+# and served a board it never loaded, while the run reported green. The migration is
+# applied while the previous release is still running; the run does not reach the restart
+# below with an un-migrated database.
+# WHY the database is required here but never started: cms-database is a persistent
+# container the backup step above already demanded running, and starting the stack to
+# satisfy the migration would start the very services this ordering keeps off it.
+# ---------------------------------------------------------------------------
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
+    log_die "cms-database is not running — its schema cannot be synced and no service may start before it is. Start cms-database (or run './cms update-server' on the main box) and re-run."
+fi
+
+log "Syncing database schema via Prisma Migrate (before any service restarts)..."
+make cms-init || log_die "make cms-init failed."
+make prisma-sync || log_die "make prisma-sync failed."
+
+# WHY a second sync: the first one (before the stacks) runs while the schema may still be the
+# previous release's, and skips the registry artifacts when it is — the one migration it waits on
+# is applied just above. Nothing else re-renders them, so they are rendered here.
+log "Rendering the registry artifacts against the migrated schema..."
+bash scripts/__config_sync.sh || log_die "config sync failed after the schema sync."
 
 log "Restarting services..."
 if [ "$DEPLOY_TYPE" = "img" ]; then
-    [ "$HAS_CORE" = true ] && make core-img
-    [ "$HAS_INFRA" = true ] && make infra-img
-    [ "$HAS_ADMIN" = true ] && make admin-img
-    [ "$HAS_CONTEST" = true ] && make contest-img
+    [ "$HAS_CORE" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img core
+    [ "$HAS_INFRA" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img infra
+    [ "$HAS_ADMIN" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img admin
+    [ "$HAS_CONTEST" = true ] && make -e DEPLOYMENT_TYPE_OVERRIDE=img contest
     [ "$HAS_WORKER" = true ] && update_worker_shards img
 else
     [ "$HAS_CORE" = true ] && make core
@@ -200,9 +248,12 @@ else
     [ "$HAS_WORKER" = true ] && update_worker_shards src
 fi
 
-log "Syncing database schema via Prisma Migrate..."
-make cms-init || log_die "make cms-init failed."
-make prisma-sync || log_die "make prisma-sync failed."
+# WHY after the migration and not with the stacks: the generated registry compose names
+# containers the sync derived from the services table, and they only start correctly once
+# the schema they read is current. WHY a hard failure: the registry renders that topology,
+# so a box that cannot bring it up is not running what the registry describes.
+log "Starting the services the registry declares..."
+make registry-up || log_die "make registry-up failed — the registry topology is rendered but not running."
 
 # ---------------------------------------------------------------------------
 # (f) Post-update verification
@@ -241,9 +292,52 @@ http_ok() {
     curl -fsS -o /dev/null --max-time 10 "$url"
 }
 
+# A one-shot probe fails a service that is still building its first response, so a route
+# that reads data gets the same bounded wait the database gets.
+wait_http_ok() {
+    local url="$1" waited=0
+    while [ "$waited" -lt "$SERVICE_HEALTH_TIMEOUT" ]; do
+        if http_ok "$url"; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    return 1
+}
+
+# Reads every running service's own healthcheck instead of only "the container exists".
+# WHY: the healthcheck is how a service reports whether it loaded what it needs, and the
+# 2026-10-15 update reported success while cms-ranking-web-server served a board it had
+# failed to load — a container that is up is not a service that is well. A container that
+# carries no healthcheck cannot report, so its absence is not counted as a failure.
+wait_services_healthy() {
+    local waited=0 unhealthy="" name status
+    while [ "$waited" -lt "$SERVICE_HEALTH_TIMEOUT" ]; do
+        unhealthy=""
+        while IFS= read -r name; do
+            [ -n "$name" ] || continue
+            status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null || echo missing)"
+            case "$status" in
+                healthy|none) ;;
+                *) unhealthy="${unhealthy} ${name}=${status}" ;;
+            esac
+        done < <(docker ps --format '{{.Names}}' | grep '^cms-' || true)
+        if [ -z "$unhealthy" ]; then
+            return 0
+        fi
+        sleep 5
+        waited=$((waited + 5))
+    done
+    warn "services not healthy after ${SERVICE_HEALTH_TIMEOUT}s:${unhealthy}"
+    return 1
+}
+
 DB_RESULT="SKIP"
 ADMIN_RESULT="SKIP"
 CONTEST_RESULT="SKIP"
+RANKING_RESULT="SKIP"
+SERVICES_RESULT="SKIP"
 
 if docker inspect cms-database >/dev/null 2>&1; then
     log "Waiting for cms-database to become healthy (max ${DB_HEALTH_TIMEOUT}s)..."
@@ -259,9 +353,26 @@ if [ "$HAS_ADMIN" = true ]; then
 fi
 
 if [ "$HAS_CONTEST" = true ]; then
-    CONTEST_PORT="$(read_contest_port .env.contest)"
+    CONTEST_PORT="$(read_contest_port .env)"
     log "Checking contest interface on http://127.0.0.1:${CONTEST_PORT}/ ..."
     if http_ok "http://127.0.0.1:${CONTEST_PORT}/"; then CONTEST_RESULT="PASS"; else CONTEST_RESULT="FAIL"; fi
+fi
+
+if [ "$HAS_ADMIN" = true ] && docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-ranking-web-server"; then
+    RANKING_PORT="$(read_env_port .env RANKING_PORT_EXTERNAL 8890)"
+    # WHY /diagnostics and not /healthz: /healthz only proves the database answers, while
+    # /diagnostics rebuilds and serves the score board — the read whose boot-time failure the
+    # 2026-10-15 update missed. A board that cannot load answers 503 here.
+    log "Checking ranking readiness on http://127.0.0.1:${RANKING_PORT}/diagnostics ..."
+    if wait_http_ok "http://127.0.0.1:${RANKING_PORT}/diagnostics"; then RANKING_RESULT="PASS"; else RANKING_RESULT="FAIL"; fi
+fi
+
+# WHY every running cms-* container and not a fixed list: which stacks this box runs is
+# detected above, and the healthcheck is the one place each service states its own state —
+# a service that restarted or never became ready must not be reported as a success.
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^cms-'; then
+    log "Waiting for every restarted service's own healthcheck (max ${SERVICE_HEALTH_TIMEOUT}s)..."
+    if wait_services_healthy; then SERVICES_RESULT="PASS"; else SERVICES_RESULT="FAIL"; fi
 fi
 
 echo ""
@@ -269,9 +380,12 @@ log "===== POST-UPDATE SUMMARY (deployment type: ${DEPLOY_TYPE}) ====="
 log "Database health : ${DB_RESULT}"
 log "Admin panel     : ${ADMIN_RESULT} (port ${ADMIN_PORT:-n/a})"
 log "Contest web     : ${CONTEST_RESULT} (port ${CONTEST_PORT:-n/a})"
+log "Ranking service : ${RANKING_RESULT} (port ${RANKING_PORT:-n/a})"
+log "Service health  : ${SERVICES_RESULT}"
 echo ""
 
-if [ "$DB_RESULT" = "FAIL" ] || [ "$ADMIN_RESULT" = "FAIL" ] || [ "$CONTEST_RESULT" = "FAIL" ]; then
+if [ "$DB_RESULT" = "FAIL" ] || [ "$ADMIN_RESULT" = "FAIL" ] || [ "$CONTEST_RESULT" = "FAIL" ] \
+   || [ "$RANKING_RESULT" = "FAIL" ] || [ "$SERVICES_RESULT" = "FAIL" ]; then
     cat >&2 <<EOF
 ================================================================
  UPDATE VERIFICATION FAILED — manual rollback required
@@ -288,8 +402,8 @@ Manual rollback steps:
        docker pull ghcr.io/<owner>/<image>@<old repo_digest>
      then pin that digest via IMG_TAG in .env / the shard env file
      (or check out the old commit and rebuild).
-  4. Bring stacks back up for every detected stack:
-       make core-img infra-img admin-img contest-img worker-img
+4. Bring stacks back up for every detected stack, e.g.:
+        make -e DEPLOYMENT_TYPE_OVERRIDE=img core infra admin contest worker
   5. Re-run ./cms update-server once the cause is fixed.
 ================================================================
 EOF

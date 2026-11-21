@@ -19,14 +19,12 @@ export function EmptyState({
   onAction,
   className,
 }: EmptyStateProps) {
-  const safeTitle = title ?? 'No data available';
-  const safeDescription = description ?? undefined;
   return (
     <div
       role="status"
       aria-live="polite"
       className={cn(
-        'bg-card text-card-foreground flex flex-col items-center justify-center gap-3 rounded-xl border px-6 py-12 text-center',
+        'bg-card text-card-foreground flex flex-col items-center justify-center gap-3 rounded-xl border border-transparent px-6 py-12 text-center high-contrast:border-border',
         className
       )}
     >
@@ -35,9 +33,9 @@ export function EmptyState({
           <Icon className="size-6" aria-hidden />
         </div>
       )}
-      <p className="text-base font-semibold">{safeTitle}</p>
-      {safeDescription && (
-        <p className="max-w-sm text-sm text-muted-foreground">{safeDescription}</p>
+      <p className="text-base font-semibold">{title}</p>
+      {description && (
+        <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
       )}
       {actionLabel && onAction && (
         <Button variant="secondary" size="sm" onClick={onAction} aria-label={actionLabel}>

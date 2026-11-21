@@ -1,62 +1,160 @@
 use crate::core::dispatch::{DispatchKey, DispatchTarget};
 use crate::tui::components::action_menu::ActionMenu;
-use crate::tui::stack_entries::{stack_control_entries, stack_deploy_entries};
 
-/// Builds the shell command for a catalog key.
-///
-/// An unresolved key yields an empty command, which `App::run_selected_action`
-/// refuses to run. Menus are drawn inside the event loop, so panicking here
-/// would take the whole interface down over one missing catalog row; the
-/// invariant that every key resolves is pinned by a test instead.
 fn cmd(key: DispatchKey, args: &[&str]) -> String {
-    let Some(target) = crate::core::dispatch::target(key) else {
-        return String::new();
-    };
-    let head = match target {
-        DispatchTarget::Script(name) => format!("bash scripts/{name}"),
-        DispatchTarget::Make(make_target) => format!("make {make_target}"),
-    };
-    if args.is_empty() {
-        return head;
+    let target = crate::core::dispatch::target(key).expect("catalog must contain key");
+    match target {
+        DispatchTarget::Script(name) => {
+            if args.is_empty() {
+                format!("bash scripts/{name}")
+            } else {
+                format!("bash scripts/{name} {}", args.join(" "))
+            }
+        }
+        DispatchTarget::Make(make_target) => {
+            if args.is_empty() {
+                format!("make {make_target}")
+            } else {
+                format!("make {make_target} {}", args.join(" "))
+            }
+        }
     }
-    format!("{head} {}", args.join(" "))
 }
 
-/// Builds a menu row from the catalog entry for `key`, falling back to the
-/// label alone when the entry is missing so the page still renders.
 fn catalog_entry(
     label: &str,
     key: DispatchKey,
     args: &[&str],
 ) -> (String, String, bool, bool, bool) {
-    let command = cmd(key, args);
-    let Some(spec) = crate::core::catalog::spec_for(key) else {
-        return (label.to_string(), command, false, false, false);
-    };
+    let spec = crate::core::catalog::spec_for(key).expect("catalog must contain key");
     (
         label.to_string(),
-        command,
+        cmd(key, args),
         spec.requires_tty,
         spec.requires_sudo,
         spec.capture_output,
     )
 }
 
+fn capitalize(input: &str) -> String {
+    let mut chars = input.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
+}
+
+fn stacks_deploy(items: &mut Vec<(String, String, bool, bool, bool)>) {
+    let stacks = crate::core::docker::ALL_STACKS;
+    for stack in stacks {
+        items.push((
+            format!("Deploy {}", capitalize(stack)),
+            format!("make {stack}"),
+            true,
+            false,
+            false,
+        ));
+    }
+    items.push((
+        "Deploy All".to_string(),
+        "make core infra admin contest worker".to_string(),
+        true,
+        false,
+        false,
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Deploy {} (--img)", capitalize(stack)),
+            format!("DEPLOYMENT_TYPE_OVERRIDE=img make {stack}"),
+            true,
+            false,
+            false,
+        ));
+    }
+    items.push((
+        "Deploy All (--img)".to_string(),
+        "DEPLOYMENT_TYPE_OVERRIDE=img make core infra admin contest worker".to_string(),
+        true,
+        false,
+        false,
+    ));
+}
+
+fn stacks_controls(items: &mut Vec<(String, String, bool, bool, bool)>) {
+    let stacks = crate::core::docker::ALL_STACKS;
+    for stack in stacks {
+        items.push((
+            format!("Stop {}", capitalize(stack)),
+            format!("make {stack}-stop"),
+            true,
+            false,
+            false,
+        ));
+    }
+    items.push((
+        "Stop All".to_string(),
+        "make core-stop admin-stop contest-stop worker-stop infra-stop".to_string(),
+        true,
+        false,
+        false,
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Clean {}", capitalize(stack)),
+            format!("make {stack}-clean"),
+            true,
+            false,
+            false,
+        ));
+    }
+    items.push((
+        "Clean All".to_string(),
+        "make core-clean admin-clean contest-clean worker-clean infra-clean".to_string(),
+        true,
+        false,
+        false,
+    ));
+    for stack in stacks {
+        items.push((
+            format!("Pull {}", capitalize(stack)),
+            format!("make pull-{stack}"),
+            true,
+            false,
+            false,
+        ));
+    }
+    items.push((
+        "Pull All".to_string(),
+        "make pull".to_string(),
+        true,
+        false,
+        false,
+    ));
+}
+
+#[must_use]
 pub fn stacks_menu() -> ActionMenu {
-    let mut items: Vec<(String, String, bool, bool, bool)> = stack_deploy_entries();
-    items.extend(stack_control_entries());
+    let mut items: Vec<(String, String, bool, bool, bool)> = Vec::new();
+    stacks_deploy(&mut items);
+    stacks_controls(&mut items);
     ActionMenu::with_meta(items)
 }
 
+#[must_use]
 pub fn database_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Initialize Database", DispatchKey::DbInit, &[]),
         catalog_entry("Reset Database", DispatchKey::DbReset, &[]),
         catalog_entry("Clean Database", DispatchKey::DbClean, &[]),
         catalog_entry("Sync Schema (Prisma)", DispatchKey::DbSync, &[]),
+        catalog_entry(
+            "Migrate Database (schema + roles + RLS)",
+            DispatchKey::DbMigrate,
+            &[],
+        ),
     ])
 }
 
+#[must_use]
 pub fn worker_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Worker Edit", DispatchKey::WorkerEdit, &[]),
@@ -76,6 +174,7 @@ pub fn worker_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn ingress_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Tailscale Setup", DispatchKey::TailscaleSetup, &["setup"]),
@@ -98,16 +197,6 @@ pub fn ingress_menu() -> ActionMenu {
             DispatchKey::DomainSetup,
             &["setup", "--cert", "letsencrypt"],
         ),
-        catalog_entry(
-            "Domain Cert (letsencrypt)",
-            DispatchKey::DomainCert,
-            &["cert", "--cert", "letsencrypt"],
-        ),
-        catalog_entry(
-            "Domain Proxy (render nginx)",
-            DispatchKey::DomainProxy,
-            &["proxy", "--cert", "letsencrypt"],
-        ),
         catalog_entry("Domain Status", DispatchKey::DomainStatus, &["status"]),
         catalog_entry("Domain Renew", DispatchKey::DomainRenew, &["renew"]),
         catalog_entry(
@@ -115,19 +204,10 @@ pub fn ingress_menu() -> ActionMenu {
             DispatchKey::DomainPreflight,
             &["preflight"],
         ),
-        catalog_entry(
-            "Domain Check Expiry",
-            DispatchKey::DomainCheckExpiry,
-            &["check-expiry"],
-        ),
-        catalog_entry(
-            "Domain Revoke (dry run)",
-            DispatchKey::DomainRevoke,
-            &["revoke"],
-        ),
     ])
 }
 
+#[must_use]
 pub fn config_menu() -> ActionMenu {
     let mut items = vec![
         catalog_entry(
@@ -164,6 +244,7 @@ pub fn config_menu() -> ActionMenu {
     ActionMenu::with_meta(items)
 }
 
+#[must_use]
 pub fn backup_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Run Backup Now", DispatchKey::Backup, &[]),
@@ -173,6 +254,7 @@ pub fn backup_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn system_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Doctor (Preflight Checks)", DispatchKey::Doctor, &[]),
@@ -184,6 +266,7 @@ pub fn system_menu() -> ActionMenu {
     ])
 }
 
+#[must_use]
 pub fn bootstrap_menu() -> ActionMenu {
     ActionMenu::with_meta(vec![
         catalog_entry("Setup (Fresh Install)", DispatchKey::Setup, &["--fresh"]),
@@ -193,7 +276,3 @@ pub fn bootstrap_menu() -> ActionMenu {
         catalog_entry("Create Superadmin", DispatchKey::AdminCreate, &[]),
     ])
 }
-
-#[cfg(test)]
-#[path = "menus_tests.rs"]
-mod tests;

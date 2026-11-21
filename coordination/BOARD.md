@@ -1,0 +1,60 @@
+# Board — live work items
+
+> Source of truth: this file. One row per live item. Declare the files you will touch
+> **before** you edit them. Overlapping claims must go to `chat/` before either agent edits.
+> Statuses: `planning` | `in-flight` | `verify` | `merge` | `done`.
+
+## Landing branch
+
+`major/admin-panel` — verified `origin/major/admin-panel` = `0c2f8f99` on 2026-10-31 22:23 +0700.
+Local `major/admin-panel` was re-pointed to it (old tip preserved as
+`backup-major-pre-009-20261031` @ `9b4df0ef`; both carry the same patch-id `a4a8eb98`).
+
+## Verified handbacks (source: epics/README.md 2026-10-29 tick + re-verified 2026-10-31)
+
+Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a time, oldest first:**
+
+| Branch | SHA | Status | Merged? |
+|---|---|---|---|
+| `fix/security-page-gates` | `05bb2edc` | verify — gate-green | no |
+| `fix/feed-run-isolation` | `763c7d3a` | verify — gate-green | no |
+| `fix/gate-lib-contract` | `c1fdc31c` | verify — gate-green | no |
+| `fix/checker-prose-match` | `ca26613e` | verify — gate-green | no |
+| `fix/ci-lib-contract` | `a59fba79` | verify — cut from `land/preflight` | no |
+| `land/preflight` | `30ff924d` | verify — umbrella gate | no |
+
+`fix/ranking-fallback-sweep` is **not** in the queue: it diverges from `0c2f8f99`
+(re-checked 2026-10-31). It needs its own thread before it can merge.
+
+## Live items
+
+| # | Item | Lane / checkout | Branch | Agent | Declared files | Step | Status |
+|---|---|---|---|---|---|---|---|
+| 009.1 | coordination board + chat (this system) | `cms-docker-major` | `major/admin-panel` | AutoClaw | `coordination/**`, repo `AGENTS.md` (hub-root records live outside any repo) | committed as one full epic commit | done |
+| 009.2 | point `CLAUDE.md` at the coordination protocol (one section + TOC line) | `cms-docker-major` | `major/admin-panel` | (unassigned) | `CLAUDE.md` | blocked — write guard flagged the file's pre-existing `AUTH_SECRET=` doc placeholder (empty value, env-var example, line ~1086); operator must rule it a false positive before any CLI edits that file | blocked |
+| R1 | diverged lane `fix/ranking-fallback-sweep` (committed ranking-web work) + its dirty worktree (3 uncommitted admin-panel files) | `.worktrees/fallback-sweep-ranking` (read-only for all agents — another writer's lane) | `fix/ranking-fallback-sweep` | (nobody — evidence only) | **none — read-only**; uncommitted evidence: `ranking/page.tsx`, `actions/ranking.ts`, `lib/ranking-appearance.ts` | awaiting T0002 decision (rebase-and-merge vs superseded vs operator salvages WIP) | blocked |
+| H1 | `/login` is a dead end: `proxy.ts` prefixes the locale onto any path, but the page lives at `[locale]/auth/login`, so `/login` and `/en/login` both 404 (proven over HTTPS 2026-11-01: `/` → 307 → `/en/auth/login` = 200 with the form; `/login` → `/en/login` = 404) | `cms-docker-major` | `major/admin-panel` (cut after `0c2f8f99`) | hermes-agent | `admin-panel/src/proxy.ts`, `admin-panel/tests/proxy-auth-alias.test.ts`, `coordination/BOARD.md` | landed `32082e3e`; local gate green (360 files / 4366 tests, tsc 0, six CI Gate scripts OK); CI 42455524161 | verify |
+| S1 | **security line — handed off 2026-11-08.** No further work from hermes-agent. Carried: (a) Trivy red `CVE-2026-78661` (`x/net` in the bundled Compose gobinary) needs a waiver row + `cd admin-panel && bun run scripts/security-waivers.ts export` + commit — the export also goes stale on **2026-11-23** (30-day gate); (b) nightly `image-scan.yml` is absent from `main`, so its `cron` never registers and it has **never run**; (c) feed verified **RUNNING** on como-main — last rootfs scan 2026-11-08 03:04, 31,368 findings in 126 batches, `complete=true`, every POST `201`; (d) C1/C2/C3 security-page candidates stay operator-gated | `land/security` lane (held by another agent, `d38194db`) + operator | `land/security` | hand-off recorded | handed off |
+
+| S2 | **security line resumed (2026-11-12) — supersedes S1's hand-off.** Since S1: the feed resolves (65,829 → 13,362 open, 52,442 closed), the chunker is byte-bounded, dpkg `rc` packages are filtered, `image-scan.yml` lives on `main` and has two green scheduled nights, Trivy is green on a DB-backed waiver export, the reachability classifier + bulk waiver shipped (526 waivers), and the Rust digest port replaces the Python one step by step | `cms-docker-major` + `.worktrees/*` | `major/admin-panel` (tip `5b1c0b15`) | hermes-agent | `admin-panel/src/lib/security/**`, `admin-panel/src/lib/panel-actions/**`, `admin-panel/src/components/security/**`, `admin-panel/src/app/api/security/**`, `docker/security-scan/**`, `scripts/__generate_rls_sql.sh`, `scripts/__security_stack.sh`, `scripts/__verify_images.sh`, `tests/test_security*`, `tests/test_rls*`, `security/waivers.json`, `admin-panel/prisma/migrations/2026102614*`, `admin-panel/prisma/migrations/2026111012*`, `coordination/BOARD.md` | verifying the two commits just landed (coverage 102 tokens, read-path split) | in-flight |
+
+### Decision-gated candidates (no work starts until the operator picks a method)
+
+| # | Item | Files (likely) | Waiting on |
+|---|---|---|---|---|
+| C1 | per-family concealment on the two security pages | security pages + route gate | operator decision (named 2026-10-27, epics 006 follow-up) |
+| C2 | the expired-waiver card's meaning | security overview page + dictionary | operator decision (named 2026-10-27, epics 006/007 follow-up) |
+| C3 | `recordAudit`'s error swallow | `admin-panel/src/lib/…` audit path | operator decision (named 2026-10-27, epics 007 follow-up) |
+| C4 | 009.2 CLAUDE.md wiring | `CLAUDE.md` | operator's false-positive ruling on the `AUTH_SECRET=` doc line |
+
+## Notes
+
+- 009.2 is the only wiring missing: repo `AGENTS.md` covers opencode and any AGENTS.md reader,
+  hub `AGENTS.md` covers AutoClaw. Command Code reads `CLAUDE.md`, so it sees the protocol only
+  after 009.2 lands.
+| H2 | expired/absent session on a protected page renders a 500 (`MissingDbActorError`, digest 1743905006) instead of redirecting — Next renders page+layout in parallel, so the layout's redirect cannot stop a child query | `.worktrees/session-gate` | `fix/session-gate` (cut from `807a5bd6`) | hermes-agent | `admin-panel/src/proxy.ts`, `admin-panel/tests/proxy-session-gate.test.ts`, `admin-panel/tests/base-path.test.ts`, `admin-panel/tests/auth-signout.test.ts`, `coordination/BOARD.md` | landed; 362 files / 4387 tests, icons 18/18, six CI Gate scripts OK | done — landed `a6c73203`, CI success on every job |
+| H3 | panel deploy drops ~22 s of 502 (single admin upstream, `compose up` recreates the whole service). Fix: blue-green — standby colour, health-gated flip of the nginx target, old retires only after the new answers | `.worktrees/panel-bluegreen` | `feat/panel-bluegreen` (cut from `fc3bfdb3`) | hermes-agent | `docker-compose.yml`, `config/*.template`, `scripts/__admin_panel_swap.sh`, `scripts/__domain_routes.sh`, `tests/test_admin_panel_swap.sh`, `runbooks/deploy-landing.md`, `coordination/BOARD.md` | one commit per step | done — `62c3b809`, CI `43463169736` success · swap suite 39/0 · four guards falsified · six Gate scripts OK |
+| H4 | no session + a server action or API call still surfaces the raw error page (`MissingDbActorError` is defined but handled nowhere). Fix: one translator — pages and actions redirect to the login, API routes answer 401 — no per-call-site try/catch | `.worktrees/actor-error-surface` | `fix/actor-error-surface` (cut from `729ba891`) | hermes-agent | `admin-panel/src/lib/actor-error-surface.ts`, `admin-panel/src/lib/request-path.ts`, `admin-panel/src/lib/db-actor-request.ts`, `admin-panel/src/lib/api-utils.ts`, `admin-panel/src/lib/locales.ts`, `admin-panel/src/lib/redirect.ts`, `admin-panel/src/proxy.ts`, `admin-panel/tests/actor-error-surface.test.ts`, `coordination/BOARD.md` | landed `ca772791` (tests; red 18/19) + `1029db9e` (translator + two funnels); gate: tsc 0, lint 0 errors (3 pre-existing warnings), 375 files / 5042 tests, icons 18/18, six CI Gate scripts rc=0 (spec 274 keys, audit 49 files, permission 39/233, RLS 62 tables, generated SQL fresh) | verify |
+| H5 | plaintext panel surface: the container publishes `203.0.113.10:8891` as well as `127.0.0.1:8891`; a Secure cookie can never be set over the tailnet-IP binding. Fix: drop that binding, keep loopback for the Funnel (operator chose C3) | `.worktrees/panel-bluegreen` | `feat/panel-bluegreen` | hermes-agent | `docker-compose.yml`, `runbooks/deploy-landing.md`, `coordination/BOARD.md` | **queued behind H3** — same file | **blocked on operator (F1 vs F3)** — the plaintext port is generated from `ADMIN_NEXT_BIND_IP`, and the funnel dials colour A directly; see epic 014.4 |
+| H6 | **epic 016 wave 1** — the design law has no enforcement, so page quality cannot ratchet. Adds a ratchet gate: three statically checkable rules vs a per-file baseline; fails when any file's count rises | `.worktrees/ui-sweep` | `feat/ui-sweep` (cut from `fc246cc5`) | hermes-agent | `scripts/__check_design_law.sh`, `scripts/design-law-baseline.txt`, `scripts/__gates.sh`, `coordination/BOARD.md` | claim placed 2026-11-14 · falsification pending | in-flight |
+| H7 | **deploy path defect, found while applying 6a1c5096.** `make prisma-sync` cannot reach the DB from the host: `cms-database` publishes on `203.0.113.10:5432` (not `127.0.0.1`), and its `docker exec` fallback targets `cms-admin-panel-next`, which is DOWN before a swap — so the documented order (prisma-sync → swap) fails whenever a migration is actually pending. Today's deploy was unaffected only because the range `380c51e44..6a1c5096` carries **no migrations** | `.worktrees/ui-sweep` | `feat/ui-sweep` | hermes-agent | `Makefile` (`prisma-sync` target), `runbooks/deploy-landing.md` | fixed: URLs come from `__owner_url.sh`, the exec target from `__admin_container.sh`; 11 assertions incl. a falsification that reddens 3 of them | done |

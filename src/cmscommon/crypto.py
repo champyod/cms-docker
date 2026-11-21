@@ -23,8 +23,9 @@
 """Utilities dealing with encryption and randomness."""
 
 import binascii
-import hmac
+import logging
 import random
+import re
 from string import ascii_lowercase
 
 import bcrypt
@@ -32,6 +33,9 @@ from Cryptodome import Random
 from Cryptodome.Cipher import AES
 
 from cmscommon.binary import bin_to_hex, hex_to_bin, bin_to_b64, b64_to_bin
+
+
+logger = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -52,6 +56,15 @@ _RANDOM = Random.new()
 # bcrypt difficulty parameter. This is here so that it can be set to a lower
 # value when running unit tests. It seems that the lowest accepted value is 4.
 BCRYPT_ROUNDS = 12
+
+# bcrypt only reads the first 72 bytes of a password: older releases hash the
+# truncation silently, newer ones (>= 5) raise ValueError for a longer input.
+# Neither is a behaviour we want to depend on, so the limit is enforced here.
+BCRYPT_MAX_PASSWORD_BYTES = 72
+
+# The shape bcrypt.hashpw returns, used to tell an already-hashed payload from a
+# raw password handed to build_password() by mistake.
+_BCRYPT_HASH_RE = re.compile(r"^\$2[abxy]\$\d{2}\$[./A-Za-z0-9]{53}$")
 
 def get_random_key() -> bytes:
     """Generate 16 random bytes, safe to be used as AES key.
@@ -177,14 +190,18 @@ def parse_authentication(authentication: str) -> tuple[str, str]:
     return method, payload
 
 
-def validate_password(authentication: str, password: str) -> bool:
+def validate_password(authentication: str, password: str,
+                      username: str | None = None) -> bool:
     """Validate the given password for the required authentication.
 
     authentication: an authentication string as stored in the db,
-        for example "plaintext:password".
+        for example "bcrypt:$2b$12$...".
     password: the password provided by the user.
+    username: who the credential belongs to, used only to name the account
+        in the log line of a refused plaintext row.
 
-    return: whether password is correct.
+    return: whether password is correct. A row stored with the "plaintext"
+        method never authenticates: see the branch below.
 
     raise (ValueError): when the authentication string is not valid or
         the method is not known.
@@ -192,49 +209,125 @@ def validate_password(authentication: str, password: str) -> bool:
     """
     method, payload = parse_authentication(authentication)
     password_bytes = password.encode("utf-8")
-    payload_bytes = payload.encode("utf-8")
+
+    if method == "plaintext":
+        # WHY refuse instead of comparing: a "plaintext:" row is the password
+        # itself, so honouring it hands the account to anyone who can read the
+        # database (a dump, a backup, a SQL injection, an operator's SELECT).
+        # Nothing can recover the original secret, so an operator has to set a
+        # new one; until then the account fails closed. The password is never
+        # logged, and the method alone is enough to name the defect.
+        logger.warning(
+            "Refusing to authenticate user %r: the stored password uses the "
+            "plaintext method, which is not accepted. Set a new password for "
+            "this account.", username)
+        return False
+
     if method == "bcrypt":
-        try:
-            return bcrypt.checkpw(password_bytes, payload_bytes)
-        except ValueError:
+        if len(password_bytes) > BCRYPT_MAX_PASSWORD_BYTES:
+            # WHY False and not an exception: bcrypt compares at most 72 bytes,
+            # so a longer candidate is either truncated into a prefix match
+            # (bcrypt < 5, which hashes its own truncation) or a ValueError
+            # (bcrypt >= 5). hash_password() now refuses to store such a
+            # password, which makes an over-long candidate a password no
+            # account can hold: a definite non-match, reported the same way as
+            # any other wrong password so login paths keep their handling of a
+            # failure (and their lockout accounting) unchanged.
             return False
-    elif method == "plaintext":
-        return hmac.compare_digest(password_bytes, payload_bytes)
-    else:
-        raise ValueError("Authentication method not known.")
+        try:
+            return bcrypt.checkpw(password_bytes, payload.encode("utf-8"))
+        except ValueError:
+            # A payload that is not a bcrypt hash: a wrong password, not a
+            # reason to fail the request.
+            return False
+
+    raise ValueError("Authentication method not known.")
 
 
-def build_password(password: str, method: str = "plaintext") -> str:
+def build_password(password: str, method: str) -> str:
     """Build an auth string from an already-hashed password.
 
-    password: the hashed password.
-    method: the hasing method to use.
+    This is the low-level half of hash_password(): it stores no secret of its
+    own, it only tags an existing payload with the method that produced it.
+    Anything holding a raw password has to go through hash_password(), which is
+    the single entry that turns a password into its stored form.
+
+    password: the already-hashed password (for bcrypt, the "$2b$..." string).
+    method: the method that hashed it; only "bcrypt" is supported.
 
     return: the string embedding the method and the password.
 
+    raise (ValueError): if method is "plaintext" — the payload would then be
+        the user's secret rather than a hash, so a database dump would hand the
+        account to whoever reads it, and such rows no longer authenticate
+        anyway — or if method is unknown or password is not a bcrypt hash.
+
     """
-    # TODO make sure it's a valid bcrypt hash if method is bcrypt.
+    if method == "plaintext":
+        # WHY: this is exactly the write that makes a credential recoverable
+        # from the database. Keeping it out of the low-level builder means no
+        # caller can reach it by accident, not even by falling back to a
+        # default.
+        raise ValueError(
+            "Refusing to build a plaintext password: the stored value would be "
+            "the user's secret, readable by anyone with database access, and "
+            "plaintext rows are no longer accepted at login. Use "
+            "hash_password() to store a raw password.")
+    if method != "bcrypt":
+        raise ValueError("Authentication method not known.")
+    if _BCRYPT_HASH_RE.match(password) is None:
+        # WHY: a caller that hands a raw password to the "already hashed"
+        # builder would otherwise store it verbatim under a bcrypt label.
+        raise ValueError(
+            "The payload is not a bcrypt hash; build_password() only wraps an "
+            "already-hashed password. Call hash_password() with the raw "
+            "password instead.")
+
     return "%s:%s" % (method, password)
 
 
 def hash_password(password: str, method: str = "bcrypt") -> str:
-    """Hash and build an auth string from a plaintext password.
+    """Hash a raw password into the string to store in the database.
+
+    This is the single entry that turns a password a human supplied into its
+    stored form: every writer (the User column default, the importers, the
+    admin panel) goes through it, so no caller can pick a weaker storage.
 
     password: the password in plaintext.
-    method: the hashing method to use.
+    method: the hashing method to use; it defaults to "bcrypt", the only
+        method a password may be stored with. "plaintext" is refused instead
+        of being silently downgraded.
 
     return: the auth string containing the hashed password.
 
-    raise (ValueError): if the method is not supported.
+    raise (ValueError): if the method is not supported (including the refused
+        "plaintext"), or if the password is longer than bcrypt can store
+        (72 bytes).
 
     """
-    if method == "bcrypt":
-        password_bytes = password.encode("utf-8")
-        salt = bcrypt.gensalt(BCRYPT_ROUNDS)
-        payload = bcrypt.hashpw(password_bytes, salt).decode("ascii")
-    elif method == "plaintext":
-        payload = password
-    else:
+    if method == "plaintext":
+        # WHY: the stored value would be the secret itself. Fail loudly here so
+        # a caller asking for it (an old script, a CLI flag, a stale form) is
+        # told, instead of quietly writing a row that cannot log in.
+        raise ValueError(
+            "Refusing to store a plaintext password: the stored value would be "
+            "the user's secret, readable by anyone with database access, and "
+            "plaintext rows are no longer accepted at login. Use bcrypt.")
+    if method != "bcrypt":
         raise ValueError("Authentication method not known.")
+
+    password_bytes = password.encode("utf-8")
+    # WHY refuse here: bcrypt reads only 72 bytes, so a longer password is
+    # stored as its prefix and every password sharing that prefix would
+    # authenticate. Rejecting it at the one place a hash is written keeps such
+    # a row from ever existing, and names the limit the caller has to respect
+    # instead of leaving it to be discovered at login time.
+    if len(password_bytes) > BCRYPT_MAX_PASSWORD_BYTES:
+        raise ValueError(
+            "Password is %d bytes, over the %d-byte limit bcrypt can store; "
+            "choose a shorter password."
+            % (len(password_bytes), BCRYPT_MAX_PASSWORD_BYTES))
+    salt = bcrypt.gensalt(BCRYPT_ROUNDS)
+    payload = bcrypt.hashpw(password_bytes, salt).decode("ascii")
 
     return build_password(payload, method)

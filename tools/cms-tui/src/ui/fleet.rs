@@ -1,0 +1,468 @@
+//! Fleet manager: worker table + detail pane + edit forms.
+
+use crossterm::event::KeyCode;
+use ratatui::layout::{Constraint, Layout, Rect};
+use ratatui::style::{Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Row, Table};
+
+use crate::app::App;
+use crate::data::env;
+use crate::data::workers::{self, WorkerRow};
+use crate::ui::modal::{self, Confirm, Kind, LogBuffer};
+use crate::ui::widgets;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditField {
+    Host,
+    Port,
+    DbHost,
+    DbPort,
+}
+
+impl EditField {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Host => "WORKER_HOST",
+            Self::Port => "WORKER_PORT",
+            Self::DbHost => "WORKER_DB_HOST",
+            Self::DbPort => "WORKER_DB_PORT",
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Host => "host",
+            Self::Port => "port",
+            Self::DbHost => "DB host",
+            Self::DbPort => "DB port",
+        }
+    }
+
+    fn next(self) -> Self {
+        match self {
+            Self::Host => Self::Port,
+            Self::Port => Self::DbHost,
+            Self::DbHost => Self::DbPort,
+            Self::DbPort => Self::Host,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct FleetScreen {
+    pub cursor: usize,
+    mode: Option<EditField>,
+    input: String,
+    toast_msg: Option<String>,
+    confirm: Option<Confirm>,
+    logs: Option<LogStream>,
+    async_note: Option<std::sync::Arc<std::sync::Mutex<Option<String>>>>,
+    menu_sel: Option<usize>,
+    add_mode: bool,
+}
+
+const MENU_ITEMS: [&str; 5] = ["Deploy", "Stop", "Logs", "Edit", "Add worker"];
+
+struct LogStream {
+    buffer: LogBuffer,
+    shard: u32,
+    task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for LogStream {
+    fn drop(&mut self) {
+        self.buffer.kill();
+        self.task.abort();
+    }
+}
+
+impl FleetScreen {
+    pub fn take_toast(&mut self) -> Option<String> {
+        self.toast_msg.take()
+    }
+
+    pub fn handle_key(&mut self, code: KeyCode) {
+        if self.logs.is_some() {
+            if matches!(code, KeyCode::Char('q') | KeyCode::Esc) {
+                self.logs = None;
+            }
+            return;
+        }
+        if let Some(c) = &self.confirm {
+            let kind = c.kind;
+            match code {
+                KeyCode::Char('y') => self.run_confirmed(kind),
+                KeyCode::Char('n') | KeyCode::Esc => self.confirm = None,
+                _ => {},
+            }
+            return;
+        }
+        if let Some(sel) = self.menu_sel {
+            let len = MENU_ITEMS.len();
+            match code {
+                KeyCode::Esc => self.menu_sel = None,
+                KeyCode::Up | KeyCode::Char('k') => {
+                    self.menu_sel = Some(sel.saturating_sub(1));
+                },
+                KeyCode::Down | KeyCode::Char('j') => {
+                    self.menu_sel = Some((sel + 1).min(len - 1));
+                },
+                KeyCode::Enter => {
+                    self.menu_sel = None;
+                    self.run_menu_item(sel);
+                },
+                _ => {},
+            }
+            return;
+        }
+        if self.add_mode {
+            match code {
+                KeyCode::Esc => {
+                    self.add_mode = false;
+                    self.input.clear();
+                },
+                KeyCode::Backspace => {
+                    self.input.pop();
+                },
+                KeyCode::Char(c) => self.input.push(c),
+                KeyCode::Enter => self.commit_add(),
+                _ => {},
+            }
+            return;
+        }
+        self.browse_key(code);
+    }
+
+    fn run_menu_item(&mut self, sel: usize) {
+        match sel {
+            0 => {
+                if let Some(shard) = self.selected_shard() {
+                    self.confirm = Some(Confirm::deploy_preview(shard));
+                }
+            },
+            1 => {
+                if let Some(shard) = self.selected_shard() {
+                    self.confirm = Some(Confirm::stop_confirm(shard));
+                }
+            },
+            2 => self.open_logs(),
+            3 => {
+                self.mode = Some(EditField::Host);
+                self.input.clear();
+            },
+            _ => {
+                self.add_mode = true;
+                self.input.clear();
+            },
+        }
+    }
+
+    fn commit_add(&mut self) {
+        if !self.input.contains(':') {
+            self.toast_msg = Some("format must be host:port".into());
+            self.add_mode = false;
+            self.input.clear();
+            return;
+        }
+        let next = next_shard_number();
+        let mut updates = std::collections::HashMap::new();
+        updates.insert(format!("WORKER_{next}"), self.input.clone());
+        let path = env::repo_root().join(env::CORE_ENV_FILE);
+        self.toast_msg = Some(match env::write_keys(&path, &updates) {
+            Ok(()) => format!("registered WORKER_{next}={}", self.input),
+            Err(e) => format!("write failed: {e}"),
+        });
+        self.add_mode = false;
+        self.input.clear();
+    }
+
+    fn browse_key(&mut self, code: KeyCode) {
+        if let Some(field) = self.mode {
+            match code {
+                KeyCode::Esc => self.mode = None,
+                KeyCode::Tab => self.mode = Some(field.next()),
+                KeyCode::Backspace => {
+                    self.input.pop();
+                },
+                KeyCode::Char(c) => self.input.push(c),
+                KeyCode::Enter => self.commit_edit(field),
+                _ => {},
+            }
+            return;
+        }
+        let len = workers_blocking().len();
+        match code {
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.cursor + 1 < len {
+                    self.cursor += 1;
+                }
+            },
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.cursor = self.cursor.saturating_sub(1);
+            },
+            KeyCode::Char('e') => {
+                self.mode = Some(EditField::Host);
+                self.input.clear();
+            },
+            KeyCode::Char('a') => {
+                self.add_mode = true;
+                self.input.clear();
+            },
+            KeyCode::Enter => self.menu_sel = Some(0),
+            KeyCode::Char('d') => self.open_confirm(Confirm::deploy_preview),
+            KeyCode::Char('K') => self.open_confirm(Confirm::stop_confirm),
+            KeyCode::Char('L') => self.open_logs(),
+            _ => {},
+        }
+    }
+
+    fn selected_shard(&self) -> Option<u32> {
+        workers_blocking().get(self.cursor).map(|w| w.shard)
+    }
+
+    fn open_confirm(&mut self, make: impl Fn(u32) -> Confirm) {
+        if let Some(shard) = self.selected_shard() {
+            self.confirm = Some(make(shard));
+        }
+    }
+
+    fn open_logs(&mut self) {
+        let Some(shard) = self.selected_shard() else {
+            return;
+        };
+        let buffer = LogBuffer::new();
+        let container = format!("worker-{shard}");
+        let task = modal::spawn_log_tail(buffer.clone(), container);
+        self.logs = Some(LogStream { buffer, shard, task });
+    }
+
+    fn run_confirmed(&mut self, kind: Kind) {
+        self.confirm = None;
+        let Some(shard) = self.selected_shard() else {
+            return;
+        };
+        let project = format!("cw{shard}");
+        let (mut args, label): (Vec<String>, String) = match kind {
+            Kind::Deploy(_) => (
+                vec![
+                    "compose".into(),
+                    "-p".into(),
+                    project,
+                    "up".into(),
+                    "-d".into(),
+                    "--no-build".into(),
+                ],
+                format!("deployed shard {shard}"),
+            ),
+            Kind::Stop(_) => (
+                vec!["compose".into(), "-p".into(), project, "stop".into()],
+                format!("stopped shard {shard}"),
+            ),
+        };
+        let note = std::sync::Arc::new(std::sync::Mutex::new(None::<String>));
+        let note2 = note.clone();
+        tokio::spawn(async move {
+            args.insert(0, "docker".to_string());
+            let program = args.remove(0);
+            let status = tokio::process::Command::new(program)
+                .args(&args)
+                .status()
+                .await
+                .map(|s| s.success())
+                .unwrap_or(false);
+            *note2.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(if status { label } else { format!("{label} FAILED") });
+        });
+        self.async_note = Some(note);
+    }
+
+    pub fn poll_async_notes(&mut self) {
+        if self.async_note.is_none() {
+            return;
+        }
+        let msg = self.async_note.as_ref().and_then(|note| {
+            note.lock()
+                .ok()
+                .and_then(|mut slot| slot.take())
+        });
+        if msg.is_some() {
+            self.async_note = None;
+            self.toast_msg = msg;
+        }
+    }
+
+    fn commit_edit(&mut self, field: EditField) {
+        let shard = workers_blocking()
+            .get(self.cursor)
+            .map(|w| w.shard)
+            .unwrap_or_default();
+        let key = format!("{}_{}", field.key(), shard);
+        let mut updates = std::collections::HashMap::new();
+        updates.insert(key, self.input.clone());
+        let path = env::repo_root().join(env::WORKER_ENV_FILE);
+        self.toast_msg = Some(match env::write_keys(&path, &updates) {
+            Ok(()) => format!("saved {} for shard {shard}", field.label()),
+            Err(e) => format!("write failed: {e}"),
+        });
+        self.mode = None;
+    }
+}
+
+fn workers_blocking() -> Vec<WorkerRow> {
+    tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(workers::fleet())
+    })
+}
+
+pub fn render(frame: &mut ratatui::Frame, app: &App) {
+    let chunks = Layout::vertical([
+        Constraint::Percentage(60),
+        Constraint::Percentage(40),
+    ])
+    .split(frame.size());
+    render_table(frame, app, chunks[0]);
+    render_detail(frame, app, chunks[1]);
+    if let Some(sel) = app.fleet.menu_sel {
+        modal::render_menu(frame, &app.theme, &MENU_ITEMS, sel);
+    }
+    if app.fleet.add_mode {
+        let area = frame.size();
+        let block = crate::ui::widgets::panel(" ADD WORKER host:port ", &app.theme);
+        let text = vec![Line::from(Span::styled(
+            format!("> {}", app.fleet.input),
+            ratatui::style::Style::new()
+                .fg(app.theme.accent)
+                .add_modifier(ratatui::style::Modifier::BOLD),
+        ))];
+        use ratatui::widgets::{Clear, Paragraph as P};
+        frame.render_widget(Clear, centered_box(area, 40, 3));
+        frame.render_widget(P::new(text).block(block), centered_box(area, 40, 3));
+    }
+    if let Some(c) = &app.fleet.confirm {
+        c.render(frame, &app.theme);
+    }
+    if let Some(stream) = &app.fleet.logs {
+        let lines = stream.buffer.snapshot();
+        let title = format!(" LOGS worker-{} ", stream.shard);
+        modal::render_logs(frame, &app.theme, &title, &lines);
+    }
+}
+
+fn render_table(frame: &mut ratatui::Frame, app: &App, area: Rect) {
+    let rows = workers_blocking();
+    let body: Vec<Row> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, w)| worker_row(w, i == app.fleet.cursor, &app.theme))
+        .collect();
+    let widths = [
+        Constraint::Length(2),
+        Constraint::Length(6),
+        Constraint::Length(20),
+        Constraint::Length(6),
+        Constraint::Length(10),
+    ];
+    let header = Row::new(["", "shard", "host", "port", "state"])
+        .style(Style::new().fg(app.theme.accent).add_modifier(Modifier::BOLD));
+    let table = Table::new(body, widths)
+        .header(header)
+        .block(widgets::panel(" WORKER FLEET ", &app.theme));
+    frame.render_widget(table, area);
+}
+
+fn worker_row<'a>(w: &'a WorkerRow, selected: bool, theme: &crate::style::Theme) -> Row<'a> {
+    let (glyph, color) = widgets::dot_state(w.running, theme);
+    let cursor = if selected { "▸" } else { " " };
+    let mut style = Style::new().fg(theme.fg);
+    if selected {
+        style = style.add_modifier(Modifier::REVERSED);
+    }
+    Row::new(vec![
+        Span::raw(cursor.to_string()),
+        Span::raw(w.shard.to_string()),
+        Span::raw(w.host.clone()),
+        Span::raw(w.port.to_string()),
+        Span::styled(glyph.to_string(), Style::new().fg(color)),
+    ])
+    .style(style)
+}
+
+fn render_detail(frame: &mut ratatui::Frame, app: &App, area: Rect) {
+    let rows = workers_blocking();
+    let Some(w) = rows.get(app.fleet.cursor) else {
+        let empty = Paragraph::new("no worker registered")
+            .block(widgets::panel(" DETAIL ", &app.theme));
+        frame.render_widget(empty, area);
+        return;
+    };
+    if let Some(field) = app.fleet.mode {
+        render_edit_form(frame, app, area, field);
+        return;
+    }
+    let db = db_settings_for(w.shard);
+    let text = vec![
+        Line::from(format!("shard: {}", w.shard)),
+        Line::from(format!("host: {}", w.host)),
+        Line::from(format!("port: {}", w.port)),
+        Line::from(format!("DB host: {}", db.0.unwrap_or_default())),
+        Line::from(format!("DB port: {}", db.1.unwrap_or_default())),
+        Line::from(Span::styled(
+            "[e] edit host/port/db · Tab dashboard",
+            Style::new().fg(app.theme.accent),
+        )),
+    ];
+    frame.render_widget(
+        Paragraph::new(text).block(widgets::panel(" DETAIL ", &app.theme)),
+        area,
+    );
+}
+
+fn render_edit_form(
+    frame: &mut ratatui::Frame,
+    app: &App,
+    area: Rect,
+    field: EditField,
+) {
+    let text = vec![
+        Line::from(format!(
+            "editing {} — Enter commits, Tab cycles fields, Esc cancels",
+            field.label()
+        )),
+        Line::from(Span::styled(
+            format!("> {}", app.fleet.input),
+            Style::new().fg(app.theme.accent).add_modifier(Modifier::BOLD),
+        )),
+    ];
+    frame.render_widget(
+        Paragraph::new(text).block(widgets::panel(" EDIT ", &app.theme)),
+        area,
+    );
+}
+
+fn db_settings_for(shard: u32) -> (Option<String>, Option<String>) {
+    let map = env::parse(&env::repo_root().join(env::WORKER_ENV_FILE));
+    (
+        map.get(&format!("WORKER_DB_HOST_{shard}")).cloned(),
+        map.get(&format!("WORKER_DB_PORT_{shard}")).cloned(),
+    )
+}
+
+fn next_shard_number() -> u32 {
+    let map = env::parse(&env::repo_root().join(env::CORE_ENV_FILE));
+    map.keys()
+        .filter_map(|k| k.strip_prefix("WORKER_")?.parse::<u32>().ok())
+        .max()
+        .unwrap_or(0)
+        + 1
+}
+
+fn centered_box(area: ratatui::layout::Rect, w: u16, h: u16) -> ratatui::layout::Rect {
+    use ratatui::layout::Rect;
+    Rect::new(
+        area.x + area.width.saturating_sub(w) / 2,
+        area.y + area.height.saturating_sub(h) / 2,
+        w.min(area.width),
+        h.min(area.height),
+    )
+}

@@ -110,7 +110,8 @@ class Translation:
         return babel.dates.format_time(dt, tzinfo=timezone, locale=self.locale)
 
     def format_datetime_smart(
-        self, dt: datetime, now: datetime, timezone: tzinfo
+        self, dt: datetime, now: datetime, timezone: tzinfo,
+        with_zone: bool = False,
     ) -> str:
         """Return dt formatted as '[date] time'.
 
@@ -120,6 +121,8 @@ class Translation:
         now: a datetime representing the moment in time at
             which the previous parameter (dt) is being formatted.
         timezone: the timezone the output should be in.
+        with_zone: whether to append the timezone's UTC-offset label, so an
+            unlabelled clock is never mistaken for the reader's own.
 
         return: the formatted [date and] time of the datetime.
 
@@ -127,12 +130,36 @@ class Translation:
         dt_date = dt.replace(tzinfo=utc).astimezone(timezone).date()
         now_date = now.replace(tzinfo=utc).astimezone(timezone).date()
         if dt_date == now_date:
-            return self.format_time(dt, timezone)
+            text = self.format_time(dt, timezone)
         else:
-            return self.format_datetime(dt, timezone)
+            text = self.format_datetime(dt, timezone)
+        if with_zone:
+            text += " (%s)" % self.format_timezone_label(dt, timezone)
+        return text
+
+    def format_timezone_label(self, dt: datetime, timezone: tzinfo) -> str:
+        """Return the UTC-offset label a datetime carries in the timezone.
+
+        dt: a datetime.
+        timezone: the timezone the datetime is displayed in.
+
+        return: a label such as "UTC" or "UTC+07:00".
+
+        """
+        offset: timedelta | None = \
+            dt.replace(tzinfo=utc).astimezone(timezone).utcoffset()
+        if offset is None:
+            return "UTC"
+        total_minutes = int(offset.total_seconds() // self.SECONDS_PER_MINUTE)
+        if total_minutes == 0:
+            return "UTC"
+        sign = "+" if total_minutes > 0 else "-"
+        hours, minutes = divmod(abs(total_minutes), self.MINUTES_PER_HOUR)
+        return "UTC%s%02d:%02d" % (sign, hours, minutes)
 
     SECONDS_PER_HOUR = 60 * 60
     SECONDS_PER_MINUTE = 60
+    MINUTES_PER_HOUR = 60
 
     def format_timedelta(self, td: timedelta) -> str:
         """Return the timedelta formatted to high precision.

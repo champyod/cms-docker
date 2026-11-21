@@ -1,5 +1,6 @@
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import type { PermissionKey } from '@/lib/permissions';
+import { EXTRA_FIELD_PERMISSION_MAP } from '@/lib/field-permission-tables';
 
 export type FieldAccess = { canRead: boolean; canUpdate: boolean };
 
@@ -8,15 +9,24 @@ export interface FieldPermissionDef {
   update?: PermissionKey;
 }
 
+// Why a brand: an access table only means anything for the entity it was built
+// from, and an unbranded Record<string, FieldAccess> let one entity's table reach
+// another entity's projection with neither tsc nor a test objecting.
+const FIELD_ACCESS_ENTITY = Symbol('field-access-entity');
+
+export type FieldAccessTable<Entity extends string> = Record<string, FieldAccess> & {
+  readonly [FIELD_ACCESS_ENTITY]: Entity;
+};
+
 // Why: defines which permission keys gate read and update access for each field of each entity.
 // Other entities (users, contests, …) adopt this same pattern by adding their own top-level entry.
-export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermissionDef>> = {
+const FIELD_PERMISSION_TABLE = {
   admins: {
     id: { read: 'admin:read' },
     name: { read: 'admin:read', update: 'admin:update' },
     username: { read: 'admin:read' },
-    authentication: { read: 'password:reveal', update: 'admin:update' },
-    password: { read: 'password:reveal', update: 'admin:update' },
+    authentication: { read: 'password:reveal', update: 'admin:password:update' },
+    password: { read: 'password:reveal', update: 'admin:password:update' },
     enabled: { read: 'admin:read', update: 'admin:update' },
     last_login_at: { read: 'audit:read' },
     admin_groups: { read: 'group:read', update: 'group:assign' },
@@ -31,6 +41,11 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     language: { read: 'submission:read' },
     comment: { read: 'submission:read', update: 'submission:update' },
     official: { read: 'submission:read', update: 'submission:update' },
+    submission_results: { read: 'submissionresult:read' },
+    files: { read: 'file:read' },
+    evaluations: { read: 'evaluation:read' },
+    executables: { read: 'executable:read' },
+    tokens: { read: 'token:read' },
   },
   datasets: {
     id: { read: 'dataset:read' },
@@ -58,6 +73,10 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     organization: { read: 'user:read', update: 'user:update' },
     country: { read: 'user:read', update: 'user:update' },
     participations: { read: 'participation:list' },
+    // Why: Prisma emits _count as a sibling key of the row, not a users column, so the
+    // readable-field filter drops it unless the table names it. Without this entry the
+    // Contests column renders 0 for every row.
+    _count: { read: 'participation:list' },
     led_teams: { read: 'team:list' },
   },
   teams: {
@@ -66,50 +85,11 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     name: { read: 'team:read', update: 'team:update' },
     organization: { read: 'team:read', update: 'team:update' },
     leader_id: { read: 'team:read', update: 'team:update' },
+    registerable: { read: 'team:read', update: 'team:update' },
     participations: { read: 'participation:list' },
-  },
-  contests: {
-    id: { read: 'contest:read' },
-    name: { read: 'contest:read', update: 'contest:update' },
-    description: { read: 'contest:read', update: 'contest:update' },
-    allowed_localizations: { read: 'contest:read', update: 'contest:update' },
-    languages: { read: 'contest:read', update: 'contest:update' },
-    submissions_download_allowed: { read: 'contest:read', update: 'contest:update' },
-    allow_questions: { read: 'contest:read', update: 'contest:update' },
-    allow_user_tests: { read: 'contest:read', update: 'contest:update' },
-    allow_unofficial_submission_before_analysis_mode: { read: 'contest:read', update: 'contest:update' },
-    block_hidden_participations: { read: 'contest:read', update: 'contest:update' },
-    allow_password_authentication: { read: 'contest:read', update: 'contest:update' },
-    allow_registration: { read: 'contest:read', update: 'contest:update' },
-    ip_restriction: { read: 'contest:read', update: 'contest:update' },
-    ip_autologin: { read: 'contest:read', update: 'contest:update' },
-    token_mode: { read: 'contest:read', update: 'contest:update' },
-    token_max_number: { read: 'contest:read', update: 'contest:update' },
-    token_min_interval: { read: 'contest:read', update: 'contest:update' },
-    token_gen_initial: { read: 'contest:read', update: 'contest:update' },
-    token_gen_number: { read: 'contest:read', update: 'contest:update' },
-    token_gen_interval: { read: 'contest:read', update: 'contest:update' },
-    token_gen_max: { read: 'contest:read', update: 'contest:update' },
-    max_submission_number: { read: 'contest:read', update: 'contest:update' },
-    max_user_test_number: { read: 'contest:read', update: 'contest:update' },
-    min_submission_interval: { read: 'contest:read', update: 'contest:update' },
-    min_submission_interval_grace_period: { read: 'contest:read', update: 'contest:update' },
-    min_user_test_interval: { read: 'contest:read', update: 'contest:update' },
-    queue_fairness_penalty_seconds: { read: 'contest:read', update: 'contest:update' },
-    is_active: { read: 'contest:read', update: 'contest:switch' },
-    score_precision: { read: 'contest:read', update: 'contest:update' },
-    start: { read: 'contest:read', update: 'contest:update' },
-    stop: { read: 'contest:read', update: 'contest:update' },
-    timezone: { read: 'contest:read', update: 'contest:update' },
-    per_user_time: { read: 'contest:read', update: 'contest:update' },
-    analysis_enabled: { read: 'contest:read', update: 'contest:update' },
-    analysis_start: { read: 'contest:read', update: 'contest:update' },
-    analysis_stop: { read: 'contest:read', update: 'contest:update' },
   },
   tasks: {
     id: { read: 'task:read' },
-    num: { read: 'task:read' },
-    contest_id: { read: 'task:read', update: 'task:update' },
     name: { read: 'task:read', update: 'task:update' },
     title: { read: 'task:read', update: 'task:update' },
     submission_format: { read: 'task:read', update: 'task:update' },
@@ -126,6 +106,9 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     max_user_test_number: { read: 'task:read', update: 'task:update' },
     min_submission_interval: { read: 'task:read', update: 'task:update' },
     min_user_test_interval: { read: 'task:read', update: 'task:update' },
+    // Why registered: the throttle override must gate like the limit fields around it; an unregistered
+    // key is dropped by stripDisallowedFields, so the override would never reach the write.
+    evaluation_throttle_delay_s: { read: 'task:read', update: 'task:update' },
     feedback_level: { read: 'task:read', update: 'task:update' },
     score_precision: { read: 'task:read', update: 'task:update' },
     score_mode: { read: 'task:read', update: 'task:update' },
@@ -136,8 +119,8 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     dataset_id: { read: 'testcase:read' },
     codename: { read: 'testcase:read', update: 'testcase:update' },
     public: { read: 'testcase:read', update: 'testcase:update' },
-    input: { read: 'testcase:read' },
-    output: { read: 'testcase:read' },
+    input: { read: 'testcase:read', update: 'testcase:update' },
+    output: { read: 'testcase:read', update: 'testcase:update' },
   },
   participations: {
     id: { read: 'participation:read' },
@@ -154,6 +137,7 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     contest_id: { read: 'participation:read' },
     user_id: { read: 'participation:read' },
     team_id: { read: 'participation:read', update: 'participation:update' },
+    user_tests: { read: 'usertest:read' },
   },
   announcements: {
     id: { read: 'announcement:read' },
@@ -172,6 +156,7 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     ignored: { read: 'question:read', update: 'question:ignore' },
     reply_subject: { read: 'question:read', update: 'question:answer' },
     reply_text: { read: 'question:read', update: 'question:answer' },
+    resolution_kind: { read: 'question:read', update: 'question:answer' },
     participation_id: { read: 'question:read' },
     admin_id: { read: 'question:read', update: 'question:answer' },
   },
@@ -192,42 +177,73 @@ export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermission
     createdAt: { read: 'monitor:read' },
     updatedAt: { read: 'monitor:read' },
   },
-};
+  ...EXTRA_FIELD_PERMISSION_MAP,
+} as const satisfies Record<string, Record<string, FieldPermissionDef>>;
+
+// Why the wide alias: consumers iterate the map as a plain record, while
+// getFieldAccess indexes the const table so an entity stays a literal union.
+export const FIELD_PERMISSION_MAP: Record<string, Record<string, FieldPermissionDef>> = FIELD_PERMISSION_TABLE;
+
+/** Every entity the field map governs; an unknown entity cannot be requested. */
+export type FieldAccessEntity = keyof typeof FIELD_PERMISSION_TABLE;
 
 /** Returns per-field read/update booleans for the given entity, evaluated against effectivePermissions. */
-export function getFieldAccess(
-  entity: string,
+export function getFieldAccess<Entity extends FieldAccessEntity>(
+  entity: Entity,
   effectivePermissions: ReadonlySet<string>,
-): Record<string, FieldAccess> {
-  const map = FIELD_PERMISSION_MAP[entity];
-  if (!map) return {};
-
+): FieldAccessTable<Entity> {
+  const map: Record<string, FieldPermissionDef> | undefined = FIELD_PERMISSION_TABLE[entity];
   const result: Record<string, FieldAccess> = {};
-  for (const field of Object.keys(map)) {
-    const def = map[field];
-    result[field] = {
-      canRead: hasEffectivePermission(effectivePermissions, def.read),
-      canUpdate: def.update ? hasEffectivePermission(effectivePermissions, def.update) : false,
-    };
+  if (map) {
+    for (const field of Object.keys(map)) {
+      const def = map[field];
+      result[field] = {
+        canRead: hasEffectivePermission(effectivePermissions, def.read),
+        canUpdate: def.update ? hasEffectivePermission(effectivePermissions, def.update) : false,
+      };
+    }
   }
-  return result;
+  const branded = { ...result, [FIELD_ACCESS_ENTITY]: entity };
+  // Why non-enumerable: the brand identifies the entity for the type system, so
+  // Object.keys, spreading and serializing the table stay exactly as before.
+  Object.defineProperty(branded, FIELD_ACCESS_ENTITY, { enumerable: false });
+  return branded;
 }
 
-/** Returns only the keys of data that the caller has update permission for. */
-export function stripDisallowedFields<T extends Record<string, unknown>>(
-  entity: string,
+function pickAllowedFields<T extends Record<string, unknown>>(
+  data: T,
+  access: Record<string, FieldAccess>,
+  gate: 'canRead' | 'canUpdate',
+): Partial<T> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(data)) {
+    if (access[key]?.[gate]) result[key] = data[key];
+  }
+  return result as Partial<T>;
+}
+
+/** Returns only the keys of data that the caller has read permission for. */
+export function filterReadableFields<Entity extends FieldAccessEntity, T extends Record<string, unknown>>(
+  entity: Entity,
   data: T,
   effectivePermissions: ReadonlySet<string>,
 ): Partial<T> {
-  const map = FIELD_PERMISSION_MAP[entity];
-  if (!map) return {};
+  return filterReadableFieldsWith(getFieldAccess(entity, effectivePermissions), data);
+}
 
-  const access = getFieldAccess(entity, effectivePermissions);
-  const result: Record<string, unknown> = {};
-  for (const key of Object.keys(data)) {
-    if (access[key]?.canUpdate) {
-      result[key] = data[key];
-    }
-  }
-  return result as Partial<T>;
+/** Returns the readable keys of data from an access table the caller already built for the batch. */
+export function filterReadableFieldsWith<Entity extends string, T extends Record<string, unknown>>(
+  access: FieldAccessTable<Entity>,
+  data: T,
+): Partial<T> {
+  return pickAllowedFields(data, access, 'canRead');
+}
+
+/** Returns only the keys of data that the caller has update permission for. */
+export function stripDisallowedFields<Entity extends FieldAccessEntity, T extends Record<string, unknown>>(
+  entity: Entity,
+  data: T,
+  effectivePermissions: ReadonlySet<string>,
+): Partial<T> {
+  return pickAllowedFields(data, getFieldAccess(entity, effectivePermissions), 'canUpdate');
 }
