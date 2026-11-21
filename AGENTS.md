@@ -28,8 +28,6 @@ This checkout is written by multiple agent CLIs. Every agent must:
 ---
 
 <!-- BEGIN agent-protocol §1 — verbatim copy of docs/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
-## Binding rules — every agent, every session
-
 **Tier A — decide, do not ask.** Naming, file layout, test shape, step order inside a slice, commit
 split, which existing component to extend, re-running a gate. Record the reason once in the epic
 file only when another person's work depends on it.
@@ -61,6 +59,12 @@ for understanding.
 
 **Evidence.** Command, exit code, counts, and one line of what it proves. "Tests pass" is not
 evidence. A gate counts only once it has been seen to fail on a dead input.
+
+**Ephemeral work.** Anything that is not the result itself — a probe script, an ad-hoc query, a
+generated report, a downloaded fixture, a one-off migration helper — lives in the session scratch
+directory, never in the repository, and is deleted in the turn that stops needing it; what survives
+is the finding, written into the epic or the doc. A script that a gate or CI runs is permanent by
+definition: it lives in `scripts/`, carries a test and a negative control, and is reviewed like code.
 
 **Never.** Edit another writer's lane, branch, stash or uncommitted file; `git add .` or `git add
 -A` on a dirty tree; weaken a gate to reach green; present a result you did not obtain; repair a

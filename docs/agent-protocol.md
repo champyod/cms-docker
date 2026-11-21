@@ -16,11 +16,9 @@ disagree.
 
 ---
 
-## §1 The binding block
-
-<!-- BEGIN agent-protocol §1 — verbatim copy of docs/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
 ## Binding rules — every agent, every session
 
+<!-- BEGIN agent-protocol §1 — verbatim copy of docs/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
 **Tier A — decide, do not ask.** Naming, file layout, test shape, step order inside a slice, commit
 split, which existing component to extend, re-running a gate. Record the reason once in the epic
 file only when another person's work depends on it.
@@ -52,6 +50,12 @@ for understanding.
 
 **Evidence.** Command, exit code, counts, and one line of what it proves. "Tests pass" is not
 evidence. A gate counts only once it has been seen to fail on a dead input.
+
+**Ephemeral work.** Anything that is not the result itself — a probe script, an ad-hoc query, a
+generated report, a downloaded fixture, a one-off migration helper — lives in the session scratch
+directory, never in the repository, and is deleted in the turn that stops needing it; what survives
+is the finding, written into the epic or the doc. A script that a gate or CI runs is permanent by
+definition: it lives in `scripts/`, carries a test and a negative control, and is reviewed like code.
 
 **Never.** Edit another writer's lane, branch, stash or uncommitted file; `git add .` or `git add
 -A` on a dirty tree; weaken a gate to reach green; present a result you did not obtain; repair a
@@ -128,7 +132,35 @@ never translated, because translating them makes them unsearchable.
 | "the gate works" | not evidence — it has never been seen to fail |
 | "gate G-5, dead input: renamed a row's `path` without marking it `retired` → exit 1, `FEATURES.tsv:118`; live input → exit 0" | evidence, and it proves the gate can fail |
 
-## §6 Amendment
+## §7 Ephemeral work — where a throwaway file may live
+
+| Kind | Lives in | Lifetime | What survives |
+|---|---|---|---|
+| probe script, ad-hoc query, generated report, downloaded fixture, one-off migration helper | `$HERMES_SCRATCH/<task>/` — default `~/.hermes/cache/scratch`, one directory per task | deleted in the turn that stops needing it | the finding: the number, the decision or the diff, written into the epic or doc |
+| an experiment that needs a build | a `spike/<topic>` branch, or a lane worktree deleted afterwards | branch deleted once the answer is written down | the answer, plus one row in the epic naming the spike |
+| a script a gate or CI runs | `scripts/` in the repository | permanent until the gate retires | itself: it carries a test, a negative control, and review |
+| a fixture a test needs | the test's own directory | permanent | itself |
+
+Six rules make it mechanical rather than a matter of taste:
+
+1. **Nothing temporary is committed** — not "just this once", not "it may be useful later". A
+   committed script is permanent by definition and must be gated.
+2. **The scratch directory is outside every checkout**, so `git status` can never show it. A
+   temporary file appearing in `git status` means the rule was already broken two steps earlier.
+3. **`/tmp` is not scratch** — it is shared between processes and cleaned without a policy. Use the
+   session scratch directory, which is one per task and pruned after 24 hours idle.
+4. **No credential, token, key or production dump goes to scratch either.** A probe reads a secret
+   from where the product reads it and prints nothing derived from it.
+5. **Cleanup happens in the turn, not later.** The directory exists because a question was open;
+   when the answer is written down, the directory goes.
+6. **A helper needed twice is promoted properly** — a gate in `scripts/` with a test, or a
+   documented tool — in its own commit. It is never renamed from scratch into the repository.
+
+**Why:** the cost of a temporary file in the repository is not the file. It is that the next reader
+cannot tell it apart from a result, so it is kept for years, and the tree fills with scripts nobody
+dares delete.
+
+## §8 Amendment
 
 A change to §1 is **one commit** that edits §1 and every verbatim copy in the same commit:
 `AGENTS.md` (both the hub root and the repository copy), and any document that restates a rule.
