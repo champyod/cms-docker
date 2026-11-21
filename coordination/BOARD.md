@@ -40,6 +40,8 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
+| P4 | **Panel admin read role** — `getAdmins` over a lazy `ADMIN_READ_DATABASE_URL` client as `cms_admin_read_people`; only `id/username/name/enabled/last_login_at`. No fallback. Credential/env and other clients remain later. | `.worktrees/panel-admin-read` | `fix/panel-admin-read` (from `6cc9ec6a`) | hermes-agent | `admin-panel/src/lib/prisma.ts`, `admin-panel/src/app/actions/admins.ts`, `admin-panel/tests/admin-login-role-client.test.ts`, `admin-panel/tests/admin-read-role-client.test.ts`, `coordination/BOARD.md` | planning | in-flight |
+
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
 | # | Item | Files (likely) | Waiting on |
