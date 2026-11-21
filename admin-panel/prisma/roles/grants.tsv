@@ -1,0 +1,34 @@
+# admin-panel/prisma/roles/grants.tsv — the admins slice of the WS-75 column grants
+#
+# Columns: role <TAB> table <TAB> privilege <TAB> columns <TAB> sequence
+#   privilege  SELECT | UPDATE | INSERT | DELETE
+#   columns    comma-separated, no spaces. `-` means the whole table, which only DELETE may use:
+#              PostgreSQL has no column list for DELETE, and no other verb is granted table-wide
+#              here (a table-level UPDATE would hand the role every column, including
+#              `authentication`, which is exactly what this slice exists to prevent).
+#   sequence   the sequence an INSERT must also be allowed to advance, or `-`. Its own column
+#              because it is the one privilege the grant on the table does not imply: PostgreSQL
+#              checks nextval() against the sequence, so INSERT alone fails on `admins` with
+#              "permission denied for sequence admins_id_seq" — an error that names a different
+#              object than the one an operator is looking at. Written out rather than derived from
+#              the table name, so the file lists every object a role gains a privilege on.
+#
+# WHY the RLS policies are derived and not listed: the rehearsal matrix (cms-ops pentest run
+# 2026-11-21, Result 4) showed the two are one rule, not two. A role with a grant and no policy
+# reads zero rows, which looks like a missing record rather than a permission error — so a grant
+# row emits its own policy row for the same verb, and the two can never drift. A writer also needs
+# SELECT, both because `UPDATE ... WHERE` looks the row up and because Prisma writes with
+# INSERT ... RETURNING; the write roles below therefore carry an explicit SELECT row.
+#
+# WHY only `admins` is listed: this step is the foundation of the split, and `admins` is the table
+# whose matrix was actually exercised against a database. The other domains follow in their own
+# slices, where their columns are proven the same way.
+# role	table	privilege	columns	sequence
+cms_admin_login	admins	SELECT	username,authentication,enabled	-
+cms_admin_read_people	admins	SELECT	id,username,name,enabled,last_login_at	-
+cms_admin_write_people	admins	SELECT	id,username	-
+cms_admin_write_people	admins	UPDATE	name,username	-
+cms_admin_account_security	admins	SELECT	id,username	-
+cms_admin_account_security	admins	UPDATE	authentication,enabled	-
+cms_admin_account_security	admins	INSERT	username,authentication,enabled,name	admins_id_seq
+cms_admin_account_security	admins	DELETE	-	-
