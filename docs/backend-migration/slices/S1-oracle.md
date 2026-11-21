@@ -30,9 +30,11 @@ verify the one piece you depend on.
 | The image's site-packages path | `/home/cmsuser/cms/lib/python3.12/site-packages` | `docker cp` of `/home/cmsuser/cms/lib` enumerates `cms/`, `cmscommon/`, `cmscontrib/`, `cmsranking/`, `cmstaskenv/`, `cmstestsuite/` |
 | **The image's Python is NOT this tree** | 4 of 6 areas byte-identical by line count (`cmscommon` 1922, `cmscontrib` 11057, `cmsranking` 2441, `cmstaskenv` 1093); `cms` differs (+82 lines, the image has `admin_security_url` the tree lacks) and `cmstestsuite` differs (15580 vs 22786) | per-area `find … \| wc -l` against both |
 | So the baseline must run **this tree's** code | mount `src/<area>` over `/home/cmsuser/cms/lib/python3.12/site-packages/<area>` | the mounted run raises **this tree's** `cms/conf.py` message verbatim, which is the proof the mount took effect |
-| A bootable config already exists in the image | `/home/cmsuser/cms/etc/cms-devdb.toml` — real `secret_key`, `url = postgresql+psycopg2://cmsuser:***@database:5432/cmsdb` | `grep` inside the image |
+| A bootable config already exists in the image | `/home/cmsuser/cms/etc/cms-devdb.toml` — `url = postgresql+psycopg2://cmsuser:your_password_here@database:5432/cmsdb` | `grep` inside the image |
+| **Its `secret_key` is NOT usable — corrected by S-1** | the image's `secret_key = "8e045a51e4b102ea803c06f92841a1fb"` **is** `WebServerConfig.DEFAULT_SECRET_KEY` (`src/cms/conf.py:122`), which `conf.py:268` refuses; and the DB password is the literal placeholder `your_password_here` | the first brief asserted this config "already boots". It does not. The harness renders its own config with a real secret and its own credentials. |
 | A docker network for it already exists | `cms-network` | `docker network ls` |
 | Postgres images available | `postgres:15-alpine`, `postgres:15` | `docker images` |
+| The schema has two sources, and they conflict | `cmsInitDB` emits the two `username_policy` enums although the table is Prisma-owned, which aborts `prisma migrate deploy`; the migrations then demote `cmsuser` to NOCREATEDB/NOBYPASSRLS with FORCE RLS (production behaviour) | found by S-1; it drops the duplicate enums between the steps and runs the snapshot as a bootstrap superuser (`scripts/parity/db-bootstrap.sql`) |
 
 **Do not use `ghcr.io/champyod/cms-docker-core:major-admin-panel` as the candidate.** It is the *older*
 tree. It is only ever the baseline, and only with this tree's `src/` mounted over it.
