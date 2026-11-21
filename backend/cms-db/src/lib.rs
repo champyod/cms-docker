@@ -28,6 +28,15 @@
 //! encoder and decoder against the sixteen bytes and the text a column really
 //! holds, and the rest check the values their columns hold.
 //!
+//! `cmscommon`'s security-bearing half is here too, because these are the
+//! functions that produce what those columns hold: [`bin_to_hex`] and
+//! [`bin_to_b64`] with their readers, SHA-1 through [`Digester`] and
+//! [`path_digest`], the AES-CBC [`encrypt_binary`] and [`encrypt_number`] that
+//! guard stored secrets and submission tokens, and [`hash_password`] /
+//! [`build_password`] for the `admins.authentication` row above. The cipher is
+//! the Python side's construction byte for byte — the `crypto` module says why
+//! that is not negotiable here.
+//!
 //! # Errors
 //!
 //! Every fallible mapping returns the error type named beside it, and each
@@ -39,6 +48,7 @@
 
 mod auth;
 mod binary;
+mod crypto;
 mod digest;
 mod interval;
 mod permission;
@@ -47,6 +57,12 @@ mod types;
 mod writes;
 
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
+pub use crypto::{
+    build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
+    generate_random_password, get_hex_random_key, get_random_key, hash_password, Bcrypt,
+    CryptoError, BCRYPT_MAX_PASSWORD_BYTES, BCRYPT_ROUNDS, BLOCK_BYTES, KEY_BYTES,
+    PASSWORD_LETTERS,
+};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
