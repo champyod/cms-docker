@@ -46,7 +46,6 @@ export default async function GroupsPage({
     <ListPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title=""
     >
       <GroupList
         groups={result.data}

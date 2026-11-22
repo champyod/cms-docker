@@ -48,7 +48,7 @@ export function SectionCard({
       {icon}
       <span className="font-bold text-foreground">{title}</span>
       {count !== undefined && (
-        <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">({count})</span>
+        <span className="rounded-full bg-accent px-2 py-0.5 text-[length:var(--text-label)] text-muted-foreground">({count})</span>
       )}
       {description}
     </>
@@ -70,7 +70,7 @@ export function SectionCard({
             </button>
           </h2>
         ) : (
-          <h2 className="flex min-w-0 flex-1 items-center gap-3 text-base">{heading}</h2>
+          <h2 className="flex min-w-0 flex-1 items-center gap-3 text-[length:var(--text-card)]">{heading}</h2>
         )}
         <div className="flex shrink-0 items-center gap-3" onClick={(event): void => event.stopPropagation()}>
           {actions}

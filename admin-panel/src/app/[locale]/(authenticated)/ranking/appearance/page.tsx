@@ -57,7 +57,6 @@ export default async function RankingAppearancePage({
     <SettingsPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title=""
       groups={groups}
     />
   );

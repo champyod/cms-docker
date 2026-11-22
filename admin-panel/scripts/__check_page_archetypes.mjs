@@ -54,12 +54,24 @@ const undeclared = [];
  * layouts exist - and it will disagree with the next page about which level a section title is.
  */
 const OWNED_BY_LAYOUT = [
+
   { pattern: /<h[1-3][\s>]/, rule: 'renders its own heading (the layout owns the page heading levels)' },
   { pattern: /variant="h1"/, rule: 'renders a heading through the text primitive' },
   { pattern: /from '@\/components\/core\/Card'/, rule: 'imports Card (a page supplies facts, the layout supplies the card)' },
 ];
 
 const problems = [];
+
+/**
+ * A page either names itself or is named by its shell.
+ *
+ * `ownsHeader={false}` with a title is a prop the layout never renders - the shell takes the name
+ * from the navigation registry. The title slot became optional once this was noticed; these pages
+ * still pass one, and the count may only fall, one page per session.
+ */
+const SHELL_OWNS_HEADER = /ownsHeader=\{false\}[^>]*title=/s;
+const TITLE_DEBT_CEILING = 39;
+const titleDebt = [];
 
 for (const page of pages) {
   const kind = PAGE_ARCHETYPE_BY_ROUTE[page.route];
@@ -68,6 +80,8 @@ for (const page of pages) {
     continue;
   }
   const source = readFileSync(page.file, 'utf8');
+
+  if (SHELL_OWNS_HEADER.test(source)) titleDebt.push(page.route);
 
   // A declared page supplies facts to its layout; headings and cards are the layout's.
   for (const { pattern, rule } of OWNED_BY_LAYOUT) {
@@ -124,6 +138,12 @@ for (const route of undeclared) {
   if (!allowed.has(route)) problems.push(`${route} has no archetype and is not in the baseline (new page, or a route renamed)`);
 }
 
+if (titleDebt.length > TITLE_DEBT_CEILING) {
+  problems.push(
+    `${titleDebt.length} pages pass a title the shell owns, above the ${TITLE_DEBT_CEILING} this branch inherited`
+  );
+}
+
 if (problems.length) {
   console.error(`page archetypes: ${problems.length} problem(s)`);
   for (const line of problems) console.error(`  - ${line}`);
@@ -134,5 +154,6 @@ if (problems.length) {
 const progress = baseline.undeclared.length - undeclared.length;
 console.log(
   `page archetypes: OK - ${declared.length} declared, ${undeclared.length} undeclared of ${pages.length} pages` +
-    (progress > 0 ? `, ${progress} fewer than the baseline` : '')
+    (progress > 0 ? `, ${progress} fewer than the baseline` : '') +
+    (titleDebt.length ? `, ${titleDebt.length} page(s) still pass a title their shell owns` : '')
 );

@@ -79,14 +79,19 @@ describe('PageSurface', () => {
 
   it('stacks the description inside the title column instead of beside the title', () => {
     const html = renderPage();
-    const titleColumnStart = html.indexOf('flex min-w-0 flex-col gap-2');
-    const titleColumnEnd = html.indexOf('</div>', html.indexOf('Manage contests'));
-    const titleColumn = html.slice(titleColumnStart, titleColumnEnd);
-    // The description has to close the same column the title opens, so the actions
-    // sibling sits after it rather than between the title and its description.
-    expect(titleColumn).toContain('<h1');
-    expect(titleColumn).toContain('Manage contests');
-    expect(html.indexOf('Manage contests')).toBeLessThan(html.indexOf('Create contest'));
+    // Located by structure, not by a class string: the column is the element that opens just
+    // before the h1 and closes after the description. A class rename must not be able to make
+    // this assertion pass on an empty slice.
+    const titleAt = html.indexOf('<h1');
+    const descriptionAt = html.indexOf('Manage contests');
+    const actionsAt = html.indexOf('Create contest');
+
+    expect(titleAt).toBeGreaterThan(-1);
+    expect(descriptionAt).toBeGreaterThan(titleAt);
+    // The description closes the same column the title opens: no closing tag between them.
+    expect(html.slice(titleAt, descriptionAt)).not.toContain('</div>');
+    // And the actions sit after the description, not between the title and it.
+    expect(descriptionAt).toBeLessThan(actionsAt);
   });
 
   it('uses the exact public prop set', () => {

@@ -39,7 +39,6 @@ export default async function SystemBackupRestorePage({
   return (
     <ModePage
       ownsHeader={false}
-      title=""
       modes={readable.map((entry) => ({
         key: entry.id,
         label: MODE_LABELS[entry.id][locale],

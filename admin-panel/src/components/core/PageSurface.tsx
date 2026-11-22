@@ -7,7 +7,8 @@ import { cn } from '@/lib/utils';
 
 export interface PageSurfaceProps {
   readonly breadcrumbs?: readonly BreadcrumbItem[];
-  readonly title: ReactNode;
+  /** Required when the page owns its header; the shell names the page when it does not. */
+  readonly title?: ReactNode;
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
   readonly status?: SurfaceStatus;
@@ -31,13 +32,16 @@ export function PageSurface({
   className,
   ownsHeader = true,
 }: PageSurfaceProps): React.JSX.Element {
-  const hasBlockingStatus = status !== undefined && status.kind !== 'idle';
+  // `info` is a pill that sits in the header; the four other kinds replace the page's content.
+  // Treating them alike blanked a page whose only state was a line saying what it is showing.
+  const blockingStatus =
+    status !== undefined && status.kind !== 'idle' && status.kind !== 'info';
   return (
     <section
       data-surface="page"
       data-surface-owns-header={ownsHeader ? 'own' : 'shell'}
       className={cn(
-        'mx-auto w-full max-w-7xl space-y-6 pb-[env(safe-area-inset-bottom)] md:pb-0',
+        'w-full space-y-6 pb-[env(safe-area-inset-bottom)] md:pb-0',
         className,
       )}
     >
@@ -50,7 +54,7 @@ export function PageSurface({
           status={<SurfaceState status={status} />}
         />
       )}
-      {!hasBlockingStatus && <div className="min-w-0">{children}</div>}
+      {!blockingStatus && <div className="min-w-0">{children}</div>}
     </section>
   );
 }

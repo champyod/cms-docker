@@ -93,7 +93,6 @@ export default async function AuditPage({
     <ListPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title=""
       toolbar={<AuditFilterBar dict={dict.audit} initial={filters} />}
       footer={
         <AuditFooter

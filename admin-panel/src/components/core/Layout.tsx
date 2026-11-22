@@ -123,8 +123,8 @@ interface PageHeaderProps {
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
     <div className={cn('flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between', className)}>
-      <div className="flex min-w-0 flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">{title}</h1>
+      <div className="flex min-w-0 max-w-[80ch] flex-col gap-2">
+        <h1 className="text-[length:var(--text-page)] font-semibold leading-[1.35] text-foreground">{title}</h1>
         {description && <p className="text-muted-foreground">{description}</p>}
       </div>
       {actions && <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>}
