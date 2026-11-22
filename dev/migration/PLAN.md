@@ -197,13 +197,28 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-resourcesvc-sup` | `52406c1e` | `cargo test -p cms-svc` → 119 passed; parent's own mutation of `naming.rs:28` (dropped the hyphen) failed 6 tests including the round-trip, with "autorestart would spawn /opt/cms/bin/cmsworker 0 -c 7 and then not see it", exit 101; process count before/after a full serial run was 1/1, so the suite spawned nothing | `39cc28f3` |
 | 2026-11-22 | `feat/rust-resourcesvc-bin` | `a72c4686` | `cargo test -p cms-svc` → 136 passed; `bash scripts/__test_config_sync.sh` → 42 passed; parent's own mutation of `cms-resource-service.rs:141` (malformed `CMS_AUTORESTART` allowed to read as false) failed `an_unreadable_autorestart_value_is_refused_rather_than_read_as_false`, exit 101, restored byte-identical | `99e89a73` |
 | 2026-11-22 | (main session) | `af1e0128` | container wiring: `docker compose --profile core config` exit 0 with 8 `CMS_SERVICES` lines intact; `__test_config_sync.sh` 42, `test_image_pins.sh` 77, `test_security_profiles_enable.sh` 114 pass/0 fail; the Dockerfile's build line produces both binaries | `af1e0128` |
+| 2026-11-22 | `feat/rust-S2a-crypto-core` | `1fd7f8cc` | **B1 approved by the operator**: `aes` 0.8, `bcrypt` 0.17, `base64` 0.22. Parent's own mutation of `crypto.rs:413` (padding terminator `0x01`→`0x00`) failed 3 tests including `the_cipher_reproduces_the_python_ciphertext_byte_for_byte`, exit 101; restored byte-identical, `cms-db` 94 passed | `2f1337db` |
+| 2026-11-22 | `feat/rust-S4-retire-cmsranking` | `b15ebf92` | `src/cmsranking` deleted; 395 Python files remain (was 409). Conflict on 3 rebranded images resolved by deletion after confirming `ranking-web/static/img/` carries the identical brand bytes | `6eaedd21` |
 
-Gate on the tree after all ten merges (`99e89a73`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 72 test binaries, 451 passed,
+Gate on the tree after all twelve merges (`6eaedd21`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 74 test binaries, 486 passed,
 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 42 passed, exit 0; `bash
 scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial because the
 parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
 (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+
+**B1 is resolved (operator, 2026-11-22): `aes` 0.8 + `bcrypt` 0.17 approved, `base64` 0.22 already
+transitive.** The rejection reasons are recorded because they are the reason there was no table: openssl
+supplies AES-CBC but no bcrypt and drags a C toolchain into the image build; ring and aws-lc-rs expose
+AES but have no bcrypt at all; hand-writing either is the thing the quality bar forbids. With it, S-2a
+merged (`2f1337db`) and S-4 merged behind it (`6eaedd21`), which unblocks **S-3** (`cms.db`, 6,816
+lines) — the largest remaining slice, and the one everything else in the service tier waits on.
+
+Notable in the S-2a port: the padding is **not** PKCS#7 — one `0x01` byte then `0x00` to the block
+(`crypto.rs:18`), with the strip reproducing `pt_pad.rstrip(b"\x00")[:-1]`. That is also why the `cbc`
+crate was not used: its padding traits describe a scheme this data never used, so chaining is done over
+the vetted `aes` core. The cipher is byte-compatible on purpose, because existing ciphertext is already
+in the database; the missing MAC remains a named finding (F3), not something the port silently fixed.
 
 **Divergence carried by LogService — MEASURED AND WITHDRAWN (2026-11-22).** This entry first claimed the
 Rust formatter printing UTC was a behaviour change from Python's `time.localtime`, and warned that a
