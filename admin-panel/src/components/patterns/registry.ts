@@ -29,6 +29,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   // tab, which is where the detail actually lives.
   '/people/users/:id': 'redirect',
   '/evaluation/submissions/:id': 'redirect',
+  '/evaluation/submissions/:id/summary': 'detail',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.
   '/admins': 'redirect',
   '/appearance': 'redirect',

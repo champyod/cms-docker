@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **17 of 57 pages documented.**
+Inventory: **18 of 57 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -30,7 +30,7 @@ Inventory: **17 of 57 pages documented.**
 | `/evaluation/submissions/:id/history` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/results` | detail | — *to inventory* |
-| `/evaluation/submissions/:id/summary` | detail | — *to inventory* |
+| `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |
 | `/infrastructure/containers` | list | — *to inventory* |
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
