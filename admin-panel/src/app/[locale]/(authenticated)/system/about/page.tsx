@@ -1,4 +1,4 @@
-import { Stack } from '@/components/core/Layout';
+import { DetailPage, type DetailFact } from '@/components/patterns/DetailPage';
 import {
   Table,
   TableBody,
@@ -15,22 +15,15 @@ import type { CreditsAsset } from '@/lib/credits';
 
 type AboutCopy = Dictionary['about'];
 
-const EXTERNAL_LINK = 'text-indigo-400 hover:text-indigo-300';
+// Why a token and not a palette step: this page is declared, so it has to be measurable in light,
+// dark and high contrast - an indigo literal looks the same in all three.
+const EXTERNAL_LINK = 'text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground';
 
 function ExternalLink({ href, children }: { readonly href: string; readonly children: string }) {
   return (
     <a href={href} target="_blank" rel="noopener noreferrer" className={EXTERNAL_LINK}>
       {children}
     </a>
-  );
-}
-
-function LabeledValue({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <Text variant="label">{label}</Text>
-      <div className="text-sm text-foreground">{children}</div>
-    </div>
   );
 }
 
@@ -84,6 +77,14 @@ function AssetsTable({ assets, copy }: { readonly assets: readonly CreditsAsset[
   );
 }
 
+/**
+ * The panel's own record: what it is, who wrote it, what it carries.
+ *
+ * WHY a detail: the page describes one record - this panel - with a handful of values and three
+ * sections that belong to it. There is nothing to list, nothing to count and nothing to change, so
+ * the only layout whose shape the page actually has is the one that leads with the values and then
+ * shows what belongs to them.
+ */
 export default async function SystemAboutPage({
   params,
 }: {
@@ -93,31 +94,32 @@ export default async function SystemAboutPage({
   const dict = await getDictionary(locale);
   const copy = dict.about;
   const { projectName, projectAuthor, sourceUrl, upstream, license, panel } = panelCredits();
+  const facts: readonly DetailFact[] = [
+    { term: copy.project, value: projectName },
+    { term: copy.upstream, value: upstream.name },
+    { term: copy.license, value: license.name },
+    {
+      term: copy.softwareCount.replace('{count}', String(panel.assets.length)),
+      value: String(panel.assets.length),
+    },
+  ];
   return (
-    <Stack gap={12} className="mx-auto max-w-5xl">
-      {/* The byline the scoreboard sidebar carries: project, author and lineage in
-          one line at body size, so the page opens on who built it. */}
+    <DetailPage
+      // The system module shell above renders the title, the description and the trail.
+      ownsHeader={false}
+      title={dict.navigation.system.about.label}
+      facts={facts}
+    >
+      {/* The byline the scoreboard sidebar carries, and the two addresses a licence has to offer:
+          the values above say what this is, this line says where to get it. */}
       <p className="text-base text-foreground">
-        {projectName}
-        {projectAuthor === null ? '' : ` by ${projectAuthor}`}
+        {projectAuthor === null ? projectName : `${projectName} by ${projectAuthor}`}
         {panel.attribution.length > 0 ? ` · ${panel.attribution[0].text}` : ''}
+        {' · '}
+        <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
+        {' · '}
+        <ExternalLink href={license.url}>{license.spdxId}</ExternalLink>
       </p>
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <LabeledValue label={copy.project}>
-          <span className="font-medium">{projectName}</span>
-        </LabeledValue>
-        <LabeledValue label={copy.source}>
-          <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
-        </LabeledValue>
-        <LabeledValue label={copy.upstream}>
-          <ExternalLink href={upstream.url}>{upstream.name}</ExternalLink>
-        </LabeledValue>
-        <LabeledValue label={copy.license}>
-          <span>{license.name}</span>
-          <span className="font-mono text-xs text-muted-foreground"> ({license.spdxId})</span>{' '}
-          <ExternalLink href={license.url}>{license.url}</ExternalLink>
-        </LabeledValue>
-      </div>
       <section className="space-y-4">
         <Text as="h2" variant="h2">{copy.contributors.title}</Text>
         <Table>
@@ -168,6 +170,6 @@ export default async function SystemAboutPage({
         </Text>
         <AssetsTable assets={panel.assets} copy={copy} />
       </section>
-    </Stack>
+    </DetailPage>
   );
 }

@@ -20,7 +20,6 @@
     "/ranking/users/:key",
     "/search",
     "/security/waf",
-    "/system/about",
     "/system/appearance",
     "/system/backup-restore",
     "/system/docs",
