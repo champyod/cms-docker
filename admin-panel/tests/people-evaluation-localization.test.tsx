@@ -6,26 +6,55 @@ import { cleanup, render } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { UserHistoryTab } from '@/components/users/UserHistoryTab';
+import UserHistoryPage from '@/app/[locale]/(authenticated)/people/users/[id]/history/page';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
-import { UserTeamsTab } from '@/components/users/UserTeamsTab';
-import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
+import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/profile/page';
+import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
+import { TeamContestsEmpty, TeamContestsTab } from '@/components/teams/TeamContestsTab';
 import { TeamListHeader } from '@/components/teams/TeamListHeader';
-import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
+import { TeamMembersEmpty, TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
+import { getUserHistory, getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import type { UserHistory, UserProfile, UserSummary } from '@/lib/people-read-model-types';
-import type { TeamContest, TeamMember, TeamSummary } from '@/lib/people-read-model-types';
+import type { TeamContest, TeamMember, TeamSummary, UserTeamMembership } from '@/lib/people-read-model-types';
 
 afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({
+  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
+  redirect: vi.fn((target: string) => { throw new Error(`NEXT_REDIRECT:${target}`); }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/th/people/users/17/history',
   useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn() } }));
+
+// Why the page is renderable here: its fact strip is where the profile's labels now live, so the
+// copy is pinned by rendering the page rather than the tab that used to draw the same labels.
+vi.mock('@/lib/server/authorization', () => ({
+  // Every key the three record tabs gate on, so the pages under test resolve their descriptor
+  // instead of concealing themselves; each page still asks for its own keys one by one.
+  requirePermission: vi.fn(async () => new Set(['user:read', 'participation:list', 'submission:read', 'team:read'])),
+  AuthorizationError: class AuthorizationError extends Error {
+    readonly status: 401 | 403;
+    constructor(status: 401 | 403) {
+      super(`Unauthorized: ${status}`);
+      this.status = status;
+    }
+  },
+}));
+
+vi.mock('@/lib/people-read-models', () => ({
+  getUserHistory: vi.fn(),
+  getUserProfile: vi.fn(),
+  getUserSummary: vi.fn(),
+}));
+
+vi.mock('@/i18n', () => ({
+  getDictionary: vi.fn(async (locale: string) => (locale === 'th' ? th : en)),
+}));
 
 function keyPaths(value: unknown, prefix = ''): string[] {
   if (typeof value !== 'object' || value === null) return [prefix];
@@ -103,26 +132,67 @@ describe('dictionary parity', () => {
 });
 
 describe('User record tab copy', () => {
-  it('renders Thai field labels on the profile tab', () => {
-    const body = text(
-      <UserProfileTab profile={PROFILE} summary={SUMMARY} navigation={th.navigation} copy={th.users} permissionKeys={[]} />,
-    );
+  it('renders Thai field labels on the profile page', async () => {
+    vi.mocked(getUserProfile).mockResolvedValue(PROFILE);
+    vi.mocked(getUserSummary).mockResolvedValue(SUMMARY);
 
-    expect(body).toContain(th.users.profile.username);
-    expect(body).toContain(th.users.profile.timezone);
-    expect(body).toContain(th.users.profile.savedPassword);
+    const body = text(await UserProfilePage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
+
+    for (const label of [
+      th.users.profile.name,
+      th.users.profile.email,
+      th.users.profile.timezone,
+      th.users.profile.languages,
+      th.users.profile.teams,
+    ]) {
+      expect(body).toContain(label);
+    }
+    // The values, not only the labels: a strip of five headings with nothing under them would pass
+    // a label-only check.
+    expect(body).toContain('Asia/Bangkok');
+    expect(body).toContain('THA-01');
     expect(body).not.toContain(en.users.profile.timezone);
   });
 
+  it('renders the Thai saved-password label on the profile tab', () => {
+    const body = text(<UserProfileTab userId={SUMMARY.id} copy={th.users} permissionKeys={[]} />);
+
+    expect(body).toContain(th.users.profile.savedPassword);
+    expect(body).not.toContain(en.users.profile.savedPassword);
+  });
+
+  it('renders the team code as a row link, without repeating the tab label as a heading', () => {
+    const body = text(
+      <UserTeamsTab
+        memberships={[{
+          id: 1,
+          contestId: 2,
+          contestName: 'Practice Round',
+          teamId: 4,
+          teamCode: 'THA-01',
+        } as unknown as UserTeamMembership]}
+        copy={th.users}
+        locale="th"
+      />,
+    );
+
+    expect(body).toContain('THA-01');
+    // The heading moved to the list layout's frame and the tab rail above it, so a second copy of
+    // the label here would be the same word three times on one screen.
+    expect(body).not.toContain(th.navigation.people['user-tabs'].teams.label);
+  });
+
   it('renders the Thai empty state on the user teams tab', () => {
-    const body = text(<UserTeamsTab memberships={[]} navigation={th.navigation} copy={th.users} locale="th" />);
+    const body = text(<UserTeamsEmpty copy={th.users} />);
 
     expect(body).toContain(th.users.teamsTab.emptyTitle);
     expect(body).toContain(th.users.teamsTab.emptyDescription);
   });
 
-  it('renders Thai section titles, the Account Access heading, and the last-login line', () => {
-    const body = text(<UserHistoryTab history={HISTORY} navigation={th.navigation} copy={th.users} />);
+  it('renders Thai section titles, the account access heading, and the last-login line', async () => {
+    vi.mocked(getUserHistory).mockResolvedValue(HISTORY);
+
+    const body = text(await UserHistoryPage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
 
     expect(body).toContain(th.users.history.accountAccess);
     expect(body).toContain('2026-01-15T08:30:00Z');
@@ -199,10 +269,10 @@ describe('Team record tab copy', () => {
   });
 
   it('renders Thai empty states and the overflow count on the members and contests tabs', () => {
-    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
-    const emptyMembers = text(<TeamMembersTab teamId={4} members={[]} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
-    const contests = text(<TeamContestsTab contests={CONTESTS} navigation={th.navigation} copy={th.teams} locale="th" />);
-    const emptyContests = text(<TeamContestsTab contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
+    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} copy={th.teams} locale="th" />);
+    const emptyMembers = text(<TeamMembersEmpty teamId={4} permissionKeys={['team:read']} contests={[]} copy={th.teams} />);
+    const contests = text(<TeamContestsTab contests={CONTESTS} locale="th" />);
+    const emptyContests = text(<TeamContestsEmpty copy={th.teams} />);
 
     expect(members).toContain('Practice Round');
     expect(emptyMembers).toContain(th.teams.members.emptyTitle);

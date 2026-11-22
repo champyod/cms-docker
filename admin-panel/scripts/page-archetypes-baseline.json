@@ -3,19 +3,12 @@
     "/infrastructure/containers",
     "/infrastructure/deployments",
     "/infrastructure/resources",
-    "/people/teams/:id",
-    "/people/teams/:id/contests",
-    "/people/teams/:id/members",
-    "/people/users/:id/history",
-    "/people/users/:id/profile",
-    "/people/users/:id/teams",
     "/search",
     "/security/waf",
     "/system/about",
     "/system/appearance",
     "/system/backup-restore",
     "/system/docs",
-    "/system/maintenance",
-    "/teams/:id"
+    "/system/maintenance"
   ]
 }

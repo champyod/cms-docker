@@ -6,7 +6,8 @@ import type { RouteId } from '@/lib/navigation/types';
 import { getDictionary } from '@/i18n';
 import { getUserTeams } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
-import { UserTeamsTab } from '@/components/users/UserTeamsTab';
+import { ListPage } from '@/components/patterns/ListPage';
+import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -29,5 +30,19 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
   await authorizeUserTab('people.user-tabs.teams');
   const dictionary = await getDictionary(locale);
   const memberships = await readRecordOrNotFound(async () => ((await getUserTeams(id)) ?? null));
-  return <UserTeamsTab memberships={memberships} navigation={dictionary.navigation} copy={dictionary.users} locale={locale as 'en' | 'th'} />;
+  const label = dictionary.navigation.people['user-tabs'].teams.label;
+  return (
+    <ListPage
+      // The record shell above renders the user's name, the trail and the tabs.
+      ownsHeader={false}
+      title={label}
+      // Why no filter and no toolbar: the read returns every membership this user holds in one
+      // pass, so there is no narrower set a filter could produce and nothing left out to page to.
+      // The footer states the whole set instead, which is the only total there is.
+      footer={<p className="text-sm text-muted-foreground">{`${label} (${memberships.length})`}</p>}
+      empty={memberships.length === 0 ? <UserTeamsEmpty copy={dictionary.users} /> : undefined}
+    >
+      <UserTeamsTab memberships={memberships} copy={dictionary.users} locale={locale as 'en' | 'th'} />
+    </ListPage>
+  );
 }

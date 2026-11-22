@@ -18,6 +18,14 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/contests': 'list',
   '/tasks': 'list',
   '/people/teams/:id/overview': 'detail',
+  '/people/teams/:id/members': 'list',
+  '/people/teams/:id/contests': 'list',
+  // The team's canonical address resolves the record and forwards to its default tab; the surface
+  // lives on the tab, so this route renders none of its own.
+  '/people/teams/:id': 'redirect',
+  '/people/users/:id/profile': 'detail',
+  '/people/users/:id/teams': 'list',
+  '/people/users/:id/history': 'board',
   '/security/tls': 'detail',
   '/security/overview': 'dashboard',
   '/security/patching': 'list',
@@ -71,6 +79,10 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/submissions': 'redirect',
   '/submissions/lanes': 'redirect',
   '/teams': 'redirect',
+  // The old address for one team, and /people/teams/:id the canonical one: a bookmark on either
+  // resolves the same record, so this route forwards and renders nothing rather than growing a
+  // second surface that would slowly disagree with the first.
+  '/teams/:id': 'redirect',
   '/users': 'redirect',
 };
 

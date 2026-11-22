@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { Users } from 'lucide-react';
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { Dictionary } from '@/lib/dictionary';
 import { interpolate } from '@/lib/interpolate';
@@ -9,7 +8,6 @@ import type { UserTeamMembership } from '@/lib/people-read-model-types';
 
 export interface UserTeamsTabProps {
   readonly memberships: readonly UserTeamMembership[];
-  readonly navigation: Dictionary['navigation'];
   readonly copy: Dictionary['users'];
   readonly locale: 'en' | 'th';
 }
@@ -43,24 +41,30 @@ function MembershipRow({ membership, copy, locale }: {
   );
 }
 
-export function UserTeamsTab({ memberships, navigation, copy, locale }: UserTeamsTabProps): React.JSX.Element {
-  if (memberships.length === 0) {
-    return (
-      <EmptyState
-        icon={Users}
-        title={copy.teamsTab.emptyTitle}
-        description={copy.teamsTab.emptyDescription}
-      />
-    );
-  }
+/**
+ * The team each of this user's participations was made under, one row per membership.
+ *
+ * Why no card and no heading of its own: the list layout draws the frame and the tab rail above
+ * already names the section, so the card here was a box inside a box and the heading a second copy
+ * of the tab label.
+ */
+export function UserTeamsTab({ memberships, copy, locale }: UserTeamsTabProps): React.JSX.Element {
   return (
-    <Card className="overflow-hidden">
-      <div className="p-4 font-bold">{navigation.people['user-tabs'].teams.label}</div>
-      <div className="divide-y divide-border">
-        {memberships.map((membership) => (
-          <MembershipRow key={membership.id} membership={membership} copy={copy} locale={locale} />
-        ))}
-      </div>
-    </Card>
+    <div className="divide-y divide-border">
+      {memberships.map((membership) => (
+        <MembershipRow key={membership.id} membership={membership} copy={copy} locale={locale} />
+      ))}
+    </div>
+  );
+}
+
+/** What empty means here: no participation has been filed under a team yet. */
+export function UserTeamsEmpty({ copy }: { readonly copy: Dictionary['users'] }): React.JSX.Element {
+  return (
+    <EmptyState
+      icon={Users}
+      title={copy.teamsTab.emptyTitle}
+      description={copy.teamsTab.emptyDescription}
+    />
   );
 }

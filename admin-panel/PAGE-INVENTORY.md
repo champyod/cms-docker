@@ -36,15 +36,15 @@ Inventory: **32 of 55 pages documented.**
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
 | `/people/teams` | list | teams with id, code, name, registerable flag, member count and organization · sort · per-row edit and delete · create · live refresh · what empty means. No filter and no total: the read returns every team in one pass, so there is no narrower set and nothing left out to count against |
-| `/people/teams/:id` | detail | — *to inventory* |
-| `/people/teams/:id/contests` | detail | — *to inventory* |
-| `/people/teams/:id/members` | detail | — *to inventory* |
+| `/people/teams/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
+| `/people/teams/:id/contests` | list | the contests this team entered, by name and description, each linking to the contest · how many there are (no filter and no total: the read returns every one in a single pass) · what empty means |
+| `/people/teams/:id/members` | list | the members, by username and name, with the contests each appears in and the profile each links to · filter by username or name, with select-all over the filtered set · the bulk action over the checked rows · how many members the team has in total (the filter narrows the rows, not the total) · rotating the checked accounts · what empty means, with the way out of it |
 | `/people/teams/:id/overview` | detail | the team's leader and member count · the code, name and registerable flag, each editable in place · save, and delete with confirmation · read-only when team:update is absent |
 | `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
-| `/people/users/:id/history` | detail | — *to inventory* |
-| `/people/users/:id/profile` | detail | — *to inventory* |
-| `/people/users/:id/teams` | detail | — *to inventory* |
+| `/people/users/:id/history` | board | when the account last signed in · the contests it appears in, its participations, its teams, its submissions and its recent contest activity, each a row set with its own meaning when empty |
+| `/people/users/:id/profile` | detail | the name, email, timezone, languages and teams the header does not already state · the saved password, masked until an operator who may reveal it asks |
+| `/people/users/:id/teams` | list | the team each participation was made under, row by row, or that no participation has a team yet · how many memberships there are (no filter and no total: the read returns every one in a single pass) · the team each row links to |
 | `/ranking` | detail | whether the ranking service reports its applied changes at all, and what it could not apply, counted per cause · that the board is live · the identity it opens with: display name, shown contest, title, subtitle, organisation and access mode · the standings of the previewed contest, each task as a column, and the progress graph over the first twenty · the logo it carries, with upload · what empty means (no contest on the board) |
 | `/ranking/appearance` | settings | the identity values: title, subtitle, organisation and display name · the display values: access mode, id column, anonymity, footer and credits text · the advanced JSON: theme, score format and perspective tabs · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
 | `/ranking/credits` | settings | the credit list the board attributes its licences to, with the vendored file named as the fallback · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
@@ -68,7 +68,7 @@ Inventory: **32 of 55 pages documented.**
 | `/tasks/:id/files` | detail | how many files the task carries · each attachment's filename, downloadable, with delete · what empty means · upload one |
 | `/tasks/:id/overview` | detail | the task's score mode, feedback level, score precision and submission count · each statement's language, file, size and upload day, each downloadable and deletable · upload a statement |
 | `/tasks/:id/settings` | settings | the score mode, feedback level, score precision and token mode the task holds · who a change to them reaches · where the edit that writes them lives |
-| `/teams/:id` | detail | — *to inventory* |
+| `/teams/:id` | redirect | nothing of its own — an older address for the same team record: it gates on team:read and forwards to /people/teams/:id, which forwards to the overview tab |
 
 ## How a row is finished
 
