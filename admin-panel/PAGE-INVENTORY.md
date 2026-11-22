@@ -18,7 +18,7 @@ Inventory: **15 of 57 pages documented.**
 | `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | detail | — *to inventory* |
 | `/contests/:id/countdown` | detail | — *to inventory* |
-| `/contests/:id/overview` | detail | — *to inventory* |
+| `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
 | `/contests/:id/participants` | detail | — *to inventory* |
 | `/contests/:id/ranking` | detail | — *to inventory* |
 | `/contests/:id/settings` | settings | — *to inventory* |

@@ -32,7 +32,6 @@ export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX
   return (
     <div className="space-y-6">
       <ContestStatusCard
-        contest={data.contest}
         formData={{ start: formData.start, stop: formData.stop, analysis_start: formData.analysis_start, analysis_stop: formData.analysis_stop }}
         onChange={(patch) => updateForm(patch)}
         timeErrors={timeErrors}
