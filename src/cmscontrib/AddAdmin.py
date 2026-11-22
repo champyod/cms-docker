@@ -32,7 +32,8 @@ import sys
 from sqlalchemy.exc import IntegrityError
 
 from cms import utf8_decoder
-from cms.db import Admin, AdminGroup, Group, SessionGen
+from cms.conf import config
+from cms.db import Admin, AdminGroup, Group, SessionGen, AdminSecuritySessionGen
 from cmscommon.crypto import generate_random_password, hash_password
 
 
@@ -47,7 +48,10 @@ def add_admin(username: str, password: str | None = None) -> bool:
                   authentication=hash_password(password),
                   name=username)
     try:
-        with SessionGen() as session:
+        # WHY: admin writes use the security role once configured; the session fallback exists only for the
+        # pre-role bootstrap and the unit-test database, where cmsuser still owns admins.
+        session_gen = AdminSecuritySessionGen() if config.database.admin_security_url else SessionGen()
+        with session_gen as session:
             group = session.query(Group).filter(Group.name == "Superadmin").first()
             if group is None:
                 logger.error(

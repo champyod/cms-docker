@@ -144,6 +144,8 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
+      # WHY: make admin-create writes admins as the security role, not the owner.
+      ADMIN_SECURITY_DATABASE_URL: postgresql://cms_admin_account_security:***@database:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-cmsdb}
     ports:
       - "${INNER_IP:-127.0.0.1}:29000:29000"
     volumes:
