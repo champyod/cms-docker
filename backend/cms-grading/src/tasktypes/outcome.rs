@@ -29,7 +29,7 @@ const NO_CREDIT: f64 = 0.0;
 /// text is the message and the rest are its arguments, as the reference hands a message
 /// and its arguments over; a code a run returned is not quoted.
 const NO_OUTPUT: &str = "Evaluation didn't produce file";
-const TIMED_OUT: &str = "Execution timed out";
+pub(crate) const TIMED_OUT: &str = "Execution timed out";
 const WALL_TIMED_OUT: &str = "Execution timed out (wall clock limit exceeded)";
 const MEMORY_EXCEEDED: &str = "Memory limit exceeded";
 const KILLED: &str = "Execution killed by signal";
