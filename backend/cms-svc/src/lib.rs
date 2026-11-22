@@ -26,13 +26,18 @@
 //! separates a refusal to dial a peer from a refusal to queue on it, and
 //! [`FrameError`] from [`of_frame`] and [`of_dispatch`], which drops a message
 //! the frame or the dispatch layer could not correlate.
+//!
+//! The server half of the same wire is `host`: it frames what arrives,
+//! dispatches it, and writes the answer the gate produced.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod connector;
+mod host;
 
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,
     PeerState, ReconnectNotice, Send,
 };
+pub use host::{DuplicateMethod, Registry};
