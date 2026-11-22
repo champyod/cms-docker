@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { Card } from '@/components/core/Card';
 import { DefinitionEntry } from '@/components/core/DefinitionEntry';
 import { PageSurface } from '@/components/core/PageSurface';
-import type { PageSlots } from '@/components/patterns/types';
+import type { PageSlots } from '@/components/patterns/page-types';
 
 export interface DetailFact {
   readonly term: string;
@@ -19,8 +19,8 @@ export interface DetailPageProps extends Omit<PageSlots, 'children'> {
   readonly children?: ReactNode;
   /** Where the record came from and when it last changed. */
   readonly freshness?: ReactNode;
-  /** False when a module shell above already renders the page identity. */
-  readonly identity?: boolean;
+  /** False when a module shell above already renders the page header. */
+  readonly ownsHeader?: boolean;
 }
 
 /**
@@ -39,10 +39,10 @@ export function DetailPage({
   state,
   children,
   freshness,
-  identity = true,
+  ownsHeader = true,
 }: DetailPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="space-y-4">
         {state}
         <Card className="p-4">

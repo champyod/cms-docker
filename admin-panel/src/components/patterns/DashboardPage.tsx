@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { PageSurface } from '@/components/core/PageSurface';
-import type { PageSlots } from '@/components/patterns/types';
+import type { PageSlots } from '@/components/patterns/page-types';
 
 /**
  * The dashboard layout. Its job is to keep the system's state above every count, so `state` is
@@ -11,8 +11,8 @@ import type { PageSlots } from '@/components/patterns/types';
 export interface DashboardPageProps extends PageSlots {
   /** The system's state, above every metric. */
   readonly state: ReactNode;
-  /** False when a module shell above already renders the page identity. */
-  readonly identity?: boolean;
+  /** False when a module shell above already renders the page header. */
+  readonly ownsHeader?: boolean;
 }
 
 export function DashboardPage({
@@ -22,10 +22,10 @@ export function DashboardPage({
   actions,
   state,
   children,
-  identity = true,
+  ownsHeader = true,
 }: DashboardPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="space-y-4">
         {state}
         {children}

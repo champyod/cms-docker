@@ -18,7 +18,7 @@ export interface PageSurfaceProps {
    * trail. Two headers over one page is the defect this flag prevents: the reader meets the same
    * title twice, and the second one scrolls away first.
    */
-  readonly identity?: boolean;
+  readonly ownsHeader?: boolean;
 }
 
 export function PageSurface({
@@ -29,19 +29,19 @@ export function PageSurface({
   status,
   children,
   className,
-  identity = true,
+  ownsHeader = true,
 }: PageSurfaceProps): React.JSX.Element {
   const hasBlockingStatus = status !== undefined && status.kind !== 'idle';
   return (
     <section
       data-surface="page"
-      data-surface-identity={identity ? 'own' : 'shell'}
+      data-surface-owns-header={ownsHeader ? 'own' : 'shell'}
       className={cn(
         'mx-auto w-full max-w-7xl space-y-6 pb-[env(safe-area-inset-bottom)] md:pb-0',
         className,
       )}
     >
-      {identity && (
+      {ownsHeader && (
         <SurfaceHeader
           breadcrumbs={breadcrumbs}
           title={title}

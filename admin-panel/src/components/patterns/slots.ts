@@ -1,4 +1,4 @@
-import type { PageArchetype } from '@/components/patterns/types';
+import type { PageArchetype } from '@/components/patterns/page-types';
 
 /**
  * What a page of each kind must tell the reader, in the order it is read.

@@ -73,7 +73,7 @@ async function renderTasks(locale: string): Promise<string> {
 async function renderDashboard(locale: string): Promise<string> {
   vi.mocked(getServiceStatus).mockResolvedValue({
     success: true,
-    status: 'online',
+    status: 'ok',
     running: 3,
     total: 3,
   } as never);

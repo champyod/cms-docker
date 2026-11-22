@@ -1,4 +1,4 @@
-import type { PageArchetype } from '@/components/patterns/types';
+import type { PageArchetype } from '@/components/patterns/page-types';
 
 /**
  * One route, one archetype. This file is the single place a page's structure is declared: the

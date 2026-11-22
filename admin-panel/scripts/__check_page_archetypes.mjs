@@ -80,8 +80,8 @@ for (const page of pages) {
   // inside one of them must not render the identity again, so it says so explicitly.
   const MODULE_GROUPS = ['/ranking', '/administration', '/security', '/infrastructure', '/system'];
   if (MODULE_GROUPS.some((group) => page.route === group || page.route.startsWith(`${group}/`))) {
-    if (!/identity=\{false\}/.test(source)) {
-      problems.push(`${page.route} sits under a module shell but does not pass identity={false} to <${component}>`);
+    if (!/ownsHeader=\{false\}/.test(source)) {
+      problems.push(`${page.route} sits under a module shell but does not pass ownsHeader={false} to <${component}>`);
       continue;
     }
   }

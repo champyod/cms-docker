@@ -4,7 +4,7 @@ import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { PageSurface } from '@/components/core/PageSurface';
 import { Skeleton } from '@/components/core/Skeleton';
-import type { PageSlots } from '@/components/patterns/types';
+import type { PageSlots } from '@/components/patterns/page-types';
 
 export interface ListPageState {
   /** One of the four things a list can be: telling the operator something needs a decision. */
@@ -25,8 +25,8 @@ export interface ListPageProps extends PageSlots {
   readonly empty?: ReactNode;
   /** Skeleton of the real shape, not a spinner over a blank card. */
   readonly loading?: boolean;
-  /** False when a module shell above already renders the page identity. */
-  readonly identity?: boolean;
+  /** False when a module shell above already renders the page header. */
+  readonly ownsHeader?: boolean;
 }
 
 /**
@@ -45,10 +45,10 @@ export function ListPage({
   footer,
   empty,
   loading = false,
-  identity = true,
+  ownsHeader = true,
 }: ListPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="space-y-3">
         {state && (
           <InlineAlert

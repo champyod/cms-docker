@@ -2,7 +2,6 @@ import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
-import type { StatusType } from '@/components/core/StatusBadge';
 import { DashboardState, DashboardSurface } from '@/components/dashboard/DashboardSurface';
 import { DashboardPage } from '@/components/patterns/DashboardPage';
 // Why the bare form: this page is a server component, so the activity row cannot read the
@@ -113,7 +112,7 @@ export default async function AdminHomePage({
     activity: labels.activity,
   };
   const service = {
-    status: serviceStatus.status as StatusType,
+    status: serviceStatus.status,
     running: serviceStatus.running,
     total: serviceStatus.total,
     checkedAt: formatInZone(new Date().toISOString()),
@@ -121,9 +120,9 @@ export default async function AdminHomePage({
 
   return (
     <DashboardPage
-      breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
-      title={labels.welcome}
-      description={labels.description}
+      breadcrumbs={[]}
+      title={dict.dashboard.welcome}
+      description={dict.dashboard.description}
       state={<DashboardState service={service} labels={dashboardLabels} stats={stats} />}
     >
       <DashboardSurface

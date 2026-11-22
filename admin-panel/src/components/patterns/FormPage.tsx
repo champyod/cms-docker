@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { PageSurface } from '@/components/core/PageSurface';
-import type { PageSlots } from '@/components/patterns/types';
+import type { PageSlots } from '@/components/patterns/page-types';
 
 export interface FormPageProps extends PageSlots {
   /** The fields, in the order they are filled. */
@@ -14,8 +14,8 @@ export interface FormPageProps extends PageSlots {
   readonly secondary?: ReactNode;
   /** What happens on success, in one line, so the button is not a guess. */
   readonly consequence?: ReactNode;
-  /** False when a module shell above already renders the page identity. */
-  readonly identity?: boolean;
+  /** False when a module shell above already renders the page header. */
+  readonly ownsHeader?: boolean;
 }
 
 /**
@@ -35,11 +35,11 @@ export function FormPage({
   submit,
   secondary,
   consequence,
-  identity = true,
+  ownsHeader = true,
 }: FormPageProps): React.JSX.Element {
   const hasErrors = errors !== undefined && errors.length > 0;
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="max-w-2xl space-y-4">
         {hasErrors && (
           <InlineAlert tone="destructive" title="This form needs a correction" announce="assertive">

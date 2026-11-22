@@ -9,7 +9,7 @@ export default async function SecurityTlsPage(): Promise<React.JSX.Element> {
   // The module shell above renders the title, the description and the trail.
   return (
     <DetailPage
-      identity={false}
+      ownsHeader={false}
       breadcrumbs={[]}
       title="TLS"
       facts={[
