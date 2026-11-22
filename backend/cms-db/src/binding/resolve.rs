@@ -11,9 +11,7 @@ use super::{active_contest, service_binding, BindingError};
 
 /// What a `-c` argument fixed an instance to, or that it fixed nothing.
 ///
-/// WHY three values and not an `Option`: "every contest" and "no override" are
-/// different answers, and folding them hands an instance started with `-c` naming
-/// every contest whichever contest the registry or the flag names.
+/// WHY three values and not an `Option`: "every contest" folded into "no override" binds the instance to the registry's contest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContestOverride {
     /// `-c <id>`: this contest, whatever the registry or the flag says.

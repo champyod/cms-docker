@@ -29,9 +29,7 @@ pub const SERVICE: Declaration = Declaration {
 
 /// Whether the registry exists, asked of the catalogue before the read.
 ///
-/// WHY the catalogue and not a caught `42P01`: the reference asked it up front,
-/// so a database without the table is an answer here rather than a statement
-/// that fails inside the caller's transaction and leaves it unusable.
+/// WHY the catalogue and not a caught `42P01`: a refused statement leaves the caller's transaction unusable.
 const SERVICES_EXIST: &str = "SELECT to_regclass('services') IS NOT NULL";
 
 /// The contest this instance's enabled row names, bound as `$1` and `$2`.

@@ -14,8 +14,7 @@ use super::BindingError;
 
 /// The environment variable a fresh install names its contest in.
 ///
-/// WHY the environment and not `config.toml`: compose still exports it, and a
-/// service may not read the file the generator derives from the database.
+/// WHY the environment and not config.toml: compose exports it, and a service may not read the generated file.
 pub const CONTEST_ID_ENV: &str = "CONTEST_ID";
 
 /// Whether the deployment default exists, asked of the catalogue first.
