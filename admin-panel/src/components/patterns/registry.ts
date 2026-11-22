@@ -28,6 +28,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   // tab, which is where the detail actually lives.
   '/contests/:id': 'redirect',
   '/contests/:id/overview': 'detail',
+  '/contests/:id/settings': 'settings',
   '/people/users/:id': 'redirect',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.
   '/admins': 'redirect',

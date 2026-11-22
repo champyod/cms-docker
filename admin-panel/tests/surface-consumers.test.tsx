@@ -73,18 +73,14 @@ describe('detail sections render through SectionCard', () => {
     expect(html).toContain('No participants yet');
   });
 
-  it('marks the settings section collapsed and reveals the form only when expanded', () => {
-    const onToggle = vi.fn();
-    const settings = { formData: SETTINGS_FORM, onToggle, onChange: vi.fn() };
-    const collapsed = renderToStaticMarkup(<ContestSettingsSection {...settings} expanded={false} />);
-    expect(collapsed).toContain('aria-expanded="false"');
-    expect(collapsed).toContain('Contest Settings');
-    expect(collapsed).not.toContain('Asia/Bangkok');
+  it('renders the settings group body without a second section header', () => {
+    const html = renderToStaticMarkup(<ContestSettingsSection formData={SETTINGS_FORM} onChange={() => undefined} />);
+    expect(html).toContain('Timezone');
+    expect(html).toContain('Asia/Bangkok');
+    expect(html).not.toContain('Contest Settings');
 
-    render(<ContestSettingsSection {...settings} expanded />);
-    const toggle = screen.getByRole('button', { name: /Contest Settings/ });
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByPlaceholderText('Asia/Bangkok')).not.toBeNull();
+    render(<ContestSettingsSection formData={SETTINGS_FORM} canEdit={false} onChange={() => undefined} />);
+    expect(screen.getByPlaceholderText('Asia/Bangkok').hasAttribute('disabled')).toBe(true);
   });
 });
 

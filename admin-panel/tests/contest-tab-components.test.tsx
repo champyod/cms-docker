@@ -52,7 +52,7 @@ describe('Contest tab components', () => {
 
   it('renders settings fields and save action', () => {
     const html = renderToStaticMarkup(<ContestSettingsTab data={settings} />);
-    expect(html).toContain('Contest Settings');
+    expect(html).toContain('Timezone');
     expect(html).toContain('Save Changes');
   });
 });

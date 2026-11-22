@@ -21,7 +21,7 @@ Inventory: **15 of 57 pages documented.**
 | `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
 | `/contests/:id/participants` | detail | — *to inventory* |
 | `/contests/:id/ranking` | detail | — *to inventory* |
-| `/contests/:id/settings` | settings | — *to inventory* |
+| `/contests/:id/settings` | settings | the contest's name, description and zone · what it allows: questions, user tests, submission download, password auth, registration, analysis mode · the scope each change reaches · save, and a locked form when contest:update is absent |
 | `/contests/:id/tasks` | detail | — *to inventory* |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
 | `/evaluation/submissions` | list | — *to inventory* |
