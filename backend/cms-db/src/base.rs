@@ -104,6 +104,84 @@ pub struct Column {
 }
 
 impl Column {
+    /// A primary key: filled by the table, so an insert leaves it out.
+    #[must_use]
+    pub const fn key(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: false,
+            has_default: true,
+            primary_key: true,
+            foreign_key: false,
+        }
+    }
+
+    /// A required foreign key, which the attribute sets skip.
+    #[must_use]
+    pub const fn reference(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: false,
+            has_default: false,
+            primary_key: false,
+            foreign_key: true,
+        }
+    }
+
+    /// A foreign key a row may leave NULL, which the attribute sets skip.
+    #[must_use]
+    pub const fn optional_reference(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: true,
+            has_default: false,
+            primary_key: false,
+            foreign_key: true,
+        }
+    }
+
+    /// A column every row must supply.
+    #[must_use]
+    pub const fn required(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: false,
+            has_default: false,
+            primary_key: false,
+            foreign_key: false,
+        }
+    }
+
+    /// A column filled by an `insert` that omits it.
+    #[must_use]
+    pub const fn generated(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: false,
+            has_default: true,
+            primary_key: false,
+            foreign_key: false,
+        }
+    }
+
+    /// A column a row may leave NULL.
+    #[must_use]
+    pub const fn optional(name: &'static str, kind: ColumnKind) -> Self {
+        Self {
+            name,
+            kind,
+            nullable: true,
+            has_default: false,
+            primary_key: false,
+            foreign_key: false,
+        }
+    }
+
     /// Whether the model's attribute set carries this column.
     ///
     /// WHY keys are excluded: the reference skipped them so a clone and an attribute dump described values without identity.

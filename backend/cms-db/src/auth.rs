@@ -9,10 +9,16 @@
 //! colon, and the plaintext payload is compared in constant time the way
 //! `hmac.compare_digest` compares it. Neither form is ever formatted, because a
 //! derived `Debug` on either one would put the secret in a log line.
+//!
+//! [`PasswordForm::verify`] is the login check, and it refuses a plaintext row
+//! outright: [`PlaintextPassword::matches`] is the comparison a caller makes
+//! only when the clear value was meant to be compared, never to authenticate.
 
 use std::fmt;
 
 use subtle::ConstantTimeEq;
+
+use crate::crypto::BCRYPT_MAX_PASSWORD_BYTES;
 
 const PLAINTEXT: &str = "plaintext";
 const BCRYPT: &str = "bcrypt";
@@ -166,6 +172,26 @@ impl PasswordForm {
         match self {
             Self::Bcrypt(hash) => Some(hash),
             Self::Plaintext(_) => None,
+        }
+    }
+
+    /// Whether `candidate` is the password this credential was built from.
+    ///
+    /// WHY a plaintext row never verifies: the payload is the password itself,
+    /// so reading it back is enough to log in with it — the refusal
+    /// `validate_password` makes, and the only answer a dump of the table
+    /// cannot turn into a login.
+    ///
+    /// A candidate over [`BCRYPT_MAX_PASSWORD_BYTES`] is a definite non-match,
+    /// because bcrypt stores at most that many bytes and `hash_password`
+    /// refuses to write a longer one.
+    #[must_use]
+    pub fn verify(&self, candidate: &str, verifier: &impl BcryptVerifier) -> bool {
+        match self {
+            Self::Plaintext(_) => false,
+            Self::Bcrypt(hash) => {
+                candidate.len() <= BCRYPT_MAX_PASSWORD_BYTES && hash.matches(candidate, verifier)
+            }
         }
     }
 }

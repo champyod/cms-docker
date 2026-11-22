@@ -138,6 +138,36 @@ fn a_complete_declaration_validates() {
 }
 
 #[test]
+fn a_constructor_sets_the_flags_its_column_carries() {
+    assert_eq!(
+        Column::key("id", ColumnKind::Integer),
+        Column {
+            name: "id",
+            kind: ColumnKind::Integer,
+            nullable: false,
+            has_default: true,
+            primary_key: true,
+            foreign_key: false,
+        }
+    );
+    assert_eq!(
+        Column::reference("user_id", ColumnKind::Integer),
+        Column {
+            name: "user_id",
+            kind: ColumnKind::Integer,
+            nullable: false,
+            has_default: false,
+            primary_key: false,
+            foreign_key: true,
+        }
+    );
+    assert!(Column::optional_reference("team_id", ColumnKind::Integer).nullable);
+    assert!(Column::required("language", ColumnKind::Text).is_carried());
+    assert!(!Column::key("id", ColumnKind::Integer).is_carried());
+    assert!(Column::generated("password", ColumnKind::Text).has_default);
+}
+
+#[test]
 fn an_unnamed_part_is_refused() {
     assert_eq!(
         Declaration {
