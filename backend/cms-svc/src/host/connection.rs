@@ -24,8 +24,10 @@ pub(super) fn serve(mut stream: TcpStream, registry: &Registry) {
     let mut chunk = [0_u8; READ_CHUNK];
     loop {
         let read = match stream.read(&mut chunk) {
+            // WHY: zero bytes is the peer's FIN, so there is nothing left to answer.
             Ok(0) => return,
             Ok(read) => read,
+            // WHY: a signal interrupted the read, not the connection.
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(_) => return,
         };
@@ -35,17 +37,14 @@ pub(super) fn serve(mut stream: TcpStream, registry: &Registry) {
     }
 }
 
-/// Absorbs one read, then answers every frame it completed.
-///
-/// The framer keeps a partial message between calls because a frame may arrive
-/// across two reads, and a read that can no longer become a legal frame ends
-/// the connection with nothing written, which is what the codec refuses for.
+/// Absorbs one read and answers every frame it completed; a refused read ends the connection.
 fn converse(
     stream: &mut TcpStream,
     framer: &mut Framer,
     chunk: &[u8],
     registry: &Registry,
 ) -> Flow {
+    // WHY: a frame may arrive across two reads, and the framer is what holds the half it has.
     if framer.push(chunk).is_err() {
         return Flow::Close;
     }
@@ -68,8 +67,7 @@ fn drain(stream: &mut TcpStream, framer: &mut Framer, registry: &Registry) -> Fl
 
 /// Writes what one frame is owed.
 fn answer(stream: &mut TcpStream, registry: &Registry, frame: &Frame) -> Flow {
-    // WHY: the codec refuses a `__data` that is not an object before the gate,
-    // so a handler is never handed arguments it cannot splat.
+    // WHY: the codec refuses a `__data` that is not an object before the gate, so no handler sees it.
     let send = match frame.refusal {
         Some(_) => of_frame(&frame.value),
         None => of_dispatch(&registry.decide(&frame.value)),
@@ -82,9 +80,8 @@ fn answer(stream: &mut TcpStream, registry: &Registry, frame: &Frame) -> Flow {
 
 /// Writes one answer, ending the connection when it cannot be framed or sent.
 fn write(stream: &mut TcpStream, response: &Response) -> Flow {
+    // WHY: an answer that cannot be framed leaves the caller waiting on an id that never arrives.
     let Ok(framed) = encode(response) else {
-        // WHY: an answer that cannot be framed leaves the caller waiting on an
-        // id that will never arrive, so the connection ends instead.
         return Flow::Close;
     };
     if stream.write_all(&framed).is_ok() {

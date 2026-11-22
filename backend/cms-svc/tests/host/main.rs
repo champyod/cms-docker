@@ -1,9 +1,4 @@
-//! The host driven over a real socket: a listener on an ephemeral port and a
-//! client that speaks the wire the Python side speaks.
-//!
-//! Every test starts its own host, so what is exercised is the whole path —
-//! accept, the connection's framer, the gate, the bytes written back — and not
-//! a helper standing in for any of it.
+//! The host driven over a real socket: a listener on an ephemeral port, and a client that speaks the wire.
 
 mod answers;
 mod framing;
@@ -50,11 +45,7 @@ pub(crate) fn uncallable(
     }
 }
 
-/// Starts a host on an ephemeral port and returns the address it holds.
-///
-/// The listener accepts from the moment `bind` returns, so a client may connect
-/// before the serving thread reaches `accept`; nothing here waits on a thread,
-/// which is why no test sleeps.
+/// Starts a host on an ephemeral port; the listener accepts from bind, so no test waits or sleeps.
 pub(crate) fn start(methods: Vec<Method>, secret: Option<&str>) -> SocketAddr {
     let config = GateConfig {
         secret,
@@ -71,8 +62,7 @@ pub(crate) fn start(methods: Vec<Method>, secret: Option<&str>) -> SocketAddr {
     addr
 }
 
-/// Connects to the host with a deadline on every read, so a missing answer fails
-/// the test instead of hanging it.
+/// Connects to the host with a deadline on every read, so a missing answer fails instead of hanging.
 pub(crate) fn connect(addr: SocketAddr) -> TcpStream {
     let stream = TcpStream::connect(addr).expect("the host is listening");
     stream

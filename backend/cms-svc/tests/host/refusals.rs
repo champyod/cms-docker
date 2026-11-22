@@ -50,8 +50,7 @@ fn a_wrong_secret_is_refused_and_the_method_does_not_run() {
         "a refused call is never dispatched"
     );
 
-    // A refusal is written rather than dropped, so the connection still carries
-    // the same caller's next call.
+    // A refusal is written rather than dropped, so the connection still carries this caller's next call.
     send(
         &mut stream,
         &wire(&json!({

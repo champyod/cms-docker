@@ -20,11 +20,7 @@ impl std::fmt::Display for DuplicateMethod {
 
 impl std::error::Error for DuplicateMethod {}
 
-/// The methods a host answers for, and the two settings the gate decides with.
-///
-/// Table and gate are one value so a connection cannot be served with a table it
-/// was not configured for, and so a duplicate is refused at bind instead of
-/// silently shadowing a handler the gate would never reach.
+/// The methods a host answers for, together with the gate settings they are served under.
 pub struct Registry {
     methods: Vec<Method>,
     secret: Option<String>,
@@ -32,12 +28,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// Takes the table, refusing a name registered twice.
-    ///
-    /// # Errors
-    ///
-    /// [`DuplicateMethod`] naming the first name that appears twice: the gate
-    /// looks a name up by first match, so the second entry would be unreachable.
+    /// Takes the table, refusing a name twice because lookup answers only the first entry.
     pub fn new(methods: Vec<Method>, config: GateConfig<'_>) -> Result<Self, DuplicateMethod> {
         ensure_unique(&methods)?;
         Ok(Self {

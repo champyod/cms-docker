@@ -1,5 +1,4 @@
-//! Framing at the connection: a message split across two reads, and one that is
-//! too large to be read at all.
+//! Framing at the connection: a message split across two reads, and one too large to be read at all.
 
 use std::io::{ErrorKind, Write};
 
@@ -38,8 +37,7 @@ fn a_message_larger_than_the_limit_is_refused_without_a_reply() {
     let oversized = vec![b'x'; MAX_MESSAGE_SIZE];
 
     if let Err(error) = stream.write_all(&oversized) {
-        // WHY: the host closes as soon as the frame can no longer fit, so the
-        // tail of this write may find the connection already gone.
+        // WHY: the host closes as soon as the frame can no longer fit, so this write may find it gone.
         assert!(
             matches!(
                 error.kind(),

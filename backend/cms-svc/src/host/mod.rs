@@ -1,9 +1,4 @@
 //! The server half of the RPC wire: a listener that answers calls to one service.
-//!
-//! `RemoteServiceServer.run` reads one framed request at a time and writes the
-//! answer the gate produced, dropping a message it cannot key a reply with. The
-//! same shape is built here from a thread per connection: no runtime, a framer
-//! owned by the connection, and a drop that closes instead of answering.
 
 mod connection;
 mod registry;
@@ -18,23 +13,14 @@ use cms_proto::{GateConfig, Method};
 
 pub use registry::{DuplicateMethod, Registry};
 
-/// A listening host: the socket, and the table every connection is served from.
-///
-/// The registry is shared rather than copied, so every connection answers from
-/// one table and a service cannot be running under two versions of it.
+/// A listening host: the socket, and the shared table every connection is served from.
 pub struct Host {
     listener: TcpListener,
     registry: Arc<Registry>,
 }
 
 impl Host {
-    /// Binds the address and takes the methods this host answers for.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::Duplicate`] when two methods share a name, and
-    /// [`HostError::Bind`] when the address cannot be listened on. Port zero
-    /// asks the kernel for one, which [`Self::local_addr`] then reports.
+    /// Binds the address, refusing a duplicate name or an unusable address; port zero asks the kernel.
     pub fn bind(
         addr: impl ToSocketAddrs,
         methods: Vec<Method>,
@@ -48,26 +34,12 @@ impl Host {
         })
     }
 
-    /// The address the listener actually holds, which is how a caller learns the
-    /// port it asked the kernel for.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::Address`] when the socket no longer has a local address.
+    /// The address the listener holds, which is how a caller learns the port the kernel picked.
     pub fn local_addr(&self) -> Result<SocketAddr, HostError> {
         self.listener.local_addr().map_err(HostError::Address)
     }
 
-    /// Accepts connections for as long as the listener holds, one thread each.
-    ///
-    /// A connection that breaks is that thread's whole business and ends there;
-    /// the listener itself failing is returned, because a host that can no
-    /// longer accept is a failure its caller has to act on rather than retry.
-    ///
-    /// # Errors
-    ///
-    /// [`HostError::Accept`] when the listener stops accepting, and
-    /// [`HostError::Spawn`] when a connection thread cannot be started.
+    /// Accepts connections forever, one thread each; an accept or spawn failure returns here.
     pub fn run(&self) -> Result<(), HostError> {
         loop {
             let (stream, peer) = match self.listener.accept() {
