@@ -14,6 +14,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/people/users': 'list',
   '/administration/admins': 'list',
   '/administration/groups': 'list',
+  '/administration/audit': 'list',
   '/contests': 'list',
   '/tasks': 'list',
   '/people/teams/:id/overview': 'detail',

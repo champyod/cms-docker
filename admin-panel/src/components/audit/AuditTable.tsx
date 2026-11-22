@@ -1,20 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef, useTransition } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useLiveStream } from '@/hooks/useLiveStream';
 import type { AuditCursorFrame } from '@/lib/live/frames';
 import type { ListSortInput } from '@/lib/list-sorting';
-import { useDebouncedSearch } from '@/hooks/useDebouncedSearch';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
-import { TablePaginationControls } from '@/components/core/TablePaginationControls';
-import { getAuditEntry, getDistinctEntities } from '@/app/actions/audit';
+import { getAuditEntry } from '@/app/actions/audit';
 import type { AuditDetailRow } from '@/app/actions/audit';
 import { Filter } from 'lucide-react';
-import { AuditFilters } from './AuditFilters';
-import { AuditToolbar } from './AuditToolbar';
 import { AuditDetailPanel } from './AuditDetailPanel';
 import { createAuditRowRenderers } from './auditRowRenderers';
 import {
@@ -27,38 +23,28 @@ import type { AuditTableProps } from './auditTypes';
 
 export type { AuditTableProps } from './auditTypes';
 
+/**
+ * The audit log's rows, and the detail a row expands into.
+ *
+ * WHY nothing else: the filters, the count and the page number describe the request rather than the
+ * rows, so the list layout places them and the page supplies them. What is left here is the one
+ * thing only this component knows — which row the reader opened.
+ */
 export function AuditTable({
   entries,
-  total,
-  totalPages,
-  currentPage,
-  filters,
   dict,
   sort,
+  autoRefresh = false,
 }: AuditTableProps): React.JSX.Element {
   const router = useAppRouter();
-  const [isPending, startTransition] = useTransition();
   // Why the hook and not window.location.pathname: it hands back the path with the base path stripped.
   const pathname = usePathname();
-
-  const [entityFilter, setEntityFilter] = useState(filters.entity ?? '');
-  const [verbFilter, setVerbFilter] = useState(filters.verb ?? '');
-  const [actorIdFilter, setActorIdFilter] = useState(filters.actorId ?? '');
-  const [resultFilter, setResultFilter] = useState(filters.result ?? '');
-  const [ipFilter, setIpFilter] = useState(filters.ip ?? '');
-  const [showViews, setShowViews] = useState(filters.showViews ?? false);
-  const [searchFilter, setSearchFilter] = useState(filters.search ?? '');
-  const [fromDateFilter, setFromDateFilter] = useState(filters.fromDate ?? '');
-  const [toDateFilter, setToDateFilter] = useState(filters.toDate ?? '');
-  const [autoRefresh, setAutoRefresh] = useState(false);
 
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
   const [expandedDetail, setExpandedDetail] = useState<AuditDetailRow | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const [entities, setEntities] = useState<string[]>([]);
-  const [pageInput, setPageInput] = useState(String(currentPage));
   const latestAuditIdRef = useRef<string | null>(null);
 
   // Why the cursor and not the rows: the rows on screen are this page's own query, so a new one is only
@@ -80,64 +66,6 @@ export function AuditTable({
     enabled: autoRefresh,
   });
 
-  useEffect(() => {
-    void (async () => {
-      const result = await getDistinctEntities();
-      if (result.success) setEntities(result.data);
-    })();
-  }, []);
-
-  const navigateWithFilters = useCallback(
-    (overrides?: Record<string, string>) => {
-      const params = new URLSearchParams();
-      const merged = {
-        entity: entityFilter,
-        verb: verbFilter,
-        actorId: actorIdFilter,
-        result: resultFilter,
-        ip: ipFilter,
-        search: searchFilter,
-        fromDate: fromDateFilter,
-        toDate: toDateFilter,
-        ...overrides,
-      };
-      for (const [key, val] of Object.entries(merged)) {
-        if (val) params.set(key, val);
-      }
-      if (showViews) params.set('views', 'all');
-      params.set('page', overrides?.page ?? '1');
-      startTransition(() => {
-        router.push(`?${params.toString()}`);
-      });
-    },
-    [entityFilter, verbFilter, actorIdFilter, resultFilter, ipFilter, showViews, searchFilter, fromDateFilter, toDateFilter, router],
-  );
-
-  const applySearch = useDebouncedSearch({
-    value: searchFilter,
-    delayMs: 300,
-    onApply: (search) => navigateWithFilters({ search }),
-  });
-
-  const handleApplyFilters = () => {
-    applySearch(searchFilter);
-  };
-
-  const handleClearFilters = () => {
-    setEntityFilter('');
-    setVerbFilter('');
-    setActorIdFilter('');
-    setResultFilter('');
-    setIpFilter('');
-    setShowViews(false);
-    setSearchFilter('');
-    setFromDateFilter('');
-    setToDateFilter('');
-    startTransition(() => {
-      router.push('?');
-    });
-  };
-
   const applySort = useCallback((next: ListSortInput): void => {
     const params = new URLSearchParams(window.location.search);
     if (next !== null && next !== undefined) {
@@ -151,11 +79,6 @@ export function AuditTable({
     const query = params.toString();
     router.replace(query.length > 0 ? `?${query}` : pathname);
   }, [router, pathname]);
-
-  const handlePageChange = (newPage: number) => {
-    setPageInput(String(newPage));
-    navigateWithFilters({ page: String(newPage) });
-  };
 
   const handleRowClick = async (id: string) => {
     if (expandedRowId === id) {
@@ -199,50 +122,6 @@ export function AuditTable({
 
   return (
     <div className="space-y-4">
-      <AuditFilters
-        dict={dict}
-        entities={entities}
-        entityFilter={entityFilter}
-        verbFilter={verbFilter}
-        actorIdFilter={actorIdFilter}
-        resultFilter={resultFilter}
-        ipFilter={ipFilter}
-        showViews={showViews}
-        searchFilter={searchFilter}
-        fromDateFilter={fromDateFilter}
-        toDateFilter={toDateFilter}
-        onEntityFilter={setEntityFilter}
-        onVerbFilter={setVerbFilter}
-        onActorIdFilter={setActorIdFilter}
-        onResultFilter={setResultFilter}
-        onIpFilter={setIpFilter}
-        onShowViews={setShowViews}
-        onSearchFilter={setSearchFilter}
-        onFromDateFilter={setFromDateFilter}
-        onToDateFilter={setToDateFilter}
-        onApply={handleApplyFilters}
-        onClear={handleClearFilters}
-      />
-
-      <AuditToolbar
-        dict={dict}
-        total={total}
-        isPending={isPending}
-        autoRefresh={autoRefresh}
-        onToggleAutoRefresh={() => setAutoRefresh((v) => !v)}
-        filters={{
-          entity: entityFilter,
-          verb: verbFilter,
-          actorId: actorIdFilter,
-          result: resultFilter,
-          ip: ipFilter,
-          showViews,
-          search: searchFilter,
-          fromDate: fromDateFilter,
-          toDate: toDateFilter,
-        }}
-      />
-
       <ResponsiveTable
         columns={columns}
         rows={entries}
@@ -265,24 +144,6 @@ export function AuditTable({
           if (expandedRowId !== null) void handleRowClick(expandedRowId);
         }}
       />
-
-      {totalPages > 1 && (
-        <TablePaginationControls
-          currentPage={currentPage}
-          totalPages={totalPages}
-          pageInput={pageInput}
-          onPageInputChange={setPageInput}
-          onPageGo={() => {
-            const target = Number(pageInput) || 1;
-            const clamped = Math.max(1, Math.min(target, totalPages));
-            handlePageChange(clamped);
-          }}
-          perPage={50}
-          onPerPageChange={() => { /* page size is fixed at 50 for audit */ }}
-          onPrev={() => handlePageChange(currentPage - 1)}
-          onNext={() => handlePageChange(currentPage + 1)}
-        />
-      )}
     </div>
   );
 }

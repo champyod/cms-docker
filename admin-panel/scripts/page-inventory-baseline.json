@@ -1,6 +1,5 @@
 {
   "undocumented": [
-    "/administration/audit",
     "/contests/:id/communications",
     "/contests/:id/countdown",
     "/evaluation/submissions/:id/logs",
