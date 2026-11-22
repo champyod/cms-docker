@@ -8,6 +8,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
+import { formatCount } from '@/lib/format-number';
 
 async function authorizeSubmissionTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -39,10 +40,9 @@ export default async function SubmissionResultsPage({ params }: { params: Promis
       // The record shell above renders the submission's name, its trail, its status and its tabs.
       // This tab adds the two totals the shell cannot derive, then the per-dataset cards.
       ownsHeader={false}
-      title={`#${model.submissionId}`}
       facts={[
-        { term: copy.results.datasets, value: String(model.results.length) },
-        { term: copy.results.compilationsFailed, value: String(compilationsFailed) },
+        { term: copy.results.datasets, value: formatCount(model.results.length, locale) },
+        { term: copy.results.compilationsFailed, value: formatCount(compilationsFailed, locale) },
       ]}
     >
       <SubmissionResultsTab model={model} />
