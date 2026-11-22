@@ -30,7 +30,15 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/security/overview': 'dashboard',
   '/security/patching': 'list',
   '/security/blocks': 'board',
+  // One subsystem's values, with its tuning and its alerts as the sections that belong to it.
+  '/security/waf': 'detail',
   '/infrastructure/services': 'board',
+  // One row set with per-row and bulk actions; the counts describe it rather than stand alone.
+  '/infrastructure/containers': 'list',
+  // Three record kinds that do not save together, plus the state all three share.
+  '/infrastructure/deployments': 'board',
+  // Five readings on their own tracks, none of them a row of the others.
+  '/infrastructure/resources': 'board',
   '/ranking/users': 'board',
   '/ranking': 'detail',
   '/ranking/users/:key': 'detail',
@@ -39,6 +47,16 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/evaluation/lanes': 'list',
   '/evaluation/submissions': 'list',
   '/system/settings': 'settings',
+  // Three groups, each reaching a different audience: the scoreboard, the host, this browser.
+  '/system/appearance': 'settings',
+  // Two groups that change what the host does on its own: its dumps and its alerts.
+  '/system/maintenance': 'settings',
+  // The panel's own record: its values, its contributors and the software it ships.
+  '/system/about': 'detail',
+  // Four record kinds answer one query, each with its own rows and its own meaning of empty.
+  '/search': 'board',
+  // Five topics of reference, none of them a record the reader acts on.
+  '/system/docs': 'board',
   // A record landing carries no surface either: it resolves the record and forwards to its default
   // tab, which is where the detail actually lives.
   '/contests/:id': 'redirect',

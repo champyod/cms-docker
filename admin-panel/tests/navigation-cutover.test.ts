@@ -157,7 +157,7 @@ describe('final navigation cutover', () => {
       'src/components/palette/entity-searchers.ts',
       'src/hooks/useShortcuts.ts',
       'src/components/shared/NotFoundContent.tsx',
-      'src/app/[locale]/(authenticated)/search/SearchClient.tsx',
+      'src/app/[locale]/(authenticated)/search/page.tsx',
       'src/components/tasks/TaskList.tsx',
       'src/components/contests/ContestList.tsx',
     ];

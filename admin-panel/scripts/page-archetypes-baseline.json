@@ -1,14 +1,5 @@
 {
   "undeclared": [
-    "/infrastructure/containers",
-    "/infrastructure/deployments",
-    "/infrastructure/resources",
-    "/search",
-    "/security/waf",
-    "/system/about",
-    "/system/appearance",
-    "/system/backup-restore",
-    "/system/docs",
-    "/system/maintenance"
+    "/system/backup-restore"
   ]
 }
