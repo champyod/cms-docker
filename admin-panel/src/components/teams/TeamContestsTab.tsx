@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { ExternalLink, Trophy } from 'lucide-react';
 
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import type { Dictionary } from '@/lib/dictionary';
 import { buildRoute } from '@/lib/navigation/routes';
@@ -9,8 +8,6 @@ import type { TeamContest } from '@/lib/people-read-model-types';
 
 export interface TeamContestsTabProps {
   readonly contests: readonly TeamContest[];
-  readonly navigation: Dictionary['navigation'];
-  readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
 }
 
@@ -43,28 +40,31 @@ function ContestRow({ contest, locale }: { readonly contest: TeamContest; readon
   );
 }
 
-export function TeamContestsTab({ contests, navigation, copy, locale }: TeamContestsTabProps): React.JSX.Element {
-  if (contests.length === 0) {
-    return (
-      <EmptyState
-        icon={Trophy}
-        title={copy.contests.emptyTitle}
-        description={copy.contests.emptyDescription}
-      />
-    );
-  }
+/**
+ * The contests this team entered, one row each, with the contest open on the right.
+ *
+ * Why no card and no heading: the list layout draws the frame and the tab rail above already names
+ * the section, so the card was a box inside a box and the heading a second copy of that label.
+ */
+export function TeamContestsTab({ contests, locale }: TeamContestsTabProps): React.JSX.Element {
   return (
-    <Card className="overflow-hidden">
-      <div className="p-4 font-bold">
-        {`${navigation.people['team-tabs'].contests.label} (${contests.length})`}
-      </div>
-      <div className="divide-y divide-border">
-        {contests.map((contest, index) => (
-          // Why: a field-filtered contest may carry no id, so the row position
-          // joins the readable key instead of relying on it alone.
-          <ContestRow key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} contest={contest} locale={locale} />
-        ))}
-      </div>
-    </Card>
+    <div className="divide-y divide-border">
+      {contests.map((contest, index) => (
+        // Why: a field-filtered contest may carry no id, so the row position
+        // joins the readable key instead of relying on it alone.
+        <ContestRow key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} contest={contest} locale={locale} />
+      ))}
+    </div>
+  );
+}
+
+/** What empty means here: this team has not been fielded in a contest yet. */
+export function TeamContestsEmpty({ copy }: { readonly copy: Dictionary['teams'] }): React.JSX.Element {
+  return (
+    <EmptyState
+      icon={Trophy}
+      title={copy.contests.emptyTitle}
+      description={copy.contests.emptyDescription}
+    />
   );
 }

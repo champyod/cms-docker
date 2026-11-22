@@ -17,6 +17,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/tasks': 'list',
   '/people/teams/:id/overview': 'detail',
   '/people/teams/:id/members': 'list',
+  '/people/teams/:id/contests': 'list',
   // The team's canonical address resolves the record and forwards to its default tab; the surface
   // lives on the tab, so this route renders none of its own.
   '/people/teams/:id': 'redirect',
