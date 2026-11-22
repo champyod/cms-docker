@@ -37,6 +37,7 @@ mod connector;
 mod host;
 mod log;
 mod resource;
+mod resource_service;
 pub mod service;
 
 pub use connector::{
@@ -47,4 +48,8 @@ pub use host::{DuplicateMethod, Host, HostError, Registry, RunOutcome, Stop};
 pub use log::{FormatterSettings, LogError, LogService, Record, RecordError};
 pub use resource::{
     CpuTimes, ProcReader, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory,
+};
+pub use resource_service::{
+    CoordError, CpuPercentages, LocalService, MemoryMegabytes, ProcessCpu, Sample, ServiceCoord,
+    ServiceFigures, ServiceState, ServiceUsage,
 };
