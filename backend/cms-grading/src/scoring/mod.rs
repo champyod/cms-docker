@@ -17,21 +17,29 @@
 //! contestant whose score is settled is not reported pending because of a submission the mode
 //! was told to ignore.
 //!
+//! [`compute_changes_for_dataset`] answers the question a replacement asks before it is made:
+//! which submissions would move, and by how much, if the active dataset were swapped for
+//! another one of the same task. It compares the score, the public score and the ranking
+//! details, because those are what a contestant and the ranking server read.
+//!
 //! # Panics
 //!
-//! Two caller mistakes, each refused with the reference's message rather than returning a
-//! number nobody should publish: [`task_score`] asked for a public score restricted to tokened
-//! submissions, and [`max_tokened_last`] handed no submission at all.
+//! Three caller mistakes, each refused with the reference's message rather than answering
+//! something nobody should publish: [`task_score`] asked for a public score restricted to
+//! tokened submissions, [`max_tokened_last`] handed no submission at all, and
+//! [`compute_changes_for_dataset`] handed two datasets of different tasks.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 use cms_db::ScoreMode;
 
+mod delta;
 mod modes;
 mod participation;
 mod task_score;
 
+pub use delta::{compute_changes_for_dataset, DatasetScores, ScoreColumns, SubmissionScoreDelta};
 pub use modes::{max, max_subtask, max_tokened_last};
 pub use participation::{Contribution, Counted, ResultColumns, Submission, SubmittedAt};
 pub use task_score::{task_score, TaskScore};

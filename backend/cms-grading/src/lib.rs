@@ -28,7 +28,8 @@
 //! score columns as values rather than reading them, so a mode is exercised with no
 //! database, and it derives no score of its own. `task_score` is what a ranking calls: it
 //! reads the official submissions in the order they were sent, hands each mode the column the
-//! caller asked for, and answers whether anything is still pending.
+//! caller asked for, and answers whether anything is still pending; `compute_changes_for_dataset`
+//! is what activating a dataset asks first — which results it would move, and by how much.
 //!
 //! [`steps`] is the checker a dataset supplies, held to the limits that bound a
 //! manager rather than a submission and read as the standard output it is required
