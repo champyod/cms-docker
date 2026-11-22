@@ -86,7 +86,7 @@ for (const page of pages) {
   // A layout whose required content slot is an empty literal renders a frame over nothing, which
   // reads as a page that failed rather than one whose subject does not exist yet. The page must say
   // why in its state.
-  const emptySlot = /(?:sections|facts|groups)=\{\s*\[\s*\]\s*\}/.exec(source);
+  const emptySlot = /(?:sections|facts|groups|modes)=\{\s*\[\s*\]\s*\}/.exec(source);
   if (emptySlot && !/\bstate=/.test(source)) {
     problems.push(`${page.route} passes an empty ${emptySlot[0].split('=')[0]} and no state to say why`);
   }
