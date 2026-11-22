@@ -26,11 +26,13 @@ use sqlx::postgres::PgConnection;
 
 mod active;
 mod registry;
+mod resolve;
 
 pub use active::{
     active_contest, active_contest_id, bootstrap_contest_id, ACTIVE_CONTEST, CONTEST_ID_ENV,
 };
 pub use registry::{service_binding, ServiceBinding, SERVICE, SERVICE_BINDING};
+pub use resolve::{contest_binding, ContestOverride, NO_OVERRIDE};
 
 /// Why an instance's contest could not be resolved.
 ///
@@ -59,6 +61,18 @@ pub enum BindingError {
     /// `CONTEST_ID` set to something that is not a contest id.
     #[error("bootstrap CONTEST_ID '{0}' is not a contest id")]
     BootstrapNotAContest(String),
+    /// An instance that serves one contest was handed every contest.
+    #[error(
+        "the registry names no contest for {role} shard {shard}, and this service serves one \
+         contest: bind that row to a contest in the service registry, or start the process \
+         with -c <contest_id>"
+    )]
+    EveryContestOnSingleContestService {
+        /// The service role that asked.
+        role: String,
+        /// Its shard.
+        shard: i32,
+    },
 }
 
 /// One catalogue question, so both reads ask it the same way.

@@ -58,6 +58,10 @@
 //! [`Declaration`] is the other half of the model contract: a struct holds the
 //! values, and the declaration beside it states which columns exist, which Rust
 //! type each one holds, and which of them are keys rather than values.
+//!
+//! Which contest a service instance serves is resolved here as well:
+//! [`contest_binding`] puts an explicit `-c` override in front of the registry
+//! row the instance's own entry names, and the deployment default behind both.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -100,8 +104,9 @@ pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use binding::{
-    active_contest, active_contest_id, bootstrap_contest_id, service_binding, BindingError,
-    ServiceBinding, ACTIVE_CONTEST, CONTEST_ID_ENV, SERVICE, SERVICE_BINDING,
+    active_contest, active_contest_id, bootstrap_contest_id, contest_binding, service_binding,
+    BindingError, ContestOverride, ServiceBinding, ACTIVE_CONTEST, CONTEST_ID_ENV, NO_OVERRIDE,
+    SERVICE, SERVICE_BINDING,
 };
 pub use codename::{Codename, CodenameError};
 pub use contest::{

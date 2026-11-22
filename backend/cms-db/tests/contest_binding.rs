@@ -3,7 +3,7 @@
 use std::ffi::OsString;
 use std::sync::{Mutex, PoisonError};
 
-use cms_db::{bootstrap_contest_id, BindingError, CONTEST_ID_ENV};
+use cms_db::{bootstrap_contest_id, BindingError, ContestOverride, CONTEST_ID_ENV, NO_OVERRIDE};
 
 /// The environment is process-wide, so every test that writes it holds this.
 static ENVIRONMENT: Mutex<()> = Mutex::new(());
@@ -32,6 +32,13 @@ impl Drop for ContestIdVariable {
 
 fn environment() -> std::sync::MutexGuard<'static, ()> {
     ENVIRONMENT.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+#[test]
+fn an_absent_override_is_its_own_value() {
+    assert_eq!(NO_OVERRIDE, ContestOverride::Registry);
+    assert_ne!(NO_OVERRIDE, ContestOverride::EveryContest);
+    assert_ne!(NO_OVERRIDE, ContestOverride::Contest(8));
 }
 
 #[test]
@@ -76,6 +83,14 @@ fn the_refusals_name_the_state_and_the_way_out() {
     assert!(BindingError::NoActiveContest
         .to_string()
         .contains("set-active"));
+    let single = BindingError::EveryContestOnSingleContestService {
+        role: "ProxyService".to_owned(),
+        shard: 2,
+    }
+    .to_string();
+    assert!(single.contains("ProxyService"));
+    assert!(single.contains("shard 2"));
+    assert!(single.contains("-c <contest_id>"));
     assert!(BindingError::MissingContests
         .to_string()
         .contains("does not exist yet"));
