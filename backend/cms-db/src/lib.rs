@@ -51,8 +51,9 @@
 //!
 //! The identity half of the layer sits here too: [`validate_actor`] is the shape
 //! the row-level security policies can read, [`CORE_ACTOR`] is what a core
-//! program announces when nothing overrides it, and the two stamp statements are
-//! the only place `cms.actor` is written.
+//! program announces when nothing overrides it, and those two stamp statements
+//! are the only place `cms.actor` is written. [`Session::begin`] is the only way
+//! to obtain a transaction, so no transaction can begin unstamped.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -66,6 +67,7 @@ mod digest;
 mod interval;
 mod permission;
 mod reads;
+mod session;
 mod types;
 mod writes;
 
@@ -86,6 +88,9 @@ pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
     DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+};
+pub use session::{
+    DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
