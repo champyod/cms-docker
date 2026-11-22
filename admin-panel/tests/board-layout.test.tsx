@@ -47,4 +47,34 @@ describe('BoardPage', () => {
 
     expect(html).toContain('data-surface-owns-header="shell"');
   });
+
+  it('reads freshness as a note, not as a line of content', () => {
+    const html = renderToStaticMarkup(
+      <BoardPage
+        breadcrumbs={crumbs}
+        title="Security"
+        freshness="read a moment ago"
+        sections={[{ key: 'a', title: 'One', rows: <span>a</span> }]}
+      />,
+    );
+
+    expect(html).toContain('read a moment ago');
+    expect(html).toMatch(/text-\[length:var\(--text-label\)\][^>]*>read a moment ago/);
+  });
+
+  it('renders its state alone when the thing it is about does not exist yet', () => {
+    // A board with no sections is legitimate: the page says why in its state, and the gate fails a
+    // board that has neither.
+    const html = renderToStaticMarkup(
+      <BoardPage
+        breadcrumbs={crumbs}
+        title="Overrides"
+        state={<p>No ranking shard is configured.</p>}
+        sections={[]}
+      />,
+    );
+
+    expect(html).toContain('No ranking shard is configured.');
+    expect(html).not.toContain('<h2');
+  });
 });

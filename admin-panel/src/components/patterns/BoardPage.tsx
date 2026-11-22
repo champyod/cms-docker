@@ -22,6 +22,10 @@ export interface BoardPageProps extends Omit<PageSlots, 'children'> {
   /** The page's own state, above every section. */
   readonly state?: ReactNode;
   readonly freshness?: ReactNode;
+  /**
+   * The sections, in reading order. A board may legitimately have none - when the thing it is about
+   * does not exist yet - but then `state` has to say so; the archetype gate enforces that pairing.
+   */
   readonly sections: readonly BoardSection[];
   /** False when a module shell above already renders the page header. */
   readonly ownsHeader?: boolean;
@@ -57,10 +61,12 @@ export function BoardPage({
     >
       <div className="space-y-4">
         {state}
-        {freshness && <p className="text-muted-foreground">{freshness}</p>}
+        {freshness && <p className="text-[length:var(--text-label)] text-muted-foreground">{freshness}</p>}
         {sections.map((section) => (
           <SectionCard key={section.key} title={section.title} description={section.description} actions={section.actions}>
             {section.state}
+            {/* A section that names its empty state renders it instead of its rows: the page knows
+                whether the section is empty, and passing `empty` is how it says so. */}
             {section.empty ?? section.rows}
           </SectionCard>
         ))}

@@ -83,6 +83,12 @@ for (const page of pages) {
 
   if (SHELL_OWNS_HEADER.test(source)) titleDebt.push(page.route);
 
+  // A board with no sections is a page whose whole content is its state. Without one it renders a
+  // heading over nothing, which reads as a page that failed rather than a page that has no rows.
+  if (kind === 'board' && /sections=\{\s*\[\s*\]\s*\}/.test(source) && !/\bstate=/.test(source)) {
+    problems.push(`${page.route} is a board with no sections and no state to say why`);
+  }
+
   // A declared page supplies facts to its layout; headings and cards are the layout's.
   for (const { pattern, rule } of OWNED_BY_LAYOUT) {
     if (pattern.test(source)) problems.push(`${page.route} ${rule}`);

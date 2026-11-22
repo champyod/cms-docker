@@ -55,3 +55,20 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
   which is right, but the lane's original note stands: the shown-contests and board-hides surfaces
   would be better as routes of their own. That is a navigation change (new public surfaces), so it
   is recorded here rather than done.
+
+## Queued: BoardSection's empty contract
+
+`BoardPage` renders `section.empty ?? section.rows`, so a page says "this section is empty" by
+passing `empty` and says "it is not" by passing `empty: undefined`. That trick makes the page
+compute emptiness twice - once to choose `empty`, once to build `rows` - and a section that passes
+both loses its rows without a word.
+
+The shape it should become:
+
+    type BoardSectionBody =
+      | { readonly isEmpty?: false; readonly rows: ReactNode; readonly empty?: never }
+      | { readonly isEmpty: true; readonly empty: ReactNode; readonly rows?: never };
+
+Blast radius: 17 sections across /search, /security/blocks, /people/users/:id/history and the two
+infrastructure boards. It is a contract change plus a page-by-page edit, so it gets its own sessions
+rather than riding along with the component review that found it.
