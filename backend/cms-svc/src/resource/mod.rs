@@ -77,6 +77,10 @@ pub struct ProcessFacts {
     pub system_cpu_seconds: f64,
     /// Resident set size, in bytes.
     pub resident_bytes: u64,
+    /// Virtual memory size, in bytes.
+    pub virtual_bytes: u64,
+    /// Threads in the process.
+    pub num_threads: i64,
     /// Real user id owning the process.
     pub uid: u32,
     /// Seconds since the Unix epoch at which the process started.

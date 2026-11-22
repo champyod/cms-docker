@@ -91,6 +91,8 @@ fn reads_this_process() {
 
     assert_eq!(facts.uid, real_uid());
     assert!(facts.resident_bytes > 0, "RSS must be positive");
+    assert!(facts.virtual_bytes >= facts.resident_bytes);
+    assert!(facts.num_threads >= 1);
     assert!(facts.create_time > 0.0);
     assert!(facts.create_time <= now_seconds());
     assert!(reader.is_running(&facts).unwrap());

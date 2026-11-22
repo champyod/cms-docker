@@ -76,6 +76,8 @@ impl ResourceReader for ProcReader {
             user_cpu_seconds: ticks_to_seconds(stat.utime),
             system_cpu_seconds: ticks_to_seconds(stat.stime),
             resident_bytes: pages_to_bytes(statm.resident),
+            virtual_bytes: pages_to_bytes(statm.size),
+            num_threads: stat.num_threads,
             // WHY: /proc/<pid> turns root-owned for a non-dumpable process, so read Uid: as psutil does.
             uid: status.ruid,
             create_time: seconds_since_epoch(stat.starttime)?,
