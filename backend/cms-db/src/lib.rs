@@ -85,6 +85,7 @@ mod interval;
 mod large_object;
 mod permission;
 mod reads;
+mod schema;
 mod security_block;
 mod session;
 mod submission;
@@ -142,6 +143,7 @@ pub use reads::{
     SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
     RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
+pub use schema::{init_db, SchemaError};
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
