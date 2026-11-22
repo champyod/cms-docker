@@ -45,10 +45,9 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
       // The record shell above renders the submission's name, its trail, its status and its tabs.
       // This tab adds the values the shell does not show, then the source and the outcome links.
       ownsHeader={false}
-      title={`#${summary.id}`}
       facts={[
-        { term: copy.identity.language, value: summary.language ?? '—' },
-        { term: copy.comment.label, value: summary.comment === '' ? '—' : summary.comment },
+        { term: copy.identity.language, value: summary.language ?? dictionary.common.notSet },
+        { term: copy.comment.label, value: summary.comment === '' ? dictionary.common.notSet : summary.comment },
       ]}
       freshness={<SubmissionArrival timestamp={summary.timestamp} />}
     >
