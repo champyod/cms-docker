@@ -87,9 +87,9 @@ const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]
  * fourteen pixels, close enough to the 14.4 body step that nobody notices, and immune to the scale
  * ever changing. Counted per file, and the count may only fall, one page per session.
  */
-const OFF_SCALE_TYPE = /\btext-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)\b/g;
-const OFF_SCALE_CEILING = Number(process.env.OFF_SCALE_TYPE_CEILING ?? 7);
-let offScaleType = 0;
+// Type sizes are not measured here: the ladder lives on Tailwind's step names (DESIGN.md 20) and
+// __check_token_coverage.mjs counts the sizes that leave it, across all of src rather than pages
+// alone. One measure, one owner.
 
 for (const page of pages) {
   const kind = PAGE_ARCHETYPE_BY_ROUTE[page.route];
@@ -102,7 +102,6 @@ for (const page of pages) {
   for (const entry of SHELL_OWNED_PROPS) {
     if (entry.pattern.test(source)) shellOwnedDebt.get(entry.prop).push(page.route);
   }
-  offScaleType += [...source.matchAll(OFF_SCALE_TYPE)].length;
 
   // A layout whose required content slot is an empty literal renders a frame over nothing, which
   // reads as a page that failed rather than one whose subject does not exist yet. The page must say
@@ -167,12 +166,6 @@ for (const route of undeclared) {
   if (!allowed.has(route)) problems.push(`${route} has no archetype and is not in the baseline (new page, or a route renamed)`);
 }
 
-if (offScaleType > OFF_SCALE_CEILING) {
-  problems.push(
-    `${offScaleType} off-scale type utilities in pages, above the ${OFF_SCALE_CEILING} this branch inherited`
-  );
-}
-
 for (const entry of SHELL_OWNED_PROPS) {
   const debt = shellOwnedDebt.get(entry.prop);
   if (debt.length > entry.ceiling) {
@@ -196,6 +189,5 @@ console.log(
     [...shellOwnedDebt]
       .filter(([, debt]) => debt.length > 0)
       .map(([prop, debt]) => `, ${debt.length} page(s) still pass a ${prop} their shell owns`)
-      .join('') +
-    (offScaleType ? `, ${offScaleType} off-scale type use(s) in pages` : '')
+      .join('')
 );

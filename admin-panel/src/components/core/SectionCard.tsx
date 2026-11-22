@@ -94,12 +94,12 @@ export function SectionCard({
           {(count !== undefined || description || note) && (
             <div className="flex min-w-0 flex-wrap items-baseline gap-2">
               {count !== undefined && (
-                <span className="rounded-full bg-accent px-2 py-0.5 text-[length:var(--text-label)] text-muted-foreground">
+                <span className="rounded-full bg-accent px-2 py-0.5 text-xs text-muted-foreground">
                   ({count})
                 </span>
               )}
               {description}
-              {note && <p className="text-[length:var(--text-label)] text-muted-foreground">{note}</p>}
+              {note && <p className="text-xs text-muted-foreground">{note}</p>}
             </div>
           )}
         </div>

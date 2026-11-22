@@ -178,7 +178,7 @@ describe('SectionCard', () => {
     );
     for (const html of [plain, collapsible]) {
       expect(html).toContain('<h2');
-      expect(html).toContain('text-[length:var(--text-card)]');
+      expect(html).toContain('text-base');
     }
   });
 

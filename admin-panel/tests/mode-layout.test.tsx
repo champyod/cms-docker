@@ -17,7 +17,7 @@ describe('ModePage', () => {
       </ModePage>,
     );
 
-    expect(html).toMatch(/text-\[length:var\(--text-label\)\][^>]*>checked a moment ago/);
+    expect(html).toMatch(/text-xs[^>]*>checked a moment ago/);
   });
 
   it('names the switcher even when the shell owns the page title', () => {

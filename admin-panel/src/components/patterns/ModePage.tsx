@@ -65,7 +65,7 @@ export function ModePage({
     <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="space-y-4">
         {state}
-        {freshness && <p className="text-[length:var(--text-label)] text-muted-foreground">{freshness}</p>}
+        {freshness && <p className="text-xs text-muted-foreground">{freshness}</p>}
         <Tabs
           items={modes.map((mode) => ({ id: mode.key, label: mode.label, href: mode.href }))}
           activeId={activeKey}

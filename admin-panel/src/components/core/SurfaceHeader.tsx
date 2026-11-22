@@ -16,7 +16,7 @@ function Breadcrumbs({ items }: { readonly items: readonly BreadcrumbItem[] }): 
   if (items.length === 0) return null;
   return (
     <nav aria-label="Breadcrumb" className="min-w-0 overflow-x-auto">
-      <ol className="flex min-w-max items-center gap-2 text-[length:var(--text-body)] text-muted-foreground">
+      <ol className="flex min-w-max items-center gap-2 text-sm text-muted-foreground">
         {items.map((item, index) => (
           <li key={`${item.href ?? 'current'}:${index}`} className="flex items-center gap-2">
             {index > 0 && <span aria-hidden="true">/</span>}

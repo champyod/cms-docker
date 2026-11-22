@@ -34,7 +34,7 @@ export function SurfaceState({
         role="status"
         aria-live="polite"
         className={cn(
-          'inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-[length:var(--text-label)] font-medium text-foreground',
+          'inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-foreground',
           className,
         )}
       >
@@ -52,7 +52,7 @@ export function SurfaceState({
         className,
       )}
     >
-      <Text as="h2" className="text-[length:var(--text-card)] font-semibold">{status.title}</Text>
+      <Text as="h2" className="text-base font-semibold">{status.title}</Text>
       {status.description && (
         <Text variant="muted" className="max-w-lg">{status.description}</Text>
       )}

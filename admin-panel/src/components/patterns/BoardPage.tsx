@@ -67,7 +67,7 @@ export function BoardPage({
     >
       <div className="space-y-4">
         {state}
-        {freshness && <p className="text-[length:var(--text-label)] text-muted-foreground">{freshness}</p>}
+        {freshness && <p className="text-xs text-muted-foreground">{freshness}</p>}
         {sections.map((section) => (
           <SectionCard
             key={section.key}

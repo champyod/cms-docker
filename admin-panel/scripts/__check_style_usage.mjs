@@ -8,7 +8,10 @@
  *
  * Rules, each a decision from DESIGN-PREFERENCE:
  *   1. focus rings are 2px (topic 6, WCAG 2.4.13)  -> no `ring-[3px]`
- *   2. sizes come from the 12 x 1.2 chain (topic 2) -> no raw `text-xl`-style sizes in Typography
+ *   2. sizes come from the one ladder, which is declared on Tailwind's step names in `@theme`
+ *      (DESIGN.md 20), so the ladder is measured by __check_design_tokens.mjs and this gate says
+ *      nothing about sizes at all. A rule here that named `var(--text-*)` was mine, not the
+ *      operator's, and it is gone with the tokens it pointed at.
  *
  * Usage: bun scripts/__check_style_usage.mjs [rootDir]
  */
@@ -23,12 +26,6 @@ const RULES = [
     id: 'focus-ring',
     test: (source) => /ring-\[3px\]/.test(source),
     message: 'uses ring-[3px]; the decision (topic 6) is a 2px ring - use ring-2',
-  },
-  {
-    id: 'type-scale',
-    match: /Typography\.tsx$/,
-    test: (source) => /\btext-(3xl|2xl|xl|lg|base|sm|xs)\b/.test(source),
-    message: 'uses a Tailwind size step; the type scale is the 12 x 1.2 chain - use var(--text-*)',
   },
 ];
 

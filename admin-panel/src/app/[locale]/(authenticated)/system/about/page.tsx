@@ -147,7 +147,7 @@ export default async function SystemAboutPage({
       <SectionCard title={panel.title}>
         <div className="space-y-2">
           <Text variant="label">{copy.firstParty}</Text>
-          <ul className="list-inside list-disc space-y-1 font-mono text-[length:var(--text-label)] text-muted-foreground">
+          <ul className="list-inside list-disc space-y-1 font-mono text-xs text-muted-foreground">
             {panel.firstParty.map((path) => <li key={path} className="break-all">{path}</li>)}
           </ul>
         </div>

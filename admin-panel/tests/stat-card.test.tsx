@@ -35,8 +35,9 @@ describe('StatCard', () => {
   it('sizes the value below the page title, so a metric never outranks the heading', () => {
     const html = renderToStaticMarkup(<StatCard label="Total users" value={1204} />);
 
-    expect(html).toContain('--text-section');
-    expect(html).not.toContain('--text-page');
+    // The value sits on the ladder's fifth step; the page title is the sixth.
+    expect(html).toContain('text-lg');
+    expect(html).not.toContain('text-xl');
   });
 
   it('does not uppercase the label, because Thai cannot shout with capitals', () => {

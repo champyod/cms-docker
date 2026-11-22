@@ -29,12 +29,12 @@ export function StatCard({ label, value, reference, locale }: StatCardProps): Re
   return (
     <Card className="p-4">
       <dl className="flex flex-col gap-1">
-        <dt className="text-[length:var(--text-label)] font-medium text-muted-foreground">{label}</dt>
-        <dd className="text-[length:var(--text-section)] leading-tight font-semibold tabular-nums">
+        <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+        <dd className="text-lg leading-tight font-semibold tabular-nums">
           {formatCountOrText(value, locale)}
         </dd>
         {reference ? (
-          <dd className="text-[length:var(--text-label)] text-muted-foreground">{reference}</dd>
+          <dd className="text-xs text-muted-foreground">{reference}</dd>
         ) : null}
       </dl>
     </Card>

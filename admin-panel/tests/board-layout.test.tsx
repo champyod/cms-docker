@@ -74,7 +74,7 @@ describe('BoardPage', () => {
     );
 
     expect(html).toContain('read a moment ago');
-    expect(html).toMatch(/text-\[length:var\(--text-label\)\][^>]*>read a moment ago/);
+    expect(html).toMatch(/text-xs[^>]*>read a moment ago/);
   });
 
   it('renders its state alone when the thing it is about does not exist yet', () => {

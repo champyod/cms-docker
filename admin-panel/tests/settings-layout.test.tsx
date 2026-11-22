@@ -31,7 +31,7 @@ describe('SettingsPage', () => {
     const headings = [...html.matchAll(/<h2[^>]*>/g)].map((match) => match[0]);
     expect(headings).toHaveLength(2);
     for (const heading of headings) {
-      expect(heading).toContain('text-[length:var(--text-card)]');
+      expect(heading).toContain('text-base');
       expect(heading).not.toContain('font-semibold');
     }
   });

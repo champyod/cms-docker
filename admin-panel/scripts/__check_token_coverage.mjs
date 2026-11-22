@@ -46,6 +46,13 @@ function files(dir, out = []) {
 const problems = [];
 let checked = 0;
 
+// A size must name a step of the one ladder (DESIGN.md 20). `text-[13px]` and `text-3xl` are the two
+// ways to leave it: one writes a number, the other reaches past the sixth step into Tailwind's
+// defaults. Both are counted rather than forbidden, because the sites that exist today are chart and
+// logo labels at 10px, below the smallest step, and each needs a decision rather than a sweep.
+const OFF_LADDER = /text-(?:\[[0-9.]+(?:px|rem)\]|(?:3xl|4xl|5xl|6xl|7xl|8xl|9xl))/g;
+const LADDER_BASELINE = 13;
+
 for (const file of files(CORE)) {
   const source = readFileSync(file, 'utf8');
   for (const [, token] of source.matchAll(COLOUR_UTILITY)) {
@@ -63,6 +70,20 @@ for (const file of files(CORE)) {
       problems.push(`${relative(ROOT, file)}: "${token}" is not a token the stylesheet defines`);
     }
   }
+}
+
+const offLadder = [];
+for (const file of files(join(ROOT, 'src'))) {
+  const source = readFileSync(file, 'utf8');
+  for (const [hit] of source.matchAll(OFF_LADDER)) {
+    offLadder.push(`${relative(ROOT, file)}: ${hit}`);
+  }
+}
+if (offLadder.length > LADDER_BASELINE) {
+  problems.push(`type ladder: ${offLadder.length} sizes off the ladder, baseline is ${LADDER_BASELINE}`);
+  for (const hit of offLadder.slice(0, 10)) problems.push(`  ${hit}`);
+} else if (offLadder.length < LADDER_BASELINE) {
+  console.log(`type ladder: ${offLadder.length} off the ladder, baseline ${LADDER_BASELINE} may be lowered to ${offLadder.length}`);
 }
 
 if (problems.length) {

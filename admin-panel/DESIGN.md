@@ -206,6 +206,7 @@ change shape *and* colour for the same reason.
 | colour channels per state | counted per region | a tint and a dot carrying the same state |
 | content width | measured `getBoundingClientRect` of the content column | full-bleed groups with a gap wider than 15% of the row |
 | colour | `grep -rn '#[0-9a-fA-F]\{6\}' src --include=*.tsx` outside the token block | one literal |
+| type ladder | `__check_design_tokens.mjs` reads `@theme`, `__check_token_coverage.mjs` counts sizes that leave it across `src` | a step missing, a step in px, a seventh step, or more off-ladder sizes than the baseline (13) |
 | colour meaning | the same element type sampled across pages | the same kind varies in colour |
 | density | content height ÷ viewport, lines counted | a page over ~40 content lines with no chart |
 | numbers | computed style `font-variant-numeric` and text-align | any metric column left-aligned |
@@ -257,3 +258,32 @@ entries, JSX text, tooltips, empty states, error messages.
 
 They are allowed inside source comments, which no reader sees. When a separator is genuinely needed
 between two values, use a comma and a word, not a glyph.
+
+## 20. One ladder, on the step names everyone already types
+
+The type scale is declared once, in `@theme` in `src/app/globals.css`, on Tailwind's own step names:
+`--text-xs` through `--text-2xl`. Six steps, ratio 1.2 from 12px, in rem.
+
+| Step | rem | px at a 16px root |
+|---|---|---|
+| `text-xs` | 0.75rem | 12 |
+| `text-sm` | 0.9rem | 14.4 |
+| `text-base` | 1.08rem | 17.28 |
+| `text-lg` | 1.296rem | 20.74 |
+| `text-xl` | 1.555rem | 24.88 |
+| `text-2xl` | 1.866rem | 29.86 |
+
+Why the step names and not invented ones: `text-sm` is the first thing anyone writes, so making it
+mean our size removes the wrong choice instead of forbidding it. An agent that reaches for a Tailwind
+step lands on the ladder by construction.
+
+Why rem: the reader's text-size preference sets the root font size (14, 16 or 18px), so every step
+follows it. A px ladder would freeze the type while the rest of the panel grew.
+
+There is no second way to name a size. `text-[length:var(--text-…)]` is gone, and the six old
+`--text-label … --text-display` tokens with it; they were also declared twice, once in `:root` and
+again in `.dark`, for sizes that do not change with the theme.
+
+Measured in a browser at three roots, not read off the CSS: 16px gives 12 / 14.4 / 17.28 / 20.736 /
+24.88 / 29.856, 18px gives 13.5 / 16.2 / 19.44 / 23.328 / 27.99 / 33.588, 14px gives 10.5 / 12.6 /
+15.12 / 18.144 / 21.77 / 26.124.
