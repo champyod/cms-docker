@@ -73,7 +73,7 @@ export function UserBulkEditDialog({ isOpen, onClose, selectedUsers, unavailable
           Selected: {rows.length} user(s)
           {unavailableCount > 0 && (
             <span className="text-warning">
-              {' '}— {unavailableCount} selected row(s) are not loaded and cannot be edited
+              {': '}{unavailableCount} selected row(s) are not loaded and cannot be edited
             </span>
           )}
         </div>

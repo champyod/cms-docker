@@ -9,22 +9,25 @@ import type { UserTeamMembership } from '@/lib/people-read-model-types';
 export interface UserTeamsTabProps {
   readonly memberships: readonly UserTeamMembership[];
   readonly copy: Dictionary['users'];
+  /** common.notSet: a row whose value the record does not hold. */
+  readonly missing: string;
   readonly locale: 'en' | 'th';
 }
 
-const EMPTY_VALUE = '—';
 
-function MembershipRow({ membership, copy, locale }: {
+function MembershipRow({ membership, copy, missing, locale }: {
   readonly membership: UserTeamMembership;
   readonly copy: Dictionary['users'];
+  /** common.notSet: a row whose value the record does not hold. */
+  readonly missing: string;
   readonly locale: 'en' | 'th';
 }): React.JSX.Element {
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <div className="font-medium">{membership.contestName ?? EMPTY_VALUE}</div>
+        <div className="font-medium">{membership.contestName ?? missing}</div>
         <div className="text-xs text-muted-foreground">
-          {interpolate(copy.teamsTab.contestLabel, { id: membership.contestId ?? EMPTY_VALUE })}
+          {interpolate(copy.teamsTab.contestLabel, { id: membership.contestId ?? missing })}
         </div>
       </div>
       {membership.teamId !== null && membership.teamCode !== null ? (
@@ -48,11 +51,11 @@ function MembershipRow({ membership, copy, locale }: {
  * already names the section, so the card here was a box inside a box and the heading a second copy
  * of the tab label.
  */
-export function UserTeamsTab({ memberships, copy, locale }: UserTeamsTabProps): React.JSX.Element {
+export function UserTeamsTab({ memberships, copy, missing, locale }: UserTeamsTabProps): React.JSX.Element {
   return (
     <div className="divide-y divide-border">
       {memberships.map((membership) => (
-        <MembershipRow key={membership.id} membership={membership} copy={copy} locale={locale} />
+        <MembershipRow key={membership.id} membership={membership} copy={copy} missing={missing} locale={locale} />
       ))}
     </div>
   );

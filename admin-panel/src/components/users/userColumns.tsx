@@ -16,7 +16,7 @@ function teamCodes(user: UsersPageRow): string {
 // Why: one column definition drives desktop rows and mobile cards, so
 // the two layouts cannot drift apart.
 export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<UserRow>[] {
-  const { selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne } = args;
+  const { selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, missing } = args;
   return [
     {
       key: 'select',
@@ -107,7 +107,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
         user.status ? (
           <Badge variant={user.status === 'active' ? 'success' : 'warning'}>{user.status}</Badge>
         ) : (
-          '—'
+          missing
         ),
     },
     {
@@ -115,7 +115,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       header: 'Organization',
       sortKey: 'organization',
       cellClassName: 'min-w-[120px]',
-      render: ({ user }) => <CellText width="md" muted>{user.organization ?? '—'}</CellText>,
+      render: ({ user }) => <CellText width="md" muted>{user.organization ?? missing}</CellText>,
       hideOnMobile: true,
     },
     {
@@ -123,7 +123,7 @@ export function buildUserColumns(args: BuildUserColumnsArgs): ResponsiveColumn<U
       header: 'Country',
       sortKey: 'country',
       cellClassName: 'min-w-[80px]',
-      render: ({ user }) => <CellText width="sm" muted>{user.country ?? '—'}</CellText>,
+      render: ({ user }) => <CellText width="sm" muted>{user.country ?? missing}</CellText>,
       hideOnMobile: true,
     },
     {

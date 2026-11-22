@@ -40,8 +40,8 @@ export function UserTable({
   );
 
   const columns = useMemo(
-    () => buildUserColumns({ selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne }),
-    [selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne],
+    () => buildUserColumns({ selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, missing: dict.common.notSet }),
+    [selectedIds, allSelected, partlySelected, selectAllLabel, onToggleAll, onToggleOne, dict.common.notSet],
   );
 
   const getRowClassName = (row: UserRow): string | undefined =>

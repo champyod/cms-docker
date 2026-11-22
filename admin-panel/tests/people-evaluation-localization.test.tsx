@@ -164,6 +164,7 @@ describe('User record tab copy', () => {
   it('renders the team code as a row link, without repeating the tab label as a heading', () => {
     const body = text(
       <UserTeamsTab
+        missing={th.common.notSet}
         memberships={[{
           id: 1,
           contestId: 2,

@@ -50,12 +50,12 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
           // thing none of the five histories can: when this account last signed in.
           key: 'account-access',
           title: copy.accountAccess,
-          rows: <UserHistoryAccountAccess history={history} copy={dictionary.users} />,
+          rows: <UserHistoryAccountAccess history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
         },
         {
           key: 'contests',
           title: copy.sections.contests.title,
-          rows: <UserHistorySection section="contests" history={history} copy={dictionary.users} />,
+          rows: <UserHistorySection section="contests" history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
           empty: history.contests.length === 0
             ? <UserHistoryEmpty title={copy.sections.contests.empty} />
             : undefined,
@@ -63,7 +63,7 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
         {
           key: 'participations',
           title: copy.sections.participations.title,
-          rows: <UserHistorySection section="participations" history={history} copy={dictionary.users} />,
+          rows: <UserHistorySection section="participations" history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
           empty: history.participations.length === 0
             ? <UserHistoryEmpty title={copy.sections.participations.empty} />
             : undefined,
@@ -71,7 +71,7 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
         {
           key: 'teams',
           title: copy.sections.teams.title,
-          rows: <UserHistorySection section="teams" history={history} copy={dictionary.users} />,
+          rows: <UserHistorySection section="teams" history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
           empty: history.teams.length === 0
             ? <UserHistoryEmpty title={copy.sections.teams.empty} />
             : undefined,
@@ -79,7 +79,7 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
         {
           key: 'submissions',
           title: copy.sections.submissions.title,
-          rows: <UserHistorySection section="submissions" history={history} copy={dictionary.users} />,
+          rows: <UserHistorySection section="submissions" history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
           empty: history.submissions.length === 0
             ? <UserHistoryEmpty title={copy.sections.submissions.empty} />
             : undefined,
@@ -87,7 +87,7 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
         {
           key: 'recent-activity',
           title: copy.sections.recentActivity.title,
-          rows: <UserHistorySection section="recentActivity" history={history} copy={dictionary.users} />,
+          rows: <UserHistorySection section="recentActivity" history={history} copy={dictionary.users} missing={dictionary.common.notSet} />,
           empty: history.recentContestActivity.length === 0
             ? <UserHistoryEmpty title={copy.sections.recentActivity.empty} />
             : undefined,

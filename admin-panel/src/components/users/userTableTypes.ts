@@ -51,4 +51,6 @@ export interface BuildUserColumnsArgs {
   selectAllLabel: string;
   onToggleAll: (checked: boolean) => void;
   onToggleOne: (userId: number, checked: boolean) => void;
+  /** The word a cell shows when the record holds nothing: common.notSet, from the page's dictionary. */
+  missing: string;
 }

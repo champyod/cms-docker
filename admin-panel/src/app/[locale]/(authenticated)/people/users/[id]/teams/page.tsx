@@ -39,7 +39,7 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
       // repeat what the reader can count.
       empty={memberships.length === 0 ? <UserTeamsEmpty copy={dictionary.users} /> : undefined}
     >
-      <UserTeamsTab memberships={memberships} copy={dictionary.users} locale={locale as 'en' | 'th'} />
+      <UserTeamsTab memberships={memberships} copy={dictionary.users} missing={dictionary.common.notSet} locale={locale as 'en' | 'th'} />
     </ListPage>
   );
 }
