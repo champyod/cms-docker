@@ -24,7 +24,10 @@ export const PAGE_SLOTS: Readonly<Record<Exclude<PageArchetype, 'redirect'>, rea
     STATE,
     FRESHNESS,
     { key: 'totals', asks: 'How much is there, per area?', required: true },
-    { key: 'activity', asks: 'What happened most recently?', required: true },
+    // Why optional: a security digest answers "does anything need me now" with a state and counts
+    // and has no feed to show. Requiring one would make the page invent a section or leave the
+    // system, and an invented feed is exactly the content this layer exists to prevent.
+    { key: 'activity', asks: 'What happened most recently?', required: false },
     { key: 'action', asks: 'What is the one thing to do about the state?', required: false },
   ],
   list: [

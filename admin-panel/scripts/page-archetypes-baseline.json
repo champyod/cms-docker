@@ -34,7 +34,6 @@
     "/ranking/credits",
     "/ranking/users/:key",
     "/search",
-    "/security/overview",
     "/security/waf",
     "/system/about",
     "/system/appearance",

@@ -1,6 +1,8 @@
 import { Card } from '@/components/core/Card';
+import { DashboardPage } from '@/components/patterns/DashboardPage';
 import { SecuritySignalCard } from '@/components/security/SecuritySignalCard';
 import { getDictionary } from '@/i18n';
+import { formatInZone } from '@/lib/timezone';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { readBannedAddresses, readLoginLockouts } from '@/app/actions/securityBlocks';
 import { readPatchingState } from '@/app/actions/securityPatching';
@@ -40,11 +42,17 @@ export default async function SecurityOverviewPage({
     { label: dict.security.patching.cards.expiredWaivers, value: String(patching.cards.expiredWaivers) },
     { label: dict.security.patching.cards.hostOsUpdates, value: String(patching.cards.hostOsUpdates) },
   ];
+  // The reads above just happened, so the page states when - the same sentence the home
+  // dashboard uses, because "how old is this" must read the same way on both.
+  const checkedAt = formatInZone(new Date().toISOString());
   return (
-    <div className="space-y-4">
-      {/* The digest leads the surface: it is the one card that answers "does anything need me now",
-          and it needs no query of its own — `patching.signal` came with the read above. */}
-      <SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />
+    <DashboardPage
+      breadcrumbs={[]}
+      title=""  // the security module shell renders this page's name and trail
+      ownsHeader={false}
+      state={<SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />}
+    >
+      <p className="text-muted-foreground">{dict.dashboard.checkedAt.replace('{count}', checkedAt)}</p>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {cards.map((card) => (
           <Card key={card.label}>
@@ -53,6 +61,6 @@ export default async function SecurityOverviewPage({
           </Card>
         ))}
       </div>
-    </div>
+    </DashboardPage>
   );
 }
