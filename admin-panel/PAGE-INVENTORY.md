@@ -11,7 +11,7 @@ Inventory: **9 of 59 pages documented.**
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
 | `/` | dashboard | state of every service · totals per area · what happened most recently |
-| `/administration/admins` | list | — *to inventory* |
+| `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
 | `/contests` | list | state of the contest service · contests with state, window and age · count against total · filter · per-row actions · create |
@@ -34,7 +34,7 @@ Inventory: **9 of 59 pages documented.**
 | `/infrastructure/containers` | list | — *to inventory* |
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
-| `/infrastructure/services` | list | — *to inventory* |
+| `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
 | `/people/teams` | list | teams with member count and state · count against total · sort · per-row actions · create · live refresh |
 | `/people/teams/:id` | detail | — *to inventory* |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
@@ -48,10 +48,10 @@ Inventory: **9 of 59 pages documented.**
 | `/ranking` | list | — *to inventory* |
 | `/ranking/appearance` | settings | — *to inventory* |
 | `/ranking/credits` | list | — *to inventory* |
-| `/ranking/users` | list | — *to inventory* |
+| `/ranking/users` | board | which contests the board draws, each with its kind, reason and author · the shard being edited · overrides with target, contest, reason, author and orphan state, filtered, selected, ended one by one or in bulk · the rows the board actually drops, with the write that hides each · what empty means per section |
 | `/ranking/users/:key` | list | — *to inventory* |
 | `/search` | list | — *to inventory* |
-| `/security/blocks` | list | — *to inventory* |
+| `/security/blocks` | board | captcha settings, thresholds and provider health · banned addresses with their unban, plus the queue-by-address control · permanent exemptions with revoke, beside the grant form · live failure counters, each expandable to the attempts behind it · open lockouts with unlock · what each section means when empty |
 | `/security/overview` | list | — *to inventory* |
 | `/security/patching` | list | whether a waiver now covers a reachable finding, and the way to those rows · findings by producer with severity, reachability, version, host and waiver state · filter by source, severity, reachability and waiver fit, with sort · how many match against the whole feed, and the feed's four totals · waive one row · waive every unreachable finding · what empty means |
 | `/security/tls` | detail | TLS proxy and certbot status · certificate lineages with expiry and days left · unreadable lineages · queue a renewal with a reason |

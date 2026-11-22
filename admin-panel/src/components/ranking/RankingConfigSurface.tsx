@@ -5,7 +5,6 @@ import { Ban, Play } from 'lucide-react';
 
 import { endTarget, showTarget } from '@/app/actions/rankingConfig';
 import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { FormField, SelectField } from '@/components/core/FormField';
 import { Input } from '@/components/core/Input';
@@ -48,22 +47,11 @@ export function RankingConfigSurface({
   const [failure, setFailure] = useState<string | null>(null);
 
   if (!canShow) {
-    return (
-      <Card className="space-y-3">
-        <Text as="h2" variant="h3">
-          {copy.title}
-        </Text>
-        <ShownList copy={copy} rows={rows} onEnd={null} />
-      </Card>
-    );
+    return <ShownList copy={copy} rows={rows} onEnd={null} />;
   }
 
   return (
-    <Card className="space-y-4">
-      <Text as="h2" variant="h3">
-        {copy.title}
-      </Text>
-      <Text variant="muted">{copy.hint}</Text>
+    <div className="space-y-4">
       <form
         action={async (formData: FormData) => {
           setFailure(null);
@@ -131,7 +119,7 @@ export function RankingConfigSurface({
         onClose={reasonPrompt.close}
         onSubmit={reasonPrompt.submit}
       />
-    </Card>
+    </div>
   );
 }
 

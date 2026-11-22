@@ -1,6 +1,5 @@
 {
   "undocumented": [
-    "/administration/admins",
     "/administration/audit",
     "/administration/groups",
     "/contests/:id/communications",
@@ -20,7 +19,6 @@
     "/infrastructure/containers",
     "/infrastructure/deployments",
     "/infrastructure/resources",
-    "/infrastructure/services",
     "/people/teams/:id",
     "/people/teams/:id/contests",
     "/people/teams/:id/members",
@@ -32,10 +30,8 @@
     "/ranking",
     "/ranking/appearance",
     "/ranking/credits",
-    "/ranking/users",
     "/ranking/users/:key",
     "/search",
-    "/security/blocks",
     "/security/overview",
     "/security/waf",
     "/system/about",

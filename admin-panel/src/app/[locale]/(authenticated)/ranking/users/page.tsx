@@ -1,9 +1,7 @@
 import { getRankingOverrideOptions } from '@/app/actions/ranking';
 import { getShownTargetChoices, getShownTargets } from '@/app/actions/rankingConfig';
 import { getRankingOverrides, type RankingOverride } from '@/app/actions/rankingOverrides';
-import { Card } from '@/components/core/Card';
-import { Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
+import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
 import { RankingConfigSurface } from '@/components/ranking/RankingConfigSurface';
 import { RankingHidesList } from '@/components/ranking/RankingHidesList';
 import { RankingOverrideList } from '@/components/ranking/RankingOverrideList';
@@ -40,44 +38,31 @@ function rowsForShard(
 }
 
 /**
- * The board's config, mounted ahead of the override surface it precedes.
+ * The shard's overrides: the shard strip, the add surface, then the ledger.
  *
- * WHY on this page and not a route of its own: the two surfaces answer one question in two
- * halves — what the board shows, then what wins over it — and an operator who can only find one
- * of them reads the other as the same control. The config half is gated on the same write
- * permission, because choosing what the board shows is the same act of control.
+ * WHY the strip is the first row of the section and not a page control: it selects the shard both
+ * the override list and the hides list read, so it has to be read before either, and the board
+ * keeps its section header for the title and the meaning of the rows.
  */
-async function ShownConfig({
+function OverridesRows({
   copy,
-  canShow,
+  shards,
+  shard,
+  overrides,
+  orphans,
+  options,
+  canOverride,
 }: {
-  readonly copy: RankingCopy;
-  readonly canShow: boolean;
-}): Promise<React.JSX.Element> {
-  const [rows, choices] = await Promise.all([getShownTargets(), getShownTargetChoices()]);
-  return (
-    <RankingConfigSurface copy={copy.shown} rows={rows} choices={choices} canShow={canShow} />
-  );
-}
-
-interface ShardOverridesProps {
   readonly copy: RankingCopy;
   readonly shards: readonly RankingShard[];
   readonly shard: RankingShard;
+  readonly overrides: readonly RankingOverride[];
+  readonly orphans: ReadonlySet<number>;
+  readonly options: Awaited<ReturnType<typeof getRankingOverrideOptions>> | null;
   readonly canOverride: boolean;
-}
-
-/** The toolbar and its diff pinned on top, the shard's list taking the rest; shape V2. */
-async function ShardOverrides({ copy, shards, shard, canOverride }: ShardOverridesProps): Promise<React.JSX.Element> {
-  const all = await getRankingOverrides();
-  const orphans = await readOrphanContestIds(all);
-  const options = canOverride ? await getRankingOverrideOptions() : null;
+}): React.JSX.Element {
   return (
-    <Card className="space-y-4">
-      <Text as="h2" variant="h3">
-        {copy.overrides.listTitle}
-      </Text>
-      <Text variant="muted">{copy.overrides.listHint}</Text>
+    <div className="space-y-4">
       <RankingShardTabs shards={shards} activeShard={shard.shard} copy={copy.overrides} />
       {canOverride && options !== null ? (
         <RankingOverrideSurface
@@ -93,41 +78,23 @@ async function ShardOverrides({ copy, shards, shard, canOverride }: ShardOverrid
       ) : null}
       <RankingOverrideList
         copy={copy.overrides}
-        rows={rowsForShard(all, shard, orphans)}
+        rows={rowsForShard(overrides, shard, orphans)}
         orphanContestIds={[...orphans]}
         canOverride={canOverride}
       />
-    </Card>
+    </div>
   );
 }
 
 /**
- * What the shard's board hides, beside the rows that ask it to.
+ * Three record kinds share this page, and each answers a different question about the same board:
+ * which contests it draws, which rows the operator filed over it, and which rows it actually
+ * drops. They are not one list — an override row and a participation flag hide a row by different
+ * means, and the config decides what is shown before either applies — so the page is a board.
  *
- * WHY on this page and not a route of its own: the override list answers "what did the operator
- * file" and this answers "what did the board drop" — two halves of one question, and they differ
- * exactly where it matters, because a participation flag hides a row with no override row at all.
- * A separate route would make the operator remember which of the two to open.
+ * WHY the config half sits on this page and not a route of its own: an operator who can only find
+ * one of the two surfaces reads the other as the same control.
  */
-async function ShardHides({
-  copy,
-  shard,
-}: {
-  readonly copy: RankingCopy;
-  readonly shard: RankingShard;
-}): Promise<React.JSX.Element> {
-  const hides = await readBoardHides(shard.contestId);
-  return (
-    <Card className="space-y-4">
-      <Text as="h2" variant="h3">
-        {copy.hides.title}
-      </Text>
-      <Text variant="muted">{copy.hides.hint}</Text>
-      <RankingHidesList copy={copy} hides={hides} />
-    </Card>
-  );
-}
-
 export default async function RankingOverridesPage({
   params,
   searchParams,
@@ -140,28 +107,80 @@ export default async function RankingOverridesPage({
     authorizeRoutePage('ranking.users'),
     searchParams,
   ]);
-  const copy = (await getDictionary(locale)).ranking;
+  const dict = await getDictionary(locale);
   const shards = await readRankingShards();
   const shard = selectShard(shards, readShardParam(query));
+  const canOverride = effective.has('ranking:override');
+
   if (shard === null) {
     return (
-      <Stack gap={6}>
-        <Card>
-          <Text variant="muted">{copy.overrides.noShards}</Text>
-        </Card>
-      </Stack>
+      <BoardPage
+        // The module shell above renders the title, the description and the trail.
+        ownsHeader={false}
+        breadcrumbs={[]}
+        title={dict.navigation.ranking.users.label}
+        description={dict.navigation.ranking.users.description}
+        state={<p className="text-sm text-muted-foreground">{dict.ranking.overrides.noShards}</p>}
+        sections={[]}
+      />
     );
   }
+
+  const overrides = await getRankingOverrides();
+  const [orphans, options, hides, shownRows, shownChoices] = await Promise.all([
+    readOrphanContestIds(overrides),
+    canOverride ? getRankingOverrideOptions() : Promise.resolve(null),
+    readBoardHides(shard.contestId),
+    getShownTargets(),
+    getShownTargetChoices(),
+  ]);
+
+  const sections: readonly BoardSection[] = [
+    {
+      key: 'shown',
+      title: dict.ranking.shown.title,
+      description: dict.ranking.shown.hint,
+      rows: (
+        <RankingConfigSurface
+          copy={dict.ranking.shown}
+          rows={shownRows}
+          choices={shownChoices}
+          canShow={canOverride}
+        />
+      ),
+    },
+    {
+      key: 'overrides',
+      title: dict.ranking.overrides.listTitle,
+      description: dict.ranking.overrides.listHint,
+      rows: (
+        <OverridesRows
+          copy={dict.ranking}
+          shards={shards}
+          shard={shard}
+          overrides={overrides}
+          orphans={orphans}
+          options={options}
+          canOverride={canOverride}
+        />
+      ),
+    },
+    {
+      key: 'hides',
+      title: dict.ranking.hides.title,
+      description: dict.ranking.hides.hint,
+      rows: <RankingHidesList copy={dict.ranking} hides={hides} />,
+    },
+  ];
+
   return (
-    <Stack gap={6}>
-      <ShownConfig copy={copy} canShow={effective.has('ranking:override')} />
-      <ShardOverrides
-        copy={copy}
-        shards={shards}
-        shard={shard}
-        canOverride={effective.has('ranking:override')}
-      />
-      <ShardHides copy={copy} shard={shard} />
-    </Stack>
+    <BoardPage
+      // The module shell above renders the title, the description and the trail.
+      ownsHeader={false}
+      breadcrumbs={[]}
+      title={dict.navigation.ranking.users.label}
+      description={dict.navigation.ranking.users.description}
+      sections={sections}
+    />
   );
 }

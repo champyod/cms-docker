@@ -4,7 +4,6 @@ import { useState } from 'react';
 
 import { grantLoginExemption, revokeLoginExemption } from '@/app/actions/securityExemptions';
 import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
 import { Input } from '@/components/core/Input';
 import { ReasonDialog } from '@/components/core/ReasonDialog';
 import { useReasonPrompt } from '@/hooks/useReasonPrompt';
@@ -30,6 +29,13 @@ function exemptionIdentityLabel(subject: string, ip: string): string {
   return `${subject || '*'} @ ${ip || '*'}`;
 }
 
+/**
+ * The standing exemptions, and the form that grants one.
+ *
+ * WHY the grant form stays even with no rows: an operator arrives here to create the first
+ * exemption, so the form cannot be a child of the list. The board section owns the frame and the
+ * meaning of empty; this renders the control and the rows.
+ */
 export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX.Element {
   const prompt = useReasonPrompt();
   const [scope, setScope] = useState<ExemptionScope>('account_address');
@@ -41,13 +47,8 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
   const canGrant = !missingInput;
 
   return (
-    <Card>
-      <h2 className="mb-1 text-lg font-semibold">Permanent exemptions</h2>
-      <p className="mb-3 text-sm text-muted-foreground">
-        A standing lift: the chosen account or address is never locked out or challenged until it is
-        revoked. This is a login-layer exemption, separate from the host bans fail2ban applies.
-      </p>
-      {prompt.feedback !== null && <p className="mb-3 text-sm text-muted-foreground">{prompt.feedback}</p>}
+    <div className="space-y-3">
+      {prompt.feedback !== null && <p className="text-sm text-muted-foreground">{prompt.feedback}</p>}
 
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1.5">
@@ -85,10 +86,8 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
         </Button>
       </div>
 
-      {exemptions.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">No permanent exemption is active.</p>
-      ) : (
-        <ul className="mt-4 space-y-2">
+      {exemptions.length > 0 && (
+        <ul className="space-y-2">
           {exemptions.map((exemption) => {
             const subject = exemption.subject ?? '';
             const exemptionIp = exemption.ip ?? '';
@@ -118,6 +117,6 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
       )}
 
       <ReasonDialog request={prompt.request} onClose={prompt.close} onSubmit={prompt.submit} />
-    </Card>
+    </div>
   );
 }

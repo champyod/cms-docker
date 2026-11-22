@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
+import { RegistryKindSection } from '@/components/infrastructure/RegistryKindSection';
 import {
   draftOfExposure,
   draftOfService,
@@ -53,17 +53,17 @@ const SERVICE: ServiceRecord = {
   pull_policy: 'missing',
 };
 
-function renderView(services: ServiceRecord[] = [SERVICE]): void {
+function renderView(services: ServiceRecord[] = [SERVICE], kind: 'service' | 'wiring' = 'service'): void {
   render(
     <DictionaryProvider dict={en}>
-      <ServiceRegistryView
+      <RegistryKindSection
+        kind={kind}
         services={services}
         wirings={[]}
         exposures={[]}
         contests={[{ id: 1, name: 'Autumn' }]}
-        title="Services"
-        description="The service registry"
         permissionKeys={['container:control']}
+        frontVhosts={[]}
       />
     </DictionaryProvider>,
   );
@@ -126,9 +126,8 @@ describe('the registry dialog edits by id', () => {
   });
 
   it('refuses a blank required number instead of writing zero', async () => {
-    renderView();
+    renderView([SERVICE], 'wiring');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Wirings' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add wiring' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 

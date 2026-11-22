@@ -72,7 +72,7 @@ function ImpactWarnings({ impact, copy }: { readonly impact: RankingImpact; read
 export function RankingImpactDiff({ copy, impact, loading, failed = false }: RankingImpactDiffProps): React.JSX.Element {
   return (
     <Card className="space-y-4">
-      <Text as="h2" variant="h4">{copy.impactTitle}</Text>
+      <Text as="h3" variant="h4">{copy.impactTitle}</Text>
       {failed ? (
         <InlineAlert tone="warning" density="compact" announce="polite">{copy.impactFailed}</InlineAlert>
       ) : loading ? (
