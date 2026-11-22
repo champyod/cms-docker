@@ -216,16 +216,23 @@ does not build the test targets. `cms-db/tests/large_object.rs:14` imports `Larg
 Mode` from the crate root, so the omission only appeared when the tests compiled. Check the tests, not the
 library: `cargo clippy --all-targets` and `cargo test`, never `cargo check` alone.
 
-**Open finding — a copy loop that no longer yields (S-3b, recorded not fixed).** The lane's report says
-"gevent: nothing to become", and that is wrong. `filecacher.py:73`, `:76` and `:774` call `gevent.sleep(0)`
-inside the copy loops, `:774` with the comment "Cooperative yield", precisely so a large copy does not
-starve the other greenlets sharing the service. The port's `filecache/store.rs:105` and `:131` do blocking
-disk I/O with no yield between chunks, so a large copy occupies a runtime worker for its duration where
-Python gave the scheduler a turn. Closing it needs one of two things, and both are decisions rather than
-porting: promote `tokio` to a direct `cms-db` dependency (it is already in `Cargo.lock` through sqlx, so no
-new crate enters the build, but no crate in the workspace depends on it directly today) and yield per
-chunk; or keep `cms-db` runtime-agnostic and run the copy on a runtime-aware caller. **Not urgent until a
-service copies multi-gigabyte files through this cache, which is exactly what submissions do.**
+**The copy loop that stopped yielding — RESOLVED (2026-11-22, operator-approved, `b244a8ad`).** The S-3b
+report said "gevent: nothing to become", and `store.rs`'s own module doc asserted the same thing: "has no
+counterpart and needs none". Both were wrong. `filecacher.py:73`, `:76` and `:774` call `gevent.sleep(0)`
+after every chunk, `:774` commented "Cooperative yield", so a large copy does not starve the greenlets
+sharing the service. The port had **no suspension point at all** on the file-to-backend path: `Writable::
+File::write_all` is a blocking write that returns immediately and `io::Read::read` never suspends, so a
+multi-gigabyte copy held its worker for the whole transfer — and submissions are exactly such files. The
+doc comment is how the gap survived review, so it is now rewritten to say what the code does and why.
+
+The decision was the operator's because it adds a manifest dependency: `tokio` is now a `cms-db`
+dependency, declared once in `[workspace.dependencies]` and referenced by both `cms-db` and `cms-audit`
+(the inline version it carried before moved into the same table, so one line owns the version). No crate
+entered `Cargo.lock` — it was already there through sqlx's `runtime-tokio`.
+
+The test makes the yield observable rather than assumed: on a `current_thread` runtime a spawned task can
+only run if the copy gives the scheduler a turn, so removing the yield fails with "the copy never gave the
+scheduler a turn, so it held its worker for the whole transfer" — seen, then restored.
 
 **A skip is reported as a pass, so a green count can prove nothing (found 2026-11-22, S-3a).** The live
 database tests return early when `CMS_DB_TEST_URL` is unset, and the harness records that as `ok` — the
