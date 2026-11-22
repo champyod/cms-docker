@@ -28,7 +28,7 @@ vi.mock('@/app/actions/securityPatching', () => ({
   endPatchingWaiver: mocks.endPatchingWaiver,
 }));
 
-import { PatchingPanel } from '@/components/security/PatchingPanel';
+import { PatchingToolbar } from '@/components/security/PatchingToolbar';
 
 const STATE: PatchingListState = {
   groups: [],
@@ -71,7 +71,7 @@ const PLAN: BulkWaiveResult = {
 };
 
 function renderPanel(canWaive: boolean): ReturnType<typeof render> {
-  return render(<PatchingPanel state={STATE} copy={en.security.patching} canWaive={canWaive} />);
+  return render(<PatchingToolbar page={STATE.page} copy={en.security.patching} canWaive={canWaive} />);
 }
 
 /** The dialog's date field: the shared Input does not wire `label` to an id, so it is found by type. */
@@ -122,7 +122,7 @@ describe('the bulk waiver on the patching page', () => {
   });
 
   it('renders the action in Thai from the Thai dictionary', () => {
-    render(<PatchingPanel state={STATE} copy={th.security.patching} canWaive />);
+    render(<PatchingToolbar page={STATE.page} copy={th.security.patching} canWaive />);
     expect(screen.getByRole('button', { name: th.security.patching.bulkWaive.button })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: th.security.patching.bulkWaive.button }));
     expect(screen.getByText(th.security.patching.bulkWaive.title)).toBeTruthy();
