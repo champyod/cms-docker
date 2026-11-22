@@ -30,16 +30,13 @@ export default async function UserTeamsPage({ params }: { params: Promise<{ loca
   await authorizeUserTab('people.user-tabs.teams');
   const dictionary = await getDictionary(locale);
   const memberships = await readRecordOrNotFound(async () => ((await getUserTeams(id)) ?? null));
-  const label = dictionary.navigation.people['user-tabs'].teams.label;
   return (
     <ListPage
-      // The record shell above renders the user's name, the trail and the tabs.
+      // The user's record shell renders this tab's name, the user, the trail and the tab rail.
       ownsHeader={false}
-      title={label}
-      // Why no filter and no toolbar: the read returns every membership this user holds in one
-      // pass, so there is no narrower set a filter could produce and nothing left out to page to.
-      // The footer states the whole set instead, which is the only total there is.
-      footer={<p className="text-sm text-muted-foreground">{`${label} (${memberships.length})`}</p>}
+      // Why no filter, no toolbar and no count line: the read returns every membership this user
+      // holds in one pass, so the table already shows the whole set and a total beneath it would
+      // repeat what the reader can count.
       empty={memberships.length === 0 ? <UserTeamsEmpty copy={dictionary.users} /> : undefined}
     >
       <UserTeamsTab memberships={memberships} copy={dictionary.users} locale={locale as 'en' | 'th'} />
