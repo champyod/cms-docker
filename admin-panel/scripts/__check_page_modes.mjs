@@ -52,8 +52,8 @@ function sourceText(dir, out = '') {
 const SOURCE = sourceText(join(ROOT, 'src'));
 
 const REACHABLE = [
-  { mode: 'high contrast', token: "'high-contrast'", applies: 'a control or hook toggles the class' },
-  { mode: 'density', token: 'density-compact', applies: 'a control toggles the density class' },
+  { mode: 'high contrast', token: 'applyHighContrast(', applies: 'a hook applies the class' },
+  { mode: 'density', token: 'applyDisplay(', applies: 'a hook applies the density class' },
 ];
 
 for (const { mode, token, applies } of REACHABLE) {
