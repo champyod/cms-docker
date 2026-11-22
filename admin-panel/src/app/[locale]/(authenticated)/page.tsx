@@ -134,6 +134,7 @@ export default async function AdminHomePage({
           when: item.timestamp ? formatInZone(item.timestamp.toISOString()) : '',
         }))}
         labels={dashboardLabels}
+      locale={locale}
       />
     </DashboardPage>
   );

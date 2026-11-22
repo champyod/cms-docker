@@ -49,6 +49,7 @@ export default async function SecurityOverviewPage({
       ownsHeader={false}
       state={<SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />}
       totals={cards}
+      locale={locale}
     >
       <p className="text-muted-foreground">{dict.dashboard.checkedAt.replace('{count}', checkedAt)}</p>
     </DashboardPage>

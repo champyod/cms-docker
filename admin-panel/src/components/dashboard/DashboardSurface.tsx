@@ -3,7 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { ROW_HEIGHT_CLASS, ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
-import { StatCard } from '@/components/core/StatCard';
+import { StatGrid } from '@/components/core/StatGrid';
 import { Text } from '@/components/core/Typography';
 import type { StatusType } from '@/components/core/StatusBadge';
 
@@ -68,11 +68,13 @@ export function DashboardSurface({
   service,
   activity,
   labels,
+  locale,
 }: {
   stats: DashboardStats;
   service: DashboardServiceState;
   activity: DashboardActivityRow[];
   labels: DashboardLabels;
+  locale?: string;
 }): React.JSX.Element {
   const columns: ResponsiveColumn<DashboardActivityRow>[] = [
     {
@@ -100,16 +102,15 @@ export function DashboardSurface({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label={labels.stats.totalUsers} value={stats.usersCount} reference={fill(labels.stats.enrolled, stats.activeContesters)} />
-        <StatCard label={labels.stats.totalContests} value={stats.contestsCount} reference={fill(labels.stats.activeNow, stats.activeContestsCount)} />
-        <StatCard label={labels.stats.totalSubmissions} value={stats.submissionsCount} reference={fill(labels.stats.pending, stats.pendingSubmissions)} />
-        <StatCard
-          label={labels.servicesTitle}
-          value={`${service.running}/${service.total}`}
-          reference={labels.servicesDetail}
-        />
-      </div>
+      <StatGrid
+        locale={locale}
+        totals={[
+          { label: labels.stats.totalUsers, value: stats.usersCount, reference: fill(labels.stats.enrolled, stats.activeContesters) },
+          { label: labels.stats.totalContests, value: stats.contestsCount, reference: fill(labels.stats.activeNow, stats.activeContestsCount) },
+          { label: labels.stats.totalSubmissions, value: stats.submissionsCount, reference: fill(labels.stats.pending, stats.pendingSubmissions) },
+          { label: labels.servicesTitle, value: `${service.running}/${service.total}`, reference: labels.servicesDetail },
+        ]}
+      />
 
       <Card className="p-0">
         <div className="px-4 py-3">

@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
 
 import { PageSurface } from '@/components/core/PageSurface';
-import { StatCard, type StatCardProps } from '@/components/core/StatCard';
+import { StatGrid } from '@/components/core/StatGrid';
+import type { StatCardProps } from '@/components/core/StatCard';
 import type { PageSlots } from '@/components/patterns/page-types';
 
 /**
@@ -17,6 +18,8 @@ export interface DashboardPageProps extends PageSlots {
    * its own column count and card padding, and then two dashboards disagree about what a metric is.
    */
   readonly totals?: readonly StatCardProps[];
+  /** Passed to the counts so they are grouped in the reader's language. */
+  readonly locale?: string;
   /** False when a module shell above already renders the page header. */
   readonly ownsHeader?: boolean;
 }
@@ -28,6 +31,7 @@ export function DashboardPage({
   actions,
   state,
   totals,
+  locale,
   children,
   ownsHeader = true,
 }: DashboardPageProps): React.JSX.Element {
@@ -35,13 +39,7 @@ export function DashboardPage({
     <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="space-y-4">
         {state}
-        {totals && totals.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {totals.map((total) => (
-              <StatCard key={total.label} {...total} />
-            ))}
-          </div>
-        )}
+        {totals && totals.length > 0 && <StatGrid totals={totals} locale={locale} />}
         {children}
       </div>
     </PageSurface>
