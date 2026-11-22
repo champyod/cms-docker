@@ -5,7 +5,6 @@ import { ArchiveRestore } from 'lucide-react';
 
 import { EmptyState } from '@/components/core/EmptyState';
 import { Stack } from '@/components/core/Layout';
-import { Tabs } from '@/components/core/Tabs';
 import { ArchiveBrowserSection } from '@/components/backup-restore/ArchiveBrowserSection';
 import { BackupSelectionSection } from '@/components/backup-restore/BackupSelectionSection';
 import { DirLocationSwitcher } from '@/components/backup-restore/DirLocationSwitcher';
@@ -21,21 +20,23 @@ interface BackupRestoreClientProps {
     readonly permissionKeys: readonly string[];
     readonly locations: readonly DirLocation[];
     readonly defaultLocationId: string;
+    /** Which workflow the address asks for; the layout renders the switcher. */
+    readonly activeMode: BackupModeId;
 }
 
 export function BackupRestoreClient({
     permissionKeys,
     locations,
     defaultLocationId,
+    activeMode,
 }: BackupRestoreClientProps): React.JSX.Element {
     const effective = new Set(permissionKeys);
     const visibleTabs = BACKUP_MODES.filter((tab) => tab.anyOf.some((key) => hasEffectivePermission(effective, key)));
-    const [activeTabId, setActiveTabId] = useState<BackupModeId>(visibleTabs[0]?.id ?? BACKUP_MODES[0].id);
     const [activeLocationId, setActiveLocationId] = useState(defaultLocationId);
     // A selective dump starts detached, so the archive browser is told to look again rather
     // than showing the pre-run list until the operator presses Refresh.
     const [archiveRefreshToken, setArchiveRefreshToken] = useState(0);
-    const activeTab = visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0];
+    const activeTab = visibleTabs.find((tab) => tab.id === activeMode) ?? visibleTabs[0];
 
     if (activeTab === undefined) {
         return (
@@ -49,12 +50,6 @@ export function BackupRestoreClient({
 
     return (
         <Stack gap={6}>
-            <Tabs
-                items={visibleTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
-                activeId={activeTab.id}
-                ariaLabel="Backup and restore modes"
-                onSelect={(id) => setActiveTabId(id as BackupModeId)}
-            />
             {activeTab.showsLocationSwitcher && (
                 <DirLocationSwitcher locations={locations} activeId={activeLocationId} onSelect={setActiveLocationId} />
             )}

@@ -10,7 +10,7 @@ import type { BreadcrumbItem } from '@/lib/navigation/types';
  * groups at once. Shared, the form grew switch rows it never needed and settings inherited a
  * submit button implying one record.
  */
-export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'form', 'settings', 'board', 'redirect'] as const;
+export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'form', 'settings', 'board', 'modes', 'redirect'] as const;
 
 export type PageArchetype = (typeof PAGE_ARCHETYPES)[number];
 

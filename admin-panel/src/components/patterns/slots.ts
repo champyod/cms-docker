@@ -64,6 +64,13 @@ export const PAGE_SLOTS: Readonly<Record<Exclude<PageArchetype, 'redirect'>, rea
     { key: 'sectionActions', asks: 'What can I do inside a section?', required: false },
     { key: 'action', asks: 'What is the one thing to do about the page state?', required: false },
   ],
+  modes: [
+    STATE,
+    FRESHNESS,
+    { key: 'modes', asks: 'Which workflow am I in, and which can I not open?', required: true },
+    { key: 'mode', asks: 'What does this workflow need from me?', required: true },
+    { key: 'action', asks: 'What is the one thing to do here?', required: false },
+  ],
   settings: [
     STATE,
     { key: 'groups', asks: 'Which settings belong together?', required: true },

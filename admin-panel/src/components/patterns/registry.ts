@@ -56,6 +56,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   // Four record kinds answer one query, each with its own rows and its own meaning of empty.
   '/search': 'board',
   // Five topics of reference, none of them a record the reader acts on.
+  '/system/backup-restore': 'modes',
   '/system/docs': 'board',
   // A record landing carries no surface either: it resolves the record and forwards to its default
   // tab, which is where the detail actually lives.
@@ -112,6 +113,7 @@ export const ARCHETYPE_COMPONENT: Readonly<Record<PageArchetype, string>> = {
   form: 'FormPage',
   settings: 'SettingsPage',
   board: 'BoardPage',
+  modes: 'ModePage',
   // A redirect has no component: the gate checks it renders no page surface at all.
   redirect: '',
 };
