@@ -19,19 +19,24 @@
 //! Each of those steps is one module's whole subject — [`pipes`] makes the directory
 //! the two phases talk through, [`boxes`] opens the box of one phase and hands it the
 //! manager it runs, [`launch`] starts each phase under the dataset's own limits, and
-//! [`verdict`] reads what the two left behind.
+//! [`verdict`] reads what the two left behind. The one program they both run is built
+//! by [`compile`]: the dataset's manager, its header, the two submitted sources and
+//! the headers they are compiled against.
 //!
 //! # Errors
 //!
 //! [`TaskError`], and only that: parameters that are not the one a Two Steps task has, a
-//! result holding a number of executables other than one, a limit the dataset set that
-//! is not a positive number, a directory or a named pipe that could not be made, a file
-//! the store would not hand over, and a run the box could not carry or read back.
+//! submission that does not carry exactly two files, a dataset missing the manager or one
+//! of the headers it is compiled with, a result holding a number of executables other
+//! than one, a limit the dataset set that is not a positive number, a directory or a
+//! named pipe that could not be made, a file the store would not hand over, and a run the
+//! box could not carry or read back.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod boxes;
+mod compile;
 mod launch;
 mod pipes;
 mod verdict;
