@@ -129,3 +129,16 @@ Decided by the operator, and it governs how every later item in this epic is put
 Size decides how many of the three apply: one file or one item needs none of them; a shared primitive
 or anything touching more than one page needs UI and file structure; a taxonomy or contract change
 needs all three.
+
+### Amendment: when the six rules do not apply
+
+Recorded after the operator asked why a question had gone out at all: "dont should we have more
+question call? or it just pass the confidence threshold on my preference to be able to auto-continue?"
+
+The ask flow governs a genuine fork. It does not govern a decision his own criteria already settle:
+security, then efficiency with a single source and the most customizability, then the final code and
+UI. When those leave one surviving candidate, it is built and the render is shown in the report, not
+offered as a question first. The four sizes above the top of the ladder were that case: a status
+heading is text and belongs on the ladder, a gauge value is a card's headline and belongs one step
+below it, and a 20% opacity numeral is decoration the law refuses. One candidate each, so three
+questions were three too many.
