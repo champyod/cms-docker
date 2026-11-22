@@ -222,6 +222,56 @@ A lane is removed as soon as it is merged and its gate is green — worktree del
 `git worktree prune`. A merged lane left on disk is 1-11 GB of build artifacts holding a branch label
 nothing needs, and it makes the next sweep unable to tell stale work from live work.
 
+### 7.3 `psutil` replacement — decided: `procfs` (2026-11-22)
+
+`ResourceService` is the one service that needs neither `cms.db` nor `cms.grading`, so it is the natural
+second swap after the logger — except it samples processes through `psutil`, which has no std
+equivalent. Measured surface, from `grep 'psutil\.' src/`: `virtual_memory`, `swap_memory`, `cpu_times`,
+`cpu_count`, `process_iter`, and per process `cmdline`, `cpu_times`, `as_dict`, `is_running`,
+`NoSuchProcess`. All of it is `/proc` on Linux.
+
+Three candidates, from crates.io metadata rather than memory:
+
+| | License | MSRV | Normal dependencies | Latest |
+|---|---|---|---|---|
+| **A. direct `/proc` with `std`** | ours | — | **none** | — |
+| `procfs` 0.18.0 | MIT OR Apache-2.0 | 1.70 | `bitflags`, `procfs-core`, `rustix` | 2025-08-30 |
+| `sysinfo` 0.40.4 | MIT | 1.95 | `libc`, plus optional per-platform crates | 2026-11-16 |
+
+Toolchain satisfies both crates (`rustc 1.99.1` locally, `rust:1-bookworm` in the image), so MSRV did
+not decide it. **Operator first chose A** (zero dependencies), then revised to **`sysinfo`**, on the reasoning that
+"no dependency" is not the same as "more secure" — it trades a supply-chain risk for a parser we own on
+attacker-influenced input (`any` process sets its own `comm` and `argv`). That reasoning was accepted.
+
+**`sysinfo` was then measured and does not fit.** Its 0.40 API cannot produce three values the service
+returns: `Cpu` exposes only `usage`, not the per-key cumulative times `ResourceService.py:325-328`
+differences into `data["cpu"]`; `System` has total/available/free/used memory and swap but **no `cached`
+and no `buffers`**, which `:341-345` reports; and per process it offers `accumulated_cpu_time()` only,
+where `:83` stores psutil's separate user and system figures.
+
+**Chosen: `procfs` 0.18.0** — Linux-only, which is exactly the deployment (Debian packaging under
+`src/debian/`, three systemd units under `src/config/systemd/`, `ubuntu:noble` base image, and no
+`darwin`/`macos`/`windows` reference anywhere in the tree). Its `CpuTime` carries all ten fields psutil
+reports, `Meminfo` carries `buffers` and `cached`, and `/proc/[pid]/stat` gives the per-process split.
+Cost: `bitflags`, `procfs-core`, `rustix`.
+
+**Rejected: `sysinfo`** — measured above; it cannot produce three of the values the service returns.
+
+**Rejected: direct `/proc` with `std`** — the operator raised it, then withdrew it for a better reason
+than "fewer crates": *no dependency* is not the same as *more secure*, it trades a supply-chain risk for
+a parser we own. And `/proc` is attacker-influenced input — any process sets its own `comm` (via
+`prctl`, 15 characters) and its whole `argv`. The hazard that makes this concrete:
+`/proc/[pid]/stat` field 2 is wrapped in parentheses and may itself contain **spaces and a `)`**, so the
+only correct split is at the **last** `)`. `procfs` exists to get that right. Severity was checked
+before it was used as an argument: `kill_service` does **not** kill by pid — it sends `quit` over RPC
+(`ResourceService.py:441`) — so a mis-parse could not kill the wrong process; the realistic worst case
+is a panic, i.e. a crashed resource monitor.
+
+Unit note carried into the port: cpu times are clock ticks and converting them normally needs
+`sysconf(_SC_CLK_TCK)`; the kernel's userspace ABI fixes USER_HZ at 100, and the service derives
+percentages from **deltas** between two samples, where the constant cancels — but `resident` is reported
+absolutely and must be converted to bytes.
+
 ### 7.1 First service swap completed — the logger (2026-11-22)
 
 `log-service` in `docker-compose.yml` now runs `cms-log-service`. This is the first W-B swap and the
