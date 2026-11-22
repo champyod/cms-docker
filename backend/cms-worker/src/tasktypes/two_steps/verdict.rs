@@ -15,7 +15,7 @@
 use crate::job::EvaluationJob;
 use crate::measure::ExitStatus;
 use crate::stats::ExecutionStats;
-use crate::tasktypes::evaluate::what_went_wrong;
+use crate::tasktypes::outcome::what_went_wrong;
 use crate::tasktypes::{OutputFile, Run, TaskError};
 
 use super::{Evaluation, OUTPUT};
@@ -74,6 +74,7 @@ pub(super) fn decide(first: &ExecutionStats, second: &ExecutionStats) -> Evaluat
         ran: clean(first) && clean(second),
         outcome: None,
         text: Vec::new(),
+        admin_text: None,
         stats: if success {
             Some(first.merged_with(second, true))
         } else {

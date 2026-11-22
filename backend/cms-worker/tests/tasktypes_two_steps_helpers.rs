@@ -27,6 +27,7 @@ use std::time::Duration;
 
 use cms_proto::{DigestMap, Operation, OperationKind};
 use cms_worker::job::{Dataset, EvaluationJob, Submission, Testcase};
+use cms_worker::steps::TrustedLimits;
 use cms_worker::tasktypes::{CompilationLimits, Runtime};
 
 pub use toolchain::{
@@ -92,7 +93,13 @@ pub fn runtime_of(dir: &Path, log: &str, answers: bool) -> Runtime {
         memory: Some(64 * 1024 * 1024),
         processes: Some(4),
     };
-    Runtime::new(stub, dir, limits, Some(2048 * 1024))
+    Runtime::new(
+        stub,
+        dir,
+        limits,
+        Some(2048 * 1024),
+        TrustedLimits::new(4, Duration::from_secs(10), 64 * 1024 * 1024),
+    )
 }
 
 /// The record of every run's start and end, in the order they happened.

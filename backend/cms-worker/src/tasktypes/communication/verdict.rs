@@ -22,7 +22,7 @@ use crate::stats::ExecutionStats;
 
 use super::charge::charged;
 use super::manager::from_manager;
-use crate::tasktypes::evaluate::what_went_wrong;
+use crate::tasktypes::outcome::what_went_wrong;
 use crate::tasktypes::{Run, TaskError};
 
 use super::{Communication, EXECUTED, NO_CREDIT, OUTPUT};

@@ -7,12 +7,12 @@
 //! compared — by a plain diff, or by a checker the dataset holds — and nothing else
 //! about the task is configurable.
 //!
-//! So both phases are short, because neither of them makes a box. The compilation
-//! reports that there was nothing to compile, which is a compilation that worked; the
-//! evaluation names the answer for the testcase the job names and hands it on where
-//! the store keeps it, as a [`Batch`](super::Batch) evaluation hands on the file a
-//! run wrote. Judging that answer is the step after this one, so an answer that was
-//! carried has no score yet.
+//! So both phases are short, because neither of them makes a box of its own. The
+//! compilation reports that there was nothing to compile, which is a compilation that
+//! worked; the evaluation names the answer for the testcase the job names and judges it
+//! where the store keeps it — by a checker the dataset holds, or by a white diff — as a
+//! [`Batch`](super::Batch) evaluation judges the file a run wrote. The only box a
+//! carried answer ever gets is the one a checker needs to be run in.
 //!
 //! A submission here is partial by definition, since a contestant may answer some
 //! testcases and not others. A testcase whose answer was not carried is therefore
@@ -22,20 +22,24 @@
 //! # Errors
 //!
 //! [`TaskError`], and only that: parameters that are not the one an `OutputOnly` task
-//! has, and a digest a job carries for a carried answer that the `DIGEST` domain
-//! does not admit. A missing answer is not among them — it is a score of zero.
+//! has, a digest a job carries for a carried answer that the `DIGEST` domain does not
+//! admit, and what the judge refuses for the answer. A missing answer is not among
+//! them — it is a score of zero.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
+
+use std::sync::Arc;
 
 use serde_json::Value;
 
 use cms_proto::DigestMap;
 
-use super::batch::TaskError;
-use super::{handle, Compilation};
+use super::judge::{self, Judgement, OutputSource, CHECKER_CODENAME};
+use super::TaskError;
+use super::{handle, Compilation, Runtime};
 use crate::job::EvaluationJob;
-use crate::stage::FileDigest;
+use crate::stage::{Cache, FileDigest};
 
 /// The choice that has a checker read the answer rather than a plain diff.
 const OUTPUT_EVAL_COMPARATOR: &str = "comparator";
@@ -57,21 +61,25 @@ pub struct OutputOnly {
     output_eval: String,
 }
 
-/// What one `OutputOnly` evaluation is worth: the answer it handed on, or the sentence
-/// that says there was none.
+/// What one `OutputOnly` evaluation is worth: the answer that was judged, or the
+/// sentence that says there was none.
 ///
-/// The score of an answer that was carried is absent rather than zero, because
-/// judging it is the step after this one — the same answer a
-/// [`Batch`](super::Batch) evaluation leaves as a file is left here as a digest.
+/// There is no run and so no file of a box's own: a carried answer is judged where the
+/// store keeps it, and its score and sentences are the judge's.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Answer {
-    /// The score, zero where the testcase's answer was not carried and absent where
-    /// the one that was has not been judged.
+    /// Whether the answer could be judged at all: false where the dataset's checker
+    /// could not be run, which is not a wrong answer.
+    pub success: bool,
+    /// The score, zero where the testcase's answer was not carried and absent where the
+    /// judge could not decide.
     pub outcome: Option<f64>,
     /// The sentences a report shows, the first of which the rest are arguments for.
     pub text: Vec<String>,
-    /// The digest the carried answer is stored under, which is how a comparison or a
-    /// checker reads it. Absent where the testcase's answer was not carried.
+    /// What only an administrator is shown, absent where the judge wrote none.
+    pub admin_text: Option<String>,
+    /// The digest the carried answer is stored under. Absent where the testcase's
+    /// answer was not carried.
     pub output: Option<FileDigest>,
 }
 
@@ -109,13 +117,19 @@ impl OutputOnly {
     }
 
     /// Judges one testcase from the answer the submission carried for it, in the
-    /// reference's order: the name that answer is filed under, then the answer.
+    /// reference's order: the name that answer is filed under, then the answer, then
+    /// the judge.
     ///
     /// # Errors
     ///
     /// [`TaskError`], and only that: a digest a job carries for a carried answer that
-    /// the `DIGEST` domain does not admit.
-    pub fn evaluate(&self, job: &EvaluationJob) -> Result<Answer, TaskError> {
+    /// the `DIGEST` domain does not admit, and what the judge refuses for the answer.
+    pub fn evaluate(
+        &self,
+        job: &EvaluationJob,
+        runtime: &Runtime,
+        store: Box<dyn Cache>,
+    ) -> Result<Answer, TaskError> {
         let codename = job
             .operation
             .testcase_codename
@@ -124,11 +138,17 @@ impl OutputOnly {
         let Some(answer) = carried(job, codename)? else {
             return Ok(Answer::not_carried());
         };
-        Ok(Answer {
-            outcome: None,
-            text: Vec::new(),
-            output: Some(answer),
-        })
+        let checker = self.uses_comparator().then_some(CHECKER_CODENAME);
+        let judged = judge::eval_output(
+            job,
+            checker,
+            OutputSource::Digest(answer.clone()),
+            "",
+            &[],
+            runtime,
+            Arc::from(store),
+        )?;
+        Ok(Answer::judged(answer, judged))
     }
 }
 
@@ -137,9 +157,22 @@ impl Answer {
     /// zero and the sentence that says so, and no answer to hand on.
     fn not_carried() -> Self {
         Self {
+            success: true,
             outcome: Some(NO_CREDIT),
             text: vec![NOT_CARRIED.to_owned()],
+            admin_text: None,
             output: None,
+        }
+    }
+
+    /// What a carried answer is worth, as the judge decided it.
+    fn judged(answer: FileDigest, judgement: Judgement) -> Self {
+        Self {
+            success: judgement.success,
+            outcome: judgement.outcome,
+            text: judgement.text,
+            admin_text: judgement.admin_text,
+            output: Some(answer),
         }
     }
 }

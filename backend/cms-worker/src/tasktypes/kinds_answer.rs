@@ -19,22 +19,26 @@ use serde_json::Value;
 
 use cms_proto::DigestMap;
 
-use super::batch::{TaskError, SOURCE_PLACEHOLDER};
+use super::batch::SOURCE_PLACEHOLDER;
 use super::batch_and_output::{Answer, Origin};
+use super::judge::Judgement;
 use super::output_only::{NOT_CARRIED, NO_CREDIT};
 use super::Evaluation;
+use super::TaskError;
 use crate::stage::FileDigest;
 
 impl Answer {
     /// What a testcase the submission carried an answer for is worth: the digest the
-    /// answer is kept under, and the word a checker is told which kind it holds.
-    pub(super) fn carried(answer: FileDigest, kind: &'static str) -> Self {
+    /// answer is kept under, the word a checker is told which kind it holds, and what
+    /// the judge decided about the answer itself.
+    pub(super) fn carried(answer: FileDigest, kind: &'static str, judgement: Judgement) -> Self {
         Self {
-            success: true,
-            outcome: None,
-            text: Vec::new(),
+            success: judgement.success,
+            outcome: judgement.outcome,
+            text: judgement.text,
+            admin_text: judgement.admin_text,
             stats: None,
-            sandboxes: Vec::new(),
+            sandboxes: judgement.sandboxes,
             origin: Some(Origin::Carried(answer)),
             extra_args: vec![kind.to_owned()],
         }
@@ -47,6 +51,7 @@ impl Answer {
             success: true,
             outcome: Some(NO_CREDIT),
             text: vec![NOT_CARRIED.to_owned()],
+            admin_text: None,
             stats: None,
             sandboxes: Vec::new(),
             origin: None,
@@ -55,7 +60,7 @@ impl Answer {
     }
 
     /// What a run is worth as the answer it left: what the box reported, what the run
-    /// was charged, and the file a comparison or a checker reads. A run that wrote no
+    /// was charged, and the file a comparison or a checker read. A run that wrote no
     /// answer hands nothing on, so it is given no word either.
     pub(super) fn from_run(mut run: Evaluation, kind: &'static str) -> Self {
         let origin = run.output_file.take().map(Origin::Written);
@@ -68,6 +73,7 @@ impl Answer {
             success: run.success,
             outcome: run.outcome,
             text: run.text,
+            admin_text: run.admin_text,
             stats: run.stats,
             sandboxes: run.sandboxes,
             origin,

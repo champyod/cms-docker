@@ -17,7 +17,8 @@ use serde_json::json;
 
 use helpers::{
     answered, content_of, digests, evaluate_job, flags_of, runtime_of, staged, store_of, workspace,
-    StubToolchain, CLEAN_LOG, EXECUTABLE, INPUT_DIGEST, NOTHING, PROGRAM_DIGEST, STOPPED_LOG,
+    StubToolchain, CLEAN_LOG, EXECUTABLE, GRADER_DIGEST, INPUT_DIGEST, NOTHING, PROGRAM_DIGEST,
+    STOPPED_LOG,
 };
 
 /// The parameters of a task that stands by itself and redirects both its streams,
@@ -54,9 +55,11 @@ fn an_evaluation_runs_the_executable_under_the_datasets_limits_and_hands_on_its_
 
     assert!(evaluated.success && evaluated.ran);
     assert_eq!(
-        evaluated.outcome, None,
-        "an answer not yet judged has no score"
+        evaluated.outcome,
+        Some(0.0),
+        "the run's answer is not the dataset's"
     );
+    assert_eq!(evaluated.text, vec!["Output isn't correct"]);
     let answer = evaluated.output_file.as_ref().expect("the file to compare");
     assert!(answer.path.ends_with("output.txt"));
     assert_eq!(answer.filename, "");
@@ -76,6 +79,39 @@ fn an_evaluation_runs_the_executable_under_the_datasets_limits_and_hands_on_its_
             "--cg-mem=1024",
             "--processes=1000",
         ],
+    );
+}
+
+#[test]
+fn a_comparator_batch_is_judged_by_the_datasets_checker_in_a_box_of_its_own() {
+    let dir = workspace("evaluate-checker");
+    // One stub serves both boxes: the run is told where to write, the checker is not.
+    let verdict = "if [ -n \"$out\" ]; then printf 'the answer' > \"$home/${out##*/}\"; \
+                   else printf '1.0\\n'; printf 'Output is correct\\n' >&2; fi\n:";
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict);
+    let mut job = evaluate_job(one_executable());
+    job.managers = digests(&[("checker", GRADER_DIGEST)]);
+    let comparator =
+        Batch::new(&json!(["alone", ["", ""], "comparator"])).expect("three parameters are a task");
+
+    let judged = comparator
+        .evaluate(&job, &StubToolchain, &runtime, Box::new(store_of(&dir)))
+        .expect("the evaluation must run");
+
+    assert!(judged.success);
+    assert_eq!(judged.outcome, Some(1.0), "the checker's own score");
+    assert_eq!(judged.text, vec!["Output is correct"]);
+    assert_eq!(judged.sandboxes.len(), 2, "the run's box and the check's");
+    assert!(judged.sandboxes[1].ends_with("cms-sandbox-check"));
+    assert_eq!(
+        staged(&judged.sandboxes[1]),
+        vec![
+            "checker",
+            "correct_output.txt",
+            "flags.txt",
+            "input.txt",
+            "user_output.txt",
+        ]
     );
 }
 

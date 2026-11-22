@@ -20,7 +20,14 @@ use std::time::Duration;
 use cms_proto::{DigestMap, Operation, OperationKind};
 use cms_worker::job::{CompilationJob, Dataset, EvaluationJob, Submission, Testcase};
 use cms_worker::stage::{Cache, CacheHandle, FileDigest, FsCache};
-use cms_worker::tasktypes::{CompilationLimits, Runtime, Toolchain};
+use cms_worker::steps::TrustedLimits;
+use cms_worker::tasktypes::{CompilationLimits, Runtime};
+
+#[path = "tasktypes_toolchain.rs"]
+mod toolchain_stub;
+
+#[allow(unused_imports)]
+pub use toolchain_stub::StubToolchain;
 
 /// The names a job is addressed by, which every record here is the same one of.
 const OBJECT: i64 = 7;
@@ -41,38 +48,6 @@ pub const FAILED_LOG: &str = "time:0.5\ntime-wall:1.5\ncg-mem:2048\nstatus:RE\ne
 pub const STOPPED_LOG: &str = "time:5\ntime-wall:5\ncg-mem:2048\nstatus:TO\nexitcode:0\n";
 /// What a run expected to have answered nothing leaves behind.
 pub const NOTHING: &str = ":";
-/// A language that answers with the commands a test chose.
-pub struct StubToolchain;
-
-impl Toolchain for StubToolchain {
-    fn source_extension(&self) -> &str {
-        ".cpp"
-    }
-
-    fn executable_extension(&self) -> &str {
-        ""
-    }
-
-    fn compiles_against(&self, manager: &str) -> bool {
-        manager.ends_with(".cpp") || manager.ends_with(".h")
-    }
-
-    fn compilation_commands(&self, sources: &[String], executable: &str) -> Vec<Vec<String>> {
-        vec![vec![format!("compile {executable}"), sources.join(" ")]]
-    }
-
-    fn evaluation_commands(
-        &self,
-        executable: &str,
-        main: &str,
-        args: &[String],
-    ) -> Vec<Vec<String>> {
-        let mut command = vec![format!("run {executable}"), main.to_owned()];
-        command.extend(args.iter().cloned());
-        vec![command]
-    }
-}
-
 pub fn digests(pairs: &[(&str, &str)]) -> DigestMap {
     pairs
         .iter()
@@ -208,7 +183,13 @@ pub fn runtime_of(dir: &Path, code: &str, log: &str, leaves: &str) -> Runtime {
         memory: Some(64 * 1024 * 1024),
         processes: Some(4),
     };
-    Runtime::new(program, dir, limits, Some(2048 * 1024))
+    Runtime::new(
+        program,
+        dir,
+        limits,
+        Some(2048 * 1024),
+        TrustedLimits::new(4, Duration::from_secs(10), 64 * 1024 * 1024),
+    )
 }
 
 /// The names of the files a box was handed, in one order however it wrote them.

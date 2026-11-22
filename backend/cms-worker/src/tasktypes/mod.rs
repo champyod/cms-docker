@@ -14,7 +14,8 @@
 //! reference does the work: `Batch::compile` stages the sources and the managers
 //! the language reads, runs the compilation commands and collects the
 //! executable; `Batch::evaluate` stages the executable and the input, runs it
-//! under the dataset's limits, and maps what came back to an outcome.
+//! under the dataset's limits, maps what came back to an outcome, and judges the
+//! answer it wrote.
 //!
 //! [`OutputOnly`] is the one for a submission that is a list of answers rather than
 //! a program: nothing is compiled, and a testcase is judged on the file the
@@ -23,6 +24,12 @@
 //! order the reference does: a carried answer wins over a run, a testcase the
 //! dataset listed as output-only is never run, and everything else is a [`Batch`]
 //! testcase whose two phases are reused unchanged.
+//!
+//! Every one of them ends in [`eval_output`], which is the judge: the answer is
+//! compared with the dataset's by a checker it holds or by a white diff, and the
+//! score, the sentence a contestant is shown and the sentence an administrator is
+//! shown are what it returns. That is what makes an unjudged run impossible to hand
+//! on rather than merely discouraged.
 //!
 //! Three things are the caller's, because none of them is a task type's business.
 //! The language a job names is a [`Toolchain`], and the lookup that produced it
@@ -45,29 +52,34 @@
 
 mod batch;
 mod batch_and_output;
+mod boxed;
 mod communication;
 mod compile;
+mod error;
 mod evaluate;
+mod judge;
 mod kinds_answer;
+mod outcome;
 mod output_only;
 mod two_steps;
 
-use std::fs;
-use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-pub use batch::{Batch, TaskError};
+pub use batch::Batch;
 pub use batch_and_output::{Answer as BatchAndOutputAnswer, BatchAndOutput, Origin};
+pub use boxed::Runtime;
 pub use communication::{Communication, Verdict};
 pub use compile::Compilation;
-pub use evaluate::{Evaluation, OutputFile};
+pub use error::TaskError;
+pub use judge::{eval_output, Judgement, OutputSource};
+pub use outcome::{Evaluation, OutputFile};
 pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
 pub use two_steps::TwoSteps;
 
-use crate::sandbox::{Launch, Options, Sandbox};
-use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
-use crate::stats::ExecutionStats;
+pub(crate) use boxed::{Run, Shared};
+
+use crate::stage::{CacheHandle, FileDigest, StageError};
 
 /// How many times a CPU limit is charged against the wall clock a run must finish
 /// inside, because a run that is stopped is still charged for being stopped.
@@ -127,107 +139,6 @@ pub struct CompilationLimits {
     pub memory: Option<u64>,
     /// How many processes a compilation may have alive at once.
     pub processes: Option<u32>,
-}
-
-/// Where a box is made, what a compilation is held to and how large a file an
-/// evaluation may create: the settings every run of this worker carries before a
-/// task type changes anything.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Runtime {
-    program: PathBuf,
-    temp_dir: PathBuf,
-    /// The three numbers a compilation is held to.
-    pub compilation: CompilationLimits,
-    /// The largest file an evaluation may create, in bytes, or `None` for a file
-    /// as large as the machine allows. It bounds the box rather than a testcase,
-    /// so it is the same size for every evaluation run this worker makes, and a
-    /// compilation is not held to it.
-    pub file_size: Option<u64>,
-}
-
-impl Runtime {
-    /// The directory a task type makes its own files in, which is where a box's
-    /// files are and so where anything that belongs to a run beside a box goes.
-    pub(super) fn temp_dir(&self) -> &Path {
-        &self.temp_dir
-    }
-
-    /// A runtime whose boxes are made under `temp_dir`, whose runs are launched
-    /// under the isolation program at `program`, and whose evaluation runs may
-    /// create a file of `file_size` bytes.
-    #[must_use]
-    pub fn new(
-        program: impl Into<PathBuf>,
-        temp_dir: impl Into<PathBuf>,
-        compilation: CompilationLimits,
-        file_size: Option<u64>,
-    ) -> Self {
-        Self {
-            program: program.into(),
-            temp_dir: temp_dir.into(),
-            compilation,
-            file_size,
-        }
-    }
-
-    /// A box named `name` and the files it is handed, over one directory.
-    fn open(&self, name: &str, store: Box<dyn Cache>) -> Result<Run, TaskError> {
-        let sandbox =
-            Sandbox::new(&self.program, &self.temp_dir, name).map_err(TaskError::Spawn)?;
-        let files = Stage::at(sandbox.home(), store).map_err(TaskError::Stage)?;
-        Ok(Run { sandbox, files })
-    }
-}
-
-/// One run's box and the files it is handed, over a single directory.
-///
-/// The two halves are the same directory: the box launches the run inside it and
-/// the stage is what the run finds there.
-struct Run {
-    sandbox: Sandbox,
-    files: Stage,
-}
-
-impl Run {
-    fn sandbox(&mut self) -> &mut Sandbox {
-        &mut self.sandbox
-    }
-
-    fn files(&self) -> &Stage {
-        &self.files
-    }
-
-    /// Starts one command under `options` and hands the run back, still running,
-    /// for a task type that must start every one of its runs before it waits for
-    /// any of them, which is the only order in which two runs that have to talk to
-    /// each other can both make progress.
-    fn started(&mut self, words: &[&str], options: &Options) -> Result<Launch, TaskError> {
-        self.sandbox.set_options(options.clone());
-        self.sandbox.start(words).map_err(TaskError::Spawn)
-    }
-
-    /// Launches one command under `options` and answers with what it was charged.
-    fn launch(
-        &mut self,
-        command: &[String],
-        options: &Options,
-    ) -> Result<ExecutionStats, TaskError> {
-        self.sandbox.set_options(options.clone());
-        let words: Vec<&str> = command.iter().map(String::as_str).collect();
-        self.sandbox.run(&words).map_err(TaskError::Spawn)
-    }
-
-    /// Finishes the run: keeps the box where `keep` asks for it and removes it
-    /// otherwise, answering with the path the report names the box by either way.
-    fn close(self, keep: bool) -> Result<PathBuf, TaskError> {
-        let root = self.sandbox.outer().to_path_buf();
-        if !keep {
-            if let Err(source) = fs::remove_dir_all(&root) {
-                return Err(TaskError::Stage(StageError::io(&root, &source)));
-            }
-        }
-        Ok(root)
-    }
 }
 
 /// The clock a run charged this CPU time must finish inside: twice the limit

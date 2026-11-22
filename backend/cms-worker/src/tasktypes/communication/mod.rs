@@ -48,8 +48,8 @@ use crate::stage::Cache;
 
 use self::pipes::Pipe;
 pub use self::verdict::Verdict;
-use super::batch::TaskError;
 use super::Runtime;
+use super::TaskError;
 use super::Toolchain;
 
 /// The manager the dataset holds, the input it reads, and the file it may write
