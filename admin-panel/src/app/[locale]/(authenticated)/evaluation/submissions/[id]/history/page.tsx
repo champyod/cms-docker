@@ -40,10 +40,9 @@ export default async function SubmissionHistoryPage({ params }: { params: Promis
       // The record shell above renders the submission's name, its trail, its status and its tabs;
       // the tab rail already names this section, so the tab adds only the latest change and the trail.
       ownsHeader={false}
-      title={`#${id}`}
       facts={[
-        { term: copy.history.actor, value: latest?.actor_name ?? '—' },
-        { term: copy.history.action, value: latest?.verb ?? '—' },
+        { term: copy.history.actor, value: latest?.actor_name ?? dictionary.common.notSet },
+        { term: copy.history.action, value: latest?.verb ?? dictionary.common.notSet },
       ]}
       freshness={latest === undefined ? undefined : <SubmissionArrival timestamp={latest.timestamp} />}
     >
