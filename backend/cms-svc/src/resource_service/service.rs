@@ -1,5 +1,6 @@
 //! Sampling, retention, query and the restart pass: the port of `ResourceService.py`.
 
+mod kill;
 mod query;
 mod restart;
 
@@ -15,6 +16,7 @@ use super::machine::{CpuPercentages, MemoryMegabytes};
 use super::matcher::ProcessMatcher;
 use super::sample::{ProcessCpu, Sample, ServiceFigures, ServiceState, ServiceUsage};
 
+pub use kill::{ConnectorQuit, PeerQuit, QuitReceipt, QUIT_REASON, QUIT_TIMEOUT};
 pub use restart::RestartReport;
 
 use restart::Launched;

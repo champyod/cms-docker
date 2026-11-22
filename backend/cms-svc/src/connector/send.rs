@@ -49,6 +49,22 @@ pub enum NoRoute {
     },
 }
 
+impl std::fmt::Display for NoRoute {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Absent => formatter.write_str("the peer is not in the configuration"),
+            Self::NotConnected { due_in, .. } => {
+                write!(
+                    formatter,
+                    "no connection to the peer, next dial in {due_in:?}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for NoRoute {}
+
 /// What the connection owes the peer about one message.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Send {
