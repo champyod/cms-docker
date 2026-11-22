@@ -178,7 +178,7 @@ describe('SubmissionActionBar lock hint', () => {
       lockHintKeys: ['evaluation:delete', 'submissionresult:delete'],
     });
 
-    expect(container.textContent).toContain('Read-only — you lack evaluation:delete, submissionresult:delete');
+    expect(container.textContent).toContain('Read-only: you lack evaluation:delete, submissionresult:delete');
     expect(container.querySelector('[role="toolbar"]')?.textContent).not.toContain('Read-only');
   });
 

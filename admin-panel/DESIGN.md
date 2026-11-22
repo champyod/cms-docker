@@ -207,7 +207,7 @@ change shape *and* colour for the same reason.
 | content width | measured `getBoundingClientRect` of the content column | full-bleed groups with a gap wider than 15% of the row |
 | colour | `grep -rn '#[0-9a-fA-F]\{6\}' src --include=*.tsx` outside the token block | one literal |
 | type ladder | `__check_design_tokens.mjs` reads `@theme`, `__check_token_coverage.mjs` counts sizes that leave it across `src` | a step missing, a step in px, a seventh step, or more off-ladder sizes than the baseline |
-| banned characters | `__check_banned_characters.mjs` counts an em dash or a middle dot on any line that is not a comment | more than the baseline (267 when the count was taken: 219 em dashes, 48 middle dots, across 109 files) |
+| banned characters | `__check_banned_characters.mjs` counts an em dash or a middle dot on any line that is not a comment | more than the baseline (202 after the dictionaries were swept) |
 | colour meaning | the same element type sampled across pages | the same kind varies in colour |
 | density | content height ÷ viewport, lines counted | a page over ~40 content lines with no chart |
 | numbers | computed style `font-variant-numeric` and text-align | any metric column left-aligned |

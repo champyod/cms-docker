@@ -17,7 +17,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(process.env.BANNED_ROOT ?? process.cwd());
-const BASELINE = Number(process.env.BANNED_BASELINE ?? 267);
+const BASELINE = Number(process.env.BANNED_BASELINE ?? 202);
 const BANNED = [
   { mark: '·', name: 'middle dot' },
   { mark: '—', name: 'em dash' },

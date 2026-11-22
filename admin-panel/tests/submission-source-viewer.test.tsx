@@ -141,7 +141,7 @@ describe('Submission source and diff', () => {
   it('never asks for the bytes when the reader lacks file:read', () => {
     const container = renderViewer({ submissionId: 19, language: 'cpp', sourceReadable: false });
 
-    expect(container.textContent).toContain('Hidden — requires file:read');
+    expect(container.textContent).toContain('Hidden: requires file:read');
     expect(mockGetFileByDigest).not.toHaveBeenCalled();
   });
 

@@ -197,7 +197,7 @@ describe('the throttle copy in both dictionaries', () => {
   });
 
   it('gives the reserved wording exactly one reading in each language', () => {
-    expect(en.limits.throttle.reserved).toBe('Reserved — nothing reads it yet');
-    expect(th.limits.throttle.reserved).toBe('สำรองไว้ — ยังไม่มีส่วนใดอ่านค่านี้');
+    expect(en.limits.throttle.reserved).toBe('Reserved: nothing reads it yet');
+    expect(th.limits.throttle.reserved).toBe('สำรองไว้: ยังไม่มีส่วนใดอ่านค่านี้');
   });
 });

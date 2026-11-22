@@ -74,7 +74,7 @@ function row(container: HTMLElement, id: number): HTMLElement {
 describe('an exposure the deployment\'s own config owns', () => {
   it('names config.toml and the exact key that owns its path', () => {
     const container = renderExposures([CURATED]);
-    expect(row(container, 11).textContent).toContain(`config.toml · ADMIN_ROUTE_PATH`);
+    expect(row(container, 11).textContent).toContain(`config.toml: ADMIN_ROUTE_PATH`);
   });
 
   it('offers no edit control, because the panel cannot move a curated route', () => {
