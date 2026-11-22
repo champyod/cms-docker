@@ -13,6 +13,7 @@ import { TeamBulkActionsDialog } from '@/components/teams/TeamBulkActionsDialog'
 import { TeamRotateAccountsDialog } from '@/components/teams/TeamRotateAccountsDialog';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import type { Dictionary } from '@/lib/dictionary';
+import { useDictionary } from '@/hooks/useDictionary';
 import { interpolate } from '@/lib/interpolate';
 import { buildRoute } from '@/lib/navigation/routes';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
@@ -59,6 +60,8 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   readonly selected: boolean;
   readonly onToggle: (userId: number, checked: boolean) => void;
 }): React.JSX.Element {
+  // common.notSet: a member whose name or contest the record does not hold.
+  const missing = useDictionary().common.notSet;
   const href = memberProfileHref(locale, member);
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
@@ -73,17 +76,17 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
           />
         )}
         <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
-          {(member.username ?? '—').substring(0, 2).toUpperCase()}
+          {(member.username ?? missing).substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="font-medium">{member.username ?? '—'}</div>
-          <div className="text-xs text-muted-foreground">{`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || '—'}</div>
+          <div className="font-medium">{member.username ?? missing}</div>
+          <div className="text-xs text-muted-foreground">{`${member.firstName ?? ''} ${member.lastName ?? ''}`.trim() || missing}</div>
         </div>
       </div>
       <div className="flex items-center gap-2">
         {member.contests.slice(0, 3).map((contest, index) => (
           <span key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} className="text-xs px-2 py-0.5 bg-primary/10 text-primary rounded-full">
-            {contest.name ?? '—'}
+            {contest.name ?? missing}
           </span>
         ))}
         {member.contests.length > 3 && (

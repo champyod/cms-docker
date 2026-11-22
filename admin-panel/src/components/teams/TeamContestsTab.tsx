@@ -9,6 +9,8 @@ import type { TeamContest } from '@/lib/people-read-model-types';
 export interface TeamContestsTabProps {
   readonly contests: readonly TeamContest[];
   readonly locale: 'en' | 'th';
+  /** common.notSet: a contest whose name or description the record does not hold. */
+  readonly missing: string;
 }
 
 // Why: a contest whose id is not readable must not become a link, because the
@@ -18,17 +20,17 @@ function contestHref(locale: 'en' | 'th', contest: TeamContest): string | null {
   return buildRoute(locale, 'contests.tabs.overview', { id: contest.id });
 }
 
-function ContestRow({ contest, locale }: { readonly contest: TeamContest; readonly locale: 'en' | 'th' }): React.JSX.Element {
+function ContestRow({ contest, locale, missing }: { readonly contest: TeamContest; readonly locale: 'en' | 'th'; readonly missing: string }): React.JSX.Element {
   const href = contestHref(locale, contest);
   return (
     <div className="p-4 flex flex-wrap items-center justify-between gap-3">
       <div className="flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center text-warning font-bold text-sm">
-          {(contest.name ?? '—').substring(0, 2).toUpperCase()}
+          {(contest.name ?? missing).substring(0, 2).toUpperCase()}
         </div>
         <div>
-          <div className="font-medium">{contest.name ?? '—'}</div>
-          <div className="text-xs text-muted-foreground">{contest.description ?? '—'}</div>
+          <div className="font-medium">{contest.name ?? missing}</div>
+          <div className="text-xs text-muted-foreground">{contest.description ?? missing}</div>
         </div>
       </div>
       {href && (
@@ -46,13 +48,13 @@ function ContestRow({ contest, locale }: { readonly contest: TeamContest; readon
  * Why no card and no heading: the list layout draws the frame and the tab rail above already names
  * the section, so the card was a box inside a box and the heading a second copy of that label.
  */
-export function TeamContestsTab({ contests, locale }: TeamContestsTabProps): React.JSX.Element {
+export function TeamContestsTab({ contests, locale, missing }: TeamContestsTabProps): React.JSX.Element {
   return (
     <div className="divide-y divide-border">
       {contests.map((contest, index) => (
         // Why: a field-filtered contest may carry no id, so the row position
         // joins the readable key instead of relying on it alone.
-        <ContestRow key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} contest={contest} locale={locale} />
+        <ContestRow key={`${contest.id ?? contest.name ?? 'contest'}-${index}`} contest={contest} locale={locale} missing={missing} />
       ))}
     </div>
   );

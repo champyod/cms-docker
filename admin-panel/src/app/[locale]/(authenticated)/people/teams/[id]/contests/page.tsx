@@ -41,7 +41,7 @@ export default async function TeamContestsPage({ params }: { params: Promise<{ l
       // would repeat what the reader can count.
       empty={contests.length === 0 ? <TeamContestsEmpty copy={dictionary.teams} /> : undefined}
     >
-      <TeamContestsTab contests={contests} locale={locale as 'en' | 'th'} />
+      <TeamContestsTab contests={contests} locale={locale as 'en' | 'th'} missing={dictionary.common.notSet} />
     </ListPage>
   );
 }

@@ -9,6 +9,7 @@ import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access
 import { DetailPage } from '@/components/patterns/DetailPage';
 import { leaderName } from '@/components/teams/teamColumns';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
+import { formatCount } from '@/lib/format-number';
 
 // Why: the reader enforces the same keys, but the page must resolve the exact
 // registry route first so a disabled or narrowed descriptor 404s before data.
@@ -41,8 +42,8 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
       ownsHeader={false}
       title={summary.name ?? summary.code ?? `#${summary.id}`}
       facts={[
-        { term: copy.leader, value: leaderName(summary) },
-        { term: copy.members, value: String(summary.participationCount) },
+        { term: copy.leader, value: leaderName(summary, dictionary.common.notSet) },
+        { term: copy.members, value: formatCount(summary.participationCount, locale) },
       ]}
     >
       <TeamOverviewTab

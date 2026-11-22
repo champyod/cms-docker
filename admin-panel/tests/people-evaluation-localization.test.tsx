@@ -272,7 +272,7 @@ describe('Team record tab copy', () => {
   it('renders Thai empty states and the overflow count on the members and contests tabs', () => {
     const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} copy={th.teams} locale="th" />);
     const emptyMembers = text(<TeamMembersEmpty teamId={4} permissionKeys={['team:read']} contests={[]} copy={th.teams} />);
-    const contests = text(<TeamContestsTab contests={CONTESTS} locale="th" />);
+    const contests = text(<TeamContestsTab missing={th.common.notSet} contests={CONTESTS} locale="th" />);
     const emptyContests = text(<TeamContestsEmpty copy={th.teams} />);
 
     expect(members).toContain('Practice Round');
