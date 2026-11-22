@@ -316,6 +316,16 @@ false (`:239-240`); re-find the process if the held one is gone (`:244-247`); sp
 *still* not running — the case the comment at `:216-220` explains, where the operator started a service
 by hand and a second copy would duplicate it.
 
+**Where the service's own inputs legitimately come from** (a correction to the binary brief, worth
+keeping because the same mistake will recur for every service): only `[services]`-derived values belong
+in `config sync` — `RESOURCE_SERVICE_ADDR`, `RESOURCE_SERVICE_COORD`, `CMS_SERVICES`. `autorestart` and
+`contest_id` are **constructor arguments that never appear in `cms.toml`**
+(`ResourceService.py:168-178`), and this deployment passes neither: `docker-compose.yml` starts the
+container as `cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}`, with no `-c`. They are therefore optional
+environment inputs supplied at container-wiring time, with Python's defaults — autorestart false,
+contest id empty — and a missing contest id is the **normal** case, not a failure. `bin_path` needs no
+input at all: the running executable already knows its own directory.
+
 ### 7.1 First service swap completed — the logger (2026-11-22)
 
 `log-service` in `docker-compose.yml` now runs `cms-log-service`. This is the first W-B swap and the
