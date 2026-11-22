@@ -28,7 +28,8 @@ pub enum TaskError {
         /// The manager the compilation needs and the dataset does not hold.
         name: String,
     },
-    /// The submission carries fewer files than a compilation is attempted for.
+    /// The submission's file count is not what the task type takes: fewer than a
+    /// floor, or not exactly a fixed number.
     TooFewFiles {
         /// How many files the submission carries.
         found: usize,
