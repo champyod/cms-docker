@@ -47,23 +47,6 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
   return (
     <div className="space-y-4">
       <Card>
-        <dl className="grid gap-3 sm:grid-cols-3">
-          <div>
-            <dt className="text-sm text-muted-foreground">Container</dt>
-            <dd className="font-mono text-sm">{state.containerStatus ?? 'not running'}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">Alerts parsed</dt>
-            <dd className="font-mono text-sm">{state.alerts.length}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">Unparsed log lines</dt>
-            <dd className="font-mono text-sm">{state.skippedAlertLines}</dd>
-          </div>
-        </dl>
-      </Card>
-
-      <Card>
         <h2 className="mb-3 text-lg font-semibold">Settings</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="text-sm">

@@ -20,6 +20,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/security/overview': 'dashboard',
   '/security/patching': 'list',
   '/security/blocks': 'board',
+  // One subsystem's values, with its tuning and its alerts as the sections that belong to it.
+  '/security/waf': 'detail',
   '/infrastructure/services': 'board',
   '/ranking/users': 'board',
   '/evaluation/lanes': 'list',
