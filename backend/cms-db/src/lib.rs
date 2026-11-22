@@ -85,10 +85,12 @@ mod interval;
 mod large_object;
 mod permission;
 mod reads;
+mod schema;
 mod security_block;
 mod session;
 mod submission;
 mod task;
+mod team;
 mod token_mode;
 mod types;
 mod user;
@@ -142,6 +144,7 @@ pub use reads::{
     SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
     RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
+pub use schema::{init_db, SchemaError};
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
@@ -158,6 +161,7 @@ pub use task::{
     Playable, ScoreMode, Task, TaskError, TokenRules, Tokens, ACTIVATE_DATASET, DELETE_DATASET,
     SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
 };
+pub use team::{registerable_teams, Team, TEAM};
 pub use token_mode::{TokenGrant, TokenMode, TokenModeError};
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
@@ -167,8 +171,10 @@ pub use types::{
 };
 pub use user::{Participation, User, PARTICIPATION, USER};
 pub use username::{
-    resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
-    CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
+    get_display_name, get_display_username, get_display_usernames, load_config_inputs,
+    resolve_config, set_display_username, username_config_allowed, ConfigInputs, DisplayUsername,
+    Policy, UsernameError, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP, CONTEST_USERNAME,
+    CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use usertest::{
     Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey, UserTest,
