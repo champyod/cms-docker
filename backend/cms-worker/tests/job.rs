@@ -48,6 +48,8 @@ fn language() -> Language {
     Language {
         source_extension: ".cpp".to_owned(),
         header_extensions: vec![".h".to_owned()],
+        object_extensions: vec![".o".to_owned()],
+        requires_multithreading: false,
     }
 }
 

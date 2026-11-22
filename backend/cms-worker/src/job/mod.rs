@@ -167,6 +167,12 @@ pub struct Language {
     /// Extensions of the header files the language reads, each of which makes a
     /// manager of the dataset one this language has to be given.
     pub header_extensions: Vec<String>,
+    /// Extensions of the object files the language reads, which a manager may
+    /// arrive as instead of a source or a header.
+    pub object_extensions: Vec<String>,
+    /// Whether the language needs more than one thread, which is what makes the
+    /// contest's sandbox multithreaded and every run in it permitted to fork.
+    pub requires_multithreading: bool,
 }
 
 /// One testcase of a dataset: what a submission evaluation is run against.

@@ -94,36 +94,96 @@ const WALL_CLOCK_GRACE: Duration = Duration::from_secs(1);
 /// it does not know is refused there, as it is in
 /// [`crate::job::BuildError::UnknownLanguage`].
 pub trait Toolchain {
-    /// The extension a source file of this language has, which is what
-    /// `grader.%l` becomes and what a submitted codename is rewritten to.
-    fn source_extension(&self) -> &str;
+    /// The name the language is filed under, which names the compiler and its
+    /// version too, e.g. `C++17 / g++` rather than `C++`.
+    fn name(&self) -> &str;
+
+    /// The extensions a source of this language has, the canonical one first.
+    ///
+    /// Plural because a contestant may submit any of them (five for C++), while
+    /// `grader.%l` and a submitted codename take the first one alone.
+    fn source_extensions(&self) -> &[&str];
+
+    /// The canonical source extension, which is what `grader.%l` becomes and
+    /// what a submitted codename is rewritten to.
+    fn source_extension(&self) -> &str {
+        self.source_extensions()
+            .first()
+            .copied()
+            .unwrap_or_default()
+    }
+
+    /// The extensions a header of this language has, each of which makes a
+    /// manager of the dataset one this language's compilation is handed.
+    fn header_extensions(&self) -> &[&str] {
+        &[]
+    }
+
+    /// The extensions a compiled object of this language has, which a manager
+    /// may arrive as instead of a source or a header.
+    fn object_extensions(&self) -> &[&str] {
+        &[]
+    }
 
     /// The extension an executable of this language has, appended to the name
     /// the task type chose for it. Empty for a language that tells its
     /// executables apart by nothing else.
-    fn executable_extension(&self) -> &str;
+    fn executable_extension(&self) -> &str {
+        ""
+    }
+
+    /// Whether running this language needs more than one thread, which is a
+    /// property of the language rather than of a contest: a contest is
+    /// multithreaded when any language it allows is, and the answer is what a
+    /// job's `multithreaded_sandbox` carries into the box.
+    fn requires_multithreading(&self) -> bool {
+        false
+    }
 
     /// Whether a manager is one this language's compilation reads: a source, a
     /// header or an object extension it names, and nothing else.
-    fn compiles_against(&self, manager: &str) -> bool;
+    fn compiles_against(&self, manager: &str) -> bool {
+        self.source_extensions()
+            .iter()
+            .chain(self.header_extensions())
+            .chain(self.object_extensions())
+            .any(|extension| manager.ends_with(extension))
+    }
 
     /// The commands that compile `sources` into `executable`.
     ///
     /// The first source is the one holding the entry point, which is the order
     /// some languages need, and the commands run in the order they are given.
-    fn compilation_commands(&self, sources: &[String], executable: &str) -> Vec<Vec<String>>;
+    /// `for_evaluation` adds what only a compilation the judge runs is given —
+    /// `-DEVAL` for the GNU compilers, `-dEVAL` for Pascal — because the same
+    /// program built for anything else must not see it.
+    fn compilation_commands(
+        &self,
+        sources: &[String],
+        executable: &str,
+        for_evaluation: bool,
+    ) -> Vec<Vec<String>>;
 
     /// The commands that run `executable`, judged by `main` where a language
     /// names its main class or module separately from the executable holding it.
     /// `args` are the arguments the program itself is run with, which a task type
     /// whose run is told where to find another one by name needs, and empty for
     /// a run told nothing.
+    ///
+    /// The default is the whole of the reference's `CompiledLanguage`: the file
+    /// the compilation left, run as `./name`. The three languages that compile to
+    /// something an interpreter is handed — C#, Java, PHP — answer for
+    /// themselves.
     fn evaluation_commands(
         &self,
         executable: &str,
-        main: &str,
+        _main: &str,
         args: &[String],
-    ) -> Vec<Vec<String>>;
+    ) -> Vec<Vec<String>> {
+        let mut command = vec![format!("./{executable}")];
+        command.extend(args.iter().cloned());
+        vec![command]
+    }
 }
 
 /// The three numbers a compilation is held to.

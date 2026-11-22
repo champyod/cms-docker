@@ -82,6 +82,7 @@
 
 pub mod edge;
 pub mod job;
+pub mod languages;
 pub mod sandbox;
 pub mod service;
 pub mod stage;

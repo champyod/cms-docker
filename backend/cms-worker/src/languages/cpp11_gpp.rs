@@ -1,0 +1,52 @@
+//! C++11, compiled with the system's g++.
+
+use crate::tasktypes::Toolchain;
+
+use super::words;
+
+/// C++11, as the g++ of the machine compiles it.
+pub struct Cpp11Gpp;
+
+/// Five extensions a contestant may submit; the first names a rewritten codename.
+const SOURCES: &[&str] = &[".cpp", ".cc", ".cxx", ".c++", ".C"];
+const HEADERS: &[&str] = &[".h"];
+const OBJECTS: &[&str] = &[".o"];
+/// Every flag before the output file, whose own two words follow them.
+const FLAGS: &[&str] = &["-std=gnu++11", "-O2", "-pipe", "-static", "-s", "-o"];
+/// The compiler by its full path, as every toolchain here names it.
+const COMPILER: &str = "/usr/bin/g++";
+const EVAL: &str = "-DEVAL";
+
+impl Toolchain for Cpp11Gpp {
+    fn name(&self) -> &str {
+        "C++11 / g++"
+    }
+
+    fn source_extensions(&self) -> &[&str] {
+        SOURCES
+    }
+
+    fn header_extensions(&self) -> &[&str] {
+        HEADERS
+    }
+
+    fn object_extensions(&self) -> &[&str] {
+        OBJECTS
+    }
+
+    fn compilation_commands(
+        &self,
+        sources: &[String],
+        executable: &str,
+        for_evaluation: bool,
+    ) -> Vec<Vec<String>> {
+        let mut command = words(&[COMPILER]);
+        if for_evaluation {
+            command.push(EVAL.to_owned());
+        }
+        command.extend(words(FLAGS));
+        command.push(executable.to_owned());
+        command.extend(sources.iter().cloned());
+        vec![command]
+    }
+}
