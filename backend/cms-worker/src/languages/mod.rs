@@ -7,9 +7,10 @@
 //! with the real command the first time a language differs in the middle of its
 //! argv — which Java, PHP and both Pythons all do.
 //!
-//! [`lookup`] is the caller's half of the contract: the name a job carries is
-//! turned into one of these, a filename into the one language whose extension it
-//! ends with, and a name this worker does not know is refused rather than guessed.
+//! The lookup is the caller's half of the contract: the name a job carries is
+//! turned into one of these by [`get_language`], a filename into the one language
+//! whose extension it ends with, and a name this worker does not know is refused
+//! rather than guessed.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]

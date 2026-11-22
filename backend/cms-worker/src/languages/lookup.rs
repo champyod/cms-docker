@@ -48,7 +48,7 @@ pub fn filename_to_language(filename: &str) -> Option<&'static dyn Toolchain> {
 
 /// A filename template with the language's source extension in place of `.%l`.
 ///
-/// A name this worker does not know substitutes [`UNKNOWN`] and is not an error:
+/// A name this worker does not know substitutes `.invalid_language` and is not an error:
 /// this names a file rather than starting a job, and the reference's answer is a
 /// file a reader can see was not resolved.
 pub fn safe_get_lang_filename(language: Option<&str>, filename: &str) -> String {
