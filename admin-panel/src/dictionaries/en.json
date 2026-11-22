@@ -200,6 +200,10 @@
     "questions": {
       "settledByStatement": "Settled by the statement",
       "clarificationNeeded": "Clarification needed"
+    },
+    "ranking": {
+      "title": "Standings",
+      "description": "Every participant’s total, with each task’s score as a column, and the progress graph over the first twenty."
     }
   },
   "tasks": {

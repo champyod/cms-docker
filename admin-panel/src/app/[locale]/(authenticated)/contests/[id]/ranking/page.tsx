@@ -4,6 +4,7 @@ import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { parseRecordId } from '@/lib/queries/record-access';
+import { getDictionary } from '@/i18n';
 import { BoardPage } from '@/components/patterns/BoardPage';
 import { ContestRankingTab } from '@/components/contests/contest-detail/ContestRankingTab';
 
@@ -28,15 +29,15 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
 }
 
 export default async function ContestRankingPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.ranking');
+  const copy = (await getDictionary(locale)).contests.ranking;
   return (
     <BoardPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      title="Ranking"
       sections={[
         {
           key: 'standings',
@@ -44,8 +45,8 @@ export default async function ContestRankingPage({ params }: ContestRouteProps):
           // no total of its own to fill a list's slots with — and the contest's own values are
           // already the shell's, so a detail would only repeat them. What the reader gets is one
           // table whose empty meaning ("no submissions yet") the table states itself.
-          title: 'Standings',
-          description: 'Every participant’s total, with each task’s score as a column, and the progress graph over the first twenty.',
+          title: copy.title,
+          description: copy.description,
           rows: <ContestRankingTab contestId={contestId} />,
         },
       ]}
