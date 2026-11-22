@@ -4,9 +4,17 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
 use std::process::{Child, Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 /// The binary under test, built by cargo for this test target.
 const BINARY: &str = env!("CARGO_BIN_EXE_cms-log-service");
+
+/// How long a process that should refuse to start is given before it is killed.
+const STARTUP_DEADLINE: Duration = Duration::from_secs(5);
+
+/// How often the watchdog checks whether the process has exited.
+const POLL_INTERVAL: Duration = Duration::from_millis(25);
 
 const ADDRESS_VARIABLE: &str = "LOG_SERVICE_ADDR";
 const SECRET_VARIABLE: &str = "RPC_SECRET";
@@ -78,15 +86,39 @@ fn supplied(
 }
 
 /// Runs the binary to completion with exactly these variables and nothing inherited.
+///
+/// Bounded on purpose: a binary that wrongly keeps serving never exits, and an
+/// unbounded `output()` would turn that regression into a hung test suite
+/// instead of a failure naming the variable. The watchdog kills it after
+/// [`STARTUP_DEADLINE`] so the assertion runs on a real exit.
 fn run_with(variables: &[(&'static str, String)]) -> Output {
     let mut command = Command::new(BINARY);
     command.env_clear();
     for (name, value) in variables {
         command.env(*name, value);
     }
-    command
-        .output()
-        .expect("the binary this build produced runs")
+    let child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the binary this build produced runs");
+    let started = Instant::now();
+    let mut child = child;
+    loop {
+        match child.try_wait().expect("the binary can be polled") {
+            Some(_) => break,
+            None if started.elapsed() > STARTUP_DEADLINE => {
+                child
+                    .kill()
+                    .expect("a binary that outlived its startup deadline can be killed");
+                break;
+            }
+            None => thread::sleep(POLL_INTERVAL),
+        }
+    }
+    child
+        .wait_with_output()
+        .expect("the output of a finished binary can be read")
 }
 
 /// Starts the binary with exactly these variables and nothing inherited.
