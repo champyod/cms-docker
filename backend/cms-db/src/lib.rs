@@ -28,6 +28,12 @@
 //! encoder and decoder against the sixteen bytes and the text a column really
 //! holds, and the rest check the values their columns hold.
 //!
+//! [`make_datetime`] and [`make_timestamp`] sit outside the table because a
+//! timestamp column's rule is a convention rather than a check: the value is a
+//! zone-less UTC spelling, and the two functions are the only pair that reads
+//! or writes it. The module docs state the convention and why it is not the
+//! machine's zone.
+//!
 //! # Errors
 //!
 //! Every fallible mapping returns the error type named beside it, and each
@@ -38,6 +44,7 @@
 #![forbid(unsafe_code)]
 
 mod auth;
+mod datetime;
 mod digest;
 mod interval;
 mod permission;
@@ -45,6 +52,7 @@ mod reads;
 mod types;
 mod writes;
 
+pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
