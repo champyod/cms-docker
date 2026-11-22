@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { LinkButton } from '@/components/core/LinkButton';
 
 import { readPatchingFindingsPage } from '@/app/actions/securityPatching';
 import { ListPage } from '@/components/patterns/ListPage';
@@ -57,23 +57,22 @@ export default async function SecurityPatchingPage({
   ).toString();
   return (
     <ListPage
-      // The module shell above renders the title, the description and the trail.
+      // The security module shell renders this page's name, description and trail from the
+      // navigation registry, so the page supplies its state, its rows and nothing else.
       ownsHeader={false}
-      // The module shell above renders the trail as well as the title, so the page has none to add.
-      title={copy.title}
-      description={copy.subtitle}
       state={
         state.waivedReachable > 0
           ? {
               tone: 'destructive',
               title: counted(copy.filters.flipNotice, state.waivedReachable),
               action: (
-                <Link
-                  className="underline"
+                <LinkButton
+                  variant="secondary"
+                  size="sm"
                   href={`${buildRoute(locale, 'security.patching')}?${flipParams}`}
                 >
                   {copy.filters.flipLink}
-                </Link>
+                </LinkButton>
               ),
             }
           : undefined
