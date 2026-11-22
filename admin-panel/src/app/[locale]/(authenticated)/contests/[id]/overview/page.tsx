@@ -44,7 +44,6 @@ export default async function ContestOverviewPage({ params }: ContestRouteProps)
       // only what the four editable timings below cannot say: where the contest stands right now,
       // and which zone those timings are read in.
       ownsHeader={false}
-      title={contest.name}
       facts={[
         { term: 'Contest state', value: PHASE_LABELS[resolveContestPhase(contest, new Date())] },
         { term: 'Timezone', value: contest.timezone ?? dictionary.common.notSet },
