@@ -29,6 +29,8 @@ interface PatchingPanelProps {
   readonly copy: PatchingCopy;
   /** Whether the reader holds patching:waive; the read key alone must not offer a write. */
   readonly canWaive: boolean;
+  /** common.notSet: a cell whose value the record does not hold. */
+  readonly missing: string;
 }
 
 /** Deterministic day label: the same string on the server render and the client hydration. */
@@ -98,7 +100,7 @@ function WaiverCell({ waiver, copy }: { waiver: WaiverState; copy: PatchingCopy 
   return <Badge variant="red">{fill(copy.waiver.expired, waiver.reviewBy)}</Badge>;
 }
 
-export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): React.JSX.Element {
+export function PatchingPanel({ state, copy, canWaive, missing }: PatchingPanelProps): React.JSX.Element {
   const [waiveTarget, setWaiveTarget] = useState<{ source: string; match: string } | null>(null);
   const [endTarget, setEndTarget] = useState<PatchingWaiver | null>(null);
   const [match, setMatch] = useState('');
@@ -160,7 +162,7 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
       mobileLabel: copy.columns.severity,
       render: (finding) =>
         finding.severity === null ? (
-          <span className="text-xs text-muted-foreground">—</span>
+          <span className="text-xs text-muted-foreground">{missing}</span>
         ) : (
           <Badge variant={SEVERITY_VARIANT[finding.severity] ?? 'neutral'}>{finding.severity}</Badge>
         ),
@@ -190,7 +192,7 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
       mobileLabel: `${copy.columns.installed} → ${copy.columns.available}`,
       render: (finding) => (
         <span className="font-mono text-xs">
-          {finding.installed ?? '—'} → {finding.available ?? '—'}
+          {finding.installed ?? missing} → {finding.available ?? missing}
         </span>
       ),
     },
@@ -198,7 +200,7 @@ export function PatchingPanel({ state, copy, canWaive }: PatchingPanelProps): Re
       key: 'host',
       header: copy.columns.host,
       mobileLabel: copy.columns.host,
-      render: (finding) => <span className="font-mono text-xs">{finding.host ?? '—'}</span>,
+      render: (finding) => <span className="font-mono text-xs">{finding.host ?? missing}</span>,
     },
     {
       key: 'firstSeen',

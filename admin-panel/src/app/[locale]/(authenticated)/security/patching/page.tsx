@@ -81,6 +81,7 @@ export default async function SecurityPatchingPage({
       footer={<PatchingFooter page={state.page} cards={state.cards} newest={newest} copy={copy} />}
     >
       <PatchingPanel
+        missing={dict.common.notSet}
         state={state}
         copy={copy}
         canWaive={hasEffectivePermission(effective, 'patching:waive')}

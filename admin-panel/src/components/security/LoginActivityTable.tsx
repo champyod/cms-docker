@@ -21,10 +21,12 @@ import type { LoginActivity } from '@/lib/security/login-activity';
 interface LoginActivityTableProps {
   readonly rows: readonly LoginActivity[];
   readonly labels: Readonly<Record<string, string>>;
+  /** common.notSet: a cell whose value the record does not hold. */
+  readonly missing: string;
 }
 
-function stamp(value: Date | null): string {
-  return value === null ? '—' : value.toISOString();
+function stamp(value: Date | null, missing: string): string {
+  return value === null ? missing : value.toISOString();
 }
 
 function surfaceName(labels: Readonly<Record<string, string>>, key: string): string {
@@ -46,7 +48,8 @@ function attemptedAt(attempt: LoginAttempt): string {
  * WHY the clear lives here: it is the one write the rows offer, and it needs a reason, so the
  * prompt belongs to the table that renders the button rather than to the page above it.
  */
-export function LoginActivityTable({ rows, labels }: LoginActivityTableProps): React.JSX.Element {
+export function LoginActivityTable({ rows, labels, missing }: LoginActivityTableProps): React.JSX.Element {
+  // common.notSet: a login row whose timestamp or user agent the record does not hold.
   const prompt = useReasonPrompt();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [attempts, setAttempts] = useState<Readonly<Record<string, readonly LoginAttempt[]>>>({});
@@ -97,11 +100,11 @@ export function LoginActivityTable({ rows, labels }: LoginActivityTableProps): R
             <Fragment key={row.key}>
               <TableRow>
                 <TableCell>{surfaceName(labels, row.surface)}</TableCell>
-                <TableCell className="font-mono">{row.username ?? '—'}</TableCell>
+                <TableCell className="font-mono">{row.username ?? missing}</TableCell>
                 <TableCell className="font-mono">{row.ip}</TableCell>
                 <TableCell>{row.failures}</TableCell>
-                <TableCell className="text-muted-foreground">{stamp(row.lastFailedAt)}</TableCell>
-                <TableCell className="text-muted-foreground">{stamp(row.lastSuccessAt)}</TableCell>
+                <TableCell className="text-muted-foreground">{stamp(row.lastFailedAt, missing)}</TableCell>
+                <TableCell className="text-muted-foreground">{stamp(row.lastSuccessAt, missing)}</TableCell>
                 <TableCell className="text-muted-foreground">{row.windowSeconds}s</TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-2">
@@ -148,7 +151,7 @@ export function LoginActivityTable({ rows, labels }: LoginActivityTableProps): R
                               <TableCell className="text-muted-foreground">{attemptedAt(attempt)}</TableCell>
                               <TableCell>{surfaceName(labels, attempt.surfaceKey)}</TableCell>
                               <TableCell className="font-mono">{attempt.ip}</TableCell>
-                              <TableCell className="text-muted-foreground">{attempt.ua ?? '—'}</TableCell>
+                              <TableCell className="text-muted-foreground">{attempt.ua ?? missing}</TableCell>
                             </TableRow>
                           ))}
                         </TableBody>

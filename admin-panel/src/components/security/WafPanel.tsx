@@ -9,6 +9,8 @@ import { Input } from '@/components/core/Input';
 
 interface WafPanelProps {
   readonly state: WafState;
+  /** common.notSet: a value the record does not hold. */
+  readonly missing: string;
 }
 
 type WafFormField =
@@ -22,7 +24,7 @@ type WafFormField =
 const ENGINE_OPTIONS = ['DetectionOnly', 'On'];
 const RESPONSE_BODY_OPTIONS = ['Off', 'On', 'Force', 'Rejected'];
 
-export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
+export function WafPanel({ state, missing }: WafPanelProps): React.JSX.Element {
   const [reason, setReason] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -135,7 +137,7 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
                   {alert.clientIp ?? 'unknown ip'} → {alert.uri ?? 'unknown uri'}
                 </p>
                 <p className="mt-1">
-                  rules {alert.ruleIds.join(', ') || 'none'}, score {alert.anomalyScore ?? '—'} ·{' '}
+                  rules {alert.ruleIds.join(', ') || 'none'}, score {alert.anomalyScore ?? missing},{' '}
                   {alert.blocked ? 'blocked' : 'detected'}
                 </p>
               </li>

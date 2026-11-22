@@ -101,7 +101,7 @@ export default async function SecurityBlocksPage({
           {activity.error}
         </InlineAlert>
       ),
-      rows: activity.ok ? <LoginActivityTable rows={activity.rows} labels={labels} /> : null,
+      rows: activity.ok ? <LoginActivityTable missing={dict.common.notSet} rows={activity.rows} labels={labels} /> : null,
       empty: activity.ok ? <Text variant="muted">{dict.security.blocks.emptyActivity}</Text> : undefined,
     },
     {
