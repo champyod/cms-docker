@@ -5,10 +5,11 @@
 //! without a boxed future per call: a stream is either a file on disk or a large
 //! object, and the copy loops are the only code that has to know which.
 //!
-//! `gevent.sleep(0)` has no counterpart and needs none: the reference yielded
-//! between chunks so other greenlets could run, while here the only suspension
-//! points are the database awaits inside a large-object read or write, which is
-//! exactly where a chunk would yield anyway.
+//! `gevent.sleep(0)` is reproduced, not dropped: the reference yielded between chunks
+//! so other greenlets could run, and that matters here because a file-backed read and
+//! write are both blocking and never suspend on their own. Without a yield a
+//! multi-gigabyte copy would hold its worker for the whole transfer, so both loops
+//! yield after every chunk. Only the large-object side would have suspended anyway.
 
 use std::fs::File;
 use std::io::{self, Write};
@@ -119,6 +120,11 @@ pub(crate) async fn copy_to_file(
             .write_all(&buffer[..read])
             .map_err(|source| FileCacheError::io(destination_path, source))?;
         total += read as u64;
+        // The file half of this loop is blocking and never suspends on its own, so a
+        // multi-gigabyte copy would hold its worker for the whole transfer. The
+        // reference yields after every chunk for the same reason (`gevent.sleep(0)`,
+        // filecacher.py:774, commented "Cooperative yield").
+        tokio::task::yield_now().await;
     }
 }
 
@@ -144,5 +150,64 @@ pub(crate) async fn copy_to_writable(
         }
         destination.write_all(&buffer[..read]).await?;
         total += read as u64;
+        // Same reason as `copy_to_file`: the read is blocking, and a backend whose
+        // write completes without suspending (Null, a small local file) would
+        // otherwise make this loop run to completion on one worker.
+        tokio::task::yield_now().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    use super::*;
+
+    /// A path in the scratch directory, unique enough that parallel tests never meet.
+    fn scratch(name: &str) -> PathBuf {
+        let unique = format!("cms-store-{}-{}", std::process::id(), name);
+        std::env::temp_dir().join(unique)
+    }
+
+    /// A copy that never suspends holds its worker for the whole transfer, which is
+    /// what the reference avoided by yielding after each chunk.
+    ///
+    /// On a single-threaded runtime a spawned task can only run if the copy gives the
+    /// scheduler a turn, so the flag makes the yield observable. Remove the yield and
+    /// this fails; that is the point of the test.
+    #[tokio::test(flavor = "current_thread")]
+    async fn a_copy_gives_the_scheduler_a_turn_between_chunks() {
+        const CHUNK: usize = 8;
+        let source_path = scratch("source");
+        let destination_path = scratch("destination");
+        std::fs::write(&source_path, vec![7_u8; CHUNK * 4]).expect("writing the source");
+
+        let mut source = File::open(&source_path).expect("opening the source");
+        let file = File::create(&destination_path).expect("creating the destination");
+        let mut destination = Writable::File {
+            file,
+            path: destination_path.clone(),
+        };
+
+        let ran = Arc::new(AtomicBool::new(false));
+        let observed = Arc::clone(&ran);
+        tokio::spawn(async move {
+            observed.store(true, Ordering::SeqCst);
+        });
+
+        let copied = copy_to_writable(&mut source, &mut destination, &source_path, CHUNK)
+            .await
+            .expect("copying the file");
+
+        assert_eq!(copied, (CHUNK * 4) as u64, "every byte must be copied");
+        assert!(
+            ran.load(Ordering::SeqCst),
+            "the copy never gave the scheduler a turn, so it held its worker for the whole transfer"
+        );
+
+        drop(destination);
+        std::fs::remove_file(&source_path).ok();
+        std::fs::remove_file(&destination_path).ok();
     }
 }
