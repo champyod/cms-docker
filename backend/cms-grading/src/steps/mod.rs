@@ -42,6 +42,8 @@ pub use checker::{
 pub use trusted::{checker_step, Check, StepError};
 pub use white_diff::{exact_diff, white_diff, Comparison, Difference};
 
+use crate::messages::EVALUATION_MESSAGES;
+
 /// A sentence a report shows for a submission, which a checker may name rather than
 /// write, and which a comparison names on the submission's behalf.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,16 +56,11 @@ pub enum StockMessage {
     Wrong,
 }
 
-/// The three words a manager spells when it asks for a stock sentence by name.
+/// The three words a manager spells when it asks for a stock sentence by name, which are
+/// also the shorthands the evaluation table files those sentences under.
 const NAME_SUCCESS: &str = "success";
 const NAME_PARTIAL: &str = "partial";
 const NAME_WRONG: &str = "wrong";
-
-/// The sentences themselves, as a report shows them, which are the ones the
-/// reference's translation table holds.
-const TEXT_SUCCESS: &str = "Output is correct";
-const TEXT_PARTIAL: &str = "Output is partially correct";
-const TEXT_WRONG: &str = "Output isn't correct";
 
 impl StockMessage {
     /// The sentence of that name, or `None` for a word that names none of them: a
@@ -78,13 +75,14 @@ impl StockMessage {
         }
     }
 
-    /// The sentence itself, which is what a report shows.
+    /// The sentence itself, which is the evaluation table's and is what a report shows.
     #[must_use]
-    pub const fn text(self) -> &'static str {
-        match self {
-            Self::Success => TEXT_SUCCESS,
-            Self::Partial => TEXT_PARTIAL,
-            Self::Wrong => TEXT_WRONG,
-        }
+    pub fn text(self) -> &'static str {
+        let shorthand = match self {
+            Self::Success => NAME_SUCCESS,
+            Self::Partial => NAME_PARTIAL,
+            Self::Wrong => NAME_WRONG,
+        };
+        EVALUATION_MESSAGES.get(shorthand).message().template()
     }
 }

@@ -12,6 +12,7 @@ mod helpers;
 
 use std::path::Path;
 
+use cms_grading::scoretypes::format_status_text;
 use cms_grading::tasktypes::{Batch, TaskError};
 use cms_proto::DigestMap;
 use cms_sandbox::ExitStatus;
@@ -28,6 +29,9 @@ const STDOUT_STREAM: &str = "compilation_stdout_0.txt";
 const STDERR_STREAM: &str = "compilation_stderr_0.txt";
 /// The package directory a Haskell compilation is given only where it is there.
 const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
+/// The log a compilation a signal killed leaves, with the signal's own number.
+const SIGNALLED_LOG: &str =
+    "time:0.5\ntime-wall:1.5\ncg-mem:2048\nstatus:SG\nexitsig:11\nexitcode:1\n";
 
 /// The parameters of a task that is compiled together with a grader the dataset
 /// holds, which redirects both of its streams.
@@ -165,6 +169,38 @@ fn a_compilation_that_produced_nothing_is_a_failure_and_leaves_no_executable() {
     assert_eq!(
         compiled.stats.as_ref().map(|s| s.exit_status),
         Some(ExitStatus::NonzeroReturn)
+    );
+}
+
+#[test]
+fn a_compilation_killed_by_a_signal_names_the_signal_it_was_killed_with() {
+    let dir = workspace("compile-signal");
+    let runtime = runtime_of(&dir, "1", SIGNALLED_LOG, NOTHING);
+    let compiled = alone()
+        .compile(
+            &compile_job(managers()),
+            &StubToolchain,
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
+        .expect("the compilation must run");
+
+    assert!(
+        compiled.success,
+        "the box worked, so the compilation is judged"
+    );
+    assert_eq!(compiled.compilation_success, Some(false));
+    assert_eq!(
+        compiled.text,
+        vec![
+            "Compilation killed with signal %s (could be triggered by violating memory limits)",
+            "11",
+        ],
+        "the sentence and the number it names, as the reference hands them over"
+    );
+    assert_eq!(
+        format_status_text(&compiled.text),
+        "Compilation killed with signal 11 (could be triggered by violating memory limits)"
     );
 }
 
