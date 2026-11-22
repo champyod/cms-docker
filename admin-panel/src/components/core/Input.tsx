@@ -14,12 +14,21 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
 // the field styling itself comes from the adapter.
 const ICON_INDENT = 'pl-10';
 
+/**
+ * The label is bound with `htmlFor`/`id` and the error with `aria-describedby`, not merely
+ * coloured: a label that cannot focus its field and an error a screen reader never announces are
+ * defects of the same kind - the association exists on screen and not in the accessibility tree.
+ */
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, icon, required, ...props }, ref) => {
+  ({ className, label, error, icon, required, id, ...props }, ref) => {
+    const generatedId = React.useId();
+    const inputId = id ?? generatedId;
+    const errorId = `${inputId}-error`;
+
     return (
       <div className="space-y-1.5 w-full">
         {label && (
-          <label className="text-sm font-medium text-foreground ml-1">
+          <label htmlFor={inputId} className="text-sm font-medium text-foreground ml-1">
             {label}
             {required && <span className="text-destructive ml-0.5" aria-hidden="true">*</span>}
           </label>
@@ -32,14 +41,16 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           )}
           <AdapterInput
             ref={ref}
+            id={inputId}
             required={required}
             aria-invalid={error ? true : undefined}
+            aria-describedby={error ? errorId : undefined}
             className={cn(icon && ICON_INDENT, className)}
             {...props}
           />
         </div>
         {error && (
-          <p className="text-xs text-destructive ml-1">{error}</p>
+          <p id={errorId} className="text-xs text-destructive ml-1">{error}</p>
         )}
       </div>
     );

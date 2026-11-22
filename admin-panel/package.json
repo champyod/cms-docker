@@ -11,7 +11,9 @@
     "icons": "bun run scripts/generate-icons.mts",
     "icons:check": "bun run scripts/generate-icons.mts --check",
     "test": "vitest run",
-    "design:check": "bun scripts/__check_design_tokens.mjs"
+    "design:check": "bun run design:tokens && bun run design:controls",
+    "design:tokens": "bun scripts/__check_design_tokens.mjs",
+    "design:controls": "bun scripts/__check_raw_controls.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
