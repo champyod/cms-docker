@@ -3,7 +3,6 @@
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { RowActions } from '@/components/core/RowActions';
-import { SectionCard } from '@/components/core/SectionCard';
 import { Users, Plus, Trash2, Settings, FlaskConical } from 'lucide-react';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { cn } from '@/lib/utils';
@@ -14,9 +13,7 @@ interface Participation { id: number; user_id: number; unrestricted: boolean; hi
 
 interface Props {
   participations: Participation[];
-  expanded: boolean;
   permissionKeys: readonly string[];
-  onToggle: () => void;
   onAddParticipant: () => void;
   onAddTeam: () => void;
   onMarkAsTest: (id: number) => void;
@@ -67,16 +64,16 @@ function ParticipantActions({ participation, permissionKeys, onMarkAsTest, onOpe
   );
 }
 
-export function ContestParticipantsSection({ participations, expanded, permissionKeys, onToggle, onAddParticipant, onAddTeam, onMarkAsTest, onOpenSettings, onRemove }: Props): React.JSX.Element {
+/**
+ * The contest's participation rows, with the gated invite controls above them.
+ *
+ * Why no section card of its own: the board layout draws a card per section with the section's
+ * title and the meaning of its rows, so the header this component used to carry is the layout's.
+ */
+export function ContestParticipantsSection({ participations, permissionKeys, onAddParticipant, onAddTeam, onMarkAsTest, onOpenSettings, onRemove }: Props): React.JSX.Element {
   const effective = new Set(permissionKeys);
   return (
-    <SectionCard
-      title="Participants"
-      icon={<Users className="h-5 w-5 text-success" />}
-      count={participations.length}
-      expanded={expanded}
-      onToggle={onToggle}
-    >
+    <div>
       {hasEffectivePermission(effective, ACTION_PERMISSIONS.addParticipant) && (
         <div className="flex justify-end gap-2 border-b border-border bg-muted/20 p-4">
           <Button variant="secondary" size="sm" icon={Users} onClick={onAddTeam}>Add Team</Button>
@@ -95,6 +92,6 @@ export function ContestParticipantsSection({ participations, expanded, permissio
         ))}
         {participations.length === 0 && <EmptyState icon={Users} title="No participants yet" />}
       </div>
-    </SectionCard>
+    </div>
   );
 }

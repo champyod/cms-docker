@@ -31,36 +31,29 @@ const SETTINGS_FORM = {
 // a shared primitive instead of re-declaring the same markup, so re-inlining the
 // duplicate fails here rather than shipping a second look.
 describe('detail sections render through SectionCard', () => {
-  it('marks the task section collapsed with its count and reveals the body when expanded', () => {
+  it('renders the task rows with their actions and no section header of its own', () => {
     const props = {
       contestId: 7,
       tasks: [{ id: 3, name: 'sum', title: 'Sum' }],
       locale: 'en',
       permissionKeys: ['task:update'] as readonly string[],
       copy: en,
-      onToggle: () => undefined,
       onAddTask: () => undefined,
       onAttachTasks: () => undefined,
       onRemoveTask: () => undefined,
       onRefresh: () => undefined,
     };
-    const collapsed = renderToStaticMarkup(<ContestTasksSection {...props} expanded={false} />);
-    expect(collapsed).toContain('aria-expanded="false"');
-    expect(collapsed).toContain('(1)');
-    expect(collapsed).not.toContain('Remove sum');
-
-    const expanded = renderToStaticMarkup(<ContestTasksSection {...props} expanded />);
-    expect(expanded).toContain('aria-expanded="true"');
-    expect(expanded).toContain('Remove sum');
+    const html = renderToStaticMarkup(<ContestTasksSection {...props} />);
+    expect(html).toContain('Add Task');
+    expect(html).toContain('Remove sum');
+    expect(html).not.toContain('aria-expanded');
   });
 
-  it('marks the participant section collapsed and shows the gated invite actions when expanded', () => {
+  it('renders the participation rows and the gated invite actions without a section header', () => {
     const html = renderToStaticMarkup(
       <ContestParticipantsSection
         participations={[]}
-        expanded
         permissionKeys={['participation:create']}
-        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}
@@ -68,23 +61,19 @@ describe('detail sections render through SectionCard', () => {
         onRemove={() => undefined}
       />,
     );
-    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('Add Participant');
     expect(html).toContain('No participants yet');
+    expect(html).not.toContain('aria-expanded');
   });
 
-  it('marks the settings section collapsed and reveals the form only when expanded', () => {
-    const onToggle = vi.fn();
-    const settings = { formData: SETTINGS_FORM, onToggle, onChange: vi.fn() };
-    const collapsed = renderToStaticMarkup(<ContestSettingsSection {...settings} expanded={false} />);
-    expect(collapsed).toContain('aria-expanded="false"');
-    expect(collapsed).toContain('Contest Settings');
-    expect(collapsed).not.toContain('Asia/Bangkok');
+  it('renders the settings group body without a second section header', () => {
+    const html = renderToStaticMarkup(<ContestSettingsSection formData={SETTINGS_FORM} onChange={() => undefined} />);
+    expect(html).toContain('Timezone');
+    expect(html).toContain('Asia/Bangkok');
+    expect(html).not.toContain('Contest Settings');
 
-    render(<ContestSettingsSection {...settings} expanded />);
-    const toggle = screen.getByRole('button', { name: /Contest Settings/ });
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(screen.getByPlaceholderText('Asia/Bangkok')).not.toBeNull();
+    render(<ContestSettingsSection formData={SETTINGS_FORM} canEdit={false} onChange={() => undefined} />);
+    expect(screen.getByPlaceholderText('Asia/Bangkok').hasAttribute('disabled')).toBe(true);
   });
 });
 
@@ -95,9 +84,7 @@ describe('row action clusters render through RowActions', () => {
     render(
       <ContestParticipantsSection
         participations={[{ id: 4, user_id: 2, unrestricted: false, hidden: false, users: { username: 'ada', first_name: 'Ada', last_name: 'L' } }]}
-        expanded
         permissionKeys={permissionKeys}
-        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}

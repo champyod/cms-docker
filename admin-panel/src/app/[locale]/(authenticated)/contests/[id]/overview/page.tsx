@@ -3,8 +3,10 @@ import { AuthorizationError, requirePermission } from '@/lib/server/authorizatio
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
+import { PHASE_LABELS, resolveContestPhase } from '@/lib/contest-countdown';
 import { getContestOverview } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { ContestOverviewTab } from '@/components/contests/contest-detail/ContestOverviewTab';
 
 type ContestRouteProps = {
@@ -27,11 +29,26 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestOverviewPage({ params }: ContestRouteProps) {
+export default async function ContestOverviewPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
   const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.overview');
   const data = await readRecordOrNotFound(() => getContestOverview(contestId));
-  return <ContestOverviewTab data={data} />;
+  const { contest } = data;
+  return (
+    <DetailPage
+      // The record shell above renders the contest's name, its trail and its tabs, so this tab adds
+      // only what the four editable timings below cannot say: where the contest stands right now,
+      // and which zone those timings are read in.
+      ownsHeader={false}
+      title={contest.name}
+      facts={[
+        { term: 'Contest state', value: PHASE_LABELS[resolveContestPhase(contest, new Date())] },
+        { term: 'Timezone', value: contest.timezone ?? '—' },
+      ]}
+    >
+      <ContestOverviewTab data={data} />
+    </DetailPage>
+  );
 }

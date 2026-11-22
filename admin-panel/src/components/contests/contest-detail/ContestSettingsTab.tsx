@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -36,8 +35,13 @@ function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestDa
   };
 }
 
+/**
+ * The contest's settings fields and the save that writes them.
+ *
+ * Why the save sits inside the group instead of the layout's save bar: the values it writes live in
+ * this component's form state, and the layout cannot hold a control it does not own the state for.
+ */
 export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX.Element {
-  const [expanded, setExpanded] = useState(true);
   // Why: the settings reader carries only contest:read — without
   // contest:update the form locks and the save affordance never appears.
   const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'contest:update');
@@ -47,12 +51,10 @@ export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX
     buildSettingsPayload,
   );
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <ContestSettingsSection
         formData={formData}
-        expanded={expanded}
         canEdit={canEdit}
-        onToggle={() => setExpanded((previous) => !previous)}
         onChange={(patch) => updateForm(patch)}
       />
       {canEdit && (

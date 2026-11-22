@@ -28,7 +28,7 @@ const settings = {
 describe('Contest tab components', () => {
   it('renders overview timing without Participant or Task relations', () => {
     const html = renderToStaticMarkup(<ContestOverviewTab data={{ contest: { id: 7, name: 'Contest Seven', description: 'Description', is_active: true, start: null, stop: null, analysis_start: null, analysis_stop: null, timezone: 'Asia/Bangkok', permissionKeys: ['contest:read'] }, permissionKeys: ['contest:read'] }} />);
-    expect(html).toContain('Contest Status');
+    expect(html).toContain('Contest Start');
     expect(html).not.toContain('participations');
   });
 
@@ -44,15 +44,15 @@ describe('Contest tab components', () => {
     expect(html).toContain('Add Participant');
   });
 
-  it('renders the registration roster beside the participants', () => {
+  it('keeps the roster out of the participants section, because the page gives it a section of its own', () => {
     const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'team:update'] }} />);
-    expect(html).toContain('Registration Roster');
-    expect(html).toContain('A row here decides for this contest');
+    expect(html).toContain('No participants yet');
+    expect(html).not.toContain('Registration Roster');
   });
 
   it('renders settings fields and save action', () => {
     const html = renderToStaticMarkup(<ContestSettingsTab data={settings} />);
-    expect(html).toContain('Contest Settings');
+    expect(html).toContain('Timezone');
     expect(html).toContain('Save Changes');
   });
 });

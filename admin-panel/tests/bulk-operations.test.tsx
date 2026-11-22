@@ -251,11 +251,9 @@ describe('contest task surface bulk detach', () => {
             { id: 1, name: 'sum', title: 'Sum' },
             { id: 2, name: 'bob', title: 'Bob' },
           ]}
-          expanded
           locale="en"
           permissionKeys={['task:update']}
           copy={en}
-          onToggle={vi.fn()}
           onAddTask={vi.fn()}
           onAttachTasks={vi.fn()}
           onRemoveTask={vi.fn()}
@@ -291,11 +289,9 @@ describe('contest task surface bulk detach', () => {
         <ContestTasksSection
           contestId={7}
           tasks={[{ id: 1, name: 'sum', title: 'Sum' }]}
-          expanded
           locale="en"
           permissionKeys={['task:update']}
           copy={en}
-          onToggle={vi.fn()}
           onAddTask={vi.fn()}
           onAttachTasks={vi.fn()}
           onRemoveTask={vi.fn()}

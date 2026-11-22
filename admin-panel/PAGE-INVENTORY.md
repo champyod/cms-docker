@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **16 of 58 pages documented.**
+Inventory: **15 of 57 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -15,14 +15,14 @@ Inventory: **16 of 58 pages documented.**
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
-| `/contests/:id` | detail | contest identity and state · window and rule facts · participants and tasks it owns · actions · change history |
+| `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | detail | — *to inventory* |
 | `/contests/:id/countdown` | detail | — *to inventory* |
-| `/contests/:id/overview` | detail | — *to inventory* |
-| `/contests/:id/participants` | detail | — *to inventory* |
-| `/contests/:id/ranking` | detail | — *to inventory* |
-| `/contests/:id/settings` | settings | — *to inventory* |
-| `/contests/:id/tasks` | detail | — *to inventory* |
+| `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
+| `/contests/:id/participants` | board | the people and teams in this contest, with their team, unrestricted and hidden state · per-row mark as test, settings and remove · add a participant or a whole team · the registration roster: which teams registration offers, each row's state and its own empty meaning · read-only when team:update is absent |
+| `/contests/:id/ranking` | board | the contest's standings: every participant's rank, username, score per task and total · the progress graph over the first twenty · what empty means (the table says no submissions yet) |
+| `/contests/:id/settings` | settings | the contest's name, description and zone · what it allows: questions, user tests, submission download, password auth, registration, analysis mode · the scope each change reaches · save, and a locked form when contest:update is absent |
+| `/contests/:id/tasks` | list | the tasks this contest carries, by name and title · filter by name or title, with select-all over the filtered set · how many are assigned in total · per-row open and remove · attach and detach the selection · create a task and add it · what empty means |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
 | `/evaluation/submissions` | list | — *to inventory* |
 | `/evaluation/submissions/:id` | detail | — *to inventory* |

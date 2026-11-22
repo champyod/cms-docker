@@ -5,7 +5,6 @@ import { ListChecks, Plus, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { SectionCard } from '@/components/core/SectionCard';
 import { SurfaceState } from '@/components/core/SurfaceState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -121,11 +120,16 @@ function useRosterMutations(contestId: number, copy: RosterCopy, reload: () => v
   };
 }
 
-/** Which teams registration may offer for the contest already open, and who decides it. */
+/**
+ * Which teams registration may offer for the contest already open, and who decides it.
+ *
+ * Why no section card of its own: the board layout draws a card per section and carries the title
+ * and the meaning of the rows, which used to sit in this component's header. What stays here is the
+ * load state, the rows, the meaning of empty and the read-only note.
+ */
 export function ContestRosterSection({ contestId, permissionKeys }: ContestRosterSectionProps): React.JSX.Element {
   const dict = useDictionary();
   const copy = dict.contests.roster;
-  const [expanded, setExpanded] = useState(true);
   const { data, status, reload } = useSurfaceLoad(() => listContestRoster(contestId), surfaceLoadMessages(dict));
   const mutations = useRosterMutations(contestId, copy, reload);
   // Why the map entry: the button that offers the write and the action that performs
@@ -135,14 +139,7 @@ export function ContestRosterSection({ contestId, permissionKeys }: ContestRoste
   const loaded = status.kind === 'idle';
 
   return (
-    <SectionCard
-      title={copy.title}
-      icon={<ListChecks className="h-5 w-5 text-primary" />}
-      count={loaded ? rows.length : undefined}
-      expanded={expanded}
-      onToggle={() => setExpanded((previous) => !previous)}
-    >
-      <div className="border-b border-border bg-muted/20 p-4 text-xs text-muted-foreground">{copy.description}</div>
+    <div>
       <SurfaceState status={status} />
       {loaded && (
         <div className="divide-y divide-border">
@@ -166,6 +163,6 @@ export function ContestRosterSection({ contestId, permissionKeys }: ContestRoste
           <InlineAlert tone="info" density="compact" announce="polite">{copy.readOnly}</InlineAlert>
         </div>
       )}
-    </SectionCard>
+    </div>
   );
 }
