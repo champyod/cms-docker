@@ -3,6 +3,7 @@ import { DetailPage } from '@/components/patterns/DetailPage';
 import { SubmissionEvaluationTab } from '@/components/submissions/SubmissionEvaluationTab';
 import { getDictionary } from '@/i18n';
 import { getSubmissionEvaluation } from '@/lib/evaluation-read-models';
+import { formatCount } from '@/lib/format-number';
 import type { SubmissionEvaluationModel } from '@/lib/evaluation-read-model-types';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -49,10 +50,9 @@ export default async function SubmissionEvaluationPage({ params }: { params: Pro
       // The record shell above renders the submission's name, its trail, its status and its tabs.
       // This tab adds how the run went overall, then the per-testcase rows.
       ownsHeader={false}
-      title={`#${model.submissionId}`}
       facts={[
-        { term: copy.evaluation.testcases, value: String(model.evaluations.length) },
-        { term: copy.evaluation.failed, value: String(failedCount(model)) },
+        { term: copy.evaluation.testcases, value: formatCount(model.evaluations.length, locale) },
+        { term: copy.evaluation.failed, value: formatCount(failedCount(model), locale) },
       ]}
     >
       <SubmissionEvaluationTab
