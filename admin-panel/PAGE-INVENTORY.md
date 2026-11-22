@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **15 of 57 pages documented.**
+Inventory: **0 of 0 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -24,13 +24,13 @@ Inventory: **15 of 57 pages documented.**
 | `/contests/:id/settings` | settings | the contest's name, description and zone · what it allows: questions, user tests, submission download, password auth, registration, analysis mode · the scope each change reaches · save, and a locked form when contest:update is absent |
 | `/contests/:id/tasks` | list | the tasks this contest carries, by name and title · filter by name or title, with select-all over the filtered set · how many are assigned in total · per-row open and remove · attach and detach the selection · create a task and add it · what empty means |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
-| `/evaluation/submissions` | list | — *to inventory* |
-| `/evaluation/submissions/:id` | detail | — *to inventory* |
-| `/evaluation/submissions/:id/evaluation` | detail | — *to inventory* |
-| `/evaluation/submissions/:id/history` | detail | — *to inventory* |
+| `/evaluation/submissions` | list | submissions with id, time, submitter and contest, task, language, judging status and score · filter by contest, task, user or free text, with sort · how many match against the whole set, paged · per-row view, rejudge and official toggle · bulk rescore, official and comment over the checked rows or the whole filtered set · live refresh · what empty means |
+| `/evaluation/submissions/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
+| `/evaluation/submissions/:id/evaluation` | detail | how many testcases were evaluated and how many failed · each testcase's verdict, time and memory, expandable to its input, expected output and the submission's output, or to the reason those bytes are withheld |
+| `/evaluation/submissions/:id/history` | detail | who made the latest recorded change, what it was and when · every recorded change, with its actor, action, result, reason and time, newest first, or what empty means · a failed read instead of an empty list |
 | `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
-| `/evaluation/submissions/:id/results` | detail | — *to inventory* |
-| `/evaluation/submissions/:id/summary` | detail | — *to inventory* |
+| `/evaluation/submissions/:id/results` | detail | how many datasets were judged and how many compilations failed · each dataset's score, compilation outcome, evaluation outcome, time, memory, public score and when it was scored · the stored files, each downloadable · what empty means |
+| `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |
 | `/infrastructure/containers` | list | — *to inventory* |
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |

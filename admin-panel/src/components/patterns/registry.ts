@@ -23,6 +23,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/infrastructure/services': 'board',
   '/ranking/users': 'board',
   '/evaluation/lanes': 'list',
+  '/evaluation/submissions': 'list',
   '/system/settings': 'settings',
   // A record landing carries no surface either: it resolves the record and forwards to its default
   // tab, which is where the detail actually lives.
@@ -33,6 +34,11 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/contests/:id/settings': 'settings',
   '/contests/:id/tasks': 'list',
   '/people/users/:id': 'redirect',
+  '/evaluation/submissions/:id': 'redirect',
+  '/evaluation/submissions/:id/evaluation': 'detail',
+  '/evaluation/submissions/:id/history': 'detail',
+  '/evaluation/submissions/:id/results': 'detail',
+  '/evaluation/submissions/:id/summary': 'detail',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.
   '/admins': 'redirect',
   '/appearance': 'redirect',

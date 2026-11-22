@@ -7,7 +7,6 @@ import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { useDictionary } from '@/hooks/useDictionary';
 
 export interface SubmissionHistoryTabProps {
-  readonly submissionId: number;
   readonly history: SubmissionHistoryResult;
 }
 
@@ -44,17 +43,13 @@ function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): Reac
   );
 }
 
-export function SubmissionHistoryTab({ submissionId, history }: SubmissionHistoryTabProps): React.JSX.Element {
+export function SubmissionHistoryTab({ history }: SubmissionHistoryTabProps): React.JSX.Element {
   const dictionary = useDictionary();
-  const heading = dictionary.submissions.history.label
-    + ' — ' + dictionary.navigation.evaluation['submission-record'].label
-    + ' #' + submissionId;
   if (!history.success) {
     return <InlineAlert tone="destructive" density="compact">{history.error}</InlineAlert>;
   }
   return (
     <Card className="space-y-3">
-      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{heading}</h3>
       {history.data.length === 0 ? (
         <p className="text-sm text-muted-foreground">{dictionary.submissions.history.empty}</p>
       ) : (

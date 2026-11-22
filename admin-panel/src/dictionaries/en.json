@@ -597,6 +597,8 @@
         "emptyTitle": "No results yet",
         "emptyDescription": "Results appear once the submission has been judged.",
         "dataset": "Dataset #{id}",
+        "datasets": "Datasets",
+        "compilationsFailed": "Compilations failed",
         "pending": "Pending...",
         "compilationSkipped": "Skipped (Compilation Failed)",
         "evaluationSkipped": "Pending/Skipped",
@@ -611,6 +613,10 @@
         "emptyTitle": "No compilation logs",
         "emptyDescription": "Compiler output appears once the submission has been compiled.",
         "title": "Compilation Logs — {record} #{id}"
+      },
+      "evaluation": {
+        "testcases": "Testcases",
+        "failed": "Failed"
       },
       "recompute": {
         "datasetLabel": "Dataset",

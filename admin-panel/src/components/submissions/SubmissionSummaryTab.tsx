@@ -3,8 +3,6 @@
 import Link from 'next/link';
 import { AlertCircle, ArrowRight } from 'lucide-react';
 
-import { Card } from '@/components/core/Card';
-import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { useDictionary } from '@/hooks/useDictionary';
 import type { SubmissionPreviousModel, SubmissionSourceModel, SubmissionSummary } from '@/lib/evaluation-read-model-types';
 import { interpolate } from '@/lib/interpolate';
@@ -23,25 +21,6 @@ export interface SubmissionSummaryTabProps {
   readonly previous?: SubmissionPreviousModel | null;
   readonly permissionKeys: readonly string[];
   readonly locale: 'en' | 'th';
-}
-
-function SummaryIdentity({ summary }: { readonly summary: SubmissionSummary }): React.JSX.Element {
-  // Why: a submission belongs to no contest context on this route, so its instant reads in the
-  // reviewer's own zone.
-  const formatTimestamp = useFormatTimestamp();
-  const record = useDictionary().submissions.record;
-  return (
-    <Card className="space-y-4">
-      <div className="text-muted-foreground text-sm flex flex-wrap gap-4">
-        <span>{record.identity.time}: {formatTimestamp(summary.timestamp)}</span>
-        <span>{record.identity.language}: <span className="font-medium text-foreground">{summary.language ?? '—'}</span></span>
-      </div>
-      <div className="text-sm">
-        <span className="text-muted-foreground">{record.comment.label}: </span>
-        <span className="text-foreground">{summary.comment || '—'}</span>
-      </div>
-    </Card>
-  );
 }
 
 // Why the descriptor check: the outcome tabs need their own reader keys, and a
@@ -84,7 +63,6 @@ export function SubmissionSummaryTab({ summary, source, previous, permissionKeys
   const outcome = useDictionary().submissions.record.outcome;
   return (
     <div className="space-y-6">
-      <SummaryIdentity summary={summary} />
       {/* Why one mount for the source and its diff: the merged viewer answers both questions in one
           scroll, so the section stays only as the anchor the previous-submission chip links to. */}
       <section id="submission-compare" className="scroll-mt-24">

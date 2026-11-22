@@ -92,8 +92,6 @@ function renderList(): HTMLElement {
     <DictionaryProvider dict={en}>
       <SubmissionList
         initialSubmissions={[11, 12, 13, 14].map(submissionRow)}
-        totalPages={1}
-        currentPage={1}
         navigation={en.navigation}
         canRecalculate
         canOfficial

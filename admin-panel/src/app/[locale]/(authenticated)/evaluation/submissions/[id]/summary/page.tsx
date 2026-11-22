@@ -1,5 +1,8 @@
 import { notFound } from 'next/navigation';
+import { DetailPage } from '@/components/patterns/DetailPage';
+import { SubmissionArrival } from '@/components/submissions/SubmissionArrival';
 import { SubmissionSummaryTab } from '@/components/submissions/SubmissionSummaryTab';
+import { getDictionary } from '@/i18n';
 import { getPreviousSubmission, getSubmissionSource, getSubmissionSummary } from '@/lib/evaluation-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -28,6 +31,7 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
   // Why the keys reach the tab: the summary renders links to the outcome tabs, so
   // it must know which of them this caller may open.
   const effective = await authorizeSubmissionTab('evaluation.submission-tabs.summary');
+  const dictionary = await getDictionary(locale);
   // Why the source read is not wrapped in readRecordOrNotFound: storing no file is
   // a valid record, so a null source renders as an empty viewer rather than a 404.
   const [summary, source, previous] = await Promise.all([
@@ -35,13 +39,26 @@ export default async function SubmissionSummaryPage({ params }: { params: Promis
     getSubmissionSource(id),
     getPreviousSubmission(id),
   ]);
+  const copy = dictionary.submissions.record;
   return (
-    <SubmissionSummaryTab
-      summary={summary}
-      source={source}
-      previous={previous}
-      permissionKeys={[...effective]}
-      locale={locale as 'en' | 'th'}
-    />
+    <DetailPage
+      // The record shell above renders the submission's name, its trail, its status and its tabs.
+      // This tab adds the values the shell does not show, then the source and the outcome links.
+      ownsHeader={false}
+      title={`#${summary.id}`}
+      facts={[
+        { term: copy.identity.language, value: summary.language ?? '—' },
+        { term: copy.comment.label, value: summary.comment === '' ? '—' : summary.comment },
+      ]}
+      freshness={<SubmissionArrival timestamp={summary.timestamp} />}
+    >
+      <SubmissionSummaryTab
+        summary={summary}
+        source={source}
+        previous={previous}
+        permissionKeys={[...effective]}
+        locale={locale as 'en' | 'th'}
+      />
+    </DetailPage>
   );
 }
