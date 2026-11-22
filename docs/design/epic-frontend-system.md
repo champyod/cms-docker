@@ -21,10 +21,11 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 | S6 | Five page layouts, a registry, and a discrepancy gate | done | four negative controls: new undeclared page, declared page not rendering its layout, stale declaration |
 | S7 | Dashboard and the contests list rebuilt on the system | done | six contract tests, falsified twice; contests list holds 0 raw controls |
 | S8 | Row height is the density preference, default dense | done | `h-10 density:h-8` from one constant; default `compact` |
-| S9 | `DetailPage`, `FormPage`, `SettingsPage` layouts | **open** | only two of five exist |
-| S10 | Per-page information inventory: what each page must show, in what order | **open** | the layer that made the dashboard wrong before tokens could help |
-| S11 | Convert pages to their layout, tightening the archetype baseline from 75 | **open** | 1 of 76 declared |
-| S12 | 164 uses of a status colour on ordinary text removed | **open** | 83 files; colour must mean state |
+| S9 | `DetailPage`, `FormPage`, `SettingsPage` layouts | done | four contract tests: the fact strip is a `<dl>`, the error summary sits above the fields, a clean form shows no alert, and every settings group states its scope |
+| S10 | Slot contract and per-page inventory | done | `patterns/slots.ts` names the facts each layout requires; `PAGE-INVENTORY.md` lists all 59 surface pages, 5 documented; the gate refuses a declared layout whose facts are empty |
+| S11 | Convert pages to their layout | **open** | 20 of 76 declared (17 are redirects, which need no surface), 56 content pages undeclared; batch 1 running in the `design/pages-batch-1` lane |
+| S12 | Status colour removed from ordinary text | **open** | 370 uses across 123 files; the gate holds it (may fall, never rise) |
+| S13 | Light, dark, high contrast and both densities measured per rebuilt page | **open** | the token gate measures both colour modes; no per-page mode matrix yet |
 
 ## Rules this epic is held to
 
