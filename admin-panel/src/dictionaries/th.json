@@ -327,6 +327,8 @@
     "overview": {
       "code": "รหัสทีม",
       "name": "ชื่อทีม",
+      "leader": "หัวหน้าทีม",
+      "members": "สมาชิก",
       "registerable": "ให้ลงทะเบียนได้",
       "registerableHint": "แสดงทีมนี้ให้ผู้เข้าแข่งขันเลือกตอนลงทะเบียน",
       "readOnlyHint": "อ่านอย่างเดียว — คุณไม่มีสิทธิ์ team:update",

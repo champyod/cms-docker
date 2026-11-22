@@ -174,7 +174,6 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read', 'team:update']}
-        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,
@@ -190,7 +189,6 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read']}
-        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,
