@@ -107,7 +107,11 @@ fn report_tick(pass: &Tick) {
 }
 
 /// The seconds since the epoch with the subsecond part, which is what Python's `time.time()` is.
-fn now_seconds() -> f64 {
+///
+/// # Panics
+///
+/// When the system clock reads before 1970, which no sample can be measured against.
+pub fn now_seconds() -> f64 {
     // WHY: a clock before 1970 has no gap to measure, and a silent zero would sample one instant twice.
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

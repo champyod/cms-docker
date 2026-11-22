@@ -7,6 +7,10 @@ edition = "2021"
 name = "cms-log-service"
 path = "src/bin/cms-log-service.rs"
 
+[[bin]]
+name = "cms-resource-service"
+path = "src/bin/cms-resource-service.rs"
+
 [dependencies]
 backon = { workspace = true }
 cms-proto = { path = "../cms-proto" }
