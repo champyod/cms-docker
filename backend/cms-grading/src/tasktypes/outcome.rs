@@ -16,6 +16,7 @@
 
 use std::path::PathBuf;
 
+use crate::messages::{EVALUATION_MESSAGES, EXECUTED};
 use crate::stage::FileDigest;
 use cms_sandbox::ExecutionStats;
 use cms_sandbox::ExitStatus;
@@ -25,16 +26,6 @@ use super::Run;
 use super::TaskError;
 
 const NO_CREDIT: f64 = 0.0;
-/// The sentences a report shows for a run that did not answer. The first of the list of
-/// text is the message and the rest are its arguments, as the reference hands a message
-/// and its arguments over; a code a run returned is not quoted.
-const NO_OUTPUT: &str = "Evaluation didn't produce file";
-pub(crate) const TIMED_OUT: &str = "Execution timed out";
-const WALL_TIMED_OUT: &str = "Execution timed out (wall clock limit exceeded)";
-const MEMORY_EXCEEDED: &str = "Memory limit exceeded";
-const KILLED: &str = "Execution killed by signal";
-const NONZERO_RETURN: &str = "Execution failed because the return code was nonzero";
-const EXECUTED: &str = "Execution completed successfully";
 
 /// What an evaluation left behind, as the result is filed.
 #[derive(Debug, Clone, PartialEq)]
@@ -87,7 +78,10 @@ impl Evaluation {
         let output = batch.actual_output();
         if !run.files().path(output).is_file() {
             self.outcome = Some(NO_CREDIT);
-            self.text = vec![NO_OUTPUT.to_owned(), output.to_owned()];
+            self.text = EVALUATION_MESSAGES
+                .get("nooutput")
+                .message()
+                .reported_naming(output);
             return Ok(());
         }
         if job.get_output.unwrap_or(false) {
@@ -120,15 +114,15 @@ impl Evaluation {
 /// its answer rather than on this. The Communication task type reads the same
 /// sentence for the process it is blaming, so this is the one table of them.
 pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
-    let message = match stats.exit_status {
-        ExitStatus::Timeout => Some(TIMED_OUT),
-        ExitStatus::TimeoutWall => Some(WALL_TIMED_OUT),
-        ExitStatus::MemoryLimit => Some(MEMORY_EXCEEDED),
-        ExitStatus::Signal => Some(KILLED),
-        ExitStatus::NonzeroReturn => Some(NONZERO_RETURN),
-        ExitStatus::Ok | ExitStatus::SandboxError => None,
+    let shorthand = match stats.exit_status {
+        ExitStatus::Timeout => "timeout",
+        ExitStatus::TimeoutWall => "walltimeout",
+        ExitStatus::MemoryLimit => "memorylimit",
+        ExitStatus::Signal => "signal",
+        ExitStatus::NonzeroReturn => "returncode",
+        ExitStatus::Ok | ExitStatus::SandboxError => return Vec::new(),
     };
-    message.map_or_else(Vec::new, |said| vec![said.to_owned()])
+    EVALUATION_MESSAGES.get(shorthand).message().reported()
 }
 
 /// What a run's figures say, undecided when there was no command to run or the

@@ -22,10 +22,11 @@ use cms_sandbox::ExitStatus;
 
 use super::charge::charged;
 use super::manager::from_manager;
+use crate::messages::EXECUTED;
 use crate::tasktypes::outcome::what_went_wrong;
 use crate::tasktypes::{Run, TaskError};
 
-use super::{Communication, EXECUTED, NO_CREDIT, OUTPUT};
+use super::{Communication, NO_CREDIT, OUTPUT};
 
 /// What a Communication evaluation left behind, as the result is filed.
 ///

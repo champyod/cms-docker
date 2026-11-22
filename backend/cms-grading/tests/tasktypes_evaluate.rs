@@ -11,6 +11,7 @@
 mod helpers;
 
 use cms_grading::job::EvaluationJob;
+use cms_grading::scoretypes::format_status_text;
 use cms_grading::tasktypes::{Batch, TaskError};
 use cms_proto::DigestMap;
 use serde_json::json;
@@ -172,7 +173,13 @@ fn a_run_that_wrote_nothing_and_a_run_that_was_stopped_are_both_charged_nothing(
     assert_eq!(wrote_nothing.outcome, Some(0.0));
     assert_eq!(
         wrote_nothing.text,
-        vec!["Evaluation didn't produce file", "output.txt"]
+        vec!["Evaluation didn't produce file %s", "output.txt"],
+        "the sentence names the file the run did not write"
+    );
+    assert_eq!(
+        format_status_text(&wrote_nothing.text),
+        "Evaluation didn't produce file output.txt",
+        "and the filename reaches the contestant rather than a bare %s"
     );
     assert!(wrote_nothing.user_output.is_none());
 

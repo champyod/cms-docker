@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use cms_proto::DigestMap;
 
 use crate::job::CompilationJob;
+use crate::messages::COMPILATION_MESSAGES;
 use crate::stage::Cache;
 use cms_sandbox::ExecutionStats;
 use cms_sandbox::ExitStatus;
@@ -37,10 +38,6 @@ const STREAM_EXTENSION: &str = ".txt";
 const SYSTEM_CONFIG: &str = "/etc";
 /// The package database a Haskell compiler reads, mapped where the machine holds one.
 const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
-const SUCCEEDED: &str = "Compilation succeeded";
-const FAILED: &str = "Compilation failed";
-const TIMED_OUT: &str = "Compilation timed out";
-const KILLED: &str = "Compilation killed with signal";
 
 /// What a compilation left behind, as the result is filed.
 #[derive(Debug, Clone, PartialEq)]
@@ -193,10 +190,10 @@ fn decide(stats: Option<&ExecutionStats>) -> Compilation {
     let (success, compilation_success, text) = match stats {
         None => (false, None, Vec::new()),
         Some(stats) => match stats.exit_status {
-            ExitStatus::Ok => (true, Some(true), said(SUCCEEDED)),
-            ExitStatus::NonzeroReturn => (true, Some(false), said(FAILED)),
-            ExitStatus::Timeout | ExitStatus::TimeoutWall => (true, Some(false), said(TIMED_OUT)),
-            ExitStatus::Signal => (true, Some(false), said(&killed_by(stats.signal))),
+            ExitStatus::Ok => (true, Some(true), said("success")),
+            ExitStatus::NonzeroReturn => (true, Some(false), said("fail")),
+            ExitStatus::Timeout | ExitStatus::TimeoutWall => (true, Some(false), said("timeout")),
+            ExitStatus::Signal => (true, Some(false), killed_by(stats)),
             ExitStatus::SandboxError | ExitStatus::MemoryLimit => (false, None, Vec::new()),
         },
     };
@@ -211,12 +208,18 @@ fn decide(stats: Option<&ExecutionStats>) -> Compilation {
     }
 }
 
-/// The one sentence a report shows, as the list a report holds its sentences in.
-fn said(message: &str) -> Vec<String> {
-    vec![message.to_owned()]
+/// The one sentence a report shows for a compilation that ended this way, as the list a
+/// report holds its sentences in.
+fn said(shorthand: &str) -> Vec<String> {
+    COMPILATION_MESSAGES.get(shorthand).message().reported()
 }
 
-/// The sentence for a compilation a signal killed, with no number where it had none.
-fn killed_by(signal: Option<i64>) -> String {
-    signal.map_or_else(|| KILLED.to_owned(), |number| format!("{KILLED} {number}"))
+/// The sentence for a compilation a signal killed, with the signal's number as its one
+/// argument; a log that wrote no number reads as zero, which is the reference's own
+/// reading of the same log.
+fn killed_by(stats: &ExecutionStats) -> Vec<String> {
+    COMPILATION_MESSAGES
+        .get("signal")
+        .message()
+        .reported_naming(&stats.signal.unwrap_or_default().to_string())
 }

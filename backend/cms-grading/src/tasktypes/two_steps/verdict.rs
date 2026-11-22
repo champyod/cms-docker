@@ -13,6 +13,7 @@
 #![forbid(unsafe_code)]
 
 use crate::job::EvaluationJob;
+use crate::messages::{EVALUATION_MESSAGES, EXECUTED};
 use crate::tasktypes::outcome::what_went_wrong;
 use crate::tasktypes::{OutputFile, Run, TaskError};
 use cms_sandbox::ExecutionStats;
@@ -21,8 +22,6 @@ use cms_sandbox::ExitStatus;
 use super::{Evaluation, OUTPUT};
 
 const NO_CREDIT: f64 = 0.0;
-const NO_OUTPUT: &str = "Evaluation didn't produce file";
-const EXECUTED: &str = "Execution completed successfully";
 
 /// Fills in the score and the sentences once both boxes have worked, in the
 /// reference's order: a run that did not do what it was asked to is told why, an
@@ -43,7 +42,10 @@ pub(super) fn judge(
     }
     if !second.files().path(OUTPUT).is_file() {
         evaluation.outcome = Some(NO_CREDIT);
-        evaluation.text = vec![NO_OUTPUT.to_owned(), OUTPUT.to_owned()];
+        evaluation.text = EVALUATION_MESSAGES
+            .get("nooutput")
+            .message()
+            .reported_naming(OUTPUT);
         return Ok(());
     }
     if job.get_output.unwrap_or(false) {

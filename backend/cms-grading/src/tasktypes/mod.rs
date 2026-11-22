@@ -79,9 +79,6 @@ pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
 pub use two_steps::TwoSteps;
 
 pub(crate) use boxed::{Run, Shared};
-/// The sentence a run that was stopped by its time limit is reported with, which the score
-/// types read to show a row as having run past the limit rather than as having taken a time.
-pub(crate) use outcome::TIMED_OUT;
 
 use crate::stage::{CacheHandle, FileDigest, StageError};
 

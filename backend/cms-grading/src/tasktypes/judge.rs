@@ -32,6 +32,7 @@ use cms_db::FileDigest;
 use super::TaskError;
 use super::{handle, Runtime};
 use crate::job::EvaluationJob;
+use crate::messages::EVALUATION_MESSAGES;
 use crate::stage::{Cache, CacheHandle, Stage, StageError};
 use crate::steps::{checker_step, white_diff, Check, Comparison, Verdict};
 
@@ -42,9 +43,6 @@ const CHECK_BOX: &str = "check";
 /// The name the answer is copied into the check box under, which is the third argument
 /// the checker is given.
 const USER_OUTPUT_FILENAME: &str = "user_output.txt";
-/// The sentence a report shows for an answer the run never wrote, whose argument is the
-/// filename the parameters named.
-const NO_OUTPUT: &str = "Evaluation didn't produce file";
 
 /// What a judge decided about one answer.
 #[derive(Debug, Clone, PartialEq)]
@@ -88,12 +86,14 @@ impl OutputSource {
 }
 
 impl Judgement {
-    /// An answer that was never written: a wrong answer, not a failed check.
+    /// An answer that was never written: a wrong answer, not a failed check, naming the
+    /// file the parameters asked for.
     fn unwritten(filename: &str) -> Self {
+        let sentence = EVALUATION_MESSAGES.get("nooutput").message();
         Self {
             success: true,
             outcome: Some(0.0),
-            text: vec![NO_OUTPUT.to_owned(), filename.to_owned()],
+            text: sentence.reported_naming(filename),
             admin_text: None,
             sandboxes: Vec::new(),
         }

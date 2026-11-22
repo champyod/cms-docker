@@ -75,7 +75,6 @@ const EXECUTABLES_REQUIRED: usize = 1;
 /// The score of a run that did not answer and of a job that only asked to be run:
 /// both are zero, and what a report shows is what says so.
 const NO_CREDIT: f64 = 0.0;
-const EXECUTED: &str = "Execution completed successfully";
 
 /// The Communication task type, as its three parameters say.
 ///

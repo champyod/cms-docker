@@ -12,6 +12,7 @@
 mod support;
 
 use cms_grading::job::EvaluationJob;
+use cms_grading::scoretypes::format_status_text;
 use cms_grading::stage::StageError;
 use cms_grading::tasktypes::{BatchAndOutput, Origin, TaskError};
 use cms_sandbox::ExitStatus;
@@ -191,13 +192,14 @@ fn a_run_that_wrote_no_answer_hands_nothing_on_and_says_why() {
 
     assert!(judged.success, "the box worked, so the run is judged");
     assert_eq!(judged.outcome, Some(0.0));
-    assert_eq!(
-        judged.text,
-        vec!["Evaluation didn't produce file", "output.txt"]
-    );
     assert!(
         judged.origin.is_none() && judged.extra_args.is_empty(),
         "there is no answer for a checker to be handed"
+    );
+    assert_eq!(
+        format_status_text(&judged.text),
+        "Evaluation didn't produce file output.txt",
+        "the sentence names the file the run did not write"
     );
 }
 

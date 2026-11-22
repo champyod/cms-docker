@@ -13,6 +13,7 @@ use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::str::FromStr;
 
+use cms_grading::scoretypes::format_status_text;
 use cms_grading::stage::FileDigest;
 use cms_grading::tasktypes::{Judgement, OutputSource, TaskError};
 
@@ -53,7 +54,13 @@ fn an_answer_that_was_never_written_is_a_wrong_answer_and_not_a_failed_check() {
     assert_eq!(judged.outcome, Some(0.0));
     assert_eq!(
         judged.text,
-        vec!["Evaluation didn't produce file", ANSWER_FILENAME]
+        vec!["Evaluation didn't produce file %s", ANSWER_FILENAME],
+        "the sentence carries the filename as its one argument"
+    );
+    assert_eq!(
+        format_status_text(&judged.text),
+        format!("Evaluation didn't produce file {ANSWER_FILENAME}"),
+        "and the contestant is shown the file rather than a %s"
     );
     assert!(
         !check_box_made(&dir),
