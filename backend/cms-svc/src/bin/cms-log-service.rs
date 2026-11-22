@@ -1,9 +1,4 @@
-//! The process that runs the logger service: three environment inputs in, one listener out.
-//!
-//! Every input is decided elsewhere and arrives rendered from `config.toml` by
-//! `scripts/__config_sync.sh`, so this file reads no configuration file of its own. A missing
-//! input stops the process: a logger started without a secret would authenticate nobody, and
-//! one started without an address has nothing to bind, so neither may fall back to a default.
+//! The process that runs the logger: three environment inputs in, one listener out.
 
 use std::env;
 use std::fmt;
@@ -49,11 +44,7 @@ fn run() -> Result<(), StartError> {
     Ok(())
 }
 
-/// Reads an environment variable the process cannot run without.
-///
-/// # Errors
-///
-/// [`StartError::Missing`] naming the variable when it is unset, blank, or not UTF-8.
+/// Reads an environment variable the process cannot run without; unset, blank or non-UTF-8 is refused by name.
 fn required(name: &'static str) -> Result<String, StartError> {
     match env::var(name) {
         Ok(value) if !value.trim().is_empty() => Ok(value),

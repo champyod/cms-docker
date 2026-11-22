@@ -1,7 +1,4 @@
 //! The binary's input handling: every variable it cannot invent, it refuses, naming it.
-//!
-//! Each case runs the process this build produced, with an empty environment, so what is
-//! asserted is the refusal an operator would see and not a library call behind it.
 
 use std::fs;
 use std::io::{BufRead, BufReader};
