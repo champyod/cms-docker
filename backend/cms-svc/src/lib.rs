@@ -51,7 +51,7 @@ pub use resource::{
 };
 pub use resource_service::{
     interesting_command_line, CoordError, CpuPercentages, LocalService, Matched, MemoryMegabytes,
-    ProcessCpu, ProcessMatcher, ProcessSpawner, ResourceError, ResourceService, Sample, Sampling,
-    ServiceCommand, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage, SpawnError,
-    SpawnedChild, Spawner, MAX_RESOURCE_SECONDS,
+    ProcessCpu, ProcessMatcher, ProcessSpawner, ResourceError, ResourceService, RestartReport,
+    Sample, Sampling, ServiceCommand, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage,
+    SpawnError, SpawnedChild, Spawner, MAX_RESOURCE_SECONDS,
 };
