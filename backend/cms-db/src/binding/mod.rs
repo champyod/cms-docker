@@ -3,7 +3,7 @@
 //! `src/cms/db/util.py` answers that in three layers: the deployment default
 //! (`contests.is_active`), the registry row written for one instance
 //! (`services.contest_id`), and an explicit `-c` override, resolved in that
-//! order. `registry` holds the row.
+//! order. `registry` holds the row and `active` the default with its bootstrap.
 //!
 //! Two of `util.py`'s inhabitants stay out. `ask_for_contest` and
 //! `ask_for_active_contest` print a numbered menu and call `input()`; a database
@@ -24,8 +24,12 @@
 
 use sqlx::postgres::PgConnection;
 
+mod active;
 mod registry;
 
+pub use active::{
+    active_contest, active_contest_id, bootstrap_contest_id, ACTIVE_CONTEST, CONTEST_ID_ENV,
+};
 pub use registry::{service_binding, ServiceBinding, SERVICE, SERVICE_BINDING};
 
 /// Why an instance's contest could not be resolved.
@@ -37,6 +41,24 @@ pub enum BindingError {
     /// A read the server refused.
     #[error("resolving the contest binding failed: {0}")]
     Database(#[from] sqlx::Error),
+    /// `contests` does not exist yet, so there is no deployment default to read.
+    #[error("the contests table does not exist yet")]
+    MissingContests,
+    /// `contests` exists and holds no active row, which is not bootstrappable.
+    #[error(
+        "no active contest: contests.is_active holds no active row; \
+         set one with './cms contest set-active <id>'"
+    )]
+    NoActiveContest,
+    /// A fresh install that names no contest in `CONTEST_ID`.
+    #[error(
+        "contests does not exist yet and CONTEST_ID is unset: \
+         cannot decide which contest to serve"
+    )]
+    BootstrapUnset,
+    /// `CONTEST_ID` set to something that is not a contest id.
+    #[error("bootstrap CONTEST_ID '{0}' is not a contest id")]
+    BootstrapNotAContest(String),
 }
 
 /// One catalogue question, so both reads ask it the same way.

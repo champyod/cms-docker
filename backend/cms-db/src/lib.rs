@@ -99,7 +99,10 @@ pub use actor::{
 pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
-pub use binding::{service_binding, BindingError, ServiceBinding, SERVICE, SERVICE_BINDING};
+pub use binding::{
+    active_contest, active_contest_id, bootstrap_contest_id, service_binding, BindingError,
+    ServiceBinding, ACTIVE_CONTEST, CONTEST_ID_ENV, SERVICE, SERVICE_BINDING,
+};
 pub use codename::{Codename, CodenameError};
 pub use contest::{
     Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenPolicy, WindowError,
