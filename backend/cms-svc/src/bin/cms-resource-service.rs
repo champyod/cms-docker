@@ -1,13 +1,11 @@
 //! The process that supervises this machine's services: seven environment inputs in, one listener out.
 
-use std::env;
-use std::fmt;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::Duration;
+use std::{env, fmt, io};
 
 use cms_proto::GateConfig;
 use cms_svc::{

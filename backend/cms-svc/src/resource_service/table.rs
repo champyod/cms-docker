@@ -1,8 +1,7 @@
 //! The `CMS_SERVICES` table: what `[services]` renders as, one `Name|shard|host|port` line per shard.
 
-use std::fmt;
-use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::{fmt, io};
 
 use super::coord::{LocalService, ServiceCoord};
 
