@@ -2,7 +2,7 @@ import { CheckCircle2 } from 'lucide-react';
 
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { ROW_HEIGHT_CLASS, ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Text } from '@/components/core/Typography';
 import type { StatusType } from '@/components/core/StatusBadge';
 
@@ -57,13 +57,10 @@ const ALERT_TONE: Record<StatusType, 'success' | 'warning' | 'destructive'> = {
   down: 'destructive',
 };
 
-const ROW_HEIGHT = 'h-8'; // 32px, the density default from DESIGN-PREFERENCE topic 5
-
 /**
  * The dashboard as data in, markup out, so the page keeps the queries and this keeps the rules:
- * the state of the service comes before any count (topic 8d: the main message is the state, not
- * the number), colour appears only where it *means* something, and the activity list is a table
- * with 32px rows rather than a stack of cards.
+ * nothing interrupts unless something is wrong, colour appears only where it carries meaning, and
+ * the activity list is a table rather than a stack of cards.
  */
 export function DashboardSurface({
   stats,
@@ -121,7 +118,7 @@ export function DashboardSurface({
           columns={columns}
           rows={activity}
           getRowKey={(row) => row.id}
-          getRowClassName={() => ROW_HEIGHT}
+          getRowClassName={() => ROW_HEIGHT_CLASS}
           emptyState={<Text variant="muted">{labels.activity.empty}</Text>}
         />
       </Card>
@@ -152,9 +149,8 @@ function Stat({
 }
 
 /**
- * The system's state, as its own component so the dashboard archetype can render it above every
- * metric without the surface knowing where it sits. Quiet when nothing is wrong; an alert with
- * the state as its title when something is.
+ * The system's state, on its own so the page can place it above every metric. Quiet when nothing
+ * is wrong; an alert titled with the state when something is.
  */
 export function DashboardState({
   service,

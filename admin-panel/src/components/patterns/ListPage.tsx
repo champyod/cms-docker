@@ -15,7 +15,7 @@ export interface ListPageState {
 }
 
 export interface ListPageProps extends PageSlots {
-  /** Above the toolbar, before any row: the page's state is the first thing read (topic 8d). */
+  /** Above the toolbar and before any row: what is wrong is read before what is listed. */
   readonly state?: ListPageState;
   /** The rows. The page supplies a table; the archetype owns where it sits and what frames it. */
   readonly children: ReactNode;
@@ -23,15 +23,14 @@ export interface ListPageProps extends PageSlots {
   readonly footer?: ReactNode;
   /** Shown instead of the rows when there is nothing: never an empty table with headers. */
   readonly empty?: ReactNode;
-  /** Skeleton of the real shape (topic 10b), not a spinner over a blank card. */
+  /** Skeleton of the real shape, not a spinner over a blank card. */
   readonly loading?: boolean;
 }
 
 /**
- * The list archetype: state, then controls, then rows, then paging. Every list page in the panel
- * reads in that order, so an operator moving between Contests, Tasks and Users does not re-learn
- * where things are. Loading renders a skeleton of rows, not a spinner, so the layout does not
- * jump when the data lands.
+ * The list layout: state, then controls, then rows, then paging. Every list reads in that order,
+ * so moving between Contests, Tasks and Users does not re-learn where things are. Loading shows a
+ * skeleton of rows rather than a spinner, so the layout does not jump when the data lands.
  */
 export function ListPage({
   breadcrumbs,
@@ -68,7 +67,7 @@ export function ListPage({
   );
 }
 
-/** Six rows of the density default: the same height the real rows will have. */
+/** Six rows at the row height the real rows will use, so nothing shifts on load. */
 function RowSkeleton(): React.JSX.Element {
   return (
     <div className="divide-y divide-border" aria-busy="true" aria-live="polite">

@@ -4,12 +4,12 @@ import { PageSurface } from '@/components/core/PageSurface';
 import type { PageSlots } from '@/components/patterns/types';
 
 /**
- * The dashboard archetype. Its whole job is to guarantee that the page opens with the state of
- * the system before any count (topic 8d), so `state` is not optional here even though the same
- * slot is optional on a list: a dashboard that leads with numbers has stopped being a dashboard.
+ * The dashboard layout. Its job is to keep the system's state above every count, so `state` is
+ * required here even though it is optional on a list: a dashboard that leads with numbers has
+ * stopped being a dashboard.
  */
 export interface DashboardPageProps extends PageSlots {
-  /** The system's state, rendered above every metric. */
+  /** The system's state, above every metric. */
   readonly state: ReactNode;
 }
 

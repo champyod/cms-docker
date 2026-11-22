@@ -12,9 +12,9 @@ interface CheckboxProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>
 }
 
 /**
- * The target is the whole label row, not the 16px box: WCAG 2.5.8 asks for 24x24 and a bare
- * checkbox misses it even when the box looks big enough. The visual box is drawn from the
- * input itself so the checked state stays the browser's own — no second source of truth.
+ * The target is the whole label row, not the 16px box: a bare checkbox is too small to hit for
+ * anyone with an unsteady pointer. The box is drawn from the input itself, so the checked state
+ * stays the browser's own.
  */
 export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
   ({ className, label, description, error, id, required, ...props }, ref) => {

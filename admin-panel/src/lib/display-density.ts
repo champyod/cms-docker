@@ -12,7 +12,9 @@ export interface DisplayPreferences {
   textSize: TextSizePreference;
 }
 
-export const DEFAULT_DISPLAY: DisplayPreferences = { density: 'comfortable', textSize: 'medium' };
+// Dense by default: an operator scanning a queue sees 19 rows instead of 15, and the
+// comfortable mode is one switch away. A default that hides data is the expensive direction.
+export const DEFAULT_DISPLAY: DisplayPreferences = { density: 'compact', textSize: 'medium' };
 
 const DENSITY_PATTERN = new RegExp(`(?:^|;\\s*)${DENSITY_COOKIE_NAME}=(comfortable|compact)(?:;|$)`);
 const TEXT_SIZE_PATTERN = new RegExp(`(?:^|;\\s*)${TEXT_SIZE_COOKIE_NAME}=(small|medium|large)(?:;|$)`);

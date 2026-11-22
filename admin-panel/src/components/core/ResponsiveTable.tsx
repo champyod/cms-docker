@@ -62,6 +62,12 @@ export interface ResponsiveTableProps<Row> {
 // differently spaced row depending on the viewport.
 const ROW_ACTIONS_CLASS = 'flex items-center justify-end gap-1';
 
+/**
+ * Row height follows the density preference: comfortable is 40px, compact 32px. Kept here so a
+ * list cannot pick its own height and quietly break the rhythm between two screens.
+ */
+export const ROW_HEIGHT_CLASS = 'h-10 density:h-8';
+
 function labelFor<Row>(column: ResponsiveColumn<Row>): string {
   if (column.mobileLabel) return column.mobileLabel;
   return typeof column.header === 'string' ? column.header : column.key;
