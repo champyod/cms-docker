@@ -22,6 +22,12 @@
 //! task's published precision and the panel's own decimal pattern.
 //!
 //! What a submission is then worth is the half a task type's answer hands on.
+//! [`scoring`] is the other direction: a participation's submissions in one task, and the
+//! three score modes that turn them into the one number a ranking reads — the best
+//! submission, each subtask's best, or the best tokened one against the last. It takes the
+//! score columns as values rather than reading them, so a mode is exercised with no
+//! database, and it derives no score of its own.
+//!
 //! [`steps`] is the checker a dataset supplies, held to the limits that bound a
 //! manager rather than a submission and read as the standard output it is required
 //! to write, and the comparison of an answer with the one a dataset says is right:
@@ -54,6 +60,7 @@
 pub mod job;
 pub mod languages;
 pub mod scoretypes;
+pub mod scoring;
 pub mod stage;
 pub mod steps;
 pub mod tasktypes;
