@@ -222,7 +222,32 @@ A lane is removed as soon as it is merged and its gate is green — worktree del
 `git worktree prune`. A merged lane left on disk is 1-11 GB of build artifacts holding a branch label
 nothing needs, and it makes the next sweep unable to tell stale work from live work.
 
-### 7.1 Service order, corrected against the imports (2026-11-22)
+### 7.1 First service swap completed — the logger (2026-11-22)
+
+`log-service` in `docker-compose.yml` now runs `cms-log-service`. This is the first W-B swap and the
+template every later one follows. Commits, in order: `4baaca29` (image ships the binary),
+`466b0eb3` (the container runs it).
+
+What the swap actually required, none of it optional:
+
+| Change | Why it is not separable |
+|---|---|
+| `Dockerfile` gains a `backend-build` stage | the image had no backend stage at all, only `ranking-build`, so no Rust service could ship |
+| `.dockerignore` gains `target/` and `**/target/` | without it the new stage copies every worktree's build artifacts into the build context before compiling |
+| `environment` gains `LOG_SERVICE_ADDR`, `LOG_DIR`, `RPC_SECRET` | no service in this compose file uses `env_file`, so values `config sync` renders are substitution-only and never reach a container; the binary would exit naming whichever it lacks |
+| `command` loses the shard argument | the Rust binary reads its address from the environment; a positional shard would be silently ignored. The shard still selects the log directory via `LOG_DIR` |
+| `healthcheck` pattern `cmsLogService` → `cms-log-service` | the old pattern cannot match the new process name, so the container would sit unhealthy and restart-loop while serving correctly |
+
+Verified here: `docker compose config` exit 0; `docker build --target backend-build` exit 0 in 7.2s with
+the 821,640-byte binary inside it, and running that binary with no environment exits 1 saying
+`LOG_SERVICE_ADDR is unset or empty`; `bash tests/test_image_pins.sh` exit 0.
+
+**Not verified here, and not mine to do: the deploy.** Restarting `cms-log-service` is a production
+action; this work only makes the next deploy run the Rust service. The rollback is one line — put
+`cmsLogService ${LOG_SERVICE_SHARD:-0}` back in `command` and the old `pgrep` pattern in
+`healthcheck`.
+
+### 7.2 Service order, corrected against the imports (2026-11-22)
 
 The order first proposed was LogService, ScoringService, ResourceService, ProxyService, Worker,
 EvaluationService — smallest file first. The imports say otherwise, and file size is the wrong
