@@ -83,15 +83,19 @@ superuser_only_file() {
   grep -qE '^--[[:space:]]*superuser-only([[:space:]]|$)' "$1"
 }
 
-# Fail loudly if DB container not running (tolerant in --pre-push / --bootstrap-roles so the update still runs)
+# WHY this catalog query: a REVOKE in migration history cannot run as the demoted owner, and a
+# NOTICE-only revoke would record a fix that never happened; read the membership after the apply.
+BACKUP_MEMBERSHIP_SQL="SELECT count(*) FROM pg_auth_members am JOIN pg_roles granted ON granted.oid = am.roleid JOIN pg_roles member ON member.oid = am.member WHERE granted.rolname = 'cmsuser' AND member.rolname = 'cms_backup';"
+
+# Fail loudly if DB container not running. --pre-push stays tolerant; --bootstrap-roles must not
+# report success when it could not prove the backup role is read-only.
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$DB_CONTAINER"; then
   if [[ "$PRE_PUSH" -eq 1 ]]; then
     log_warn "database container '$DB_CONTAINER' is not running — skipping --pre-push capture (prisma db push will still run)"
     exit 0
   fi
   if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
-    log_warn "database container '$DB_CONTAINER' is not running — skipping --bootstrap-roles (prisma-sync will retry after the restart)"
-    exit 0
+    log_die "database container '$DB_CONTAINER' is not running — cannot bootstrap roles; start it with 'make core' and re-run (prisma-sync will not migrate without a proven cms_backup role)." 1
   fi
   log_die "database container '$DB_CONTAINER' is not running — start it with 'make core' first." 1
 fi
@@ -174,12 +178,30 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
       -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
       -v "admin_read_password=$ADMIN_READ_PASSWORD" \
       -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
-    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
       -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
       -f - < "$sql_file"; then
-      log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
+      log_warn "failed to apply $sql_file — continuing; the membership check below decides whether the bootstrap may report success"
     fi
   done
+  # WHY read pg_auth_members instead of trusting the REVOKE: on a database installed before WS-76 the
+  # bootstrap connects as the demoted owner, where the revoke is refused (42501) and the file can only
+  # warn. A scrolling warning is how the owner-equivalent backup role survived, so the catalog decides.
+  _membership_status=0
+  if [[ "$BOOTSTRAP_AS_POSTGRES" -eq 1 ]]; then
+    _membership="$(docker_exec_db_superuser -X -tA -v ON_ERROR_STOP=1 -c "$BACKUP_MEMBERSHIP_SQL" 2>&1)" || _membership_status=$?
+  else
+    _membership="$(docker_exec_db "$DB_PASS" \
+      "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" -X -tA -v ON_ERROR_STOP=1 \
+      -c "$BACKUP_MEMBERSHIP_SQL" 2>&1)" || _membership_status=$?
+  fi
+  if [[ "${_membership_status:-0}" -ne 0 ]]; then
+    log_die "could not read pg_auth_members — cannot prove cms_backup is read-only: $_membership" 1
+  fi
+  _membership="$(printf '%s' "$_membership" | tr -d '[:space:]')"
+  if [[ "$_membership" != "0" ]]; then
+    log_die "cms_backup is still a member of cmsuser (WS-76): a member of the owner inherits its UPDATE and DDL on every object cmsuser owns. REVOKE needs a superuser or ADMIN OPTION on cmsuser — run the one-time revoke as a superuser (scripts/__db_admin.sh documents the postgres --single route) and re-run the bootstrap. Dumps are unaffected: cms_backup keeps BYPASSRLS and its SELECT grants." 1
+  fi
+  log_info "cms_backup holds no membership in cmsuser (WS-76: the backup role is SELECT-only)."
   log_info "role bootstrap complete."
   exit 0
 fi

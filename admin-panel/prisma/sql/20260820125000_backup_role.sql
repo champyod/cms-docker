@@ -36,17 +36,14 @@ BEGIN
   END IF;
 END $$;
 
--- WHY GRANT membership: PostgreSQL large objects are readable only by the owning role. cmsuser creates every LO,
--- so making cms_backup a member of cmsuser inherits LO read for existing AND future objects. Per-OID
--- GRANT SELECT ON LARGE OBJECT <oid> would rot because new objects never receive it, and
--- ALTER DEFAULT PRIVILEGES ... ON LARGE OBJECTS does not exist in PG15 (syntax error). Membership is rot-proof.
-DO $$
-BEGIN
-  BEGIN
-    EXECUTE 'GRANT cmsuser TO cms_backup';
-  EXCEPTION WHEN insufficient_privilege THEN
-    RAISE NOTICE 'GRANT cmsuser TO cms_backup requires superuser/owner — skipped on demoted re-apply (membership already present)';
-  END;
-END $$;
+-- WHY NO membership in cmsuser (WS-76): this file used to run `GRANT cmsuser TO cms_backup`, which made the
+-- backup role owner-equivalent — a role member inherits the owner's privileges and PostgreSQL's ownership
+-- checks accept a member of the owning role, so cms_backup could UPDATE every table and run DDL on everything
+-- cmsuser owns. pg_dump needs no membership: SELECT on tables/sequences and on pg_largeobject /
+-- pg_largeobject_metadata (20260912000150_backup_grants) plus cms_legacy
+-- (20261120121500_backup_legacy_grants) covers every read it performs, and BYPASSRLS is what makes FORCE RLS
+-- transparent. Never re-add the grant; 20260820120000_db_roles.sql carries the idempotent REVOKE that removes
+-- it from a database that still has it, and scripts/__apply_sql.sh --bootstrap-roles fails loudly if it survives.
 
--- GRANTs moved to migration 20260912000150_backup_grants (database-scoped grants belong in migration history).
+-- GRANTs moved to migration 20260912000150_backup_grants (database-scoped grants belong in migration history);
+-- cms_legacy's are in 20261120121500_backup_legacy_grants.

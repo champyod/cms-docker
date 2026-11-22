@@ -69,16 +69,15 @@ make env || log_die "make env failed."
 # ---------------------------------------------------------------------------
 # (b2) Ensure DB roles exist BEFORE services restart with them
 # WHY: cms_backup must exist with its password before the restart so backups
-# succeed; RLS and owner-hardening are deferred to the post-restart
-# prisma-sync so they land after the new code is running.
-# Tolerant on a fresh install where the database container is not up yet —
-# prisma-sync re-applies the roles afterwards.
+# succeed; RLS and owner-hardening are deferred to the post-restart prisma-sync
+# so they land after the new code is running. The bootstrap is fail-closed: a
+# database that still carries the backup owner membership stops the update here.
 # ---------------------------------------------------------------------------
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "cms-database"; then
     log "Bootstrapping database roles (idempotent)..."
     "$APPLY_SQL_SCRIPT" --bootstrap-roles || log_die "Role bootstrap failed; refusing to restart with roles the new code cannot use."
 else
-    log "Database container not running yet; roles will be created during prisma-sync."
+    log "Database container not running yet; prisma-sync runs the role bootstrap and refuses to migrate without it."
 fi
 
 # Deployment type must be detected AFTER env regeneration (branch switch may change it)

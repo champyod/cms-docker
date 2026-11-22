@@ -198,6 +198,11 @@ if [[ "${1:-}" == "exec" ]]; then
     printf '<<<SQL %s\n' "$*" >> "$STUB_STDIN"
     cat >> "$STUB_STDIN"
     printf '\nSQL>>>\n' >> "$STUB_STDIN"
+    exit 0
+  fi
+  if [[ " $* " == *"pg_auth_members"* ]]; then
+    printf '%s\n' "${STUB_MEMBERSHIP:-0}"
+    exit 0
   fi
   exit 0
 fi
@@ -250,8 +255,8 @@ done
 ABSENT_CALLS="$TEST_ROOT/absent.calls"; ABSENT_STDIN="$TEST_ROOT/absent.stdin"
 absent_rc=0
 run_apply --bootstrap-roles "$ABSENT_CALLS" "$ABSENT_STDIN" "$TEST_ROOT/absent.log" "" || absent_rc=$?
-if [[ "$absent_rc" -eq 0 ]]; then ok "bootstrap tolerates an absent container"; else no "bootstrap tolerates an absent container (got ${absent_rc})"; fi
-check_grep "the absent container is reported, not fatal" "is not running" "$TEST_ROOT/absent.log"
+if [[ "$absent_rc" -ne 0 ]]; then ok "bootstrap refuses an absent container"; else no "bootstrap refused an absent container"; fi
+check_grep "the absent container is reported" "is not running" "$TEST_ROOT/absent.log"
 
 DEMOTED_CALLS="$TEST_ROOT/demoted.calls"; DEMOTED_STDIN="$TEST_ROOT/demoted.stdin"
 demoted_rc=0

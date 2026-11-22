@@ -48,7 +48,6 @@ done
 POSTGRES_USER_VAL="${POSTGRES_USER:-cmsuser}"
 POSTGRES_DB_VAL="${POSTGRES_DB:-cmsdb}"
 POSTGRES_PASSWORD_VAL="${POSTGRES_PASSWORD:-}"
-POSTGRES_BACKUP_PASSWORD_VAL="${POSTGRES_BACKUP_PASSWORD:-}"
 CONTAINER_DB="cms-database"
 
 # WHY every client below announces `system:migration`: every table carries FORCE ROW LEVEL
@@ -266,35 +265,97 @@ ensure_roles_exist "$CONTAINER_DB"
 
 log_info "Restoring database dump into live postgres..."
 
-# WHY the live restore connects as a bypassing role, with what was measured: PostgreSQL refuses
-# COPY FROM into a table that has row-level security enabled for the connecting role ("COPY FROM
-# not supported with row-level security", PG 16), and a custom-format dump replays its data as
-# COPY — after its own `SET row_security = off` preamble, whose failure reads "query would be
-# affected by row-level security policy". Neither is a question about identity: `cms.actor` cannot
-# make COPY evaluate policies, so an owner connection WITH the actor still writes 0 rows into every
-# FORCE-RLS table. Only a role that bypasses the policy can, and this stack already has one for
-# bulk work: cms_backup (BYPASSRLS, member of cmsuser, so it inherits the owner's DML and DDL
-# rights) — the same role the backup side dumps as, for the same reason.
-# WHY not silently keep the owner: a restore that "succeeds" and puts nothing back is the exact
-# failure this script must never report, so a deployment without the backup secret says so here,
-# before the first COPY is attempted.
-RESTORE_ROLE="$POSTGRES_USER_VAL"
-RESTORE_PASSWORD="$POSTGRES_PASSWORD_VAL"
-if [[ -n "$POSTGRES_BACKUP_PASSWORD_VAL" ]]; then
-  RESTORE_ROLE="cms_backup"
-  RESTORE_PASSWORD="$POSTGRES_BACKUP_PASSWORD_VAL"
-else
-  log_warn "POSTGRES_BACKUP_PASSWORD is empty, so the restore connects as ${POSTGRES_USER_VAL} — every table is FORCE-RLS, so pg_restore cannot write a row. Run './cms config sync' to generate the backup role's password."
-fi
-log_info "Restoring as ${RESTORE_ROLE}..."
+# >>> WS-76 live RLS window — extracted verbatim by scripts/__verify_db_guard_ws75_76.sh
+# WHY the live restore connects as the owner and suspends RLS for the replay, measured rather than assumed:
+# pg_restore replays a custom-format dump's data as COPY, and PostgreSQL refuses COPY into a table whose
+# row-level security is enabled for the connecting role. On this stack the owner is FORCE-RLS bound, so the
+# refusal is real: with `SET row_security = off` (the dump's own preamble) it reads "query would be affected
+# by row-level security policy for table ..." and PG16 words the same rule "COPY FROM not supported with
+# row-level security". An actor cannot help — COPY is refused before a policy is evaluated, which is why
+# `cms.actor` was never the answer for the replay.
+# WHY this is better than the role it replaces: the old path connected as cms_backup, whose DML and DDL came
+# from `GRANT cmsuser TO cms_backup`. That membership made the backup credential owner-equivalent (WS-76) and
+# is revoked. Widening cms_backup again, or minting a second bypassing role with the owner's rights, rebuilds
+# the hole. Suspending RLS is a bounded, explicit window instead: --force has already stopped every service
+# that writes (above), so the only client is this psql, and the window closes in the trap below.
+# WHY the snapshot is read BEFORE DISABLE and replayed from a trap, not just after a successful restore:
+# pg_restore's own ENABLE statements are post-data, so a table the dump carries comes back enabled; a table
+# it does not carry (created after the dump, or a failed run that never reached post-data) stays disabled
+# unless this snapshot puts it back. The trap runs on success, on log_die, and on a signal, so the invariant
+# holds on the failure path too. Tables that never had RLS (`_prisma_migrations` is the one in public) are
+# not in the snapshot and are deliberately not touched — enabling RLS there would hide the migration ledger.
+RLS_DISABLE_SQL="SELECT format('ALTER TABLE %I.%I DISABLE ROW LEVEL SECURITY;', n.nspname, c.relname) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity ORDER BY n.nspname, c.relname;"
+RLS_RESTORE_SQL="SELECT format('ALTER TABLE %I.%I ENABLE ROW LEVEL SECURITY;', n.nspname, c.relname) || CASE WHEN c.relforcerowsecurity THEN format(' ALTER TABLE %I.%I FORCE ROW LEVEL SECURITY;', n.nspname, c.relname) ELSE '' END FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity ORDER BY n.nspname, c.relname;"
+LIVE_RLS_RESTORE_SQL=""
+LIVE_RLS_TABLES=0
 
-if ! docker_exec_db "$RESTORE_PASSWORD" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
-  pg_restore -U "$RESTORE_ROLE" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
+live_rls_off() {
+  local _restore _disable
+  _restore="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+    psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -X -tA -v ON_ERROR_STOP=1 -c "$RLS_RESTORE_SQL" 2>&1)" || {
+      log_warn "could not read the RLS snapshot (${_restore}) — refusing to replay without a way back"
+      return 1
+    }
+  LIVE_RLS_RESTORE_SQL="$_restore"
+  LIVE_RLS_TABLES="$(printf '%s\n' "$_restore" | grep -c 'ENABLE ROW LEVEL SECURITY' || true)"
+  _disable="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+    psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -X -tA -v ON_ERROR_STOP=1 -c "$RLS_DISABLE_SQL" 2>&1)" || {
+      log_warn "could not list the RLS tables (${_disable}) — refusing to replay without a way back"
+      return 1
+    }
+  if [[ -n "$_disable" ]]; then
+    if ! printf '%s\n' "$_disable" | docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" -i "$CONTAINER_DB" \
+      psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -X -q -v ON_ERROR_STOP=1 -f - >/dev/null 2>&1; then
+      log_warn "could not suspend row-level security on the public tables — refusing to replay into a database where COPY would be refused"
+      return 1
+    fi
+  fi
+  log_info "RLS suspended on ${LIVE_RLS_TABLES} public table(s) for the replay; ENABLE+FORCE is restored on exit"
+  return 0
+}
+
+live_rls_back() {
+  local _out
+  [[ -n "$LIVE_RLS_RESTORE_SQL" ]] || return 0
+  if ! _out="$(printf '%s\n' "$LIVE_RLS_RESTORE_SQL" | docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" -i "$CONTAINER_DB" \
+      psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -X -q -v ON_ERROR_STOP=1 -f - 2>&1)"; then
+    log_warn "could not restore RLS (ENABLE + FORCE) on ${LIVE_RLS_TABLES} table(s): ${_out}"
+    return 1
+  fi
+  LIVE_RLS_RESTORE_SQL=""
+  log_info "RLS restored (ENABLE + FORCE) on ${LIVE_RLS_TABLES} table(s)"
+  return 0
+}
+# <<< WS-76 live RLS window
+
+# WHY EXIT and not just the success path: log_die below exits, and a restore that dies halfway is exactly
+# when a table is left readable by every role — the window must close on that path too.
+trap 'live_rls_back || true' EXIT INT TERM
+live_rls_off || log_die "could not suspend row-level security — no dump was replayed"
+
+if ! docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+  pg_restore -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -Fc "$local_dump" 2>/tmp/cms-restore-pgrestore.log; then
   err="$(cat /tmp/cms-restore-pgrestore.log 2>/dev/null || echo 'pg_restore failed')"
   log_warn "pg_restore failed: $err"
   log_die "Restore failed"
 fi
 log_info "Database restore complete"
+
+# WHY the explicit call before the verification queries: those run as the same owner under FORCE RLS, so they
+# read 0 rows while the window is open — a restore that put everything back would report an empty database.
+live_rls_back || log_die "the replay finished but RLS could not be re-enabled — every FORCE table is readable until this is repaired; re-run the ENABLE+FORCE statements before starting services"
+# WHY count instead of asserting the schema-wide FORCE invariant: a table that legitimately carries ENABLE
+# without FORCE (or a maintenance table added later) would make that assertion fail a working restore. What
+# must hold is the window itself: every table it suspended has RLS enabled again. pg_restore never drops a
+# table without --clean, so the count can only be at least what it was; fewer means an ALTER did not stick.
+_rls_now="$(docker_exec_db "$POSTGRES_PASSWORD_VAL" "PGOPTIONS=${DB_ACTOR_SYSTEM_MIGRATION}" "$CONTAINER_DB" \
+  psql -U "$POSTGRES_USER_VAL" -d "$POSTGRES_DB_VAL" -X -tA -v ON_ERROR_STOP=1 -c "$RLS_DISABLE_SQL" 2>&1)" || \
+  log_die "could not re-read pg_class after the restore — RLS state unverified"
+_rls_now_count="$(printf '%s\n' "$_rls_now" | grep -c 'DISABLE ROW LEVEL SECURITY' || true)"
+if (( _rls_now_count < LIVE_RLS_TABLES )); then
+  log_die "RLS gap after restore: ${_rls_now_count} public table(s) have RLS enabled, but ${LIVE_RLS_TABLES} were suspended — do not start services"
+fi
+log_info "RLS verified: ${_rls_now_count} public table(s) carry RLS again (${LIVE_RLS_TABLES} were suspended)"
 
 # WHY bootstrap cms_backup password after restore: ensure_roles_exist creates a
 # NOLOGIN stub with no password; without the real password pg_dump as cms_backup fails.
