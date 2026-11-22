@@ -1808,6 +1808,61 @@ render_registry_compose_from_db() {
   return 0
 }
 
+# --- The logger service's three inputs ---
+# WHY parsed here and not in Rust: the backend lock has no TOML parser and adding one is the
+# operator's decision, so cms.toml is read where it is already rendered and the binary reads
+# only the environment.
+render_log_service_env() {
+  local file="config/cms.toml" shard raw log_dir address
+  if [[ ! -f "$file" ]]; then
+    log_info "No ${file} — the logger's env is not rendered (this tree has no CMS service config)."
+    return 0
+  fi
+  shard="${__TOML[core.LOG_SERVICE_SHARD]:-0}"
+  raw="$(toml_value_in_section "$file" services LogService)"
+  log_dir="$(toml_value_in_section "$file" global log_dir)"
+  # WHY fatal: the logger cannot be given an address without this entry, and emitting an empty
+  # LOG_SERVICE_ADDR would hand the container a value that can only fail later and elsewhere.
+  if [[ -z "$raw" ]]; then
+    log_error "${file} has no [services] LogService entry; add LogService = [[\"cms-log-service\", 29000]]."
+    exit 1
+  fi
+  # WHY fatal: one entry is rendered into one container, so a shard index above 0 would be given
+  # shard 0's address and serve under the wrong name.
+  if [[ "$shard" != "0" ]]; then
+    log_error "[core] LOG_SERVICE_SHARD is ${shard} but ${file} renders one logger container; only shard 0 can be addressed."
+    exit 1
+  fi
+  if [[ ! "$raw" =~ ^\[\[[[:space:]]*\"([^\"]+)\"[[:space:]]*,[[:space:]]*([0-9]+)[[:space:]]*\]\]$ ]]; then
+    log_error "[services] LogService = ${raw} in ${file} is not one [host, port] shard; LOG_SERVICE_ADDR cannot be formed."
+    exit 1
+  fi
+  address="${BASH_REMATCH[1]}:${BASH_REMATCH[2]}"
+  # WHY fatal: without a shared secret every caller is refused, so the sync reports the missing
+  # key instead of writing an .env that starts a service nobody can talk to.
+  if [[ "$DRY_RUN" -eq 0 && "$NO_SECRETS" -eq 0 ]] && ! grep -q '^RPC_SECRET=.' "$MERGED_ENV"; then
+    log_error "${MERGED_ENV} has no RPC_SECRET although secrets are generated; the logger cannot authenticate a caller without it."
+    exit 1
+  fi
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "Would write logger env: LOG_SERVICE_ADDR=${address} LOG_DIR=${log_dir:-absent}"
+    return 0
+  fi
+  {
+    echo "### [log-service] ###"
+    printf 'LOG_SERVICE_ADDR=%s\n' "$(env_quote "$address")"
+    if [[ -n "$log_dir" ]]; then
+      printf 'LOG_DIR=%s\n' "$(env_quote "$log_dir")"
+    fi
+    echo ""
+  } >> "$MERGED_ENV"
+  # WHY absent rather than guessed: log_dir reaches cms.toml only once injection has written it,
+  # and a path invented here would name a directory no service writes to.
+  if [[ -z "$log_dir" ]]; then
+    log_warn "${file} has no [global] log_dir yet — LOG_DIR is not in ${MERGED_ENV}; the logger will refuse to start."
+  fi
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -2048,6 +2103,10 @@ main() {
    else
      log_info "Would run: bash scripts/__inject_config.sh"
    fi
+
+   # WHY here: the three keys are derived from config/cms.toml, and [global] log_dir only reaches
+   # that file during the injection above — read any earlier and the key would name no directory.
+   render_log_service_env
  
   # Ensure backups/.gitkeep exists (monitor mount needs host dir) and that the
   # monitor's uid can write it — a directory created here belongs to the
