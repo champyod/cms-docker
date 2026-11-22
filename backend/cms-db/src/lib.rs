@@ -63,26 +63,34 @@
 #![forbid(unsafe_code)]
 
 mod actor;
+mod admin;
 mod auth;
 mod base;
 mod binary;
+mod codename;
 mod crypto;
 mod datetime;
 mod digest;
 mod drop;
+mod grants;
 mod interval;
 mod permission;
 mod reads;
+mod security_block;
 mod session;
 mod types;
+mod user;
+mod username;
 mod writes;
 
 pub use actor::{
     default_actor, label_for, process_label, validate_actor, ActorError, ACTOR_ENV, ACTOR_SETTING,
     CONNECTION_STAMP_SQL, CORE_ACTOR, KNOWN_SYSTEM_ACTORS, TRANSACTION_STAMP_SQL,
 };
+pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
+pub use codename::{Codename, CodenameError};
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
     generate_random_password, get_hex_random_key, get_random_key, hash_password, Bcrypt,
@@ -92,11 +100,17 @@ pub use crypto::{
 pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use drop::{drop_db, DropError};
+pub use grants::{
+    effective_permissions, PermissionError, ADMIN_ENABLED, ADMIN_GROUP, ADMIN_PERMISSION_OVERRIDE,
+    ALLOW_OVERRIDE_KEYS, DENY_OVERRIDE_KEYS, GROUP, GROUP_GRANT_KEYS, GROUP_PERMISSION, PERMISSION,
+    REGISTERED_KEYS,
+};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
     DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
+pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
@@ -105,6 +119,11 @@ pub use types::{
     Effect, EffectivePermissions, FileDigest, Interval, IntervalError, PasswordForm,
     PermissionInputs, PlaintextPassword, RemoveAction, DIGEST_HEX_LEN, MICROS_PER_DAY,
     MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND, TOMBSTONE, WILDCARD_PERMISSION,
+};
+pub use user::{Participation, User, PARTICIPATION, USER};
+pub use username::{
+    resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
+    CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use writes::{
     group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
