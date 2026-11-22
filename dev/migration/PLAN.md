@@ -207,6 +207,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3f-util` | `8422a988` | contest/service binding + bootstrap. Parent's own mutation of `binding/active.rs:74` (an empty `is_active` flag made to bootstrap from `CONTEST_ID`) failed `a_fresh_install_is_bootstrapped_only_while_the_table_is_missing`, exit 101, restored byte-identical. Merged tree: 108 binaries, 736 passed, live database | merged |
 | 2026-11-22 | `feat/rust-S3g-reads` | `dd53f811` | the deferred 244 lines. Parent's own mutation of `reads/walk.rs:64` (`!submissions && !users` → `||`) failed `the_walk_visits_every_table_and_honours_each_skip`, leaking digests …0006 and …0007 into a walk "without users", exit 101, restored byte-identical. Merged tree: 113 binaries, 760 passed, live database | `4df2295e` |
 | 2026-11-22 | `feat/rust-S3h-schema` | `70945d9f` | closes the three gaps: schema creation (DDL obtained by running the reference and dumping it, frozen at `dev/fixtures/cms_schema.sql`, 224 statements split into `cms-db/sql/`), username display/registration, and the team fallback. Parent's own mutation of `username/policy.rs:72` (removing the contest short-circuit) failed `a_contest_denial_is_not_reopened_by_a_user_allow` and `a_contest_policy_decides_for_every_participant`, exit 101, restored byte-identical. Merged tree: 117 binaries, 772 passed, live database | `be01014e` |
+| 2026-11-22 | `feat/rust-S3i-pgdump` | `7bb3952f`→`d7b453fe` | dumper from the prod-pinned image, fixture regenerated on PG 15, version check made strict. Parent's own control: the first attempt (deleting a FOREIGN KEY statement) proved only that the DDL runs, not that the comparison sees anything — repaired to `CASCADE`→`RESTRICT`, which failed at statement 187 with "224 statements expected, 224 created", exit 101, restored byte-identical. Merged tree: no host `pg_dump`, 117 binaries, 772 passed | `2461a695` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -340,16 +341,23 @@ and the five `compile_*` → replaced by the frozen DDL, because with the schema
 there is nothing left for a DDL compiler to emit. Four are deliberately unported (the two interactive
 prompts, `test_db_connection`, `custom_psycopg2_connection`).
 
-**Open item the schema gate depends on, and it is the operator's:** `cms-db/tests/schema_live.rs` needs a
-`pg_dump` whose major version matches the fixture's author (16.16) on `PATH`, and **this host has no
-`pg_dump` at all** — the gate passed today only because a 16.16 binary was extracted into
-`~/.hermes/cache/scratch/s3h/bin`, which scratch prunes after 24h. So the gate is green now and will go red
-by itself later today or tomorrow. The Python suite carries the same prerequisite
-(`src/cmstestsuite/unit_tests/schema_diff_test.py:124-133`), so this is not a new need, but it is unmet
-here. Three ways to close it, none taken yet: run `pg_dump` from the pinned `postgres:16-alpine` image (no
-host package, parity by construction, needs docker); install `postgresql-client-16` on the host (needs
-sudo); or compare the catalogue with SQL instead of dump text (no external tool at all, and immune to the
-version drift that already cost this lane a cycle — 469 statements against 224).
+**The schema gate's prerequisite — RESOLVED, and it was worse than a missing tool (2026-11-22, `2461a695`).**
+The gate needed a `pg_dump` matching the fixture's author on `PATH`, this host had none, and it passed only
+because a binary sat in `~/.hermes/cache/scratch` — pruned daily. Chasing that turned up the real defect: the
+fixture had been dumped from **Postgres 16.16** while production runs the pinned **postgres:15**
+(`docker-compose.yml:132`), so the port was validated against a spec generated on a version the deployment
+does not run.
+
+Both are closed by running the dumper from the image production runs — the same pin, read out of
+`docker-compose.yml` rather than copied — and regenerating the fixture on 15. The comparison has no host
+dependency now: verified with `command -v pg_dump` empty and the suite green at 117 binaries / 772 passed.
+`docker` becomes a stated prerequisite of that one test path, which it already was of the test database.
+
+**The finding worth keeping: nothing in the compared spec moved between 15 and 16.** 224 statements either
+way, stripped comparison byte-identical. The 27-line full-file diff is three non-schema things — the version
+header, the per-dump `\restrict` nonce, and 23 sequence owners that pg_dump 16 writes as `ALTER SEQUENCE`
+while 15 writes as `ALTER TABLE`. So the fixture's provenance was wrong without the spec being wrong, which
+is why no test could have noticed.
 
 Lesson, recorded because it cost a false claim in a commit message: "the child said every function is
 covered" is a claim. Compare the Python `def` list against the crate's `fn` list mechanically; the two
