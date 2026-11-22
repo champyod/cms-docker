@@ -45,7 +45,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | — *to inventory* |
 | `/people/users/:id/teams` | detail | — *to inventory* |
-| `/ranking` | list | — *to inventory* |
+| `/ranking` | detail | whether the ranking service reports its applied changes at all, and what it could not apply, counted per cause · that the board is live · the identity it opens with: display name, shown contest, title, subtitle, organisation and access mode · the standings of the previewed contest, each task as a column, and the progress graph over the first twenty · the logo it carries, with upload · what empty means (no contest on the board) |
 | `/ranking/appearance` | settings | the identity values: title, subtitle, organisation and display name · the display values: access mode, id column, anonymity, footer and credits text · the advanced JSON: theme, score format and perspective tabs · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
 | `/ranking/credits` | settings | the credit list the board attributes its licences to, with the vendored file named as the fallback · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
 | `/ranking/users` | board | which contests the board draws, each with its kind, reason and author · the shard being edited · overrides with target, contest, reason, author and orphan state, filtered, selected, ended one by one or in bulk · the rows the board actually drops, with the write that hides each · what empty means per section |

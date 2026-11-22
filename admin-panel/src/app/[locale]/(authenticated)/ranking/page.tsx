@@ -2,11 +2,10 @@ import { getRanking, getRankingBoardContests } from '@/app/actions/ranking';
 import { getRankingAppearance } from '@/app/actions/rankingAppearance';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
-import { DefinitionEntry } from '@/components/core/DefinitionEntry';
 import { EmptyState } from '@/components/core/EmptyState';
 import { SelectField } from '@/components/core/FormField';
-import { Grid, Stack } from '@/components/core/Layout';
 import { Text } from '@/components/core/Typography';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { RankingBoardSurface } from '@/components/ranking/RankingBoardSurface';
 import { RankingDiagnosticsCard } from '@/components/ranking/RankingDiagnosticsCard';
 import { RankingLogoCard } from '@/components/ranking/RankingLogoCard';
@@ -18,7 +17,18 @@ import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
 const EMPTY_VALUE = '—';
 
-/** The board's landing: the identity the public scoreboard opens with, and the logo it carries. */
+/**
+ * The public scoreboard, as the deployment publishes it.
+ *
+ * WHY a detail and not a board: the page is about one record — the board this deployment serves —
+ * and its six identity values are a fact strip, not one of several independent row kinds. The
+ * standings preview and the logo belong to that record; a board section for each would claim
+ * record kinds the page does not have.
+ *
+ * WHY the dropped-row report is the state and now reads first: it is the one thing here that can be
+ * wrong, and the detail layout puts a record's state above its values so a fault is read before the
+ * numbers it would explain. Everything else on the page is the record itself.
+ */
 export default async function RankingBoardPage({
   params,
   searchParams,
@@ -32,7 +42,7 @@ export default async function RankingBoardPage({
   ]);
   const copy = (await getDictionary(locale)).ranking;
   // WHY the contest is resolved before the appearance read: a deployment with no
-  // contest yet still has to render the identity card, so the board below it must be
+  // contest yet still has to render the identity facts, so the standings below them must be
   // able to say "nothing to show" rather than fail the whole page.
   const contests = await getRankingBoardContests();
   const { contest } = await searchParams;
@@ -51,87 +61,82 @@ export default async function RankingBoardPage({
     appearance.accessMode === 'protected'
       ? copy.appearance.accessProtected
       : copy.appearance.accessPublic;
-  const boardHint =
-    appearance.accessMode === 'protected' ? copy.board.hintProtected : copy.board.hint;
   return (
-    <Stack gap={6}>
-      <Card className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <Text as="h2" variant="h3">
-            {copy.board.title}
-          </Text>
+    <DetailPage
+      // The module shell above renders the title, the description and the trail.
+      ownsHeader={false}
+      title={appearance.displayName || appearance.title || named?.name || copy.board.title}
+      state={
+        // The report keeps its card: the layout places a state but does not frame one, and a set of
+        // counters loose on the page background reads as part of the fact strip above it.
+        <Card className="space-y-4">
+          <RankingDiagnosticsCard diagnostics={diagnostics} copy={copy.diagnostics} />
+        </Card>
+      }
+      freshness={
+        <>
           <LiveRefresh url="/api/ranking/stream" />
-        </div>
-        <Text variant="muted">{boardHint}</Text>
-        <Grid as="dl" cols={2} gap={3} className="text-sm">
-          <DefinitionEntry
-            term={copy.appearance.displayNameField}
-            value={appearance.displayName || EMPTY_VALUE}
-          />
-          <DefinitionEntry
-            term={copy.shown.contestField}
-            value={named?.name ?? copy.shown.contestNone}
-          />
-          <DefinitionEntry term={copy.appearance.titleField} value={appearance.title || EMPTY_VALUE} />
-          <DefinitionEntry term={copy.appearance.subtitleField} value={appearance.subtitle || EMPTY_VALUE} />
-          <DefinitionEntry
-            term={copy.appearance.organisationField}
-            value={appearance.organisation || EMPTY_VALUE}
-          />
-          <DefinitionEntry term={copy.appearance.accessField} value={accessValue} />
-        </Grid>
-      </Card>
-      {/* Above the board because it explains what the board is missing, and as its own card
-          because a dropped row is not part of the users list it would otherwise sit in. */}
-      <Card className="space-y-4">
-        <RankingDiagnosticsCard diagnostics={diagnostics} copy={copy.diagnostics} />
-      </Card>
-      <Card className="space-y-4">
-        <Text as="h2" variant="h3">
-          {copy.users.title}
-        </Text>
-        {contests.length === 0 ? (
-          <EmptyState title={copy.users.empty} description={copy.users.hint} />
-        ) : (
-          <>
-            {/*
-              A plain GET form, so the choice works before hydration and the URL stays
-              shareable — an operator can send a colleague the board they are looking at.
-              WHY its own wording rather than the override form's: this picks which board to
-              preview, so it neither shows a target nor overrides one, and borrowing either
-              surface's label would read as one of them.
-            */}
-            <form method="get" className="space-y-2">
-              <div className="flex items-end gap-2">
-                <SelectField
-                  id="ranking-board-contest"
-                  label={copy.board.previewContestField}
-                  name="contest"
-                  defaultValue={String(selected?.id ?? '')}
-                >
-                  {contests.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      #{entry.id} — {entry.name}
-                    </option>
-                  ))}
-                </SelectField>
-                <Button type="submit" size="sm" variant="secondary">
-                  {copy.board.previewContestSubmit}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">{copy.board.previewContestHint}</p>
-            </form>
-            <RankingBoardSurface
-              ranking={board}
-              graphTitle="Score Progress Overview (First Board Page)"
-            />
-          </>
-        )}
-      </Card>
-      <RankingLogoCard
-        canManage={effective.has('ranking:update')}
-        displayName={appearance.displayName || appearance.title || named?.name || ''}
-      />
-    </Stack>
+          {/* The board is pushed rather than polled, so "how old is this" has one answer here. */}
+          <span>Live: the board refreshes as ranking rows change.</span>
+        </>
+      }
+      facts={[
+        { term: copy.appearance.displayNameField, value: appearance.displayName || EMPTY_VALUE },
+        { term: copy.shown.contestField, value: named?.name ?? copy.shown.contestNone },
+        { term: copy.appearance.titleField, value: appearance.title || EMPTY_VALUE },
+        { term: copy.appearance.subtitleField, value: appearance.subtitle || EMPTY_VALUE },
+        { term: copy.appearance.organisationField, value: appearance.organisation || EMPTY_VALUE },
+        { term: copy.appearance.accessField, value: accessValue },
+      ]}
+    >
+      <div className="space-y-4">
+        <Card className="space-y-4">
+          <Text as="h2" variant="h3">
+            {copy.users.title}
+          </Text>
+          {contests.length === 0 ? (
+            <EmptyState title={copy.users.empty} description={copy.users.hint} />
+          ) : (
+            <>
+              {/*
+                A plain GET form, so the choice works before hydration and the URL stays
+                shareable — an operator can send a colleague the board they are looking at.
+                WHY its own wording rather than the override form's: this picks which board to
+                preview, so it neither shows a target nor overrides one, and borrowing either
+                surface's label would read as one of them.
+              */}
+              <form method="get" className="space-y-2">
+                <div className="flex items-end gap-2">
+                  <SelectField
+                    id="ranking-board-contest"
+                    label={copy.board.previewContestField}
+                    name="contest"
+                    defaultValue={String(selected?.id ?? '')}
+                  >
+                    {contests.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        #{entry.id} — {entry.name}
+                      </option>
+                    ))}
+                  </SelectField>
+                  <Button type="submit" size="sm" variant="secondary">
+                    {copy.board.previewContestSubmit}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">{copy.board.previewContestHint}</p>
+              </form>
+              <RankingBoardSurface
+                ranking={board}
+                graphTitle="Score Progress Overview (First Board Page)"
+              />
+            </>
+          )}
+        </Card>
+        <RankingLogoCard
+          canManage={effective.has('ranking:update')}
+          displayName={appearance.displayName || appearance.title || named?.name || ''}
+        />
+      </div>
+    </DetailPage>
   );
 }
