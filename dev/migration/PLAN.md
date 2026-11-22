@@ -199,13 +199,27 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | (main session) | `af1e0128` | container wiring: `docker compose --profile core config` exit 0 with 8 `CMS_SERVICES` lines intact; `__test_config_sync.sh` 42, `test_image_pins.sh` 77, `test_security_profiles_enable.sh` 114 pass/0 fail; the Dockerfile's build line produces both binaries | `af1e0128` |
 | 2026-11-22 | `feat/rust-S2a-crypto-core` | `1fd7f8cc` | **B1 approved by the operator**: `aes` 0.8, `bcrypt` 0.17, `base64` 0.22. Parent's own mutation of `crypto.rs:413` (padding terminator `0x01`→`0x00`) failed 3 tests including `the_cipher_reproduces_the_python_ciphertext_byte_for_byte`, exit 101; restored byte-identical, `cms-db` 94 passed | `2f1337db` |
 | 2026-11-22 | `feat/rust-S4-retire-cmsranking` | `b15ebf92` | `src/cmsranking` deleted; 395 Python files remain (was 409). Conflict on 3 rebranded images resolved by deletion after confirming `ranking-web/static/img/` carries the identical brand bytes | `6eaedd21` |
+| 2026-11-22 | `feat/rust-S3a-session` | `a2140d61` | first S-3 piece: actor, session, base, drop. `cargo test -p cms-db` → 125 passed, but **the live half skips without `CMS_DB_TEST_URL` and a skip is reported as a pass** — so the parent started `postgres:16-alpine` on 127.0.0.1:15433 and ran them for real: `a_commit_and_a_second_begin_stamps_again` passed, and all three FAIL against a dead port, so they cannot skip silently once the URL is set. Parent's own mutation of `actor.rs:143` (admin id `1..=9`→`1..=10`) failed `every_malformed_shape_is_refused`, exit 101, restored byte-identical | `c07e695a` |
 
-Gate on the tree after all twelve merges (`6eaedd21`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 74 test binaries, 486 passed,
-0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 42 passed, exit 0; `bash
-scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial because the
-parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
+Gate on the tree after all thirteen merges (`c07e695a`), with a live database: `cargo fmt --check` exit
+0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 79 test
+binaries, 517 passed, 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 42 passed,
+exit 0; `bash scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial
+because the parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
 (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+
+**A skip is reported as a pass, so a green count can prove nothing (found 2026-11-22, S-3a).** The live
+database tests return early when `CMS_DB_TEST_URL` is unset, and the harness records that as `ok` — the
+lane's `125 passed` and the parent's first `passed=125` both included them without exercising them.
+`drop_db` even reported `1 passed` while doing nothing. The check that settles it is to run the suite
+against a real server and then against a dead one: start `postgres:16-alpine` on 127.0.0.1:15433 with
+the database named to contain `test` (drop refuses anything else), export
+`CMS_DB_TEST_URL=postgres://cmsuser:testpass@127.0.0.1:15433/cmsdb_test`, and point the same variable at
+a dead port to confirm the tests **panic** rather than pass. Every later S-3 epic will add live tests;
+run them this way before believing a count.
+**Still open:** `.github/workflows/ci.yml` only `cargo-deny`s `backend/` (line 904) and its identity job
+drives the Python suite, so no CI job runs those tests — the proof stays CI-invisible until a backend job
+carries a postgres service.
 
 **B1 is resolved (operator, 2026-11-22): `aes` 0.8 + `bcrypt` 0.17 approved, `base64` 0.22 already
 transitive.** The rejection reasons are recorded because they are the reason there was no table: openssl
