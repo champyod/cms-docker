@@ -31,7 +31,6 @@
     "/ranking",
     "/ranking/appearance",
     "/ranking/credits",
-    "/ranking/users",
     "/ranking/users/:key",
     "/search",
     "/security/overview",

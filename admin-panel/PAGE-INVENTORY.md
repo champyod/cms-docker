@@ -48,7 +48,7 @@ Inventory: **9 of 59 pages documented.**
 | `/ranking` | list | — *to inventory* |
 | `/ranking/appearance` | settings | — *to inventory* |
 | `/ranking/credits` | list | — *to inventory* |
-| `/ranking/users` | list | — *to inventory* |
+| `/ranking/users` | board | which contests the board draws, each with its kind, reason and author · the shard being edited · overrides with target, contest, reason, author and orphan state, filtered, selected, ended one by one or in bulk · the rows the board actually drops, with the write that hides each · what empty means per section |
 | `/ranking/users/:key` | list | — *to inventory* |
 | `/search` | list | — *to inventory* |
 | `/security/blocks` | board | captcha settings, thresholds and provider health · banned addresses with their unban, plus the queue-by-address control · permanent exemptions with revoke, beside the grant form · live failure counters, each expandable to the attempts behind it · open lockouts with unlock · what each section means when empty |
