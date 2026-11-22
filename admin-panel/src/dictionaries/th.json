@@ -1,4 +1,7 @@
 {
+  "common": {
+    "notSet": "ยังไม่ตั้งค่า"
+  },
   "infrastructure": {
     "services": {
       "tabs": {
@@ -239,6 +242,14 @@
       "attachFailed": "ระบบปฏิเสธการแนบ",
       "attachCancel": "ยกเลิก",
       "createNew": "สร้างโจทย์ใหม่"
+    },
+    "overview": {
+      "facts": {
+        "scoreMode": "โหมดการให้คะแนน",
+        "feedback": "ระดับผลตอบกลับ",
+        "scorePrecision": "ความละเอียดของคะแนน",
+        "submissions": "จำนวนการส่ง"
+      }
     }
   },
   "users": {

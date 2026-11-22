@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { formatCount } from '@/lib/format-number';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -34,10 +36,12 @@ function humanize(value: string): string {
 }
 
 export default async function TaskOverviewPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const taskId = parseRecordId(id);
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.overview');
+  const dictionary = await getDictionary(locale);
+  const facts = dictionary.tasks.overview.facts;
   const data = await readRecordOrNotFound(() => getTaskOverview(taskId));
   return (
     <DetailPage
@@ -45,11 +49,15 @@ export default async function TaskOverviewPage({ params }: TaskRouteProps): Prom
       // already says Overview, so this page adds only the values and the statements under them.
       ownsHeader={false}
       facts={[
-        { term: 'Score mode', value: humanize(data.task.score_mode) },
-        { term: 'Feedback', value: humanize(data.task.feedback_level) },
-        // Why the panel's missing mark: a null precision is a task that never set one, not a 0.
-        { term: 'Score precision', value: data.task.score_precision === null ? '—' : String(data.task.score_precision) },
-        { term: 'Submissions', value: String(data.task.submissions) },
+        { term: facts.scoreMode, value: humanize(data.task.score_mode) },
+        { term: facts.feedback, value: humanize(data.task.feedback_level) },
+        // Why a word and not a dash: a null precision is a task that never set one, not a 0, and
+        // DESIGN.md 19 bans the em dash from anything a reader sees.
+        {
+          term: facts.scorePrecision,
+          value: data.task.score_precision === null ? dictionary.common.notSet : String(data.task.score_precision),
+        },
+        { term: facts.submissions, value: formatCount(data.task.submissions, locale) },
       ]}
     >
       <TaskOverviewTab data={data} />

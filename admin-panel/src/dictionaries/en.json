@@ -1,4 +1,7 @@
 {
+  "common": {
+    "notSet": "Not set"
+  },
   "infrastructure": {
     "services": {
       "tabs": {
@@ -239,6 +242,14 @@
       "attachFailed": "The attach was refused",
       "attachCancel": "Cancel",
       "createNew": "Create new task"
+    },
+    "overview": {
+      "facts": {
+        "scoreMode": "Score mode",
+        "feedback": "Feedback",
+        "scorePrecision": "Score precision",
+        "submissions": "Submissions"
+      }
     }
   },
   "users": {
