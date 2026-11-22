@@ -45,6 +45,7 @@
 
 mod error;
 mod exits;
+mod home;
 mod launch;
 mod measure;
 mod options;
