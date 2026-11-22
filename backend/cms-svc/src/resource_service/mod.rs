@@ -13,6 +13,7 @@ mod naming;
 mod sample;
 mod service;
 mod spawn;
+mod table;
 
 pub use coord::{CoordError, LocalService, ServiceCoord};
 pub use error::ResourceError;
@@ -24,3 +25,4 @@ pub use service::{
     MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
 };
 pub use spawn::{ProcessSpawner, ServiceCommand, SpawnError, SpawnedChild, Spawner};
+pub use table::{local_services, TableError};
