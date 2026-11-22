@@ -13,9 +13,17 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::Sandbox;
+use super::spawn::set_mode;
+use super::{Sandbox, SpawnError};
+
+/// The permissions of a home and its entries when the run may write anything.
+const MODE_ALL: u32 = 0o777;
+/// The permissions they are given when it may write nothing: its owner reads and
+/// traverses, and the run, which does not own its home, only reads and traverses.
+const MODE_NONE: u32 = 0o755;
 
 impl Sandbox {
     /// The path on this side of a file the run sees at `path`.
@@ -26,5 +34,43 @@ impl Sandbox {
     #[must_use]
     pub fn relative_path(&self, path: impl AsRef<Path>) -> PathBuf {
         self.home().join(path)
+    }
+
+    /// Opens the home, and each of its direct entries, to writes by anyone.
+    ///
+    /// A directory below the top level keeps the permissions it had.
+    /// # Errors
+    /// [`SpawnError::Io`] when the home or an entry could not be changed.
+    pub fn allow_writing_all(&self) -> Result<(), SpawnError> {
+        self.set_every_entry(MODE_ALL)
+    }
+
+    /// Closes the home, and each of its direct entries, to writes by anyone but
+    /// their owner, which is not the run.
+    ///
+    /// A directory below the top level keeps the permissions it had.
+    /// # Errors
+    /// [`SpawnError::Io`] when the home or an entry could not be changed.
+    pub fn allow_writing_none(&self) -> Result<(), SpawnError> {
+        self.set_every_entry(MODE_NONE)
+    }
+
+    /// Gives the home and each of its direct entries `mode`.
+    fn set_every_entry(&self, mode: u32) -> Result<(), SpawnError> {
+        let home = self.home();
+        set_mode(home, mode)?;
+        for entry in fs::read_dir(home).map_err(|source| failed(home, source))? {
+            let entry = entry.map_err(|source| failed(home, source))?;
+            set_mode(&entry.path(), mode)?;
+        }
+        Ok(())
+    }
+}
+
+/// The refusal a path the file system would not touch is reported as.
+fn failed(path: &Path, source: std::io::Error) -> SpawnError {
+    SpawnError::Io {
+        path: path.to_path_buf(),
+        source,
     }
 }
