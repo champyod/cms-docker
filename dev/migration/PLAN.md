@@ -193,9 +193,10 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-logsvc-bin` | `cd5b6a13` | `cargo test -p cms-svc` → 45 passed; `bash scripts/__test_config_sync.sh` → 24 passed; parent's own mutation (fail-open `required()`) failed the two startup tests in 5.02s, exit 101, restored byte-identical after the parent bounded `run_with` with a watchdog | `4d7a8bad` |
 | 2026-11-22 | `feat/rust-svc-surface` | `cc92e0ff` | `cargo test -p cms-svc` → 57 passed; parent's own mutation of `inflight.rs` (condvar loop removed) failed **no** test, so the parent added the missing in-crate assertion; the same mutation now fails at 4.141µs, exit 101 | `9bf7953c` |
 | 2026-11-22 | `feat/rust-proc-reader` | `81f45804` | `cargo test -p cms-svc` → 68 passed; parent's own mutation of `procfs_reader.rs:36` (`swap_used` → plain `swap_free`) failed **no** test, so the parent added the swap identity and a per-key memory comparison; the same mutation now fails at exit 101 | `ef3ceadc` |
+| 2026-11-22 | `feat/rust-resourcesvc` | `c982c182` | `cargo test -p cms-svc` → 99 passed; parent's own mutation of `machine.rs:122` (`round_ties_even` → `round`) failed `percentages_round_like_python` with left 3 / right 2, exit 101, restored byte-identical | `d800accd` |
 
-Gate on the tree after all seven merges (`ef3ceadc`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 69 test binaries, 383 passed,
+Gate on the tree after all eight merges (`d800accd`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 70 test binaries, 414 passed,
 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 24 passed, exit 0; `bash
 scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial because the
 parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
