@@ -9,15 +9,37 @@
 //!
 //! Both types are newtypes over the same string with the domain's rule applied
 //! once, so no caller can hold a digest the column would have rejected.
+//!
+//! The rest of the module is `src/cmscommon/digest.py` (75 lines):
+//! [`Digester`], [`bytes_digest`] and [`path_digest`]. All three are SHA-1 —
+//! `hashlib.sha1()`, not md5 and not sha512 — and they answer the same forty
+//! lowercase hexadecimal characters the domain above admits, which is why a
+//! digest computed here can be handed straight to [`FileDigest`].
+//!
+//! # Errors
+//!
+//! [`path_digest`] answers the `std::io::Error` of the read it performed and
+//! nothing else: a file that cannot be opened has no digest, and reporting the
+//! system's own failure keeps the path and the errno that name it.
 
 use std::fmt;
+use std::fs::File;
+use std::io::{self, Read};
+use std::path::Path;
 use std::str::FromStr;
+
+use sha1::{Digest, Sha1};
+
+use crate::binary::bin_to_hex;
 
 /// The value the `DIGEST` domain allows in place of a digest.
 pub const TOMBSTONE: &str = "x";
 
 /// Hexadecimal digits in a SHA-1 digest.
 pub const DIGEST_HEX_LEN: usize = 40;
+
+/// The step a file is read in, `io.DEFAULT_BUFFER_SIZE` on the Python side.
+pub const DEFAULT_READ_BUFFER: usize = 8192;
 
 /// Why a digest string was refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -182,4 +204,70 @@ impl CacheHandle {
             RemoveAction::Forward
         }
     }
+}
+
+/// A SHA-1 a caller feeds in pieces, as `cmscommon.digest.Digester` does.
+///
+/// `digest` leaves the state untouched, exactly as `hashlib`'s own `digest`
+/// does, so one instance can be asked more than once while a value is still
+/// being appended to it.
+#[derive(Clone, Default)]
+pub struct Digester {
+    hasher: Sha1,
+}
+
+impl Digester {
+    /// A digester with nothing fed to it yet.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            hasher: Sha1::new(),
+        }
+    }
+
+    /// Feeds `bytes` in. Calling it twice is the same as feeding the join.
+    pub fn update(&mut self, bytes: &[u8]) {
+        self.hasher.update(bytes);
+    }
+
+    /// The digest of everything fed in so far, as lowercase hexadecimal.
+    #[must_use]
+    pub fn digest(&self) -> String {
+        bin_to_hex(&self.hasher.clone().finalize())
+    }
+}
+
+impl fmt::Debug for Digester {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Digester")
+    }
+}
+
+/// The digest of `bytes`, as lowercase hexadecimal.
+#[must_use]
+pub fn bytes_digest(bytes: &[u8]) -> String {
+    bin_to_hex(&Sha1::digest(bytes))
+}
+
+/// The digest of the content of the file at `path`, as lowercase hexadecimal.
+///
+/// The file is read in `io.DEFAULT_BUFFER_SIZE` steps because the Python side
+/// reads it that way, which matters only for how much of a large file is held
+/// at once: the digest of a file does not depend on the step.
+///
+/// # Errors
+///
+/// The `std::io::Error` of opening or reading the file.
+pub fn path_digest(path: impl AsRef<Path>) -> io::Result<String> {
+    let mut buffer = vec![0u8; DEFAULT_READ_BUFFER];
+    let mut hasher = Sha1::new();
+    let mut file = File::open(path)?;
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(bin_to_hex(&hasher.finalize()))
 }

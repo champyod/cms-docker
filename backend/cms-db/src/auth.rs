@@ -85,10 +85,10 @@ pub struct BcryptPassword(String);
 /// The bcrypt check a [`BcryptPassword`] is validated against.
 ///
 /// A stored hash cannot be checked without the cost it was built with, so the
-/// check is supplied rather than assumed. There is no implementation here: the
-/// password hashing that computes and compares those hashes is not part of this
-/// mapping, and a default that answered `false` would report a valid credential
-/// as wrong.
+/// check is supplied rather than assumed: the mapping applies the column's rule
+/// and owns no hash function, and a default that answered `false` would report
+/// a valid credential as wrong. The implementation is [`crate::Bcrypt`], in the
+/// `crypto` module, beside the `hash_password` that writes such a row.
 pub trait BcryptVerifier {
     /// Whether `candidate` is the password `hash` was built from.
     fn verify(&self, candidate: &str, hash: &str) -> bool;
