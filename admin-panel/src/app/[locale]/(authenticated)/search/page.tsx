@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { searchAll } from '@/app/actions/search';
+import { Text } from '@/components/core/Typography';
 import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
 import { SearchResultCard } from '@/components/search/SearchComponents';
 import { getDictionary } from '@/i18n';
@@ -49,6 +50,8 @@ export default async function SearchPage({
     getDictionary(locale),
     query.length > 0 ? searchAll(query) : Promise.resolve(NO_RESULTS),
   ]);
+  const copy = dict.search;
+  const fill = (template: string, value: string): string => template.replace('{query}', value);
   const nothingMatched =
     results.users.length === 0 &&
     results.tasks.length === 0 &&
@@ -58,8 +61,8 @@ export default async function SearchPage({
   const sections: readonly BoardSection[] = [
     {
       key: 'users',
-      title: 'Users',
-      description: `${results.users.length} matched`,
+      title: copy.kinds.users,
+      count: results.users.length,
       rows: (
         <ResultGrid>
           {results.users.map((user) => (
@@ -69,12 +72,12 @@ export default async function SearchPage({
           ))}
         </ResultGrid>
       ),
-      empty: <p className="text-sm text-muted-foreground">No user matched this query.</p>,
+      empty: <Text variant="muted">{copy.empty.users}</Text>,
     },
     {
       key: 'tasks',
-      title: 'Tasks',
-      description: `${results.tasks.length} matched`,
+      title: copy.kinds.tasks,
+      count: results.tasks.length,
       rows: (
         <ResultGrid>
           {results.tasks.map((task) => (
@@ -84,12 +87,12 @@ export default async function SearchPage({
           ))}
         </ResultGrid>
       ),
-      empty: <p className="text-sm text-muted-foreground">No task matched this query.</p>,
+      empty: <Text variant="muted">{copy.empty.tasks}</Text>,
     },
     {
       key: 'contests',
-      title: 'Contests',
-      description: `${results.contests.length} matched`,
+      title: copy.kinds.contests,
+      count: results.contests.length,
       rows: (
         <ResultGrid>
           {results.contests.map((contest) => (
@@ -99,12 +102,12 @@ export default async function SearchPage({
           ))}
         </ResultGrid>
       ),
-      empty: <p className="text-sm text-muted-foreground">No contest matched this query.</p>,
+      empty: <Text variant="muted">{copy.empty.contests}</Text>,
     },
     {
       key: 'admins',
-      title: 'Admins',
-      description: `${results.admins.length} matched`,
+      title: copy.kinds.admins,
+      count: results.admins.length,
       rows: (
         <ResultGrid>
           {results.admins.map((admin) => (
@@ -114,19 +117,19 @@ export default async function SearchPage({
           ))}
         </ResultGrid>
       ),
-      empty: <p className="text-sm text-muted-foreground">No admin matched this query.</p>,
+      empty: <Text variant="muted">{copy.empty.admins}</Text>,
     },
   ];
 
   return (
     <BoardPage
       title={dict.navigation.system.search.label}
-      description={query.length > 0 ? `Results for “${query}”` : undefined}
+      description={query.length > 0 ? fill(copy.resultsFor, query) : undefined}
       state={
         query.length === 0 ? (
-          <p className="text-muted-foreground">Please enter a search term.</p>
+          <Text variant="muted">{copy.prompt}</Text>
         ) : nothingMatched ? (
-          <p className="text-sm text-muted-foreground">No results found.</p>
+          <Text variant="muted">{copy.noResults}</Text>
         ) : undefined
       }
       sections={sections}

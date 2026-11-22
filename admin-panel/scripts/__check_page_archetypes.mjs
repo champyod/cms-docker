@@ -88,7 +88,7 @@ const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]
  * ever changing. Counted per file, and the count may only fall, one page per session.
  */
 const OFF_SCALE_TYPE = /\btext-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)\b/g;
-const OFF_SCALE_CEILING = Number(process.env.OFF_SCALE_TYPE_CEILING ?? 15);
+const OFF_SCALE_CEILING = Number(process.env.OFF_SCALE_TYPE_CEILING ?? 10);
 let offScaleType = 0;
 
 for (const page of pages) {

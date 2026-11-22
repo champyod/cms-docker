@@ -1778,5 +1778,22 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "required": "A reason is required"
+  },
+  "search": {
+    "resultsFor": "Results for “{query}”",
+    "prompt": "Please enter a search term.",
+    "noResults": "No results found.",
+    "kinds": {
+      "users": "Users",
+      "tasks": "Tasks",
+      "contests": "Contests",
+      "admins": "Admins"
+    },
+    "empty": {
+      "users": "No user matched this query.",
+      "tasks": "No task matched this query.",
+      "contests": "No contest matched this query.",
+      "admins": "No admin matched this query."
+    }
   }
 }
