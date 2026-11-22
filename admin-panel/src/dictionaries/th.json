@@ -1291,7 +1291,11 @@
       "captchaProvider": "ผู้ให้บริการ",
       "captchaHealth": "สุขภาพ",
       "enabledOn": "เปิด",
-      "enabledOff": "ปิด"
+      "enabledOff": "ปิด",
+      "emptyBans": "ยังไม่มีที่อยู่ที่ถูกแบน",
+      "emptyExemptions": "ยังไม่มีข้อยกเว้นถาวรที่ใช้งานอยู่",
+      "emptyActivity": "ยังไม่มีการนับการเข้าสู่ระบบที่ล้มเหลว",
+      "emptyLockouts": "ยังไม่มีการล็อกบัญชีที่เปิดอยู่"
     },
     "overview": {
       "cards": {

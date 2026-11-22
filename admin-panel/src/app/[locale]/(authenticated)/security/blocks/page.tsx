@@ -1,6 +1,7 @@
 import { readBannedAddresses, readLoginActivity, readLoginLockouts } from '@/app/actions/securityBlocks';
 import { readLoginExemptions } from '@/app/actions/securityExemptions';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { Text } from '@/components/core/Typography';
 import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
 import { BannedAddressList } from '@/components/security/BannedAddressList';
 import { CaptchaStatusSummary } from '@/components/security/CaptchaStatusSummary';
@@ -70,7 +71,7 @@ export default async function SecurityBlocksPage({
       ),
       empty: (
         <>
-          <p className="text-sm text-muted-foreground">No banned address is reported.</p>
+          <Text variant="muted">{dict.security.blocks.emptyBans}</Text>
           <QueueUnbanForm jailNames={banned.jailNames} />
         </>
       ),
@@ -83,7 +84,7 @@ export default async function SecurityBlocksPage({
       rows: <ExemptionsPanel exemptions={exemptions} />,
       empty: (
         <>
-          <p className="text-sm text-muted-foreground">No permanent exemption is active.</p>
+          <Text variant="muted">{dict.security.blocks.emptyExemptions}</Text>
           <ExemptionsPanel exemptions={[]} />
         </>
       ),
@@ -101,7 +102,7 @@ export default async function SecurityBlocksPage({
         </InlineAlert>
       ),
       rows: activity.ok ? <LoginActivityTable rows={activity.rows} labels={labels} /> : null,
-      empty: activity.ok ? <p className="text-sm text-muted-foreground">No failed sign-in is being counted.</p> : undefined,
+      empty: activity.ok ? <Text variant="muted">{dict.security.blocks.emptyActivity}</Text> : undefined,
     },
     {
       key: 'lockouts',
@@ -109,7 +110,7 @@ export default async function SecurityBlocksPage({
       description:
         'The captcha hard limit: after repeated failed passwords the contest and admin web servers refuse the account and address for the lockout window. Lifting one clears the counter and closes the record.',
       rows: <LockoutList lockouts={lockouts} />,
-      empty: <p className="text-sm text-muted-foreground">No open lockout.</p>,
+      empty: <Text variant="muted">{dict.security.blocks.emptyLockouts}</Text>,
     },
   ];
 

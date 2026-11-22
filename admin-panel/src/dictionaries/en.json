@@ -1291,7 +1291,11 @@
       "captchaProvider": "Provider",
       "captchaHealth": "Health",
       "enabledOn": "on",
-      "enabledOff": "off"
+      "enabledOff": "off",
+      "emptyBans": "No banned address is reported.",
+      "emptyExemptions": "No permanent exemption is active.",
+      "emptyActivity": "No failed sign-in is being counted.",
+      "emptyLockouts": "No open lockout."
     },
     "overview": {
       "cards": {
