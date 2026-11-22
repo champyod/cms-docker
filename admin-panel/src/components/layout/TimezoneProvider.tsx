@@ -5,11 +5,16 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 import { formatDayInZone, formatInZone, formatTimeInZone, resolveDisplayZone } from '@/lib/timezone';
 
 /**
- * The glyph every formatter here falls back to: a payload that carries no parseable instant gets
- * one fixed character rather than a blank cell or the browser's "Invalid Date" text, so a row's
- * absence is visible and identical across surfaces.
+ * The word every formatter here falls back to: a payload that carries no parseable instant says so
+ * rather than leaving a blank cell or the browser's "Invalid Date" text, so a row's absence is visible
+ * and identical across surfaces.
+ *
+ * Why a constant and not the dictionary: a formatter is a function, not a component, and the panel has
+ * no dictionary outside a component. The alternative was a `missing` argument on all three hooks and
+ * every call site that uses them, for one word. This is the panel's one reader-visible string that does
+ * not follow the language setting, and it is recorded as such rather than hidden.
  */
-export const MISSING_TIMESTAMP = '—';
+export const MISSING_TIMESTAMP = 'Unknown';
 
 /** Renders an instant, from whatever shape the payload carried it in, as text in the display zone. */
 export type TimestampFormatter = (instant: string | Date) => string;
