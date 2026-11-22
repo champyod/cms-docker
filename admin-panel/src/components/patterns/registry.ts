@@ -43,6 +43,7 @@ export const ARCHETYPE_COMPONENT: Readonly<Record<PageArchetype, string>> = {
   detail: 'DetailPage',
   form: 'FormPage',
   settings: 'SettingsPage',
+  board: 'BoardPage',
   // A redirect has no component: the gate checks it renders no page surface at all.
   redirect: '',
 };

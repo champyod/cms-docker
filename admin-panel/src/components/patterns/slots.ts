@@ -54,6 +54,13 @@ export const PAGE_SLOTS: Readonly<Record<Exclude<PageArchetype, 'redirect'>, rea
     { key: 'submit', asks: 'What happens when I press this?', required: true },
     { key: 'cancel', asks: 'How do I leave without saving?', required: true },
   ],
+  board: [
+    STATE,
+    FRESHNESS,
+    { key: 'sections', asks: 'Which record kinds live here, and what does each mean when empty?', required: true },
+    { key: 'sectionActions', asks: 'What can I do inside a section?', required: false },
+    { key: 'action', asks: 'What is the one thing to do about the page state?', required: false },
+  ],
   settings: [
     STATE,
     { key: 'groups', asks: 'Which settings belong together?', required: true },
