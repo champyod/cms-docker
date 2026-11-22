@@ -19,9 +19,10 @@
 //! documents are typed, and a testcase a contestant may not see is a [`Row::Hidden`] rather
 //! than a flag, so a hidden outcome cannot reach a page by a forgotten branch.
 //!
-//! What a score reads as is [`format_score`]'s, which is a rule about a number already
-//! decided: the rounding a task publishes at and the rounding a panel shows are two
-//! different rules, and only one of them is the score.
+//! What those documents look like is [`html_details`]'s business, and what a score reads as
+//! is [`format_score`]'s. Both are rules about numbers already decided, which is why they
+//! are here rather than in a page: the rounding a task publishes at and the rounding the
+//! panel shows are two different rules, and only one of them is the score.
 //!
 //! # Errors
 //!
@@ -36,21 +37,28 @@
 mod error;
 mod format;
 mod group;
+mod html;
 mod params;
 mod pattern;
 mod reduce;
+mod rows;
 mod submission;
 mod subtask;
 mod sum;
+mod text;
+mod units;
 
 pub use error::ScoreTypeError;
 pub use format::{format_decimal, format_general, format_score, round_at};
 pub use group::Group;
+pub use html::html_details;
 pub use reduce::Reduction;
 pub use submission::{
     Evaluated, MaxScores, Row, ScoreDetails, Scored, Submission, Subtask, SumRow, Testcase,
 };
 pub use sum::Sum;
+pub use text::{escape, format_status_text};
+pub use units::{format_duration, format_size};
 
 use std::collections::BTreeMap;
 
