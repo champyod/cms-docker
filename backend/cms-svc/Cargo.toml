@@ -10,6 +10,7 @@ path = "src/bin/cms-log-service.rs"
 [dependencies]
 backon = { workspace = true }
 cms-proto = { path = "../cms-proto" }
+procfs = { workspace = true }
 rand = { workspace = true }
 serde_json = { workspace = true }
 
