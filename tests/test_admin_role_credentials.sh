@@ -8,6 +8,7 @@ REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
 SQL_FILE="${REPO_ROOT}/admin-panel/prisma/sql/20260820119000_admin_role_passwords.sql"
 GEN_SQL="${REPO_ROOT}/admin-panel/prisma/sql/20260820110000_generated_roles.sql"
+OWNER_SQL="${REPO_ROOT}/admin-panel/prisma/sql/20260820130000_admin_owner_separation.sql"
 APPLY="${REPO_ROOT}/scripts/__apply_sql.sh"
 SYNC="${REPO_ROOT}/scripts/__config_sync.sh"
 ENGINE="${REPO_ROOT}/scripts/__update_engine.sh"
@@ -72,6 +73,16 @@ if [[ -f "$GEN_SQL" ]]; then
     no "the generated role catalog has no bare generator variables"
   else
     ok "the generated role catalog has no bare generator variables"
+  fi
+  if [[ -f "$OWNER_SQL" ]]; then
+    check_literal "the owner SQL is superuser-only" '-- superuser-only' "$OWNER_SQL"
+    check_literal "the owner SQL moves admins to cms_platform_owner" 'ALTER TABLE public.admins OWNER TO cms_platform_owner' "$OWNER_SQL"
+    check_literal "the owner SQL moves the sequence" 'ALTER SEQUENCE public.admins_id_seq OWNER TO cms_platform_owner' "$OWNER_SQL"
+    check_literal "the owner SQL moves the trigger function" 'ALTER FUNCTION public.cms_admin_security_audit() OWNER TO cms_platform_owner' "$OWNER_SQL"
+    check_literal "the owner SQL revokes the shared role" 'REVOKE ALL PRIVILEGES ON TABLE public.admins FROM cmsuser' "$OWNER_SQL"
+    check_literal "the owner SQL keeps last_login_at writable" 'GRANT UPDATE (last_login_at) ON TABLE public.admins TO cmsuser' "$OWNER_SQL"
+  else
+    no "the owner SQL exists"
   fi
   order="$(printf '%s\n' "$(basename "$GEN_SQL")" "$(basename "$SQL_FILE")" 20260820120000_db_roles.sql | LC_ALL=C sort | paste -sd' ' -)"
   if [[ "$order" == "$(basename "$GEN_SQL") $(basename "$SQL_FILE") 20260820120000_db_roles.sql" ]]; then
@@ -158,6 +169,7 @@ POSTGRES_BACKUP_PASSWORD=fixture_backup_pw
 ADMIN_LOGIN_PASSWORD=fixture_login_pw
 ADMIN_READ_PASSWORD=fixture_read_pw
 ADMIN_SECURITY_PASSWORD=fixture_security_pw
+ADMIN_MIGRATE_PASSWORD=fixture_migrate_pw
 ENV
 chmod 600 "$TEST_ROOT/apply/.env"
 cat > "$STUB_DIR/docker" <<'STUB'
@@ -213,8 +225,9 @@ check_grep "bootstrap connects as the local postgres superuser" "CALL exec -u po
 check_not_grep "bootstrap never connects as the application role" "psql -U cmsuser" "$BOOT_CALLS"
 check_grep "bootstrap applies the marker-only credential file" "admin_role_passwords.sql" "$BOOT_STDIN"
 check_grep "bootstrap still applies the generated role file" "generated_roles.sql" "$BOOT_STDIN"
+check_grep "bootstrap applies the admin owner separation" "admin_owner_separation.sql" "$BOOT_STDIN"
 check_grep "bootstrap still applies the backup role file" "backup_role.sql" "$BOOT_STDIN"
-for name in admin_login_password admin_read_password admin_security_password; do
+for name in admin_login_password admin_read_password admin_security_password admin_migrate_password; do
   check_literal "bootstrap passes -v ${name}" "-v ${name}=fixture_" "$BOOT_CALLS"
 done
 check_grep "the superuser phase carries no PGPASSWORD" "^ENV PGPASSWORD=unset$" "$BOOT_CALLS"
@@ -226,10 +239,11 @@ run_apply "" "$NORM_CALLS" "$NORM_STDIN" "$TEST_ROOT/normal.log" || norm_rc=$?
 if [[ "$norm_rc" -eq 0 ]]; then ok "normal apply exits 0"; else no "normal apply exits 0 (got ${norm_rc})"; fi
 check_grep "normal apply reports the skipped superuser file" "skipping superuser-only file" "$TEST_ROOT/normal.log"
 check_not_grep "normal apply does not send the superuser-only SQL" "admin_role_passwords.sql" "$NORM_STDIN"
+check_not_grep "normal apply does not send the owner separation" "admin_owner_separation.sql" "$NORM_STDIN"
 check_grep "normal apply still applies the role file" "generated_roles.sql" "$NORM_STDIN"
 check_grep "normal apply keeps the application-role connection" "psql -U cmsuser -d cmsdb" "$NORM_CALLS"
 check_grep "normal apply keeps the PGPASSWORD handover" "^ENV PGPASSWORD=set$" "$NORM_CALLS"
-for name in admin_login_password admin_read_password admin_security_password; do
+for name in admin_login_password admin_read_password admin_security_password admin_migrate_password; do
   check_literal "normal apply passes -v ${name}" "-v ${name}=fixture_" "$NORM_CALLS"
 done
 

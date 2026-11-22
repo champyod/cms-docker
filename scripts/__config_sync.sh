@@ -185,6 +185,7 @@ generate_secret_for() {
     ADMIN_LOGIN_PASSWORD) gen_hex32 ;;
     ADMIN_READ_PASSWORD) gen_hex32 ;;
     ADMIN_SECURITY_PASSWORD) gen_hex32 ;;
+    ADMIN_MIGRATE_PASSWORD) gen_hex32 ;;
     OFFSITE_ENCRYPT_KEY) gen_hex32 ;;
     GRAFANA_PASSWORD)    gen_hex32 ;;
     VAULT_TOKEN)         gen_hex32 ;;

@@ -59,7 +59,8 @@ fi
 ADMIN_LOGIN_PASSWORD="$(get_env_val "ADMIN_LOGIN_PASSWORD" "$ENV_FILE")"
 ADMIN_READ_PASSWORD="$(get_env_val "ADMIN_READ_PASSWORD" "$ENV_FILE")"
 ADMIN_SECURITY_PASSWORD="$(get_env_val "ADMIN_SECURITY_PASSWORD" "$ENV_FILE")"
-if [[ -z "$ADMIN_LOGIN_PASSWORD" || -z "$ADMIN_READ_PASSWORD" || -z "$ADMIN_SECURITY_PASSWORD" ]]; then
+ADMIN_MIGRATE_PASSWORD="$(get_env_val "ADMIN_MIGRATE_PASSWORD" "$ENV_FILE")"
+if [[ -z "$ADMIN_LOGIN_PASSWORD" || -z "$ADMIN_READ_PASSWORD" || -z "$ADMIN_SECURITY_PASSWORD" || -z "$ADMIN_MIGRATE_PASSWORD" ]]; then
   log_warn "ADMIN_*_PASSWORD empty — run './cms config sync' to generate them; those roles keep PASSWORD NULL"
 fi
 
@@ -111,6 +112,7 @@ if [[ "$PRE_PUSH" -eq 1 ]]; then
     -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
     -v "admin_read_password=$ADMIN_READ_PASSWORD" \
     -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
     -f - < "$CAPTURE_FILE"; then
     log_warn "failed to apply $CAPTURE_FILE — continuing (prisma db push must still run)"
   else
@@ -172,6 +174,8 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
       -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
       -v "admin_read_password=$ADMIN_READ_PASSWORD" \
       -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
+      -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
       -f - < "$sql_file"; then
       log_warn "failed to apply $sql_file — continuing (prisma-sync will retry after the restart)"
     fi
@@ -211,6 +215,7 @@ for sql_file in "${SQL_FILES[@]}"; do
     -v "admin_login_password=$ADMIN_LOGIN_PASSWORD" \
     -v "admin_read_password=$ADMIN_READ_PASSWORD" \
     -v "admin_security_password=$ADMIN_SECURITY_PASSWORD" \
+    -v "admin_migrate_password=$ADMIN_MIGRATE_PASSWORD" \
     -f - < "$sql_file"; then
     log_die "failed to apply $sql_file" 1
   fi

@@ -647,6 +647,7 @@ VAR_SPECS=(
   "Admin Panel|[admin]|ADMIN_LOGIN_PASSWORD|secret||hex32"
   "Admin Panel|[admin]|ADMIN_READ_PASSWORD|secret||hex32"
   "Admin Panel|[admin]|ADMIN_SECURITY_PASSWORD|secret||hex32"
+  "Admin Panel|[admin]|ADMIN_MIGRATE_PASSWORD|secret||hex32"
   "Admin Panel|[admin]|COOKIE_SECURE|bool||false"
   "Admin Panel|[admin]|CAPTCHA_ENABLED|enum:0,1||0"
   "Admin Panel|[admin]|CAPTCHA_PROVIDER|enum:turnstile,hcaptcha||turnstile"

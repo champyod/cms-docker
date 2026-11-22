@@ -5,6 +5,7 @@
 SELECT set_config('my.admin_login_password', :'admin_login_password', false);
 SELECT set_config('my.admin_read_password', :'admin_read_password', false);
 SELECT set_config('my.admin_security_password', :'admin_security_password', false);
+SELECT set_config('my.admin_migrate_password', :'admin_migrate_password', false);
 DO $$
 DECLARE
   r record;
@@ -14,7 +15,8 @@ BEGIN
     SELECT * FROM (VALUES
       ('cms_admin_login', current_setting('my.admin_login_password', true)),
       ('cms_admin_read_people', current_setting('my.admin_read_password', true)),
-      ('cms_admin_account_security', current_setting('my.admin_security_password', true))
+      ('cms_admin_account_security', current_setting('my.admin_security_password', true)),
+      ('cms_platform_migrator', current_setting('my.admin_migrate_password', true))
     ) AS v(rolname, password)
   LOOP
     _pw := coalesce(r.password, '');

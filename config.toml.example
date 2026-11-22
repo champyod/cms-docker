@@ -79,6 +79,7 @@ AUTH_SECRET = ""                # secret; auto-generated hex32 if empty; signs t
 ADMIN_LOGIN_PASSWORD = ""       # secret; generated on first sync; the cms_admin_login role's password
 ADMIN_READ_PASSWORD = ""        # secret; generated on first sync; the cms_admin_read_people role's password
 ADMIN_SECURITY_PASSWORD = ""    # secret; generated on first sync; the cms_admin_account_security role's password
+ADMIN_MIGRATE_PASSWORD = ""     # secret; generated on first sync; the cms_platform_migrator role's password; deploy host only
 COOKIE_SECURE = false           # bool; sends the admin session cookie with the Secure attribute so browsers never transmit it over plain HTTP; set true whenever admin access is served over TLS
 CAPTCHA_ENABLED = 0             # enum:0,1; effect: reduces brute-force before fail2ban
 CAPTCHA_PROVIDERS = ""          # str; comma list in priority order, e.g. "hcaptcha,turnstile"; each names CAPTCHA_<NAME>_SITE_KEY/_SECRET_KEY. Empty falls back to CAPTCHA_PROVIDER
