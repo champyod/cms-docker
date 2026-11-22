@@ -205,6 +205,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3d-submissions` + `feat/rust-S3e-contest` (parallel) | `1c6741d4` / `16520948` | task 646 + submission 799, contest 499 + usertest 550. **Both lanes were green alone and the merged tree did not compile** (`E0252: TokenMode defined multiple times`) — each had redeclared the same enum; see the fix row below | `d8e75868`, `5432c958` |
 | 2026-11-22 | (main session) | — | consolidated the duplicate `TokenMode` into `cms-db/src/token_mode.rs` (one concept: `contest.py:157` and `task.py:133` use the same constants and differ only in default). Parent's own mutation of `quota.rs:65` (infinite balance refusing as if zero) failed `an_infinite_task_always_offers_a_token` and `two_unlimited_sides_stay_unlimited`, exit 101, restored byte-identical. 104 binaries, 714 passed with a live database | `8549667f` |
 | 2026-11-22 | `feat/rust-S3f-util` | `8422a988` | contest/service binding + bootstrap. Parent's own mutation of `binding/active.rs:74` (an empty `is_active` flag made to bootstrap from `CONTEST_ID`) failed `a_fresh_install_is_bootstrapped_only_while_the_table_is_missing`, exit 101, restored byte-identical. Merged tree: 108 binaries, 736 passed, live database | merged |
+| 2026-11-22 | `feat/rust-S3g-reads` | `dd53f811` | the deferred 244 lines. Parent's own mutation of `reads/walk.rs:64` (`!submissions && !users` → `||`) failed `the_walk_visits_every_table_and_honours_each_skip`, leaking digests …0006 and …0007 into a walk "without users", exit 101, restored byte-identical. Merged tree: 113 binaries, 760 passed, live database | `4df2295e` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -310,6 +311,28 @@ So S-3's queue is S-3g for these six, and only then is the slice done. Also defe
 interactive prompts (`ask_for_contest:113`, `ask_for_active_contest:296`) belong to the CLI crate that asks
 them, not here; and the five-second registry TTL cache was dropped, so every binding read is the database's
 current answer — a behaviour change worth knowing when a caller expected the reference's staleness.
+
+**S-3 IS STILL NOT COMPLETE — the "every function has a counterpart" claim was false (2026-11-22).** The
+S-3g lane reported that every function in `src/cms/db` now has a Rust counterpart, and the merge message
+repeated it. A mechanical check — every module-level `def` in the 21 Python files compared against the
+crate's `fn` names — found 20 without a verbatim counterpart. Most are covered under another name or by the
+type system, and four were deliberately left out (the two interactive prompts, `test_db_connection`,
+`custom_psycopg2_connection`). Three are genuine gaps, measured:
+
+| gap | where | size |
+|---|---|---|
+| **schema creation** — nothing in Rust can create the tables | `init.py:40-52` (`init_db`) plus the DDL compilers `types.py:79-248` (`compile_codename`, `compile_filename`, `compile_filename_schema`, `compile_filename_schema_array`, `compile_digest`), ~170 lines that exist only to emit `CREATE TABLE` | ≈180 lines |
+| **username display and registration** — `get_display_usernames`, `get_display_username`, `get_display_name`, `username_config_allowed`, `set_display_username` and their private helpers `_find_record`/`_assert_username_free`/`_append_history`/`_create_username`/`_update_username` | `username/resolution.py:94-133`, `:134-184`, `:185-211` | ≈111 lines |
+| **`registerable_teams_query`** — a contest decides, else the team's own flag | `user.py:165-178` | 14 lines |
+
+Confirmed *not* a gap: `resolve_username_config` is ported as `resolve_config` (`username/policy.rs:68`).
+The schema gap is the serious one: a fresh deployment cannot initialise a database from Rust, so the Python
+tree cannot be deleted while it stands. Queued as **S-3h**.
+
+Lesson, recorded because it cost a false claim in a commit message: "the child said every function is
+covered" is a claim. Compare the Python `def` list against the crate's `fn` list mechanically; the two
+names that made me doubt the check (`resolve_username_config` → `resolve_config`, `copyfileobj` →
+`copy_to_file`) were both covered, and the gap was somewhere I had not looked.
 
 Two ordering facts that are not obvious from the sizes: `filecacher` must follow `fsobject` because it
 imports `FSObject` and `LargeObject`, and S-3d must follow S-3b for the same reason through the cache.
