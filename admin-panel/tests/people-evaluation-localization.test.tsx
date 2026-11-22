@@ -12,7 +12,7 @@ import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/pr
 import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
 import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
 import { TeamListHeader } from '@/components/teams/TeamListHeader';
-import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
+import { TeamMembersEmpty, TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
 import { getUserHistory, getUserProfile, getUserSummary } from '@/lib/people-read-models';
@@ -269,8 +269,8 @@ describe('Team record tab copy', () => {
   });
 
   it('renders Thai empty states and the overflow count on the members and contests tabs', () => {
-    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
-    const emptyMembers = text(<TeamMembersTab teamId={4} members={[]} permissionKeys={['team:read']} contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
+    const members = text(<TeamMembersTab teamId={4} members={MEMBERS} permissionKeys={['team:read']} contests={[]} copy={th.teams} locale="th" />);
+    const emptyMembers = text(<TeamMembersEmpty teamId={4} permissionKeys={['team:read']} contests={[]} copy={th.teams} />);
     const contests = text(<TeamContestsTab contests={CONTESTS} navigation={th.navigation} copy={th.teams} locale="th" />);
     const emptyContests = text(<TeamContestsTab contests={[]} navigation={th.navigation} copy={th.teams} locale="th" />);
 

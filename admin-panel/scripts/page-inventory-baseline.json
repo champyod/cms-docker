@@ -9,7 +9,6 @@
     "/infrastructure/deployments",
     "/infrastructure/resources",
     "/people/teams/:id/contests",
-    "/people/teams/:id/members",
     "/ranking",
     "/ranking/appearance",
     "/ranking/credits",

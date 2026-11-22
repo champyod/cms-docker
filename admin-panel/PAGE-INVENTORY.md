@@ -38,7 +38,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/teams` | list | teams with id, code, name, registerable flag, member count and organization · sort · per-row edit and delete · create · live refresh · what empty means. No filter and no total: the read returns every team in one pass, so there is no narrower set and nothing left out to count against |
 | `/people/teams/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
-| `/people/teams/:id/members` | detail | — *to inventory* |
+| `/people/teams/:id/members` | list | the members, by username and name, with the contests each appears in and the profile each links to · filter by username or name, with select-all over the filtered set · the bulk action over the checked rows · how many members the team has in total (the filter narrows the rows, not the total) · rotating the checked accounts · what empty means, with the way out of it |
 | `/people/teams/:id/overview` | detail | the team's leader and member count · the code, name and registerable flag, each editable in place · save, and delete with confirmation · read-only when team:update is absent |
 | `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |

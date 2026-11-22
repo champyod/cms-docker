@@ -6,7 +6,6 @@ import { ExternalLink, RotateCcw, Users } from 'lucide-react';
 
 import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
 import { SELECTION_CHECKBOX_CLASS } from '@/components/core/SelectionColumn';
@@ -19,14 +18,25 @@ import { buildRoute } from '@/lib/navigation/routes';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import type { TeamMember } from '@/lib/people-read-model-types';
 
+interface ContestOption {
+  readonly id: number;
+  readonly name: string;
+}
+
 export interface TeamMembersTabProps {
   readonly teamId: number;
   readonly members: readonly TeamMember[];
   readonly permissionKeys: readonly string[];
-  readonly contests: readonly { id: number; name: string }[];
-  readonly navigation: Dictionary['navigation'];
+  readonly contests: readonly ContestOption[];
   readonly copy: Dictionary['teams'];
   readonly locale: 'en' | 'th';
+}
+
+export interface TeamMembersEmptyProps {
+  readonly teamId: number;
+  readonly permissionKeys: readonly string[];
+  readonly contests: readonly ContestOption[];
+  readonly copy: Dictionary['teams'];
 }
 
 // Why: an unreadable user id is never inferred, so the record link is omitted
@@ -91,26 +101,85 @@ function MemberRow({ member, locale, copy, selected, onToggle }: {
   );
 }
 
+/** Why the bulk affordance is reachable from the empty roster too: adding accounts is how a team
+ * that has no members stops having none, so the empty state carries the same dialog as the header. */
+function useBulkAffordance(permissionKeys: readonly string[]): {
+  readonly canUpdateTeam: boolean;
+  readonly canUpdateParticipation: boolean;
+  readonly canBulk: boolean;
+  readonly canRotate: boolean;
+} {
+  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
+  const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
+  const canUpdateParticipation = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateParticipation);
+  return {
+    canUpdateTeam,
+    canUpdateParticipation,
+    canBulk: canUpdateTeam || canUpdateParticipation,
+    canRotate: hasEffectivePermission(effective, 'username:set'),
+  };
+}
+
+/**
+ * What empty means for this team's roster, and the one action that changes it.
+ *
+ * Why not inside the rows component: the list layout renders its empty slot instead of the rows, so
+ * the meaning of empty is the page's to state; the dialog has to live with it or the empty roster
+ * would offer no way out of being empty.
+ */
+export function TeamMembersEmpty({ teamId, permissionKeys, contests, copy }: TeamMembersEmptyProps): React.JSX.Element {
+  const router = useAppRouter();
+  const { canUpdateTeam, canUpdateParticipation, canBulk } = useBulkAffordance(permissionKeys);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  return (
+    <>
+      <EmptyState
+        icon={Users}
+        title={copy.members.emptyTitle}
+        description={copy.members.emptyDescription}
+      />
+      {canBulk && (
+        <div className="mt-4 flex justify-end">
+          <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
+            {copy.bulkActions.button}
+          </Button>
+        </div>
+      )}
+      {canBulk && (
+        <TeamBulkActionsDialog
+          isOpen={dialogOpen}
+          onClose={() => setDialogOpen(false)}
+          onSuccess={() => { router.refresh(); }}
+          teamId={teamId}
+          selectedUserIds={[]}
+          contests={contests}
+          canUpdateTeam={canUpdateTeam}
+          canUpdateParticipation={canUpdateParticipation}
+          copy={copy}
+        />
+      )}
+    </>
+  );
+}
+
 /**
  * A team's members, with the filter and the selection that drive the day-2 rotation.
  *
  * WHY the filter drives the list and the header cell selects what the filter matches: assigning a
  * team to a term's worth of accounts was one row at a time, and the day-two rotation was the same
  * work again. The select-all box walks the filtered set, so it never reaches a member the
- * operator's filter hid, and the toolbar states how many accounts the action will touch before it
- * runs.
+ * operator's filter hid.
  *
  * WHY this surface owns its own selection state: the ids here are users, the rows carry contests
  * and the action is scoped to this team, so the selection is this page's own — only the write
  * behind the toolbar is shared (`lib/panel-actions/contest-accounts`).
+ *
+ * WHY no card and no heading: the list layout draws the frame and the tab rail above already names
+ * the section, so the card here was a box inside a box and the heading a second copy of that label.
  */
-export function TeamMembersTab({ teamId, members, permissionKeys, contests, navigation, copy, locale }: TeamMembersTabProps): React.JSX.Element {
+export function TeamMembersTab({ teamId, members, permissionKeys, contests, copy, locale }: TeamMembersTabProps): React.JSX.Element {
   const router = useAppRouter();
-  const effective = useMemo(() => new Set(permissionKeys), [permissionKeys]);
-  const canUpdateTeam = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateTeam);
-  const canUpdateParticipation = hasEffectivePermission(effective, ACTION_PERMISSIONS.updateParticipation);
-  const canBulk = canUpdateTeam || canUpdateParticipation;
-  const canRotate = hasEffectivePermission(effective, 'username:set');
+  const { canUpdateTeam, canUpdateParticipation, canBulk, canRotate } = useBulkAffordance(permissionKeys);
 
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set());
   const [term, setTerm] = useState('');
@@ -146,18 +215,9 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
     });
   };
 
-  const bulkButton = canBulk ? (
-    <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
-      {copy.bulkActions.button}
-    </Button>
-  ) : null;
-
   const header = (
     <div className="flex flex-wrap items-end justify-between gap-3 p-4">
       <div className="flex flex-wrap items-end gap-3">
-        <span className="pb-2 font-bold">
-          {`${navigation.people['team-tabs'].members.label} (${members.length})`}
-        </span>
         <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
           <input
             type="checkbox"
@@ -177,7 +237,11 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
           onChange={(event) => setTerm(event.target.value)}
         />
       </div>
-      {bulkButton}
+      {canBulk && (
+        <Button type="button" variant="secondary" onClick={() => setDialogOpen(true)}>
+          {copy.bulkActions.button}
+        </Button>
+      )}
     </div>
   );
 
@@ -222,22 +286,8 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
     </div>
   ) : null;
 
-  if (members.length === 0) {
-    return (
-      <>
-        <EmptyState
-          icon={Users}
-          title={copy.members.emptyTitle}
-          description={copy.members.emptyDescription}
-        />
-        {bulkButton && <div className="mt-4 flex justify-end">{bulkButton}</div>}
-        {dialog}
-      </>
-    );
-  }
-
   return (
-    <Card className="overflow-hidden">
+    <>
       {header}
       {toolbar}
       <div className="divide-y divide-border">
@@ -253,10 +303,14 @@ export function TeamMembersTab({ teamId, members, permissionKeys, contests, navi
             onToggle={toggleOne}
           />
         ))}
-        {filtered.length === 0 && <EmptyState icon={Users} title={copy.members.emptyTitle} description={copy.members.emptyDescription} />}
+        {filtered.length === 0 && (
+          <div className="p-4">
+            <EmptyState icon={Users} title={copy.members.emptyTitle} description={copy.members.emptyDescription} />
+          </div>
+        )}
       </div>
       {dialog}
       {rotateDialog}
-    </Card>
+    </>
   );
 }

@@ -325,7 +325,6 @@ describe('team membership day-two action', () => {
           ]}
           permissionKeys={['team:update', 'participation:update', 'username:set']}
           contests={[{ id: 9, name: 'Autumn' }]}
-          navigation={en.navigation}
           copy={TEAM_COPY}
           locale="en"
         />,
