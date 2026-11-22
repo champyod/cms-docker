@@ -3,13 +3,22 @@
 import { useState } from 'react';
 
 import { Button } from '@/components/core/Button';
+import { Checkbox } from '@/components/core/Checkbox';
 import { Dialog } from '@/components/core/Dialog';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { Input } from '@/components/core/Input';
+import { Select } from '@/components/core/Select';
 import { apiClient } from '@/lib/apiClient';
 import type { ContestData } from '@/lib/contests-repo';
 import { toZoneInstants } from '../contest-modal/contestFormMappers';
 
 type SwitchState = 'unchanged' | 'on' | 'off';
+
+const SWITCH_OPTIONS = [
+  { value: 'unchanged', label: 'Unchanged' },
+  { value: 'on', label: 'Enabled' },
+  { value: 'off', label: 'Disabled' },
+] as const;
 
 interface SwitchSelectProps {
   readonly label: string;
@@ -19,17 +28,13 @@ interface SwitchSelectProps {
 
 function SwitchSelect({ label, value, onChange }: SwitchSelectProps): React.JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
-      <span className="text-sm font-medium text-foreground">{label}</span>
-      <select
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <Select
+        label={label}
+        options={SWITCH_OPTIONS}
         value={value}
         onChange={(event) => onChange(event.target.value as SwitchState)}
-        className="rounded-md border border-input bg-transparent px-2 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <option value="unchanged">Unchanged</option>
-        <option value="on">Enabled</option>
-        <option value="off">Disabled</option>
-      </select>
+      />
     </div>
   );
 }
@@ -105,42 +110,33 @@ export function ContestBulkEditDialog({ isOpen, onClose, contestIds, onSuccess }
     >
       {error && <InlineAlert tone="destructive" density="regular" className="mb-4">{error}</InlineAlert>}
       <div className="space-y-4">
-        <div className="space-y-2">
-          <label className="block text-xs font-bold uppercase tracking-widest text-muted-foreground">Timezone</label>
-          <input
-            type="text"
-            value={timezone}
-            onChange={(event) => setTimezone(event.target.value)}
-            placeholder="Asia/Bangkok"
-            className="w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-          />
-        </div>
+        <Input
+          label="Timezone"
+          value={timezone}
+          onChange={(event) => setTimezone(event.target.value)}
+          placeholder="Asia/Bangkok"
+          className="font-mono"
+        />
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <input type="checkbox" checked={changeStart} onChange={(event) => setChangeStart(event.target.checked)} className="size-4 accent-primary" />
-              Start time
-            </label>
-            <input
+            <Checkbox label="Set start time" checked={changeStart} onChange={(event) => setChangeStart(event.target.checked)} />
+            <Input
+              label="Start time"
               type="datetime-local"
               value={start}
               disabled={!changeStart}
               onChange={(event) => setStart(event.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             />
           </div>
           <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-              <input type="checkbox" checked={changeStop} onChange={(event) => setChangeStop(event.target.checked)} className="size-4 accent-primary" />
-              Stop time
-            </label>
-            <input
+            <Checkbox label="Set stop time" checked={changeStop} onChange={(event) => setChangeStop(event.target.checked)} />
+            <Input
+              label="Stop time"
               type="datetime-local"
               value={stop}
               disabled={!changeStop}
               onChange={(event) => setStop(event.target.value)}
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
             />
           </div>
         </div>
