@@ -6,6 +6,7 @@ import { FormField, SelectField, TextareaField } from '@/components/core/FormFie
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
 import { ModalFooter } from '@/components/core/ModalFooter';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { SectionCard } from '@/components/core/SectionCard';
 import { NameDialog } from '@/components/core/NameDialog';
 
@@ -155,6 +156,35 @@ describe('SectionCard', () => {
     render(<SectionCard title="Datasets" expanded onToggle={onToggle} actions={<button type="button">Create</button>}><p>Body</p></SectionCard>);
     fireEvent.click(screen.getByRole('button', { name: 'Create' }));
     expect(onToggle).not.toHaveBeenCalled();
+  });
+
+  it('names the heading with the title alone, never with the count or the description', () => {
+    render(
+      <SectionCard title="Statements" count={12} description={<p>No statements uploaded yet.</p>}>
+        <p>Body</p>
+      </SectionCard>,
+    );
+    // An exact name match fails the moment the count or the description joins the heading, which is
+    // how a reader navigating by headings would hear it.
+    expect(screen.getByRole('heading', { level: 2, name: 'Statements' })).not.toBeNull();
+    expect(screen.queryByRole('heading', { name: /12/ })).toBeNull();
+    expect(screen.queryByRole('heading', { name: /No statements/ })).toBeNull();
+  });
+
+  it('renders the same heading level and size whether the section collapses or not', () => {
+    const plain = renderToStaticMarkup(<SectionCard title="Statements"><p>Body</p></SectionCard>);
+    const collapsible = renderToStaticMarkup(
+      <SectionCard title="Statements" expanded onToggle={() => undefined}><p>Body</p></SectionCard>,
+    );
+    for (const html of [plain, collapsible]) {
+      expect(html).toContain('<h2');
+      expect(html).toContain('text-[length:var(--text-card)]');
+    }
+  });
+
+  it('pads its own body so content never sits flush against the card edge', () => {
+    const html = renderToStaticMarkup(<SectionCard title="Statements"><p>Body</p></SectionCard>);
+    expect(html).toMatch(/px-4 pb-4[^>]*><p>Body/);
   });
 });
 

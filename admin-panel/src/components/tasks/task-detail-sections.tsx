@@ -109,7 +109,7 @@ export function StatementsSection({ statements, expanded, onToggle, onUpload, on
       expanded={expanded}
       onToggle={onToggle}
     >
-      <div className="p-4 pt-0 space-y-4">
+      <div className="space-y-4">
         <Button variant="positiveOutline" size="sm" icon={Upload} onClick={onUpload}>Upload Statement</Button>
         {statements.length === 0 ? (
           <EmptyState title="No statements" description="No statements uploaded yet." />
