@@ -68,6 +68,7 @@ mod auth;
 mod base;
 mod binary;
 mod codename;
+mod contest;
 mod crypto;
 mod datetime;
 mod digest;
@@ -86,6 +87,7 @@ mod task;
 mod types;
 mod user;
 mod username;
+mod usertest;
 mod writes;
 
 pub use actor::{
@@ -96,6 +98,10 @@ pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use codename::{Codename, CodenameError};
+pub use contest::{
+    Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenGrant, TokenMode,
+    TokenModeError, TokenPolicy, WindowError, CONTEST,
+};
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
     generate_random_password, get_hex_random_key, get_random_key, hash_password, Bcrypt,
@@ -149,6 +155,12 @@ pub use user::{Participation, User, PARTICIPATION, USER};
 pub use username::{
     resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
     CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
+};
+pub use usertest::{
+    Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey, UserTest,
+    UserTestExecutable, UserTestFile, UserTestFiles, UserTestManager, UserTestManagers,
+    UserTestResult, UserTestResults, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
+    USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };
 pub use writes::{
     group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
