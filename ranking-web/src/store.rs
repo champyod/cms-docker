@@ -14,11 +14,13 @@ use crate::scoring::{
 };
 
 mod admin;
+pub mod session_store;
 
 pub use admin::{
     load_admin_permissions, load_admin_user, touch_last_login, AdminPermissions, AdminUser,
     RANKING_READ_PERMISSION,
 };
+pub use session_store as sessions;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {

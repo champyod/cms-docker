@@ -13,6 +13,7 @@ bcrypt = "0.17"
 dotenvy = "0.15"
 hex = "0.4"
 hmac = "0.12"
+getrandom = "0.2"
 redis = { version = "0.27", features = ["connection-manager", "tokio-comp"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }

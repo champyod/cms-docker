@@ -1058,6 +1058,18 @@ model ranking_submissions {
   @@map("ranking_submissions")
 }
 
+model ranking_sessions {
+  session_id String   @id @db.VarChar(64)
+  admin_id   Int
+  username   String   @db.VarChar
+  created_at DateTime @default(now())
+  expires_at DateTime
+
+  @@index([admin_id], map: "ix_ranking_sessions_admin_id")
+  @@index([expires_at], map: "ix_ranking_sessions_expires_at")
+  @@map("ranking_sessions")
+}
+
 model ranking_subchanges {
   key        String   @id @db.VarChar
   submission String   @db.VarChar

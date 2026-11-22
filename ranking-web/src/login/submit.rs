@@ -9,7 +9,8 @@ use crate::auth::{captcha, lockout, password, session};
 use crate::config::CaptchaProvider;
 use crate::http::{refuse, Refusal};
 use crate::store::{
-    load_admin_permissions, load_admin_user, touch_last_login, AdminUser, RANKING_READ_PERMISSION,
+    load_admin_permissions, load_admin_user, sessions, touch_last_login, AdminUser,
+    RANKING_READ_PERMISSION,
 };
 use crate::AppState;
 
@@ -166,10 +167,26 @@ async fn accept(
 ) -> Response {
     let keys = vec![account_key.to_string(), address_key.to_string()];
     let _ = counter.clear(&keys).await;
-    if let Some(db) = state.db() {
-        let _ = touch_last_login(db.pool(), user.id).await;
+    let Some(db) = state.db() else {
+        return refuse("no database is configured");
+    };
+    let _ = touch_last_login(db.pool(), user.id).await;
+    let session_id = match session::new_id() {
+        Ok(id) => id,
+        Err(error) => return refuse(&error.to_string()),
+    };
+    if let Err(error) = sessions::insert(
+        db.pool(),
+        &session_id,
+        user.id,
+        &user.username,
+        session::TTL_SECONDS,
+    )
+    .await
+    {
+        return refuse(&error.to_string());
     }
-    let token = match session::issue(secret, &user.username, now()) {
+    let token = match session::issue(secret, &user.username, &session_id, now()) {
         Ok(token) => token,
         Err(error) => return refuse(&error.to_string()),
     };

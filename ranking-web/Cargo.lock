@@ -309,6 +309,7 @@ dependencies = [
  "axum",
  "bcrypt",
  "dotenvy",
+ "getrandom 0.2.17",
  "hex",
  "hmac 0.12.1",
  "redis",

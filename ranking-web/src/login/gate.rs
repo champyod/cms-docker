@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 
 use crate::auth::session;
 use crate::http::refuse;
-use crate::store::load_appearance;
+use crate::store::{load_appearance, sessions};
 use crate::AppState;
 
 /// The protected-mode gate. It runs before every route except the four an anonymous
@@ -38,12 +38,19 @@ pub async fn gate(State(state): State<AppState>, request: Request, next: Next) -
     if !protected {
         return next.run(request).await;
     }
-    let session =
-        session::from_headers(state.config().session_secret.as_deref(), request.headers());
-    if session.is_some() {
-        return next.run(request).await;
+    let Some(session) =
+        session::from_headers(state.config().session_secret.as_deref(), request.headers())
+    else {
+        return Redirect::to("/login").into_response();
+    };
+    let Some(db) = state.db() else {
+        return refuse("no database is configured");
+    };
+    match sessions::is_live(db.pool(), &session.session_id, &session.username).await {
+        Ok(true) => next.run(request).await,
+        Ok(false) => Redirect::to("/login").into_response(),
+        Err(error) => refuse(&error.to_string()),
     }
-    Redirect::to("/login").into_response()
 }
 
 /// The client address the counters are scoped to. Behind the domain proxy the socket
