@@ -48,21 +48,40 @@
 //! Every fallible mapping returns the error type named beside it, and each
 //! variant says which reference rule it enforces. No mapping degrades to a
 //! default on bad input.
+//!
+//! The identity half of the layer sits here too: [`validate_actor`] is the shape
+//! the row-level security policies can read, [`CORE_ACTOR`] is what a core
+//! program announces when nothing overrides it, and those two stamp statements
+//! are the only place `cms.actor` is written. [`Session::begin`] is the only way
+//! to obtain a transaction, so no transaction can begin unstamped.
+//!
+//! [`Declaration`] is the other half of the model contract: a struct holds the
+//! values, and the declaration beside it states which columns exist, which Rust
+//! type each one holds, and which of them are keys rather than values.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod actor;
 mod auth;
+mod base;
 mod binary;
 mod crypto;
 mod datetime;
 mod digest;
+mod drop;
 mod interval;
 mod permission;
 mod reads;
+mod session;
 mod types;
 mod writes;
 
+pub use actor::{
+    default_actor, label_for, process_label, validate_actor, ActorError, ACTOR_ENV, ACTOR_SETTING,
+    CONNECTION_STAMP_SQL, CORE_ACTOR, KNOWN_SYSTEM_ACTORS, TRANSACTION_STAMP_SQL,
+};
+pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
@@ -72,10 +91,14 @@ pub use crypto::{
 };
 pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
+pub use drop::{drop_db, DropError};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
     DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+};
+pub use session::{
+    DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
