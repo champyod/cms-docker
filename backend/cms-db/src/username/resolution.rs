@@ -1,14 +1,12 @@
 //! Which display name applies, and the alias rows behind it.
 //!
 //! `src/cms/db/username/resolution.py:94-133` answers two questions: may a user
-//! configure an alias in this contest, and which name a row shows as. The
-//! precedence itself is [`resolve_config`](crate::resolve_config); this module is
-//! the half that reads the three policy scopes out of the database and hands
-//! them to it, so the rule stays in one place.
+//! configure an alias here, and which name a row shows as. The precedence is
+//! [`resolve_config`](crate::resolve_config); this module reads the three policy
+//! scopes out of the database and hands them to it, so the rule stays in one place.
 //!
-//! WHY the contest row ends the read: the reference returned as soon as it found
-//! one (`resolution.py:83-85`) and never queried the narrower scopes, so a row
-//! cannot exist there that this port would treat differently.
+//! WHY the contest row ends the read: the reference returned as soon as it found one
+//! (`resolution.py:83-85`) and never queried the narrower scopes.
 
 use std::collections::BTreeMap;
 

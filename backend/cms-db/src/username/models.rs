@@ -27,9 +27,9 @@ use crate::codename::Codename;
 
 /// A row of `contest_usernames`: the alias one participation shows as.
 ///
-/// WHY the username is a [`Codename`](crate::Codename): the reference declares the
-/// column with that domain, and Prisma's migration creates it as a plain `varchar`,
-/// so a row outside the alphabet can exist and is refused here rather than shown.
+/// The username is a [`Codename`](crate::Codename) because the reference declares
+/// that domain, while Prisma creates a plain `varchar`, so a row outside the alphabet
+/// can exist and is refused here rather than shown.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DisplayUsername {
     /// `contest_usernames.id`.

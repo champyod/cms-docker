@@ -1,26 +1,16 @@
 //! The database schema this crate creates: `init_db`, from the reference's own DDL.
 //!
-//! The statements are pg_dump's rendering of what `cms.db.init_db` creates, frozen
-//! at `dev/fixtures/cms_schema.sql`, so no table here was translated by reading a
-//! model. The five domains are hand-written in `types.py` rather than emitted from
-//! a column, which is why the dump is the only faithful source for them.
+//! The statements are pg_dump's rendering of what `cms.db.init_db` created, frozen at
+//! `dev/fixtures/cms_schema.sql`, so no table was translated by reading a model.
+//! Order is the dump's own, and each part is one batch whose failure names its objects.
 //!
-//! WHY the parts: each is one batch whose failure names the objects being created,
-//! where one 900-line script would report only a byte offset.
+//! Two things the dump carries are dropped: `OWNER TO`, because the objects belong to
+//! whichever role runs the create, and the `SET` lines, which configure pg_dump's
+//! session. Column order, `NOT NULL` and every check and constraint name stay verbatim,
+//! since callers read the name in a constraint-violation error.
 //!
-//! Order is the dump's own: domains and enums first, then tables, then the
-//! sequences their `id` columns read, then the `SET DEFAULT` that binds each one,
-//! then primary and unique keys, indexes, and the foreign keys that need every
-//! table to exist.
-//!
-//! Two things the dump carries are dropped: `OWNER TO`, because the objects belong
-//! to whichever role runs the create, and the `SET` lines, because they configure
-//! pg_dump's session and not the schema. Everything else — column order, `NOT NULL`,
-//! check and constraint names, index names — is preserved verbatim, since callers
-//! read the name in a constraint-violation error.
-//!
-//! Thirteen tables the models declare are absent, because `init.py` excludes them
-//! and Prisma migrations own their creation: the permission tables, `audit_log`,
+//! Thirteen tables the models declare are absent, because `init.py` excludes them and
+//! Prisma migrations own their creation: the permission tables, `audit_log`,
 //! `security_blocks`, and the display-username and `contest_teams` tables.
 
 use sqlx::postgres::PgConnection;

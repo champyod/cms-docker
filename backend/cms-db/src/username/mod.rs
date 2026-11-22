@@ -1,27 +1,23 @@
 //! Contestant display usernames: the policy rule, the aliases, and their history.
 //!
-//! `resolve_username_config` (`src/cms/db/username/resolution.py:72-91`) answers
-//! one question per user: may they configure a display username in this
-//! contest? The precedence is fixed, and it is a security rule rather than a
-//! preference:
+//! `resolve_username_config` (`src/cms/db/username/resolution.py:72-91`) answers one
+//! question per user: may they configure a display username here? The precedence is
+//! fixed, and it is a security rule rather than a preference:
 //!
-//! 1. a row at `contest` scope decides for every participant, and nothing at a
-//!    narrower scope can reopen it;
+//! 1. a row at `contest` scope decides for every participant, and nothing narrower can reopen it;
 //! 2. otherwise a row at `user` scope decides for that user;
-//! 3. otherwise the group verdicts apply, and a `deny` on any of the user's
-//!    groups beats an `allow` on another;
+//! 3. otherwise the group verdicts apply, and a `deny` on any group beats an `allow` on another;
 //! 4. with no row anywhere the feature is denied.
 //!
-//! [`resolve_config`] is that rule as a pure function; `resolution` is the
-//! queries that fill it and the name a row shows as, and `mutation` is the write
-//! that sets or clears one. `models.rs` holds the five table declarations and the
-//! alias row.
+//! [`resolve_config`] is that rule as a pure function, `resolution` the queries that
+//! fill it and the name a row shows as, `mutation` the write that sets or clears one,
+//! and `models.rs` the five table declarations and the alias row.
 //!
 //! # Errors
 //!
-//! [`UsernameError`] names what the reference refused: a name another user of the
-//! same contest holds, a stored alias the domain would not admit, and the
-//! driver's own refusals. No function degrades to a default on any of them.
+//! [`UsernameError`] names what the reference refused: a name another user of the same
+//! contest holds, a stored alias the domain would not admit, and the driver's own
+//! refusals. No function degrades to a default on any of them.
 
 mod models;
 mod mutation;

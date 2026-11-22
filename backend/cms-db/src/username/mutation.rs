@@ -4,19 +4,12 @@
 //! participation, one append-only history row per change, and a refusal when the
 //! name already belongs to another user in the same contest.
 //!
-//! Three orderings the reference fixes, and this port keeps:
-//!
-//! - a name that is already the row's own is not a change, so it appends no
-//!   history row and writes nothing (`:201-202`);
-//! - removal appends a history row whose username is NULL before deleting the
-//!   alias, so the record of the name survives its row (`:195-199`);
-//! - the history row goes in before the alias is created or updated (`:204-210`),
-//!   which is what makes the history a log of what was asked for even when the
-//!   write after it fails.
-//!
-//! The caller commits, as in the reference: every statement here runs on the
-//! connection it is given, so a caller holding a [`Transaction`](crate::Transaction)
-//! gets all of them or none.
+//! Three orderings the reference fixes and this port keeps: a name the row already
+//! holds is not a change, so it writes nothing (`:201-202`); removal appends a
+//! NULL-username history row before deleting the alias (`:195-199`); and every other
+//! change appends history before it writes the alias (`:204-210`). The caller
+//! commits, as there: a caller holding a [`Transaction`](crate::Transaction) gets all
+//! of these or none.
 
 use chrono::NaiveDateTime;
 use sqlx::postgres::PgConnection;
