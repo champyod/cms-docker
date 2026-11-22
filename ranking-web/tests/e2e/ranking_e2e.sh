@@ -190,10 +190,11 @@ SQL
 
 seed_console_admin() {
     psql "${DATABASE_URL}" -q >/dev/null <<'SQL'
-DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm');
+DELETE FROM admins WHERE username IN ('e2e', 'e2e-noperm', 'e2e-bad');
 INSERT INTO admins (name, username, authentication, enabled) VALUES
     ('E2E Operator', 'e2e', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true),
-    ('E2E No Permission', 'e2e-noperm', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true);
+    ('E2E No Permission', 'e2e-noperm', 'bcrypt:$2b$10$dNhGvAUxNK3y0uOSw/CuL.xpMG2l/TqeUDGVGhNgFHFPJ6VUIH4Gu', true),
+    ('E2E Malformed Credential', 'e2e-bad', 'plaintext:not-a-real-password', true);
 INSERT INTO permissions (key, module, verb)
     VALUES ('ranking:read', 'ranking', 'read') ON CONFLICT (key) DO NOTHING;
 INSERT INTO groups (name) VALUES ('e2e-ranking') ON CONFLICT (name) DO NOTHING;
@@ -238,6 +239,22 @@ console_login_refuses_an_admin_without_the_key() {
     pass "an admin without ranking:read is refused and sets no session"
 }
 
+console_login_treats_a_malformed_credential_as_a_credential_failure() {
+    local ip="198.51.100.203" code i
+    for i in 1 2 3 4 5; do
+        code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
+            -d "username=e2e-bad" -d "password=e2e-secret" "${BASE}/login")"
+        [[ "${code}" == "303" || "${code}" == "307" ]] ||
+            fail "a malformed stored credential should look like a wrong password, got ${code}"
+    done
+    # The malformed attempts must feed the address counter; five of them lock the source.
+    code="$(curl -sS -o /dev/null -w "%{http_code}" -H "X-Forwarded-For: ${ip}" \
+        -d "username=e2e" -d "password=e2e-secret" "${BASE}/login")"
+    [[ "${code}" == "429" ]] ||
+        fail "malformed credentials did not count toward the source lockout, got ${code}"
+    pass "a malformed credential is counted and cannot confirm a username"
+}
+
 protected_mode_redirects() {
     psql "${DATABASE_URL}" -q -c \
         "INSERT INTO ranking_settings (id, access_mode) VALUES (1, 'protected') ON CONFLICT (id) DO UPDATE SET access_mode = 'protected'" \
@@ -273,6 +290,7 @@ main() {
     a_score_write_publishes_a_board_delta
     a_stale_event_id_is_answered_with_a_reinit
     seed_console_admin
+    console_login_treats_a_malformed_credential_as_a_credential_failure
     protected_mode_redirects
     printf "\nacceptance rehearsal passed\n"
 }

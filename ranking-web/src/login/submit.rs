@@ -140,9 +140,16 @@ async fn authenticate(
     };
     match password::verify(&user.authentication, password) {
         Ok(true) => {}
-        // A malformed stored row is not a wrong password, so it is refused loudly
-        // rather than counted against the operator trying to get in.
-        Err(error) => return Err(Refusal(error.to_string())),
+        // A malformed stored row is not a wrong password, but the caller must not learn
+        // that: it takes the same generic refusal and the same failure counter, while the
+        // reason is kept for the operator in the service log.
+        Err(error) => {
+            eprintln!(
+                "cms-ranking: unusable stored credential for admin {}: {error}",
+                user.id
+            );
+            return Ok(None);
+        }
         Ok(false) => return Ok(None),
     }
     let permissions = load_admin_permissions(db.pool(), user.id)
