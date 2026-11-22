@@ -196,6 +196,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-resourcesvc` | `c982c182` | `cargo test -p cms-svc` → 99 passed; parent's own mutation of `machine.rs:122` (`round_ties_even` → `round`) failed `percentages_round_like_python` with left 3 / right 2, exit 101, restored byte-identical | `d800accd` |
 | 2026-11-22 | `feat/rust-resourcesvc-sup` | `52406c1e` | `cargo test -p cms-svc` → 119 passed; parent's own mutation of `naming.rs:28` (dropped the hyphen) failed 6 tests including the round-trip, with "autorestart would spawn /opt/cms/bin/cmsworker 0 -c 7 and then not see it", exit 101; process count before/after a full serial run was 1/1, so the suite spawned nothing | `39cc28f3` |
 | 2026-11-22 | `feat/rust-resourcesvc-bin` | `a72c4686` | `cargo test -p cms-svc` → 136 passed; `bash scripts/__test_config_sync.sh` → 42 passed; parent's own mutation of `cms-resource-service.rs:141` (malformed `CMS_AUTORESTART` allowed to read as false) failed `an_unreadable_autorestart_value_is_refused_rather_than_read_as_false`, exit 101, restored byte-identical | `99e89a73` |
+| 2026-11-22 | (main session) | `af1e0128` | container wiring: `docker compose --profile core config` exit 0 with 8 `CMS_SERVICES` lines intact; `__test_config_sync.sh` 42, `test_image_pins.sh` 77, `test_security_profiles_enable.sh` 114 pass/0 fail; the Dockerfile's build line produces both binaries | `af1e0128` |
 
 Gate on the tree after all ten merges (`99e89a73`): `cargo fmt --check` exit 0; `cargo clippy
 --all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 72 test binaries, 451 passed,
@@ -326,6 +327,27 @@ container as `cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}`, with no `-c`. Th
 environment inputs supplied at container-wiring time, with Python's defaults — autorestart false,
 contest id empty — and a missing contest id is the **normal** case, not a failure. `bin_path` needs no
 input at all: the running executable already knows its own directory.
+
+**Operator-visible finding while wiring the container (2026-11-22): the service is started but never
+queried, and in this topology it cannot see what it is supposed to sample.**
+
+- Nothing in the panel calls it. `grep -rn 'get_resources\|toggle_autorestart' admin-panel/` returns **no
+  files**; the only mentions of `ResourceService` are a documentation string
+  (`ServicesSection.tsx:20`) and a name in the wiring contract's expected list
+  (`service-wiring-contract.ts:17`). Port 28000 appears **only** in `docker-compose.yml` — the publish
+  at `:222` and its own healthcheck at `:236`.
+- `resource-service` is `privileged: true` (`docker-compose.yml:229`) but does **not** set `pid: host`;
+  only `monitor` does (`:864`). A container without the host PID namespace sees only its own processes.
+- The service table addresses services by **container name** (`config/cms.sample.toml`:
+  `LogService = [["cms-log-service", 29000]]`), and `_find_local_services` keeps the ones whose resolved
+  address equals the caller's own — which, when each service is its own container, is `ResourceService`
+  alone. So `_restart_services` has nothing to supervise and a sample describes one process.
+
+The port reproduces this faithfully rather than silently "fixing" it, because changing what the service
+observes is a deployment decision, not a porting one: it needs either `pid: host` on this container or a
+move to host-level metrics. Monitoring in this deployment already runs elsewhere — `config/prometheus/`,
+`config/grafana/` and `monitor_targets.json.example` with `MONITOR_ENHANCED=1`. **Recorded for the
+operator; not changed here.**
 
 ### 7.1 First service swap completed — the logger (2026-11-22)
 
