@@ -12,7 +12,8 @@ export interface SubmissionHistoryTabProps {
 
 function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): React.JSX.Element {
   const formatTimestamp = useFormatTimestamp();
-  const labels = useDictionary().submissions.record.history;
+  const dict = useDictionary();
+  const labels = dict.submissions.record.history;
   return (
     <li className="rounded-lg border border-border bg-muted/40 px-3 py-2">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
@@ -22,7 +23,7 @@ function HistoryRow({ entry }: { readonly entry: SubmissionHistoryEntry }): Reac
         </span>
         <span>
           <span className="text-muted-foreground">{labels.actor}: </span>
-          <span className="font-medium text-foreground">{entry.actor_name ?? '—'}</span>
+          <span className="font-medium text-foreground">{entry.actor_name ?? dict.common.notSet}</span>
         </span>
         <span>
           <span className="text-muted-foreground">{labels.action}: </span>

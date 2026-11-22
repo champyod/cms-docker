@@ -20,13 +20,15 @@ export interface TestcaseDetailTableProps {
   readonly model: SubmissionEvaluationModel;
   /** False keeps the row data visible but never asks the route for the gated bytes. */
   readonly canReadTestcase: boolean;
+  /** common.notSet: a cell or block whose value the record does not hold. */
+  readonly missing: string;
 }
 
 const DETAIL_COLUMN_COUNT = 5;
 const BYTES_PER_MEBIBYTE = 1024 * 1024;
 
-function text(value: string | null | undefined): string {
-  if (value === null || value === undefined || value === '') return '—';
+function text(value: string | null | undefined, missing: string): string {
+  if (value === null || value === undefined || value === '') return missing;
   return value;
 }
 
@@ -34,12 +36,12 @@ function testcaseLabel(row: EvaluationRow): string {
   return row.testcaseName ?? `Testcase #${row.testcaseId}`;
 }
 
-function timeText(seconds: number | null): string {
-  return seconds === null ? '—' : `${seconds.toFixed(3)}s`;
+function timeText(seconds: number | null, missing: string): string {
+  return seconds === null ? missing : `${seconds.toFixed(3)}s`;
 }
 
-function memoryText(bytes: string | null): string {
-  if (bytes === null) return '—';
+function memoryText(bytes: string | null, missing: string): string {
+  if (bytes === null) return missing;
   const value = Number(bytes);
   if (!Number.isFinite(value)) return bytes;
   return `${(value / BYTES_PER_MEBIBYTE).toFixed(2)} MiB`;
@@ -55,10 +57,10 @@ function verdictVariant(outcome: string | null): 'success' | 'destructive' | 'ne
   return score > 0 ? 'success' : 'destructive';
 }
 
-function DetailBlock({ label, body, emptyLabel = '—' }: {
+function DetailBlock({ label, body, emptyLabel }: {
   readonly label: string;
   readonly body: string | null;
-  readonly emptyLabel?: string;
+  readonly emptyLabel: string;
 }): React.JSX.Element {
   return (
     <div className="space-y-1">
@@ -84,10 +86,11 @@ function HiddenTestcaseData(): React.JSX.Element {
   );
 }
 
-function TestcaseDetailBody({ detail, loading, error }: {
+function TestcaseDetailBody({ detail, loading, error, missing }: {
   readonly detail: SubmissionTestcaseDetailModel | null;
   readonly loading: boolean;
   readonly error: string | null;
+  readonly missing: string;
 }): React.JSX.Element {
   if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading testcase…</p>;
   if (error !== null) return <InlineAlert tone="destructive" density="compact">{error}</InlineAlert>;
@@ -95,27 +98,28 @@ function TestcaseDetailBody({ detail, loading, error }: {
   if (!detail.testcaseReadable) return <HiddenTestcaseData />;
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <DetailBlock label="Input" body={detail.input} />
-      <DetailBlock label="Expected output" body={detail.expectedOutput} />
+      <DetailBlock label="Input" body={detail.input} emptyLabel={missing} />
+      <DetailBlock label="Expected output" body={detail.expectedOutput} emptyLabel={missing} />
       <DetailBlock label="Submission output" body={detail.output} emptyLabel="Not stored" />
     </div>
   );
 }
 
-function TestcaseRow({ row, expanded, onToggle }: {
+function TestcaseRow({ row, expanded, onToggle, missing }: {
   readonly row: EvaluationRow;
   readonly expanded: boolean;
   readonly onToggle: () => void;
+  readonly missing: string;
 }): React.JSX.Element {
   const label = testcaseLabel(row);
   return (
     <TableRow className="cursor-pointer" aria-expanded={expanded} onClick={onToggle}>
       <TableCell className="font-medium">{label}</TableCell>
       <TableCell>
-        <Badge variant={verdictVariant(row.outcome)}>{text(row.outcome)}</Badge>
+        <Badge variant={verdictVariant(row.outcome)}>{text(row.outcome, missing)}</Badge>
       </TableCell>
-      <TableCell className="text-right font-mono text-xs tabular-nums">{timeText(row.executionTime)}</TableCell>
-      <TableCell className="text-right font-mono text-xs tabular-nums">{memoryText(row.executionMemory)}</TableCell>
+      <TableCell className="text-right font-mono text-xs tabular-nums">{timeText(row.executionTime, missing)}</TableCell>
+      <TableCell className="text-right font-mono text-xs tabular-nums">{memoryText(row.executionMemory, missing)}</TableCell>
       <TableCell className="text-right">
         <RowExpandAction
           expanded={expanded}
@@ -131,7 +135,7 @@ function TestcaseRow({ row, expanded, onToggle }: {
  * One row per testcase; opening a row fetches that testcase's input, expected
  * output and stored output from the gated per-testcase route.
  */
-export function TestcaseDetailTable({ model, canReadTestcase }: TestcaseDetailTableProps): React.JSX.Element {
+export function TestcaseDetailTable({ model, canReadTestcase, missing }: TestcaseDetailTableProps): React.JSX.Element {
   const [expandedTestcaseId, setExpandedTestcaseId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SubmissionTestcaseDetailModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -192,12 +196,12 @@ export function TestcaseDetailTable({ model, canReadTestcase }: TestcaseDetailTa
           const expanded = expandedTestcaseId === row.testcaseId;
           return (
             <Fragment key={row.id}>
-              <TestcaseRow row={row} expanded={expanded} onToggle={() => { void toggleRow(row); }} />
+              <TestcaseRow row={row} expanded={expanded} onToggle={() => { void toggleRow(row); }} missing={missing} />
               {expanded && (
                 <TableRow>
                   <TableCell colSpan={DETAIL_COLUMN_COUNT} className="bg-muted/40">
                     {canReadTestcase
-                      ? <TestcaseDetailBody detail={detail} loading={loading} error={error} />
+                      ? <TestcaseDetailBody detail={detail} loading={loading} error={error} missing={missing} />
                       : <HiddenTestcaseData />}
                   </TableCell>
                 </TableRow>

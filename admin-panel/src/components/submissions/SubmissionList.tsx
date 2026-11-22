@@ -188,7 +188,7 @@ export function SubmissionList({ initialSubmissions, navigation, initialSort, fi
       handleSelectorPointerDown,
       handleSelectorClickCapture,
     ),
-    ...buildSubmissionColumns(),
+    ...buildSubmissionColumns(dict.common.notSet),
   ];
 
   // Why the page resets on sort: page 4 of one order is not page 4 of another, so keeping

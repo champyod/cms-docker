@@ -55,16 +55,16 @@ function submissionUser(submission: SubmissionListItem): React.JSX.Element {
   );
 }
 
-function submissionScore(submission: SubmissionListItem): React.JSX.Element {
+function submissionScore(submission: SubmissionListItem, missing: string): React.JSX.Element {
   const score = firstResult(submission)?.score;
-  if (score === null || score === undefined) return <span className="text-muted-foreground">—</span>;
+  if (score === null || score === undefined) return <span className="text-muted-foreground">{missing}</span>;
   return <span className={score > 0 ? 'text-success' : 'text-destructive'}>{score.toFixed(0)}</span>;
 }
 
 // Why one definition: the same columns drive the desktop table and the mobile
 // cards, so a cell can no longer be edited in one layout and forgotten in the
 // other.
-export function buildSubmissionColumns(): ResponsiveColumn<SubmissionListItem>[] {
+export function buildSubmissionColumns(missing: string): ResponsiveColumn<SubmissionListItem>[] {
   return [
     { key: 'id', header: 'ID', sortKey: 'id', headerClassName: 'w-24', cellClassName: 'font-mono text-muted-foreground text-xs', render: (row) => <span>#{row.id}</span> },
     { key: 'time', header: 'Time', sortKey: 'timestamp', render: (row) => (
@@ -80,8 +80,8 @@ export function buildSubmissionColumns(): ResponsiveColumn<SubmissionListItem>[]
         {row.tasks.name}
       </span>
     ) },
-    { key: 'language', header: 'Language', cellClassName: 'font-mono text-sm', render: (row) => <span>{row.language ?? '—'}</span> },
+    { key: 'language', header: 'Language', cellClassName: 'font-mono text-sm', render: (row) => <span>{row.language ?? missing}</span> },
     { key: 'status', header: 'Status', render: (row) => submissionStatus(row) },
-    { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row) },
+    { key: 'score', header: 'Score', headerClassName: 'text-right', sortKey: 'score', cellClassName: 'text-right font-mono text-sm', render: (row) => submissionScore(row, missing) },
   ];
 }
