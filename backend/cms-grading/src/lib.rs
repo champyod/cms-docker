@@ -26,7 +26,9 @@
 //! three score modes that turn them into the one number a ranking reads — the best
 //! submission, each subtask's best, or the best tokened one against the last. It takes the
 //! score columns as values rather than reading them, so a mode is exercised with no
-//! database, and it derives no score of its own.
+//! database, and it derives no score of its own. `task_score` is what a ranking calls: it
+//! reads the official submissions in the order they were sent, hands each mode the column the
+//! caller asked for, and answers whether anything is still pending.
 //!
 //! [`steps`] is the checker a dataset supplies, held to the limits that bound a
 //! manager rather than a submission and read as the standard output it is required
@@ -52,7 +54,9 @@
 //! digest no store holds, a checker that answered with something unreadable, and a
 //! task type's own parameters, managers, file counts, executable counts and
 //! limits. A run that measured nothing is `None`, which is an answer rather than a
-//! failure.
+//! failure. [`scoring`]'s refusals are not errors and do not join that list: a caller asking
+//! for what cannot be meant is a programming error, so it panics with the reference's own
+//! message instead of returning something a caller would have to handle.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]

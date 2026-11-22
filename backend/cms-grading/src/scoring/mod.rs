@@ -11,16 +11,51 @@
 //! reads the last submission as zero when it is unscored, because that submission is half of
 //! the answer rather than an entry in a maximum.
 //!
+//! [`task_score`] is the entry point and holds the part a mode cannot: it drops the
+//! non-official submissions, reads the rest in the order they were sent, and answers whether
+//! the participation still has one unscored. That last answer is about the participation, so a
+//! contestant whose score is settled is not reported pending because of a submission the mode
+//! was told to ignore.
+//!
 //! # Panics
 //!
-//! [`max_tokened_last`], and only that: it is asked about a participation with no submission,
-//! which the aggregation never does.
+//! Two caller mistakes, each refused with the reference's message rather than returning a
+//! number nobody should publish: [`task_score`] asked for a public score restricted to tokened
+//! submissions, and [`max_tokened_last`] handed no submission at all.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+use cms_db::ScoreMode;
+
 mod modes;
 mod participation;
+mod task_score;
 
 pub use modes::{max, max_subtask, max_tokened_last};
 pub use participation::{Contribution, Counted, ResultColumns, Submission, SubmittedAt};
+pub use task_score::{task_score, TaskScore};
+
+/// The two task columns the aggregation reads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TaskSettings {
+    /// `tasks.score_mode`: which of the three modes turns submissions into a score.
+    pub score_mode: ScoreMode,
+    /// `tasks.score_precision`, the decimal places [`ScoreOptions::rounded`] rounds at.
+    pub score_precision: u32,
+}
+
+/// What a caller asks of [`task_score`].
+///
+/// A struct rather than three parameters because three booleans at a call site read as one:
+/// `task_score(&submissions, task, false, true, false)` names neither the column nor the
+/// submissions, and the two combinations that matter are the two that are easy to transpose.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ScoreOptions {
+    /// Read `public_score` instead of `score`.
+    pub public: bool,
+    /// Read only the submissions a token made visible.
+    pub only_tokened: bool,
+    /// Round the answer at the task's `score_precision`.
+    pub rounded: bool,
+}
