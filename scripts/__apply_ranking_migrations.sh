@@ -66,6 +66,31 @@ if ! psql "$URL" -q -v ON_ERROR_STOP=1 -c \
     exit 1
 fi
 
+# The session migration references the panel's admin tables; CI has no classic CMS schema, so give
+# it only the parent columns that migration uses instead of letting the migration fail. The stub
+# exists only in the test database; a real deployment already owns these tables.
+if ! psql "$URL" -q -v ON_ERROR_STOP=1 2>"$ERR" <<'SQL'
+CREATE TABLE IF NOT EXISTS admins (
+    id serial PRIMARY KEY,
+    username text NOT NULL,
+    authentication text NOT NULL DEFAULT '',
+    enabled boolean NOT NULL DEFAULT true
+);
+CREATE TABLE IF NOT EXISTS admin_groups (
+    admin_id integer NOT NULL,
+    group_id integer NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admin_permission_overrides (
+    admin_id integer NOT NULL,
+    permission_key text NOT NULL
+);
+SQL
+then
+    error "could not create the admin tables the session migration references"
+    cat "$ERR" >&2
+    exit 1
+fi
+
 strict=0
 known=0
 total=0
