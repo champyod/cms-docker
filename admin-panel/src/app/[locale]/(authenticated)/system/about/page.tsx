@@ -110,10 +110,10 @@ export default async function SystemAboutPage({
           the values above say what this is, this line says where to get it. */}
       <Text>
         {projectAuthor === null ? projectName : `${projectName} by ${projectAuthor}`}
-        {panel.attribution.length > 0 ? ` · ${panel.attribution[0].text}` : ''}
-        {' · '}
+        {panel.attribution.length > 0 ? `, ${panel.attribution[0].text}` : ''}
+        {', '}
         <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
-        {' · '}
+        {', '}
         <ExternalLink href={license.url}>{license.spdxId}</ExternalLink>
       </Text>
       <SectionCard title={copy.contributors.title}>

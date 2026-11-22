@@ -33,7 +33,7 @@ export function LockoutList({ lockouts }: LockoutListProps): React.JSX.Element {
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
             >
               <span className="font-mono text-sm">
-                {lockout.subject ?? 'unknown'} · {lockout.ip ?? 'local'} · until{' '}
+                {lockout.subject ?? 'unknown'}, {lockout.ip ?? 'local'}, until{' '}
                 {lockout.expiresAt === null ? 'unknown' : lockout.expiresAt.toISOString()}
               </span>
               <Button

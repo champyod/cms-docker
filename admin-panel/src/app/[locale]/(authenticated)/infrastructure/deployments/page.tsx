@@ -32,7 +32,7 @@ export default async function InfrastructureDeploymentsPage({
     {
       key: 'active-contest',
       title: 'Contests served per shard',
-      description: 'The contest each bound shard serves, read from the service registry — not one active id.',
+      description: 'The contest each bound shard serves, read from the service registry: not one active id.',
       rows: <ActiveContestSection />,
     },
     {

@@ -26,7 +26,7 @@ export function MoveLaneDialog({ submissionId, canMove }: MoveLaneDialogProps): 
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title={`${moveLaneLabel} — ${dictionary.navigation.evaluation['submission-record'].label} #${submissionId}`}
+        title={`${moveLaneLabel}: ${dictionary.navigation.evaluation['submission-record'].label} #${submissionId}`}
         description={dictionary.submissions.record.lane.description}
       >
         {/* Why the shared selector: the lane board and this record entry point must

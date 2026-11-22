@@ -106,7 +106,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
           canRead={fieldAccess.code.canRead}
           canUpdate={fieldAccess.code.canUpdate}
           label="Team Code"
-          lockHint="Read-only — you lack team:update"
+          lockHint="Read-only: you lack team:update"
         >
           <input
             type="text"
@@ -121,7 +121,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
           canRead={fieldAccess.name.canRead}
           canUpdate={fieldAccess.name.canUpdate}
           label="Team Name"
-          lockHint="Read-only — you lack team:update"
+          lockHint="Read-only: you lack team:update"
         >
           <input
             type="text"
@@ -135,7 +135,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
           canRead={fieldAccess.registerable.canRead}
           canUpdate={fieldAccess.registerable.canUpdate}
           label="Registerable"
-          lockHint="Read-only — you lack team:update"
+          lockHint="Read-only: you lack team:update"
         >
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input

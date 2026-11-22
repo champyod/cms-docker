@@ -111,7 +111,7 @@ export default async function RankingBoardPage({
                   >
                     {contests.map((entry) => (
                       <option key={entry.id} value={entry.id}>
-                        #{entry.id} — {entry.name}
+                        #{entry.id}: {entry.name}
                       </option>
                     ))}
                   </SelectField>

@@ -13,5 +13,5 @@ export function UserDetailFrame({ summary, participationsLabel }: UserDetailFram
     summary.country,
     participationsLabel,
   ].filter(Boolean);
-  return <span className="text-muted-foreground">{meta.join(' · ')}</span>;
+  return <span className="text-muted-foreground">{meta.join(', ')}</span>;
 }

@@ -93,7 +93,7 @@ export function ShortcutOverlay({ open, onOpenChange, bindings = [] }: ShortcutO
           <ShortcutRow keys={['Enter']} label="Open selected row" />
         </ShortcutGroup>
       </div>
-      <ShortcutGroup title="Go to — press g, then key">
+      <ShortcutGroup title="Go to: press g, then key">
         <div className="grid gap-x-8 sm:grid-cols-2">
           {bindings.map((binding) => (
             <ShortcutRow

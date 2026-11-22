@@ -95,7 +95,7 @@ export function SaveToFileFlow(): React.JSX.Element {
                         </Text>
                         <Text variant="small" className="text-emerald-200/90">
                             The server streams the archive as it produces it, so there is no size to report in
-                            advance and no percentage to track — the bar only says the request is in flight.
+                            advance and no percentage to track: the bar only says the request is in flight.
                             Leaving this page ends the download, and because the server keeps no copy the dump
                             has to be started again.
                         </Text>

@@ -49,7 +49,7 @@ export function AuditDetailPanel({
         if (open) return;
         onClose();
       }}
-      title={entry === undefined ? dict.expandedDetails : `${entry.verb} · ${entry.entity_name ?? entry.entity}`}
+      title={entry === undefined ? dict.expandedDetails : `${entry.verb}, ${entry.entity_name ?? entry.entity}`}
     >
       {loading && <div className="text-sm text-muted-foreground animate-pulse">Loading details…</div>}
       {error !== null && (

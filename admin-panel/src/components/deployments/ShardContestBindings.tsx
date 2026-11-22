@@ -27,7 +27,7 @@ export function ShardContestBindings({ bindings, contests, emptyText }: ShardCon
   const nameOf = new Map(contests.map((contest) => [contest.id, contest.name]));
   const label = (contestId: number): string => {
     const name = nameOf.get(contestId);
-    return name === undefined ? `#${contestId}` : `#${contestId} — ${name}`;
+    return name === undefined ? `#${contestId}` : `#${contestId}: ${name}`;
   };
   const columns: ResponsiveColumn<ShardContestBinding>[] = [
     { key: 'shard', header: 'Shard', render: (binding) => `shard ${binding.shard}` },

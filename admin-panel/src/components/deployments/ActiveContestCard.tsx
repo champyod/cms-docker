@@ -40,7 +40,7 @@ export function ActiveContestCard({
     <Stack gap={5}>
       <Text variant="small" color="text-muted-foreground">
         From the service registry: the contest each bound shard serves. A registry row decides
-        what a running instance serves, so these rows — not one active id — are what is live.
+        what a running instance serves, so these rows, not one active id, are what is live.
       </Text>
 
       <ShardContestBindings
@@ -54,7 +54,7 @@ export function ActiveContestCard({
           <AlertTriangle className="h-4 w-4 shrink-0 text-muted-foreground" />
           <Text variant="small" color="text-muted-foreground">
             {activeContestId
-              ? `Deployment default (contests.is_active): #${activeContestId}${activeContestName ? ` — ${activeContestName}` : ''}. Applies only to an instance no registry row names.`
+              ? `Deployment default (contests.is_active): #${activeContestId}${activeContestName ? `: ${activeContestName}` : ''}. Applies only to an instance no registry row names.`
               : 'No deployment default (contests.is_active) is set; an instance no registry row names serves no contest.'}
           </Text>
         </Stack>

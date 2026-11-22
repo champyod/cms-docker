@@ -73,7 +73,7 @@ export function ModePage({
         />
         {unavailable && unavailable.length > 0 && (
           <p className="text-muted-foreground">
-            {unavailable.map((mode) => `${mode.label} - ${mode.reason}`).join(' · ')}
+            {unavailable.map((mode) => `${mode.label} - ${mode.reason}`).join(', ')}
           </p>
         )}
         {children}

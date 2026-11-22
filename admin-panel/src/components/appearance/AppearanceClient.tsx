@@ -56,7 +56,7 @@ export function BrandingTab({
             />
           ) : (
             <span className="text-sm text-muted-foreground">
-              No logo configured — upload on the Ranking page
+              No logo configured: upload on the Ranking page
             </span>
           )}
         </div>

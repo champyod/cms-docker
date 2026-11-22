@@ -157,7 +157,7 @@ export function DashboardState({
   }
   return (
     <InlineAlert tone={ALERT_TONE[service.status]} title={labels.serviceState[service.status]} announce="polite">
-      {`${service.running}/${service.total} · ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
+      {`${service.running}/${service.total}, ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
     </InlineAlert>
   );
 }

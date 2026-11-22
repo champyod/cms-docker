@@ -46,7 +46,7 @@ export default async function ContestSettingsPage({ params }: ContestRouteProps)
           description: 'How this contest presents itself, and what it lets contestants do.',
           // The toggles below change the contestant side, not the operator's screen, so the group
           // says so before the reader flips one.
-          scope: 'Every contestant of this contest — nobody else.',
+          scope: 'Every contestant of this contest: nobody else.',
           children: <ContestSettingsTab data={data} />,
         },
       ]}

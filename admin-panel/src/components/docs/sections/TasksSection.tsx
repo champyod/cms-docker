@@ -23,7 +23,7 @@ export function TasksSection(): React.JSX.Element {
           </ul>
           <div className="mt-4 rounded-lg border border-border bg-muted/50 p-3">
             <h4 className="mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-foreground"><Terminal className="h-3 w-3" />Manager Files</h4>
-            <div className="space-y-2 text-xs"><code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">checker</code> — validates output. <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">grader</code> — driver for communication.</div>
+            <div className="space-y-2 text-xs"><code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">checker</code>: validates output. <code className="rounded bg-muted px-1 py-0.5 font-mono text-foreground">grader</code>: driver for communication.</div>
           </div>
         </div>
         <div className="rounded-xl border border-border p-4">

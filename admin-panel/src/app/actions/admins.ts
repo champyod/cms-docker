@@ -191,7 +191,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
   // Why: the system actor is attribution infrastructure — every script-side
   // action logs under its id, so the row is insert-only and no delete path exists.
   if (target?.username === ROOT_ACTOR_USERNAME) {
-    return { success: false, error: 'Cannot delete the system actor — script-side action attribution resolves through it' };
+    return { success: false, error: 'Cannot delete the system actor: script-side action attribution resolves through it' };
   }
 
   try {

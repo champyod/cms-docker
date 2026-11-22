@@ -16,7 +16,7 @@ export function LogFollowButton({ following, onClick, className }: LogFollowButt
       type="button"
       onClick={onClick}
       aria-pressed={following}
-      title={following ? 'Following latest logs — click to pause' : 'Paused — click to jump to latest and resume'}
+      title={following ? 'Following latest logs: click to pause' : 'Paused: click to jump to latest and resume'}
       className={cn(
         'flex size-11 items-center justify-center rounded-full border shadow-lg transition-all',
         following

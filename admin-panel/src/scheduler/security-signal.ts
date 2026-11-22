@@ -97,7 +97,7 @@ export async function runSecuritySignalTick(now: Date = new Date()): Promise<Sig
   if (!shouldReportReadFailure(lastReadFailureAt, now)) return outcome;
   const delivered = await logToDiscord(
     'Security signal cannot read its state',
-    `The security digest could not be evaluated: ${outcome.error}. Nothing is being reported until this reads again — the Patching page shows the same failure.`,
+    `The security digest could not be evaluated: ${outcome.error}. Nothing is being reported until this reads again: the Patching page shows the same failure.`,
     SIGNAL_COLOR,
     true,
   );
@@ -139,7 +139,7 @@ export function startSecuritySignal(): void {
     // Why said once at boot and not per tick: without a webhook every send returns false, so the
     // page is the only surface. That is a configuration state, not news — and saying it every
     // minute would drown the log lines that matter.
-    console.warn('Security signal: no DISCORD_WEBHOOK_URL — the digest card is the only surface.');
+    console.warn('Security signal: no DISCORD_WEBHOOK_URL: the digest card is the only surface.');
   }
   console.log(`Security signal polling every ${String(seconds)}s.`);
   void runSecuritySignalTick().catch((error: unknown) => {

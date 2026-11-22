@@ -56,8 +56,8 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
               value={form.enabled}
               onChange={(event) => setForm({ ...form, enabled: event.target.value })}
             >
-              <option value="0">0 — off</option>
-              <option value="1">1 — on</option>
+              <option value="0">0: off</option>
+              <option value="1">1: on</option>
             </select>
           </label>
           <label className="text-sm">
@@ -135,7 +135,7 @@ export function WafPanel({ state }: WafPanelProps): React.JSX.Element {
                   {alert.clientIp ?? 'unknown ip'} → {alert.uri ?? 'unknown uri'}
                 </p>
                 <p className="mt-1">
-                  rules {alert.ruleIds.join(', ') || 'none'} · score {alert.anomalyScore ?? '—'} ·{' '}
+                  rules {alert.ruleIds.join(', ') || 'none'}, score {alert.anomalyScore ?? '—'} ·{' '}
                   {alert.blocked ? 'blocked' : 'detected'}
                 </p>
               </li>

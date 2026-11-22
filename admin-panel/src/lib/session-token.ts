@@ -39,7 +39,7 @@ export const SESSION_COOKIE_PATH = '/';
 
 const secretKey = (() => {
   if (process.env.AUTH_SECRET) return process.env.AUTH_SECRET;
-  console.warn('WARNING: AUTH_SECRET is not set. Using a random secret — sessions will not persist across restarts.');
+  console.warn('WARNING: AUTH_SECRET is not set. Using a random secret: sessions will not persist across restarts.');
   return crypto.randomBytes(32).toString('hex');
 })();
 const key = new TextEncoder().encode(secretKey);

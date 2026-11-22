@@ -86,7 +86,7 @@ export function SecuritySignalCard({ digest, locale, copy }: SecuritySignalCardP
         <p className="mt-3 text-sm">
           <span className="text-muted-foreground">{copy.worst}: </span>
           <span className="font-mono">{digest.worst.label}</span>
-          <span className="text-muted-foreground"> — {digest.worst.detail}</span>
+          <span className="text-muted-foreground">: {digest.worst.detail}</span>
         </p>
       )}
 
@@ -95,7 +95,7 @@ export function SecuritySignalCard({ digest, locale, copy }: SecuritySignalCardP
           <span className="text-muted-foreground">{copy.oldest}: </span>
           <span className="font-mono">{digest.oldest.label}</span>
           <span className="text-muted-foreground">
-            {' — '}
+            {': '}
             {fill(copy.ageDays, { days: digest.oldest.ageDays })}
           </span>
         </p>
@@ -116,7 +116,7 @@ export function SecuritySignalCard({ digest, locale, copy }: SecuritySignalCardP
                 </span>
               )}
               {reading.state !== 'current' && reading.detail !== null && (
-                <span className="text-muted-foreground"> — {reading.detail}</span>
+                <span className="text-muted-foreground">: {reading.detail}</span>
               )}
             </dd>
           </div>

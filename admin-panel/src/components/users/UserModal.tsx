@@ -107,7 +107,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
       if (result.success) {
         toast.success(user ? 'User updated' : 'User created', {
           description: formData.password
-            ? `${formData.username} saved — new password is active immediately.`
+            ? `${formData.username} saved: new password is active immediately.`
             : `${formData.username} saved.`,
         });
         onSuccess();
@@ -156,7 +156,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
           canRead={fieldAccess.password.canRead}
           canUpdate={fieldAccess.password.canUpdate}
           label={user ? 'New Password (Optional)' : 'Password'}
-          lockHint="Read-only — you lack user:update"
+          lockHint="Read-only: you lack user:update"
         >
           <PasswordFieldWithKind
             label=""
@@ -179,7 +179,7 @@ export function UserModal({ isOpen, onClose, user, contests = [], canReadContest
           canRead={fieldAccess.timezone.canRead}
           canUpdate={fieldAccess.timezone.canUpdate}
           label="Timezone"
-          lockHint="Read-only — you lack user:update"
+          lockHint="Read-only: you lack user:update"
         >
           <input
             type="text"

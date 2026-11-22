@@ -119,7 +119,7 @@ export function MoveLaneSelector({ submissionId, lanes, onMoved, allowCreate = f
             {reasonError && (
               <p id="move-lane-reason-error" role="alert" className="text-xs text-destructive ml-1">{reasonError}</p>
             )}
-            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required — recorded with the lane move.</p>
+            <p id="move-lane-reason-hint" className="text-xs text-muted-foreground ml-1">Required: recorded with the lane move.</p>
           </div>
           <span className="text-xs text-muted-foreground tabular-nums shrink-0" aria-hidden="true">{reason.length}/{MAX_REASON_LENGTH}</span>
         </div>

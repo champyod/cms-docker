@@ -104,7 +104,7 @@ export function WorkerNodeRow(props: WorkerNodeRowProps): ReactElement {
       )}
 
       {!live && (
-        <div className="mt-1.5 text-xs text-muted-foreground">No telemetry yet — is this worker deployed?</div>
+        <div className="mt-1.5 text-xs text-muted-foreground">No telemetry yet: is this worker deployed?</div>
       )}
 
       {expanded && live?.lastLog && (

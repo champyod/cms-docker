@@ -33,7 +33,7 @@ export function BannedAddressList({ bans }: BannedAddressListProps): React.JSX.E
             className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3"
           >
             <span className="font-mono text-sm">
-              {ban.ip} · {ban.jail}
+              {ban.ip}, {ban.jail}
             </span>
             <Button
               size="sm"

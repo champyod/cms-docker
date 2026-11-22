@@ -40,7 +40,7 @@ export function TestcaseSubtaskSummary({
             key={group.name}
             className="rounded-md border border-border bg-card px-2 py-0.5 text-xs text-foreground"
           >
-            {group.name} · {group.testcases.length}
+            {group.name}, {group.testcases.length}
           </span>
         ))}
       </div>

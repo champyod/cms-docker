@@ -146,7 +146,7 @@ export function MonitorConfigSectionClient({
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground truncate font-mono">{target.url}</p>
                 <p className="text-xs text-muted-foreground">
-                  {target.interval}s interval · {target.timeout}s timeout · HTTP{' '}
+                  {target.interval}s interval, {target.timeout}s timeout, HTTP{' '}
                   {target.expectedStatus}
                 </p>
               </div>

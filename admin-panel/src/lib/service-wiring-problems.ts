@@ -69,7 +69,7 @@ function misboundServiceProblems(services: ServiceRow[]): WiringProblem[] {
     if (service.role === PROXY_SERVICE_ROLE && service.contest_id === null) {
       problems.push({
         area: 'service',
-        message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest — it relays exactly one, so it needs a row per contest`,
+        message: `service ${service.name} is a ${PROXY_SERVICE_ROLE} that names no contest: it relays exactly one, so it needs a row per contest`,
       });
     }
   }

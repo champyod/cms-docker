@@ -94,7 +94,7 @@ export function ExemptionsPanel({ exemptions }: ExemptionsPanelProps): React.JSX
             return (
               <li key={exemption.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border p-3">
                 <span className="font-mono text-sm">
-                  {exemption.subject ?? 'any account'} · {exemption.ip ?? 'any address'}
+                  {exemption.subject ?? 'any account'}, {exemption.ip ?? 'any address'}
                 </span>
                 <Button
                   variant="danger"

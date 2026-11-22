@@ -79,7 +79,7 @@ function DetailBlock({ label, body, emptyLabel = '—' }: {
 function HiddenTestcaseData(): React.JSX.Element {
   return (
     <InlineAlert tone="info" density="compact">
-      Hidden — requires testcase:read
+      Hidden: requires testcase:read
     </InlineAlert>
   );
 }

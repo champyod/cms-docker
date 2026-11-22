@@ -114,7 +114,7 @@ export async function updateGroup(
     if (existing.name === 'Superadmin' && trimmedName !== 'Superadmin') {
       return {
         success: false,
-        error: 'Cannot rename the Superadmin group — it is name-keyed and anchors superadmin detection',
+        error: 'Cannot rename the Superadmin group: it is name-keyed and anchors superadmin detection',
       };
     }
 
@@ -122,7 +122,7 @@ export async function updateGroup(
     if (existing.name === 'Superadmin' && !permissionKeys.includes('all:all')) {
       return {
         success: false,
-        error: 'Cannot remove "all:all" from the Superadmin group — it would strip every superadmin at once',
+        error: 'Cannot remove "all:all" from the Superadmin group: it would strip every superadmin at once',
       };
     }
 
@@ -132,7 +132,7 @@ export async function updateGroup(
     if (existing.name === ROOT_ACTOR_GROUP_NAME) {
       return {
         success: false,
-        error: 'Cannot edit the root actor group — the seed maintains it, and script-action attribution resolves through it',
+        error: 'Cannot edit the root actor group: the seed maintains it, and script-action attribution resolves through it',
       };
     }
 
@@ -189,7 +189,7 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
     if (existing.name === 'Superadmin') {
       return {
         success: false,
-        error: 'Cannot delete the Superadmin group — it is name-keyed and anchors superadmin detection',
+        error: 'Cannot delete the Superadmin group: it is name-keyed and anchors superadmin detection',
       };
     }
 
@@ -199,7 +199,7 @@ export async function deleteGroup(id: number, reason: string): Promise<ActionRes
     if (existing.name === ROOT_ACTOR_GROUP_NAME) {
       return {
         success: false,
-        error: 'Cannot delete the root actor group — the system actor attribution resolves through it',
+        error: 'Cannot delete the root actor group: the system actor attribution resolves through it',
       };
     }
 

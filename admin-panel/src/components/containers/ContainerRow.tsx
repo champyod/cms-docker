@@ -80,7 +80,7 @@ function ContainerActions({
   if (container.protected) {
     return (
       <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
-        <div className="hidden sm:block text-xs text-muted-foreground">Platform-managed — not controllable from the panel</div>
+        <div className="hidden sm:block text-xs text-muted-foreground">Platform-managed: not controllable from the panel</div>
         <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
         <RowActions
           ariaLabel={rowActionGroupLabel(dict, 'containers')}
@@ -130,7 +130,7 @@ function ContainerMainRow(props: {
 function RestartToggle({ containerId, enabled, onToggle }: { containerId: string; enabled: boolean; onToggle: (id: string, value: boolean) => void }): React.JSX.Element {
   return (
     <div className="flex items-center gap-2">
-      <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-restart ${enabled ? 'enabled' : 'disabled'} — click to ${enabled ? 'disable' : 'enable'}`} onClick={() => onToggle(containerId, enabled)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1" title={`Auto-restart: ${enabled ? 'Enabled' : 'Disabled'}`}>
+      <button type="button" role="switch" aria-checked={enabled} aria-label={`Auto-restart ${enabled ? 'enabled' : 'disabled'}: click to ${enabled ? 'disable' : 'enable'}`} onClick={() => onToggle(containerId, enabled)} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1" title={`Auto-restart: ${enabled ? 'Enabled' : 'Disabled'}`}>
         <span className={cn('pointer-events-none relative inline-flex h-4 w-7 items-center rounded-full transition-colors', enabled ? 'bg-success' : 'bg-muted')}>
           <span className={cn('inline-block h-3 w-3 transform rounded-full bg-card transition-transform', enabled ? 'translate-x-3.5' : 'translate-x-0.5')} />
         </span>

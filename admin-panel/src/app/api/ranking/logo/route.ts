@@ -123,7 +123,7 @@ async function readLogoUpload(formData: FormData): Promise<UploadedLogo | NextRe
 
   const ext = logoExtension(file.name || LOGO_FILENAME_STEM);
   if (ext === null) {
-    return apiError({ status: 400, message: 'Unsupported format — allowed: png, jpg, jpeg, gif, bmp' });
+    return apiError({ status: 400, message: 'Unsupported format. Allowed: png, jpg, jpeg, gif, bmp' });
   }
   return { buffer: Buffer.from(await file.arrayBuffer()), ext };
 }

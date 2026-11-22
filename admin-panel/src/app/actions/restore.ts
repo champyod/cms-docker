@@ -155,7 +155,7 @@ export async function getPreviewTables(previewId: string): Promise<PreviewTables
     for (const catalogTable of BACKUP_TABLES) {
       const live = await settle(countLiveRows(catalogTable.name));
       if (live.ok) liveCounts.set(catalogTable.name, live.value);
-      else failures.push(`${catalogTable.name}: live count failed — ${live.error}`);
+      else failures.push(`${catalogTable.name}: live count failed: ${live.error}`);
     }
     for (const name of toc.catalogTables) {
       const catalogTable = BACKUP_TABLES.find((table) => table.name === name);
@@ -165,10 +165,10 @@ export async function getPreviewTables(previewId: string): Promise<PreviewTables
         settle(measureOverlap(container, catalogTable.pk, name)),
       ]);
       if (archive.ok) archiveCounts.set(name, archive.value);
-      else failures.push(`${name}: archive count failed — ${archive.error}`);
+      else failures.push(`${name}: archive count failed: ${archive.error}`);
       if (sample.ok && sample.value !== null) overlapSamples.set(name, sample.value);
       else {
-        failures.push(`${name}: primary-key overlap failed — ${sample.ok ? 'the archive table has no rows to sample' : sample.error}`);
+        failures.push(`${name}: primary-key overlap failed: ${sample.ok ? 'the archive table has no rows to sample' : sample.error}`);
       }
     }
     return {

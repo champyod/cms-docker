@@ -297,7 +297,7 @@ export function verifyAuditChain(
     const verdict = verifyRowHash(row);
     if (verdict.recipe === 'none') {
       failures.push(
-        `row ${row.id}: entry_hash ${row.entry_hash ?? 'null'} matches neither the current recipe (${verdict.computed}) nor the pre-2026-10-26 entry recipe — the row was altered or written by something else`,
+        `row ${row.id}: entry_hash ${row.entry_hash ?? 'null'} matches neither the current recipe (${verdict.computed}) nor the pre-2026-10-26 entry recipe: the row was altered or written by something else`,
       );
     } else if (verdict.recipe === 'legacy-entry') {
       legacyRows += 1;

@@ -74,7 +74,7 @@ export function submissionDescription(summary: SubmissionSummary): string | null
   const fullName = [user.firstName, user.lastName]
     .filter((part): part is string => part !== null && part.trim() !== '')
     .join(' ');
-  return fullName === '' ? user.username : `${fullName} · ${user.username}`;
+  return fullName === '' ? user.username : `${fullName}, ${user.username}`;
 }
 
 export type SubmissionStatusLabels = Record<JudgingPhaseLabelKey, string> & {
@@ -94,7 +94,7 @@ export function submissionStatus(
   }
   if (judging !== null) segments.push(labels[judgingPhaseLabelKey(judging.phase)]);
   if (official) segments.push(labels.official);
-  return segments.length === 0 ? undefined : { kind: 'info', title: segments.join(' · ') };
+  return segments.length === 0 ? undefined : { kind: 'info', title: segments.join(', ') };
 }
 
 function statusLabelsFor(dictionary: Dictionary): SubmissionStatusLabels {

@@ -160,7 +160,7 @@ function LaneCard({ item, laneNames, canMove, expanded, pending, onToggle, onDon
           <Badge variant={item.waitingCount > 0 ? 'warning' : 'neutral'}>Waiting {item.waitingCount}</Badge>
         </div>
         <p className="text-sm font-medium">{item.username}</p>
-        <p className="text-xs text-muted-foreground">{item.taskName} · {LANE_TIME_FORMAT.format(new Date(item.timestamp))}</p>
+        <p className="text-xs text-muted-foreground">{item.taskName}, {LANE_TIME_FORMAT.format(new Date(item.timestamp))}</p>
         {item.reason && <p className="text-xs text-muted-foreground italic truncate" title={item.reason}>Last: {item.reason}</p>}
       </div>
       {canMove && (

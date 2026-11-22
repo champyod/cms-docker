@@ -62,7 +62,7 @@ const IMAGE_MIME: Readonly<Record<ImageExtension, string>> = {
 export function validateAssetSize(kind: AssetKind, bytes: number): string | null {
   const maxBytes = ASSET_MAX_BYTES[kind];
   if (bytes === 0) return 'Empty file';
-  if (bytes > maxBytes) return `File too large — max ${formatByteLimit(maxBytes)}`;
+  if (bytes > maxBytes) return `File too large: max ${formatByteLimit(maxBytes)}`;
   return null;
 }
 

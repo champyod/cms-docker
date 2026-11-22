@@ -47,7 +47,7 @@ function participationLabel(row: UserHistory['participations'][number], copy: Us
   return [
     row.contestName ?? referenceRow(history.contestLabel, row.contestId),
     row.teamCode ?? copy.teamsTab.noTeam,
-  ].join(' · ');
+  ].join(', ');
 }
 
 function submissionLabel(row: UserHistory['submissions'][number], copy: HistoryCopy): string {
@@ -55,7 +55,7 @@ function submissionLabel(row: UserHistory['submissions'][number], copy: HistoryC
     `#${row.id}`,
     row.taskName ?? referenceRow(copy.taskLabel, row.taskId),
     row.score ?? EMPTY_VALUE,
-  ].join(' · ');
+  ].join(', ');
 }
 
 function activityLabel(row: UserHistory['recentContestActivity'][number], copy: HistoryCopy): string {
@@ -63,7 +63,7 @@ function activityLabel(row: UserHistory['recentContestActivity'][number], copy: 
     `#${row.id}`,
     row.contestName ?? referenceRow(copy.contestLabel, row.contestId),
     row.timestamp,
-  ].join(' · ');
+  ].join(', ');
 }
 
 function rowsFor(

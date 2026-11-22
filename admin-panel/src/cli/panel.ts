@@ -60,7 +60,7 @@ export class PanelUsageError extends Error {
 
 export const PANEL_USAGE = `usage: cms panel <command> [args]
 
-Every command performs the write itself — the panel does not have to be running — and files it
+Every command performs the write itself, the panel does not have to be running, and files it
 under the \`root\` actor wherever the write records an actor, exactly as the panel files the same
 action.
 
@@ -107,7 +107,7 @@ A contest's roster and its accounts:
         Take tasks off a contest. A task not on it refuses the whole selection.
   contest accounts rotate <contest-id> --user <id>[,<id>...] [--team <id>] --reason <text>
         Rotate the display usernames of the selected accounts and, when --team is given, set that
-        team on the same participations — one transaction, as the panel's day-two action runs it.
+        team on the same participations: one transaction, as the panel's day-two action runs it.
 
 The patching surface's decisions:
   waiver create --source <diun|rootfs|osv> --match <finding-key|cve> --review-by <date> --reason <text>
@@ -214,13 +214,13 @@ export const PANEL_NON_VERB_EXPORTS: Readonly<Record<string, string>> = {
   validateExposure:
     'a validator: it refuses an exposure row and writes nothing, so the write it guards is the verb',
   writeContestUsername:
-    'one row inside a caller-run transaction — `accounts rotate` is the verb that opens it',
+    'one row inside a caller-run transaction: `accounts rotate` is the verb that opens it',
   assignTeamToParticipants:
-    'one statement inside a caller-run transaction — `accounts rotate` is the verb that opens it',
+    'one statement inside a caller-run transaction: `accounts rotate` is the verb that opens it',
   attachContestTask:
-    'one row inside a caller-run transaction — `task attach` is the verb that opens it',
+    'one row inside a caller-run transaction: `task attach` is the verb that opens it',
   detachContestTask:
-    'one row inside a caller-run transaction — `task detach` is the verb that opens it',
+    'one row inside a caller-run transaction: `task detach` is the verb that opens it',
   resolveRootActorId:
     'the actor the verbs file under, not a write: it changes no row',
 };

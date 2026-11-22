@@ -42,6 +42,6 @@ export async function writeActiveContestId(id: number): Promise<void> {
       UPDATE contests SET is_active = true WHERE id = ${id}`,
   ]);
   if (flagged === 0) {
-    throw new Error(`No contest with id ${id} — refusing to clear the active contest`);
+    throw new Error(`No contest with id ${id}: refusing to clear the active contest`);
   }
 }

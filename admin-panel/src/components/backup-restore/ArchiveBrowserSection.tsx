@@ -40,7 +40,7 @@ type BackupWatchState = 'idle' | 'waiting' | 'timedOut';
 
 const BACKUP_WATCH_MESSAGE: Readonly<Record<Exclude<BackupWatchState, 'idle'>, string>> = {
     waiting: 'Backup is running in the background. Checking for the new archive...',
-    timedOut: 'Backup is still running in the background. It can take several minutes — use Refresh to check again.',
+    timedOut: 'Backup is still running in the background. It can take several minutes: use Refresh to check again.',
 };
 
 export function ArchiveBrowserSection({ refreshToken, locationId }: ArchiveBrowserSectionProps) {

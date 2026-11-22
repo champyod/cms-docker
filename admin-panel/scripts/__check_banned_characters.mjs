@@ -17,7 +17,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(process.env.BANNED_ROOT ?? process.cwd());
-const BASELINE = Number(process.env.BANNED_BASELINE ?? 166);
+const BASELINE = Number(process.env.BANNED_BASELINE ?? 54);
 const BANNED = [
   { mark: '·', name: 'middle dot' },
   { mark: '—', name: 'em dash' },
@@ -27,6 +27,15 @@ const BANNED = [
 function isComment(line) {
   const trimmed = line.trimStart();
   return trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*');
+}
+
+/**
+ * The part of a line a reader can see: everything before a trailing ` // ` comment.
+ * Why the spaces: `https://` carries a double slash too, and cutting there would hide a real mark.
+ */
+function codePart(line) {
+  const at = line.indexOf(' // ');
+  return at === -1 ? line : line.slice(0, at);
 }
 
 /**
@@ -58,7 +67,7 @@ for (const file of [...files(join(ROOT, 'src'))]) {
     inJsxComment = trackJsxComment(line, inJsxComment);
     if (wasInComment || isComment(line)) return;
     for (const { mark, name } of BANNED) {
-      if (line.includes(mark)) hits.push(`${relative(ROOT, file)}:${index + 1}: ${name}`);
+      if (codePart(line).includes(mark)) hits.push(`${relative(ROOT, file)}:${index + 1}: ${name}`);
     }
   });
 }

@@ -98,7 +98,7 @@ export function ContainerSettingsModal({
     if (res.success) {
       toast.success('Success', { description: 'Container settings updated' });
       if (isDiscordConfigured === false && discordNotifications) {
-        toast.warning('Discord not configured', { description: 'Webhook is empty — notifications will be skipped until configured.' });
+        toast.warning('Discord not configured', { description: 'Webhook is empty: notifications will be skipped until configured.' });
       }
       onUpdate();
       onClose();

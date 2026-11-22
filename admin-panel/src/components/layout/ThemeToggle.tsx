@@ -46,7 +46,7 @@ export function ThemeToggle(): React.JSX.Element {
       variant="ghost"
       size="sm"
       iconOnly
-      tooltip={`Theme: ${LABEL[preference]} — switch to ${upcoming.toLowerCase()}`}
+      tooltip={`Theme: ${LABEL[preference]}: switch to ${upcoming.toLowerCase()}`}
       onClick={cyclePreference}
     >
       <motion.span

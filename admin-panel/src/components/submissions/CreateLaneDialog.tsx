@@ -49,7 +49,7 @@ export function CreateLaneDialog({ items, laneNames, onClose, onDone }: { items:
         <datalist id="create-lane-existing">{laneNames.map((lane) => <option key={lane} value={lane} />)}</datalist>
         <DialogField id="create-lane-submission" label="Submission">
           <select id="create-lane-submission" value={submissionId} onChange={(e) => setSubmissionId(e.target.value)} disabled={busy} className={FIELD_CLASSES}>
-            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username} — {item.taskName}</option>)}
+            {items.map((item) => <option key={item.submissionId} value={item.submissionId}>#{item.submissionId} {item.username}: {item.taskName}</option>)}
           </select>
         </DialogField>
         <DialogField id="create-lane-reason" label="Reason *">

@@ -30,7 +30,7 @@ export function UserPreferredLanguagesField({
       canRead={access.canRead}
       canUpdate={access.canUpdate}
       label="Preferred Languages"
-      lockHint="Read-only — you lack user:update"
+      lockHint="Read-only: you lack user:update"
     >
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2">
@@ -74,7 +74,7 @@ export function UserPreferredLanguagesField({
         {(() => {
           const pending = normalizeLanguageCode(draft);
           if (!pending || isKnownLanguageCode(pending)) return null;
-          return <p className="text-xs text-amber-600">Unrecognised code — will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
+          return <p className="text-xs text-amber-600">Unrecognised code: will be saved as “{pending}” but may not match any statement. Use a code from the shared languages list (languages.json).</p>;
         })()}
         <p className="text-xs text-muted-foreground">Stored normalized (trim + lowercase). Exact match against statement.language.</p>
       </div>

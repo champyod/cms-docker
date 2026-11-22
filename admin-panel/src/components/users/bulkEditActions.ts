@@ -172,7 +172,7 @@ async function postCredentialUpdates(
 
     const summary = `Applied credentials for ${count} user(s)`;
     if (failed.length > 0) {
-      setStatusMessage(`${summary} — ${failed.length} failed`);
+      setStatusMessage(`${summary}: ${failed.length} failed`);
     } else {
       setStatusMessage(passwordChanged ? `${summary} and exported the new passwords` : summary);
     }

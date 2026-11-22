@@ -217,7 +217,7 @@ function DiffSummary({ previous, current, added, removed }: {
   return (
     <p className="text-xs text-muted-foreground">
       {interpolate(compare.previous, { id: previous })} → {interpolate(compare.current, { id: current })}
-      {' · '}
+      {', '}
       {added === 0 && removed === 0 ? compare.equal : interpolate(compare.summary, { added, removed })}
     </p>
   );

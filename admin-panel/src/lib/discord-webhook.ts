@@ -49,7 +49,7 @@ export function validateDiscordWebhookUrl(raw: string): FieldValidation {
   if (!DISCORD_WEBHOOK_PATTERN.test(value)) {
     return {
       ok: false,
-      error: 'Not a Discord webhook URL — expected https://discord.com/api/webhooks/<id>/<token>',
+      error: 'Not a Discord webhook URL: expected https://discord.com/api/webhooks/<id>/<token>',
     };
   }
   return { ok: true, value };

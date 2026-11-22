@@ -51,7 +51,7 @@ async function audit(label: string, result: ExposureApplyResult, entityId?: numb
     entity: 'contest_exposures',
     entityId: entityId === undefined ? undefined : String(entityId),
     result: result.success ? 'success' : 'failure',
-    reason: `${label}: ${result.outcome}${result.error === undefined ? '' : ` — ${result.error}`}`,
+    reason: `${label}: ${result.outcome}${result.error === undefined ? '' : `: ${result.error}`}`,
   });
 }
 

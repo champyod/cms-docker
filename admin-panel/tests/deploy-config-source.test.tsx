@@ -6,8 +6,8 @@ import { ActiveContestCard } from '@/components/deployments/ActiveContestCard';
 /**
  * The deployments card states what each shard serves and offers no lever of its own: a shard is
  * moved by writing its registry row, which a running instance re-reads within seconds, so the
- * control that activated a contest by recreating the contest stack — the one path that could
- * restart the board mid-contest — is gone. These tests pin that absence, because a reinstated
+ * control that activated a contest by recreating the contest stack: the one path that could
+ * restart the board mid-contest: is gone. These tests pin that absence, because a reinstated
  * control would read as harmless copy rather than as the restart lever it is.
  *
  * Why static markup: the values on screen are strings these components render, and a reader of the
@@ -84,10 +84,10 @@ describe('the active-contest view shows the per-shard registry truth', () => {
   it('renders one row per bound shard with its role and the contest it serves', () => {
     expect(cardHtml).toContain('shard 0');
     expect(cardHtml).toContain('ContestWebServer');
-    expect(cardHtml).toContain('#12 — Autumn');
+    expect(cardHtml).toContain('#12: Autumn');
     expect(cardHtml).toContain('shard 1');
     expect(cardHtml).toContain('ProxyService');
-    expect(cardHtml).toContain('#10 — Spring');
+    expect(cardHtml).toContain('#10: Spring');
   });
 
   it('stops presenting a single active contest id as the truth', () => {

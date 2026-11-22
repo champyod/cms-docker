@@ -123,9 +123,9 @@ function pickerTriggerText(
   selectedId: number | undefined,
   picked: PickerOption | null,
 ): string {
-  if (selectedId === undefined) return `${label} · ${anyLabel}`;
-  if (picked !== null && picked.id === selectedId) return `${label} · ${picked.name}`;
-  return `${label} · #${selectedId}`;
+  if (selectedId === undefined) return `${label}, ${anyLabel}`;
+  if (picked !== null && picked.id === selectedId) return `${label}, ${picked.name}`;
+  return `${label}, #${selectedId}`;
 }
 
 function pickerEmptyText(loading: boolean, error: string | null, searching: string, noMatches: string): string {

@@ -122,7 +122,7 @@ export function AdminAccessEditor({
         </div>
         {overrides.length === 0 && (
           <p className="text-xs text-muted-foreground italic">
-            This admin has no overrides — access matches their groups exactly.
+            This admin has no overrides: access matches their groups exactly.
           </p>
         )}
         {overrides.map((draft, index) => (
@@ -185,7 +185,7 @@ export function AdminAccessEditor({
           ))}
           {effectivePermissions.size === 0 && (
             <p className="text-xs text-muted-foreground italic">
-              No effective permissions — this admin will be denied everything.
+              No effective permissions: this admin will be denied everything.
             </p>
           )}
         </div>

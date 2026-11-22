@@ -174,7 +174,7 @@ export async function unlockLoginLockout(username: string, ip: string, reason: s
   revalidatePath(BLOCKS_PAGE_PATH, 'page');
   return {
     success: true,
-    message: closed > 0 ? `Lockout lifted for ${username}` : `No open lockout row for ${username} — the in-memory counter was cleared`,
+    message: closed > 0 ? `Lockout lifted for ${username}` : `No open lockout row for ${username}: the in-memory counter was cleared`,
   };
 }
 

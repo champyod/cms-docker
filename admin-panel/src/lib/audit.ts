@@ -229,7 +229,7 @@ export async function recordAudit(entry: AuditEntry): Promise<void> {
     const { logToDiscord } = await import('@/lib/discord-notifier');
     await logToDiscord(
       'Audit log write failed',
-      `${entry.entity}:${entry.verb} — ${describeError(error)}`,
+      `${entry.entity}:${entry.verb}: ${describeError(error)}`,
       15158332,
       true,
     );

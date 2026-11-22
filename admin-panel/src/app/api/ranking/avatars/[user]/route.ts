@@ -36,7 +36,7 @@ async function readAvatarUpload(formData: FormData): Promise<{ buffer: Buffer; e
 
   const ext = logoExtension(file.name);
   if (ext === null) {
-    return apiError({ status: 400, message: 'Unsupported format — allowed: png, jpg, jpeg, gif, bmp' });
+    return apiError({ status: 400, message: 'Unsupported format. Allowed: png, jpg, jpeg, gif, bmp' });
   }
   return { buffer: Buffer.from(await file.arrayBuffer()), ext };
 }

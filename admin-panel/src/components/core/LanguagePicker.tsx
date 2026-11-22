@@ -119,12 +119,12 @@ export function LanguagePicker({
         )}
       />
       {showWarning ? (
-        <p className="text-xs text-muted-foreground ml-1"><Badge variant="warning">Warning</Badge> Unrecognised language code — will be saved as “{normalized}” but may not match any statement. Recognised codes come from the shared languages list (languages.json).</p>
+        <p className="text-xs text-muted-foreground ml-1"><Badge variant="warning">Warning</Badge> Unrecognised language code: will be saved as “{normalized}” but may not match any statement. Recognised codes come from the shared languages list (languages.json).</p>
       ) : null}
       {open ? (
         <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border border-border bg-popover shadow-md">
           {filtered.length === 0 ? (
-            <div className="p-3 text-sm text-muted-foreground">No matches — press Enter to use “{normalized}”</div>
+            <div className="p-3 text-sm text-muted-foreground">No matches: press Enter to use “{normalized}”</div>
           ) : (
             filtered.map((opt) => (
               <button

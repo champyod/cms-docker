@@ -25,7 +25,7 @@ export function UserIdentityFields({
           canRead={fieldAccess.first_name.canRead}
           canUpdate={fieldAccess.first_name.canUpdate}
           label="First Name"
-          lockHint="Read-only — you lack user:update"
+          lockHint="Read-only: you lack user:update"
         >
           <input
             required
@@ -40,7 +40,7 @@ export function UserIdentityFields({
           canRead={fieldAccess.last_name.canRead}
           canUpdate={fieldAccess.last_name.canUpdate}
           label="Last Name"
-          lockHint="Read-only — you lack user:update"
+          lockHint="Read-only: you lack user:update"
         >
           <input
             required
@@ -56,7 +56,7 @@ export function UserIdentityFields({
         canRead={fieldAccess.username.canRead}
         canUpdate={fieldAccess.username.canUpdate}
         label="Username"
-        lockHint="Read-only — you lack user:update"
+        lockHint="Read-only: you lack user:update"
       >
         <input
           required
@@ -72,7 +72,7 @@ export function UserIdentityFields({
         canRead={fieldAccess.email.canRead}
         canUpdate={fieldAccess.email.canUpdate}
         label="Email (Optional)"
-        lockHint="Read-only — you lack user:update"
+        lockHint="Read-only: you lack user:update"
       >
         <input
           type="email"

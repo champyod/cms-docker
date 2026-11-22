@@ -254,7 +254,7 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
                   {/* The type lives on the task's dataset, so a task dialog cannot show
                       it as a field — say where the decision is made instead. */}
                   <p className="text-xs text-muted-foreground">
-                    Task type is set on the task&apos;s dataset, not here — the dataset chooses Batch, Communication or TwoSteps.
+                    Task type is set on the task&apos;s dataset, not here: the dataset chooses Batch, Communication or TwoSteps.
                   </p>
                   <GeneralTab formData={formData} onChange={setFormData} />
                 </div>

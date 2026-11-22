@@ -55,7 +55,7 @@ export class MissingDbActorError extends Error {
   constructor(detail: string) {
     super(
       `no database actor: ${detail}. Every table is row-level secured on cms.actor, so this query ` +
-        'would read nothing and write nothing — wrap the scope in withActor() (a signed-in panel ' +
+        'would read nothing and write nothing: wrap the scope in withActor() (a signed-in panel ' +
         'request resolves its own actor from the session cookie).',
     );
     this.name = 'MissingDbActorError';

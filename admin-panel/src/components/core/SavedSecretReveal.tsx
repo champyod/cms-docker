@@ -136,10 +136,10 @@ export function SavedSecretReveal({ label, canReveal, onReveal }: SavedSecretRev
         onToggle={toggle}
       />
       {!canReveal && (
-        <p className="text-xs text-muted-foreground">Read-only — you lack the reveal permission.</p>
+        <p className="text-xs text-muted-foreground">Read-only: you lack the reveal permission.</p>
       )}
       {outcome.kind === 'bcrypt' && (
-        <p className="text-xs text-muted-foreground">Stored hashed — irreversible. Typing a new value replaces it.</p>
+        <p className="text-xs text-muted-foreground">Stored hashed: irreversible. Typing a new value replaces it.</p>
       )}
       {error !== '' && <p className="text-xs text-destructive">{error}</p>}
     </div>

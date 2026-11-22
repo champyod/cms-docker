@@ -277,12 +277,12 @@ describe('Submission record header identity', () => {
 
   it('heads the record with the task it was sent for and names the submitter below', () => {
     expect(submissionHeading(BASE)).toBe('aplusb');
-    expect(submissionDescription(BASE)).toBe('Ada Lovelace · ada');
+    expect(submissionDescription(BASE)).toBe('Ada Lovelace, ada');
   });
 
   it('leads with the full name and keeps the handle behind it', () => {
     const onlyFirst = { ...BASE, user: { id: 5, username: 'ada', firstName: 'Ada', lastName: null } };
-    expect(submissionDescription(onlyFirst)).toBe('Ada · ada');
+    expect(submissionDescription(onlyFirst)).toBe('Ada, ada');
   });
 
   it('falls back to the username when the name columns are denied or empty', () => {
@@ -297,7 +297,7 @@ describe('Submission record header identity', () => {
     const taskless = { ...BASE, task: null };
 
     expect(submissionHeading(taskless)).toBe('#19');
-    expect(submissionDescription(taskless)).toBe('Ada Lovelace · ada');
+    expect(submissionDescription(taskless)).toBe('Ada Lovelace, ada');
   });
 
   it('falls back to the language when the submitter is hidden from this reader', () => {
@@ -335,7 +335,7 @@ describe('Submission record status pill', () => {
 
   it('states score, judging phase, and the official flag as one info pill', () => {
     expect(submissionStatus({ phase: 'done', totalScore: 100 }, true, LABELS))
-      .toEqual({ kind: 'info', title: '100.0 pts · Done · ★ Official' });
+      .toEqual({ kind: 'info', title: '100.0 pts, Done, ★ Official' });
   });
 
   it('shows Judging… when a requeue has cleared every result row', () => {
@@ -404,7 +404,7 @@ describe('Submission record header composition', () => {
   });
 
   it('passes the judging state as an info status instead of a blocking one', () => {
-    expect(composedHtml).toContain('100.0 pts · Done · ★ Official');
+    expect(composedHtml).toContain('100.0 pts, Done, ★ Official');
     expect(composedHtml).toContain('Record body');
   });
 
@@ -415,7 +415,7 @@ describe('Submission record header composition', () => {
   });
 
   it('leads the description with the full name ahead of the handle', () => {
-    expect(composedHtml).toContain('Ada Lovelace · ada');
+    expect(composedHtml).toContain('Ada Lovelace, ada');
   });
 
   it('links the previous submission chip to the compare section of the summary', () => {

@@ -33,7 +33,7 @@ function ArchiveList(): React.JSX.Element {
         <div key={archive.name} className="flex items-center justify-between gap-2 text-xs">
           <span className="font-mono truncate">{archive.name}</span>
           <span className="text-muted-foreground shrink-0">
-            {formatArchiveSize(archive.sizeBytes)} · {formatTimestamp(archive.modifiedIso)}
+            {formatArchiveSize(archive.sizeBytes)}, {formatTimestamp(archive.modifiedIso)}
           </span>
         </div>
       ))}

@@ -137,7 +137,7 @@ export function useRecomputeDialog({ submissionId, taskId }: {
     const option = datasets.options.find((entry) => entry.id === datasets.selected);
     if (option === undefined) return null;
     const name = interpolate(record.results.dataset, { id: option.id });
-    return option.isActive ? name + ' · ' + record.recompute.activeDefault : name;
+    return option.isActive ? name + ', ' + record.recompute.activeDefault : name;
   };
 
   const title = (): string => {
@@ -190,7 +190,7 @@ export function useRecomputeDialog({ submissionId, taskId }: {
               {datasets.options.map((option) => (
                 <option key={option.id} value={option.id}>
                   {interpolate(record.results.dataset, { id: option.id })}
-                  {option.isActive ? ' · ' + record.recompute.activeDefault : ''}
+                  {option.isActive ? ', ' + record.recompute.activeDefault : ''}
                 </option>
               ))}
             </select>

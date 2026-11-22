@@ -127,7 +127,7 @@ describe('Submission testcase table', () => {
 
     fireEvent.click(toggleButton('test-2'));
 
-    expect(container.textContent).toContain('Hidden — requires testcase:read');
+    expect(container.textContent).toContain('Hidden: requires testcase:read');
     expect(container.textContent).not.toContain('Input');
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -145,7 +145,7 @@ describe('Submission testcase table', () => {
 
     fireEvent.click(toggleButton('test-2'));
 
-    await waitFor(() => expect(container.textContent).toContain('Hidden — requires testcase:read'));
+    await waitFor(() => expect(container.textContent).toContain('Hidden: requires testcase:read'));
     expect(container.textContent).not.toContain('Not stored');
   });
 

@@ -147,7 +147,7 @@ export function PasswordFieldWithKind({
       </div>
       {reveal?.state === 'bcrypt' && (
         <p className="text-xs text-muted-foreground">
-          Stored as bcrypt — irreversible. Typing replaces it.
+          Stored as bcrypt: irreversible. Typing replaces it.
         </p>
       )}
       {reveal?.state === 'plaintext' && <SavedPasswordField reveal={reveal} />}
