@@ -149,3 +149,60 @@ fn pids_contains_this_process() {
     let pids = ProcReader::new().pids().unwrap();
     assert!(pids.contains(&this_pid()));
 }
+
+/// Swap is three views of one number, so the identity holds exactly no matter
+/// what the kernel changes between reads. A wrong source field breaks it.
+#[test]
+fn swap_used_is_total_minus_free() {
+    let memory = ProcReader::new().system().unwrap().memory;
+    assert_eq!(
+        memory.swap_used_bytes + memory.swap_free_bytes,
+        memory.swap_total_bytes,
+        "swap_used({}) + swap_free({}) must equal swap_total({})",
+        memory.swap_used_bytes,
+        memory.swap_free_bytes,
+        memory.swap_total_bytes
+    );
+}
+
+/// The fields that move constantly cannot be compared to a second read exactly,
+/// so this allows drift — but a wrong source key, or a lost or doubled 1024,
+/// misses by far more than the allowance.
+#[test]
+fn every_memory_field_comes_from_its_own_meminfo_key() {
+    let memory = ProcReader::new().system().unwrap().memory;
+    let bytes = |key: &str| meminfo_kib(key) * 1024;
+    let about = |reported: u64, expected: u64, what: &str| {
+        let allowance = expected / 20 + 64 * 1024 * 1024;
+        assert!(
+            reported.abs_diff(expected) <= allowance,
+            "{what}: read {reported} bytes, /proc/meminfo says about {expected}"
+        );
+    };
+
+    about(memory.total_bytes, bytes("MemTotal:"), "total_bytes");
+    about(memory.free_bytes, bytes("MemFree:"), "free_bytes");
+    about(
+        memory.available_bytes,
+        bytes("MemAvailable:"),
+        "available_bytes",
+    );
+    about(memory.buffers_bytes, bytes("Buffers:"), "buffers_bytes");
+    // The Rust field is cached plus reclaimable, because that is the pair psutil
+    // reports as `cached` on Linux.
+    about(
+        memory.cached_bytes,
+        bytes("Cached:") + bytes("SReclaimable:"),
+        "cached_bytes",
+    );
+    about(
+        memory.swap_total_bytes,
+        bytes("SwapTotal:"),
+        "swap_total_bytes",
+    );
+    about(
+        memory.swap_free_bytes,
+        bytes("SwapFree:"),
+        "swap_free_bytes",
+    );
+}
