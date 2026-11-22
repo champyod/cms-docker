@@ -597,6 +597,8 @@
         "emptyTitle": "No results yet",
         "emptyDescription": "Results appear once the submission has been judged.",
         "dataset": "Dataset #{id}",
+        "datasets": "Datasets",
+        "compilationsFailed": "Compilations failed",
         "pending": "Pending...",
         "compilationSkipped": "Skipped (Compilation Failed)",
         "evaluationSkipped": "Pending/Skipped",

@@ -597,6 +597,8 @@
         "emptyTitle": "ยังไม่มีผลลัพธ์",
         "emptyDescription": "ผลลัพธ์จะปรากฏเมื่อระบบตัดสินการส่งงานนี้แล้ว",
         "dataset": "ชุดข้อมูล #{id}",
+        "datasets": "ชุดข้อมูล",
+        "compilationsFailed": "คอมไพล์ไม่สำเร็จ",
         "pending": "รอดำเนินการ...",
         "compilationSkipped": "ข้าม (คอมไพล์ไม่สำเร็จ)",
         "evaluationSkipped": "รอดำเนินการ/ข้าม",
