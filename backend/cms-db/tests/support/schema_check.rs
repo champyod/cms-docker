@@ -4,8 +4,6 @@
 //! `cms.db.init_db` had just filled, so it is the reference's schema rather than a
 //! transcription of it.
 
-use std::process::Command;
-
 use sqlx::postgres::PgConnection;
 use sqlx::AssertSqlSafe;
 
@@ -84,37 +82,6 @@ pub async fn count(connection: &mut PgConnection, sql: &'static str) -> i64 {
         .fetch_one(&mut *connection)
         .await
         .expect("counting catalogue rows")
-}
-
-/// `pg_dump --schema-only` over the database the URL names.
-///
-/// WHY the binary and not a catalogue query: the fixture is that command's output,
-/// so only the same command can be compared with it.
-#[must_use]
-pub fn dump(url: &str) -> String {
-    let output = Command::new("pg_dump")
-        .args(["--schema-only", "--dbname", url])
-        .output()
-        .expect("pg_dump must be on PATH to compare against the frozen dump");
-    assert!(
-        output.status.success(),
-        "pg_dump refused the check database: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout).expect("pg_dump writes UTF-8")
-}
-
-/// The `X.Y` pg_dump reports in a dump's header, without any build suffix.
-///
-/// WHY: the fixture was dumped by one build of 16.16 and a runner may have another
-/// whose statements still match; 16.15 does not, and its diff reads as a schema
-/// difference rather than the tool difference it is.
-#[must_use]
-pub fn dump_version(dump: &str) -> Option<String> {
-    dump.lines()
-        .find_map(|line| line.strip_prefix("-- Dumped by pg_dump version "))
-        .and_then(|version| version.split_whitespace().next())
-        .map(str::to_owned)
 }
 
 /// The statements of a dump, without the comments, session settings and ownership
