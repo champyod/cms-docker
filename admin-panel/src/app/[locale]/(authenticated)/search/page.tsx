@@ -1,19 +1,135 @@
-import { checkPermission } from '@/lib/permissions';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import SearchClient from './SearchClient';
 
+import { searchAll } from '@/app/actions/search';
+import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
+import { SearchResultCard } from '@/components/search/SearchComponents';
+import { getDictionary } from '@/i18n';
+import { buildRoute } from '@/lib/navigation/routes';
+import { checkPermission } from '@/lib/permissions';
+
+type SearchResults = Awaited<ReturnType<typeof searchAll>>;
+
+const NO_RESULTS: SearchResults = { users: [], tasks: [], contests: [], admins: [] };
+
+/** One kind's matches, in the two-column grid every kind uses so the four sections read alike. */
+function ResultGrid({ children }: { readonly children: React.ReactNode }): React.JSX.Element {
+  return <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>;
+}
+
+/**
+ * The results of one query, one section per record kind.
+ *
+ * WHY a board: the search answers with four kinds that share no row shape and no meaning of empty -
+ * a user, a task, a contest and an admin - and the reader's first question is which kind answered
+ * at all. A list would have had to invent one row set, one filter and one total across the four;
+ * the board lets each kind keep its own rows and say for itself that it matched nothing.
+ *
+ * WHY the query is read on the server: the results are the answer to an address, so the page renders
+ * them from the request instead of refetching after the browser has already drawn an empty page. The
+ * same address now produces the same HTML, and the reader can send it to somebody.
+ */
 export default async function SearchPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string }>;
-}) {
-  await params;
-  const hasPermission = await checkPermission('all:all', false);
+  searchParams: Promise<{ q?: string }>;
+}): Promise<React.JSX.Element> {
+  const { locale } = await params;
+  const { q } = await searchParams;
+  const query = (q ?? '').trim();
 
   // Why: return 404 for forbidden access so existence is indistinguishable from missing page
-  if (!hasPermission) {
+  if (!(await checkPermission('all:all', false))) {
     notFound();
   }
 
-  return <SearchClient />;
+  const [dict, results] = await Promise.all([
+    getDictionary(locale),
+    query.length > 0 ? searchAll(query) : Promise.resolve(NO_RESULTS),
+  ]);
+  const nothingMatched =
+    results.users.length === 0 &&
+    results.tasks.length === 0 &&
+    results.contests.length === 0 &&
+    results.admins.length === 0;
+
+  const sections: readonly BoardSection[] = [
+    {
+      key: 'users',
+      title: 'Users',
+      description: `${results.users.length} matched`,
+      rows: (
+        <ResultGrid>
+          {results.users.map((user) => (
+            <Link key={user.id} href={buildRoute(locale, 'people.user-tabs.profile', { id: user.id })}>
+              <SearchResultCard title={user.username} subtitle={`${user.first_name} ${user.last_name}`} />
+            </Link>
+          ))}
+        </ResultGrid>
+      ),
+      empty: <p className="text-sm text-muted-foreground">No user matched this query.</p>,
+    },
+    {
+      key: 'tasks',
+      title: 'Tasks',
+      description: `${results.tasks.length} matched`,
+      rows: (
+        <ResultGrid>
+          {results.tasks.map((task) => (
+            <Link key={task.id} href={buildRoute(locale, 'tasks.record', { id: task.id })}>
+              <SearchResultCard title={task.name} subtitle={task.title} />
+            </Link>
+          ))}
+        </ResultGrid>
+      ),
+      empty: <p className="text-sm text-muted-foreground">No task matched this query.</p>,
+    },
+    {
+      key: 'contests',
+      title: 'Contests',
+      description: `${results.contests.length} matched`,
+      rows: (
+        <ResultGrid>
+          {results.contests.map((contest) => (
+            <Link key={contest.id} href={buildRoute(locale, 'contests.record', { id: contest.id })}>
+              <SearchResultCard title={contest.name} subtitle={contest.description} />
+            </Link>
+          ))}
+        </ResultGrid>
+      ),
+      empty: <p className="text-sm text-muted-foreground">No contest matched this query.</p>,
+    },
+    {
+      key: 'admins',
+      title: 'Admins',
+      description: `${results.admins.length} matched`,
+      rows: (
+        <ResultGrid>
+          {results.admins.map((admin) => (
+            // Why no link: an administrator has no page of its own, so a card that looks pressable
+            // would promise a destination the panel does not have.
+            <SearchResultCard key={admin.id} title={admin.username} subtitle={admin.name} className="cursor-default" />
+          ))}
+        </ResultGrid>
+      ),
+      empty: <p className="text-sm text-muted-foreground">No admin matched this query.</p>,
+    },
+  ];
+
+  return (
+    <BoardPage
+      title={dict.navigation.system.search.label}
+      description={query.length > 0 ? `Results for “${query}”` : undefined}
+      state={
+        query.length === 0 ? (
+          <p className="text-muted-foreground">Please enter a search term.</p>
+        ) : nothingMatched ? (
+          <p className="text-sm text-muted-foreground">No results found.</p>
+        ) : undefined
+      }
+      sections={sections}
+    />
+  );
 }

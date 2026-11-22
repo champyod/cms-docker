@@ -18,7 +18,6 @@
     "/ranking/appearance",
     "/ranking/credits",
     "/ranking/users/:key",
-    "/search",
     "/security/waf",
     "/system/appearance",
     "/system/backup-restore",
