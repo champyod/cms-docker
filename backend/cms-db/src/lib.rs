@@ -81,6 +81,8 @@ mod permission;
 mod reads;
 mod security_block;
 mod session;
+mod submission;
+mod task;
 mod types;
 mod user;
 mod username;
@@ -125,6 +127,17 @@ pub use reads::{
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
+};
+pub use submission::{
+    accept_token, max_resources, result_by_id, token_of, Evaluation, Submission, SubmissionError,
+    SubmissionResult, SubmissionStatus, Token, TokenBudget, TokenRefusal, DELETE_EVALUATIONS,
+    DELETE_EXECUTABLES, EVALUATION, EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE, INSERT_TOKEN,
+    SUBMISSION, SUBMISSION_JUDGING_BY_ID, TOKEN, TOKEN_BY_SUBMISSION, TOKEN_HISTORY,
+};
+pub use task::{
+    activate_dataset, dataset_by_id, delete_dataset, merge, unjudged_submissions, FeedbackLevel,
+    Playable, ScoreMode, Task, TaskError, TokenMode, TokenRules, Tokens, ACTIVATE_DATASET,
+    DELETE_DATASET, SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
 };
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,

@@ -35,6 +35,16 @@ impl CompilationOutcome {
             Self::Fail => "fail",
         }
     }
+
+    /// The outcome a column value names, or `None` for one the enum does not declare.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "ok" => Some(Self::Ok),
+            "fail" => Some(Self::Fail),
+            _ => None,
+        }
+    }
 }
 
 /// The one value the `evaluation_outcome` enum accepts: it records that every
@@ -51,6 +61,15 @@ impl EvaluationOutcome {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Ok => "ok",
+        }
+    }
+
+    /// The outcome a column value names, or `None` for one the enum does not declare.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "ok" => Some(Self::Ok),
+            _ => None,
         }
     }
 }
