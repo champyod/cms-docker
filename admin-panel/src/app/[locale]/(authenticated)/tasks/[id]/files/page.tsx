@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { formatCount } from '@/lib/format-number';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -29,18 +31,20 @@ async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> 
 }
 
 export default async function TaskFilesPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const taskId = parseRecordId(id);
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.files');
+  const dictionary = await getDictionary(locale);
   const data = await readRecordOrNotFound(() => getTaskFiles(taskId));
   return (
     <DetailPage
       // The record shell above renders the task's name, its trail and its tabs; the rail says Files,
       // so this page states how many files the task carries and leaves the list to the tab.
       ownsHeader={false}
-      title={`Task #${data.taskId}`}
-      facts={[{ term: 'Attachments', value: String(data.attachments.length) }]}
+      facts={[
+        { term: dictionary.tasks.files.attachments, value: formatCount(data.attachments.length, locale) },
+      ]}
     >
       <TaskFilesTab data={data} />
     </DetailPage>

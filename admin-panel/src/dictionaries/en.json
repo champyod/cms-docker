@@ -259,6 +259,9 @@
       "datasets": "Datasets",
       "activeDataset": "Active dataset",
       "testcases": "Testcases"
+    },
+    "files": {
+      "attachments": "Attachments"
     }
   },
   "users": {

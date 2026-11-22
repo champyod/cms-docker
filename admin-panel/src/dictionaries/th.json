@@ -259,6 +259,9 @@
       "datasets": "ชุดข้อมูล",
       "activeDataset": "ชุดข้อมูลที่ใช้งาน",
       "testcases": "กรณีทดสอบ"
+    },
+    "files": {
+      "attachments": "ไฟล์แนบ"
     }
   },
   "users": {
