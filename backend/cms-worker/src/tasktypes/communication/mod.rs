@@ -16,6 +16,10 @@
 //! [`charge`] merges what the processes were charged, and [`verdict`] reads what
 //! that and the manager's own two streams are worth.
 //!
+//! The submission is built by [`compile`], in the same order: the stub the dataset
+//! holds where the parameters ask for one, then the submitted sources, then only the
+//! managers the language reads — one executable, named after the codenames.
+//!
 //! Two numbers the reference takes from the operator's configuration are not taken
 //! from it here, because this worker holds no configuration: the manager is given
 //! `processes × (time limit + 1 second)` rather than that with the operator's own
@@ -26,16 +30,19 @@
 //! # Errors
 //!
 //! [`TaskError`], and only that: parameters that are not the three a
-//! Communication task has, a result holding a number of executables other than
-//! one, a dataset holding no manager of the name a run is started with, a limit
-//! set to a number that bounds nothing, a pipe that could not be made, a file the
-//! store would not hand over, and a run the box could not carry or read back.
+//! Communication task has, a submission carrying no file, a dataset holding no
+//! stub where the parameters compile with one, a result holding a number of
+//! executables other than one, a dataset holding no manager of the name a run is
+//! started with, a limit set to a number that bounds nothing, a pipe that could not
+//! be made, a file the store would not hand over, and a run the box could not carry
+//! or read back.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod boxes;
 mod charge;
+mod compile;
 mod launch;
 mod manager;
 mod pipes;
