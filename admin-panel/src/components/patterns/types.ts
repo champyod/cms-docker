@@ -10,9 +10,16 @@ import type { BreadcrumbItem } from '@/lib/navigation/types';
  * groups at once. Shared, the form grew switch rows it never needed and settings inherited a
  * submit button implying one record.
  */
-export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'form', 'settings'] as const;
+export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'form', 'settings', 'redirect'] as const;
 
 export type PageArchetype = (typeof PAGE_ARCHETYPES)[number];
+
+/**
+ * `redirect` is not a layout - it is a route that forwards an old address to its canonical one
+ * and renders nothing. It is declared for the same reason the others are: two addresses quietly
+ * rendering the same page is how they start to disagree about it.
+ */
+export type PageLayoutKind = Exclude<PageArchetype, 'redirect'>;
 
 /** Slots every archetype understands. A slot left empty renders nothing, never a placeholder. */
 export interface PageSlots {

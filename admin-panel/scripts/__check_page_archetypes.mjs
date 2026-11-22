@@ -54,8 +54,21 @@ for (const page of pages) {
     undeclared.push(page.route);
     continue;
   }
-  const component = ARCHETYPE_COMPONENT[kind];
   const source = readFileSync(page.file, 'utf8');
+
+  // A redirect owns no surface: it must forward, and it must not render a page shell of its own.
+  if (kind === 'redirect') {
+    if (!/resolveLegacyRedirect|redirect\(/.test(source)) {
+      problems.push(`${page.route} declares "redirect" but does not forward anywhere`);
+    } else if (/<PageSurface|<ListPage|<DetailPage|<FormPage|<SettingsPage|<DashboardPage/.test(source)) {
+      problems.push(`${page.route} declares "redirect" but renders a page surface`);
+    } else {
+      declared.push(`${page.route} -> redirect`);
+    }
+    continue;
+  }
+
+  const component = ARCHETYPE_COMPONENT[kind];
   const importsIt = new RegExp(`import\\s*\\{[^}]*\\b${component}\\b[^}]*\\}\\s*from\\s*'@/components/patterns/`).test(source);
   const rendersIt = new RegExp(`<${component}[\\s>]`).test(source);
   if (!importsIt || !rendersIt) {

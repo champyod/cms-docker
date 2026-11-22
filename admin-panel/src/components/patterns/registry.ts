@@ -10,6 +10,24 @@ import type { PageArchetype } from '@/components/patterns/types';
  */
 export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = {
   '/': 'dashboard',
+  // Legacy addresses that forward to their canonical route; they render no surface of their own.
+  '/admins': 'redirect',
+  '/appearance': 'redirect',
+  '/audit': 'redirect',
+  '/containers': 'redirect',
+  '/deployments': 'redirect',
+  '/docs': 'redirect',
+  '/groups': 'redirect',
+  '/infrastructure/ranking': 'redirect',
+  '/maintenance': 'redirect',
+  '/permissions': 'redirect',
+  '/ranking/settings': 'redirect',
+  '/resources': 'redirect',
+  '/settings': 'redirect',
+  '/submissions': 'redirect',
+  '/submissions/lanes': 'redirect',
+  '/teams': 'redirect',
+  '/users': 'redirect',
 };
 
 /** The component a page must render for its archetype; the gate compares against these names. */
@@ -19,4 +37,6 @@ export const ARCHETYPE_COMPONENT: Readonly<Record<PageArchetype, string>> = {
   detail: 'DetailPage',
   form: 'FormPage',
   settings: 'SettingsPage',
+  // A redirect has no component: the gate checks it renders no page surface at all.
+  redirect: '',
 };
