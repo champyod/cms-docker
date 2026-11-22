@@ -5,8 +5,10 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getContestCountdown } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { ContestCountdownTab } from '@/components/contests/contest-detail/ContestCountdownTab';
 import { resolveCountdownAmbientConfig } from '@/lib/contest-ambient-config';
+import { formatZoneTime } from '@/lib/contest-countdown';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
@@ -28,13 +30,42 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestCountdownPage({ params }: ContestRouteProps) {
+/** One timing in the zone the contest is read in, or the panel's missing mark. */
+function zoneFact(value: string | null, timeZone: string): string {
+  return value === null ? '—' : formatZoneTime(new Date(value), timeZone);
+}
+
+export default async function ContestCountdownPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
   const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.countdown');
   const data = await readRecordOrNotFound(() => getContestCountdown(contestId));
-  // The tuning is read here rather than in the Client Component, so the values are the
-  // deployment's own and not a build-time constant baked into the browser bundle.
-  return <ContestCountdownTab data={data} ambientConfig={resolveCountdownAmbientConfig()} />;
+  // Why the facts carry absolute times while the clock carries the remainder: the clock behind
+  // them counts down and can be paused, so it answers "how long left"; only the four stored timings
+  // say when this contest actually runs, and reading them in the contest's own zone is the point.
+  const zone = data.timezone ?? 'UTC';
+  return (
+    <DetailPage
+      // The record shell above renders the contest's name, its trail and its tabs; the rail says
+      // Countdown, so the tab adds the timings and the clock that counts to them.
+      ownsHeader={false}
+      title={data.name}
+      facts={[
+        { term: 'Timezone', value: data.timezone ?? 'UTC' },
+        { term: 'Start', value: zoneFact(data.start, zone) },
+        { term: 'Stop', value: zoneFact(data.stop, zone) },
+        {
+          term: 'Analysis',
+          value: data.analysis_start === null || data.analysis_stop === null
+            ? '—'
+            : `${zoneFact(data.analysis_start, zone)} → ${zoneFact(data.analysis_stop, zone)}`,
+        },
+      ]}
+    >
+      {/* The tuning is read here rather than in the Client Component, so the values are the
+          deployment's own and not a build-time constant baked into the browser bundle. */}
+      <ContestCountdownTab data={data} ambientConfig={resolveCountdownAmbientConfig()} />
+    </DetailPage>
+  );
 }

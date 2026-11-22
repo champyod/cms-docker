@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **30 of 55 pages documented.**
+Inventory: **31 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -17,7 +17,7 @@ Inventory: **30 of 55 pages documented.**
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | board | the announcements published to this contest, each with author and time, its delete and its own empty meaning · the questions contestants asked, each with its asker, time, reply state, reply and ignore actions, and its own empty meaning · publish an announcement · a failed read instead of an empty section |
-| `/contests/:id/countdown` | detail | — *to inventory* |
+| `/contests/:id/countdown` | detail | the zone the contest's times are read in · when it starts, stops and when its analysis window opens and closes, each in that zone · the live clock counting to the next of those moments, with its stage |
 | `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
 | `/contests/:id/participants` | board | the people and teams in this contest, with their team, unrestricted and hidden state · per-row mark as test, settings and remove · add a participant or a whole team · the registration roster: which teams registration offers, each row's state and its own empty meaning · read-only when team:update is absent |
 | `/contests/:id/ranking` | board | the contest's standings: every participant's rank, username, score per task and total · the progress graph over the first twenty · what empty means (the table says no submissions yet) |

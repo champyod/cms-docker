@@ -2,7 +2,6 @@
   "undocumented": [
     "/administration/audit",
     "/administration/groups",
-    "/contests/:id/countdown",
     "/evaluation/submissions/:id/logs",
     "/infrastructure/containers",
     "/infrastructure/deployments",
