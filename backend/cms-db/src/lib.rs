@@ -78,6 +78,7 @@ mod reads;
 mod session;
 mod types;
 mod user;
+mod username;
 mod writes;
 
 pub use actor::{
@@ -112,6 +113,10 @@ pub use types::{
     MICROS_PER_HOUR, MICROS_PER_MINUTE, MICROS_PER_SECOND, TOMBSTONE, WILDCARD_PERMISSION,
 };
 pub use user::{Participation, User, PARTICIPATION, USER};
+pub use username::{
+    resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
+    CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
+};
 pub use writes::{
     group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
     ObjectWrite, OperationType, ResultRow, RowState, ScoreRow, WriteError, INSERT_EVALUATIONS,
