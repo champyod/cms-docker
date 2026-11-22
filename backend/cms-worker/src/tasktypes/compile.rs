@@ -3,9 +3,8 @@
 //! commands printed along the way.
 //!
 //! The order is the reference's: a grader goes to the compiler first where there
-//! is one, and the executable is named after the codenames rather than after the
-//! sources. A box that did not work is not a compilation that failed, so it comes
-//! back undecided.
+//! is one, and the executable is named after the codenames. A box that did not
+//! work is not a compilation that failed, so it comes back undecided.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -32,8 +31,7 @@ const ERROR_PREFIX: &str = "compilation_stderr_";
 const STREAM_EXTENSION: &str = ".txt";
 /// The system configuration directory, which the toolchains read.
 const SYSTEM_CONFIG: &str = "/etc";
-/// The package database a Haskell compiler looks its packages up in, mapped only
-/// where the machine holds one, as the reference maps it as well.
+/// The package database a Haskell compiler reads, mapped where the machine holds one.
 const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
 const SUCCEEDED: &str = "Compilation succeeded";
 const FAILED: &str = "Compilation failed";
@@ -84,7 +82,8 @@ impl Batch {
         }
         let inputs = self.inputs(job, toolchain)?;
         let executable = self.executable_name(&job.files, toolchain);
-        let commands = toolchain.compilation_commands(&inputs.sources, &executable);
+        // What the worker builds is run by the judge, so it is compiled for it.
+        let commands = toolchain.compilation_commands(&inputs.sources, &executable, true);
         let mut run = runtime.open(COMPILE_BOX, store)?;
         for (name, digest) in &inputs.files {
             run.files()

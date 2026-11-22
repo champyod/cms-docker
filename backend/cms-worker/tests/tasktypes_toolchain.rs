@@ -12,19 +12,24 @@ use cms_worker::tasktypes::Toolchain;
 pub struct StubToolchain;
 
 impl Toolchain for StubToolchain {
-    fn source_extension(&self) -> &str {
-        ".cpp"
+    fn name(&self) -> &str {
+        "Stub"
     }
 
-    fn executable_extension(&self) -> &str {
-        ""
+    fn source_extensions(&self) -> &[&str] {
+        &[".cpp"]
     }
 
-    fn compiles_against(&self, manager: &str) -> bool {
-        manager.ends_with(".cpp") || manager.ends_with(".h")
+    fn header_extensions(&self) -> &[&str] {
+        &[".h"]
     }
 
-    fn compilation_commands(&self, sources: &[String], executable: &str) -> Vec<Vec<String>> {
+    fn compilation_commands(
+        &self,
+        sources: &[String],
+        executable: &str,
+        _for_evaluation: bool,
+    ) -> Vec<Vec<String>> {
         vec![vec![format!("compile {executable}"), sources.join(" ")]]
     }
 
