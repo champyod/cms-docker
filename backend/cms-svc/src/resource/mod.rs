@@ -116,8 +116,7 @@ impl std::error::Error for ReadError {
 
 impl From<procfs::ProcError> for ReadError {
     fn from(error: procfs::ProcError) -> Self {
-        // WHY: psutil raises NoSuchProcess for a vanished pid and the service skips it; every other
-        // failure is a real error and must not be mistaken for "gone".
+        // WHY: psutil skips a vanished pid, and any other failure must not be mistaken for gone.
         match error {
             procfs::ProcError::NotFound(_) => Self::NotFound,
             other => Self::Failed(Box::new(other)),
