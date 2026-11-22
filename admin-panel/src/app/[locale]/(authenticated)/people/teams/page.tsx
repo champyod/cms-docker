@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PageSurface } from '@/components/core/PageSurface';
+import { ListPage } from '@/components/patterns/ListPage';
 import { TeamList } from '@/components/teams/TeamList';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getDictionary } from '@/i18n';
@@ -52,7 +52,7 @@ export default async function PeopleTeamsPage({ params, searchParams }: {
   const sort = readListSort({ sort: query.sort, dir: query.dir });
   const { teams, effectivePermissions } = await loadTeamsListPage(sort);
   return (
-    <PageSurface
+    <ListPage
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
       title={teamsLabel}
       description={dict.teams.subtitle}
@@ -66,6 +66,6 @@ export default async function PeopleTeamsPage({ params, searchParams }: {
         docsLinkLabel={dict.docs.viewDocumentation}
         initialSort={sort}
       />
-    </PageSurface>
+    </ListPage>
   );
 }

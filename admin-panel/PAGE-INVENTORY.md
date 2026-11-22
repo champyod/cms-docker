@@ -23,7 +23,7 @@ Inventory: **3 of 59 pages documented.**
 | `/contests/:id/ranking` | detail | — *to inventory* |
 | `/contests/:id/settings` | settings | — *to inventory* |
 | `/contests/:id/tasks` | detail | — *to inventory* |
-| `/evaluation/lanes` | list | — *to inventory* |
+| `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
 | `/evaluation/submissions` | list | — *to inventory* |
 | `/evaluation/submissions/:id` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/evaluation` | detail | — *to inventory* |
@@ -35,7 +35,7 @@ Inventory: **3 of 59 pages documented.**
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | list | — *to inventory* |
-| `/people/teams` | list | — *to inventory* |
+| `/people/teams` | list | teams with member count and state · count against total · sort · per-row actions · create · live refresh |
 | `/people/teams/:id` | detail | — *to inventory* |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
