@@ -13,7 +13,6 @@
     "/people/users/:id/profile",
     "/people/users/:id/teams",
     "/ranking",
-    "/ranking/appearance",
     "/ranking/users/:key",
     "/search",
     "/security/waf",

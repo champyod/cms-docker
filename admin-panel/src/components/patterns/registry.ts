@@ -25,6 +25,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/infrastructure/services': 'board',
   '/ranking/users': 'board',
   '/ranking/credits': 'settings',
+  '/ranking/appearance': 'settings',
   '/evaluation/lanes': 'list',
   '/evaluation/submissions': 'list',
   '/system/settings': 'settings',

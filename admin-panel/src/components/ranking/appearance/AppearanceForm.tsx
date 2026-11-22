@@ -7,7 +7,6 @@ import {
   type AppearanceFields,
   type RankingAppearance,
 } from '@/app/actions/rankingAppearance';
-import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { Grid } from '@/components/core/Layout';
 import { SaveButton } from '@/components/core/SaveButton';
@@ -16,7 +15,6 @@ import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useJustSavedFlag } from '@/hooks/useJustSavedFlag';
 import type { Dictionary } from '@/lib/dictionary';
-import { cn } from '@/lib/utils';
 
 import { AppearanceFieldControl, type AppearanceValue } from './AppearanceFieldControl';
 import type { AppearanceSection } from './appearanceSchema';
@@ -45,11 +43,6 @@ function toAppearanceFields(appearance: RankingAppearance): AppearanceFields {
     scoreFormat: appearance.scoreFormat,
     perspectives: appearance.perspectives,
   };
-}
-
-/** The full-width sections share the page grid with the two-column ones. */
-function sectionClassName(section: AppearanceSection): string {
-  return cn('space-y-4', section.id === 'advanced' && 'md:col-span-full');
 }
 
 /**
@@ -103,32 +96,35 @@ export function AppearanceForm({
 
   return (
     <div className="space-y-6">
-      <Grid cols={2} gap={6}>
-        {sections.map((section) => (
-          <Card key={section.id} className={sectionClassName(section)}>
-            <Text as="h2" variant="h4">
-              {section.title}
-            </Text>
-            <Grid cols={2} gap={4}>
-              {section.fields.map((field) => (
-                <div
-                  key={field.name}
-                  data-field={field.name}
-                  data-span={field.span ?? 'half'}
-                  className={field.span === 'full' ? 'md:col-span-2' : undefined}
-                >
-                  <AppearanceFieldControl
-                    field={field}
-                    value={form[field.name]}
-                    disabled={saving}
-                    onChange={changeField}
-                  />
-                </div>
-              ))}
-            </Grid>
-          </Card>
-        ))}
-      </Grid>
+      {/* The settings layout owns the card and the group heading, so a section here is a heading at
+          the next level down and its fields — not a second card inside the group's card. */}
+      {sections.map((section, index) => (
+        <section
+          key={section.id}
+          className={index === 0 ? 'space-y-4' : 'space-y-4 border-t border-border/80 pt-4'}
+        >
+          <Text as="h3" variant="h4">
+            {section.title}
+          </Text>
+          <Grid cols={2} gap={4}>
+            {section.fields.map((field) => (
+              <div
+                key={field.name}
+                data-field={field.name}
+                data-span={field.span ?? 'half'}
+                className={field.span === 'full' ? 'md:col-span-2' : undefined}
+              >
+                <AppearanceFieldControl
+                  field={field}
+                  value={form[field.name]}
+                  disabled={saving}
+                  onChange={changeField}
+                />
+              </div>
+            ))}
+          </Grid>
+        </section>
+      ))}
       {error !== null && <InlineAlert tone="destructive">{error}</InlineAlert>}
       <div className="flex items-center justify-end gap-3 border-t border-border/80 pt-4">
         <SaveButton
