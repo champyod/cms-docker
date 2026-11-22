@@ -1,0 +1,22 @@
+import type { PageArchetype } from '@/components/patterns/types';
+
+/**
+ * One route, one archetype. This file is the single place a page's structure is declared: the
+ * discrepancy gate reads it, so a page cannot quietly keep bespoke layout while claiming to be a
+ * list, and a page added without a declaration is a counted debt rather than an invisible one.
+ *
+ * Route keys are what the file tree produces: `src/app/[locale]/(authenticated)/contests/page.tsx`
+ * is `/contests`, and `contests/[id]/page.tsx` is `/contests/:id`.
+ */
+export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = {
+  '/': 'dashboard',
+};
+
+/** The component a page must render for its archetype; the gate compares against these names. */
+export const ARCHETYPE_COMPONENT: Readonly<Record<PageArchetype, string>> = {
+  dashboard: 'DashboardPage',
+  list: 'ListPage',
+  detail: 'DetailPage',
+  form: 'FormPage',
+  settings: 'SettingsPage',
+};

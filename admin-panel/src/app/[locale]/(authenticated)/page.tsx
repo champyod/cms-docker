@@ -2,9 +2,9 @@ import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
-import { PageSurface } from '@/components/core/PageSurface';
 import type { StatusType } from '@/components/core/StatusBadge';
-import { DashboardSurface } from '@/components/dashboard/DashboardSurface';
+import { DashboardState, DashboardSurface } from '@/components/dashboard/DashboardSurface';
+import { DashboardPage } from '@/components/patterns/DashboardPage';
 // Why the bare form: this page is a server component, so the activity row cannot read the
 // reviewer's own zone from a client context; the zone of record is the one this process renders in.
 import { formatInZone } from '@/lib/timezone';
@@ -88,7 +88,7 @@ async function getRecentActivity(): Promise<{ id: number; timestamp: Date; usern
   }));
 }
 
-export default async function DashboardPage({
+export default async function AdminHomePage({
   params: paramsPromise,
 }: {
   params: Promise<{ locale: string }>;
@@ -104,36 +104,39 @@ export default async function DashboardPage({
   ]);
 
   const labels = dict.dashboard;
+  const dashboardLabels = {
+    serviceState: labels.serviceState,
+    checkedAt: labels.checkedAt,
+    servicesTitle: labels.servicesTitle,
+    servicesDetail: labels.servicesDetail,
+    stats: labels.stats,
+    activity: labels.activity,
+  };
+  const service = {
+    status: serviceStatus.status as StatusType,
+    running: serviceStatus.running,
+    total: serviceStatus.total,
+    checkedAt: formatInZone(new Date().toISOString()),
+  };
 
   return (
-    <PageSurface
+    <DashboardPage
       breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
       title={labels.welcome}
       description={labels.description}
+      state={<DashboardState service={service} labels={dashboardLabels} stats={stats} />}
     >
       <DashboardSurface
         stats={stats}
-        service={{
-          status: serviceStatus.status as StatusType,
-          running: serviceStatus.running,
-          total: serviceStatus.total,
-          checkedAt: formatInZone(new Date().toISOString()),
-        }}
+        service={service}
         activity={recentActivity.map((item) => ({
           id: item.id,
           username: item.username,
           taskName: item.taskName,
           when: item.timestamp ? formatInZone(item.timestamp.toISOString()) : '',
         }))}
-        labels={{
-          serviceState: labels.serviceState,
-          checkedAt: labels.checkedAt,
-          servicesTitle: labels.servicesTitle,
-          servicesDetail: labels.servicesDetail,
-          stats: labels.stats,
-          activity: labels.activity,
-        }}
+        labels={dashboardLabels}
       />
-    </PageSurface>
+    </DashboardPage>
   );
 }

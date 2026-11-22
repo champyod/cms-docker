@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
-import { DashboardSurface, fill, type DashboardLabels } from '@/components/dashboard/DashboardSurface';
+import { DashboardState, DashboardSurface, fill, type DashboardLabels } from '@/components/dashboard/DashboardSurface';
+import { DashboardPage } from '@/components/patterns/DashboardPage';
 
 const labels: DashboardLabels = {
   serviceState: { ok: 'All services are running', degraded: 'Some services are not running', down: 'Services have stopped' },
@@ -33,14 +34,18 @@ const activity = [
   { id: 2, username: 'malee', taskName: 'decoder', when: '14:01' },
 ];
 
+// The page is now the composition of an archetype and a surface, so the tests render it the way
+// the route does - the ordering guarantee belongs to the archetype, not to string order in one file.
 function render(status: 'ok' | 'degraded' | 'down') {
+  const service = { status, running: 3, total: 4, checkedAt: '14:00' } as const;
   return renderToStaticMarkup(
-    <DashboardSurface
-      stats={stats}
-      service={{ status, running: 3, total: 4, checkedAt: '14:00' }}
-      activity={activity}
-      labels={labels}
-    />
+    <DashboardPage
+      breadcrumbs={[{ label: 'Home', href: '/' }]}
+      title="Welcome back"
+      state={<DashboardState service={service} labels={labels} stats={stats} />}
+    >
+      <DashboardSurface stats={stats} service={service} activity={activity} labels={labels} />
+    </DashboardPage>
   );
 }
 

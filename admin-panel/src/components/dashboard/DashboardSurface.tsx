@@ -102,24 +102,6 @@ export function DashboardSurface({
 
   return (
     <div className="space-y-4">
-      {service.status === 'ok' ? (
-        // Nothing is wrong, so nothing interrupts: a quiet line carries the state and its age.
-        <p className="flex items-center gap-2 text-sm text-muted-foreground">
-          <CheckCircle2 className="size-4 text-success" aria-hidden />
-          <span>{labels.serviceState.ok}</span>
-          <span aria-hidden>·</span>
-          <span>{fill(labels.checkedAt, service.checkedAt)}</span>
-        </p>
-      ) : (
-        <InlineAlert
-          tone={ALERT_TONE[service.status]}
-          title={labels.serviceState[service.status]}
-          announce="polite"
-        >
-          {`${service.running}/${service.total} · ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
-        </InlineAlert>
-      )}
-
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Stat label={labels.stats.totalUsers} value={stats.usersCount} reference={fill(labels.stats.enrolled, stats.activeContesters)} />
         <Stat label={labels.stats.totalContests} value={stats.contestsCount} reference={fill(labels.stats.activeNow, stats.activeContestsCount)} />
@@ -166,5 +148,36 @@ function Stat({
       <span className="text-[length:var(--text-page)] leading-tight font-semibold tabular-nums">{value}</span>
       <Text variant="muted">{reference}</Text>
     </Card>
+  );
+}
+
+/**
+ * The system's state, as its own component so the dashboard archetype can render it above every
+ * metric without the surface knowing where it sits. Quiet when nothing is wrong; an alert with
+ * the state as its title when something is.
+ */
+export function DashboardState({
+  service,
+  labels,
+  stats,
+}: {
+  service: DashboardServiceState;
+  labels: DashboardLabels;
+  stats: Pick<DashboardStats, 'pendingSubmissions'>;
+}): React.JSX.Element {
+  if (service.status === 'ok') {
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <CheckCircle2 className="size-4 text-success" aria-hidden />
+        <span>{labels.serviceState.ok}</span>
+        <span aria-hidden>·</span>
+        <span>{fill(labels.checkedAt, service.checkedAt)}</span>
+      </p>
+    );
+  }
+  return (
+    <InlineAlert tone={ALERT_TONE[service.status]} title={labels.serviceState[service.status]} announce="polite">
+      {`${service.running}/${service.total} · ${fill(labels.stats.pending, stats.pendingSubmissions)}`}
+    </InlineAlert>
   );
 }
