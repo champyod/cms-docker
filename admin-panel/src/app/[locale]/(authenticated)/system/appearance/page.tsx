@@ -50,7 +50,7 @@ export default async function SystemAppearancePage({
       title: 'Services',
       description: 'The values config.toml holds for the ranking, contest, worker and infrastructure services.',
       scope: 'Everyone: these are this host’s values. Changing them recreates services, so the editor is System → Settings.',
-      children: <ServicesGroup values={toml.values} />,
+      children: <ServicesGroup values={toml.values} missing={dict.common.notSet} />,
     },
     {
       key: 'display',

@@ -98,7 +98,7 @@ const SERVICE_GROUPS: { title: string; keys: string[] }[] = [
  * and needs a restart decision this page cannot make. Reading them here answers "what is this host
  * configured with" without pretending to be the editor.
  */
-export function ServicesGroup({ values }: { readonly values: Record<string, string> }): React.JSX.Element {
+export function ServicesGroup({ values, missing }: { readonly values: Record<string, string>; readonly missing: string }): React.JSX.Element {
   return (
     <div className="space-y-4">
       {SERVICE_GROUPS.map((group) => (
@@ -111,7 +111,7 @@ export function ServicesGroup({ values }: { readonly values: Record<string, stri
             {group.keys.map((key) => (
               <div key={key} className="flex items-center justify-between rounded-lg border border-border bg-card/30 px-3 py-2">
                 <code className="font-mono text-xs text-primary">{key}</code>
-                <span className="max-w-3/5 truncate text-right text-xs text-muted-foreground">{values[key] ?? '—'}</span>
+                <span className="max-w-3/5 truncate text-right text-xs text-muted-foreground">{values[key] ?? missing}</span>
               </div>
             ))}
           </div>

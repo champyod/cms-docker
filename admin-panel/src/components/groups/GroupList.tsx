@@ -40,7 +40,7 @@ export function GroupList({
 
   // Why: one column definition drives desktop rows and mobile cards, so
   // the two layouts cannot drift apart.
-  const columns = useMemo(() => buildColumns(dict), [dict]);
+  const columns = useMemo(() => buildColumns(dict, useDictionary().common.notSet), [dict]);
 
   const renderRowActions = useCallback(
     (group: GroupWithPermissions) => (

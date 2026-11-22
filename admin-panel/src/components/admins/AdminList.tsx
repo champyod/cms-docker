@@ -160,7 +160,7 @@ export function AdminList({
       hideOnMobile: true,
       render: (admin) => (
         <span className="text-xs text-muted-foreground">
-          {admin.last_login_at ? formatTimestamp(admin.last_login_at) : '—'}
+          {admin.last_login_at ? formatTimestamp(admin.last_login_at) : dict.common.notSet}
         </span>
       ),
     },

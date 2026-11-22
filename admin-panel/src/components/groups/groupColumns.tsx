@@ -7,6 +7,7 @@ import type { GroupsDict } from './groupListTypes';
 // the two layouts cannot drift apart.
 export function buildColumns(
   dict: GroupsDict,
+  missing: string,
 ): ResponsiveColumn<GroupWithPermissions>[] {
   return [
     {
@@ -21,7 +22,7 @@ export function buildColumns(
       sortKey: 'description',
       render: (group) => (
         <span className="block max-w-xs truncate">
-          {group.description ?? '—'}
+          {group.description ?? missing}
         </span>
       ),
     },
