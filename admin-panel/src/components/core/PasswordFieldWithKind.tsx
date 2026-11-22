@@ -55,7 +55,7 @@ export function PasswordKindSelector({
           className={cn(
             'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
             kind === option.value
-              ? 'bg-indigo-500/20 text-indigo-300 shadow-sm shadow-indigo-500/20'
+              ? 'bg-accent text-foreground shadow-sm'
               : 'text-muted-foreground hover:text-foreground'
           )}
         >
@@ -146,7 +146,7 @@ export function PasswordFieldWithKind({
         <PasswordKindSelector kind={kind} onKind={onKind} />
       </div>
       {reveal?.state === 'bcrypt' && (
-        <p className="text-xs text-amber-400/80">
+        <p className="text-xs text-muted-foreground">
           Stored as bcrypt — irreversible. Typing replaces it.
         </p>
       )}

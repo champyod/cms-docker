@@ -139,7 +139,7 @@ export function SavedSecretReveal({ label, canReveal, onReveal }: SavedSecretRev
         <p className="text-xs text-muted-foreground">Read-only — you lack the reveal permission.</p>
       )}
       {outcome.kind === 'bcrypt' && (
-        <p className="text-xs text-amber-400/80">Stored hashed — irreversible. Typing a new value replaces it.</p>
+        <p className="text-xs text-muted-foreground">Stored hashed — irreversible. Typing a new value replaces it.</p>
       )}
       {error !== '' && <p className="text-xs text-destructive">{error}</p>}
     </div>
