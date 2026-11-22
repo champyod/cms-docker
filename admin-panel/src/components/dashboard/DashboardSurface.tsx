@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { ROW_HEIGHT_CLASS, ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { StatCard } from '@/components/core/StatCard';
 import { Text } from '@/components/core/Typography';
 import type { StatusType } from '@/components/core/StatusBadge';
 
@@ -100,10 +101,10 @@ export function DashboardSurface({
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <Stat label={labels.stats.totalUsers} value={stats.usersCount} reference={fill(labels.stats.enrolled, stats.activeContesters)} />
-        <Stat label={labels.stats.totalContests} value={stats.contestsCount} reference={fill(labels.stats.activeNow, stats.activeContestsCount)} />
-        <Stat label={labels.stats.totalSubmissions} value={stats.submissionsCount} reference={fill(labels.stats.pending, stats.pendingSubmissions)} />
-        <Stat
+        <StatCard label={labels.stats.totalUsers} value={stats.usersCount} reference={fill(labels.stats.enrolled, stats.activeContesters)} />
+        <StatCard label={labels.stats.totalContests} value={stats.contestsCount} reference={fill(labels.stats.activeNow, stats.activeContestsCount)} />
+        <StatCard label={labels.stats.totalSubmissions} value={stats.submissionsCount} reference={fill(labels.stats.pending, stats.pendingSubmissions)} />
+        <StatCard
           label={labels.servicesTitle}
           value={`${service.running}/${service.total}`}
           reference={labels.servicesDetail}
@@ -130,24 +131,6 @@ export function DashboardSurface({
  * Label, number, reference — the same three slots in every cell, so four cards read as one row.
  * No decorative icon and no colour: a number that is not a status must not look like one.
  */
-function Stat({
-  label,
-  value,
-  reference,
-}: {
-  label: string;
-  value: number | string;
-  reference: string;
-}): React.JSX.Element {
-  return (
-    <Card className="flex flex-col gap-1 p-4">
-      <Text variant="label">{label}</Text>
-      <span className="text-[length:var(--text-page)] leading-tight font-semibold tabular-nums">{value}</span>
-      <Text variant="muted">{reference}</Text>
-    </Card>
-  );
-}
-
 /**
  * The system's state, on its own so the page can place it above every metric. Quiet when nothing
  * is wrong; an alert titled with the state when something is.

@@ -1,4 +1,3 @@
-import { Card } from '@/components/core/Card';
 import { DashboardPage } from '@/components/patterns/DashboardPage';
 import { SecuritySignalCard } from '@/components/security/SecuritySignalCard';
 import { getDictionary } from '@/i18n';
@@ -50,16 +49,9 @@ export default async function SecurityOverviewPage({
       title=""  // the security module shell renders this page's name and trail
       ownsHeader={false}
       state={<SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />}
+      totals={cards}
     >
       <p className="text-muted-foreground">{dict.dashboard.checkedAt.replace('{count}', checkedAt)}</p>
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {cards.map((card) => (
-          <Card key={card.label}>
-            <p className="text-sm text-muted-foreground">{card.label}</p>
-            <p className="mt-1 font-mono text-2xl text-foreground">{card.value}</p>
-          </Card>
-        ))}
-      </div>
     </DashboardPage>
   );
 }

@@ -46,6 +46,19 @@ function routeFor(file) {
 const pages = walk(PAGES_ROOT).map((file) => ({ file, route: routeFor(file) }));
 const declared = [];
 const undeclared = [];
+
+/**
+ * The layout owns the page's headings and its cards.
+ *
+ * A page that writes its own `<h2>` or imports Card is drawing structure of its own - the reason the
+ * layouts exist - and it will disagree with the next page about which level a section title is.
+ */
+const OWNED_BY_LAYOUT = [
+  { pattern: /<h[1-3][\s>]/, rule: 'renders its own heading (the layout owns the page heading levels)' },
+  { pattern: /variant="h1"/, rule: 'renders a heading through the text primitive' },
+  { pattern: /from '@\/components\/core\/Card'/, rule: 'imports Card (a page supplies facts, the layout supplies the card)' },
+];
+
 const problems = [];
 
 for (const page of pages) {
@@ -55,6 +68,11 @@ for (const page of pages) {
     continue;
   }
   const source = readFileSync(page.file, 'utf8');
+
+  // A declared page supplies facts to its layout; headings and cards are the layout's.
+  for (const { pattern, rule } of OWNED_BY_LAYOUT) {
+    if (pattern.test(source)) problems.push(`${page.route} ${rule}`);
+  }
 
   // A redirect owns no surface: it must forward, and it must not render a page shell of its own.
   if (kind === 'redirect') {
