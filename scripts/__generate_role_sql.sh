@@ -243,10 +243,10 @@ spaced_columns() {
 }
 
 emit_grants() {
+  local role tbl verbs verb policy row_role
   printf '\n'
   printf '%s\n' \
-    '-- One block per role: grants emit policies for their own verbs, so a grant cannot exist without one.' \
-  local role tbl verbs verb policy row_role
+    '-- One block per role: grants emit policies for their own verbs, so a grant cannot exist without one.'
   while IFS=$'\t' read -r role tbl; do
     [ -n "$role" ] || continue
     printf '\n-- %s on public.%s\n' "$role" "$tbl"

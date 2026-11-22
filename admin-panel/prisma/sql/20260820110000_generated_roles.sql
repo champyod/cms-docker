@@ -44,13 +44,6 @@ BEGIN
 END $$;
 
 -- One block per role: grants emit policies for their own verbs, so a grant cannot exist without one.
-local
-role
-tbl
-verbs
-verb
-policy
-row_role
 
 -- cms_admin_login on public.admins
 DO $$
