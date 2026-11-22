@@ -178,3 +178,27 @@ It is recorded here rather than assumed.
 | F4 | **CI `icons:check` will go red because S-4 deleted the tree it still references.** `admin-panel/scripts/generate-icons.mts:128-130` lists `src/cmsranking/static/img/favicon.ico`, `…/logo.png`, `src/cmsranking/images/logo.svg`; `.github/workflows/ci.yml:523` runs `bun run icons:check` unconditionally and a missing input reads as drift. | **OPEN — the frontend session's files.** Three array entries to delete; not editable from a backend lane. |
 | F5 | **A licence bug the port found and fixed.** The Rust ranking served one compiled-in AGPL section-13 offer URL, while `cmsranking/Config.py:41-51` read `source_url` from `cms_ranking.toml` precisely so a fork could point the offer at its own repository. `/config` now takes the URL from the file `/credits` serves, falling back to the constant only when no file can supply it (`b32ffdad`). | Landed with S-4. |
 | F6 | **A verification lesson worth keeping.** A negative control is evidence only about the tests its command runs: breaking the licence fallback and running `cargo test --test surface` showed 33 passing and looked like an untested branch, but the guard lives in the **lib** unit tests, which that command never runs. Run the scope that owns the code under test. | Recorded after a false positive on S-4. |
+
+## 7. Landing log
+
+Lanes are merged into `feat/rust-trunk-reconcile` only after the parent re-runs their gate; the merge
+commit names the lane tip and the gate result it was accepted on.
+
+| When | Lane | Tip | Gate re-run by the parent | Merge commit |
+|---|---|---|---|---|
+| 2026-11-22 | `feat/rust-S2c-datetime` | `2e28ff39` | `cargo test -p cms-db --test mapping_datetime` → 7 passed, 0 failed, 2 ignored | `a3a605c4` |
+| 2026-11-22 | `feat/rust-S1-equivalence-oracle` | `58a6c24b` | `python3 -m unittest tests/test_render_parity.py` → 20 tests OK | `b282ed4c` |
+
+Gate on the tree after both merges (`b282ed4c`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 63 test binaries, 331 passed,
+0 failed, 2 ignored, exit 0. Serial because the parallel run hits the pre-existing `ETXTBSY` race on
+`backend/target/tmp/**/isolate` (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+
+Not merged, and why: `feat/rust-S2a-crypto-core` (`1fd7f8cc`) is blocked on **B1** (the `aes`/`bcrypt`
+dependency decision). `feat/rust-S4-retire-cmsranking` (`b15ebf92`) deletes `src/cmsranking`, which is
+tangled with the open question of whether `src/` becomes an upstream submodule — deferred rather than
+merged, because the answer decides whether that deletion is meaningful or moot.
+
+`scripts/__check_render_parity.sh` is **not** wired into `scripts/__gates.sh` (checked: `__gates.sh:17-23`
+lists six `__check_*` scripts and not this one). It boots two Docker stacks, so wiring it is a cost
+decision, not an oversight to fix quietly.
