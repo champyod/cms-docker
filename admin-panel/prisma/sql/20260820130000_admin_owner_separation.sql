@@ -13,6 +13,7 @@ BEGIN
   END IF;
 
   EXECUTE 'GRANT cms_platform_owner TO cms_platform_migrator';
+  EXECUTE 'GRANT cmsuser TO cms_platform_migrator';
   EXECUTE 'GRANT cmsuser TO cms_platform_owner';
 
   IF to_regclass('public.admins') IS NOT NULL THEN
