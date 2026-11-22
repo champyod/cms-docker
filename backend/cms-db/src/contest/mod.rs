@@ -9,12 +9,15 @@
 
 mod limits;
 mod model;
+mod reads;
+mod rows;
 mod schema;
 mod token;
 mod window;
 
 pub use limits::ContestError;
 pub use model::Contest;
+pub use reads::{get_contest_list, is_contest_id, CONTEST_EXISTS, CONTEST_LIST};
 pub use schema::CONTEST;
 pub use token::{TokenConfigError, TokenPolicy};
 pub use window::{ContestWindow, Phase, WindowError};

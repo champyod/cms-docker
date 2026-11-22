@@ -2,7 +2,10 @@
 
 use std::fmt;
 
+use sqlx::postgres::PgConnection;
 use sqlx::{ColumnIndex, Decode, Error, FromRow, Row, Type};
+
+use crate::task::Task;
 
 /// The columns one `datasets` row is read with, bound to its own id as `$1`.
 ///
@@ -15,6 +18,20 @@ pub const DATASET_BY_ID: &str = "\
     FROM datasets AS d
     JOIN tasks AS t ON t.id = d.task_id
     WHERE d.id = $1";
+
+/// Every dataset of one task that is either its active dataset or marked `autojudge`,
+/// bound to the task's id as `$1`.
+///
+/// `t.active_dataset_id = d.id` is false rather than `NULL` here because the whole
+/// comparison sits under `OR`, so a task with no active dataset still admits its
+/// `autojudge` rows.
+pub const JUDGEABLE_DATASETS: &str = "\
+    SELECT d.id, d.task_id, d.task_type, d.time_limit, d.memory_limit,
+           t.active_dataset_id IS NOT DISTINCT FROM d.id AS is_active
+    FROM datasets AS d
+    JOIN tasks AS t ON t.id = d.task_id
+    WHERE d.task_id = $1
+      AND (t.active_dataset_id = d.id OR d.autojudge)";
 
 /// A `datasets.id`.
 ///
@@ -102,4 +119,22 @@ where
             is_active,
         })
     }
+}
+
+/// The datasets of `task` that a submission is judged on without an admin asking.
+///
+/// `Dataset.autojudge` is not carried on [`DatasetRecord`]: the rule is what decides
+/// membership, so a caller never has to re-apply it to the rows it is handed.
+///
+/// # Errors
+///
+/// Returns the driver's own error for a statement it could not run.
+pub async fn get_datasets_to_judge(
+    connection: &mut PgConnection,
+    task: &Task,
+) -> Result<Vec<DatasetRecord>, sqlx::Error> {
+    sqlx::query_as::<_, DatasetRecord>(JUDGEABLE_DATASETS)
+        .bind(task.id)
+        .fetch_all(connection)
+        .await
 }

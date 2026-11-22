@@ -110,8 +110,8 @@ pub use binding::{
 };
 pub use codename::{Codename, CodenameError};
 pub use contest::{
-    Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenPolicy, WindowError,
-    CONTEST,
+    get_contest_list, is_contest_id, Contest, ContestError, ContestWindow, Phase, TokenConfigError,
+    TokenPolicy, WindowError, CONTEST, CONTEST_EXISTS, CONTEST_LIST,
 };
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
@@ -137,16 +137,18 @@ pub use grants::{
 };
 pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
-    dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
-    DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
-    DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
+    dataset_from_row, enumerate_files, get_datasets_to_judge, result_from_row, submission_from_row,
+    testcase_from_row, DatasetId, DatasetRecord, FileSkips, ReadError, ResultRecord, SubmissionId,
+    SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
+    RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
 pub use submission::{
-    accept_token, max_resources, result_by_id, token_of, Evaluation, Submission, SubmissionError,
+    accept_token, get_submission_results, get_submissions, max_resources, result_by_id, token_of,
+    Evaluation, ResultFilter, SearchError, Submission, SubmissionError, SubmissionFilter,
     SubmissionResult, SubmissionStatus, Token, TokenBudget, TokenRefusal, DELETE_EVALUATIONS,
     DELETE_EXECUTABLES, EVALUATION, EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE, INSERT_TOKEN,
     SUBMISSION, SUBMISSION_JUDGING_BY_ID, TOKEN, TOKEN_BY_SUBMISSION, TOKEN_HISTORY,

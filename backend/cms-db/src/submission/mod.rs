@@ -7,7 +7,9 @@ use crate::reads::{submission_from_row, DatasetId, DatasetRecord, SubmissionId, 
 use crate::task::{Task, TaskError};
 
 mod evaluation;
+mod filter;
 mod result;
+mod search;
 mod status;
 mod token;
 
@@ -15,7 +17,9 @@ pub use evaluation::{
     max_resources, Evaluation, DELETE_EVALUATIONS, DELETE_EXECUTABLES, EVALUATION,
     EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE,
 };
-pub use result::{result_by_id, SubmissionResult};
+pub use filter::{ResultFilter, SearchError, SubmissionFilter};
+pub use result::{get_submission_results, result_by_id, SubmissionResult};
+pub use search::get_submissions;
 pub use status::SubmissionStatus;
 pub use token::{
     accept_token, token_of, Token, TokenBudget, TokenRefusal, INSERT_TOKEN, TOKEN,
