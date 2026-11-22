@@ -96,8 +96,8 @@ pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use codename::{Codename, CodenameError};
 pub use contest::{
-    ContestWindow, Phase, TokenConfigError, TokenGrant, TokenMode, TokenModeError, TokenPolicy,
-    WindowError,
+    Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenGrant, TokenMode,
+    TokenModeError, TokenPolicy, WindowError, CONTEST,
 };
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
