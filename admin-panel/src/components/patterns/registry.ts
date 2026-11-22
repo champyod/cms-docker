@@ -37,6 +37,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/tasks/:id': 'redirect',
   '/tasks/:id/overview': 'detail',
   '/tasks/:id/datasets': 'detail',
+  '/tasks/:id/files': 'detail',
   '/tasks/:id/settings': 'settings',
   '/people/users/:id': 'redirect',
   '/evaluation/submissions/:id': 'redirect',

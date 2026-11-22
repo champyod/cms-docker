@@ -172,9 +172,10 @@ export function AttachmentsSection({ attachments, onUpload, onDeleteAttachment }
   const deleteAttachment = onDeleteAttachment ?? handleDeleteAttachment;
 
   return (
+    // Why no "Attachments" header: the detail layout's fact strip states the count and the tab rail
+    // names the tab, so the header was the same two facts again - the upload row is all that is left.
     <Card className="border-border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3"><Paperclip className="w-5 h-5 text-info" /><span className="font-bold text-foreground">Attachments</span><span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{attachments.length}</span></div>
+      <div className="mb-4 flex items-center justify-end">
         <button onClick={onUpload} className="flex items-center gap-2 px-3 py-1.5 bg-info/10 text-info rounded-lg text-sm hover:bg-info/20 transition-colors"><Upload className="w-4 h-4" />Upload</button>
       </div>
       {attachments.length === 0 ? <p className="text-muted-foreground text-sm">No attachments.</p> : (

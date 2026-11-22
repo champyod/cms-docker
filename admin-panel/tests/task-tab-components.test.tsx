@@ -34,8 +34,10 @@ describe('Task tab components', () => {
 
   it('renders file empty state and upload action', () => {
     const html = renderToStaticMarkup(<TaskFilesTab data={{ taskId: 9, attachments: [], permissionKeys: ['task:read', 'attachment:read', 'attachment:create'] }} />);
-    expect(html).toContain('Attachments');
+    // Why no heading assertion: the page's fact strip states the count and the tab rail says Files.
+    expect(html).not.toContain('Attachments');
     expect(html).toContain('Upload');
+    expect(html).toContain('No attachments');
   });
 
   it('renders Task settings without unrelated relations', () => {

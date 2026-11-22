@@ -5,6 +5,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTaskFiles } from '@/lib/queries/task-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { TaskFilesTab } from '@/components/tasks/task-detail/TaskFilesTab';
 
 type TaskRouteProps = {
@@ -33,5 +34,15 @@ export default async function TaskFilesPage({ params }: TaskRouteProps): Promise
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.files');
   const data = await readRecordOrNotFound(() => getTaskFiles(taskId));
-  return <TaskFilesTab data={data} />;
+  return (
+    <DetailPage
+      // The record shell above renders the task's name, its trail and its tabs; the rail says Files,
+      // so this page states how many files the task carries and leaves the list to the tab.
+      ownsHeader={false}
+      title={`Task #${data.taskId}`}
+      facts={[{ term: 'Attachments', value: String(data.attachments.length) }]}
+    >
+      <TaskFilesTab data={data} />
+    </DetailPage>
+  );
 }

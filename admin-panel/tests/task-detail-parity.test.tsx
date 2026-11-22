@@ -108,7 +108,7 @@ describe('task detail parity', () => {
         data={{ taskId: 9, attachments: [{ id: 5, filename: 'harness.zip' }], permissionKeys: ['task:read', 'attachment:read'] }}
       />,
     );
-    expect(html).toContain('Attachments');
+    expect(html).not.toContain('Attachments');
     expect(html).toContain('Upload');
     expect(html).toContain('harness.zip');
     expect(html).toContain('Delete attachment');
