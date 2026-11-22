@@ -38,15 +38,9 @@ const overviewTask = {
 };
 
 describe('task detail parity', () => {
-  // Why a literal and not a provider: the page resolves the affordance label and
-  // hands it down as a typed prop, so these renders stay bare and still exercise
-  // the section's real contract.
-  const DOCS_LINK_LABEL = 'View Documentation';
-
-  it('renders overview config, statements, and statement upload/delete controls', () => {
+  it('renders statements, and leaves the config to the layout fact strip', () => {
     const html = renderToStaticMarkup(
       <TaskOverviewTab
-        docsLinkLabel={DOCS_LINK_LABEL}
         data={{
           task: overviewTask,
           statements: [{ id: 11, language: 'en', digest: 'abc123', filename: 'en.pdf', size: 1024, uploadedAt: null }],
@@ -54,7 +48,7 @@ describe('task detail parity', () => {
         }}
       />,
     );
-    expect(html).toContain('Configuration');
+    expect(html).not.toContain('Configuration');
     expect(html).toContain('Statements');
     expect(html).toContain('Upload Statement');
     expect(html).toContain('/api/statements/abc123');
@@ -64,7 +58,6 @@ describe('task detail parity', () => {
   it('renders datasets with testcase, activate, clone, rename, autojudge, delete, and bulk controls', () => {
     const html = renderToStaticMarkup(
       <TaskDatasetsTab
-        docsLinkLabel={DOCS_LINK_LABEL}
         data={{
           taskId: 9,
           activeDatasetId: 3,
@@ -115,7 +108,7 @@ describe('task detail parity', () => {
         data={{ taskId: 9, attachments: [{ id: 5, filename: 'harness.zip' }], permissionKeys: ['task:read', 'attachment:read'] }}
       />,
     );
-    expect(html).toContain('Attachments');
+    expect(html).not.toContain('Attachments');
     expect(html).toContain('Upload');
     expect(html).toContain('harness.zip');
     expect(html).toContain('Delete attachment');
@@ -146,9 +139,10 @@ describe('task detail parity', () => {
         }}
       />,
     );
-    expect(html).toContain('Task Settings');
-    expect(html).toContain('Score Mode');
-    expect(html).toContain('Edit Task');
+    expect(html).not.toContain('Task Settings');
+    expect(html).toContain('Score mode');
+    // Why: the write lives in the record shell's single edit action, so the group holds no second button.
+    expect(html).not.toContain('Edit Task');
     expect(html).not.toContain('Statements');
     expect(html).not.toContain('Datasets');
     expect(html).not.toContain('Attachments');

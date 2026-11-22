@@ -1,18 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2, Globe, Lock } from 'lucide-react';
+import { Database, CheckCircle, Copy, Edit, ToggleLeft, ToggleRight, TestTube, Plus, Trash2, Upload, Paperclip, Settings2, Globe, Lock } from 'lucide-react';
 import { Card } from '@/components/core/Card';
 import { Button } from '@/components/core/Button';
 import { RowActions, type RowAction } from '@/components/core/RowActions';
-import { SectionCard } from '@/components/core/SectionCard';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
-import { buildRoute } from '@/lib/navigation/routes';
-import type { Dictionary } from '@/lib/dictionary';
 
 interface Dataset {
   id: number;
@@ -30,8 +26,6 @@ interface Dataset {
 interface DatasetsSectionProps {
   datasets: Dataset[];
   activeDatasetId: number | null;
-  expanded: boolean;
-  onToggle: () => void;
   onCreate: () => void;
   onEdit: (ds: Dataset) => void;
   onActivate: (id: number) => void;
@@ -42,9 +36,6 @@ interface DatasetsSectionProps {
   onOpenTestcaseUpload: (id: number) => void;
   onDeleteTestcase: (id: number) => void;
   onTogglePublic: (id: number) => void;
-  locale: string;
-  /** The affordance label for the docs link, not the documentation's own name. */
-  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
 }
 
 // Why one builder per dataset: the cluster is a permission-shaped list, and
@@ -76,8 +67,6 @@ interface DatasetHandlers {
 export function DatasetsSection({
   datasets,
   activeDatasetId,
-  expanded,
-  onToggle,
   onCreate,
   onEdit,
   onActivate,
@@ -88,25 +77,14 @@ export function DatasetsSection({
   onOpenTestcaseUpload,
   onDeleteTestcase,
   onTogglePublic,
-  locale,
-  docsLinkLabel,
 }: DatasetsSectionProps): React.JSX.Element {
   const handlers: DatasetHandlers = { onEdit, onActivate, onClone, onRename, onToggleAutojudge, onDelete };
   return (
-    <SectionCard
-      className="border-border"
-      title="Datasets"
-      icon={<Database className="w-5 h-5 text-warning" />}
-      count={datasets.length}
-      expanded={expanded}
-      onToggle={onToggle}
-      actions={
-        <Link href={`${buildRoute(locale, 'system.docs')}#datasets`} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={docsLinkLabel}>
-          <HelpCircle className="w-4 h-4" />
-        </Link>
-      }
-    >
-      <div className="p-4 pt-0">
+    // Why no section header: the detail layout's fact strip already says which task this is and how
+    // many datasets it holds, so a collapsible "Datasets" card repeated both the page title and the
+    // count - and collapsed away the only content the tab has.
+    <Card className="p-4">
+      <div>
         <div className="mb-4">
           <button onClick={onCreate} className="flex items-center gap-2 px-3 py-1.5 bg-warning/10 text-warning rounded-lg text-sm hover:bg-warning/20 transition-colors">
             <Plus className="w-4 h-4" />
@@ -170,7 +148,7 @@ export function DatasetsSection({
             ))}
           </div>
         </div>
-    </SectionCard>
+    </Card>
   );
 }
 
@@ -194,9 +172,10 @@ export function AttachmentsSection({ attachments, onUpload, onDeleteAttachment }
   const deleteAttachment = onDeleteAttachment ?? handleDeleteAttachment;
 
   return (
+    // Why no "Attachments" header: the detail layout's fact strip states the count and the tab rail
+    // names the tab, so the header was the same two facts again - the upload row is all that is left.
     <Card className="border-border p-4">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3"><Paperclip className="w-5 h-5 text-info" /><span className="font-bold text-foreground">Attachments</span><span className="text-xs bg-accent px-2 py-0.5 rounded-full text-muted-foreground">{attachments.length}</span></div>
+      <div className="mb-4 flex items-center justify-end">
         <button onClick={onUpload} className="flex items-center gap-2 px-3 py-1.5 bg-info/10 text-info rounded-lg text-sm hover:bg-info/20 transition-colors"><Upload className="w-4 h-4" />Upload</button>
       </div>
       {attachments.length === 0 ? <p className="text-muted-foreground text-sm">No attachments.</p> : (

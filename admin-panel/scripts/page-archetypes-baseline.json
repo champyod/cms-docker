@@ -1,8 +1,5 @@
 {
   "undeclared": [
-    "/contests/:id/communications",
-    "/contests/:id/countdown",
-    "/evaluation/submissions/:id/logs",
     "/infrastructure/containers",
     "/infrastructure/deployments",
     "/infrastructure/resources",
@@ -19,11 +16,6 @@
     "/system/backup-restore",
     "/system/docs",
     "/system/maintenance",
-    "/tasks/:id",
-    "/tasks/:id/datasets",
-    "/tasks/:id/files",
-    "/tasks/:id/overview",
-    "/tasks/:id/settings",
     "/teams/:id"
   ]
 }

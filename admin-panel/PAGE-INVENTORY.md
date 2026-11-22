@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **0 of 0 pages documented.**
+Inventory: **32 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -16,8 +16,8 @@ Inventory: **0 of 0 pages documented.**
 | `/administration/groups` | list | groups with name, description, seeded flag and the number of permissions each holds · sort · per-row edit and delete · create · what empty means. No filter and no total: the read returns every group in one pass, so there is nothing narrower to filter to and nothing left out to count |
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
-| `/contests/:id/communications` | detail | — *to inventory* |
-| `/contests/:id/countdown` | detail | — *to inventory* |
+| `/contests/:id/communications` | board | the announcements published to this contest, each with author and time, its delete and its own empty meaning · the questions contestants asked, each with its asker, time, reply state, reply and ignore actions, and its own empty meaning · publish an announcement · a failed read instead of an empty section |
+| `/contests/:id/countdown` | detail | the zone the contest's times are read in · when it starts, stops and when its analysis window opens and closes, each in that zone · the live clock counting to the next of those moments, with its stage |
 | `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
 | `/contests/:id/participants` | board | the people and teams in this contest, with their team, unrestricted and hidden state · per-row mark as test, settings and remove · add a participant or a whole team · the registration roster: which teams registration offers, each row's state and its own empty meaning · read-only when team:update is absent |
 | `/contests/:id/ranking` | board | the contest's standings: every participant's rank, username, score per task and total · the progress graph over the first twenty · what empty means (the table says no submissions yet) |
@@ -28,7 +28,7 @@ Inventory: **0 of 0 pages documented.**
 | `/evaluation/submissions/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/evaluation/submissions/:id/evaluation` | detail | how many testcases were evaluated and how many failed · each testcase's verdict, time and memory, expandable to its input, expected output and the submission's output, or to the reason those bytes are withheld |
 | `/evaluation/submissions/:id/history` | detail | who made the latest recorded change, what it was and when · every recorded change, with its actor, action, result, reason and time, newest first, or what empty means · a failed read instead of an empty list |
-| `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
+| `/evaluation/submissions/:id/logs` | detail | the compilation outcome that produced this output, and how many lines it runs to · the compiler's output as one stream, stdout and stderr included, or what empty means |
 | `/evaluation/submissions/:id/results` | detail | how many datasets were judged and how many compilations failed · each dataset's score, compilation outcome, evaluation outcome, time, memory, public score and when it was scored · the stored files, each downloadable · what empty means |
 | `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |
 | `/infrastructure/containers` | list | — *to inventory* |
@@ -63,11 +63,11 @@ Inventory: **0 of 0 pages documented.**
 | `/system/maintenance` | settings | — *to inventory* |
 | `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | tasks with id, name, title, the contests they belong to, resources and submission count · filter, with sort · how many match against the whole set, paged · per-row edit and delete · assign and unassign the checked rows, edit their limits · create · what empty means |
-| `/tasks/:id` | detail | — *to inventory* |
-| `/tasks/:id/datasets` | detail | — *to inventory* |
-| `/tasks/:id/files` | detail | — *to inventory* |
-| `/tasks/:id/overview` | detail | — *to inventory* |
-| `/tasks/:id/settings` | settings | — *to inventory* |
+| `/tasks/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
+| `/tasks/:id/datasets` | detail | how many datasets the task holds, which one is live and how many testcases they carry · each dataset's type, limits and score type, with make-live, clone, rename, autojudge, settings and delete · its testcases, each with its public state and delete · what empty means · add a dataset, and bulk-upload testcases into one |
+| `/tasks/:id/files` | detail | how many files the task carries · each attachment's filename, downloadable, with delete · what empty means · upload one |
+| `/tasks/:id/overview` | detail | the task's score mode, feedback level, score precision and submission count · each statement's language, file, size and upload day, each downloadable and deletable · upload a statement |
+| `/tasks/:id/settings` | settings | the score mode, feedback level, score precision and token mode the task holds · who a change to them reaches · where the edit that writes them lives |
 | `/teams/:id` | detail | — *to inventory* |
 
 ## How a row is finished

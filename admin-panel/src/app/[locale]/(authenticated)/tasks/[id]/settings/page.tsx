@@ -5,6 +5,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTaskSettings } from '@/lib/queries/task-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { SettingsPage } from '@/components/patterns/SettingsPage';
 import { TaskSettingsTab } from '@/components/tasks/task-detail/TaskSettingsTab';
 
 type TaskRouteProps = {
@@ -33,5 +34,23 @@ export default async function TaskSettingsPage({ params }: TaskRouteProps): Prom
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.settings');
   const data = await readRecordOrNotFound(() => getTaskSettings(taskId));
-  return <TaskSettingsTab data={data} />;
+  return (
+    <SettingsPage
+      // The record shell above renders the task's name, its trail and its tabs.
+      ownsHeader={false}
+      title={data.task.title}
+      groups={[
+        {
+          key: 'task',
+          title: 'Task Settings',
+          description: 'How this task scores a submission, and what it tells the contestant who sent it.',
+          // The values below reach the contestant side and the judge, never another operator's
+          // screen, so the group says so before a reader changes one.
+          scope: 'Every contestant of this task, and the evaluator that scores them.',
+          children: <TaskSettingsTab data={data} />,
+        },
+      ]}
+    />
+  );
 }
+

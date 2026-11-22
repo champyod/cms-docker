@@ -1,9 +1,8 @@
 'use client';
 
 import { useCallback, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
-import { HelpCircle, Settings, FileText, Trash2, Upload } from 'lucide-react';
+import { FileText, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/core/Button';
 import { SectionCard } from '@/components/core/SectionCard';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
@@ -12,47 +11,9 @@ import { apiClient } from '@/lib/apiClient';
 import { useConfirm } from '@/hooks/useConfirm';
 import { useFormatDay, type TimestampFormatter } from '@/components/layout/TimezoneProvider';
 import { useTaskConfirmationCopy, useTaskTabRefresh } from './task-detail/useTaskTabRefresh';
-import { buildRoute } from '@/lib/navigation/routes';
 import { withBasePath } from '@/lib/base-path';
-import type { Dictionary } from '@/lib/dictionary';
 import { cn } from '@/lib/utils';
 
-interface TaskDetailConfigProps {
-  task: { score_precision: number; score_mode: string; feedback_level: string; _count: { submissions: number } };
-  expanded: boolean;
-  onToggle: () => void;
-  locale: string;
-  /** The affordance label for the docs link, not the documentation's own name. */
-  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
-}
-
-function DocsLink({ href, label }: { href: string; label: string }): React.JSX.Element {
-  return (
-    <Link href={href} className="p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-foreground" title={label}>
-      <HelpCircle className="w-4 h-4" />
-    </Link>
-  );
-}
-
-export function ConfigSection({ task, expanded, onToggle, locale, docsLinkLabel }: TaskDetailConfigProps): React.JSX.Element {
-  return (
-    <SectionCard
-      className="border-border"
-      title="Configuration"
-      icon={<Settings className="w-5 h-5 text-primary" />}
-      expanded={expanded}
-      onToggle={onToggle}
-      actions={<DocsLink href={`${buildRoute(locale, 'system.docs')}#task-types`} label={docsLinkLabel} />}
-    >
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Precision</label><div className="text-foreground text-sm">{task.score_precision}</div></div>
-        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Score Mode</label><div className="text-foreground text-sm capitalize">{task.score_mode.replace(/_/g, ' ')}</div></div>
-        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Feedback</label><div className="text-foreground text-sm capitalize">{task.feedback_level.replace(/_/g, ' ')}</div></div>
-        <div className="bg-muted/30 p-3 rounded-lg border border-border"><label className="block text-xs font-bold text-muted-foreground uppercase mb-1">Submissions</label><div className="text-foreground text-sm">{task._count.submissions}</div></div>
-      </div>
-    </SectionCard>
-  );
-}
 
 interface StatementRow {
   id: number;
