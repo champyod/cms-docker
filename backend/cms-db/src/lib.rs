@@ -147,7 +147,8 @@ pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
 pub use submission::{
-    accept_token, max_resources, result_by_id, token_of, Evaluation, Submission, SubmissionError,
+    accept_token, get_submission_results, get_submissions, max_resources, result_by_id, token_of,
+    Evaluation, ResultFilter, SearchError, Submission, SubmissionError, SubmissionFilter,
     SubmissionResult, SubmissionStatus, Token, TokenBudget, TokenRefusal, DELETE_EVALUATIONS,
     DELETE_EXECUTABLES, EVALUATION, EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE, INSERT_TOKEN,
     SUBMISSION, SUBMISSION_JUDGING_BY_ID, TOKEN, TOKEN_BY_SUBMISSION, TOKEN_HISTORY,

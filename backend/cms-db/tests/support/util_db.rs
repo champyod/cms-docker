@@ -104,10 +104,12 @@ const TABLES: &[&str] = &[
         task_type varchar NOT NULL DEFAULT 'Batch')",
     "CREATE TEMP TABLE submissions (
         id integer PRIMARY KEY,
+        opaque_id bigint NOT NULL DEFAULT 0,
         task_id integer NOT NULL REFERENCES tasks (id) ON DELETE CASCADE,
         participation_id integer NOT NULL REFERENCES participations (id) ON DELETE CASCADE,
         timestamp timestamp NOT NULL DEFAULT '2026-01-01',
         language varchar,
+        comment varchar NOT NULL DEFAULT '',
         official boolean NOT NULL DEFAULT true)",
     "CREATE TEMP TABLE submission_results (
         submission_id integer NOT NULL REFERENCES submissions (id) ON DELETE CASCADE,
