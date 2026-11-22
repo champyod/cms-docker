@@ -8,6 +8,8 @@ import { getTeamMembers } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { hasEffectivePermission } from '@/lib/permission-engine';
 import { prisma } from '@/lib/prisma';
+import { Text } from '@/components/core/Typography';
+import { formatCount } from '@/lib/format-number';
 import { ListPage } from '@/components/patterns/ListPage';
 import { TeamMembersEmpty, TeamMembersTab } from '@/components/teams/TeamMembersTab';
 
@@ -42,13 +44,12 @@ export default async function TeamMembersPage({ params }: { params: Promise<{ lo
   const label = dictionary.navigation.people['team-tabs'].members.label;
   return (
     <ListPage
-      // The record shell above renders the team's name, the trail and the tabs.
+      // The team's record shell renders this tab's name, the team, the trail and the tab rail.
       ownsHeader={false}
-      title={label}
       // Why the total sits in the footer and not beside the filter: the filter narrows the rows,
       // and a count that moved with it would answer "how many matched" when the question a roster
       // asks first is "how many members does this team have".
-      footer={<p className="text-sm text-muted-foreground">{`${label} (${members.length})`}</p>}
+      footer={<Text variant="muted">{`${formatCount(members.length, locale)} ${label}`}</Text>}
       empty={members.length === 0
         ? (
           <TeamMembersEmpty
