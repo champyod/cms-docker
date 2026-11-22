@@ -191,9 +191,10 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-svc-host` | `32db4b41` | `cargo test -p cms-svc` → 25 passed; parent's own mutation of `connection.rs:76` (`Send::Dropped` → `Flow::Continue`) failed `refusals::a_request_without_an_id_closes_the_connection_without_a_reply`, exit 101, then restored byte-identical | `578c743d` |
 | 2026-11-22 | `feat/rust-logservice` | `e9158035` | `cargo test -p cms-svc` → 42 passed; parent's own mutation of `recent.rs:12` (`CAPACITY` 100 → 99) failed `log::sink::tests::a_hundred_and_one_warnings_keep_the_newest_hundred_in_order` with left 99 / right 100, exit 101, then restored byte-identical | `57f5be26` |
 | 2026-11-22 | `feat/rust-logsvc-bin` | `cd5b6a13` | `cargo test -p cms-svc` → 45 passed; `bash scripts/__test_config_sync.sh` → 24 passed; parent's own mutation (fail-open `required()`) failed the two startup tests in 5.02s, exit 101, restored byte-identical after the parent bounded `run_with` with a watchdog | `4d7a8bad` |
+| 2026-11-22 | `feat/rust-svc-surface` | `cc92e0ff` | `cargo test -p cms-svc` → 57 passed; parent's own mutation of `inflight.rs` (condvar loop removed) failed **no** test, so the parent added the missing in-crate assertion; the same mutation now fails at 4.141µs, exit 101 | `9bf7953c` |
 
-Gate on the tree after all five merges (`4d7a8bad`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 68 test binaries, 360 passed,
+Gate on the tree after all six merges (`9bf7953c`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 68 test binaries, 372 passed,
 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 24 passed, exit 0; `bash
 scripts/__check_agent_protocol.sh` → exit 0. Serial because the parallel run hits the pre-existing
 `ETXTBSY` race on `backend/target/tmp/**/isolate` (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) —
