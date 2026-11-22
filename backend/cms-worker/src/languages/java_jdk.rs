@@ -12,8 +12,7 @@ use super::words;
 pub struct JavaJdk;
 
 const SOURCES: &[&str] = &[".java"];
-/// A jar, because `USE_JAR` is true in the reference; the zip it can build
-/// instead, and the unzip before a run, are not ported with it.
+/// A jar, because `USE_JAR` is true there; its zip branch and the unzip are not.
 const EXECUTABLE: &str = ".jar";
 const COMPILER: &str = "/usr/bin/javac";
 const RUNTIME: &str = "/usr/bin/java";
@@ -46,16 +45,14 @@ impl Toolchain for JavaJdk {
     ) -> Vec<Vec<String>> {
         let mut compile = words(&[COMPILER]);
         compile.extend(sources.iter().cloned());
-        // The name is quoted because this string is a shell command, not an argv:
-        // an unquoted one with a space is two words to `jar`, and the submission
-        // then cannot compile for a reason nothing in the box explains.
+        // The name is quoted because /bin/sh reads this string, not an argv: a
+        // filename with a space would otherwise reach jar as two words.
         let script = format!("jar cf {} *.class", escape(Cow::Borrowed(executable)));
         vec![compile, words(&[SHELL, "-c", &script])]
     }
 
-    /// The jar is the class path and `main` is the class inside it, so the run
-    /// needs both; the JVM is also told it is evaluating, and bounded in heap and
-    /// stack so a submission cannot take the box down before the limits do.
+    /// The jar is the class path and `main` the class inside it, so a run needs
+    /// both, and the heap and stack are bounded before the limits have to be.
     fn evaluation_commands(
         &self,
         executable: &str,

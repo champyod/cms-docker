@@ -8,8 +8,7 @@ use super::words;
 pub struct PascalFpc;
 
 const SOURCES: &[&str] = &[".pas"];
-/// A unit is found by a file ending in `lib.pas`, which is an extension with no
-/// leading dot and so is spelled exactly as the reference spells it.
+/// A unit is found by a file ending in `lib.pas`: an extension with no leading dot.
 const HEADERS: &[&str] = &["lib.pas"];
 const OBJECTS: &[&str] = &[".o"];
 const COMPILER: &str = "/usr/bin/fpc";

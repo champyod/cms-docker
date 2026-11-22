@@ -34,8 +34,7 @@ impl Toolchain for HaskellGhc {
         _for_evaluation: bool,
     ) -> Vec<Vec<String>> {
         let mut commands = Vec::new();
-        // ghc finds a module by the file named after it, and a module name starts
-        // in upper case, so every source but the entry point is linked under one.
+        // ghc finds a module by the file named after it, and module names start in upper case.
         for source in sources.iter().skip(1) {
             let mut link = words(&[LINK, "-s"]);
             link.push(basename(source));

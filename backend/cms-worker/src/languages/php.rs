@@ -11,8 +11,7 @@ const SOURCES: &[&str] = &[".php"];
 const INTERPRETER: &str = "/usr/bin/php";
 /// The staged file is the program, copied under the executable's name.
 const COPY: &str = "/bin/cp";
-/// A compilation that has nothing to do is still a command, so it is charged and
-/// appears in the report like any other.
+/// A compilation with nothing to do is still a command, so it is charged anyway.
 const NOTHING: &str = "/bin/true";
 
 impl Toolchain for Php {

@@ -38,8 +38,7 @@ impl Toolchain for Python3Pypy {
         let mut packaged = Vec::new();
         for (index, source) in sources.iter().enumerate() {
             let compiled = format!("{}.pyc", stem(source));
-            // Same contract as CPython's: the entry point becomes the file the zip
-            // is run by, and every other module keeps its own name.
+            // The entry point is the file the zip is run by, so only it is renamed.
             if index == 0 {
                 commands.push(words(&["/bin/mv", &compiled, MAIN]));
                 packaged.push(MAIN.to_owned());

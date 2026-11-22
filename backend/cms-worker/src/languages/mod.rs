@@ -22,6 +22,7 @@ mod cpp20_gpp;
 mod csharp_mono;
 mod haskell_ghc;
 mod java_jdk;
+mod lookup;
 mod pascal_fpc;
 mod php;
 mod python3_cpython;
@@ -36,6 +37,9 @@ pub use cpp20_gpp::Cpp20Gpp;
 pub use csharp_mono::CSharpMono;
 pub use haskell_ghc::HaskellGhc;
 pub use java_jdk::JavaJdk;
+pub use lookup::{
+    describe, filename_to_language, get_language, is_multithreaded, safe_get_lang_filename,
+};
 pub use pascal_fpc::PascalFpc;
 pub use php::Php;
 pub use python3_cpython::Python3Cpython;

@@ -7,15 +7,13 @@ use super::words;
 /// C++11, as the g++ of the machine compiles it.
 pub struct Cpp11Gpp;
 
-/// Five extensions, because a contestant may submit any of them; the first is
-/// the one CMS names a rewritten codename by.
+/// Five extensions a contestant may submit; the first names a rewritten codename.
 const SOURCES: &[&str] = &[".cpp", ".cc", ".cxx", ".c++", ".C"];
 const HEADERS: &[&str] = &[".h"];
 const OBJECTS: &[&str] = &[".o"];
-/// Every flag the compilation carries before the output file, whose own two
-/// words follow them.
+/// Every flag before the output file, whose own two words follow them.
 const FLAGS: &[&str] = &["-std=gnu++11", "-O2", "-pipe", "-static", "-s", "-o"];
-/// The compiler the reference names by its full path, as every toolchain here does.
+/// The compiler by its full path, as every toolchain here names it.
 const COMPILER: &str = "/usr/bin/g++";
 const EVAL: &str = "-DEVAL";
 

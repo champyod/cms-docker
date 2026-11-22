@@ -10,14 +10,11 @@ pub struct C11Gcc;
 const SOURCES: &[&str] = &[".c"];
 const HEADERS: &[&str] = &[".h"];
 const OBJECTS: &[&str] = &[".o"];
-/// Every flag the compilation carries before the output file, whose own two
-/// words follow them.
+/// Every flag before the output file, whose own two words follow them.
 const FLAGS: &[&str] = &["-std=gnu11", "-O2", "-pipe", "-static", "-s", "-o"];
-/// The compiler the reference names by its full path, so a box with a short PATH
-/// still compiles, and so the argv a test pins is the argv the box runs.
+/// The compiler by its full path, so a short PATH cannot pick a different one.
 const COMPILER: &str = "/usr/bin/gcc";
-/// What a compilation the judge runs defines, so a grader can tell it is being
-/// compiled for evaluation rather than for the contestant's own build.
+/// What a compilation the judge runs defines, and no other compilation sees.
 const EVAL: &str = "-DEVAL";
 
 impl Toolchain for C11Gcc {
