@@ -1,6 +1,7 @@
 import { getRankingOverrideOptions } from '@/app/actions/ranking';
 import { getShownTargetChoices, getShownTargets } from '@/app/actions/rankingConfig';
 import { getRankingOverrides, type RankingOverride } from '@/app/actions/rankingOverrides';
+import { Text } from '@/components/core/Typography';
 import { BoardPage, type BoardSection } from '@/components/patterns/BoardPage';
 import { RankingConfigSurface } from '@/components/ranking/RankingConfigSurface';
 import { RankingHidesList } from '@/components/ranking/RankingHidesList';
@@ -115,11 +116,10 @@ export default async function RankingOverridesPage({
   if (shard === null) {
     return (
       <BoardPage
-        // The module shell above renders the title, the description and the trail.
+        // The ranking module shell renders this page's name, description and trail from the
+        // navigation registry. With no shard there is nothing to lay out, so the state is the page.
         ownsHeader={false}
-        title={dict.navigation.ranking.users.label}
-        description={dict.navigation.ranking.users.description}
-        state={<p className="text-sm text-muted-foreground">{dict.ranking.overrides.noShards}</p>}
+        state={<Text variant="muted">{dict.ranking.overrides.noShards}</Text>}
         sections={[]}
       />
     );
@@ -174,10 +174,8 @@ export default async function RankingOverridesPage({
 
   return (
     <BoardPage
-      // The module shell above renders the title, the description and the trail.
+      // The ranking module shell renders this page's name, description and trail.
       ownsHeader={false}
-      title={dict.navigation.ranking.users.label}
-      description={dict.navigation.ranking.users.description}
       sections={sections}
     />
   );
