@@ -6,6 +6,8 @@
 //! `window`; the token configuration and its check constraints live in `token`
 //! and `model` carries the row that ties them together.
 
+mod token;
 mod window;
 
+pub use token::{TokenConfigError, TokenGrant, TokenMode, TokenModeError, TokenPolicy};
 pub use window::{ContestWindow, Phase, WindowError};
