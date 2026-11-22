@@ -214,6 +214,15 @@ AES but have no bcrypt at all; hand-writing either is the thing the quality bar 
 merged (`2f1337db`) and S-4 merged behind it (`6eaedd21`), which unblocks **S-3** (`cms.db`, 6,816
 lines) — the largest remaining slice, and the one everything else in the service tier waits on.
 
+**This landing branch is shared with a frontend writer (observed 2026-11-22).** `60eb668d`
+("feat(patterns): five page archetypes…", author another Hermes session, 15:55) sits on
+`feat/rust-trunk-reconcile` above `cb4b6a3c`, and two `admin-panel/` files were left modified in this
+worktree at the same time. Its scope is frontend-only — `git show --name-only 60eb668d` lists nothing
+under `backend/`, `src/`, `scripts/` or `dev/` — so it does not endanger the port and is left untouched,
+per the rule that another writer's work is read-only. Recorded because it means a merge from this lane
+carries frontend commits too: read `git log <base>..feat/rust-trunk-reconcile --name-only` before
+describing a merge as backend-only.
+
 Notable in the S-2a port: the padding is **not** PKCS#7 — one `0x01` byte then `0x00` to the block
 (`crypto.rs:18`), with the strip reproducing `pt_pad.rstrip(b"\x00")[:-1]`. That is also why the `cbc`
 crate was not used: its padding traits describe a scheme this data never used, so chaining is done over
