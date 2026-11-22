@@ -176,7 +176,7 @@ describe('the list bulk bars open the same dialog on the checked rows', () => {
     render(
       withDictionary(
         <DeployContestProvider>
-          <ContestList initialContests={[CONTEST]} totalPages={1} permissionKeys={['contest:update']} />
+          <ContestList initialContests={[CONTEST]} permissionKeys={['contest:update']} />
         </DeployContestProvider>,
       ),
     );

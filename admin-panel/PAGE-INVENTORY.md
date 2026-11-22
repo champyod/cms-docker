@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **9 of 59 pages documented.**
+Inventory: **14 of 59 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -14,7 +14,7 @@ Inventory: **9 of 59 pages documented.**
 | `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
-| `/contests` | list | state of the contest service · contests with state, window and age · count against total · filter · per-row actions · create |
+| `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | detail | contest identity and state · window and rule facts · participants and tasks it owns · actions · change history |
 | `/contests/:id/communications` | detail | — *to inventory* |
 | `/contests/:id/countdown` | detail | — *to inventory* |
