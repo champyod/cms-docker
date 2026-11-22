@@ -75,7 +75,7 @@ const problems = [];
 // Ceilings are overridable so a fixture can prove the ratchet fails when a page adds one back.
 const ceiling = (prop, fallback) => Number(process.env[`SHELL_DEBT_${prop.toUpperCase()}`] ?? fallback);
 const SHELL_OWNED_PROPS = [
-  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 30) },
+  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 29) },
   { prop: 'description', pattern: /ownsHeader=\{false\}[^>]*description=/s, ceiling: ceiling('description', 2) },
 ];
 const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]));

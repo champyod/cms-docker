@@ -44,7 +44,6 @@ export default async function TaskOverviewPage({ params }: TaskRouteProps): Prom
       // The record shell above renders the task's name, its trail and its tabs, and the tab rail
       // already says Overview, so this page adds only the values and the statements under them.
       ownsHeader={false}
-      title={data.task.title}
       facts={[
         { term: 'Score mode', value: humanize(data.task.score_mode) },
         { term: 'Feedback', value: humanize(data.task.feedback_level) },
