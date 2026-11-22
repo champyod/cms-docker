@@ -171,6 +171,12 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: LogService
       SERVICE_SHARD: ${LOG_SERVICE_SHARD:-0}
+      # The Rust logger reads its inputs from the environment, not from cms.toml:
+      # no TOML parser is in the backend lock, so `config sync` renders these three
+      # from the same file and compose substitutes them here.
+      LOG_SERVICE_ADDR: ${LOG_SERVICE_ADDR}
+      LOG_DIR: ${LOG_DIR}
+      RPC_SECRET: ${RPC_SECRET}
     ports:
       - "${INNER_IP:-127.0.0.1}:29000:29000"
     volumes:
@@ -183,9 +189,9 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/LogService-${LOG_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             wait-for-it database:5432 -t 60 -- cmsLogService ${LOG_SERVICE_SHARD:-0}"
+             wait-for-it database:5432 -t 60 -- cms-log-service"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsLogService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 29000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cms-log-service && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 29000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
