@@ -272,6 +272,33 @@ Unit note carried into the port: cpu times are clock ticks and converting them n
 percentages from **deltas** between two samples, where the constant cancels — but `resident` is reported
 absolutely and must be converted to bytes.
 
+### 7.4 `ResourceService` — split in two, and the matcher it changes (2026-11-22)
+
+The service is 481 lines and mixes two different risk classes, so it is two epics:
+
+1. **read-only half** — `_store_resources` (306-398), `get_resources` (402-419), `toggle_autorestart`
+   (447-481), and `ProcessMatcher._is_interesting_command_line` (119-159). Samples and reports; starts
+   nothing.
+2. **supervision half** — `_restart_services` (211-...), `_launched_processes`, `subprocess.Popen`, and
+   `kill_service` (423-445), which makes an RPC call to another service. **This one starts processes**,
+   so it gets its own gate and its own negative control.
+
+**The finding that makes this more than a transcription:** `_is_interesting_command_line` recognises a
+service only as a **Python** command line — it requires `"python" in cmdline[start_index]` and then
+matches `^<BIN_PATH>/cms([a-zA-Z]+)$` against the next argument. Every Rust service is a binary like
+`cms-log-service`, so a faithful port would find **nothing**, and during the transition both kinds run.
+The port must therefore carry the Python rule *and* add the binary rule, or the first swapped service
+silently vanishes from `get_resources` — the panel would show it as not running while it serves happily.
+
+Checked, and confined here: no other code identifies services by command line. The `cmdline` matches
+elsewhere are `cmscommon/commands.pretty_print_cmdline` (formatting) and `src/setup.py:121-125` (the
+Python entrypoint list, which disappears with the tree).
+
+Exact shapes the port must reproduce, because they are not symmetric in the original:
+`memory` values are **float** divisions by `B_TO_MB = 1_048_576` (line 49, 341-348), while
+`resident`/`virtual` are **integer** divisions (374-375). `ram_available` is the reader's **free**
+bytes, not `available` (342). Retention is `MAX_RESOURCE_SECONDS = 11 * 60` (51).
+
 ### 7.1 First service swap completed — the logger (2026-11-22)
 
 `log-service` in `docker-compose.yml` now runs `cms-log-service`. This is the first W-B swap and the
