@@ -13,7 +13,7 @@
 
 use std::fs;
 
-use cms_worker::sandbox::ArchiveError;
+use cms_worker::stage::ArchiveError;
 
 #[path = "sandbox_archive_helpers.rs"]
 mod support;
@@ -32,7 +32,7 @@ fn the_archive_is_a_gzip_stream_filed_under_a_digest() {
     let wide = sandbox.home().join(REPETITIVE_NAME);
     fs::write(&wide, &repetitive).expect("the wide file must be writable");
 
-    let digest = sandbox.archive(&stage).expect("the directory is there");
+    let digest = stage.archive(&sandbox).expect("the directory is there");
 
     assert_eq!(digest.as_str().len(), 40, "a digest is forty characters");
     assert!(lowercase_hex(digest.as_str()), "a digest is lowercase hex");
@@ -50,8 +50,8 @@ fn the_archive_is_a_gzip_stream_filed_under_a_digest() {
 fn a_directory_archived_twice_is_filed_under_the_same_digest() {
     let (sandbox, stage, _cache) = box_with_output("twice");
 
-    let first = sandbox.archive(&stage).expect("the first pack");
-    let second = sandbox.archive(&stage).expect("the second pack");
+    let first = stage.archive(&sandbox).expect("the first pack");
+    let second = stage.archive(&sandbox).expect("the second pack");
 
     assert_eq!(first, second, "nothing changed, so the digest is the same");
 }
@@ -61,8 +61,8 @@ fn a_directory_that_is_not_there_is_a_named_refusal_and_nothing_is_filed() {
     let (sandbox, stage, cache) = box_with_output("missing");
     fs::remove_dir_all(sandbox.home()).expect("the run's own directory must go");
 
-    let refused = sandbox
-        .archive(&stage)
+    let refused = stage
+        .archive(&sandbox)
         .expect_err("a missing dir cannot pack");
 
     assert!(
@@ -79,8 +79,8 @@ fn a_file_where_the_packed_copy_goes_is_refused_rather_than_overwritten() {
     let owned = b"the run's own file";
     fs::write(&taken, owned).expect("the file must be writable");
 
-    let refused = sandbox
-        .archive(&stage)
+    let refused = stage
+        .archive(&sandbox)
         .expect_err("an archive must not overwrite it");
 
     assert!(

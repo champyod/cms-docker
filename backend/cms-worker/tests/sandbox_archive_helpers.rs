@@ -70,7 +70,7 @@ pub fn box_with_output(test: &str) -> (Sandbox, Stage, PathBuf) {
 
 /// The archive a sandbox packed and the store took, read back through the store.
 pub fn pack(sandbox: &Sandbox, stage: &Stage, cache: &Path) -> Vec<u8> {
-    let digest = sandbox.archive(stage).expect("the directory is there");
+    let digest = stage.archive(sandbox).expect("the directory is there");
     filed(cache, &digest)
 }
 

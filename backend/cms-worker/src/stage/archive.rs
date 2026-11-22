@@ -33,8 +33,8 @@ use flate2::write::GzEncoder;
 use flate2::Compression;
 use tar::Builder;
 
-use super::Sandbox;
-use crate::stage::{FileDigest, Stage, StageError};
+use super::{FileDigest, Stage, StageError};
+use crate::sandbox::Sandbox;
 
 /// The name the packed archive is written under where the store can reach it.
 ///
@@ -69,8 +69,10 @@ pub enum ArchiveError {
     },
 }
 
-impl Sandbox {
+impl Stage {
     /// Archives the run's own directory and files it in the store.
+    ///
+    /// The stage writes and files; the sandbox owns only the directory, so the pack belongs here.
     ///
     /// The digest is a SHA-1 over the packed archive, which is what every file in
     /// the store is named by, so a directory archived twice with nothing changed
@@ -83,9 +85,9 @@ impl Sandbox {
     /// for a stage or a store that refused the bytes. The store is asked last, so
     /// a refusal before it leaves nothing filed and a refusal at it leaves no
     /// archive.
-    pub fn archive(&self, stage: &Stage) -> Result<FileDigest, ArchiveError> {
-        let packed = pack(self.home())?;
-        file_in(stage, self.home(), &packed)
+    pub fn archive(&self, sandbox: &Sandbox) -> Result<FileDigest, ArchiveError> {
+        let packed = pack(sandbox.home())?;
+        file_in(self, sandbox.home(), &packed)
     }
 }
 
