@@ -3,6 +3,10 @@ name = "cms-svc"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "cms-log-service"
+path = "src/bin/cms-log-service.rs"
+
 [dependencies]
 backon = { workspace = true }
 cms-proto = { path = "../cms-proto" }
