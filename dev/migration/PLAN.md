@@ -341,6 +341,22 @@ and the five `compile_*` → replaced by the frozen DDL, because with the schema
 there is nothing left for a DDL compiler to emit. Four are deliberately unported (the two interactive
 prompts, `test_db_connection`, `custom_psycopg2_connection`).
 
+### Working rules binding every step (operator's standing instruction)
+
+These govern how this migration is driven, not what it builds. They were each broken once in this session and
+each broke something:
+
+1. **One question per form.** Never batch several decisions into one call, even when they are independent and
+   each answers by a click. A `clarify` call carries exactly one question, whose choices are readable on their
+   own — no "option 1", no pointer to a file, a key or a paragraph above.
+2. **A timeout is a wait, never an answer.** Re-issue the same question verbatim until it is answered. Do not
+   re-decide whether to ask, do not narrow the choice to the part that looks like code, and never treat a
+   keystroke or a silence as consent. If the eventual answer differs from what was already built, change the
+   build.
+3. **Never skip a decision.** No decision is closed by an argument that it was really mine; the classification
+   of a decision is itself a decision for the operator when it concerns dependencies, hosts, schemas or
+   anything one `git revert` cannot undo.
+
 **Confirmed decision (operator, 2026-11-22): the schema gate keeps option 1** — `pg_dump` from the
 `postgres:15` image it already pins, docker on the machine that runs the test, nothing installed on the host.
 Chosen over installing `postgresql-client-15` (a manual step no install or update script performs, and one
