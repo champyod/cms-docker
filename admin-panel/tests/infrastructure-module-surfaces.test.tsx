@@ -6,9 +6,11 @@ function readSource(relativePath: string): string {
   return fs.readFileSync(path.resolve(__dirname, '..', relativePath), 'utf8');
 }
 
+// Why the surfaces and not the pages: each panel is the client body a page's layout slots render,
+// and the header it must not draw belongs to the module shell above both of them.
 const PANEL_PATHS = [
-  'src/components/deployments/DeploymentsClient.tsx',
-  'src/components/containers/ContainersClient.tsx',
+  'src/components/deployments/DeploymentsSurface.tsx',
+  'src/components/containers/ContainersSurface.tsx',
   'src/components/resources/ResourceView.tsx',
   'src/components/ranking/RankingLogoCard.tsx',
 ] as const;

@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **0 of 0 pages documented.**
+Inventory: **34 of 56 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|

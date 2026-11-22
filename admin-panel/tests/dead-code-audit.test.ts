@@ -108,7 +108,7 @@ describe('final dead-code audit', () => {
     const controllerOwners = containerSources.filter((file) =>
       /import\s+\{[^}]*useContainersController/.test(readFileSync(file, 'utf8')),
     );
-    expect(controllerOwners).toEqual(['src/components/containers/ContainersClient.tsx']);
+    expect(controllerOwners).toEqual(['src/components/containers/ContainersSurface.tsx']);
   });
 
   it('uses no native confirm or alert anywhere in the panel', () => {
