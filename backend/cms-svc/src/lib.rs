@@ -36,10 +36,11 @@
 mod connector;
 mod host;
 mod log;
+pub mod service;
 
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,
     PeerState, ReconnectNotice, Send,
 };
-pub use host::{DuplicateMethod, Host, HostError, Registry};
+pub use host::{DuplicateMethod, Host, HostError, Registry, RunOutcome, Stop};
 pub use log::{FormatterSettings, LogError, LogService, Record, RecordError};

@@ -12,6 +12,7 @@ use cms_proto::Method;
 use super::formatter::FormatterSettings;
 use super::handlers;
 use super::sink::Sink;
+use crate::service;
 
 /// The directory the service keeps its log files in, under the one it is given.
 const LOG_DIRECTORY: &str = "cms";
@@ -48,21 +49,21 @@ impl LogService {
         Ok(Self { log_path })
     }
 
-    /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind).
+    /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind), the base ones first.
     #[must_use]
     pub fn methods(&self) -> Vec<Method> {
-        vec![
-            Method {
-                name: LOG_METHOD,
-                is_callable: true,
-                handler: handlers::log_method,
-            },
-            Method {
-                name: LAST_MESSAGES_METHOD,
-                is_callable: true,
-                handler: handlers::last_messages_method,
-            },
-        ]
+        let mut methods = service::methods();
+        methods.push(Method {
+            name: LOG_METHOD,
+            is_callable: true,
+            handler: handlers::log_method,
+        });
+        methods.push(Method {
+            name: LAST_MESSAGES_METHOD,
+            is_callable: true,
+            handler: handlers::last_messages_method,
+        });
+        methods
     }
 
     /// The file the service is writing to, which is what `last.log` points at.

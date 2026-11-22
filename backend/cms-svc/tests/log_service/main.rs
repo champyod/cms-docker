@@ -1,32 +1,47 @@
-//! The binary's input handling: every variable it cannot invent, it refuses, naming it.
+//! The logger binary as a process: what it refuses at startup, and what `quit` asks of it.
+
+mod quit;
+mod startup;
 
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Child, Command, ExitStatus, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
+
+use serde_json::{json, Value};
 
 /// The binary under test, built by cargo for this test target.
 const BINARY: &str = env!("CARGO_BIN_EXE_cms-log-service");
 
-/// How long a process that should refuse to start is given before it is killed.
-const STARTUP_DEADLINE: Duration = Duration::from_secs(5);
+/// How long a process that should finish, start or stop, is given before it is killed.
+const DEADLINE: Duration = Duration::from_secs(5);
 
 /// How often the watchdog checks whether the process has exited.
 const POLL_INTERVAL: Duration = Duration::from_millis(25);
+
+/// How long a client waits before it calls the service unresponsive.
+const REPLY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The line the binary prints once it is serving, with the address it bound after it.
+const LISTENING: &str = "cms-log-service listening on ";
+
+/// The secret every invocation here is configured with.
+const SECRET: &str = "5f2c8d0e1a4b7c9d2e3f4a5b6c7d8e9f";
 
 const ADDRESS_VARIABLE: &str = "LOG_SERVICE_ADDR";
 const SECRET_VARIABLE: &str = "RPC_SECRET";
 const LOG_DIR_VARIABLE: &str = "LOG_DIR";
 
 /// A scratch log directory removed when the test ends.
-struct Sandbox {
+pub(crate) struct Sandbox {
     path: PathBuf,
 }
 
 impl Sandbox {
-    fn new(label: &str) -> Self {
+    pub(crate) fn new(label: &str) -> Self {
         let path =
             std::env::temp_dir().join(format!("cms-log-service-{}-{label}", std::process::id()));
         let _ = fs::remove_dir_all(&path);
@@ -41,7 +56,7 @@ impl Drop for Sandbox {
 }
 
 /// A child killed when the test ends, so a failed assertion leaves no listener behind.
-struct Running(Child);
+pub(crate) struct Running(Child);
 
 impl Drop for Running {
     fn drop(&mut self) {
@@ -54,10 +69,7 @@ impl Drop for Running {
 fn complete(sandbox: &Sandbox) -> Vec<(&'static str, String)> {
     vec![
         (ADDRESS_VARIABLE, "127.0.0.1:0".to_owned()),
-        (
-            SECRET_VARIABLE,
-            "5f2c8d0e1a4b7c9d2e3f4a5b6c7d8e9f".to_owned(),
-        ),
+        (SECRET_VARIABLE, SECRET.to_owned()),
         (
             LOG_DIR_VARIABLE,
             sandbox.path.to_string_lossy().into_owned(),
@@ -86,12 +98,7 @@ fn supplied(
 }
 
 /// Runs the binary to completion with exactly these variables and nothing inherited.
-///
-/// Bounded on purpose: a binary that wrongly keeps serving never exits, and an
-/// unbounded `output()` would turn that regression into a hung test suite
-/// instead of a failure naming the variable. The watchdog kills it after
-/// [`STARTUP_DEADLINE`] so the assertion runs on a real exit.
-fn run_with(variables: &[(&'static str, String)]) -> Output {
+pub(crate) fn run_with(variables: &[(&'static str, String)]) -> Output {
     let mut command = Command::new(BINARY);
     command.env_clear();
     for (name, value) in variables {
@@ -102,20 +109,8 @@ fn run_with(variables: &[(&'static str, String)]) -> Output {
         .stderr(Stdio::piped())
         .spawn()
         .expect("the binary this build produced runs");
-    let started = Instant::now();
     let mut child = child;
-    loop {
-        match child.try_wait().expect("the binary can be polled") {
-            Some(_) => break,
-            None if started.elapsed() > STARTUP_DEADLINE => {
-                child
-                    .kill()
-                    .expect("a binary that outlived its startup deadline can be killed");
-                break;
-            }
-            None => thread::sleep(POLL_INTERVAL),
-        }
-    }
+    wait_with_deadline(&mut child);
     child
         .wait_with_output()
         .expect("the output of a finished binary can be read")
@@ -138,51 +133,85 @@ fn spawn_with(variables: &[(&'static str, String)]) -> Running {
     )
 }
 
-#[test]
-fn a_missing_variable_stops_the_process_and_is_named() {
-    let sandbox = Sandbox::new("missing");
-    for absent in [ADDRESS_VARIABLE, SECRET_VARIABLE, LOG_DIR_VARIABLE] {
-        let output = run_with(&supplied(&sandbox, absent, None));
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            !output.status.success(),
-            "{absent} unset must not start the service, stdout: {}",
-            String::from_utf8_lossy(&output.stdout)
-        );
-        assert!(
-            stderr.contains(absent),
-            "the refusal must name {absent}, got: {stderr}"
-        );
+/// Waits for the process, killing it at the deadline so a regression fails instead of hanging the suite.
+fn wait_with_deadline(child: &mut Child) -> ExitStatus {
+    let started = Instant::now();
+    loop {
+        match child.try_wait().expect("the binary can be polled") {
+            Some(status) => return status,
+            None if started.elapsed() > DEADLINE => {
+                child
+                    .kill()
+                    .expect("a binary that outlived its deadline can be killed");
+                return child.wait().expect("a killed binary can be reaped");
+            }
+            None => thread::sleep(POLL_INTERVAL),
+        }
     }
 }
 
-#[test]
-fn a_blank_variable_is_refused_like_a_missing_one() {
-    let sandbox = Sandbox::new("blank");
-    let output = run_with(&supplied(&sandbox, SECRET_VARIABLE, Some("   ")));
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(!output.status.success(), "a blank secret must not start it");
-    assert!(
-        stderr.contains(SECRET_VARIABLE),
-        "the refusal must name {SECRET_VARIABLE}, got: {stderr}"
-    );
-}
-
-#[test]
-fn the_service_binds_and_reports_the_address_it_bound() {
-    let sandbox = Sandbox::new("bound");
-    let mut running = spawn_with(&supplied(&sandbox, ADDRESS_VARIABLE, Some("127.0.0.1:0")));
+/// Starts the binary on an ephemeral port and reads the address it reports, so a test talks to a real listener.
+pub(crate) fn started(sandbox: &Sandbox) -> (Running, SocketAddr) {
+    let mut running = spawn_with(&supplied(sandbox, ADDRESS_VARIABLE, Some("127.0.0.1:0")));
     let stdout = running.0.stdout.take().expect("stdout is piped");
     let mut reported = String::new();
     BufReader::new(stdout)
         .read_line(&mut reported)
         .expect("the bound address is readable on stdout");
-    assert!(
-        reported.starts_with("cms-log-service listening on 127.0.0.1:"),
-        "the address it bound must be reported, got: {reported:?}"
-    );
-    assert!(
-        !reported.trim_end().ends_with(":0"),
-        "the port the kernel picked must be the one reported, got: {reported:?}"
-    );
+    let address = reported
+        .trim_end()
+        .strip_prefix(LISTENING)
+        .unwrap_or_else(|| panic!("the service must report its address, got: {reported:?}"));
+    let addr = address
+        .parse()
+        .expect("the reported address is a socket address");
+    (running, addr)
+}
+
+/// Waits for the process to exit and returns its status with everything it wrote to stderr.
+pub(crate) fn finish(mut running: Running) -> (ExitStatus, String) {
+    let status = wait_with_deadline(&mut running.0);
+    let mut stderr = String::new();
+    if let Some(mut pipe) = running.0.stderr.take() {
+        pipe.read_to_string(&mut stderr)
+            .expect("the stderr of an exited process is readable");
+    }
+    (status, stderr)
+}
+
+/// Connects to the service with a deadline on every read, so a missing reply fails instead of hanging.
+pub(crate) fn connect(addr: SocketAddr) -> TcpStream {
+    let stream = TcpStream::connect(addr).expect("the service is listening");
+    stream
+        .set_read_timeout(Some(REPLY_TIMEOUT))
+        .expect("a read deadline can be set on the test socket");
+    stream
+}
+
+/// Sends one call and reads the one reply it is owed.
+pub(crate) fn call(stream: &mut TcpStream, id: &str, method: &str, data: Value) -> Value {
+    let envelope = json!({
+        "__id": id,
+        "__method": method,
+        "__data": data,
+        "__secret": SECRET,
+    });
+    let mut framed = serde_json::to_vec(&envelope).expect("an envelope is JSON");
+    framed.extend_from_slice(b"\r\n");
+    stream
+        .write_all(&framed)
+        .expect("the service reads this connection");
+    let mut received = Vec::new();
+    while !received.ends_with(b"\r\n") {
+        let mut byte = [0_u8; 1];
+        match stream.read(&mut byte) {
+            Ok(0) => panic!(
+                "the connection closed after {} bytes, before a whole reply",
+                received.len()
+            ),
+            Ok(_) => received.push(byte[0]),
+            Err(error) => panic!("no reply arrived: {error}"),
+        }
+    }
+    serde_json::from_slice(&received[..received.len() - 2]).expect("the reply is JSON")
 }

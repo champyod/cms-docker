@@ -5,7 +5,7 @@ use std::net::TcpStream;
 
 use cms_proto::{encode, Frame, Framer, Response};
 
-use super::Registry;
+use super::{InFlight, Registry};
 use crate::{of_dispatch, of_frame, Send};
 
 /// Bytes asked of the socket per read, so a whole call usually arrives at once.
@@ -19,7 +19,7 @@ enum Flow {
 }
 
 /// Serves one connection until the peer closes it or a message ends it.
-pub(super) fn serve(mut stream: TcpStream, registry: &Registry) {
+pub(super) fn serve(mut stream: TcpStream, registry: &Registry, answers: &InFlight) {
     let mut framer = Framer::default();
     let mut chunk = [0_u8; READ_CHUNK];
     loop {
@@ -31,6 +31,8 @@ pub(super) fn serve(mut stream: TcpStream, registry: &Registry) {
             Err(error) if error.kind() == ErrorKind::Interrupted => continue,
             Err(_) => return,
         };
+        // WHY: counted only while a frame is answered, so a stop is not held by a connection reading.
+        let _answer_in_flight = answers.guard();
         if converse(&mut stream, &mut framer, &chunk[..read], registry) == Flow::Close {
             return;
         }
