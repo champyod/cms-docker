@@ -1,9 +1,6 @@
 //! The RPC surface every service inherits, composed onto the table it adds itself.
 //!
-//! `Service` in Python puts four methods on every subclass. Two of them,
-//! `start_backdoor` and `stop_backdoor`, are refused by the gate in `cms-proto`
-//! before dispatch and need no handler here; `echo` and `quit` do, and a service
-//! that composes [`methods`] gets them without declaring either name.
+//! `start_backdoor` and `stop_backdoor` need no entry here: the gate refuses them before dispatch.
 
 use std::sync::{Mutex, MutexGuard};
 

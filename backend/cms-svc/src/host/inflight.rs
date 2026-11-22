@@ -2,10 +2,7 @@
 
 use std::sync::{Condvar, Mutex, PoisonError};
 
-/// How many frames are being answered right now.
-///
-/// Only a frame handed to `converse` counts, never the blocking read before it: an
-/// idle connection holds nothing, which is what lets a stop come back while one is open.
+/// Counted for frames being answered only, so a connection blocked in `read` never holds a stop.
 #[derive(Debug, Default)]
 pub(super) struct InFlight {
     count: Mutex<usize>,

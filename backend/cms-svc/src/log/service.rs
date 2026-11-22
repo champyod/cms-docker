@@ -49,11 +49,7 @@ impl LogService {
         Ok(Self { log_path })
     }
 
-    /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind).
-    ///
-    /// The base methods come first, composed rather than declared: a service that
-    /// forgot `echo` or `quit` would not be manageable by the tooling every other
-    /// service is managed by.
+    /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind), the base ones first.
     #[must_use]
     pub fn methods(&self) -> Vec<Method> {
         let mut methods = service::methods();
