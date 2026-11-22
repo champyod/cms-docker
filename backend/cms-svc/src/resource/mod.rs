@@ -88,15 +88,15 @@ pub struct ProcessFacts {
 pub enum ReadError {
     /// The process vanished, `psutil.NoSuchProcess`; the caller skips it rather than failing.
     NotFound,
-    /// Any other `/proc` failure: denied, malformed, or the filesystem is gone.
-    Failed(procfs::ProcError),
+    /// Any other failure: denied, malformed, or the filesystem is gone.
+    Failed(Box<dyn std::error::Error + Send + Sync>),
 }
 
 impl fmt::Display for ReadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotFound => formatter.write_str("process is gone"),
-            Self::Failed(error) => write!(formatter, "cannot read /proc: {error}"),
+            Self::Failed(error) => write!(formatter, "cannot read process facts: {error}"),
         }
     }
 }
@@ -105,7 +105,7 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::NotFound => None,
-            Self::Failed(error) => Some(error),
+            Self::Failed(error) => Some(error.as_ref()),
         }
     }
 }
@@ -116,7 +116,7 @@ impl From<procfs::ProcError> for ReadError {
         // failure is a real error and must not be mistaken for "gone".
         match error {
             procfs::ProcError::NotFound(_) => Self::NotFound,
-            other => Self::Failed(other),
+            other => Self::Failed(Box::new(other)),
         }
     }
 }
