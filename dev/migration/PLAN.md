@@ -339,6 +339,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | crate (ARCHITECTURE.md) | contents | state |
 |---|---|---|
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
+| S-5h parameters | value validation at construction; the silent not-grader fallback | **merged** `c908c696` |
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
