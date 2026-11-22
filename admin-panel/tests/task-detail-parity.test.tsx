@@ -145,9 +145,10 @@ describe('task detail parity', () => {
         }}
       />,
     );
-    expect(html).toContain('Task Settings');
-    expect(html).toContain('Score Mode');
-    expect(html).toContain('Edit Task');
+    expect(html).not.toContain('Task Settings');
+    expect(html).toContain('Score mode');
+    // Why: the write lives in the record shell's single edit action, so the group holds no second button.
+    expect(html).not.toContain('Edit Task');
     expect(html).not.toContain('Statements');
     expect(html).not.toContain('Datasets');
     expect(html).not.toContain('Attachments');

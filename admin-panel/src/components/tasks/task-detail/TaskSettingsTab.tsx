@@ -1,50 +1,28 @@
-'use client';
-
-import { Settings } from 'lucide-react';
-import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
-import { hasEffectivePermission } from '@/lib/permission-engine';
+import { DefinitionEntry } from '@/components/core/DefinitionEntry';
 import type { TaskSettingsData } from '@/lib/queries/task-detail';
-import { TaskModal } from '../TaskModal';
-import { useTaskSettingsState } from './useTaskSettingsState';
 
 export type TaskSettingsTabProps = { data: TaskSettingsData };
 
+/** One wording for the underscore-separated enum values this group reports. */
+function humanize(value: string): string {
+  return value.replace(/_/g, ' ');
+}
+
+/**
+ * The value each setting the group lists holds right now.
+ *
+ * Why the values and not an edit button: the record shell above already offers "Edit Task", which
+ * opens exactly the dialog this tab used to open, so the second identical button was one action drawn
+ * twice. The group says what each value means; the write goes through the record's one action.
+ */
 export function TaskSettingsTab({ data }: TaskSettingsTabProps): React.JSX.Element {
-  const state = useTaskSettingsState();
-  // Why: the settings reader carries only task:read — without task:update
-  // the edit affordance never appears and the record stays read-only.
-  const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'task:update');
   return (
-    <div className="space-y-6">
-      <Card className="border-border p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <Settings className="h-5 w-5 text-primary" />
-            <span className="font-bold text-foreground">Task Settings</span>
-          </div>
-          {canEdit && (
-            <Button variant="positiveOutline" icon={Settings} onClick={state.open}>
-              Edit Task
-            </Button>
-          )}
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <div className="rounded-lg border border-border bg-muted/30 p-3"><label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">Score Mode</label><div className="text-sm capitalize text-foreground">{data.task.score_mode.replace(/_/g, ' ')}</div></div>
-          <div className="rounded-lg border border-border bg-muted/30 p-3"><label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">Feedback</label><div className="text-sm capitalize text-foreground">{data.task.feedback_level.replace(/_/g, ' ')}</div></div>
-          <div className="rounded-lg border border-border bg-muted/30 p-3"><label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">Score Precision</label><div className="text-sm text-foreground">{data.task.score_precision ?? '-'}</div></div>
-          <div className="rounded-lg border border-border bg-muted/30 p-3"><label className="mb-1 block text-xs font-bold uppercase text-muted-foreground">Token Mode</label><div className="text-sm capitalize text-foreground">{data.task.token_mode.replace(/_/g, ' ')}</div></div>
-        </div>
-      </Card>
-      {state.isOpen && (
-        <TaskModal
-          isOpen
-          onClose={state.close}
-          task={data.task}
-          onSuccess={state.refresh}
-          permissionKeys={data.permissionKeys}
-        />
-      )}
-    </div>
+    <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <DefinitionEntry term="Score mode" value={humanize(data.task.score_mode)} />
+      <DefinitionEntry term="Feedback" value={humanize(data.task.feedback_level)} />
+      {/* Why the missing mark: a null precision is a task that never set one, not a 0. */}
+      <DefinitionEntry term="Score precision" value={data.task.score_precision === null ? '—' : String(data.task.score_precision)} />
+      <DefinitionEntry term="Token mode" value={humanize(data.task.token_mode)} />
+    </dl>
   );
 }
