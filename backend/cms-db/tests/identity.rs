@@ -1,12 +1,15 @@
-//! The identity rows: their declarations, and the credential they hold.
+//! The identity rows: their declarations, the credential they hold, and the
+//! block ledger.
 //!
 //! The password checks are the ones a login makes: a built hash verifies, a
 //! legacy `plaintext:` row never does, and a participation's own password
-//! replaces the user's for that contest. Nothing opens a connection.
+//! replaces the user's for that contest. The admin checks are the login pair and
+//! the wildcard rule. Nothing opens a connection.
 
 use cms_db::{
-    hash_password, resolve, Admin, Bcrypt, BcryptVerifier, Codename, Interval, Participation,
-    PasswordForm, PermissionInputs, User, ADMIN, PARTICIPATION, USER, WILDCARD_PERMISSION,
+    hash_password, resolve, Admin, Bcrypt, BcryptVerifier, Codename, ColumnKind, Interval,
+    Participation, PasswordForm, PermissionInputs, SecurityBlock, User, ADMIN, PARTICIPATION,
+    SECURITY_BLOCK, USER, WILDCARD_PERMISSION,
 };
 
 /// A verifier that proves a path never reached bcrypt.
@@ -184,4 +187,40 @@ fn a_plaintext_admin_row_never_authenticates() {
     );
 
     assert!(!admin.authenticates("let me in", &Bcrypt));
+}
+
+#[test]
+fn the_security_block_table_validates_and_keys_on_kind_address_and_subject() {
+    assert_eq!(SECURITY_BLOCK.validate(), Ok(()));
+
+    let id = SECURITY_BLOCK
+        .columns
+        .first()
+        .expect("a table declares its key");
+    assert_eq!(id.kind, ColumnKind::BigInteger);
+    assert!(id.primary_key && id.has_default);
+    assert!(SECURITY_BLOCK.relationships.is_empty());
+
+    let at = chrono::DateTime::from_timestamp(0, 0)
+        .expect("the epoch is in range")
+        .naive_utc();
+    let block = SecurityBlock {
+        id: 1,
+        kind: "login".to_string(),
+        source: "cms-web".to_string(),
+        ip: Some("203.0.113.9".to_string()),
+        subject: Some("ada".to_string()),
+        detail: Some("{}".to_string()),
+        started_at: at,
+        expires_at: None,
+        ended_at: None,
+        ended_by: Some(4),
+        active: true,
+        created_at: at,
+    };
+
+    assert_eq!(
+        block.identity(),
+        ("login", Some("203.0.113.9"), Some("ada"))
+    );
 }

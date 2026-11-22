@@ -76,6 +76,7 @@ mod grants;
 mod interval;
 mod permission;
 mod reads;
+mod security_block;
 mod session;
 mod types;
 mod user;
@@ -109,6 +110,7 @@ pub use reads::{
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
     DATASET_BY_ID, RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
+pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
 };
