@@ -17,7 +17,15 @@ need no Node at build, and `make icons-check` fails when any of them drifts from
 | `logo-mono-dark.svg` | One-ink lockup for light backgrounds. |
 | `logo-mono-light.svg` | One-ink lockup for dark backgrounds. |
 
-Brand colours: indigo `#6366F1`, ink `#18181B`, muted `#71717A`, MWIT yellow `#FACC15`.
+Brand colours: maroon `#7A2439`, ink `#1C1B1F`, muted `#5D5F65`, white `#FFFFFF`.
+
+The mark is **two colours only** — a maroon hexagon and a white glyph, with the `S` filament in the
+glyph colour so it stays visible (in the old yellow it would read as the `warning` status colour the
+admin panel now reserves). On a dark surface the mark inverts to a `#F8ACB7` badge with a `#7A2439`
+glyph, because the maroon badge alone measures 1.84:1 against `#171613`.
+
+The glyph is centred on its **ink mass**, not its bounding box: at the old offset the box looked
+centred while the mass sat 10.6 units high, which read as floating.
 
 ## Derive the icons
 

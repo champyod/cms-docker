@@ -2,10 +2,10 @@
   <g transform="translate(2,20) scale(0.7)">
     <polygon points="64,6 114,35 114,93 64,122 14,93 14,35" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="12" stroke-linejoin="round"/>
     <g transform="translate(64,58) scale(1.15) translate(-64,-58)">
-      <path d="M 53.2,73.31 A 23,23 0 1 1 74.8,73.31" fill="none" stroke="#18181B" stroke-width="11" stroke-linecap="round"/>
-      <path d="M 58,81 H 70" fill="none" stroke="#18181B" stroke-width="6" stroke-linecap="round"/>
-      <path d="M 59.5,88.5 H 68.5" fill="none" stroke="#18181B" stroke-width="5" stroke-linecap="round"/>
-      <path d="M 71,47 C 71,42 57,42 57,48 C 57,53.5 73,52.5 73,58 C 73,64 59,64 59,59" fill="none" stroke="#18181B" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 53.2,73.31 A 23,23 0 1 1 74.8,73.31" fill="none" stroke="#1C1B1F" stroke-width="11" stroke-linecap="round"/>
+      <path d="M 58,81 H 70" fill="none" stroke="#1C1B1F" stroke-width="6" stroke-linecap="round"/>
+      <path d="M 59.5,88.5 H 68.5" fill="none" stroke="#1C1B1F" stroke-width="5" stroke-linecap="round"/>
+      <path d="M 71,47 C 71,42 57,42 57,48 C 57,53.5 73,52.5 73,58 C 73,64 59,64 59,59" fill="none" stroke="#1C1B1F" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
     </g>
   </g>
 <path d="M122.97 63.79V38.41L129.18 32.2H147.648L153.75 38.302V44.08H146.406V41.001999999999995L143.868 38.464H133.068L130.314 41.218V60.982L133.068 63.736H143.868L146.406 61.198V58.120000000000005H153.75V63.897999999999996L147.648 70.0H129.18ZM157.84 63.79V38.41L164.05 32.2H182.518L188.62 38.302V44.08H181.276V41.001999999999995L178.738 38.464H167.93800000000002L165.184 41.218V60.982L167.93800000000002 63.736H178.738L181.276 61.198V58.120000000000005H188.62V63.897999999999996L182.518 70.0H164.05Z" fill="#FFFFFF"/>
