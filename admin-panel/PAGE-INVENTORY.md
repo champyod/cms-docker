@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **20 of 57 pages documented.**
+Inventory: **21 of 57 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -27,7 +27,7 @@ Inventory: **20 of 57 pages documented.**
 | `/evaluation/submissions` | list | submissions with id, time, submitter and contest, task, language, judging status and score · filter by contest, task, user or free text, with sort · how many match against the whole set, paged · per-row view, rejudge and official toggle · bulk rescore, official and comment over the checked rows or the whole filtered set · live refresh · what empty means |
 | `/evaluation/submissions/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/evaluation/submissions/:id/evaluation` | detail | how many testcases were evaluated and how many failed · each testcase's verdict, time and memory, expandable to its input, expected output and the submission's output, or to the reason those bytes are withheld |
-| `/evaluation/submissions/:id/history` | detail | — *to inventory* |
+| `/evaluation/submissions/:id/history` | detail | who made the latest recorded change, what it was and when · every recorded change, with its actor, action, result, reason and time, newest first, or what empty means · a failed read instead of an empty list |
 | `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/results` | detail | how many datasets were judged and how many compilations failed · each dataset's score, compilation outcome, evaluation outcome, time, memory, public score and when it was scored · the stored files, each downloadable · what empty means |
 | `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |

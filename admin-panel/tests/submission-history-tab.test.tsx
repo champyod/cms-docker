@@ -24,17 +24,16 @@ const ENTRY: SubmissionHistoryEntry = {
 function renderTab(history: SubmissionHistoryResult): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
-      <SubmissionHistoryTab submissionId={19} history={history} />
+      <SubmissionHistoryTab history={history} />
     </DictionaryProvider>,
   );
   return container;
 }
 
 describe('SubmissionHistoryTab', () => {
-  it('lists each recorded change under the record label with the localized field names', () => {
+  it('lists each recorded change with the localized field names', () => {
     const container = renderTab({ success: true, data: [ENTRY] });
 
-    expect(container.textContent).toContain('History — Submission #19');
     expect(container.textContent).toContain(en.submissions.record.history.actor + ': root');
     expect(container.textContent).toContain(en.submissions.record.history.action + ': submission:update');
     expect(container.textContent).toContain(en.submissions.record.history.result + ': success');
