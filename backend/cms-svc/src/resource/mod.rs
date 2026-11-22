@@ -1,12 +1,4 @@
-//! The Linux `/proc` facts the resource service reports.
-//!
-//! Everything here comes from `/proc`, so this module is Linux-only by design: the port runs on the
-//! same hosts as the Python service and no other platform can answer these questions.
-//!
-//! [`ResourceReader`] is the seam. The service will hold a `&dyn ResourceReader` (or be generic over
-//! it), so another backend can replace [`ProcReader`] without the service changing. The plain
-//! structs carry their unit in the field name: the Python consumer divides at its own edge, and a
-//! silent kB-for-bytes mistake is exactly what this layer must make impossible.
+//! Linux-only `/proc` facts for the resource service; [`ResourceReader`] is the swappable seam.
 
 mod procfs_reader;
 mod units;
@@ -133,4 +125,13 @@ impl From<procfs::ProcError> for ReadError {
 pub trait ResourceReader {
     /// Samples memory and aggregate cpu for the machine.
     fn system(&self) -> Result<SystemFacts, ReadError>;
+
+    /// Lists every pid present in `/proc`, `psutil.process_iter()`.
+    fn pids(&self) -> Result<Vec<i32>, ReadError>;
+
+    /// Reads one process, or answers [`ReadError::NotFound`] if it vanished.
+    fn process(&self, pid: i32) -> Result<ProcessFacts, ReadError>;
+
+    /// Whether the pid still belongs to the process that was read, `psutil.Process.is_running()`.
+    fn is_running(&self, process: &ProcessFacts) -> Result<bool, ReadError>;
 }

@@ -1,9 +1,10 @@
 //! The `/proc` implementation of [`ResourceReader`].
 
-use procfs::{Current, CurrentSI, KernelStats, Meminfo};
+use procfs::process::Process;
+use procfs::{Current, CurrentSI, KernelStats, Meminfo, ProcError};
 
-use super::units::ticks_to_seconds;
-use super::{CpuTimes, ReadError, ResourceReader, SystemFacts, SystemMemory};
+use super::units::{pages_to_bytes, ticks_to_seconds};
+use super::{CpuTimes, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory};
 
 /// Reads the running machine and its processes from `/proc`.
 #[derive(Debug, Clone, Copy, Default)]
@@ -23,13 +24,11 @@ impl ResourceReader for ProcReader {
         let stats = KernelStats::current()?;
         Ok(SystemFacts {
             memory: SystemMemory {
-                // WHY: procfs 0.18 multiplies meminfo's kB by 1024 while parsing, so these are
-                // already bytes; converting again would report a machine 1024 times larger.
+                // WHY: procfs 0.18 multiplies meminfo's kB by 1024 while parsing, so these are already bytes.
                 total_bytes: memory.mem_total,
                 free_bytes: memory.mem_free,
                 available_bytes: memory.mem_available.unwrap_or(0),
-                // WHY: psutil 7.2.2 counts SReclaimable as cached so `ram_cached` matches free(1);
-                // the bare Cached line understates what the kernel can reclaim.
+                // WHY: psutil 7.2.2 counts SReclaimable as cached so `ram_cached` matches free(1).
                 cached_bytes: memory.cached + memory.s_reclaimable.unwrap_or(0),
                 buffers_bytes: memory.buffers,
                 swap_total_bytes: memory.swap_total,
@@ -37,8 +36,7 @@ impl ResourceReader for ProcReader {
                 swap_used_bytes: memory.swap_total - memory.swap_free,
             },
             cpu: CpuTimes {
-                // WHY: /proc omits the fields past a kernel that predates them, and psutil reports
-                // the missing counters as zero rather than failing the whole sample.
+                // WHY: /proc omits counters an older kernel lacks, and psutil reports the missing ones as zero.
                 user: ticks_to_seconds(stats.total.user),
                 nice: ticks_to_seconds(stats.total.nice),
                 system: ticks_to_seconds(stats.total.system),
@@ -52,5 +50,63 @@ impl ResourceReader for ProcReader {
             },
             cpu_count: stats.cpu_time.len(),
         })
+    }
+
+    fn pids(&self) -> Result<Vec<i32>, ReadError> {
+        let mut pids = Vec::new();
+        for entry in procfs::process::all_processes()? {
+            match entry {
+                Ok(process) => pids.push(process.pid()),
+                // WHY: a pid can vanish between readdir and open, which psutil.process_iter() skips.
+                Err(ProcError::NotFound(_)) => {}
+                Err(error) => return Err(ReadError::from(error)),
+            }
+        }
+        Ok(pids)
+    }
+
+    fn process(&self, pid: i32) -> Result<ProcessFacts, ReadError> {
+        let process = Process::new(pid)?;
+        let stat = process.stat()?;
+        let statm = process.statm()?;
+        let status = process.status()?;
+        Ok(ProcessFacts {
+            pid,
+            cmd: process.cmdline()?,
+            user_cpu_seconds: ticks_to_seconds(stat.utime),
+            system_cpu_seconds: ticks_to_seconds(stat.stime),
+            resident_bytes: pages_to_bytes(statm.resident),
+            // WHY: /proc/<pid> turns root-owned for a non-dumpable process, so read Uid: as psutil does.
+            uid: status.ruid,
+            create_time: seconds_since_epoch(stat.starttime)?,
+        })
+    }
+
+    fn is_running(&self, process: &ProcessFacts) -> Result<bool, ReadError> {
+        let opened = match Process::new(process.pid) {
+            Ok(opened) => opened,
+            Err(error) => return alive_unless_gone(error),
+        };
+        let stat = match opened.stat() {
+            Ok(stat) => stat,
+            Err(error) => return alive_unless_gone(error),
+        };
+        // WHY: psutil's is_running compares start time, so a recycled pid is not the process that was read.
+        Ok(seconds_since_epoch(stat.starttime)? == process.create_time)
+    }
+}
+
+/// The process start time in seconds since the Unix epoch, as `psutil.Process.create_time()`.
+fn seconds_since_epoch(start_ticks: u64) -> Result<f64, ReadError> {
+    let boot_seconds = procfs::boot_time_secs()?;
+    Ok(boot_seconds as f64 + ticks_to_seconds(start_ticks))
+}
+
+/// Maps a failed inspection to psutil's answer: gone is dead, unreadable is alive, the rest is an error.
+fn alive_unless_gone(error: ProcError) -> Result<bool, ReadError> {
+    match error {
+        ProcError::NotFound(_) => Ok(false),
+        ProcError::PermissionDenied(_) => Ok(true),
+        other => Err(ReadError::from(other)),
     }
 }
