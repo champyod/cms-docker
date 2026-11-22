@@ -33,5 +33,8 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 - Debt is counted: raw controls (238), undeclared pages (75), status-colour misuse (164). Each may
   fall, never rise.
 - One writer per worktree index. A step handed to a subagent gets its own lane.
+- Every gate takes its inputs from environment variables, so a negative control can run it against a
+  throwaway fixture. A gate whose rules cannot be reached by a fixture cannot be falsified, and an
+  unfalsified gate is a claim, not a check. This was learned three times in this epic.
 - Product code carries no reference to how the work is organised: no document names, no step
   numbers, no gate talk.

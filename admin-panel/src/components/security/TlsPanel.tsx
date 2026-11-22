@@ -5,6 +5,8 @@ import { useState, useTransition } from 'react';
 import { requestCertificateRenewal, type TlsState } from '@/app/actions/securityTls';
 import { Button } from '@/components/core/Button';
 import { Card } from '@/components/core/Card';
+import { InlineAlert } from '@/components/core/InlineAlert';
+import { StatusBadge } from '@/components/core/StatusBadge';
 import { Input } from '@/components/core/Input';
 
 interface TlsPanelProps {
@@ -36,15 +38,18 @@ export function TlsPanel({ state }: TlsPanelProps): React.JSX.Element {
               <li key={lineage.lineage} className="rounded-xl border border-border p-3">
                 <p className="font-mono text-sm">{lineage.lineage}</p>
                 <p className="text-xs text-muted-foreground">{lineage.subject}</p>
-                <p className={lineage.expiresSoon ? 'mt-1 text-sm text-amber-300' : 'mt-1 text-sm text-muted-foreground'}>
+                <p className="mt-1 text-sm text-muted-foreground">
                   expires {lineage.validTo} ({lineage.daysRemaining} days)
+                  {lineage.expiresSoon && <StatusBadge status="degraded" running={0} total={0} />}
                 </p>
               </li>
             ))}
           </ul>
         )}
         {state.unreadableLineages.length > 0 && (
-          <p className="mt-3 text-sm text-amber-300">Unreadable: {state.unreadableLineages.join(', ')}</p>
+          <InlineAlert tone="warning" density="compact" className="mt-3" title="Unreadable lineages">
+            {state.unreadableLineages.join(', ')}
+          </InlineAlert>
         )}
       </Card>
 

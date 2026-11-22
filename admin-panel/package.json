@@ -11,14 +11,15 @@
     "icons": "bun run scripts/generate-icons.mts",
     "icons:check": "bun run scripts/generate-icons.mts --check",
     "test": "vitest run",
-    "design:check": "bun run design:tokens && bun run design:usage && bun run design:colour && bun run design:modes && bun run design:controls && bun run design:archetypes && bun run design:inventory",
+    "design:check": "bun run design:tokens && bun run design:usage && bun run design:colour && bun run design:modes && bun run design:controls && bun run design:archetypes && bun run design:modes-per-page && bun run design:inventory",
     "design:tokens": "bun scripts/__check_design_tokens.mjs",
     "design:controls": "bun scripts/__check_raw_controls.mjs",
     "design:archetypes": "bun scripts/__check_page_archetypes.mjs",
     "design:usage": "bun scripts/__check_style_usage.mjs",
     "design:colour": "bun scripts/__check_status_colour.mjs",
     "design:modes": "bun scripts/__check_page_modes.mjs",
-    "design:inventory": "bun scripts/__check_page_inventory.mjs"
+    "design:inventory": "bun scripts/__check_page_inventory.mjs",
+    "design:modes-per-page": "bun scripts/__check_page_modes_per_page.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
