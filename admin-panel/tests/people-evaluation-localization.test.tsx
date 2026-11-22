@@ -8,24 +8,50 @@ import th from '@/dictionaries/th.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { UserHistoryTab } from '@/components/users/UserHistoryTab';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
+import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/profile/page';
 import { UserTeamsTab } from '@/components/users/UserTeamsTab';
 import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
 import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
+import { getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import type { UserHistory, UserProfile, UserSummary } from '@/lib/people-read-model-types';
 import type { TeamContest, TeamMember, TeamSummary } from '@/lib/people-read-model-types';
 
 afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({
+  notFound: vi.fn(() => { throw new Error('NEXT_NOT_FOUND'); }),
+  redirect: vi.fn((target: string) => { throw new Error(`NEXT_REDIRECT:${target}`); }),
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), prefetch: vi.fn() }),
   usePathname: () => '/th/people/users/17/history',
   useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: vi.fn() } }));
+
+// Why the page is renderable here: its fact strip is where the profile's labels now live, so the
+// copy is pinned by rendering the page rather than the tab that used to draw the same labels.
+vi.mock('@/lib/server/authorization', () => ({
+  requirePermission: vi.fn(async () => new Set(['user:read'])),
+  AuthorizationError: class AuthorizationError extends Error {
+    readonly status: 401 | 403;
+    constructor(status: 401 | 403) {
+      super(`Unauthorized: ${status}`);
+      this.status = status;
+    }
+  },
+}));
+
+vi.mock('@/lib/people-read-models', () => ({
+  getUserProfile: vi.fn(),
+  getUserSummary: vi.fn(),
+}));
+
+vi.mock('@/i18n', () => ({
+  getDictionary: vi.fn(async (locale: string) => (locale === 'th' ? th : en)),
+}));
 
 function keyPaths(value: unknown, prefix = ''): string[] {
   if (typeof value !== 'object' || value === null) return [prefix];
@@ -103,15 +129,33 @@ describe('dictionary parity', () => {
 });
 
 describe('User record tab copy', () => {
-  it('renders Thai field labels on the profile tab', () => {
-    const body = text(
-      <UserProfileTab profile={PROFILE} summary={SUMMARY} navigation={th.navigation} copy={th.users} permissionKeys={[]} />,
-    );
+  it('renders Thai field labels on the profile page', async () => {
+    vi.mocked(getUserProfile).mockResolvedValue(PROFILE);
+    vi.mocked(getUserSummary).mockResolvedValue(SUMMARY);
 
-    expect(body).toContain(th.users.profile.username);
-    expect(body).toContain(th.users.profile.timezone);
-    expect(body).toContain(th.users.profile.savedPassword);
+    const body = text(await UserProfilePage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
+
+    for (const label of [
+      th.users.profile.name,
+      th.users.profile.email,
+      th.users.profile.timezone,
+      th.users.profile.languages,
+      th.users.profile.teams,
+    ]) {
+      expect(body).toContain(label);
+    }
+    // The values, not only the labels: a strip of five headings with nothing under them would pass
+    // a label-only check.
+    expect(body).toContain('Asia/Bangkok');
+    expect(body).toContain('THA-01');
     expect(body).not.toContain(en.users.profile.timezone);
+  });
+
+  it('renders the Thai saved-password label on the profile tab', () => {
+    const body = text(<UserProfileTab userId={SUMMARY.id} copy={th.users} permissionKeys={[]} />);
+
+    expect(body).toContain(th.users.profile.savedPassword);
+    expect(body).not.toContain(en.users.profile.savedPassword);
   });
 
   it('renders the Thai empty state on the user teams tab', () => {

@@ -43,7 +43,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/people/users/:id/history` | detail | — *to inventory* |
-| `/people/users/:id/profile` | detail | — *to inventory* |
+| `/people/users/:id/profile` | detail | the name, email, timezone, languages and teams the header does not already state · the saved password, masked until an operator who may reveal it asks |
 | `/people/users/:id/teams` | detail | — *to inventory* |
 | `/ranking` | list | — *to inventory* |
 | `/ranking/appearance` | settings | — *to inventory* |
