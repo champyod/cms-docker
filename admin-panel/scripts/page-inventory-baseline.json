@@ -27,7 +27,6 @@
     "/system/maintenance",
     "/tasks/:id/datasets",
     "/tasks/:id/files",
-    "/tasks/:id/overview",
     "/tasks/:id/settings",
     "/teams/:id"
   ]

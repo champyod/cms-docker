@@ -17,8 +17,9 @@ const task = {
 
 describe('Task tab components', () => {
   it('renders overview without a datasets property', () => {
-    const html = renderToStaticMarkup(<TaskOverviewTab docsLinkLabel="View Documentation" data={{ task, statements: [], permissionKeys: ['task:read'] }} />);
-    expect(html).toContain('Configuration');
+    const html = renderToStaticMarkup(<TaskOverviewTab data={{ task, statements: [], permissionKeys: ['task:read'] }} />);
+    // Why: the layout's fact strip carries the task's configuration, so the tab must not repeat it.
+    expect(html).not.toContain('Configuration');
     expect(html).toContain('Statements');
     expect(html).not.toContain('datasets');
   });

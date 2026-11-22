@@ -43,10 +43,9 @@ describe('task detail parity', () => {
   // the section's real contract.
   const DOCS_LINK_LABEL = 'View Documentation';
 
-  it('renders overview config, statements, and statement upload/delete controls', () => {
+  it('renders statements, and leaves the config to the layout fact strip', () => {
     const html = renderToStaticMarkup(
       <TaskOverviewTab
-        docsLinkLabel={DOCS_LINK_LABEL}
         data={{
           task: overviewTask,
           statements: [{ id: 11, language: 'en', digest: 'abc123', filename: 'en.pdf', size: 1024, uploadedAt: null }],
@@ -54,7 +53,7 @@ describe('task detail parity', () => {
         }}
       />,
     );
-    expect(html).toContain('Configuration');
+    expect(html).not.toContain('Configuration');
     expect(html).toContain('Statements');
     expect(html).toContain('Upload Statement');
     expect(html).toContain('/api/statements/abc123');

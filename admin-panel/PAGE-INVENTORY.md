@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **25 of 55 pages documented.**
+Inventory: **26 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -66,7 +66,7 @@ Inventory: **25 of 55 pages documented.**
 | `/tasks/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/tasks/:id/datasets` | detail | — *to inventory* |
 | `/tasks/:id/files` | detail | — *to inventory* |
-| `/tasks/:id/overview` | detail | — *to inventory* |
+| `/tasks/:id/overview` | detail | the task's score mode, feedback level, score precision and submission count · each statement's language, file, size and upload day, each downloadable and deletable · upload a statement |
 | `/tasks/:id/settings` | settings | — *to inventory* |
 | `/teams/:id` | detail | — *to inventory* |
 
