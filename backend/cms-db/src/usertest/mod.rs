@@ -1,0 +1,20 @@
+//! The user-test half of the database: the five tables, their name domains, and
+//! the result status the evaluator reads.
+//!
+//! `src/cms/db/usertest.py` holds `UserTest`, the two named file tables, the
+//! result keyed by test and dataset, and the executables under that result. The
+//! referential rules — the two `(user_test_id, filename)` uniques, the unique
+//! result key, and the composite foreign key from an executable to its result —
+//! are enforced in `rules`; the columns and their domains are here.
+
+mod model;
+mod name;
+mod result;
+mod schema;
+
+pub use model::{UserTest, UserTestExecutable, UserTestFile, UserTestManager};
+pub use name::{Filename, FilenameError, FilenameSchema};
+pub use result::{ResultKey, UserTestResult, UserTestStatus};
+pub use schema::{
+    USER_TEST, USER_TEST_EXECUTABLE, USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
+};

@@ -85,6 +85,7 @@ mod session;
 mod types;
 mod user;
 mod username;
+mod usertest;
 mod writes;
 
 pub use actor::{
@@ -141,6 +142,11 @@ pub use user::{Participation, User, PARTICIPATION, USER};
 pub use username::{
     resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
     CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
+};
+pub use usertest::{
+    Filename, FilenameError, FilenameSchema, ResultKey, UserTest, UserTestExecutable, UserTestFile,
+    UserTestManager, UserTestResult, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
+    USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };
 pub use writes::{
     group_by_object, AuditRow, CompilationOutcome, EvaluationOutcome, EvaluationRow, ExecutableRow,
