@@ -614,6 +614,10 @@
         "emptyDescription": "ผลของคอมไพเลอร์จะปรากฏเมื่อคอมไพล์เสร็จแล้ว",
         "title": "บันทึกการคอมไพล์ — {record} #{id}"
       },
+      "evaluation": {
+        "testcases": "เทสเคส",
+        "failed": "ไม่ผ่าน"
+      },
       "recompute": {
         "datasetLabel": "ชุดข้อมูล",
         "activeDefault": "ชุดข้อมูลหลัก"

@@ -614,6 +614,10 @@
         "emptyDescription": "Compiler output appears once the submission has been compiled.",
         "title": "Compilation Logs — {record} #{id}"
       },
+      "evaluation": {
+        "testcases": "Testcases",
+        "failed": "Failed"
+      },
       "recompute": {
         "datasetLabel": "Dataset",
         "activeDefault": "Active dataset"
