@@ -37,6 +37,11 @@
 //! byte for byte, or forgiving whitespace and nothing else. Both are pure, so a
 //! verdict is decided by the bytes a run wrote rather than by a box of their own.
 //!
+//! [`messages`] is every sentence a contestant is shown for what a run did, in the
+//! order the help page prints them, and the one table both surfaces read: a job's
+//! report names an outcome and takes its sentence from there, so a sentence with an
+//! argument cannot be handed on without one.
+//!
 //! The files a run is handed and leaves behind are where all of that starts and
 //! ends. [`stage::Stage`] creates a run's files under the modes it will use them
 //! with, refuses a path the run already has, reads a file back whole or only as
@@ -64,6 +69,7 @@
 
 pub mod job;
 pub mod languages;
+pub mod messages;
 pub mod scoretypes;
 pub mod scoring;
 pub mod stage;
