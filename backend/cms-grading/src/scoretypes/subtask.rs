@@ -23,7 +23,7 @@ use super::format::round_at;
 use super::params::GroupParameter;
 use super::submission::{Evaluated, Row, Subtask, Testcase};
 use super::Group;
-use crate::tasktypes::TIMED_OUT;
+use crate::messages::EVALUATION_MESSAGES;
 
 /// One subtask scored, with the two documents it contributes.
 pub(super) struct Detail {
@@ -90,7 +90,8 @@ impl Group {
             time: evaluated.time,
             time_limit: evaluated.time_limit,
             // Only a report of the timeout itself counts, not an argument that says it.
-            time_limit_was_exceeded: evaluated.text.len() == 1 && evaluated.text[0] == TIMED_OUT,
+            time_limit_was_exceeded: evaluated.text.len() == 1
+                && evaluated.text[0] == EVALUATION_MESSAGES.get("timeout").message().template(),
             memory: evaluated.memory,
             show_in_restricted_feedback: public,
             show_in_oi_restricted_feedback: public,
