@@ -38,11 +38,6 @@ const overviewTask = {
 };
 
 describe('task detail parity', () => {
-  // Why a literal and not a provider: the page resolves the affordance label and
-  // hands it down as a typed prop, so these renders stay bare and still exercise
-  // the section's real contract.
-  const DOCS_LINK_LABEL = 'View Documentation';
-
   it('renders statements, and leaves the config to the layout fact strip', () => {
     const html = renderToStaticMarkup(
       <TaskOverviewTab
@@ -63,7 +58,6 @@ describe('task detail parity', () => {
   it('renders datasets with testcase, activate, clone, rename, autojudge, delete, and bulk controls', () => {
     const html = renderToStaticMarkup(
       <TaskDatasetsTab
-        docsLinkLabel={DOCS_LINK_LABEL}
         data={{
           taskId: 9,
           activeDatasetId: 3,

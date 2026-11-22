@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **27 of 55 pages documented.**
+Inventory: **28 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -64,7 +64,7 @@ Inventory: **27 of 55 pages documented.**
 | `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | tasks with id, name, title, the contests they belong to, resources and submission count · filter, with sort · how many match against the whole set, paged · per-row edit and delete · assign and unassign the checked rows, edit their limits · create · what empty means |
 | `/tasks/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
-| `/tasks/:id/datasets` | detail | — *to inventory* |
+| `/tasks/:id/datasets` | detail | how many datasets the task holds, which one is live and how many testcases they carry · each dataset's type, limits and score type, with make-live, clone, rename, autojudge, settings and delete · its testcases, each with its public state and delete · what empty means · add a dataset, and bulk-upload testcases into one |
 | `/tasks/:id/files` | detail | — *to inventory* |
 | `/tasks/:id/overview` | detail | the task's score mode, feedback level, score precision and submission count · each statement's language, file, size and upload day, each downloadable and deletable · upload a statement |
 | `/tasks/:id/settings` | settings | the score mode, feedback level, score precision and token mode the task holds · who a change to them reaches · where the edit that writes them lives |

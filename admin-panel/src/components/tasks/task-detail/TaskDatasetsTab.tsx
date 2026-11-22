@@ -1,40 +1,22 @@
 'use client';
 
-import { useParams } from 'next/navigation';
 import type { TaskDatasetsData } from '@/lib/queries/task-detail';
-import type { Dictionary } from '@/lib/dictionary';
 import { DatasetModal } from '../DatasetModal';
 import { TestcaseUploadModal } from '../TestcaseUploadModal';
 import { DatasetsSection } from '../task-detail-datasets';
 import { useTaskDatasetActions } from './useTaskDatasetActions';
 import { useTaskTabRefresh } from './useTaskTabRefresh';
 
-export type TaskDatasetsTabProps = {
-  data: TaskDatasetsData;
-  /** The affordance label for the docs link, not the documentation's own name. */
-  docsLinkLabel: Dictionary['docs']['viewDocumentation'];
-};
+export type TaskDatasetsTabProps = { data: TaskDatasetsData };
 
-// Why: the tab contract carries no locale, so docs links resolve it from
-// the route — useParams is null-safe without a provider, so unit tests fall
-// back to English with no conditional hook call.
-function useTabLocale(): string {
-  const params = useParams() as { locale?: unknown } | null;
-  const candidate = params?.locale;
-  return typeof candidate === 'string' && candidate.length > 0 ? candidate : 'en';
-}
-
-export function TaskDatasetsTab({ data, docsLinkLabel }: TaskDatasetsTabProps): React.JSX.Element {
+export function TaskDatasetsTab({ data }: TaskDatasetsTabProps): React.JSX.Element {
   const actions = useTaskDatasetActions();
   const refresh = useTaskTabRefresh();
-  const locale = useTabLocale();
   return (
     <div className="space-y-6">
       <DatasetsSection
         datasets={[...data.datasets]}
         activeDatasetId={data.activeDatasetId}
-        expanded={actions.expanded}
-        onToggle={actions.toggleExpanded}
         onCreate={actions.openCreate}
         onEdit={(dataset) => actions.openEdit({
           ...dataset,
@@ -49,8 +31,6 @@ export function TaskDatasetsTab({ data, docsLinkLabel }: TaskDatasetsTabProps): 
         onOpenTestcaseUpload={(datasetId) => actions.openTestcaseUpload(datasetId)}
         onDeleteTestcase={(testcaseId) => { void actions.removeTestcase(testcaseId); }}
         onTogglePublic={(testcaseId) => { void actions.togglePublic(testcaseId); }}
-        locale={locale}
-        docsLinkLabel={docsLinkLabel}
       />
       {actions.isDatasetModalOpen && (
         <DatasetModal

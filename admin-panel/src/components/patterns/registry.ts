@@ -36,6 +36,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   // A record landing carries no surface: it resolves the record and forwards to its default tab.
   '/tasks/:id': 'redirect',
   '/tasks/:id/overview': 'detail',
+  '/tasks/:id/datasets': 'detail',
   '/tasks/:id/settings': 'settings',
   '/people/users/:id': 'redirect',
   '/evaluation/submissions/:id': 'redirect',
