@@ -243,13 +243,17 @@
       "attachCancel": "Cancel",
       "createNew": "Create new task"
     },
-    "overview": {
-      "facts": {
-        "scoreMode": "Score mode",
-        "feedback": "Feedback",
-        "scorePrecision": "Score precision",
-        "submissions": "Submissions"
-      }
+    "facts": {
+      "scoreMode": "Score mode",
+      "feedback": "Feedback",
+      "scorePrecision": "Score precision",
+      "tokenMode": "Token mode",
+      "submissions": "Submissions"
+    },
+    "settings": {
+      "title": "Task Settings",
+      "description": "How this task scores a submission, and what it tells the contestant who sent it.",
+      "scope": "Every contestant of this task, and the evaluator that scores them."
     }
   },
   "users": {

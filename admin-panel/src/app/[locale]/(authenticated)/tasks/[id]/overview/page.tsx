@@ -37,7 +37,7 @@ export default async function TaskOverviewPage({ params }: TaskRouteProps): Prom
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.overview');
   const dictionary = await getDictionary(locale);
-  const facts = dictionary.tasks.overview.facts;
+  const facts = dictionary.tasks.facts;
   const data = await readRecordOrNotFound(() => getTaskOverview(taskId));
   return (
     <DetailPage

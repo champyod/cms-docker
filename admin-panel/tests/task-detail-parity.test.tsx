@@ -117,6 +117,8 @@ describe('task detail parity', () => {
   it('renders Task settings without statement, dataset, or attachment data', () => {
     const html = renderToStaticMarkup(
       <TaskSettingsTab
+        labels={{ scoreMode: 'Score mode', feedback: 'Feedback', scorePrecision: 'Score precision', tokenMode: 'Token mode', submissions: 'Submissions' }}
+        notSet="Not set"
         data={{
           task: {
             ...overviewTask,

@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -29,25 +30,28 @@ async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> 
 }
 
 export default async function TaskSettingsPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const taskId = parseRecordId(id);
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.settings');
+  const dictionary = await getDictionary(locale);
+  const copy = dictionary.tasks.settings;
   const data = await readRecordOrNotFound(() => getTaskSettings(taskId));
   return (
     <SettingsPage
       // The record shell above renders the task's name, its trail and its tabs.
       ownsHeader={false}
-      title={data.task.title}
       groups={[
         {
           key: 'task',
-          title: 'Task Settings',
-          description: 'How this task scores a submission, and what it tells the contestant who sent it.',
+          title: copy.title,
+          description: copy.description,
           // The values below reach the contestant side and the judge, never another operator's
           // screen, so the group says so before a reader changes one.
-          scope: 'Every contestant of this task, and the evaluator that scores them.',
-          children: <TaskSettingsTab data={data} />,
+          scope: copy.scope,
+          children: (
+            <TaskSettingsTab data={data} labels={dictionary.tasks.facts} notSet={dictionary.common.notSet} />
+          ),
         },
       ]}
     />

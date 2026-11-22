@@ -41,7 +41,7 @@ describe('Task tab components', () => {
   });
 
   it('renders Task settings without unrelated relations', () => {
-    const html = renderToStaticMarkup(<TaskSettingsTab data={{ task: { ...task, allowed_languages: [], submission_format: [], token_mode: 'disabled', token_max_number: null, token_min_interval: null, token_gen_initial: null, token_gen_number: null, token_gen_interval: null, token_gen_max: null, max_submission_number: null, max_user_test_number: null, min_submission_interval: null, min_user_test_interval: null, evaluation_throttle_delay_s: null }, permissionKeys: ['task:read', 'task:update'] }} />);
+    const html = renderToStaticMarkup(<TaskSettingsTab labels={{ scoreMode: 'Score mode', feedback: 'Feedback', scorePrecision: 'Score precision', tokenMode: 'Token mode', submissions: 'Submissions' }} notSet="Not set" data={{ task: { ...task, allowed_languages: [], submission_format: [], token_mode: 'disabled', token_max_number: null, token_min_interval: null, token_gen_initial: null, token_gen_number: null, token_gen_interval: null, token_gen_max: null, max_submission_number: null, max_user_test_number: null, min_submission_interval: null, min_user_test_interval: null, evaluation_throttle_delay_s: null }, permissionKeys: ['task:read', 'task:update'] }} />);
     expect(html).not.toContain('Task Settings');
     expect(html).toContain('Score mode');
     expect(html).not.toContain('Datasets');
