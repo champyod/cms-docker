@@ -200,11 +200,22 @@ scripts/__check_agent_protocol.sh` → exit 0. Serial because the parallel run h
 recorded, not fixed. Three consecutive parallel whole-tree runs before this merge were green
 (360 passed each), so the race did not reproduce in that window.
 
-**Divergence carried by LogService, recorded rather than hidden:** `std` has no zone database, so the
-formatter prints local time only if the composition root passes the offset; the constructor default is
-UTC, which is what a container without `TZ` reports. Python uses `time.localtime`. Until the service
-binary passes the configured offset, a host with a non-zero zone logs a different clock than the
-Python service did.
+**Divergence carried by LogService — MEASURED AND WITHDRAWN (2026-11-22).** This entry first claimed the
+Rust formatter printing UTC was a behaviour change from Python's `time.localtime`, and warned that a
+non-UTC host would log a different clock. Production says otherwise, so the warning was wrong:
+
+- `ssh com-o@<prod> docker exec cms-log-service date` → `Sun Nov 22 06:42:08 UTC 2026`. The log
+  container runs in UTC: nothing in `docker-compose*.yml` or the `Dockerfile` sets `TZ`, and the base
+  image carries no zone configuration, so `time.localtime` is UTC there.
+- The container's own current log, `/var/local/log/cms/cms/1795328852.log` line 1:
+  `2026-11-22 06:27:32,291 - INFO [Log,0 Main service::run] LogService 0 up and running!` — the printed
+  clock is UTC and agrees with the file's mtime, which is what the symlink listing reports.
+
+So `FormatterSettings::UTC` reproduces the production behaviour it replaces, and no operator action is
+needed. What remains true is narrower: the offset is a constructor argument with no caller that passes
+one, so a deployment that ever moved a log container off UTC would drift silently. Recorded as a
+limitation of the setting, not as an active divergence.
+
 
 A lane is removed as soon as it is merged and its gate is green — worktree deleted, branch deleted,
 `git worktree prune`. A merged lane left on disk is 1-11 GB of build artifacts holding a branch label
