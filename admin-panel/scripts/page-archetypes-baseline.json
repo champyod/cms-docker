@@ -46,7 +46,6 @@
     "/system/backup-restore",
     "/system/docs",
     "/system/maintenance",
-    "/system/settings",
     "/tasks",
     "/tasks/:id",
     "/tasks/:id/datasets",

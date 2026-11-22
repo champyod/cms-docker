@@ -9,9 +9,8 @@ import { EnvSectionCard } from './EnvSectionCard';
 import { UnsavedRestartBanner } from './UnsavedRestartBanner';
 import { ManualServiceControlCard, MaintenanceUpdatesCard, DeploymentModeNote } from './MaintenanceControls';
 
-// Why no header here: the settings route already wraps this view in a
-// PageSurface carrying the breadcrumbs, title, and description, so a second
-// title inside the content was the same string rendered twice.
+// Why no header here: the settings group above this view carries the title, the description and
+// the reach of a save, so a second title inside the content would be the same string twice.
 export function EnvConfigView(): ReactElement {
   const config = useEnvConfig();
 

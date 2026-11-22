@@ -131,8 +131,7 @@ export function MonitorConfigSectionClient({
   );
 
   return (
-    <div className="bg-card backdrop-blur-xl border border-border rounded-2xl p-6 space-y-6">
-      <h2 className="text-lg font-semibold text-foreground">Monitor Configuration</h2>
+    <div className="space-y-6">
       {targets.length === 0 ? (
         <p className="text-muted-foreground text-sm">No monitor targets configured.</p>
       ) : (

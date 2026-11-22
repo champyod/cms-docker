@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **7 of 59 pages documented.**
+Inventory: **8 of 59 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -61,7 +61,7 @@ Inventory: **7 of 59 pages documented.**
 | `/system/backup-restore` | settings | — *to inventory* |
 | `/system/docs` | settings | — *to inventory* |
 | `/system/maintenance` | settings | — *to inventory* |
-| `/system/settings` | settings | — *to inventory* |
+| `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | — *to inventory* |
 | `/tasks/:id` | detail | — *to inventory* |
 | `/tasks/:id/datasets` | detail | — *to inventory* |
