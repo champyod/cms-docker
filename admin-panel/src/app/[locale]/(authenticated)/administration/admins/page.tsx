@@ -44,8 +44,6 @@ export default async function AdminsPage({
     <ListPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title={dict.admins.title}
-      description={dict.permissions.subtitle}
     >
       <AdminList
         initialAdmins={admins}

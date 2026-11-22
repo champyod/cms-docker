@@ -41,8 +41,6 @@ export default async function SystemSettingsPage({
     <SettingsPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title={dict.settings.title}
-      description={dict.settings.subtitle}
       groups={[
         { ...ENVIRONMENT, children: <EnvConfigView /> },
         { ...MONITOR, children: <MonitorConfigSection /> },
