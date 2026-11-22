@@ -66,3 +66,25 @@ pub fn dump(url: &str) -> String {
         "over the check database",
     )
 }
+
+/// The version the pinned image's pg_dump reports, as `X.Y` like a dump's header.
+#[must_use]
+pub fn version() -> String {
+    let reported = stdout_of(pg_dump(&["--version"]), "--version");
+    reported
+        .split_once("(PostgreSQL) ")
+        .and_then(|(_product, version)| version.split_whitespace().next())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            panic!("pg_dump --version answered {reported:?}, which names no version")
+        })
+}
+
+/// The `X.Y` version a dump's header credits, without the build suffix this image spells its own.
+#[must_use]
+pub fn dump_version(dump: &str) -> Option<String> {
+    dump.lines()
+        .find_map(|line| line.strip_prefix("-- Dumped by pg_dump version "))
+        .and_then(|version| version.split_whitespace().next())
+        .map(str::to_owned)
+}
