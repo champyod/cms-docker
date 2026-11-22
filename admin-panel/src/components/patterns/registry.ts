@@ -11,6 +11,7 @@ import type { PageArchetype } from '@/components/patterns/types';
 export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = {
   '/': 'dashboard',
   '/people/teams': 'list',
+  '/people/users': 'list',
   '/security/tls': 'detail',
   '/evaluation/lanes': 'list',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.

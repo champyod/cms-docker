@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **3 of 59 pages documented.**
+Inventory: **7 of 59 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -40,7 +40,7 @@ Inventory: **3 of 59 pages documented.**
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
 | `/people/teams/:id/overview` | detail | — *to inventory* |
-| `/people/users` | list | — *to inventory* |
+| `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | detail | — *to inventory* |
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | — *to inventory* |
