@@ -90,6 +90,7 @@ mod security_block;
 mod session;
 mod submission;
 mod task;
+mod team;
 mod token_mode;
 mod types;
 mod user;
@@ -160,6 +161,7 @@ pub use task::{
     Playable, ScoreMode, Task, TaskError, TokenRules, Tokens, ACTIVATE_DATASET, DELETE_DATASET,
     SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
 };
+pub use team::{registerable_teams, Team, TEAM};
 pub use token_mode::{TokenGrant, TokenMode, TokenModeError};
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
