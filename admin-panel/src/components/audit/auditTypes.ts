@@ -16,13 +16,16 @@ export interface AuditFilterValues {
   toDate?: string;
 }
 
+/**
+ * The rows the page hands its table.
+ *
+ * WHY no count and no page number: those describe the request, and the list layout prints them in
+ * the footer it owns. A table carrying them would be a second place they could disagree.
+ */
 export interface AuditTableProps {
   entries: AuditLogRow[];
-  total: number;
-  totalPages: number;
-  currentPage: number;
-  filters: AuditFilterValues;
   dict: AuditDict;
-  permissionKeys: string[];
   sort?: ListSortInput;
+  /** True when the address asked for the live cursor; the table then reloads on a new row. */
+  autoRefresh?: boolean;
 }

@@ -87,12 +87,7 @@ describe('AuditTable detail expansion failure', () => {
     const view = render(
       <AuditTable
         entries={[makeEntry()]}
-        total={1}
-        totalPages={1}
-        currentPage={1}
-        filters={{}}
         dict={DICT}
-        permissionKeys={[]}
       />
     );
 
@@ -109,12 +104,7 @@ describe('AuditTable detail expansion failure', () => {
     const view = render(
       <AuditTable
         entries={[makeEntry()]}
-        total={1}
-        totalPages={1}
-        currentPage={1}
-        filters={{}}
         dict={DICT}
-        permissionKeys={[]}
       />
     );
 

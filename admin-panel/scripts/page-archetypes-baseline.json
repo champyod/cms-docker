@@ -1,7 +1,5 @@
 {
   "undeclared": [
-    "/administration/audit",
-    "/administration/groups",
     "/contests/:id/communications",
     "/contests/:id/countdown",
     "/evaluation/submissions/:id/logs",
@@ -14,10 +12,6 @@
     "/people/users/:id/history",
     "/people/users/:id/profile",
     "/people/users/:id/teams",
-    "/ranking",
-    "/ranking/appearance",
-    "/ranking/credits",
-    "/ranking/users/:key",
     "/search",
     "/security/waf",
     "/system/about",

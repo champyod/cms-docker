@@ -111,12 +111,7 @@ async function openDetail() {
   const view = render(
     <AuditTable
       entries={[makeEntry()]}
-      total={1}
-      totalPages={1}
-      currentPage={1}
-      filters={{}}
       dict={DICT}
-      permissionKeys={[]}
     />
   );
   vi.mocked(getAuditEntry).mockResolvedValue({ success: true, data: DETAIL });

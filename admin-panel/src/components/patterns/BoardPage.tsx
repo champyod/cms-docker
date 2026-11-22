@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { Card } from '@/components/core/Card';
+import { SectionCard } from '@/components/core/SectionCard';
 import { PageSurface } from '@/components/core/PageSurface';
 import type { PageSlots } from '@/components/patterns/page-types';
 
@@ -59,17 +59,10 @@ export function BoardPage({
         {state}
         {freshness && <p className="text-muted-foreground">{freshness}</p>}
         {sections.map((section) => (
-          <Card key={section.key} className="space-y-3 p-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-[length:var(--text-card)] font-semibold">{section.title}</h2>
-                {section.description && <p className="text-muted-foreground">{section.description}</p>}
-              </div>
-              {section.actions}
-            </div>
+          <SectionCard key={section.key} title={section.title} description={section.description} actions={section.actions}>
             {section.state}
             {section.empty ?? section.rows}
-          </Card>
+          </SectionCard>
         ))}
       </div>
     </PageSurface>

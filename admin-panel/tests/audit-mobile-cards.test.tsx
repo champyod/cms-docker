@@ -79,12 +79,7 @@ describe('AuditTable mobile cards', () => {
     const { getAllByText } = render(
       <AuditTable
         entries={[entry]}
-        total={1}
-        totalPages={1}
-        currentPage={1}
-        filters={{}}
         dict={DICT}
-        permissionKeys={[]}
       />
     );
     // Why: ResponsiveTable renders one row model in both layouts, so

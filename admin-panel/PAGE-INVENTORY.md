@@ -12,8 +12,8 @@ Inventory: **0 of 0 pages documented.**
 |---|---|---|
 | `/` | dashboard | state of every service · totals per area · what happened most recently |
 | `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
-| `/administration/audit` | list | — *to inventory* |
-| `/administration/groups` | list | — *to inventory* |
+| `/administration/audit` | list | recorded actions with timestamp, actor, verb, entity, result and reason, newest first · filter by entity, verb, actor, result, address, free text and date range, with sort · how many match against the whole log, paged · per-row expand to the before and after values, the session and the entry hash · export the narrowed set as CSV · live refresh on request · what empty means |
+| `/administration/groups` | list | groups with name, description, seeded flag and the number of permissions each holds · sort · per-row edit and delete · create · what empty means. No filter and no total: the read returns every group in one pass, so there is nothing narrower to filter to and nothing left out to count |
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | detail | — *to inventory* |
@@ -45,11 +45,11 @@ Inventory: **0 of 0 pages documented.**
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | — *to inventory* |
 | `/people/users/:id/teams` | detail | — *to inventory* |
-| `/ranking` | list | — *to inventory* |
-| `/ranking/appearance` | settings | — *to inventory* |
-| `/ranking/credits` | list | — *to inventory* |
+| `/ranking` | detail | whether the ranking service reports its applied changes at all, and what it could not apply, counted per cause · that the board is live · the identity it opens with: display name, shown contest, title, subtitle, organisation and access mode · the standings of the previewed contest, each task as a column, and the progress graph over the first twenty · the logo it carries, with upload · what empty means (no contest on the board) |
+| `/ranking/appearance` | settings | the identity values: title, subtitle, organisation and display name · the display values: access mode, id column, anonymity, footer and credits text · the advanced JSON: theme, score format and perspective tabs · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
+| `/ranking/credits` | settings | the credit list the board attributes its licences to, with the vendored file named as the fallback · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
 | `/ranking/users` | board | which contests the board draws, each with its kind, reason and author · the shard being edited · overrides with target, contest, reason, author and orphan state, filtered, selected, ended one by one or in bulk · the rows the board actually drops, with the write that hides each · what empty means per section |
-| `/ranking/users/:key` | list | — *to inventory* |
+| `/ranking/users/:key` | detail | the participant's name, username, team, total, rank and whether the public board hides them · the score each task awarded · the overrides active on this user in this contest, with the add surface · what empty means for scores and overrides |
 | `/search` | list | — *to inventory* |
 | `/security/blocks` | board | captcha settings, thresholds and provider health · banned addresses with their unban, plus the queue-by-address control · permanent exemptions with revoke, beside the grant form · live failure counters, each expandable to the attempts behind it · open lockouts with unlock · what each section means when empty |
 | `/security/overview` | dashboard | the patching signal (does anything need me now) · when the numbers were read · ten counts: waf state, waf alerts, banned addresses, lockouts, certificates expiring, host agent reporting, stale images, unresolved CVEs, expired waivers, host OS updates |
