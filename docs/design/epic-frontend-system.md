@@ -23,10 +23,11 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 | S8 | Row height is the density preference, default dense | done | `h-10 density:h-8` from one constant; default `compact` |
 | S9 | `DetailPage`, `FormPage`, `SettingsPage` layouts | done | four contract tests: the fact strip is a `<dl>`, the error summary sits above the fields, a clean form shows no alert, and every settings group states its scope |
 | S10 | Slot contract and per-page inventory | done | `patterns/slots.ts` names the facts each layout requires; `PAGE-INVENTORY.md` lists all 59 surface pages, 5 documented; the gate refuses a declared layout whose facts are empty |
-| S11 | Convert pages to their layout | **in progress** | 24 of 76 declared (17 redirects need no surface); batches 1-2 merged, batch 3 running. 52 content pages still undeclared, 9 of 59 inventoried |
+| S11 | Convert pages to their layout | **in progress** | 29 of 76 declared (17 redirects need no surface), 14 of 59 inventoried; batches 1-3 merged, batch 4 running. 47 content pages still undeclared |
 | S12 | Status colour removed from ordinary text | **open** | 370 uses across 123 files; the gate holds it (may fall, never rise) |
 | S13 | Light, dark, high contrast and both densities measured per rebuilt page | **partly** | `design:modes-per-page` fails any declared page that paints a raw colour, which is what makes four-mode measurement possible at all; it found and fixed two `text-amber-300` statuses in the TLS panel |
 | S14 | A board layout for pages carrying several record kinds | done | `BoardPage` with a section contract; two lanes refused those pages before it existed, and the refusal was correct |
+| S15 | A contract that does not push a page to invent content | done | `activity` is optional on dashboard after a lane refused a count-only digest; `tests/page-slots.test.ts` pins every slot's requirement level, so loosening one is a decision and not a quiet edit |
 
 ## Rules this epic is held to
 
