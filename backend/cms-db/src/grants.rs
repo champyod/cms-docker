@@ -125,6 +125,13 @@ pub const DENY_OVERRIDE_KEYS: &str = "\
 /// Every key the `permissions` table holds, which the wildcard expands into.
 pub const REGISTERED_KEYS: &str = "SELECT key FROM permissions";
 
+/// The isolation the five reads take, so they all answer from one instant.
+///
+/// WHY not the default: under read committed each statement takes a new
+/// snapshot, so a grant revoked between the group read and the deny read could
+/// still sit in the resolved set.
+const SNAPSHOT_ISOLATION: &str = "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ";
+
 /// Why a permission set could not be resolved.
 #[derive(Debug, thiserror::Error)]
 pub enum PermissionError {
@@ -135,9 +142,8 @@ pub enum PermissionError {
 
 /// The keys one admin holds, read from the rows in `permissions` and its joins.
 ///
-/// The four reads run in one transaction, so a grant removed halfway through
-/// cannot leave the set holding a key from before the change and an allow from
-/// after it.
+/// The five reads share one snapshot, so a grant a concurrent writer revokes
+/// halfway through cannot survive in the set through a later read.
 ///
 /// # Errors
 ///
@@ -149,6 +155,9 @@ pub async fn effective_permissions(
     admin_id: i32,
 ) -> Result<EffectivePermissions, PermissionError> {
     let mut transaction = connection.begin().await?;
+    sqlx::query(SNAPSHOT_ISOLATION)
+        .execute(&mut *transaction)
+        .await?;
     let enabled: Option<bool> = sqlx::query_scalar(ADMIN_ENABLED)
         .bind(admin_id)
         .fetch_optional(&mut *transaction)
