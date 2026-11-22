@@ -16,6 +16,11 @@
 //! language this workspace compiles, and a lookup that answers `None` for a name
 //! it does not know rather than inventing a command.
 //!
+//! [`scoretypes`] is what a submission is worth once its runs are judged: four score
+//! types chosen by the name in a dataset's `score_type` column, the two document shapes
+//! they produce, and the two formatting rules that decide what a contestant reads — the
+//! task's published precision and the panel's own decimal pattern.
+//!
 //! What a submission is then worth is the half a task type's answer hands on.
 //! [`steps`] is the checker a dataset supplies, held to the limits that bound a
 //! manager rather than a submission and read as the standard output it is required
@@ -48,6 +53,7 @@
 
 pub mod job;
 pub mod languages;
+pub mod scoretypes;
 pub mod stage;
 pub mod steps;
 pub mod tasktypes;
