@@ -36,7 +36,7 @@ Inventory: **0 of 0 pages documented.**
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
 | `/people/teams` | list | teams with id, code, name, registerable flag, member count and organization · sort · per-row edit and delete · create · live refresh · what empty means. No filter and no total: the read returns every team in one pass, so there is no narrower set and nothing left out to count against |
-| `/people/teams/:id` | detail | — *to inventory* |
+| `/people/teams/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
 | `/people/teams/:id/overview` | detail | the team's leader and member count · the code, name and registerable flag, each editable in place · save, and delete with confirmation · read-only when team:update is absent |

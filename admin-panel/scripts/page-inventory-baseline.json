@@ -8,7 +8,6 @@
     "/infrastructure/containers",
     "/infrastructure/deployments",
     "/infrastructure/resources",
-    "/people/teams/:id",
     "/people/teams/:id/contests",
     "/people/teams/:id/members",
     "/ranking",
