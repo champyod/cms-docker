@@ -10,6 +10,9 @@ pub struct Cpp20Gpp;
 const SOURCES: &[&str] = &[".cpp", ".cc", ".cxx", ".c++", ".C"];
 const HEADERS: &[&str] = &[".h"];
 const OBJECTS: &[&str] = &[".o"];
+/// Every flag the compilation carries before the output file, whose own two
+/// words follow them.
+const FLAGS: &[&str] = &["-std=gnu++20", "-O2", "-pipe", "-static", "-s", "-o"];
 const COMPILER: &str = "/usr/bin/g++";
 const EVAL: &str = "-DEVAL";
 
@@ -40,7 +43,7 @@ impl Toolchain for Cpp20Gpp {
         if for_evaluation {
             command.push(EVAL.to_owned());
         }
-        command.extend(words(&["-std=gnu++20", "-O2", "-pipe", "-static", "-s", "-o"]));
+        command.extend(words(FLAGS));
         command.push(executable.to_owned());
         command.extend(sources.iter().cloned());
         vec![command]

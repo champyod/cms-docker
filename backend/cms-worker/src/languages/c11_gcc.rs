@@ -10,6 +10,9 @@ pub struct C11Gcc;
 const SOURCES: &[&str] = &[".c"];
 const HEADERS: &[&str] = &[".h"];
 const OBJECTS: &[&str] = &[".o"];
+/// Every flag the compilation carries before the output file, whose own two
+/// words follow them.
+const FLAGS: &[&str] = &["-std=gnu11", "-O2", "-pipe", "-static", "-s", "-o"];
 /// The compiler the reference names by its full path, so a box with a short PATH
 /// still compiles, and so the argv a test pins is the argv the box runs.
 const COMPILER: &str = "/usr/bin/gcc";
@@ -44,7 +47,7 @@ impl Toolchain for C11Gcc {
         if for_evaluation {
             command.push(EVAL.to_owned());
         }
-        command.extend(words(&["-std=gnu11", "-O2", "-pipe", "-static", "-s", "-o"]));
+        command.extend(words(FLAGS));
         command.push(executable.to_owned());
         command.extend(sources.iter().cloned());
         command.push("-lm".to_owned());
