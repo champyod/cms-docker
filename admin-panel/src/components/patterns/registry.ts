@@ -29,6 +29,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/contests/:id': 'redirect',
   '/contests/:id/overview': 'detail',
   '/contests/:id/participants': 'board',
+  '/contests/:id/ranking': 'board',
   '/contests/:id/settings': 'settings',
   '/contests/:id/tasks': 'list',
   '/people/users/:id': 'redirect',

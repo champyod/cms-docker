@@ -20,7 +20,7 @@ Inventory: **15 of 57 pages documented.**
 | `/contests/:id/countdown` | detail | — *to inventory* |
 | `/contests/:id/overview` | detail | the state the contest is in now and the zone its timings are read in · the four timing fields it edits (start, stop, analysis start, analysis stop), each with its own error · save |
 | `/contests/:id/participants` | board | the people and teams in this contest, with their team, unrestricted and hidden state · per-row mark as test, settings and remove · add a participant or a whole team · the registration roster: which teams registration offers, each row's state and its own empty meaning · read-only when team:update is absent |
-| `/contests/:id/ranking` | detail | — *to inventory* |
+| `/contests/:id/ranking` | board | the contest's standings: every participant's rank, username, score per task and total · the progress graph over the first twenty · what empty means (the table says no submissions yet) |
 | `/contests/:id/settings` | settings | the contest's name, description and zone · what it allows: questions, user tests, submission download, password auth, registration, analysis mode · the scope each change reaches · save, and a locked form when contest:update is absent |
 | `/contests/:id/tasks` | list | the tasks this contest carries, by name and title · filter by name or title, with select-all over the filtered set · how many are assigned in total · per-row open and remove · attach and detach the selection · create a task and add it · what empty means |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
