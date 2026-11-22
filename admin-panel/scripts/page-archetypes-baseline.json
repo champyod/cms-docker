@@ -23,7 +23,6 @@
     "/people/teams/:id",
     "/people/teams/:id/contests",
     "/people/teams/:id/members",
-    "/people/users/:id",
     "/people/users/:id/history",
     "/people/users/:id/profile",
     "/people/users/:id/teams",
