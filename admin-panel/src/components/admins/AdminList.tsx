@@ -6,6 +6,7 @@ import { useSyncedState } from '@/hooks/useSyncedState';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { Button } from '@/components/core/Button';
+import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ShieldAlert, Plus, ShieldCheck } from 'lucide-react';
 import { updateAdmin, deleteAdmin } from '@/app/actions/admins';
@@ -144,7 +145,7 @@ export function AdminList({
       key: 'username',
       header: 'Username',
       sortKey: 'username',
-      render: (admin) => <span className="font-mono text-indigo-400 text-sm">{admin.username}</span>,
+      render: (admin) => <span className="font-mono text-foreground text-sm">{admin.username}</span>,
     },
     {
       key: 'name',
@@ -172,9 +173,9 @@ export function AdminList({
         return (
           <div className="flex items-center gap-1.5 flex-wrap">
             {groupNames.map((groupName) => (
-              <span key={groupName} className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400">
+              <Badge key={groupName} variant="indigo">
                 {groupName}
-              </span>
+              </Badge>
             ))}
             {accessSummary[admin.id] && groupNames.length === 0 && (
               <span className="text-xs text-muted-foreground italic">No groups</span>

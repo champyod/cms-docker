@@ -11,7 +11,7 @@ Inventory: **9 of 59 pages documented.**
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
 | `/` | dashboard | state of every service · totals per area · what happened most recently |
-| `/administration/admins` | list | — *to inventory* |
+| `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
 | `/contests` | list | state of the contest service · contests with state, window and age · count against total · filter · per-row actions · create |
