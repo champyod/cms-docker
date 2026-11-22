@@ -114,3 +114,18 @@ The rules that replace it:
    says what it was and why nothing changes on screen.
 6. **A decision already taken is reversible by the operator.** When he revisits one, the earlier
    commit is re-opened as a discussion, not defended.
+
+## Working rule — when a preview is required
+
+Decided by the operator, and it governs how every later item in this epic is put to him.
+
+| Preview | Required when | Example from this epic |
+|---|---|---|
+| **UI** — rendered at the real width, light and dark | the reader sees a different thing: page structure, type size, colour allocation, how a number is grouped, copy inside a control, an element added or removed | the list footer, a count inside a heading, `text-sm` becoming a token |
+| **File structure** — the tree and the shape, not the code | files are added, moved or deleted, or a contract changes shape: a prop, a slot, a layout kind, a dictionary section | removing `FormPage`, adding `count` to `BoardSection`, detail's seven slots becoming four |
+| **Implementation** — the diff | logic with no visible effect, or a small visible effect with a wide blast radius | `formatCount` inside `StatCard`, `LinkButton` |
+| **None** | dead code, a comment, a rename that changes no behaviour | removing a `title` the shell owns |
+
+Size decides how many of the three apply: one file or one item needs none of them; a shared primitive
+or anything touching more than one page needs UI and file structure; a taxonomy or contract change
+needs all three.
