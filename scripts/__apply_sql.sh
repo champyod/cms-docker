@@ -138,6 +138,11 @@ if [[ "$BOOTSTRAP_ROLES" -eq 1 ]]; then
       continue
     fi
     # Comment lines are stripped: the backup_role header mentions ROW LEVEL SECURITY without being an RLS file.
+    # The role catalog carries its role-specific policies; the bootstrap applies it as postgres even though it contains policy DDL.
+    if [[ "$BOOTSTRAP_ROLES" -eq 1 && "$(basename -- "$_f")" == "20260820110000_generated_roles.sql" ]]; then
+      SQL_FILES+=("$_f")
+      continue
+    fi
     if grep -v '^\s*--' "$_f" | grep -qE "CREATE POLICY|ENABLE ROW LEVEL SECURITY|FORCE ROW LEVEL SECURITY"; then
       log_info "skipping RLS-related file $_f (contains active RLS policy)"
       continue
