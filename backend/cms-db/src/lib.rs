@@ -70,6 +70,7 @@ mod crypto;
 mod datetime;
 mod digest;
 mod drop;
+mod filecache;
 mod fsobject;
 mod interval;
 mod large_object;
@@ -94,6 +95,10 @@ pub use crypto::{
 pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use drop::{drop_db, DropError};
+pub use filecache::{
+    Backend, CacheScope, DbBackend, FileCache, FileCacheConfig, FileCacheError, FsBackend,
+    NullBackend, Readable, StoredFile, Writable, CHUNK_SIZE,
+};
 pub use fsobject::{
     FSObject, FsObjectError, DELETE_FSOBJECT, DELETE_FSOBJECTS, FSOBJECTS, FSOBJECT_BY_DIGEST,
     FSOBJECT_DECLARATION, INSERT_FSOBJECT, NO_LARGE_OBJECT,
