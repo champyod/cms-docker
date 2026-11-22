@@ -202,6 +202,8 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S3a-session` | `a2140d61` | first S-3 piece: actor, session, base, drop. `cargo test -p cms-db` → 125 passed, but **the live half skips without `CMS_DB_TEST_URL` and a skip is reported as a pass** — so the parent started `postgres:16-alpine` on 127.0.0.1:15433 and ran them for real: `a_commit_and_a_second_begin_stamps_again` passed, and all three FAIL against a dead port, so they cannot skip silently once the URL is set. Parent's own mutation of `actor.rs:143` (admin id `1..=9`→`1..=10`) failed `every_malformed_shape_is_refused`, exit 101, restored byte-identical | `c07e695a` |
 | 2026-11-22 | `feat/rust-S3b-files` + `feat/rust-S3c-users` (parallel) | `9bc48370` / `066a40b4` | file store 1,391 + identity 1,096. Only `lib.rs` conflicted; the resolution dropped the `large_object` re-export and **`cargo check -p cms-db` still passed**, because check does not build test targets and `tests/large_object.rs:14` imports `LargeObject, LargeObjectError, Mode` from the crate root — caught by running the tests. Parent's own mutation of `database.rs:100` (removed the losing writer's `LargeObject::unlink`) failed `a_competing_insert_leaves_one_row_and_no_unlinked_bytes` with "the losing writer's large object was left behind", left 1 / right 0, exit 101, restored byte-identical | `7408c34d` |
 | 2026-11-22 | (main session) | — | that dedup test asserted the orphan count over the **whole database**, so one failed run poisoned every later run until the database was dropped — I mistook a restored file for a broken one. Scoped to a floor captured at test start; re-proven three ways: passes with a pre-existing `lo_create` orphan, FAILS with the unlink removed, passes restored | `50a37ea3` |
+| 2026-11-22 | `feat/rust-S3d-submissions` + `feat/rust-S3e-contest` (parallel) | `1c6741d4` / `16520948` | task 646 + submission 799, contest 499 + usertest 550. **Both lanes were green alone and the merged tree did not compile** (`E0252: TokenMode defined multiple times`) — each had redeclared the same enum; see the fix row below | `d8e75868`, `5432c958` |
+| 2026-11-22 | (main session) | — | consolidated the duplicate `TokenMode` into `cms-db/src/token_mode.rs` (one concept: `contest.py:157` and `task.py:133` use the same constants and differ only in default). Parent's own mutation of `quota.rs:65` (infinite balance refusing as if zero) failed `an_infinite_task_always_offers_a_token` and `two_unlimited_sides_stay_unlimited`, exit 101, restored byte-identical. 104 binaries, 714 passed with a live database | `8549667f` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -278,8 +280,8 @@ in the database; the missing MAC remains a named finding (F3), not something the
 | S-3a | `actor` 183, `session` 154, `base` 330, `drop` 84 | **751** | **merged** (`c07e695a`) |
 | S-3b | `fsobject` 437 → `filecacher` 954 (filecacher imports `FSObject`, `LargeObject`) | **1,391** | in a lane |
 | S-3c | `user` 439, `username/models` 175, `username/resolution` 211, `permissions` 145, `admin` 70, `security_block` 56 | **1,096** | in a lane, independent of S-3b |
-| S-3d | `submission` 799, `task` 646 | **1,445** | after S-3b — both need the file store |
-| S-3e | `contest` 499, `usertest` 550 | **1,049** | after S-3d |
+| S-3d | `submission` 799, `task` 646 | **1,445** | **merged** (`d8e75868`) |
+| S-3e | `contest` 499, `usertest` 550 | **1,049** | **merged** (`5432c958`) |
 | S-3f | `util` 568, `__init__` 175 | **743** | last: `__init__` is the package surface |
 
 The arithmetic, computed rather than asserted: 751 + 1,391 + 1,096 + 1,445 + 1,049 + 743 = **6,475**, plus
