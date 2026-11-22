@@ -66,15 +66,16 @@
 //! # Errors
 //!
 //! [`MeasureError`], [`StageError`], [`CacheError`], [`edge::JobError`],
-//! [`service::ServiceError`], [`sandbox::SpawnError`], [`steps::CheckerError`] and
-//! [`tasktypes::TaskError`], and nothing else: a line that names no key, a value
-//! that is not the number its key promises, a path already staged, a path with no
-//! file, a digest no store holds, a task type this worker does not have, the
-//! tombstone, a request declined because the worker was busy, a run that could not
-//! be launched, a pipe that could not be read, a code the isolation program does
-//! not document, a checker that answered with something unreadable, and a task type's
-//! own three parameters, managers, file counts, executable counts and limits. A run that measured nothing is `None`, which is
-//! an answer rather than a failure.
+//! [`service::ServiceError`], [`sandbox::SpawnError`], [`steps::CheckerError`],
+//! [`steps::StepError`] and [`tasktypes::TaskError`], and nothing else: a line that
+//! names no key, a value that is not the number its key promises, a path already
+//! staged, a path with no file, a digest no store holds, a task type this worker does
+//! not have, the tombstone, a request declined because the worker was busy, a run that
+//! could not be launched, a pipe that could not be read, a code the isolation program
+//! does not document, a checker that answered with something unreadable, a file a
+//! checker could not be handed, and a task type's own parameters, managers, file
+//! counts, executable counts and limits. A run that measured nothing is `None`, which
+//! is an answer rather than a failure.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
