@@ -43,10 +43,14 @@ fn the_fourth_parameter_names_the_testcases_a_dataset_lists_as_output_only() {
         json!(["alone", ["", ""], "diff"]),
         json!(["alone", ["", ""], "diff", 4]),
         json!(["alone", [""], "diff", ""]),
+        json!(["alone", ["", ""], "diffs", ""]),
     ] {
         assert!(
-            matches!(BatchAndOutput::new(&wrong), Err(TaskError::Parameters)),
-            "{wrong} is not four parameters the first three of which are a Batch task's"
+            matches!(
+                BatchAndOutput::new(&wrong),
+                Err(TaskError::Parameters | TaskError::Parameter { .. })
+            ),
+            "{wrong} is not four parameters of the declared kinds"
         );
     }
 }

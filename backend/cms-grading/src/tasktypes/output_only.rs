@@ -22,9 +22,9 @@
 //! # Errors
 //!
 //! [`TaskError`], and only that: parameters that are not the one an `OutputOnly` task
-//! has, a digest a job carries for a carried answer that the `DIGEST` domain does not
-//! admit, and what the judge refuses for the answer. A missing answer is not among
-//! them — it is a score of zero.
+//! has or whose value is not the name the declaration gives it, a digest a job carries
+//! for a carried answer that the `DIGEST` domain does not admit, and what the judge
+//! refuses for the answer. A missing answer is not among them — it is a score of zero.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -36,13 +36,23 @@ use serde_json::Value;
 use cms_proto::DigestMap;
 
 use super::judge::{self, Judgement, OutputSource, CHECKER_CODENAME};
-use super::TaskError;
-use super::{handle, Compilation, Runtime};
+use super::{handle, Compilation, Parameter, Parameters, Runtime, TaskError};
 use crate::job::EvaluationJob;
 use crate::stage::{Cache, FileDigest};
 
 /// The choice that has a checker read the answer rather than a plain diff.
 const OUTPUT_EVAL_COMPARATOR: &str = "comparator";
+/// The choice that diffs the answer rather than having a checker read it.
+const OUTPUT_EVAL_DIFF: &str = "diff";
+/// The one parameter this task type declares: how an answer is compared.
+const EVALUATION: Parameter = Parameter::choice(
+    "Output evaluation",
+    "output_eval",
+    "",
+    &[OUTPUT_EVAL_DIFF, OUTPUT_EVAL_COMPARATOR],
+);
+/// The one parameter a task type of this kind is configured with.
+static PARAMETERS: [Parameter; 1] = [EVALUATION];
 /// The name a carried answer is filed under, the codename of the testcase it
 /// answers held between a prefix and a suffix.
 const ANSWER_PREFIX: &str = "output_";
@@ -89,17 +99,13 @@ impl OutputOnly {
     ///
     /// # Errors
     ///
-    /// [`TaskError::Parameters`] unless the parameters hold exactly one string.
+    /// [`TaskError::Parameters`] unless the parameters are a list of exactly one, and
+    /// [`TaskError::Parameter`] unless its value is one of the choice's names.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
-        let entries = parameters.as_array().ok_or(TaskError::Parameters)?;
-        let [output_eval] = entries.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        let output_eval = output_eval
-            .as_str()
-            .ok_or(TaskError::Parameters)?
-            .to_owned();
-        Ok(Self { output_eval })
+        let parameters = Parameters::of(parameters, &PARAMETERS)?;
+        Ok(Self {
+            output_eval: parameters.text(0).into_owned(),
+        })
     }
 
     /// Whether a checker the dataset holds reads the answer, rather than the two

@@ -41,11 +41,12 @@
 //!
 //! # Errors
 //!
-//! [`TaskError`], and only that: parameters that are not the entries a task type has,
-//! a dataset holding no grader manager a grader compilation needs, a
-//! submission carrying too few files, a result carrying the wrong number of
-//! executables, a limit a dataset set that is not a positive number, a file the
-//! store would not hand over, and a run the box could not carry or read back.
+//! [`TaskError`], and only that: parameters that are not the entries a task type
+//! declares or whose value is not the type declared for it, a dataset holding no grader
+//! manager a grader compilation needs, a submission carrying too few files, a result
+//! carrying the wrong number of executables, a limit a dataset set that is not a positive
+//! number, a file the store would not hand over, and a run the box could not carry or
+//! read back.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -62,6 +63,7 @@ mod judge;
 mod kinds_answer;
 mod outcome;
 mod output_only;
+mod parameters;
 mod two_steps;
 
 use std::str::FromStr;
@@ -76,9 +78,11 @@ pub use error::TaskError;
 pub use judge::{eval_output, Judgement, OutputSource};
 pub use outcome::{Evaluation, OutputFile};
 pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
+pub use parameters::{Accepts, Parameter};
 pub use two_steps::TwoSteps;
 
 pub(crate) use boxed::{Run, Shared};
+pub(crate) use parameters::Parameters;
 
 use crate::stage::{CacheHandle, FileDigest, StageError};
 

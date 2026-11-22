@@ -14,15 +14,34 @@
 
 use std::fmt;
 
+use serde_json::Value;
+
 use crate::stage::StageError;
 use crate::steps::StepError;
 use cms_sandbox::SpawnError;
 
+use super::parameters::Accepts;
+
 /// Why a job was not compiled, not run, or not read back.
 #[derive(Debug)]
 pub enum TaskError {
-    /// The task type parameters are not the three entries a Batch task has.
+    /// The task type parameters are not the entries the task type declares: not a list,
+    /// or not one entry per declared parameter.
     Parameters,
+    /// A declared parameter was given a value it does not accept.
+    ///
+    /// The declaration's own name, what it accepts and the value it refused are carried
+    /// because the reference's per-type messages say all three, and they are what an
+    /// administrator has to correct in a dataset's parameters: "not the entries a Batch
+    /// task has" names no parameter at all.
+    Parameter {
+        /// The name the declaration gives the parameter.
+        name: &'static str,
+        /// What the declaration accepts for it.
+        accepts: Accepts,
+        /// The value the declaration refused.
+        value: Value,
+    },
     /// The dataset holds no manager of the name a grader compilation needs.
     MissingManager {
         /// The manager the compilation needs and the dataset does not hold.
@@ -68,9 +87,14 @@ impl fmt::Display for TaskError {
             Self::Parameters => {
                 write!(
                     f,
-                    "the task type parameters are not the three a Batch task has"
+                    "the task type parameters are not the entries the task type declares"
                 )
             }
+            Self::Parameter {
+                name,
+                accepts,
+                value,
+            } => write!(f, "parameter `{name}` {accepts}, not {value}"),
             Self::MissingManager { name } => {
                 write!(f, "the dataset is missing manager `{name}`")
             }

@@ -27,11 +27,15 @@ fn an_output_only_task_is_configured_by_the_one_choice_it_compares_answers_by() 
         json!([]),
         json!(["diff", "diff"]),
         json!([1]),
+        json!(["diffs"]),
         json!("diff"),
     ] {
         assert!(
-            matches!(OutputOnly::new(&wrong), Err(TaskError::Parameters)),
-            "{wrong} is not one parameter"
+            matches!(
+                OutputOnly::new(&wrong),
+                Err(TaskError::Parameters | TaskError::Parameter { .. })
+            ),
+            "{wrong} is not one parameter of the declared kind"
         );
     }
 }

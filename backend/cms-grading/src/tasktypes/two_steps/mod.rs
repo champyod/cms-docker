@@ -25,8 +25,9 @@
 //!
 //! # Errors
 //!
-//! [`TaskError`], and only that: parameters that are not the one a Two Steps task has, a
-//! submission that does not carry exactly two files, a dataset missing the manager or one
+//! [`TaskError`], and only that: parameters that are not the one a Two Steps task has or
+//! whose value is not the name the declaration gives it, a submission that does not carry
+//! exactly two files, a dataset missing the manager or one
 //! of the headers it is compiled with, a result holding a number of executables other
 //! than one, a limit the dataset set that is not a positive number, a directory or a
 //! named pipe that could not be made, a file the store would not hand over, and a run the
@@ -51,7 +52,7 @@ use crate::stage::{Cache, StageError};
 use cms_sandbox::Launch;
 
 use super::judge::{self, OutputSource, CHECKER_CODENAME};
-use super::{Evaluation, Run, Runtime, Shared, TaskError, Toolchain};
+use super::{Evaluation, Parameter, Parameters, Run, Runtime, Shared, TaskError, Toolchain};
 
 const INPUT: &str = "input.txt";
 const OUTPUT: &str = "output.txt";
@@ -60,7 +61,18 @@ const OUTPUT: &str = "output.txt";
 const PIPE_MOUNT: &str = "/fifo";
 const PIPE_NAME: &str = "fifo";
 const OUTPUT_EVAL_COMPARATOR: &str = "comparator";
+const OUTPUT_EVAL_DIFF: &str = "diff";
 const EXECUTABLES_REQUIRED: usize = 1;
+
+/// The one parameter this task type declares: how the second phase's answer is compared.
+const EVALUATION: Parameter = Parameter::choice(
+    "Output evaluation",
+    "output_eval",
+    "",
+    &[OUTPUT_EVAL_DIFF, OUTPUT_EVAL_COMPARATOR],
+);
+/// The one parameter a task type of this kind is configured with.
+static PARAMETERS: [Parameter; 1] = [EVALUATION];
 
 /// One phase: the box it runs in, the step its manager is told it is, the file it
 /// reads from that box, and the file its answer is written to. Only the first phase
@@ -97,15 +109,12 @@ impl TwoSteps {
     ///
     /// # Errors
     ///
-    /// [`TaskError::Parameters`] unless the parameters hold exactly one string.
+    /// [`TaskError::Parameters`] unless the parameters are a list of exactly one, and
+    /// [`TaskError::Parameter`] unless its value is one of the choice's names.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
-        let entries = parameters.as_array().ok_or(TaskError::Parameters)?;
-        let [output_eval] = entries.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        let output_eval = output_eval.as_str().ok_or(TaskError::Parameters)?;
+        let parameters = Parameters::of(parameters, &PARAMETERS)?;
         Ok(Self {
-            output_eval: output_eval.to_owned(),
+            output_eval: parameters.text(0).into_owned(),
         })
     }
 

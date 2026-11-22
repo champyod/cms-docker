@@ -29,11 +29,11 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
+use super::batch::{COMPILATION, EVALUATION, USE_FILE};
 use super::judge::{self, OutputSource, CHECKER_CODENAME};
 use super::kinds_answer::{carries_source, listed};
 use super::output_only::{carried, no_compilation};
-use super::TaskError;
-use super::{Batch, Compilation, OutputFile, Runtime, Toolchain};
+use super::{Batch, Compilation, OutputFile, Parameter, Parameters, Runtime, TaskError, Toolchain};
 use crate::job::{CompilationJob, EvaluationJob};
 use crate::stage::{Cache, FileDigest};
 use cms_sandbox::ExecutionStats;
@@ -42,6 +42,16 @@ use cms_sandbox::ExecutionStats;
 const OUTPUT_ONLY: &str = "outputonly";
 /// The word a checker is given for a testcase the executable is run for.
 const BATCH: &str = "batch";
+
+/// The comma-separated list of the testcases a dataset listed as output-only.
+const OUTPUT_ONLY_TESTCASES: Parameter = Parameter::text(
+    "Comma-separated list of output only testcases",
+    "output_only_testcases",
+    "",
+);
+/// The four parameters this task type declares: the three a Batch task has, then the
+/// output-only testcases.
+static PARAMETERS: [Parameter; 4] = [COMPILATION, USE_FILE, EVALUATION, OUTPUT_ONLY_TESTCASES];
 
 /// The `BatchAndOutput` task type, as its four parameters say.
 ///
@@ -96,21 +106,13 @@ impl BatchAndOutput {
     ///
     /// # Errors
     ///
-    /// [`TaskError::Parameters`] unless the parameters hold exactly those four, and
-    /// the first three are the three a Batch task has.
+    /// [`TaskError::Parameters`] unless the parameters are a list of exactly four, and
+    /// [`TaskError::Parameter`] for a value that is not what its declaration accepts.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
-        let entries = parameters.as_array().ok_or(TaskError::Parameters)?;
-        let [compilation, names, output_eval, testcases] = entries.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        let batch = Batch::new(&Value::Array(vec![
-            compilation.clone(),
-            names.clone(),
-            output_eval.clone(),
-        ]))?;
+        let parameters = Parameters::of(parameters, &PARAMETERS)?;
         Ok(Self {
-            batch,
-            output_only: listed(testcases)?,
+            batch: Batch::of(&parameters),
+            output_only: listed(&parameters.text(3)),
         })
     }
 
