@@ -25,7 +25,6 @@
     "/system/backup-restore",
     "/system/docs",
     "/system/maintenance",
-    "/tasks/:id",
     "/tasks/:id/datasets",
     "/tasks/:id/files",
     "/tasks/:id/overview",

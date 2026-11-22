@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **0 of 0 pages documented.**
+Inventory: **25 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -63,7 +63,7 @@ Inventory: **0 of 0 pages documented.**
 | `/system/maintenance` | settings | — *to inventory* |
 | `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | tasks with id, name, title, the contests they belong to, resources and submission count · filter, with sort · how many match against the whole set, paged · per-row edit and delete · assign and unassign the checked rows, edit their limits · create · what empty means |
-| `/tasks/:id` | detail | — *to inventory* |
+| `/tasks/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/tasks/:id/datasets` | detail | — *to inventory* |
 | `/tasks/:id/files` | detail | — *to inventory* |
 | `/tasks/:id/overview` | detail | — *to inventory* |
