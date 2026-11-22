@@ -8,10 +8,10 @@
 
 use std::str::FromStr as _;
 
+use cms_grading::stage::{CacheHandle, FileDigest};
 use cms_worker::edge::{
     content_digest, dispose, resolve_task_type, Accounting, JobError, JobResult,
 };
-use cms_worker::stage::{CacheHandle, FileDigest};
 
 /// A digest of a file the store really holds, so a refusal is about the tombstone
 /// and not about a handle the mapping would refuse anyway.

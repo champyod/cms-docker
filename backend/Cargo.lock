@@ -215,6 +215,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cms-grading"
+version = "0.1.0"
+dependencies = [
+ "cms-db",
+ "cms-proto",
+ "cms-sandbox",
+ "flate2",
+ "serde_json",
+ "sha1",
+ "shell-escape",
+ "tar",
+ "thiserror",
+]
+
+[[package]]
 name = "cms-proto"
 version = "0.1.0"
 dependencies = [
@@ -251,14 +266,9 @@ name = "cms-worker"
 version = "0.1.0"
 dependencies = [
  "cms-db",
+ "cms-grading",
  "cms-proto",
- "cms-sandbox",
- "flate2",
  "serde_json",
- "sha1",
- "shell-escape",
- "tar",
- "thiserror",
 ]
 
 [[package]]
