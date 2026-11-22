@@ -81,6 +81,7 @@ mod permission;
 mod reads;
 mod security_block;
 mod session;
+mod task;
 mod types;
 mod user;
 mod username;
@@ -125,6 +126,11 @@ pub use reads::{
 pub use security_block::{SecurityBlock, SECURITY_BLOCK};
 pub use session::{
     DedicatedConnection, Session, SessionConfig, SessionError, Transaction, UnhonouredOption,
+};
+pub use task::{
+    activate_dataset, dataset_by_id, delete_dataset, merge, unjudged_submissions, FeedbackLevel,
+    Playable, ScoreMode, Task, TaskError, TokenMode, TokenRules, Tokens, ACTIVATE_DATASET,
+    DELETE_DATASET, SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
 };
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
