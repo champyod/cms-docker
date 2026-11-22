@@ -20,109 +20,138 @@
 @custom-variant density (&:where(.density-compact, .density-compact *));
 @custom-variant high-contrast (&:where(.high-contrast, .high-contrast *));
 
-/* Design tokens: neutral SaaS zinc + single indigo accent, soft-medium radius.
-   :root carries the light tokens so first paint has values before .dark applies. */
+/* Design tokens — decided in admin-panel/DESIGN-PREFERENCE.md, not inherited from a theme.
+   The values are the measured ones: hex is kept where a decision was measured in hex, because
+   re-encoding it as oklch would silently move the contrast that settled the decision.
+   Light surface is neutral tone 98 (#fbfaf7) and dark is tone 14 (#171613) — never #fff/#000.
+   Roles: primary = maroon accent; destructive/`error` = ink (topic 8d, S3); success, warning and
+   info carry their own hue; `unknown` is the muted pair, drawn as an outline with no fill.
+   Radius is Carbon's: 0 for containers and controls, 2 and 4 are the only small steps, and tags
+   use `rounded-full`. Type sizes are the 12 x 1.2 chain (12 / 14.4 / 17.28 / 20.74 / 24.88 /
+   29.86). Motion is Carbon's 70 / 150 / 240 ms with its standard easing. */
 :root,
 .light {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.511 0.262 276.966);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --success: oklch(0.596 0.145 163.225);
-  --success-foreground: oklch(0.985 0 0);
-  --warning: oklch(0.666 0.179 58.318);
-  --warning-foreground: oklch(0.205 0.01 285);
-  --info: oklch(0.609 0.126 221.723);
-  --info-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.585 0.233 277.117);
-  --radius: 0.75rem;
+  --background: #fbfaf7;
+  --foreground: #1c1b1f;
+  --card: #ffffff;
+  --card-foreground: #1c1b1f;
+  --popover: #ffffff;
+  --popover-foreground: #1c1b1f;
+  --primary: #7a2439;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f4f4;
+  --secondary-foreground: #1c1b1f;
+  --muted: #f4f4f4;
+  --muted-foreground: #5d5f65;
+  --accent: #f2efea;
+  --accent-foreground: #1c1b1f;
+  --destructive: #1c1b1f;
+  --destructive-foreground: #fbfaf7;
+  --success: #1f6f43;
+  --success-foreground: #ffffff;
+  --warning: #594d00;
+  --warning-foreground: #ffffff;
+  --info: #833b43;
+  --info-foreground: #ffffff;
+  --border: #e2e0db;
+  --input: #e2e0db;
+  --ring: #7a2439;
+
+  /* type */
+  --text-label: 12px;
+  --text-body: 14.4px;
+  --text-card: 17.28px;
+  --text-section: 20.74px;
+  --text-page: 24.88px;
+  --text-display: 29.86px;
+  /* motion */
+  --motion-fast: 70ms;
+  --motion-moderate: 150ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+
   color-scheme: light;
 }
 
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.585 0.233 277.117);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.637 0.237 25.331);
-  --destructive-foreground: oklch(0.205 0.01 285);
-  --success: oklch(0.765 0.177 163.223);
-  --success-foreground: oklch(0.205 0.01 285);
-  --warning: oklch(0.828 0.189 84.429);
-  --warning-foreground: oklch(0.205 0.01 285);
-  --info: oklch(0.789 0.154 211.53);
-  --info-foreground: oklch(0.205 0.01 285);
-  --border: oklch(0.274 0.006 286.033);
-  --input: oklch(0.274 0.006 286.033);
-  --ring: oklch(0.585 0.233 277.117);
-  --radius: 0.75rem;
+  --background: #171613;
+  --foreground: #e5e4e2;
+  --card: #1f1e1b;
+  --card-foreground: #e5e4e2;
+  --popover: #26241f;
+  --popover-foreground: #e5e4e2;
+  --primary: #f8acb7;
+  --primary-foreground: #171613;
+  --secondary: #292824;
+  --secondary-foreground: #e5e4e2;
+  --muted: #292824;
+  --muted-foreground: #c4c6cf;
+  --accent: #26241f;
+  --accent-foreground: #e5e4e2;
+  --destructive: #e5e4e2;
+  --destructive-foreground: #171613;
+  --success: #7ed6a3;
+  --success-foreground: #171613;
+  --warning: #f5cf73;
+  --warning-foreground: #171613;
+  --info: #c293bd;
+  --info-foreground: #171613;
+  --border: #3a3833;
+  --input: #3a3833;
+  --ring: #f8acb7;
+
+  --text-label: 12px;
+  --text-body: 14.4px;
+  --text-card: 17.28px;
+  --text-section: 20.74px;
+  --text-page: 24.88px;
+  --text-display: 29.86px;
+  --motion-fast: 70ms;
+  --motion-moderate: 150ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+
   color-scheme: dark;
 }
 
-/* High contrast: the reader asked for separators and semantic colour that carry
-   without relying on a tint. Placed after .dark so it wins on <html>, which can
-   carry both classes; the more specific .dark.high-contrast pair below re-derives
-   every value that has to flip with the background. */
+/* High contrast: the reader asked for separators and semantic colour that carry without a
+   tint. Only the roles that need more separation are re-derived; the hue families stay. */
 .high-contrast {
-  --secondary: oklch(0.9 0.004 286.375);
-  --muted: oklch(0.9 0.004 286.375);
-  --accent: oklch(0.9 0.004 286.375);
-  --muted-foreground: oklch(0.32 0.014 285.938);
-  --primary: oklch(0.45 0.24 277);
-  --ring: oklch(0.45 0.24 277);
-  --border: oklch(0.42 0.012 286.32);
-  --input: oklch(0.42 0.012 286.32);
-  --success: oklch(0.47 0.16 163.225);
-  --warning: oklch(0.55 0.16 58.318);
-  --info: oklch(0.45 0.14 221.723);
-  --destructive: oklch(0.47 0.24 27.325);
-  --success-foreground: oklch(1 0 0);
-  --warning-foreground: oklch(0 0 0);
-  --info-foreground: oklch(1 0 0);
-  --destructive-foreground: oklch(1 0 0);
+  --secondary: #e9e6e0;
+  --muted: #e9e6e0;
+  --accent: #e9e6e0;
+  --muted-foreground: #3d3b38;
+  --primary: #5c1a2b;
+  --ring: #5c1a2b;
+  --border: #6b665f;
+  --input: #6b665f;
+  --success: #14522f;
+  --warning: #3f3600;
+  --info: #5f242c;
+  --destructive: #000000;
+  --success-foreground: #ffffff;
+  --warning-foreground: #ffffff;
+  --info-foreground: #ffffff;
+  --destructive-foreground: #ffffff;
 }
 
 .dark.high-contrast {
-  --secondary: oklch(0.32 0.006 286.033);
-  --muted: oklch(0.32 0.006 286.033);
-  --accent: oklch(0.32 0.006 286.033);
-  --muted-foreground: oklch(0.86 0.012 286.067);
-  --primary: oklch(0.72 0.2 277);
-  --ring: oklch(0.72 0.2 277);
-  --border: oklch(0.72 0.012 286.32);
-  --input: oklch(0.72 0.012 286.32);
-  --success: oklch(0.7 0.18 163.225);
-  --warning: oklch(0.82 0.18 84.429);
-  --info: oklch(0.72 0.15 211.53);
-  --destructive: oklch(0.68 0.24 25.331);
-  --success-foreground: oklch(0 0 0);
-  --warning-foreground: oklch(0 0 0);
-  --info-foreground: oklch(0 0 0);
-  --destructive-foreground: oklch(0 0 0);
+  --secondary: #33322e;
+  --muted: #33322e;
+  --accent: #33322e;
+  --muted-foreground: #e8e6e2;
+  --primary: #ffd3d9;
+  --ring: #ffd3d9;
+  --border: #8f8b83;
+  --input: #8f8b83;
+  --success: #a9f0c4;
+  --warning: #ffe6a8;
+  --info: #e6bfd9;
+  --destructive: #ffffff;
+  --success-foreground: #000000;
+  --warning-foreground: #000000;
+  --info-foreground: #000000;
+  --destructive-foreground: #000000;
 }
 
 @theme inline {
@@ -151,10 +180,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Carbon radius scale: containers and controls are square; 2px and 4px are the only small
+     steps; tags use rounded-full, which Tailwind already provides. */
+  --radius: 0px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Chakra Petch', 'Geist Sans', sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;

@@ -10,7 +10,8 @@
     "scheduler": "bun run src/scheduler/main.ts",
     "icons": "bun run scripts/generate-icons.mts",
     "icons:check": "bun run scripts/generate-icons.mts --check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "design:check": "bun scripts/__check_design_tokens.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

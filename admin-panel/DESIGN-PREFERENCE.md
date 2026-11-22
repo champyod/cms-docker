@@ -20,7 +20,11 @@ break a page silently. Every colour pair is measured in both modes; every contro
 that passes 2.4.13; meaning is never carried by hue alone.
 
 **Out of scope of this file.** The Rust backend migration (system and backend only, handed to its
-own session) and any code change: applying tokens and primitives is its own gated step (8e).
+own session). Code is changed only inside a gated step: applying tokens and the logo is step **8e**,
+with its own gate, not a side effect of deciding.
+
+**Done when** every topic is decided, 8e is applied with the gate measuring both modes, and the
+dashboard plus one table page are rebuilt on the system with zero raw controls that have a primitive.
 
 # Design preference — what survives repetition
 
