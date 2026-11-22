@@ -64,6 +64,10 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/submissions': 'redirect',
   '/submissions/lanes': 'redirect',
   '/teams': 'redirect',
+  // The old address for one team, and /people/teams/:id the canonical one: a bookmark on either
+  // resolves the same record, so this route forwards and renders nothing rather than growing a
+  // second surface that would slowly disagree with the first.
+  '/teams/:id': 'redirect',
   '/users': 'redirect',
 };
 

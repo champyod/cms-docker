@@ -68,7 +68,7 @@ Inventory: **0 of 0 pages documented.**
 | `/tasks/:id/files` | detail | — *to inventory* |
 | `/tasks/:id/overview` | detail | — *to inventory* |
 | `/tasks/:id/settings` | settings | — *to inventory* |
-| `/teams/:id` | detail | — *to inventory* |
+| `/teams/:id` | redirect | nothing of its own — an older address for the same team record: it gates on team:read and forwards to /people/teams/:id, which forwards to the overview tab |
 
 ## How a row is finished
 
