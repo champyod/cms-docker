@@ -1856,6 +1856,74 @@ render_log_service_env() {
   fi
 }
 
+# The [services] table as `Name|shard|host|port` lines, one per shard.
+# WHY the list position is the shard: conf.py enumerates each service's list, so shard 0 is
+# the first entry and its address is that pair. A Worker list spans several lines, so a key
+# keeps naming the entries until the section or another key starts.
+toml_services_table() {
+  local file="$1" line trimmed section="" key="" pair host port index
+  local -A shard_count=()
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    trimmed="$(toml_trim "${line%%#*}")"
+    if [[ "$trimmed" =~ ^\[([a-zA-Z0-9_]+)\]$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      continue
+    fi
+    [[ "$section" == "services" && -n "$trimmed" ]] || continue
+    if [[ "$trimmed" =~ ^([A-Za-z0-9_]+)[[:space:]]*= ]]; then
+      key="${BASH_REMATCH[1]}"
+    fi
+    [[ -n "$key" ]] || continue
+    while IFS= read -r pair; do
+      [[ -n "$pair" ]] || continue
+      [[ "$pair" =~ \"([^\"]+)\"[[:space:]]*,[[:space:]]*([0-9]+) ]] || continue
+      host="${BASH_REMATCH[1]}"
+      port="${BASH_REMATCH[2]}"
+      index="${shard_count[$key]:-0}"
+      printf '%s|%s|%s|%s\n' "$key" "$index" "$host" "$port"
+      shard_count[$key]=$((index + 1))
+    done < <(grep -oE '\[[[:space:]]*"[^"]+"[[:space:]]*,[[:space:]]*[0-9]+[[:space:]]*\]' <<< "$trimmed")
+  done < "$file"
+}
+
+# --- The resource service's three inputs, rendered from config/cms.toml ---
+# WHY only three: the contest, the autorestart flag and BIN_PATH are constructor arguments or
+# derived at run time in Python, not cms.toml keys, so emitting them here would invent config.
+render_resource_service_env() {
+  local file="config/cms.toml" shard table entry coord
+  if [[ ! -f "$file" ]]; then
+    log_info "No ${file} — the resource service's env is not rendered (this tree has no CMS service config)."
+    return 0
+  fi
+  shard="${__TOML[core.RESOURCE_SERVICE_SHARD]:-0}"
+  table="$(toml_services_table "$file")"
+  # WHY fatal: a coordinate with no row would refuse to start anyway, and an empty table
+  # tells the service nothing about the peers it is supposed to sample.
+  if [[ -z "$table" ]]; then
+    log_error "${file} has no [services] table; RESOURCE_SERVICE_ADDR and CMS_SERVICES cannot be formed."
+    exit 1
+  fi
+  entry="$(printf '%s\n' "$table" | awk -F'|' -v name="ResourceService" -v shard="$shard" '$1 == name && $2 == shard { print $3 ":" $4; exit }')"
+  # WHY fatal: one entry names one container's address, so a missing shard is a deployment
+  # whose second instance would be handed the first one's coordinate.
+  if [[ -z "$entry" ]]; then
+    log_error "${file} has no [services] ResourceService shard ${shard}; add ResourceService = [[\"cms-resource-service\", 28000]]."
+    exit 1
+  fi
+  coord="ResourceService,${shard}"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "Would write resource service env: RESOURCE_SERVICE_ADDR=${entry} RESOURCE_SERVICE_COORD=${coord} CMS_SERVICES=($(printf '%s\n' "$table" | wc -l | tr -d ' ') shards)"
+    return 0
+  fi
+  {
+    echo "### [resource-service] ###"
+    printf 'RESOURCE_SERVICE_ADDR=%s\n' "$(env_quote "$entry")"
+    printf 'RESOURCE_SERVICE_COORD=%s\n' "$(env_quote "$coord")"
+    printf 'CMS_SERVICES=%s\n' "$(env_quote "$table")"
+    echo ""
+  } >> "$MERGED_ENV"
+}
+
 # --- Main ---
 SECRETS_CHANGED=0
 
@@ -2099,6 +2167,9 @@ main() {
 
    # WHY here: [global] log_dir reaches cms.toml only during the injection above.
    render_log_service_env
+   # WHY after the logger: the same table names both addresses, and the logger's refusal
+   # already reports a cms.toml that has no [services] at all.
+   render_resource_service_env
  
   # Ensure backups/.gitkeep exists (monitor mount needs host dir) and that the
   # monitor's uid can write it — a directory created here belongs to the

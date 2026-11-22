@@ -119,6 +119,12 @@ impl<'a> ResourceService<'a> {
         self.interval
     }
 
+    /// Whether the restart pass is on for this service.
+    #[must_use]
+    pub fn is_autorestarting(&self) -> bool {
+        self.autorestart
+    }
+
     /// Whether `now` is at or past the next sample the interval asks for.
     #[must_use]
     pub fn is_due(&self, now: f64) -> bool {

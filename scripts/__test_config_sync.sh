@@ -163,5 +163,79 @@ assert_grep "$TEST_ROOT/sync-output.log" 'LOG_SERVICE_SHARD is 1' \
   "the failure names the shard it cannot address"
 
 echo ""
+echo "=== Test 11: .env carries the resource service's three inputs ==="
+setup_test_root
+sed 's|^#log_dir = .*|log_dir = "/var/local/log/cms"|' "$TEST_ROOT/config/cms.sample.toml" \
+  > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with a rendered cms.toml exits 0"
+assert_grep "$TEST_ROOT/.env" '^RESOURCE_SERVICE_ADDR=cms-resource-service:28000$' \
+  ".env RESOURCE_SERVICE_ADDR is the [services] ResourceService shard"
+assert_grep "$TEST_ROOT/.env" '^RESOURCE_SERVICE_COORD=ResourceService,0$' \
+  ".env RESOURCE_SERVICE_COORD is the shard the list holds"
+assert_grep "$TEST_ROOT/.env" 'LogService|0|cms-log-service|29000' \
+  "CMS_SERVICES carries the LogService shard"
+assert_grep "$TEST_ROOT/.env" 'ResourceService|0|cms-resource-service|28000' \
+  "CMS_SERVICES carries the ResourceService shard"
+if grep -q '^Worker|' "$TEST_ROOT/.env"; then
+  fail "CMS_SERVICES invented a Worker row although the Worker list is commented out"
+else
+  pass "no CMS_SERVICES row for a service the [services] table does not run"
+fi
+# WHY source it: the table is one multi-line value, and every shell reader of .env must get all of it.
+sourced_services="$(set -a; . "$TEST_ROOT/.env" >/dev/null 2>&1; printf '%s' "$CMS_SERVICES")"
+if [[ "$(printf '%s\n' "$sourced_services" | head -1)" == "LogService|0|cms-log-service|29000" ]] \
+   && [[ "$(printf '%s\n' "$sourced_services" | wc -l)" -ge 2 ]]; then
+  pass "sourcing .env gives CMS_SERVICES as one value of one line per shard"
+else
+  fail "CMS_SERVICES did not survive being sourced (got: $(printf '%s' "$sourced_services" | head -3 | tr '\n' ' '))"
+fi
+# WHY: the contest, the flag and BIN_PATH are container wiring, not cms.toml keys.
+for not_rendered in CMS_AUTORESTART CMS_CONTEST_ID CMS_BIN_PATH; do
+  if grep -q "^${not_rendered}=" "$TEST_ROOT/.env"; then
+    fail "${not_rendered} was emitted although no cms.toml key derives it"
+  else
+    pass "no ${not_rendered} in .env"
+  fi
+done
+
+echo ""
+echo "=== Test 12: a second shard is a second line, at its own index ==="
+setup_test_root
+sed 's|^ScoringService = .*|ScoringService = [["cms-scoring-service", 28500], ["cms-scoring-service-2", 28501]]|' \
+  "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "a two-shard service still syncs"
+assert_grep "$TEST_ROOT/.env" 'ScoringService|0|cms-scoring-service|28500' \
+  "the first shard keeps index 0"
+assert_grep "$TEST_ROOT/.env" 'ScoringService|1|cms-scoring-service-2|28501' \
+  "the second shard is index 1, not the first one's address"
+
+echo ""
+echo "=== Test 13: a missing [services] ResourceService stops the sync ==="
+setup_test_root
+grep -v '^ResourceService = ' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+if run_sync; then sync_code=0; else sync_code=$?; fi
+assert_exit 1 "$sync_code" "sync exits 1 without [services] ResourceService"
+assert_grep "$TEST_ROOT/sync-output.log" 'has no \[services\] ResourceService shard 0' \
+  "the failure names the missing entry and shard"
+if grep -q '^RESOURCE_SERVICE_ADDR=' "$TEST_ROOT/.env" 2>/dev/null; then
+  fail "RESOURCE_SERVICE_ADDR emitted without [services] ResourceService"
+else
+  pass "no RESOURCE_SERVICE_ADDR without [services] ResourceService"
+fi
+
+echo ""
+echo "=== Test 14: a resource service shard the table does not hold is refused ==="
+setup_test_root
+sed -i 's|^ACTIVE_DATABASE = .*|&\nRESOURCE_SERVICE_SHARD = 1|' "$TEST_ROOT/config.toml"
+sed 's|^#log_dir = .*|log_dir = "/var/local/log/cms"|' "$TEST_ROOT/config/cms.sample.toml" \
+  > "$TEST_ROOT/config/cms.toml"
+if run_sync; then sync_code=0; else sync_code=$?; fi
+assert_exit 1 "$sync_code" "sync exits 1 with RESOURCE_SERVICE_SHARD = 1"
+assert_grep "$TEST_ROOT/sync-output.log" 'ResourceService shard 1' \
+  "the failure names the shard it cannot address"
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]
