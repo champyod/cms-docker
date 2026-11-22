@@ -204,6 +204,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | (main session) | — | that dedup test asserted the orphan count over the **whole database**, so one failed run poisoned every later run until the database was dropped — I mistook a restored file for a broken one. Scoped to a floor captured at test start; re-proven three ways: passes with a pre-existing `lo_create` orphan, FAILS with the unlink removed, passes restored | `50a37ea3` |
 | 2026-11-22 | `feat/rust-S3d-submissions` + `feat/rust-S3e-contest` (parallel) | `1c6741d4` / `16520948` | task 646 + submission 799, contest 499 + usertest 550. **Both lanes were green alone and the merged tree did not compile** (`E0252: TokenMode defined multiple times`) — each had redeclared the same enum; see the fix row below | `d8e75868`, `5432c958` |
 | 2026-11-22 | (main session) | — | consolidated the duplicate `TokenMode` into `cms-db/src/token_mode.rs` (one concept: `contest.py:157` and `task.py:133` use the same constants and differ only in default). Parent's own mutation of `quota.rs:65` (infinite balance refusing as if zero) failed `an_infinite_task_always_offers_a_token` and `two_unlimited_sides_stay_unlimited`, exit 101, restored byte-identical. 104 binaries, 714 passed with a live database | `8549667f` |
+| 2026-11-22 | `feat/rust-S3f-util` | `8422a988` | contest/service binding + bootstrap. Parent's own mutation of `binding/active.rs:74` (an empty `is_active` flag made to bootstrap from `CONTEST_ID`) failed `a_fresh_install_is_bootstrapped_only_while_the_table_is_missing`, exit 101, restored byte-identical. Merged tree: 108 binaries, 736 passed, live database | merged |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -282,11 +283,33 @@ in the database; the missing MAC remains a named finding (F3), not something the
 | S-3c | `user` 439, `username/models` 175, `username/resolution` 211, `permissions` 145, `admin` 70, `security_block` 56 | **1,096** | in a lane, independent of S-3b |
 | S-3d | `submission` 799, `task` 646 | **1,445** | **merged** (`d8e75868`) |
 | S-3e | `contest` 499, `usertest` 550 | **1,049** | **merged** (`5432c958`) |
-| S-3f | `util` 568, `__init__` 175 | **743** | last: `__init__` is the package surface |
+| S-3f | `util` 568, `__init__` 175 | **743** | **partial** — 244 lines deferred, see S-3g |
 
 The arithmetic, computed rather than asserted: 751 + 1,391 + 1,096 + 1,445 + 1,049 + 743 = **6,475**, plus
 `types.py` **248** (already ported into `cms-db`'s `types.rs` long before S-3), `init.py` **52** and
 `username/__init__.py` **41** = **6,816**, which is the `wc -l` total. Nothing in the slice is unassigned.
+
+**S-3 IS NOT COMPLETE — 244 lines of `util.py` were deferred by decision (2026-11-22).** The lane ported the
+binding half (`_read_service_binding`, `service_binding`, `active_contest_id`, `_bootstrap_contest_id`,
+`contest_binding`, `_resolved_contest`) and deliberately left six reads, on the stated ground that they read
+other lanes' tables and would re-create the mixture `util.py` already suffers from. That reasoning was
+sound when it was written and is now obsolete: every one of those tables has since landed (`task/`,
+`submission/`, `contest/`, `filecache`, `fsobject`). Measured, not estimated:
+
+| function | lines | span in `util.py` |
+|---|---|---|
+| `get_contest_list` | 19 | 83-101 |
+| `is_contest_id` | 11 | 102-112 |
+| `get_submissions` | 60 | 355-414 |
+| `get_submission_results` | 68 | 415-482 |
+| `get_datasets_to_judge` | 23 | 483-505 |
+| `enumerate_files` | 63 | 506-568 |
+| **total** | **244** | |
+
+So S-3's queue is S-3g for these six, and only then is the slice done. Also deferred and stated: the two
+interactive prompts (`ask_for_contest:113`, `ask_for_active_contest:296`) belong to the CLI crate that asks
+them, not here; and the five-second registry TTL cache was dropped, so every binding read is the database's
+current answer — a behaviour change worth knowing when a caller expected the reference's staleness.
 
 Two ordering facts that are not obvious from the sizes: `filecacher` must follow `fsobject` because it
 imports `FSObject` and `LargeObject`, and S-3d must follow S-3b for the same reason through the cache.
