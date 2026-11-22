@@ -59,11 +59,6 @@ PACKAGE_DATA = {
     "cmscontrib": [
         "loaders/polygon/testlib.h",
     ],
-    "cmsranking": [
-        "static/img/*.*",
-        "static/lib/*.*",
-        "static/*.*",
-    ],
     "cmstestsuite": [
         "code/*.*",
         "tasks/batch_and_output/code/*",
@@ -127,7 +122,6 @@ setup(
         "scripts/cmsContestWebServer",
         "scripts/cmsAdminWebServer",
         "scripts/cmsProxyService",
-        "scripts/cmsRankingWebServer",
         "scripts/cmsInitDB",
         "scripts/cmsDropDB",
     ],

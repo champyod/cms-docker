@@ -9,8 +9,7 @@ Files: *
 Copyright: 2010-2018 The CMS development team <contestms@googlegroups.com>
 License: AGPL-3+
 
-Files: cmsranking/images/*
-       ranking-web/static/img/*.png
+Files: ranking-web/static/img/*.png
 Copyright: 2011-2012 Luca Wehrstedt <luca.wehrstedt@gmail.com>
 License: CC-BY-SA-3.0
 

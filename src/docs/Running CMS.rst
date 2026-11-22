@@ -124,8 +124,6 @@ services under ``~/.config/systemd/user/``:
   (which could be ``ALL`` if you want a common Contest Web Server for all contests).
   The resource service then manages all other services.
 
-* ``cms-ranking.service`` that starts the ``cmsRankingWebServer``.
-
 You can start a service by ``systemctl --user start cms-logging`` and make it start
 automatically when the system is booted up by ``systemctl --user enable cms-logging``.
 Other useful operations include ``status``, ``stop``, and ``disable``.

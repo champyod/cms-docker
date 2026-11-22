@@ -231,6 +231,94 @@ fn an_empty_footer_adds_no_block() {
     assert!(!rendered.contains("id=\"ranking-credits\""));
 }
 
+/// The notice block as rendered. With no panel byline it holds the anchor alone, so the
+/// first closing div is the notice's own.
+fn notice_block(rendered: &str) -> &str {
+    let start = rendered
+        .find("<div id=\"LicenseNotice\"")
+        .expect("the page carries the licence notice");
+    let rest = &rendered[start..];
+    let end = rest.find("</div>").expect("the notice closes") + "</div>".len();
+    &rest[..end]
+}
+
+/// What a reader sees, with the markup removed.
+fn visible_text(html: &str) -> String {
+    let mut text = String::new();
+    let mut inside_tag = false;
+    for character in html.chars() {
+        match character {
+            '<' => inside_tag = true,
+            '>' => inside_tag = false,
+            _ if !inside_tag => text.push(character),
+            _ => {}
+        }
+    }
+    text.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// The credits file the image serves, which the byline has to agree with.
+fn repo_credits() -> serde_json::Value {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../credits.json");
+    let raw = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("cannot read {}: {error}", path.display()));
+    serde_json::from_str(&raw).expect("the credits file is JSON")
+}
+
+/// The byline is read at a glance, so it is one element holding one line: a block tag
+/// inside it would break the line the layout reserves for it.
+#[test]
+fn the_license_notice_is_one_line_of_one_element() {
+    let rendered = page(None, None).expect("the page renders");
+    assert_eq!(rendered.matches("<div id=\"LicenseNotice\"").count(), 1);
+    assert_eq!(rendered.matches("id=\"LicenseNotice_project\"").count(), 1);
+    let block = notice_block(&rendered);
+    assert_eq!(
+        block.matches("<div").count(),
+        1,
+        "the notice nests another block: {block}"
+    );
+    for tag in [
+        "<br", "<p", "<table", "<ul", "<ol", "<li", "<h1", "<h2", "<pre",
+    ] {
+        assert!(
+            !block.contains(tag),
+            "{tag} breaks the notice line: {block}"
+        );
+    }
+    assert!(!visible_text(block).is_empty(), "{block}");
+}
+
+/// The byline names the project, its author and its lineage, and never the licence: the
+/// section 13 offer is visible text on the credits page the scoreboard sits beside.
+#[test]
+fn the_notice_names_the_project_and_its_author() {
+    let rendered = page(None, None).expect("the page renders");
+    let text = visible_text(notice_block(&rendered));
+    let credits = repo_credits();
+    let name = credits["project"]["name"]
+        .as_str()
+        .expect("the credits file names the project");
+    let author = credits["project"]["author"]
+        .as_str()
+        .expect("the credits file names the author");
+    assert!(text.contains(name), "{text}");
+    assert!(text.contains(author), "{text}");
+    assert!(!text.contains("AGPL-3.0"), "{text}");
+    let credits_page = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static/credits.html");
+    assert!(credits_page.is_file(), "{}", credits_page.display());
+}
+
+/// The offer is filled in from /config at load time, so no repository URL may be written
+/// into the page for a fork to inherit.
+#[test]
+fn the_offer_link_follows_the_runtime_config() {
+    let rendered = page(None, None).expect("the page renders");
+    assert!(rendered.contains("PublicConfig[\"source_url\"]"));
+    assert!(!rendered.contains("https://github.com/"));
+    assert!(!visible_text(notice_block(&rendered)).contains("source_url"));
+}
+
 /// The vendored credits.html reads project["name"], license["name"], license["url"]
 /// and license["spdx_id"], so the route must serve objects, not the flattened strings
 /// the port used to emit.
