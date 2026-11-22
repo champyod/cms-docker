@@ -218,6 +218,10 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: ResourceService
       SERVICE_SHARD: ${RESOURCE_SERVICE_SHARD:-0}
+      RESOURCE_SERVICE_ADDR: ${RESOURCE_SERVICE_ADDR}
+      RESOURCE_SERVICE_COORD: ResourceService,${RESOURCE_SERVICE_SHARD:-0}
+      CMS_SERVICES: ${CMS_SERVICES}
+      RPC_SECRET: ${RPC_SECRET}
     ports:
       - "${INNER_IP:-127.0.0.1}:28000:28000"
     volumes:
@@ -231,9 +235,9 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/ResourceService-${RESOURCE_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsResourceService ${RESOURCE_SERVICE_SHARD:-0}"
+             cms-resource-service"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsResourceService && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f cms-resource-service && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 28000))\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
