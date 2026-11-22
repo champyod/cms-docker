@@ -8,6 +8,10 @@ codecov/
 .jj/
 node_modules/
 **node_modules/
+# Rust build artifacts. Without this a backend-build stage copies every worktree's
+# target/ (gigabytes) into the build context before compiling a line.
+target/
+**/target/
 .ruff_cache/
 .vscode/
 .idea/

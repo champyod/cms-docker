@@ -17,6 +17,16 @@ WORKDIR /build
 COPY ranking-web/ ./
 RUN cargo build --release
 
+# The backend workspace: the Rust services that replace the Python ones. Separate
+# stage for the same reason as ranking-build — the runtime layer stays toolchain-free,
+# so shipping one service does not drag a 1.5 GB Rust toolchain into the image.
+FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8 AS backend-build
+WORKDIR /build
+COPY backend/ ./
+# Only the service being shipped, so the build does not pay for cms-worker's sandbox
+# fixtures. More binaries join this line as their services are ported.
+RUN cargo build --release --package cms-svc --bin cms-log-service
+
 FROM ${BASE_IMAGE}
 
 # Default mirror. Override with --build-arg APT_MIRROR=mirror.example.com
@@ -199,6 +209,11 @@ ENV PATH="/home/cmsuser/cms/bin:$PATH"
 
 # Built in the ranking-build stage; the runtime layer stays toolchain-free.
 COPY --from=ranking-build --chown=cmsuser:cmsuser /build/target/release/cms-ranking /home/cmsuser/cms/bin/cms-ranking
+
+# Built in the backend-build stage, same rule: no toolchain in the runtime layer.
+# The binary is shipped but NOT yet wired to a container — docker-compose still
+# runs cmsLogService. Switching it is a separate, operator-visible step.
+COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-log-service /home/cmsuser/cms/bin/cms-log-service
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel
