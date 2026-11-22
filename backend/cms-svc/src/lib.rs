@@ -36,6 +36,7 @@
 mod connector;
 mod host;
 mod log;
+pub mod service;
 
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,

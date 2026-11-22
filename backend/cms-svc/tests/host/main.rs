@@ -3,6 +3,7 @@
 mod answers;
 mod framing;
 mod refusals;
+mod service;
 mod stopping;
 
 use std::io::{Read, Write};

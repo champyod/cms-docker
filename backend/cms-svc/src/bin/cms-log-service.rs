@@ -6,7 +6,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use cms_proto::GateConfig;
-use cms_svc::{FormatterSettings, Host, HostError, LogError, LogService};
+use cms_svc::{service, FormatterSettings, Host, HostError, LogError, LogService};
 
 /// The `host:port` the RPC listener binds, rendered from `[services] LogService`.
 const ADDRESS_VARIABLE: &str = "LOG_SERVICE_ADDR";
@@ -19,7 +19,7 @@ const LOG_DIR_VARIABLE: &str = "LOG_DIR";
 
 fn main() -> ExitCode {
     match run() {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             eprintln!("cms-log-service: {error}");
             ExitCode::FAILURE
@@ -27,8 +27,8 @@ fn main() -> ExitCode {
     }
 }
 
-/// Starts the service on the configured address and serves until the host is stopped.
-fn run() -> Result<(), StartError> {
+/// Starts the service on the configured address and reports the exit its stop asked for.
+fn run() -> Result<ExitCode, StartError> {
     let address = required(ADDRESS_VARIABLE)?;
     let secret = required(SECRET_VARIABLE)?;
     let log_dir = required(LOG_DIR_VARIABLE)?;
@@ -39,9 +39,15 @@ fn run() -> Result<(), StartError> {
         is_backdoor_enabled: false,
     };
     let host = Host::bind(address.as_str(), service.methods(), config)?;
+    // WHY: `quit` reaches the host through one slot, so the root that bound it is the one that fills it.
+    service::attach_stop(host.stop_handle()).map_err(StartError::Stop)?;
     println!("cms-log-service listening on {}", host.local_addr()?);
-    host.run()?;
-    Ok(())
+    let outcome = host.run()?;
+    Ok(if outcome.is_fatal() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
 }
 
 /// Reads an environment variable the process cannot run without; unset, blank or non-UTF-8 is refused by name.
@@ -59,6 +65,8 @@ enum StartError {
     Missing(&'static str),
     /// The log file could not be opened.
     Log(LogError),
+    /// The base methods could not be given the host `quit` stops.
+    Stop(String),
     /// The listener could not be bound or stopped accepting.
     Host(HostError),
 }
@@ -71,6 +79,7 @@ impl fmt::Display for StartError {
                 "{name} is unset or empty; the logger needs it set and will not invent one"
             ),
             Self::Log(error) => write!(formatter, "{error}"),
+            Self::Stop(reason) => write!(formatter, "{reason}"),
             Self::Host(error) => write!(formatter, "{error}"),
         }
     }
@@ -79,7 +88,7 @@ impl fmt::Display for StartError {
 impl std::error::Error for StartError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            Self::Missing(_) => None,
+            Self::Missing(_) | Self::Stop(_) => None,
             Self::Log(error) => Some(error),
             Self::Host(error) => Some(error),
         }
