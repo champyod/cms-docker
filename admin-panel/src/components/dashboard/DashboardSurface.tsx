@@ -149,8 +149,7 @@ export function DashboardState({
     return (
       <p className="flex items-center gap-2 text-sm text-muted-foreground">
         <CheckCircle2 className="size-4 text-success" aria-hidden />
-        <span>{labels.serviceState.ok}</span>
-        <span aria-hidden>·</span>
+        <span>{labels.serviceState.ok},</span>
         <span>{fill(labels.checkedAt, service.checkedAt)}</span>
       </p>
     );

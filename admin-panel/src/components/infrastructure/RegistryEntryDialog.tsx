@@ -28,7 +28,8 @@ export function RegistryEntryDialog({
   onClose,
   onSubmit,
 }: RegistryEntryDialogProps): React.JSX.Element {
-  const copy = useDictionary().infrastructure.services;
+  const dict = useDictionary();
+  const copy = dict.infrastructure.services;
   return (
     <Dialog
       open={kind !== null}
@@ -54,6 +55,7 @@ export function RegistryEntryDialog({
             value={draft[field.key] ?? ''}
             contests={contests}
             services={services}
+            missing={dict.common.notSet}
             onChange={(value): void => onChange(field.key, value)}
           />
         ))}
@@ -69,9 +71,11 @@ interface FieldInputProps {
   contests: ContestOption[];
   services: ServiceRecord[];
   onChange: (value: string) => void;
+  /** common.notSet: the option that means no choice has been made. */
+  missing: string;
 }
 
-function FieldInput({ field, label, value, contests, services, onChange }: FieldInputProps): React.JSX.Element {
+function FieldInput({ field, label, value, contests, services, onChange, missing }: FieldInputProps): React.JSX.Element {
   if (field.kind === 'boolean') {
     return (
       <label className="flex items-center gap-2 text-sm text-foreground">
@@ -92,6 +96,7 @@ function FieldInput({ field, label, value, contests, services, onChange }: Field
         value={value}
         options={optionsFor(field, contests, services)}
         onChange={onChange}
+        missing={missing}
       />
     );
   }
@@ -125,9 +130,11 @@ interface ChoiceFieldProps {
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  /** common.notSet: the option that means no choice has been made. */
+  missing: string;
 }
 
-function ChoiceField({ label, value, options, onChange }: ChoiceFieldProps): React.JSX.Element {
+function ChoiceField({ label, value, options, onChange, missing }: ChoiceFieldProps): React.JSX.Element {
   return (
     <label className="block text-sm text-foreground">
       <span className="mb-1 block text-muted-foreground">{label}</span>
@@ -136,7 +143,7 @@ function ChoiceField({ label, value, options, onChange }: ChoiceFieldProps): Rea
         value={value}
         onChange={(event): void => onChange(event.target.value)}
       >
-        <option value="">—</option>
+        <option value="">{missing}</option>
         {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </label>

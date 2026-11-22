@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Banned-character gate.
+ * Banned-character gate. The baseline is zero and may not rise: the panel carries neither mark in
+ * anything a reader sees.
  *
  * DESIGN.md 19 bans two marks from anything a reader sees: the em dash and the middle dot. Both are
  * allowed inside a source comment, which no reader sees, so this gate skips comment lines and counts
@@ -17,7 +18,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(process.env.BANNED_ROOT ?? process.cwd());
-const BASELINE = Number(process.env.BANNED_BASELINE ?? 2);
+const BASELINE = Number(process.env.BANNED_BASELINE ?? 0);
 const BANNED = [
   { mark: '·', name: 'middle dot' },
   { mark: '—', name: 'em dash' },
