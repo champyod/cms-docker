@@ -2,10 +2,10 @@
 -- PostgreSQL database dump
 --
 
-\restrict ZzefGcvda0RUL0NRKj3gsrvEVULtjcGj7gvPNkYi7Ws0Bhn4sMcjSLmcOpXRjjr
+\restrict ugtgy81btQsIQfB0yGppIWED5kf7z86vTYLxxRgil0krtpKoGriXyqsFiEa7ir9
 
--- Dumped from database version 16.16
--- Dumped by pg_dump version 16.16
+-- Dumped from database version 15.20 (Debian 15.20-1.pgdg13+1)
+-- Dumped by pg_dump version 15.20 (Debian 15.20-1.pgdg13+1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -206,7 +206,7 @@ CREATE SEQUENCE public.admins_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.admins_id_seq OWNER TO cmsuser;
+ALTER TABLE public.admins_id_seq OWNER TO cmsuser;
 
 --
 -- Name: admins_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -244,7 +244,7 @@ CREATE SEQUENCE public.announcements_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.announcements_id_seq OWNER TO cmsuser;
+ALTER TABLE public.announcements_id_seq OWNER TO cmsuser;
 
 --
 -- Name: announcements_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -280,7 +280,7 @@ CREATE SEQUENCE public.attachments_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.attachments_id_seq OWNER TO cmsuser;
+ALTER TABLE public.attachments_id_seq OWNER TO cmsuser;
 
 --
 -- Name: attachments_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -387,7 +387,7 @@ CREATE SEQUENCE public.contests_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.contests_id_seq OWNER TO cmsuser;
+ALTER TABLE public.contests_id_seq OWNER TO cmsuser;
 
 --
 -- Name: contests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -432,7 +432,7 @@ CREATE SEQUENCE public.datasets_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.datasets_id_seq OWNER TO cmsuser;
+ALTER TABLE public.datasets_id_seq OWNER TO cmsuser;
 
 --
 -- Name: datasets_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -477,7 +477,7 @@ CREATE SEQUENCE public.evaluations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.evaluations_id_seq OWNER TO cmsuser;
+ALTER TABLE public.evaluations_id_seq OWNER TO cmsuser;
 
 --
 -- Name: evaluations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -514,7 +514,7 @@ CREATE SEQUENCE public.executables_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.executables_id_seq OWNER TO cmsuser;
+ALTER TABLE public.executables_id_seq OWNER TO cmsuser;
 
 --
 -- Name: executables_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -550,7 +550,7 @@ CREATE SEQUENCE public.files_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.files_id_seq OWNER TO cmsuser;
+ALTER TABLE public.files_id_seq OWNER TO cmsuser;
 
 --
 -- Name: files_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -599,7 +599,7 @@ CREATE SEQUENCE public.managers_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.managers_id_seq OWNER TO cmsuser;
+ALTER TABLE public.managers_id_seq OWNER TO cmsuser;
 
 --
 -- Name: managers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -637,7 +637,7 @@ CREATE SEQUENCE public.messages_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.messages_id_seq OWNER TO cmsuser;
+ALTER TABLE public.messages_id_seq OWNER TO cmsuser;
 
 --
 -- Name: messages_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -682,7 +682,7 @@ CREATE SEQUENCE public.participations_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.participations_id_seq OWNER TO cmsuser;
+ALTER TABLE public.participations_id_seq OWNER TO cmsuser;
 
 --
 -- Name: participations_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -725,7 +725,7 @@ CREATE SEQUENCE public.questions_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.questions_id_seq OWNER TO cmsuser;
+ALTER TABLE public.questions_id_seq OWNER TO cmsuser;
 
 --
 -- Name: questions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -761,7 +761,7 @@ CREATE SEQUENCE public.statements_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.statements_id_seq OWNER TO cmsuser;
+ALTER TABLE public.statements_id_seq OWNER TO cmsuser;
 
 --
 -- Name: statements_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -832,7 +832,7 @@ CREATE SEQUENCE public.submissions_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.submissions_id_seq OWNER TO cmsuser;
+ALTER TABLE public.submissions_id_seq OWNER TO cmsuser;
 
 --
 -- Name: submissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -899,7 +899,7 @@ CREATE SEQUENCE public.tasks_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.tasks_id_seq OWNER TO cmsuser;
+ALTER TABLE public.tasks_id_seq OWNER TO cmsuser;
 
 --
 -- Name: tasks_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -935,7 +935,7 @@ CREATE SEQUENCE public.teams_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.teams_id_seq OWNER TO cmsuser;
+ALTER TABLE public.teams_id_seq OWNER TO cmsuser;
 
 --
 -- Name: teams_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -973,7 +973,7 @@ CREATE SEQUENCE public.testcases_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.testcases_id_seq OWNER TO cmsuser;
+ALTER TABLE public.testcases_id_seq OWNER TO cmsuser;
 
 --
 -- Name: testcases_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1008,7 +1008,7 @@ CREATE SEQUENCE public.tokens_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.tokens_id_seq OWNER TO cmsuser;
+ALTER TABLE public.tokens_id_seq OWNER TO cmsuser;
 
 --
 -- Name: tokens_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1045,7 +1045,7 @@ CREATE SEQUENCE public.user_test_executables_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_test_executables_id_seq OWNER TO cmsuser;
+ALTER TABLE public.user_test_executables_id_seq OWNER TO cmsuser;
 
 --
 -- Name: user_test_executables_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1081,7 +1081,7 @@ CREATE SEQUENCE public.user_test_files_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_test_files_id_seq OWNER TO cmsuser;
+ALTER TABLE public.user_test_files_id_seq OWNER TO cmsuser;
 
 --
 -- Name: user_test_files_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1117,7 +1117,7 @@ CREATE SEQUENCE public.user_test_managers_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_test_managers_id_seq OWNER TO cmsuser;
+ALTER TABLE public.user_test_managers_id_seq OWNER TO cmsuser;
 
 --
 -- Name: user_test_managers_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1188,7 +1188,7 @@ CREATE SEQUENCE public.user_tests_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.user_tests_id_seq OWNER TO cmsuser;
+ALTER TABLE public.user_tests_id_seq OWNER TO cmsuser;
 
 --
 -- Name: user_tests_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -1229,7 +1229,7 @@ CREATE SEQUENCE public.users_id_seq
     CACHE 1;
 
 
-ALTER SEQUENCE public.users_id_seq OWNER TO cmsuser;
+ALTER TABLE public.users_id_seq OWNER TO cmsuser;
 
 --
 -- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: cmsuser
@@ -2295,5 +2295,5 @@ ALTER TABLE ONLY public.user_tests
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ZzefGcvda0RUL0NRKj3gsrvEVULtjcGj7gvPNkYi7Ws0Bhn4sMcjSLmcOpXRjjr
+\unrestrict ugtgy81btQsIQfB0yGppIWED5kf7z86vTYLxxRgil0krtpKoGriXyqsFiEa7ir9
 
