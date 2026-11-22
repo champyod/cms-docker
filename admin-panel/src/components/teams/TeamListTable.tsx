@@ -10,7 +10,6 @@ import type { TeamSummary } from '@/lib/people-read-model-types';
 
 import { TeamRowActions } from './TeamRowActions';
 import { buildTeamColumns } from './teamColumns';
-import type { TeamCapabilities } from './useTeamListActions';
 
 export type TeamListCopy = Pick<Dictionary['teams'], 'addTeam' | 'tableEmptyTitle' | 'tableEmptyDescription'>;
 
@@ -18,10 +17,8 @@ export interface TeamListTableProps {
   readonly teams: readonly TeamSummary[];
   readonly recordHref: (team: TeamSummary) => string;
   readonly permissionKeys: readonly string[];
-  readonly capabilities: TeamCapabilities;
   readonly onEdit: (team: TeamSummary) => void;
   readonly onDelete: (teamId: number) => void;
-  readonly onCreate: () => void;
   readonly copy: TeamListCopy;
   readonly sort?: ListSortInput;
   readonly onSortChange?: (sort: ListSortInput) => void;
@@ -31,10 +28,8 @@ export function TeamListTable({
   teams,
   recordHref,
   permissionKeys,
-  capabilities,
   onEdit,
   onDelete,
-  onCreate,
   copy,
   sort,
   onSortChange,
@@ -59,8 +54,6 @@ export function TeamListTable({
           icon={Users}
           title={copy.tableEmptyTitle}
           description={copy.tableEmptyDescription}
-          actionLabel={capabilities.canCreate ? copy.addTeam : undefined}
-          onAction={capabilities.canCreate ? onCreate : undefined}
         />
       }
       sort={sort}

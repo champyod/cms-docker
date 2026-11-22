@@ -35,7 +35,7 @@ Inventory: **15 of 59 pages documented.**
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
-| `/people/teams` | list | teams with member count and state · count against total · sort · per-row actions · create · live refresh |
+| `/people/teams` | list | teams with id, code, name, registerable flag, member count and organization · sort · per-row edit and delete · create · live refresh · what empty means. No filter and no total: the read returns every team in one pass, so there is no narrower set and nothing left out to count against |
 | `/people/teams/:id` | detail | — *to inventory* |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
