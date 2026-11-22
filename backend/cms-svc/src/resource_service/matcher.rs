@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use super::coord::{LocalService, ServiceCoord};
+use super::naming::camel_case;
 use crate::resource::{ProcessFacts, ReadError, ResourceReader};
 
 /// The service a command line names, and the shard it was given, if any.
@@ -108,20 +109,6 @@ fn binary_service_name(program: &str, bin_path: &Path) -> Option<String> {
         return None;
     }
     camel_case(path.file_name()?.to_str()?.strip_prefix("cms-")?)
-}
-
-/// `log-service` → `LogService`, so both forms key the same report entry.
-fn camel_case(kebab: &str) -> Option<String> {
-    let mut name = String::new();
-    for segment in kebab.split('-') {
-        if segment.is_empty() || !segment.chars().all(|c| c.is_ascii_lowercase()) {
-            return None;
-        }
-        let mut characters = segment.chars();
-        name.push(characters.next()?.to_ascii_uppercase());
-        name.extend(characters);
-    }
-    Some(name)
 }
 
 /// The first all-digit argument two apart from `from`, as the shard scan reads the options.
