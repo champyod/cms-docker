@@ -9,7 +9,6 @@ import {
 import { getRankingOverrides, type RankingOverride } from '@/app/actions/rankingOverrides';
 import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
-import { Grid, Stack } from '@/components/core/Layout';
 import {
   Table,
   TableBody,
@@ -19,6 +18,7 @@ import {
   TableRow,
 } from '@/components/core/Table';
 import { Text } from '@/components/core/Typography';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { RankingOverrideList } from '@/components/ranking/RankingOverrideList';
 import { RankingOverrideSurface } from '@/components/ranking/RankingOverrideSurface';
 import { getDictionary } from '@/i18n';
@@ -52,42 +52,6 @@ function userOverrides(
       override.targetKind === 'user' &&
       override.targetKey === entry.username &&
       override.contestId === entry.contestId,
-  );
-}
-
-interface DetailFieldProps {
-  readonly term: string;
-  readonly value: string;
-}
-
-function DetailField({ term, value }: DetailFieldProps): React.JSX.Element {
-  return (
-    <div className="min-w-0">
-      <Text as="dt" variant="label" color={MUTED}>
-        {term}
-      </Text>
-      <Text as="dd" variant="small" className="text-foreground/80 truncate block" title={value}>
-        {value}
-      </Text>
-    </div>
-  );
-}
-
-function Identity({ entry, copy }: { readonly entry: RankingUserEntry; readonly copy: UsersCopy }): React.JSX.Element {
-  return (
-    <Card className="space-y-4">
-      <Text as="h2" variant="h3">
-        {copy.identity}
-      </Text>
-      <Grid as="dl" cols={2} gap={3} className="text-sm">
-        <DetailField term={copy.name} value={entry.displayName} />
-        <DetailField term={copy.username} value={entry.username} />
-        <DetailField term={copy.team} value={entry.teamName ?? EMPTY_VALUE} />
-        <DetailField term={copy.total} value={entry.totalScore.toFixed(TOTAL_SCORE_PRECISION)} />
-        <DetailField term={copy.rank} value={String(entry.rank)} />
-        <DetailField term={copy.hidden} value={entry.hidden ? copy.hiddenYes : copy.hiddenNo} />
-      </Grid>
-    </Card>
   );
 }
 
@@ -163,6 +127,13 @@ function OverrideCard({ copy, entry, options, overrides, canOverride }: Override
   );
 }
 
+/**
+ * One participant's row, opened.
+ *
+ * WHY a detail and not a list: the page is about a single record — a participation in a contest —
+ * and its six values are read as a fact strip rather than as the first table on the page. The
+ * scores and the overrides are sections belonging to that record, not further rows of one set.
+ */
 export default async function RankingUserDetailPage({
   params,
 }: {
@@ -179,16 +150,32 @@ export default async function RankingUserDetailPage({
   const options = canOverride ? await getRankingOverrideOptions() : null;
   const overrides = userOverrides(await getRankingOverrides(detail.entry.contestId), detail.entry);
   return (
-    <Stack gap={6}>
-      <Identity entry={detail.entry} copy={copy.users} />
-      <TaskScores entry={detail.entry} tasks={detail.tasks} copy={copy.users} />
-      <OverrideCard
-        copy={copy}
-        entry={detail.entry}
-        options={options}
-        overrides={overrides}
-        canOverride={canOverride}
-      />
-    </Stack>
+    <DetailPage
+      // The module shell above renders the title, the description and the trail.
+      ownsHeader={false}
+      title={detail.entry.displayName}
+      facts={[
+        { term: copy.users.name, value: detail.entry.displayName },
+        { term: copy.users.username, value: detail.entry.username },
+        { term: copy.users.team, value: detail.entry.teamName ?? EMPTY_VALUE },
+        { term: copy.users.total, value: detail.entry.totalScore.toFixed(TOTAL_SCORE_PRECISION) },
+        { term: copy.users.rank, value: String(detail.entry.rank) },
+        {
+          term: copy.users.hidden,
+          value: detail.entry.hidden ? copy.users.hiddenYes : copy.users.hiddenNo,
+        },
+      ]}
+    >
+      <div className="space-y-4">
+        <TaskScores entry={detail.entry} tasks={detail.tasks} copy={copy.users} />
+        <OverrideCard
+          copy={copy}
+          entry={detail.entry}
+          options={options}
+          overrides={overrides}
+          canOverride={canOverride}
+        />
+      </div>
+    </DetailPage>
   );
 }
