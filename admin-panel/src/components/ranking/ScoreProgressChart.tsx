@@ -141,7 +141,7 @@ export function ScoreProgressChart({
               >
                 <div className="h-1.5 w-px bg-border" />
                 {showXLabels ? (
-                  <span className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                  <span className="font-mono text-xs text-muted-foreground mt-0.5">
                     {tick.value}
                   </span>
                 ) : null}

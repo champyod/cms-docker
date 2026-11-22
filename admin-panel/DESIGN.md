@@ -284,6 +284,10 @@ There is no second way to name a size. `text-[length:var(--text-…)]` is gone, 
 `--text-label … --text-display` tokens with it; they were also declared twice, once in `:root` and
 again in `.dark`, for sizes that do not change with the theme.
 
+The smallest step is 12px. Nothing on the panel is set below it: the nine labels that used 10px
+(chart axis, wordmark, bottom-bar tabs, badge, notification counter) were raised onto `text-xs` by the
+operator's decision, and a smaller size would be text the reader has to squint at.
+
 Measured in a browser at three roots, not read off the CSS: 16px gives 12 / 14.4 / 17.28 / 20.736 /
 24.88 / 29.856, 18px gives 13.5 / 16.2 / 19.44 / 23.328 / 27.99 / 33.588, 14px gives 10.5 / 12.6 /
 15.12 / 18.144 / 21.77 / 26.124.

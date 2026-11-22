@@ -88,7 +88,7 @@ export function AdminAccessEditor({
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-foreground font-medium truncate">{group.name}</span>
                   {group.is_seeded && (
-                    <span className="px-1.5 py-0.5 text-[0.625rem] rounded-full bg-muted text-muted-foreground">Seeded</span>
+                    <span className="px-1.5 py-0.5 text-xs rounded-full bg-muted text-muted-foreground">Seeded</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{group.description ?? 'No description'}</p>

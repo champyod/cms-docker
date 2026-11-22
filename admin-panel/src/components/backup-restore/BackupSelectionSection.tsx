@@ -50,7 +50,7 @@ function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps
             {locked && (
                 <span
                     title="Pulled in because a selected table stores a digest that resolves into it; removing it would make those rows unrestorable."
-                    className="ml-auto inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-sky-300 shrink-0"
+                    className="ml-auto inline-flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-sky-300 shrink-0"
                 >
                     <Lock className="size-3" />
                     Required
@@ -59,7 +59,7 @@ function TableRow({ table, selected, disabled, locked, onToggle }: TableRowProps
             {!locked && table.needsLargeObjects === true && (
                 <span
                     title="Rows reference large objects, so fsobjects must be in the same dump."
-                    className="ml-auto text-[10px] font-bold uppercase tracking-widest text-amber-400 shrink-0"
+                    className="ml-auto text-xs font-bold uppercase tracking-widest text-amber-400 shrink-0"
                 >
                     LO
                 </span>

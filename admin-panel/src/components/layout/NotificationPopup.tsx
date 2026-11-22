@@ -61,7 +61,7 @@ function AlertEntry({ event, locale, formatTimestamp, copy }: AlertEntryProps): 
     <>
       <p className="text-xs font-semibold text-foreground">{title}</p>
       <p className="text-xs text-muted-foreground break-words">{detail}</p>
-      <p className="font-mono text-[10px] text-muted-foreground/70">{formatTimestamp(event.timestamp)}</p>
+      <p className="font-mono text-xs text-muted-foreground/70">{formatTimestamp(event.timestamp)}</p>
     </>
   );
   return (

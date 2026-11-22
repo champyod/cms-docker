@@ -49,7 +49,7 @@ export function NotificationBell({ events, unread, onClear, onSeen }: Notificati
         <span className="relative flex">
           <BellRing className="size-4" />
           {unread > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-0.5 rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center animate-pulse">
+            <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-0.5 rounded-full bg-destructive text-xs font-bold text-white flex items-center justify-center animate-pulse">
               {unread > 9 ? '9+' : unread}
             </span>
           )}
