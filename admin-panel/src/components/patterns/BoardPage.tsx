@@ -10,6 +10,12 @@ export interface BoardSection {
   readonly title: string;
   /** What this section answers, in one line — a board of five untitled lists is a wall. */
   readonly description?: string;
+  /**
+   * How many rows the section holds, when that is a fact worth reading before them. A count belongs
+   * in its own slot: written into the title it joins the heading's accessible name and stops being
+   * a number the eye can compare with the one beside it.
+   */
+  readonly count?: number;
   /** The section's own state, when it has one worth reading before its rows. */
   readonly state?: ReactNode;
   /** What empty means for this section specifically: "no blocks" differs from "not loaded". */
@@ -63,7 +69,13 @@ export function BoardPage({
         {state}
         {freshness && <p className="text-[length:var(--text-label)] text-muted-foreground">{freshness}</p>}
         {sections.map((section) => (
-          <SectionCard key={section.key} title={section.title} description={section.description} actions={section.actions}>
+          <SectionCard
+            key={section.key}
+            title={section.title}
+            description={section.description}
+            count={section.count}
+            actions={section.actions}
+          >
             {section.state}
             {/* A section that names its empty state renders it instead of its rows: the page knows
                 whether the section is empty, and passing `empty` is how it says so. */}

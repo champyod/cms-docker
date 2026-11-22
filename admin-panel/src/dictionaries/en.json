@@ -11,7 +11,10 @@
       "kinds": {
         "service": "Service",
         "wiring": "Wiring",
-        "exposure": "Exposure"
+        "exposure": "Exposure",
+        "serviceHint": "The processes this deployment runs, the contest each one serves and whether it is enabled.",
+        "wiringHint": "Which service reaches which, and over which relation.",
+        "exposureHint": "Which host path reaches which service, and where it is published."
       },
       "columns": {
         "actions": "Actions",

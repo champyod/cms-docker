@@ -48,6 +48,21 @@ describe('BoardPage', () => {
     expect(html).toContain('data-surface-owns-header="shell"');
   });
 
+  it('puts a section count in its own slot, outside the heading name', () => {
+    const html = renderToStaticMarkup(
+      <BoardPage
+        breadcrumbs={crumbs}
+        title="Services"
+        sections={[{ key: 'services', title: 'Service', count: 12, rows: <span>rows</span> }]}
+      />,
+    );
+
+    // The heading is the word; the count is a badge beside it, so a reader navigating by headings
+    // hears "Service" and not "Service 12".
+    expect(html).toMatch(/<h2[^>]*>Service<\/h2>/);
+    expect(html).toContain('(12)');
+  });
+
   it('reads freshness as a note, not as a line of content', () => {
     const html = renderToStaticMarkup(
       <BoardPage

@@ -46,8 +46,9 @@ export default async function InfrastructureServicesPage({
   const sections: readonly BoardSection[] = [
     {
       key: 'services',
-      title: `${copy.kinds.service} (${registry.services.length})`,
-      description: 'The processes this deployment runs, the contest each one serves and whether it is enabled.',
+      title: copy.kinds.service,
+      count: registry.services.length,
+      description: copy.kinds.serviceHint,
       rows: (
         <RegistryKindSection
           kind="service"
@@ -62,8 +63,9 @@ export default async function InfrastructureServicesPage({
     },
     {
       key: 'wirings',
-      title: `${copy.kinds.wiring} (${registry.wirings.length})`,
-      description: 'Which service reaches which, and over which relation.',
+      title: copy.kinds.wiring,
+      count: registry.wirings.length,
+      description: copy.kinds.wiringHint,
       rows: (
         <RegistryKindSection
           kind="wiring"
@@ -78,9 +80,9 @@ export default async function InfrastructureServicesPage({
     },
     {
       key: 'exposures',
-      title: `${copy.kinds.exposure} (${registry.exposures.length})`,
-      description:
-        'The routes the front publishes for a contest, and who owns each one — a curated route is moved in config.toml, not here.',
+      title: copy.kinds.exposure,
+      count: registry.exposures.length,
+      description: copy.kinds.exposureHint,
       rows: (
         <RegistryKindSection
           kind="exposure"
@@ -103,10 +105,9 @@ export default async function InfrastructureServicesPage({
 
   return (
     <BoardPage
-      // The module shell above renders the title, the description and the trail.
+      // The infrastructure module shell renders this page's name, description and trail from the
+      // navigation registry, so the page supplies its state and its sections.
       ownsHeader={false}
-      title={dict.navigation.infrastructure.services.label}
-      description={dict.navigation.infrastructure.services.description}
       state={problems.length > 0 ? <RegistryProblems problems={problems} copy={copy} /> : undefined}
       sections={sections}
     />
