@@ -189,11 +189,18 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S2c-datetime` | `2e28ff39` | `cargo test -p cms-db --test mapping_datetime` → 7 passed, 0 failed, 2 ignored | `a3a605c4` |
 | 2026-11-22 | `feat/rust-S1-equivalence-oracle` | `58a6c24b` | `python3 -m unittest tests/test_render_parity.py` → 20 tests OK | `b282ed4c` |
 | 2026-11-22 | `feat/rust-svc-host` | `32db4b41` | `cargo test -p cms-svc` → 25 passed; parent's own mutation of `connection.rs:76` (`Send::Dropped` → `Flow::Continue`) failed `refusals::a_request_without_an_id_closes_the_connection_without_a_reply`, exit 101, then restored byte-identical | `578c743d` |
+| 2026-11-22 | `feat/rust-logservice` | `e9158035` | `cargo test -p cms-svc` → 42 passed; parent's own mutation of `recent.rs:12` (`CAPACITY` 100 → 99) failed `log::sink::tests::a_hundred_and_one_warnings_keep_the_newest_hundred_in_order` with left 99 / right 100, exit 101, then restored byte-identical | `57f5be26` |
 
-Gate on the tree after all three merges (`578c743d`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 65 test binaries, 340 passed,
+Gate on the tree after all four merges (`57f5be26`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 66 test binaries, 357 passed,
 0 failed, 2 ignored, exit 0. Serial because the parallel run hits the pre-existing `ETXTBSY` race on
 `backend/target/tmp/**/isolate` (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+
+**Divergence carried by LogService, recorded rather than hidden:** `std` has no zone database, so the
+formatter prints local time only if the composition root passes the offset; the constructor default is
+UTC, which is what a container without `TZ` reports. Python uses `time.localtime`. Until the service
+binary passes the configured offset, a host with a non-zero zone logs a different clock than the
+Python service did.
 
 A lane is removed as soon as it is merged and its gate is green — worktree deleted, branch deleted,
 `git worktree prune`. A merged lane left on disk is 1-11 GB of build artifacts holding a branch label
