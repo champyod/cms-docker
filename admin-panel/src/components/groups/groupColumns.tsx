@@ -39,9 +39,7 @@ export function buildColumns(
       header: dict.permissions,
       sortKey: 'permissions',
       render: (group) => (
-        <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-500/20 text-indigo-400">
-          {group.permissionKeys.length}
-        </span>
+        <Badge variant="indigo">{group.permissionKeys.length}</Badge>
       ),
     },
   ];

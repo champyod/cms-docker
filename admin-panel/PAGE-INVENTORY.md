@@ -13,7 +13,7 @@ Inventory: **0 of 0 pages documented.**
 | `/` | dashboard | state of every service · totals per area · what happened most recently |
 | `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
 | `/administration/audit` | list | — *to inventory* |
-| `/administration/groups` | list | — *to inventory* |
+| `/administration/groups` | list | groups with name, description, seeded flag and the number of permissions each holds · sort · per-row edit and delete · create · what empty means. No filter and no total: the read returns every group in one pass, so there is nothing narrower to filter to and nothing left out to count |
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | detail | — *to inventory* |

@@ -1,7 +1,6 @@
 {
   "undeclared": [
     "/administration/audit",
-    "/administration/groups",
     "/contests/:id/communications",
     "/contests/:id/countdown",
     "/evaluation/submissions/:id/logs",
