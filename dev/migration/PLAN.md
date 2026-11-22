@@ -339,7 +339,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | crate (ARCHITECTURE.md) | contents | state |
 |---|---|---|
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
-| `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 | next |
+| `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
 | `cms-svc-worker` (:28) | the service that executes job groups | after `cms-grading` |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
