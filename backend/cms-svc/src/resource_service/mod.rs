@@ -5,14 +5,22 @@
 
 mod coord;
 mod error;
+#[cfg(test)]
+mod fixture;
 mod machine;
 mod matcher;
+mod naming;
 mod sample;
 mod service;
+mod spawn;
 
 pub use coord::{CoordError, LocalService, ServiceCoord};
 pub use error::ResourceError;
 pub use machine::{CpuPercentages, MemoryMegabytes};
 pub use matcher::{interesting_command_line, Matched, ProcessMatcher};
 pub use sample::{ProcessCpu, Sample, ServiceFigures, ServiceState, ServiceUsage};
-pub use service::{ResourceService, Sampling, MAX_RESOURCE_SECONDS};
+pub use service::{
+    ConnectorQuit, PeerQuit, QuitReceipt, ResourceService, RestartReport, Sampling,
+    MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
+};
+pub use spawn::{ProcessSpawner, ServiceCommand, SpawnError, SpawnedChild, Spawner};

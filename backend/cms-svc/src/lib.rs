@@ -50,7 +50,9 @@ pub use resource::{
     CpuTimes, ProcReader, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory,
 };
 pub use resource_service::{
-    interesting_command_line, CoordError, CpuPercentages, LocalService, Matched, MemoryMegabytes,
-    ProcessCpu, ProcessMatcher, ResourceError, ResourceService, Sample, Sampling, ServiceCoord,
-    ServiceFigures, ServiceState, ServiceUsage, MAX_RESOURCE_SECONDS,
+    interesting_command_line, ConnectorQuit, CoordError, CpuPercentages, LocalService, Matched,
+    MemoryMegabytes, PeerQuit, ProcessCpu, ProcessMatcher, ProcessSpawner, QuitReceipt,
+    ResourceError, ResourceService, RestartReport, Sample, Sampling, ServiceCommand, ServiceCoord,
+    ServiceFigures, ServiceState, ServiceUsage, SpawnError, SpawnedChild, Spawner,
+    MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
 };

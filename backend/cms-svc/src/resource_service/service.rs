@@ -1,6 +1,8 @@
-//! Sampling, retention and query: the half of `ResourceService.py` that never starts a process.
+//! Sampling, retention, query and the restart pass: the port of `ResourceService.py`.
 
+mod kill;
 mod query;
+mod restart;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::PathBuf;
@@ -13,6 +15,11 @@ use super::error::ResourceError;
 use super::machine::{CpuPercentages, MemoryMegabytes};
 use super::matcher::ProcessMatcher;
 use super::sample::{ProcessCpu, Sample, ServiceFigures, ServiceState, ServiceUsage};
+
+pub use kill::{ConnectorQuit, PeerQuit, QuitReceipt, QUIT_REASON, QUIT_TIMEOUT};
+pub use restart::RestartReport;
+
+use restart::Launched;
 
 /// The window `MAX_RESOURCE_SECONDS` names: eleven minutes of samples.
 pub const MAX_RESOURCE_SECONDS: i64 = 660;
@@ -41,6 +48,7 @@ pub struct ResourceService<'a> {
     contest_id: Option<i64>,
     will_restart: BTreeMap<ServiceCoord, Option<bool>>,
     procs: BTreeMap<ServiceCoord, ProcessFacts>,
+    launched: Vec<Launched>,
     services_prev_cpu: BTreeMap<ServiceCoord, ProcessCpu>,
     prev_cpu: CpuTimes,
     last_saved_time: f64,
@@ -85,6 +93,7 @@ impl<'a> ResourceService<'a> {
             contest_id,
             will_restart,
             procs: BTreeMap::new(),
+            launched: Vec::new(),
             services_prev_cpu: BTreeMap::new(),
             prev_cpu: CpuTimes::default(),
             last_saved_time: 0.0,
