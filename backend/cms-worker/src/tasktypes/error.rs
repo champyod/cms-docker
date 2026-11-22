@@ -14,9 +14,9 @@
 
 use std::fmt;
 
-use crate::sandbox::SpawnError;
 use crate::stage::StageError;
 use crate::steps::StepError;
+use cms_sandbox::SpawnError;
 
 /// Why a job was not compiled, not run, or not read back.
 #[derive(Debug)]

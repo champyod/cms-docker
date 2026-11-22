@@ -4,7 +4,7 @@
 //! outright, so a mapping and a merge are decided by what is handed in rather
 //! than by anything launched. Nothing sleeps and nothing is measured.
 
-use cms_worker::{ExecutionLog, ExecutionStats, ExitStatus};
+use cms_sandbox::{ExecutionLog, ExecutionStats, ExitStatus};
 
 /// Kibibytes in the byte count a memory figure is reported as.
 const KIB: u64 = 1024;

@@ -34,7 +34,7 @@ use flate2::Compression;
 use tar::Builder;
 
 use super::{FileDigest, Stage, StageError};
-use crate::sandbox::Sandbox;
+use cms_sandbox::Sandbox;
 
 /// The name the packed archive is written under where the store can reach it.
 ///

@@ -30,6 +30,9 @@
 //! one [`ExitStatus`] a report shows. A code outside those three is not a run at
 //! all, and is refused rather than guessed at.
 //!
+//! [`ExecutionStats`] is the figures a report reads and what several runs fold into,
+//! and it lives here because it is what a launch answers with.
+//!
 //! # Errors
 //!
 //! [`SpawnError`], and nothing else: a command with nothing in it, a program that
@@ -43,8 +46,10 @@
 mod error;
 mod exits;
 mod launch;
+mod measure;
 mod options;
 mod spawn;
+mod stats;
 mod stream;
 
 use std::fs;
@@ -54,14 +59,13 @@ use std::process::Output;
 pub use error::SpawnError;
 pub use exits::Outcome;
 pub use launch::Launch;
+pub use measure::{ExecutionLog, ExitStatus, MeasureError};
 pub use options::{MappedDirectory, Options};
 pub use spawn::SECURE_COMMANDS;
+pub use stats::ExecutionStats;
 pub use stream::{ReadError, Stream};
 
 use spawn::Layout;
-
-use crate::measure::ExecutionLog;
-use crate::stats::ExecutionStats;
 
 /// The program a run is launched under, whatever an operator configured.
 pub const EXECUTABLE_NAME: &str = "isolate";
@@ -162,7 +166,7 @@ impl Sandbox {
     /// The answer a launch is turned into, once its log has been read.
     /// # Errors
     /// [`SpawnError::Measure`] for a number the log cannot read, and nothing else.
-    pub(super) fn finish(
+    pub(crate) fn finish(
         output: &Output,
         log: &ExecutionLog,
     ) -> Result<ExecutionStats, SpawnError> {
@@ -235,7 +239,7 @@ impl Sandbox {
 /// waiting, and which a run started but not waited for is already named to write to.
 /// # Errors
 /// [`SpawnError::NoMetaFile`] or [`SpawnError::Measure`], as [`Sandbox::run`] says.
-pub(super) fn read_log(path: &Path) -> Result<ExecutionLog, SpawnError> {
+pub(crate) fn read_log(path: &Path) -> Result<ExecutionLog, SpawnError> {
     let text = fs::read_to_string(path).map_err(|_| SpawnError::NoMetaFile {
         path: path.to_path_buf(),
     })?;

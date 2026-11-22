@@ -10,21 +10,33 @@
 
 #![allow(dead_code, unused_imports)]
 
-#[path = "sandbox_helpers.rs"]
-mod base;
-
 use std::fs;
 use std::io::Read as _;
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use cms_worker::sandbox::Sandbox;
+use cms_sandbox::Sandbox;
 use cms_worker::stage::{Cache, CacheHandle, FileDigest, FsCache, Stage};
 
 use flate2::read::GzDecoder;
 
-use base::stub;
+/// A directory of this test's own, named after the test so parallel tests differ.
+///
+/// The build directory, not the system temp one: a fork can be refused while a stub there is still open for writing.
+pub fn workspace(test: &str) -> PathBuf {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(test);
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).expect("the test's own directory must be creatable");
+    dir
+}
 
-pub use base::workspace;
+/// Writes an executable stub, and the path to run it by.
+pub fn stub(dir: &Path, name: &str, body: &str) -> PathBuf {
+    let path = dir.join(name);
+    fs::write(&path, body).expect("the stub must be writable");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("the stub must run");
+    path
+}
 
 /// What a run leaves in its own directory, at the top and one level down.
 pub const GRADED_OUTPUT: &[u8] = b"one graded answer\n";

@@ -6,7 +6,7 @@
 
 use std::fs;
 
-use cms_worker::sandbox::{Outcome, ReadError, Stream};
+use cms_sandbox::{Outcome, ReadError, Stream};
 
 #[path = "sandbox_helpers.rs"]
 mod helpers;

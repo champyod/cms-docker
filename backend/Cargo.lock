@@ -228,6 +228,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "cms-sandbox"
+version = "0.1.0"
+dependencies = [
+ "shell-escape",
+ "thiserror",
+]
+
+[[package]]
 name = "cms-svc"
 version = "0.1.0"
 dependencies = [
@@ -244,6 +252,7 @@ version = "0.1.0"
 dependencies = [
  "cms-db",
  "cms-proto",
+ "cms-sandbox",
  "flate2",
  "serde_json",
  "sha1",

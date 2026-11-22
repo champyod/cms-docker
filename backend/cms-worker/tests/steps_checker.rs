@@ -6,12 +6,12 @@
 
 use std::time::Duration;
 
-use cms_worker::sandbox::Options;
+use cms_sandbox::ExitStatus;
+use cms_sandbox::Options;
 use cms_worker::steps::{
     checker_command, extract_verdict, judge_trusted_run, CheckerError, StockMessage, TrustedLimits,
     TrustedRun, Verdict, CHECKER_FILENAME, CORRECT_OUTPUT_FILENAME, INPUT_FILENAME,
 };
-use cms_worker::ExitStatus;
 
 /// The score, the contestant's text and the administrator's text a manager output is
 /// read as, and the refusal of one that says neither.

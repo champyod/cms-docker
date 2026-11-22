@@ -15,7 +15,7 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
-use cms_worker::sandbox::Sandbox;
+use cms_sandbox::Sandbox;
 
 /// The kibibytes the log's memory figure is reported in.
 pub const KIB: u64 = 1024;

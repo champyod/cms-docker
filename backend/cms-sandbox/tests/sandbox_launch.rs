@@ -7,8 +7,8 @@
 
 use std::fs;
 
-use cms_worker::sandbox::{Outcome, Sandbox, SpawnError};
-use cms_worker::ExitStatus;
+use cms_sandbox::ExitStatus;
+use cms_sandbox::{Outcome, Sandbox, SpawnError};
 
 #[path = "sandbox_helpers.rs"]
 mod helpers;

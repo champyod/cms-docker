@@ -2,7 +2,7 @@
 //! and what those runs are worth.
 //!
 //! A task type is the part of a worker that knows what a task *is*. Everything it
-//! needs from the machine is already here — [`crate::sandbox`] launches a run and
+//! needs from the machine is already here — [`cms_sandbox`] launches a run and
 //! reads back what it left behind, [`crate::stage`] hands it files and takes them
 //! away again — so a task type is the order those two are used in and nothing
 //! else. That order is the task type's own, and it is what differs between one

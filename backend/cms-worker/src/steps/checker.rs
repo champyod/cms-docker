@@ -23,8 +23,8 @@
 use std::fmt;
 use std::time::Duration;
 
-use crate::measure::ExitStatus;
-use crate::sandbox::Options;
+use cms_sandbox::ExitStatus;
+use cms_sandbox::Options;
 
 use super::StockMessage;
 

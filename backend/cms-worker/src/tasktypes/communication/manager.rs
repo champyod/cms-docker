@@ -11,7 +11,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
 
 /// The prefix a manager marks a line with for the administrators rather than for a
 /// contestant, which is the reference's own marker.

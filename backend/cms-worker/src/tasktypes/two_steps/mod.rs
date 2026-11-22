@@ -47,8 +47,8 @@ use std::path::Path;
 use serde_json::Value;
 
 use crate::job::EvaluationJob;
-use crate::sandbox::Launch;
 use crate::stage::{Cache, StageError};
+use cms_sandbox::Launch;
 
 use super::judge::{self, OutputSource, CHECKER_CODENAME};
 use super::{Evaluation, Run, Runtime, Shared, TaskError, Toolchain};

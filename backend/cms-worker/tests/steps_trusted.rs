@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
-use cms_worker::sandbox::Sandbox;
+use cms_sandbox::Sandbox;
 use cms_worker::stage::{Cache, CacheHandle, FileDigest, FsCache, Stage, StageError};
 use cms_worker::steps::{checker_step, Check, StepError, TrustedLimits, Verdict};
 

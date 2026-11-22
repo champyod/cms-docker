@@ -3,7 +3,7 @@
 //! Every fixture is the text isolate would have written, so every answer is
 //! decided: nothing is launched, nothing sleeps, and nothing is measured.
 
-use cms_worker::{ExecutionLog, ExitStatus, MeasureError};
+use cms_sandbox::{ExecutionLog, ExitStatus, MeasureError};
 
 /// Kibibytes in the byte count a memory figure is reported as.
 const KIB: u64 = 1024;

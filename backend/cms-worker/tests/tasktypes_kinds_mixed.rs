@@ -11,10 +11,10 @@
 #[path = "tasktypes_kinds_helpers.rs"]
 mod support;
 
+use cms_sandbox::ExitStatus;
 use cms_worker::job::EvaluationJob;
 use cms_worker::stage::StageError;
 use cms_worker::tasktypes::{BatchAndOutput, Origin, TaskError};
-use cms_worker::ExitStatus;
 use serde_json::json;
 
 use support::toolchain::{
