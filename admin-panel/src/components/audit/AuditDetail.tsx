@@ -9,6 +9,8 @@ interface AuditDetailContentProps {
   dict: AuditDict;
   copiedField: string | null;
   onCopy: (text: string, field: string) => void;
+  /** common.notSet: a field whose value the record does not hold. */
+  missing: string;
 }
 
 interface AuditJsonValueProps {
@@ -37,22 +39,22 @@ export function AuditJsonValue({ value, label, copiedField, onCopy }: AuditJsonV
   );
 }
 
-export function AuditDetailContent({ detail, dict, copiedField, onCopy }: AuditDetailContentProps): React.JSX.Element {
+export function AuditDetailContent({ detail, dict, copiedField, onCopy, missing }: AuditDetailContentProps): React.JSX.Element {
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
         <div>
           <span className="text-muted-foreground">{dict.ip}: </span>
-          <span className="font-mono text-foreground">{detail.ip ?? '—'}</span>
+          <span className="font-mono text-foreground">{detail.ip ?? missing}</span>
         </div>
         <div>
           <span className="text-muted-foreground">{dict.sessionId}: </span>
-          <span className="font-mono text-foreground">{detail.session_id ?? '—'}</span>
+          <span className="font-mono text-foreground">{detail.session_id ?? missing}</span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">{dict.entryHash}: </span>
           <span className="font-mono text-xs text-foreground truncate max-w-[240px]">
-            {detail.entry_hash ?? '—'}
+            {detail.entry_hash ?? missing}
           </span>
           {detail.entry_hash && (
             <button

@@ -77,7 +77,7 @@ describe('AuditTable mobile cards', () => {
   it('renders entry fields and failure badge in row and card', () => {
     const entry = makeEntry({ id: '41', result: 'failure' });
     const { getAllByText } = render(
-      <AuditTable
+      <AuditTable missing="Not set"
         entries={[entry]}
         dict={DICT}
       />

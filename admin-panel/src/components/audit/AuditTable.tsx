@@ -33,6 +33,7 @@ export type { AuditTableProps } from './auditTypes';
 export function AuditTable({
   entries,
   dict,
+  missing,
   sort,
   autoRefresh = false,
 }: AuditTableProps): React.JSX.Element {
@@ -110,8 +111,8 @@ export function AuditTable({
   // Why: one column definition drives desktop rows and mobile cards, so
   // the two layouts cannot drift apart.
   const columns = useMemo(
-    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }),
-    [dict],
+    () => buildAuditColumns(dict, { formatTimestamp, truncate, resultBadgeVariant }, missing),
+    [dict, missing],
   );
 
   const { getRowProps, renderRowActions } = createAuditRowRenderers(expandedRowId, handleRowClick);
@@ -136,6 +137,7 @@ export function AuditTable({
 
       <AuditDetailPanel
         entry={expandedEntry}
+        missing={missing}
         dict={dict}
         loading={loadingDetail}
         error={detailError}

@@ -5,7 +5,7 @@ import type { AuditDict } from './auditTypes';
 
 export interface AuditColumnHelpers {
   formatTimestamp: (iso: string) => string;
-  truncate: (text: string | null, max: number) => string;
+  truncate: (text: string | null, max: number, missing: string) => string;
   resultBadgeVariant: (result: string) => 'success' | 'destructive' | 'neutral';
 }
 
@@ -17,8 +17,8 @@ export function formatTimestamp(iso: string): string {
   return AUDIT_TIME_FORMAT.format(new Date(iso));
 }
 
-export function truncate(text: string | null, max: number): string {
-  if (!text) return '—';
+export function truncate(text: string | null, max: number, missing: string): string {
+  if (!text) return missing;
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
@@ -33,6 +33,7 @@ export function resultBadgeVariant(result: string): 'success' | 'destructive' | 
 export function buildAuditColumns(
   dict: AuditDict,
   helpers: AuditColumnHelpers,
+  missing: string,
 ): ResponsiveColumn<AuditLogRow>[] {
   return [
     {
@@ -51,7 +52,7 @@ export function buildAuditColumns(
       sortKey: 'actor_id',
       render: (entry) => (
         <span className="font-mono text-xs text-indigo-400">
-          {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : '—')}
+          {entry.actor_name ?? (entry.actor_id !== null ? `#${entry.actor_id}` : missing)}
         </span>
       ),
     },
@@ -59,7 +60,7 @@ export function buildAuditColumns(
       key: 'ip',
       header: dict.ip,
       render: (entry) => (
-        <span className="font-mono text-xs text-muted-foreground">{entry.ip ?? '—'}</span>
+        <span className="font-mono text-xs text-muted-foreground">{entry.ip ?? missing}</span>
       ),
     },
     {
@@ -79,7 +80,7 @@ export function buildAuditColumns(
       header: dict.columns.entityName,
       render: (entry) => (
         <span className="text-sm text-foreground">
-          {entry.entity_name ?? (entry.entity_id !== null ? `#${entry.entity_id}` : '—')}
+          {entry.entity_name ?? (entry.entity_id !== null ? `#${entry.entity_id}` : missing)}
         </span>
       ),
     },
@@ -96,7 +97,7 @@ export function buildAuditColumns(
       header: dict.columns.reason,
       render: (entry) => (
         <span className="block max-w-[200px] text-sm text-muted-foreground">
-          {helpers.truncate(entry.reason, 60)}
+          {helpers.truncate(entry.reason, 60, missing)}
         </span>
       ),
     },

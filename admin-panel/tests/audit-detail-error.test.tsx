@@ -85,7 +85,7 @@ describe('AuditTable detail expansion failure', () => {
     mockedGetAuditEntry.mockResolvedValue({ success: false, error: 'Audit entry not found' });
 
     const view = render(
-      <AuditTable
+      <AuditTable missing="Not set"
         entries={[makeEntry()]}
         dict={DICT}
       />
@@ -102,7 +102,7 @@ describe('AuditTable detail expansion failure', () => {
     mockedGetAuditEntry.mockResolvedValue({ success: false, error: 'gone' });
 
     const view = render(
-      <AuditTable
+      <AuditTable missing="Not set"
         entries={[makeEntry()]}
         dict={DICT}
       />

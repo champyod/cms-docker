@@ -105,7 +105,7 @@ export default async function AuditPage({
         />
       }
     >
-      <AuditTable entries={result.data.entries} dict={dict.audit} sort={sort} autoRefresh={live} />
+      <AuditTable entries={result.data.entries} dict={dict.audit} missing={dict.common.notSet} sort={sort} autoRefresh={live} />
     </ListPage>
   );
 }

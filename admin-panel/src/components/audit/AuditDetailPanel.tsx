@@ -16,6 +16,8 @@ interface AuditDetailPanelProps {
   error: string | null;
   detail: AuditDetailRow | null;
   onClose: () => void;
+  /** common.notSet: a field whose value the record does not hold. */
+  missing: string;
 }
 
 export function AuditDetailPanel({
@@ -25,6 +27,7 @@ export function AuditDetailPanel({
   error,
   detail,
   onClose,
+  missing,
 }: AuditDetailPanelProps): React.JSX.Element {
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
@@ -61,6 +64,7 @@ export function AuditDetailPanel({
         <AuditDetailContent
           detail={detail}
           dict={dict}
+          missing={missing}
           copiedField={copiedField}
           onCopy={(text, field) => {
             void handleCopy(text, field);

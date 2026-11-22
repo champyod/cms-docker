@@ -27,5 +27,6 @@ export interface AuditTableProps {
   dict: AuditDict;
   sort?: ListSortInput;
   /** True when the address asked for the live cursor; the table then reloads on a new row. */
-  autoRefresh?: boolean;
+  autoRefresh?: boolean;  /** common.notSet: a cell whose value the record does not hold. */
+  readonly missing: string;
 }

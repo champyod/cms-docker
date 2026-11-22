@@ -109,7 +109,7 @@ beforeEach(() => {
 
 async function openDetail() {
   const view = render(
-    <AuditTable
+    <AuditTable missing="Not set"
       entries={[makeEntry()]}
       dict={DICT}
     />
