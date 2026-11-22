@@ -2,7 +2,7 @@
 
 Run from the repository root, in an environment that can import cms:
 
-    PYTHONPATH=src TZ=UTC0 python3 backend/cms-svc/tests/log/expected.py
+    PYTHONPATH=src TZ=UTC0 python3 dev/fixtures/expected_log_lines.py
 
 CMS_CONFIG must point at a config whose web_server.secret_key is not the shipped
 default, since importing cms validates it. Nothing in the Rust test runs this

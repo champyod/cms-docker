@@ -4,12 +4,16 @@
 //!
 //! ```text
 //! CMS_CONFIG=<a config whose web_server.secret_key is not the shipped default> \
-//!   PYTHONPATH=src TZ=UTC0 python3 backend/cms-svc/tests/log/expected.py
+//!   PYTHONPATH=src TZ=UTC0 python3 dev/fixtures/expected_log_lines.py
 //! ```
 //!
 //! and pasted below byte for byte; the script builds each `logging.LogRecord`
 //! with `logging.makeLogRecord` and formats it with `DetailedFormatter(False)`.
 //! Nothing here shells out to Python.
+//!
+//! The script lives under `dev/`, not beside this test: the Rust crate carries
+//! production code only, and that file is the record of how the strings below
+//! were produced, run by no gate.
 
 use cms_svc::{FormatterSettings, Record};
 use serde_json::{json, Value};
