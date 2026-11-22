@@ -13,14 +13,15 @@ import { surfaceLoadMessages, useSurfaceLoad } from '@/hooks/useSurfaceLoad';
 // not a message. It used to be a third tab here beside announcements and questions.
 export type CommTab = 'announcements' | 'questions';
 
-export function useContestCommunications(contestId: number, adminId: number) {
+// Why the tab is a parameter and not state: each section of the page renders one list, so a
+// component that also held which list was open would fetch one and show the other.
+export function useContestCommunications(contestId: number, adminId: number, tab: CommTab) {
   const dict = useDictionary();
   const confirm = useConfirm();
   const { destructiveConfirm } = useConfirmationCopy();
   // Why: mutation actions throw on 403 — the feedback path toasts the denial
   // instead of leaving an unhandled rejection with no visible outcome.
   const runAction = useActionFeedback();
-  const [activeTab, setActiveTab] = useState<CommTab>('announcements');
   const [announcements, setAnnouncements] = useState<unknown[]>([]);
   const [questions, setQuestions] = useState<unknown[]>([]);
   const [showAnnouncementForm, setShowAnnouncementForm] = useState(false);
@@ -32,19 +33,14 @@ export function useContestCommunications(contestId: number, adminId: number) {
   const [replySettled, setReplySettled] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
-    if (activeTab === 'announcements') setAnnouncements(await getAnnouncements(contestId));
+    if (tab === 'announcements') setAnnouncements(await getAnnouncements(contestId));
     else setQuestions(await getQuestions(contestId));
-  }, [contestId, activeTab]);
+  }, [contestId, tab]);
 
   // Why the refusal is not swallowed any more: the load ran under a catch that only logged, so a
-  // refused tab read as "no announcements" and "no questions". It now ends in data, denied or
-  // failed, and the panel renders that; a tab switch re-runs the load for the tab it opened.
+  // refused read looked like "no announcements" or "no questions". It now ends in data, denied or
+  // failed, and the section renders that.
   const { status, reload } = useSurfaceLoad(load, surfaceLoadMessages(dict));
-
-  const selectTab = useCallback((tab: CommTab): void => {
-    setActiveTab(tab);
-    reload();
-  }, [reload]);
 
   const handleCreateAnnouncement = async (): Promise<void> => {
     if (!announcementSubject.trim() || !announcementText.trim()) return;
@@ -97,7 +93,7 @@ export function useContestCommunications(contestId: number, adminId: number) {
   };
 
   return {
-    activeTab, selectTab, announcements, questions, status,
+    announcements, questions, status,
     showAnnouncementForm, setShowAnnouncementForm,
     announcementSubject, setAnnouncementSubject, announcementText, setAnnouncementText,
     replyingTo, setReplyingTo, replySubject, setReplySubject, replyText, setReplyText, replySettled, setReplySettled,

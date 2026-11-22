@@ -5,6 +5,7 @@ import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { parseRecordId } from '@/lib/queries/record-access';
+import { BoardPage } from '@/components/patterns/BoardPage';
 import { ContestCommunicationsTab } from '@/components/contests/contest-detail/ContestCommunicationsTab';
 
 type ContestRouteProps = {
@@ -28,12 +29,36 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestCommunicationsPage({ params }: ContestRouteProps) {
+export default async function ContestCommunicationsPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
   const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   const effective = await authorizeContestTab('contests.tabs.communications');
   const admin = await getCurrentUser();
   if (!admin) notFound();
-  return <ContestCommunicationsTab contestId={contestId} adminId={admin.id} permissionKeys={[...effective]} />;
+  const keys = [...effective];
+  return (
+    <BoardPage
+      // The record shell above renders the contest's name, its trail and its tabs.
+      ownsHeader={false}
+      title="Communications"
+      sections={[
+        {
+          // Why an announcement and a question are two sections and not two tabs of one: they are
+          // different records with different actions and different meanings when empty, and a tab
+          // rail inside a page that already has one hid half the contest's messages behind a click.
+          key: 'announcements',
+          title: 'Announcements',
+          description: 'What was published to every contestant of this contest, newest first.',
+          rows: <ContestCommunicationsTab contestId={contestId} adminId={admin.id} permissionKeys={keys} panel="announcements" />,
+        },
+        {
+          key: 'questions',
+          title: 'Questions',
+          description: 'What contestants asked, and the answer each one is waiting for.',
+          rows: <ContestCommunicationsTab contestId={contestId} adminId={admin.id} permissionKeys={keys} panel="questions" />,
+        },
+      ]}
+    />
+  );
 }
