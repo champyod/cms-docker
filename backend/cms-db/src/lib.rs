@@ -48,10 +48,16 @@
 //! Every fallible mapping returns the error type named beside it, and each
 //! variant says which reference rule it enforces. No mapping degrades to a
 //! default on bad input.
+//!
+//! The identity half of the layer sits here too: [`validate_actor`] is the shape
+//! the row-level security policies can read, [`CORE_ACTOR`] is what a core
+//! program announces when nothing overrides it, and the two stamp statements are
+//! the only place `cms.actor` is written.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod actor;
 mod auth;
 mod binary;
 mod crypto;
@@ -63,6 +69,10 @@ mod reads;
 mod types;
 mod writes;
 
+pub use actor::{
+    default_actor, label_for, process_label, validate_actor, ActorError, ACTOR_ENV, ACTOR_SETTING,
+    CONNECTION_STAMP_SQL, CORE_ACTOR, KNOWN_SYSTEM_ACTORS, TRANSACTION_STAMP_SQL,
+};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
