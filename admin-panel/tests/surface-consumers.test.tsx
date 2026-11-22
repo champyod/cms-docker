@@ -49,13 +49,11 @@ describe('detail sections render through SectionCard', () => {
     expect(html).not.toContain('aria-expanded');
   });
 
-  it('marks the participant section collapsed and shows the gated invite actions when expanded', () => {
+  it('renders the participation rows and the gated invite actions without a section header', () => {
     const html = renderToStaticMarkup(
       <ContestParticipantsSection
         participations={[]}
-        expanded
         permissionKeys={['participation:create']}
-        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}
@@ -63,9 +61,9 @@ describe('detail sections render through SectionCard', () => {
         onRemove={() => undefined}
       />,
     );
-    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('Add Participant');
     expect(html).toContain('No participants yet');
+    expect(html).not.toContain('aria-expanded');
   });
 
   it('renders the settings group body without a second section header', () => {
@@ -86,9 +84,7 @@ describe('row action clusters render through RowActions', () => {
     render(
       <ContestParticipantsSection
         participations={[{ id: 4, user_id: 2, unrestricted: false, hidden: false, users: { username: 'ada', first_name: 'Ada', last_name: 'L' } }]}
-        expanded
         permissionKeys={permissionKeys}
-        onToggle={() => undefined}
         onAddParticipant={() => undefined}
         onAddTeam={() => undefined}
         onMarkAsTest={() => undefined}

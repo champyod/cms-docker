@@ -44,10 +44,10 @@ describe('Contest tab components', () => {
     expect(html).toContain('Add Participant');
   });
 
-  it('renders the registration roster beside the participants', () => {
+  it('keeps the roster out of the participants section, because the page gives it a section of its own', () => {
     const html = withDictionary(<ContestParticipantsTab data={{ contestId: 7, participations: [], availableUsers: [], teams: [], permissionKeys: ['contest:read', 'participation:read', 'team:update'] }} />);
-    expect(html).toContain('Registration Roster');
-    expect(html).toContain('A row here decides for this contest');
+    expect(html).toContain('No participants yet');
+    expect(html).not.toContain('Registration Roster');
   });
 
   it('renders settings fields and save action', () => {

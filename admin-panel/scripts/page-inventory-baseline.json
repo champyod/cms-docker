@@ -4,7 +4,6 @@
     "/administration/groups",
     "/contests/:id/communications",
     "/contests/:id/countdown",
-    "/contests/:id/participants",
     "/contests/:id/ranking",
     "/evaluation/submissions",
     "/evaluation/submissions/:id",
