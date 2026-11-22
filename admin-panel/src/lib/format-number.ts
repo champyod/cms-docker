@@ -19,3 +19,13 @@ export function formatCount(value: number, locale?: string): string {
 export function formatCountOrText(value: number | string, locale?: string): string {
   return typeof value === 'number' ? formatCount(value, locale) : value;
 }
+
+/**
+ * A count with its noun, singular or plural, in the reader's locale.
+ *
+ * Why here: the panel hand-rolled the same `count === 1 ? 'task' : 'tasks'` in five places, each free
+ * to disagree with the others. A language without plurals passes the same word twice.
+ */
+export function countLabel(count: number, noun: { one: string; other: string }, locale?: string): string {
+  return `${formatCount(count, locale)} ${count === 1 ? noun.one : noun.other}`;
+}

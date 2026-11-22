@@ -7,6 +7,9 @@ import { getContestTasks } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
 import { ListPage } from '@/components/patterns/ListPage';
 import { ContestTasksTab } from '@/components/contests/contest-detail/ContestTasksTab';
+import { Text } from '@/components/core/Typography';
+import { getDictionary } from '@/i18n';
+import { countLabel } from '@/lib/format-number';
 
 type ContestRouteProps = {
   params: Promise<{ locale: string; id: string }>;
@@ -29,21 +32,21 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
 }
 
 export default async function ContestTasksPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.tasks');
   const data = await readRecordOrNotFound(() => getContestTasks(contestId));
   const assigned = data.tasks.length;
+  const copy = (await getDictionary(locale)).contests;
   return (
     <ListPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      title="Tasks"
       // The count is the whole assignment, not the filtered set: the rows below narrow themselves
       // as the operator types, and a footer that moved with the filter would answer a question
-      // nobody asked.
-      footer={<p className="text-sm text-muted-foreground">{assigned} {assigned === 1 ? 'task' : 'tasks'} assigned to this contest</p>}
+      // nobody asked. The noun comes from the dictionary because Thai does not pluralise.
+      footer={<Text variant="muted">{countLabel(assigned, copy.tasks, locale)}</Text>}
     >
       <ContestTasksTab data={data} />
     </ListPage>
