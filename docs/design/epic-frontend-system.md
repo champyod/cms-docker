@@ -85,6 +85,9 @@ If a page-level form ever appears, the shape is in git history (`FormPage.tsx` b
 and the contract is the five slots the old `PAGE_SLOTS.form` named. Add it back with a page that
 renders it, not before.
 
+**Confirmed by the operator** when the deletion was put to him as a decision rather than a report:
+keep it removed, because a template nothing renders is a rule nobody tested against real data.
+
 ## Working rule — the ask flow (binding on every session of this epic)
 
 This epic produced its own failure worth writing down. After the nine layout reviews, the queue held
