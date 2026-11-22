@@ -26,10 +26,10 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::sandbox::{Launch, Options, Sandbox};
 use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
-use crate::stats::ExecutionStats;
 use crate::steps::TrustedLimits;
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::{Launch, Options, Sandbox};
 
 use super::{CompilationLimits, TaskError};
 

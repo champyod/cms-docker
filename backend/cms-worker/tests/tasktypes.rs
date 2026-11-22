@@ -13,8 +13,8 @@ mod helpers;
 use std::path::Path;
 
 use cms_proto::DigestMap;
+use cms_sandbox::ExitStatus;
 use cms_worker::tasktypes::{Batch, TaskError};
-use cms_worker::ExitStatus;
 use serde_json::json;
 
 use helpers::{

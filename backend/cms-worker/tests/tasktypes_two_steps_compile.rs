@@ -11,8 +11,8 @@
 mod support;
 
 use cms_proto::DigestMap;
+use cms_sandbox::ExitStatus;
 use cms_worker::tasktypes::{TaskError, TwoSteps};
-use cms_worker::ExitStatus;
 use serde_json::json;
 
 use support::{

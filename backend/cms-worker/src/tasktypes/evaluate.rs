@@ -20,9 +20,9 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::job::EvaluationJob;
-use crate::sandbox::Options;
 use crate::stage::Cache;
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::Options;
 
 use super::batch::Batch;
 use super::judge::{self, OutputSource, CHECKER_CODENAME};

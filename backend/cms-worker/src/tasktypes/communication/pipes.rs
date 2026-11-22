@@ -26,8 +26,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use crate::sandbox::MappedDirectory;
 use crate::stage::StageError;
+use cms_sandbox::MappedDirectory;
 
 use super::TaskError;
 

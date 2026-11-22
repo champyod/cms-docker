@@ -69,7 +69,7 @@ fn a_link_in_the_run_directory_is_archived_as_a_link_and_not_followed() {
 fn nothing_is_left_behind_where_the_next_archive_would_pack_it_again() {
     let (sandbox, stage, _cache) = box_with_output("clean");
 
-    let digest = sandbox.archive(&stage).expect("the directory is there");
+    let digest = stage.archive(&sandbox).expect("the directory is there");
 
     assert_eq!(
         stage.path(ARCHIVE_NAME),

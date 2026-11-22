@@ -18,8 +18,8 @@
 use std::path::PathBuf;
 
 use crate::job::EvaluationJob;
-use crate::sandbox::{Launch, Options};
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::{Launch, Options};
 
 use super::charge::{manager_clock, memory_of, processes_of, time_of};
 use super::pipes::Pipe;

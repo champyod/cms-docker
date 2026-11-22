@@ -22,8 +22,8 @@
 
 use std::fmt;
 
-use crate::sandbox::{Sandbox, SpawnError};
 use crate::stage::{CacheHandle, Stage, StageError};
+use cms_sandbox::{Sandbox, SpawnError};
 
 use super::{
     checker_command, extract_verdict, judge_trusted_run, TrustedLimits, Verdict, CHECKER_FILENAME,

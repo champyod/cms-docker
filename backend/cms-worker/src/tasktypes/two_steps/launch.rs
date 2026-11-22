@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::job::EvaluationJob;
-use crate::sandbox::{Launch, MappedDirectory, Options};
 use crate::tasktypes::{wall_clock_of, Run, Runtime, TaskError, Toolchain};
+use cms_sandbox::{Launch, MappedDirectory, Options};
 
 use super::{Phase, PIPE_MOUNT, PIPE_NAME};
 

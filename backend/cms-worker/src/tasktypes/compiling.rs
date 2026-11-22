@@ -18,10 +18,10 @@ use std::path::{Path, PathBuf};
 use cms_proto::DigestMap;
 
 use crate::job::CompilationJob;
-use crate::measure::ExitStatus;
-use crate::sandbox::{MappedDirectory, Options, Sandbox};
 use crate::stage::Cache;
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::ExitStatus;
+use cms_sandbox::{MappedDirectory, Options, Sandbox};
 
 use super::batch::SOURCE_PLACEHOLDER;
 use super::{handle, wall_clock_of, Run, Runtime, TaskError, Toolchain};

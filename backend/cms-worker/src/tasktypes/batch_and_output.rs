@@ -36,7 +36,7 @@ use super::TaskError;
 use super::{Batch, Compilation, OutputFile, Runtime, Toolchain};
 use crate::job::{CompilationJob, EvaluationJob};
 use crate::stage::{Cache, FileDigest};
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
 
 /// The word a checker is given for a testcase the dataset listed as output-only.
 const OUTPUT_ONLY: &str = "outputonly";

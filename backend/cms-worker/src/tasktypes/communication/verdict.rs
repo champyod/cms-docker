@@ -16,9 +16,9 @@
 use std::path::PathBuf;
 
 use crate::job::EvaluationJob;
-use crate::measure::ExitStatus;
 use crate::stage::FileDigest;
-use crate::stats::ExecutionStats;
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::ExitStatus;
 
 use super::charge::charged;
 use super::manager::from_manager;

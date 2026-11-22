@@ -13,10 +13,10 @@
 #![forbid(unsafe_code)]
 
 use crate::job::EvaluationJob;
-use crate::measure::ExitStatus;
-use crate::stats::ExecutionStats;
 use crate::tasktypes::outcome::what_went_wrong;
 use crate::tasktypes::{OutputFile, Run, TaskError};
+use cms_sandbox::ExecutionStats;
+use cms_sandbox::ExitStatus;
 
 use super::{Evaluation, OUTPUT};
 

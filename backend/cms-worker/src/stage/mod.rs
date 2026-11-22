@@ -13,6 +13,9 @@
 //! answers the digest it stored content under, which is the identity every file
 //! already in the store is named by.
 //!
+//! What a run leaves behind is packed from its own directory into one archive and
+//! filed under one digest, which is [`Stage::archive`]'s subject.
+//!
 //! The store is one trait with three backends, so a worker whose files are worth
 //! keeping, a worker whose files are worth keeping in a database and a worker
 //! that keeps nothing are the same code with a different value. The tombstone is
@@ -28,6 +31,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+mod archive;
 mod cache;
 mod files;
 mod precache;
@@ -35,6 +39,7 @@ mod precache;
 use std::fmt;
 use std::path::PathBuf;
 
+pub use archive::ArchiveError;
 pub use cache::{Cache, DatabaseCache, FsCache, LargeObjects, NullCache, PrecacheLock};
 pub use cms_db::{CacheError, CacheHandle, DigestError, FileDigest};
 pub use files::{Stage, DEFAULT_READ_LIMIT, MODE_EXECUTABLE, MODE_PLAIN};
