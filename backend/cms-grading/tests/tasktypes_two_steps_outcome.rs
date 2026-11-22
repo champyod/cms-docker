@@ -10,6 +10,7 @@
 mod support;
 
 use cms_grading::job::EvaluationJob;
+use cms_grading::scoretypes::format_status_text;
 use cms_grading::stage::FsCache;
 use cms_grading::tasktypes::{TaskError, TwoSteps};
 use serde_json::json;
@@ -55,8 +56,9 @@ fn a_stopped_phase_and_a_phase_that_wrote_nothing_are_both_charged_nothing() {
     assert!(wrote_nothing.success && wrote_nothing.ran);
     assert_eq!(wrote_nothing.outcome, Some(NO_CREDIT));
     assert_eq!(
-        wrote_nothing.text,
-        vec!["Evaluation didn't produce file", "output.txt"]
+        format_status_text(&wrote_nothing.text),
+        "Evaluation didn't produce file output.txt",
+        "the sentence names the file the run did not write"
     );
     assert!(wrote_nothing.output_file.is_none());
 }
