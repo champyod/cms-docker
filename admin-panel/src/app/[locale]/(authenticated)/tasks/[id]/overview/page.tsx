@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { getDictionary } from '@/i18n';
 import { formatCount } from '@/lib/format-number';
+import { humanizeEnum } from '@/lib/format-text';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -30,11 +31,6 @@ async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> 
   }
 }
 
-/** One wording for the underscore-separated enum values the two facts below report. */
-function humanize(value: string): string {
-  return value.replace(/_/g, ' ');
-}
-
 export default async function TaskOverviewPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
   const { locale, id } = await params;
   const taskId = parseRecordId(id);
@@ -49,8 +45,8 @@ export default async function TaskOverviewPage({ params }: TaskRouteProps): Prom
       // already says Overview, so this page adds only the values and the statements under them.
       ownsHeader={false}
       facts={[
-        { term: facts.scoreMode, value: humanize(data.task.score_mode) },
-        { term: facts.feedback, value: humanize(data.task.feedback_level) },
+        { term: facts.scoreMode, value: humanizeEnum(data.task.score_mode) },
+        { term: facts.feedback, value: humanizeEnum(data.task.feedback_level) },
         // Why a word and not a dash: a null precision is a task that never set one, not a 0, and
         // DESIGN.md 19 bans the em dash from anything a reader sees.
         {
