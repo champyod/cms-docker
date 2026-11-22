@@ -200,13 +200,32 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-S2a-crypto-core` | `1fd7f8cc` | **B1 approved by the operator**: `aes` 0.8, `bcrypt` 0.17, `base64` 0.22. Parent's own mutation of `crypto.rs:413` (padding terminator `0x01`→`0x00`) failed 3 tests including `the_cipher_reproduces_the_python_ciphertext_byte_for_byte`, exit 101; restored byte-identical, `cms-db` 94 passed | `2f1337db` |
 | 2026-11-22 | `feat/rust-S4-retire-cmsranking` | `b15ebf92` | `src/cmsranking` deleted; 395 Python files remain (was 409). Conflict on 3 rebranded images resolved by deletion after confirming `ranking-web/static/img/` carries the identical brand bytes | `6eaedd21` |
 | 2026-11-22 | `feat/rust-S3a-session` | `a2140d61` | first S-3 piece: actor, session, base, drop. `cargo test -p cms-db` → 125 passed, but **the live half skips without `CMS_DB_TEST_URL` and a skip is reported as a pass** — so the parent started `postgres:16-alpine` on 127.0.0.1:15433 and ran them for real: `a_commit_and_a_second_begin_stamps_again` passed, and all three FAIL against a dead port, so they cannot skip silently once the URL is set. Parent's own mutation of `actor.rs:143` (admin id `1..=9`→`1..=10`) failed `every_malformed_shape_is_refused`, exit 101, restored byte-identical | `c07e695a` |
+| 2026-11-22 | `feat/rust-S3b-files` + `feat/rust-S3c-users` (parallel) | `9bc48370` / `066a40b4` | file store 1,391 + identity 1,096. Only `lib.rs` conflicted; the resolution dropped the `large_object` re-export and **`cargo check -p cms-db` still passed**, because check does not build test targets and `tests/large_object.rs:14` imports `LargeObject, LargeObjectError, Mode` from the crate root — caught by running the tests. Parent's own mutation of `database.rs:100` (removed the losing writer's `LargeObject::unlink`) failed `a_competing_insert_leaves_one_row_and_no_unlinked_bytes` with "the losing writer's large object was left behind", left 1 / right 0, exit 101, restored byte-identical | `7408c34d` |
+| 2026-11-22 | (main session) | — | that dedup test asserted the orphan count over the **whole database**, so one failed run poisoned every later run until the database was dropped — I mistook a restored file for a broken one. Scoped to a floor captured at test start; re-proven three ways: passes with a pre-existing `lo_create` orphan, FAILS with the unlink removed, passes restored | `50a37ea3` |
 
-Gate on the tree after all thirteen merges (`c07e695a`), with a live database: `cargo fmt --check` exit
-0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 79 test
-binaries, 517 passed, 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 42 passed,
-exit 0; `bash scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial
-because the parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
-(`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
+database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
+--test-threads=1` → 89 test binaries, 570 passed, 0 failed, 2 ignored, exit 0; `bash
+scripts/__test_config_sync.sh` → 42 passed, exit 0; `bash scripts/__check_agent_protocol.sh` → exit 0;
+`docker compose config` → exit 0. Serial because the parallel run hits the pre-existing `ETXTBSY` race on
+`backend/target/tmp/**/isolate` (`sandbox_launch.rs:79`, `sandbox_drain.rs:57`) — recorded, not fixed.
+
+**`cargo check` is not a gate (learned 2026-11-22).** Resolving the S-3b/S-3c merge in `lib.rs` dropped the
+`large_object` re-export and `cargo check -p cms-db` still exited 0 with no error count, because `check`
+does not build the test targets. `cms-db/tests/large_object.rs:14` imports `LargeObject, LargeObjectError,
+Mode` from the crate root, so the omission only appeared when the tests compiled. Check the tests, not the
+library: `cargo clippy --all-targets` and `cargo test`, never `cargo check` alone.
+
+**Open finding — a copy loop that no longer yields (S-3b, recorded not fixed).** The lane's report says
+"gevent: nothing to become", and that is wrong. `filecacher.py:73`, `:76` and `:774` call `gevent.sleep(0)`
+inside the copy loops, `:774` with the comment "Cooperative yield", precisely so a large copy does not
+starve the other greenlets sharing the service. The port's `filecache/store.rs:105` and `:131` do blocking
+disk I/O with no yield between chunks, so a large copy occupies a runtime worker for its duration where
+Python gave the scheduler a turn. Closing it needs one of two things, and both are decisions rather than
+porting: promote `tokio` to a direct `cms-db` dependency (it is already in `Cargo.lock` through sqlx, so no
+new crate enters the build, but no crate in the workspace depends on it directly today) and yield per
+chunk; or keep `cms-db` runtime-agnostic and run the copy on a runtime-aware caller. **Not urgent until a
+service copies multi-gigabyte files through this cache, which is exactly what submissions do.**
 
 **A skip is reported as a pass, so a green count can prove nothing (found 2026-11-22, S-3a).** The live
 database tests return early when `CMS_DB_TEST_URL` is unset, and the harness records that as `ok` — the
