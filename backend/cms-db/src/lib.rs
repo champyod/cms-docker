@@ -67,6 +67,7 @@ mod admin;
 mod auth;
 mod base;
 mod binary;
+mod binding;
 mod codename;
 mod contest;
 mod crypto;
@@ -98,6 +99,7 @@ pub use actor::{
 pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
+pub use binding::{service_binding, BindingError, ServiceBinding, SERVICE, SERVICE_BINDING};
 pub use codename::{Codename, CodenameError};
 pub use contest::{
     Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenPolicy, WindowError,
