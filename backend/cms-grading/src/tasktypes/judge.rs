@@ -86,16 +86,14 @@ impl OutputSource {
 }
 
 impl Judgement {
-    /// An answer that was never written: a wrong answer, not a failed check, said in the
-    /// sentence that names the file the parameters asked for.
+    /// An answer that was never written: a wrong answer, not a failed check, naming the
+    /// file the parameters asked for.
     fn unwritten(filename: &str) -> Self {
+        let sentence = EVALUATION_MESSAGES.get("nooutput").message();
         Self {
             success: true,
             outcome: Some(0.0),
-            text: EVALUATION_MESSAGES
-                .get("nooutput")
-                .message()
-                .reported_naming(filename),
+            text: sentence.reported_naming(filename),
             admin_text: None,
             sandboxes: Vec::new(),
         }
