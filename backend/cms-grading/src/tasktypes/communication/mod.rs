@@ -30,7 +30,8 @@
 //! # Errors
 //!
 //! [`TaskError`], and only that: parameters that are not the three a
-//! Communication task has, a submission carrying no file, a dataset holding no
+//! Communication task has or whose value is not the name the declaration gives it, a
+//! submission carrying no file, a dataset holding no
 //! stub where the parameters compile with one, a result holding a number of
 //! executables other than one, a dataset holding no manager of the name a run is
 //! started with, a limit set to a number that bounds nothing, a pipe that could not
@@ -55,9 +56,7 @@ use crate::stage::Cache;
 
 use self::pipes::Pipe;
 pub use self::verdict::Verdict;
-use super::Runtime;
-use super::TaskError;
-use super::Toolchain;
+use super::{Parameter, Parameters, Runtime, TaskError, Toolchain};
 
 /// The manager the dataset holds, the input it reads, and the file it may write
 /// for a user test to be shown.
@@ -68,13 +67,31 @@ const OUTPUT: &str = "output.txt";
 /// separately from the executable holding it, and the choice that compiles a
 /// submission with it.
 const STUB: &str = "stub";
+const COMPILATION_ALONE: &str = "alone";
 const COMPILATION_STUB: &str = "stub";
 /// The choice that tells a process where its pipes are as arguments.
+const USER_IO_STD: &str = "std_io";
 const USER_IO_FIFOS: &str = "fifo_io";
 const EXECUTABLES_REQUIRED: usize = 1;
 /// The score of a run that did not answer and of a job that only asked to be run:
 /// both are zero, and what a report shows is what says so.
 const NO_CREDIT: f64 = 0.0;
+
+/// The number of processes a submission runs as, which has to be a count of at least
+/// one.
+const NUM_PROCESSES: Parameter = Parameter::integer("Number of Processes", "num_processes", "");
+/// The compilation choice: by itself, or together with the stub.
+const COMPILATION: Parameter = Parameter::choice(
+    "Compilation",
+    "compilation",
+    "",
+    &[COMPILATION_ALONE, COMPILATION_STUB],
+);
+/// The user I/O choice: the pipes as standard input and output, or as arguments.
+const USER_IO: Parameter =
+    Parameter::choice("User I/O", "user_io", "", &[USER_IO_STD, USER_IO_FIFOS]);
+/// The three parameters a Communication task type declares.
+static PARAMETERS: [Parameter; 3] = [NUM_PROCESSES, COMPILATION, USER_IO];
 
 /// The Communication task type, as its three parameters say.
 ///
@@ -94,22 +111,19 @@ impl Communication {
     ///
     /// # Errors
     ///
-    /// [`TaskError::Parameters`] unless the parameters hold exactly those three and
-    /// the first is a positive count.
+    /// [`TaskError::Parameters`] unless the parameters are a list of exactly three and
+    /// the count is at least one, and [`TaskError::Parameter`] for a value that is not
+    /// what its declaration accepts.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
-        let entries = parameters.as_array().ok_or(TaskError::Parameters)?;
-        let [num_processes, compilation, user_io] = entries.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        let count = num_processes
-            .as_u64()
-            .and_then(|count| usize::try_from(count).ok())
+        let parameters = Parameters::of(parameters, &PARAMETERS)?;
+        let count = usize::try_from(parameters.integer(0))
+            .ok()
             .filter(|count| *count > 0)
             .ok_or(TaskError::Parameters)?;
         Ok(Self {
             num_processes: count,
-            compilation: text_of(compilation)?,
-            user_io: text_of(user_io)?,
+            compilation: parameters.text(1).into_owned(),
+            user_io: parameters.text(2).into_owned(),
         })
     }
 
@@ -194,12 +208,4 @@ fn manager_digest(job: &EvaluationJob) -> Result<String, TaskError> {
         .ok_or_else(|| TaskError::MissingManager {
             name: MANAGER.to_owned(),
         })
-}
-
-/// One parameter read as the string it has to be.
-fn text_of(entry: &Value) -> Result<String, TaskError> {
-    entry
-        .as_str()
-        .map(str::to_owned)
-        .ok_or(TaskError::Parameters)
 }

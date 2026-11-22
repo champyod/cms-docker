@@ -2,12 +2,12 @@
 //! both of its phases report.
 //!
 //! The three parameters decide everything else, and each is read for what it
-//! names and nothing more. The first says whether the submission is compiled by
-//! itself or together with a grader the dataset holds; the second is a pair of
-//! filenames, where an empty one is a redirect to the default file rather than a
-//! file of its own; the third says whether the output is compared by a
-//! comparator. A value that is neither of a choice's two names is the other one,
-//! which is the decision `Batch.__init__` makes by equality with the two names.
+//! names. The first says whether the submission is compiled by itself or together
+//! with a grader the dataset holds; the second is a pair of filenames, where an
+//! empty one is a redirect to the default file rather than a file of its own; the
+//! third says whether the output is compared by a comparator. A value that is neither
+//! of a choice's two names is refused when the task type is built, so a malformed
+//! configuration cannot be read as the other name and graded as if it were.
 //!
 //! # Errors
 //!
@@ -20,7 +20,7 @@ use std::path::Path;
 
 use serde_json::Value;
 
-use super::TaskError;
+use super::{Parameter, Parameters, TaskError};
 
 /// The marker a codename carries where the language's own source extension goes,
 /// and which the executable's name is built without.
@@ -28,14 +28,45 @@ pub(super) const SOURCE_PLACEHOLDER: &str = ".%l";
 /// The basename of the grader, in the manager's filename and as the main class
 /// in the languages that name one.
 pub(super) const GRADER_BASENAME: &str = "grader";
+/// The choice that compiles the submission by itself.
+const COMPILATION_ALONE: &str = "alone";
 /// The choice that compiles the submission together with a grader.
 const COMPILATION_GRADER: &str = "grader";
+/// The choice that diffs the output rather than having a comparator read it.
+const OUTPUT_EVAL_DIFF: &str = "diff";
 /// The choice that has a comparator read the output rather than a plain diff.
 const OUTPUT_EVAL_COMPARATOR: &str = "comparator";
 /// The file a run is given as its input when the parameters name none.
 const DEFAULT_INPUT_FILENAME: &str = "input.txt";
 /// The file a run's answer is read from when the parameters name none.
 const DEFAULT_OUTPUT_FILENAME: &str = "output.txt";
+
+/// The name a run reads its input from, which may be blank for a redirect.
+const INPUT_FILE: Parameter = Parameter::text("Input file", "inputfile", "");
+/// The name a run writes its answer to, which may be blank for a redirect.
+const OUTPUT_FILE: Parameter = Parameter::text("Output file", "outputfile", "");
+/// The two filenames the middle parameter is a pair of, the input first.
+const FILENAMES: &[Parameter] = &[INPUT_FILE, OUTPUT_FILE];
+/// The compilation choice, by itself or together with a grader.
+pub(super) const COMPILATION: Parameter = Parameter::choice(
+    "Compilation",
+    "compilation",
+    "",
+    &[COMPILATION_ALONE, COMPILATION_GRADER],
+);
+/// The pair of filenames, either of which is blank for a redirect.
+pub(super) const USE_FILE: Parameter =
+    Parameter::list("I/O (blank for stdin/stdout)", "io", "", FILENAMES);
+/// The output-evaluation choice, a plain diff or a comparator.
+pub(super) const EVALUATION: Parameter = Parameter::choice(
+    "Output evaluation",
+    "output_eval",
+    "",
+    &[OUTPUT_EVAL_DIFF, OUTPUT_EVAL_COMPARATOR],
+);
+/// The three parameters a Batch task type declares, which is also what the three a
+/// `BatchAndOutput` task has begin with.
+static PARAMETERS: [Parameter; 3] = [COMPILATION, USE_FILE, EVALUATION];
 
 /// The Batch task type, as its three parameters say.
 ///
@@ -57,23 +88,23 @@ impl Batch {
     ///
     /// # Errors
     ///
-    /// [`TaskError::Parameters`] unless the parameters hold exactly those three,
-    /// with the middle one a pair of strings.
+    /// [`TaskError::Parameters`] unless the parameters are a list of exactly three,
+    /// and [`TaskError::Parameter`] for a value that is not what its declaration
+    /// accepts.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
-        let entries = parameters.as_array().ok_or(TaskError::Parameters)?;
-        let [compilation, names, output_eval] = entries.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        let names = names.as_array().ok_or(TaskError::Parameters)?;
-        let [input, output] = names.as_slice() else {
-            return Err(TaskError::Parameters);
-        };
-        Ok(Self {
-            compilation: string_of(compilation)?,
-            input_filename: string_of(input)?,
-            output_filename: string_of(output)?,
-            output_eval: string_of(output_eval)?,
-        })
+        Ok(Self::of(&Parameters::of(parameters, &PARAMETERS)?))
+    }
+
+    /// The three parameters read from a table already checked against this task type's
+    /// declaration, which is what a type whose parameters begin with them needs.
+    pub(super) fn of(parameters: &Parameters<'_>) -> Self {
+        let names = parameters.list(1);
+        Self {
+            compilation: parameters.text(0).into_owned(),
+            input_filename: names.text(0).into_owned(),
+            output_filename: names.text(1).into_owned(),
+            output_eval: parameters.text(2).into_owned(),
+        }
     }
 
     /// Whether the submission is compiled together with a grader.
@@ -136,14 +167,6 @@ impl Batch {
             .to_string_lossy()
             .into_owned()
     }
-}
-
-/// One parameter read as the string it has to be.
-fn string_of(entry: &Value) -> Result<String, TaskError> {
-    entry
-        .as_str()
-        .map(str::to_owned)
-        .ok_or(TaskError::Parameters)
 }
 
 /// The name a parameter gave, or the default where it gave none.

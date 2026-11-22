@@ -93,8 +93,11 @@ fn parameters_that_are_not_three_of_the_right_shape_are_refused() {
         json!([1, ["in.txt", "out.txt"], "diff"]),
     ] {
         assert!(
-            matches!(Batch::new(&wrong), Err(TaskError::Parameters)),
-            "{wrong} is not three parameters"
+            matches!(
+                Batch::new(&wrong),
+                Err(TaskError::Parameters | TaskError::Parameter { .. })
+            ),
+            "{wrong} is not three parameters of the declared kinds"
         );
     }
 }

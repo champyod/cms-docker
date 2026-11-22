@@ -15,8 +15,6 @@
 
 use std::collections::BTreeSet;
 
-use serde_json::Value;
-
 use cms_proto::DigestMap;
 
 use super::batch::SOURCE_PLACEHOLDER;
@@ -24,7 +22,6 @@ use super::batch_and_output::{Answer, Origin};
 use super::judge::Judgement;
 use super::output_only::{NOT_CARRIED, NO_CREDIT};
 use super::Evaluation;
-use super::TaskError;
 use crate::stage::FileDigest;
 
 impl Answer {
@@ -84,13 +81,11 @@ impl Answer {
 
 /// The testcases a parameter listed as output-only: a comma-separated list of
 /// codenames, where one naming none is the empty set and not the empty name.
-pub(super) fn listed(entry: &Value) -> Result<BTreeSet<String>, TaskError> {
-    let text = entry.as_str().ok_or(TaskError::Parameters)?;
-    Ok(text
-        .split(',')
+pub(super) fn listed(text: &str) -> BTreeSet<String> {
+    text.split(',')
         .filter(|codename| !codename.is_empty())
         .map(str::to_owned)
-        .collect())
+        .collect()
 }
 
 /// Whether a submission carries anything to compile, which is what decides whether a
