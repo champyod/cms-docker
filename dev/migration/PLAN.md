@@ -331,6 +331,35 @@ Confirmed *not* a gap: `resolve_username_config` is ported as `resolve_config` (
 The schema gap is the serious one: a fresh deployment cannot initialise a database from Rust, so the Python
 tree cannot be deleted while it stands. Queued as **S-3h**.
 
+### Crate layout: `cms-worker` is three crates, and the split is measured (2026-11-23)
+
+`ARCHITECTURE.md` names 16 crates and the tree had 5 because `cms-worker` was carrying three of
+them at once. The split is now evidence-driven, not scheduled by taste:
+
+| crate (ARCHITECTURE.md) | contents | state |
+|---|---|---|
+| `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
+| `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 | next |
+| `cms-svc-worker` (:28) | the service that executes job groups | after `cms-grading` |
+
+The extraction was mechanical **because it was measured first**: `sandbox/` referenced
+`crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
+8 files — one direction, no cycle. The proofs that it is real, each run rather than asserted:
+`grep -rn 'crate::sandbox' backend/cms-worker/src | wc -l` → 0; `cargo tree -p cms-sandbox`
+names no `cms-worker`; and no re-export shim exists, which is the way a split silently un-splits.
+
+**Consequence for S-5d, and it is why the order changed.** `scoretypes/` and `scoring.py` are
+"scoring" in `ARCHITECTURE.md:25`, so they belong in `cms-grading` — a crate that did not exist.
+Porting 1,197 lines into `cms-worker` would have meant moving them again the moment the split
+landed. So the queue is `cms-sandbox` → `cms-grading` → **S-5d into `cms-grading`** →
+`cms-svc-worker` → S-5f → S-5g. Build order, no behaviour change, decided from the record rather
+than asked.
+
+**One architecture line is aspirational, and that is recorded not fixed:** `cms-sandbox` does not
+depend on `cms-proto` (`ARCHITECTURE.md:24` says it does). The moved code names nothing from it,
+and an unused dependency is exactly what the new-code bar forbids; it arrives with the epic that
+gives the sandbox a proto type. Verify with `sed -n '/^\[dependencies\]/,/^\[/p' backend/cms-sandbox/Cargo.toml`.
+
 **S-3 IS CLOSED (2026-11-22, `be01014e`) — verified by re-running the check that found the gap.** The same
 mechanical comparison (every module-level `def` in the 21 Python files against the crate's `fn` names) now
 leaves 10 without a verbatim counterpart, and each was checked rather than waved through:
