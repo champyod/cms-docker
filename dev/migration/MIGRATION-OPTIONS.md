@@ -93,7 +93,7 @@ outputs before promoting the Rust one.
 
 ## OPT-6 — Execute the confirmed single-backend plan first
 
-A user-confirmed plan already exists on this branch (`docs/PLAN-SINGLE-BACKEND.md`): the panel
+A user-confirmed plan already exists on this branch (`dev/PLAN-SINGLE-BACKEND.md`): the panel
 becomes the only write backend and the Python admin becomes its API client, with security rules
 generated from one TypeScript source. Recent branch history is already executing it.
 

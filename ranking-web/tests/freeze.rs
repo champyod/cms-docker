@@ -5,7 +5,7 @@
 //! fold (`Overrides::fold` / `frozen_at`), which needs no `Subchange` fixture. The
 //! replay-side test — that a change after the cutoff never reaches the ledger — needs a
 //! `Subchange`, and is recorded as unverified in
-//! docs/IMPLEMENTATION-CHECKLIST-RANKING-SCOPE.md.
+//! dev/IMPLEMENTATION-CHECKLIST-RANKING-SCOPE.md.
 
 use cms_ranking::overrides::{OverrideRow, Overrides};
 

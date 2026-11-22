@@ -25,7 +25,7 @@
 # The payload shape, the source enum and the endpoint are fixed by docs/SECURITY-FEED.md.
 # One script builds and POSTs that body for every producer: docker/security-scan/lib/feed.sh.
 #
-# Image pin policy (docs/decisions/image-digest-pinning.md): renovate and diun are
+# Image pin policy (dev/decisions/image-digest-pinning.md): renovate and diun are
 # third-party and carry tag+digest; the scanner below is our own image.
 # WHY no digest on our own images: ${IMG_TAG} is how a deploy selects the build CI just
 # pushed, so pinning a digest would freeze the feed to one commit — the tag is the selector.

@@ -3,7 +3,7 @@
 > Project rules for AI agents working in this checkout. Coordination first: read
 > `coordination/PROTOCOL.md` (board + chat rules) — present in the panel checkout — and claim your
 > files before editing anything. The **binding decision, selection and context rules are §1 of
-> `docs/agent-protocol.md`**, copied verbatim at the end of this file and checked by
+> `dev/agent-protocol.md`**, copied verbatim at the end of this file and checked by
 > `scripts/__check_agent_protocol.sh`.
 
 ## Cross-agent coordination
@@ -22,7 +22,7 @@ This checkout is written by multiple agent CLIs. Every agent must:
 - `admin-panel/DESIGN.md` is the design law of the panel: the delete test, the ban list, density,
   colour, type and the instruments that check them. Any UI change is judged by it before it is
   judged by taste.
-- `docs/agent-protocol.md` §1 is the binding rule set for decisions, selection and context — it is
+- `dev/agent-protocol.md` §1 is the binding rule set for decisions, selection and context — it is
   copied verbatim at the end of this file, and the copy is checked.
 - `TODO-DEV.md` and `epics/` (hub root) are the durable backlog and decision record.
 - The landing branch is the line you are on: `feat/backend-rust` on the Rust trunk,
@@ -30,7 +30,7 @@ This checkout is written by multiple agent CLIs. Every agent must:
 
 ---
 
-<!-- BEGIN agent-protocol §1 — verbatim copy of docs/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
+<!-- BEGIN agent-protocol §1 — verbatim copy of dev/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
 **Tier A — decide, do not ask.** Naming, file layout, test shape, step order inside a slice, commit
 split, which existing component to extend, re-running a gate. Record the reason once in the epic
 file only when another person's work depends on it.

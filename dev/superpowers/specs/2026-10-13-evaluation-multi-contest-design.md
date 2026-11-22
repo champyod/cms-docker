@@ -80,7 +80,7 @@ An earlier reading of this section called `TS_HTTPS_*` dead config. That was wro
 | 4 | Tailscale topology | **B — one Tailscale container per contest** | N nodes, N authkeys, N device rows, N state volumes. Cost acknowledged in Q11 |
 | 5 | Worker binding | **Custom:** "one eval for all and same worker set — or multiple with different wire — all config in DB with hot swapping/hot-update and lower usage of config in host" | Must support shared-fleet *and* partitioned wiring from one mechanism, DB-authored |
 | 6 | Backward compat | **Custom: "compare table and example"** | Comparison delivered; selection still open → Q6b |
-| 7 | Stale lanes WIP | **B — port as-is, then clean** | Ported verbatim to `docs/reference/lanes-wip/` (section 10) |
+| 7 | Stale lanes WIP | **B — port as-is, then clean** | Ported verbatim to `dev/reference/lanes-wip/` (section 10) |
 | 8 | Acceptance | **B — typecheck + vitest suites** | `bun run build`/`tsc` + the `vitest` suites, with new unit tests for the renderer and resolver |
 
 Notable tension to resolve, not ignore: answer 1 says one multi-tenant process; answer 5 says "or multiple with different wire". The design in section 5 satisfies both by making the **evaluation row** the unit of choice, so the count of eval services is data, not architecture.
@@ -264,7 +264,7 @@ Green `bun run build` (or `tsc --noEmit`) in `admin-panel/`, the `vitest` suites
 
 ## 10. Reference material ported
 
-`docs/reference/lanes-wip/` holds the unlanded `feat/evaluation-lanes` work verbatim: `worker-endpoints.ts`, `evaluationWorkers.ts`, `evaluationLaneBoard.ts`, two components, the old `evaluation-rpc.ts`, its migration, and a 1 920-line patch of the 13 tracked files it touched. `workers_status` was verified to exist in the current tree (`EvaluationService.py:439`, authorized at `src/cms/server/admin/rpc_authorization.py:31`), so the WIP's RPC call is sound. Read it as design; re-derive it against the schema in section 5.2.
+`dev/reference/lanes-wip/` holds the unlanded `feat/evaluation-lanes` work verbatim: `worker-endpoints.ts`, `evaluationWorkers.ts`, `evaluationLaneBoard.ts`, two components, the old `evaluation-rpc.ts`, its migration, and a 1 920-line patch of the 13 tracked files it touched. `workers_status` was verified to exist in the current tree (`EvaluationService.py:439`, authorized at `src/cms/server/admin/rpc_authorization.py:31`), so the WIP's RPC call is sound. Read it as design; re-derive it against the schema in section 5.2.
 
 ## 11. Status — what landed and what did not (2026-10-13)
 

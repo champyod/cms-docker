@@ -10,7 +10,7 @@
 # depending on -f order) and whichever proxy lost had no entry at all. The name
 # matches container_name, so the service and container are addressed identically.
 #
-# Image pin policy (docs/decisions/image-digest-pinning.md): third-party images carry a
+# Image pin policy (dev/decisions/image-digest-pinning.md): third-party images carry a
 # readable tag plus an @sha256 digest. This file declares no image of our own.
 
 services:
@@ -254,7 +254,7 @@ services:
   # registers it gets their code executed with HSM_PIN in the environment and the token
   # DB mounted. An image that cannot be verified must not be declared, so the service is
   # gone rather than exempted from the pin gate (tests/test_image_pins.sh). The decision
-  # is recorded in docs/decisions/image-digest-pinning.md.
+  # is recorded in dev/decisions/image-digest-pinning.md.
   #
   # The operator-facing flow is unchanged and still documented (docs/optional-features.md,
   # config.toml.example [infra] HSM_*): HSM_ENABLED=1 HSM_MODULE=softhsm ./cms domain

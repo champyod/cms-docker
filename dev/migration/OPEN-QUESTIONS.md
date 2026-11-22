@@ -7,10 +7,10 @@ verified. Each question names why it blocks a decision and who can answer it.
 
 | ID | Question | Why it blocks | Evidence in the repository | Who decides |
 |---|---|---|---|---|
-| OQ-00 | Which end-state wins: the confirmed single-backend plan (the panel as write backend) or the Rust backend task? | They contradict; almost every other design choice depends on the answer. | `docs/PLAN-SINGLE-BACKEND.md` is user-confirmed and being implemented; this document set specifies the opposite | Owner |
+| OQ-00 | Which end-state wins: the confirmed single-backend plan (the panel as write backend) or the Rust backend task? | They contradict; almost every other design choice depends on the answer. | `dev/PLAN-SINGLE-BACKEND.md` is user-confirmed and being implemented; this document set specifies the opposite | Owner |
 | OQ-01 | Which checkout is the canonical state for the move, given that the worktrees have diverged? | The comparison, the parity tests, and the invariants all depend on the baseline. This set uses `feat/requirements-catalog`. | Three registered worktrees: `feat/requirements-catalog` (`cms-re-catalog`), `feat/migration-management` (`cms-migrations`), `feat/mobile-nav-ui` (`cms-docker`) | Owner |
 | OQ-02 | Which branch actually runs in production today? | A move cannot be planned against a branch that is not deployed. | `docs/UPGRADE-RBAC-RELEASE.md:32-37` describes a cutover to `feat/requirements-catalog`; not confirmed as deployed | Owner |
-| OQ-03 | What upstream pin should be recorded, so future syncs are diffable? | Without a pin, "what changed versus upstream" is unanswerable, which is the core cost in `CONTEXT.md`. | `docs/FORK-SUMMARY.md` records a best-supported base only | Owner and upstream maintainer |
+| OQ-03 | What upstream pin should be recorded, so future syncs are diffable? | Without a pin, "what changed versus upstream" is unanswerable, which is the core cost in `CONTEXT.md`. | `dev/FORK-SUMMARY.md` records a best-supported base only | Owner and upstream maintainer |
 | OQ-04 | Should the replacement carry a per-caller identity on the RPC transport, or keep one shared secret? | It changes the security requirement set and the transport design. | `src/cms/io/rpc.py:443-445` has one secret and no caller identity | Owner |
 | OQ-05 | Is the `pg_largeobject` row-level-security exemption acceptable permanently? | If not, an alternative file-storage design is required before any move. | `admin-panel/prisma/sql/20260820130000_rls.sql:15`; `admin-panel/src/lib/fsobjects.ts` | Owner |
 | OQ-06 | Is the inability to enforce contestant row ownership at the database layer acceptable? | It limits how much of authorization can move into the database. | Documented limitation; the contestant path shares the application connection | Owner |
@@ -25,7 +25,7 @@ verified. Each question names why it blocks a decision and who can answer it.
 
 | Contradiction | Resolution used here | Risk if wrong |
 |---|---|---|
-| `docs/FORK-SUMMARY.md` says `submissions` has no DELETE for any role; the policy SQL grants DELETE to the application role. | The SQL is treated as ground truth (`admin-panel/prisma/sql/20260820130000_rls.sql:227-236`). | Low; the SQL is the enforced artefact. The stale prose should be corrected. |
+| `dev/FORK-SUMMARY.md` says `submissions` has no DELETE for any role; the policy SQL grants DELETE to the application role. | The SQL is treated as ground truth (`admin-panel/prisma/sql/20260820130000_rls.sql:227-236`). | Low; the SQL is the enforced artefact. The stale prose should be corrected. |
 | `docs/UPGRADE-RBAC-RELEASE.md` mentions `cms_admin` and `cms_monitor` roles; the role SQL defines exactly two roles. | The SQL is treated as ground truth (`admin-panel/prisma/sql/20260820120000_db_roles.sql:1-52`). | Low; but an operator following the guide would create roles that should not exist. |
 | The task statement describes the RPC secret as present; it is present on this baseline but absent on `major/admin-panel`. | This set describes the baseline only, and notes the difference. | Medium; if the intended baseline is the other branch, the transport section is wrong. |
 | `.omo/plans/migration-management.md` is titled as a proposal but reads like a specification. | Treated as an input, not authority; its own header says it is not approved. | Low. |
@@ -58,7 +58,7 @@ Stated plainly, so no reader assumes more than was checked:
 | Decision | Choice |
 |---|---|
 | Baseline | `feat/backend-rust`, cut from `feat/requirements-catalog` at `b6103ed9` |
-| Output location | `docs/backend-migration/` on the `feat/backend-rust` branch, in its own worktree |
+| Output location | `dev/migration/` on the `feat/backend-rust` branch, in its own worktree |
 | Scope | compare all components; select none |
 | Deliverable | analysis and specification only; no code |
 
@@ -77,4 +77,4 @@ and its result, not a recollection.
 | The branch the brief names as the gate for `admin-panel` (`bun test`) does not exist as a gate. `package.json` defines `"test": "vitest run"`; `bun test` runs Bun's own runner, which ignores `vitest.config.ts` and hangs (exit 124 at a 90 s cap) on `tests/with-timeout.test.ts`. No script, workflow or Makefile invokes `bun test`. | `bun run test` → 382 files / 5082 tests passed, exit 0, 65 s. The brief's gate line should read `bun run test`. |
 | `backend` has pre-existing, non-deterministic failures of one class: `Unlaunchable { source: Os { code: 26, ExecutableFileBusy } }` on `backend/target/tmp/**/isolate`, seen in `cms-worker --test sandbox_launch` (`sandbox_launch.rs:79`) and `--test sandbox_drain` (`sandbox_drain.rs:57`). The isolate stub is written and executed concurrently, so under full-suite parallelism the exec races the write. Proven a parallelism race, not a defect: `cargo test -- --test-threads=1` → exit 0, 62 test binaries ok, 0 failed. | Not fixed here — a pre-existing race, reported with its lines. The brief sites it in `sandbox_launch` only; it is a class, and the same run hits `sandbox_drain` too. Hardening it is a row, not a retry. |
 | `admin-panel/DESIGN-PREFERENCE.md` was modified in the working tree mid-run by a concurrent writer (mtime inside the `vitest` window, content is the frontend session's Material 3 topic log). It is not part of this lane's commits. | `git status` before/after; not staged, not touched. |
-| `docs/backend-migration/PLAN.md` and `PERSPECTIVES.md`, which the brief cites for the 9 decisions / 12 domains / S-0…S-9 order, do not exist on this tree. The set present is `ARCHITECTURE.md`, `CONTEXT.md`, `INVENTORY.md`, `MIGRATION-OPTIONS.md`, `OPEN-QUESTIONS.md`, `REQUIREMENTS.md`, `THREAT-MODEL.md`. | `ls docs/backend-migration/`. The slice order in the brief has no in-tree source, so it is carried as the brief states it until a `PLAN.md` lands. |
+| `dev/migration/PLAN.md` and `PERSPECTIVES.md`, which the brief cites for the 9 decisions / 12 domains / S-0…S-9 order, do not exist on this tree. The set present is `ARCHITECTURE.md`, `CONTEXT.md`, `INVENTORY.md`, `MIGRATION-OPTIONS.md`, `OPEN-QUESTIONS.md`, `REQUIREMENTS.md`, `THREAT-MODEL.md`. | `ls dev/migration/`. The slice order in the brief has no in-tree source, so it is carried as the brief states it until a `PLAN.md` lands. |

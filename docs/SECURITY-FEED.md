@@ -37,7 +37,7 @@ Verified while writing this, not recalled:
   dashboard issue, with no findings webhook. **Do not invent one.**
 
 **Every image above is pinned by digest** (`tag@sha256:…`) per
-`docs/decisions/image-digest-pinning.md`: an unpinned reference would make "the digest the registry
+`dev/decisions/image-digest-pinning.md`: an unpinned reference would make "the digest the registry
 now serves" move without a commit, and Diun's `update` event is only meaningful against a pin that
 someone chose to move.
 
@@ -338,7 +338,7 @@ Measured 2026-10-25: all 13 refs matched, which is what makes the equality meani
 **When the issue appears.** Read the table: `fixable` > 0 means a fixed release exists in that image's
 repository now. In order of preference: (1) bump that one image's digest to what its tag serves today
 (`docker buildx imagetools inspect <ref>`), one image per commit, per
-`docs/decisions/image-digest-pinning.md`; (2) if the fix is not in any usable tag yet, file a
+`dev/decisions/image-digest-pinning.md`; (2) if the fix is not in any usable tag yet, file a
 `security_waivers` row with a `review_by` date — the only suppression mechanism, never a second ignore file;
 (3) for a **drift** row, bumping the digest is the cheap win and often clears the CVE rows with it. An
 **unknown** row is not a clearance: it means the registry could not be read, so check by hand.

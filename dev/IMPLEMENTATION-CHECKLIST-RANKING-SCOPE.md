@@ -25,7 +25,7 @@ per `RANKING-STATUS.md`. Re-run both after every task and compare.
 
 ## 1. Corrections to the earlier roadmap (read this — it changes task priority)
 
-The first roadmap (`docs/ADMIN-PANEL-FEATURE-ROADMAP.md`) overstated two things. This
+The first roadmap (`dev/ADMIN-PANEL-FEATURE-ROADMAP.md`) overstated two things. This
 document supersedes them.
 
 ### C1 — D2 severity was overstated. It is a **latent** bug, not a live cross-contest leak.
@@ -209,7 +209,7 @@ handoff; do not imply otherwise.
 ### DROPPED-3 — Submission filters (S1) and the evaluation/re-eval spine (E1/V1/V4)
 
 Out of scope for this branch by the user's selection. They remain in
-`docs/ADMIN-PANEL-FEATURE-ROADMAP.md` §3 and §4.
+`dev/ADMIN-PANEL-FEATURE-ROADMAP.md` §3 and §4.
 
 ---
 

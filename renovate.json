@@ -13,7 +13,7 @@
   },
   "packageRules": [
     {
-      "description": "Digest pinning is the decision in docs/decisions/image-digest-pinning.md: every third-party base image carries its readable tag PLUS an @sha256 digest, so the tag stays legible in the file while the bits are fixed. Renovate is the only thing that moves either — it re-resolves the digest when it bumps a tag, and opens a digest-only PR when the tag has not moved but the registry serves new bits. tests/test_image_pins.sh fails on a floating reference, so a hand edit that drops a digest cannot merge.",
+      "description": "Digest pinning is the decision in dev/decisions/image-digest-pinning.md: every third-party base image carries its readable tag PLUS an @sha256 digest, so the tag stays legible in the file while the bits are fixed. Renovate is the only thing that moves either — it re-resolves the digest when it bumps a tag, and opens a digest-only PR when the tag has not moved but the registry serves new bits. tests/test_image_pins.sh fails on a floating reference, so a hand edit that drops a digest cannot merge.",
       "matchManagers": ["dockerfile", "docker-compose"],
       "pinDigests": true
     },

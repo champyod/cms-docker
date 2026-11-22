@@ -148,7 +148,7 @@ May touch:  <exact paths>
 Must not:   admin-panel/**, docs/DESIGN*.md, any other lane
 Done when:  <the check from §3, verbatim>
 Authority:  Tier A inside the slice; Tier C for a new dependency or a schema change
-Read:       docs/agent-protocol.md §1 (binding), docs/backend-migration/INVENTORY.md §<n>
+Read:       dev/agent-protocol.md §1 (binding), dev/migration/INVENTORY.md §<n>
             (the behaviour to reproduce), THREAT-MODEL.md §<n> (what must not weaken)
 ```
 

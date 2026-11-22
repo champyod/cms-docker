@@ -451,7 +451,7 @@ for svc in targets:
         print("  %-16s %s" % (svc, ref))
         print("  %-16s   %s" % ("", digest))
     else:
-        print("  %-16s %s   [tag only — our own image, see docs/decisions/image-digest-pinning.md]" % (svc, image))
+        print("  %-16s %s   [tag only — our own image, see dev/decisions/image-digest-pinning.md]" % (svc, image))
     rc, _, _ = run(["docker", "image", "inspect", image, "--format", "{{.Id}}"])
     print("  %-16s   present locally: %s" % ("", "yes" if rc == 0 else "no (pulled at up)"))
 print()

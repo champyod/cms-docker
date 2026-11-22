@@ -9,7 +9,7 @@ provider). This file is the complete, self-contained task list.
   wiring (one contest or many) lives in the **database**; nothing hardcoded in compose/nginx/panel.
 - **Repo:** `github.com/champyod/cms-docker`. **Base:** `major/admin-panel` @ `117394c8`.
 - **Work branch:** `cms-hub/db-registry-ui` (worktree; at `3915fe9b` after step 1).
-- **Read first:** `docs/superpowers/specs/2026-10-14-service-registry-db-driven-ui-design.md` — the
+- **Read first:** `dev/superpowers/specs/2026-10-14-service-registry-db-driven-ui-design.md` — the
   gap list (G1–G22), defects C1–C5, the contract map, the UI plan, the hot-apply map.
 - **Decisions (settled):** D1 = **B** (a path exposure injects location fragments into the **owning
   vhost**); D2 = the sync **never writes** `contests.is_active`; the legacy `CONTEST_ID` reads the

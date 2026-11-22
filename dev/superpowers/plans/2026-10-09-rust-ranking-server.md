@@ -8,7 +8,7 @@
 
 **Tech stack:** Rust (axum, tokio, sqlx, serde, chrono, thiserror, bcrypt, tower-http), PostgreSQL 16 with RLS, Next.js 16 / React 19 / Prisma 6 / Bun / vitest, Python CMS (SQLAlchemy + gevent) for the pusher.
 
-**Spec:** docs/superpowers/specs/2026-10-09-rust-ranking-server-design.md
+**Spec:** dev/superpowers/specs/2026-10-09-rust-ranking-server-design.md
 
 ## Global constraints
 
@@ -20,7 +20,7 @@
 - Panel code follows cms-docker-ranking/CLAUDE.md: verifyApiPermission before every route body, ensurePermission first line of every protected action, revalidatePath after every mutation, no hardcoded locale, dictionary keys in both en.json and th.json.
 - No migration is applied without the RLS enable/force pair and the backup catalog test update.
 - Every new permission key is added to the registry, to at least one seeded group, and to the tests that count keys and groups.
-- No paid dependency anywhere; every Rust crate chosen is already vetted in docs/backend-migration/ARCHITECTURE.md section 6.
+- No paid dependency anywhere; every Rust crate chosen is already vetted in dev/migration/ARCHITECTURE.md section 6.
 - Performance is design intent only: no benchmark gate is added and no speed figure is published.
 
 ## Verification commands

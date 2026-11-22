@@ -19,7 +19,7 @@ Deliver a Rust ranking web server that:
 5. removes the Python service from the runtime path without changing what a participant sees.
 
 Claim that cannot be verified today: the repository asserts no performance property at all
-(docs/backend-migration/REQUIREMENTS.md, NG-06 "no performance target is asserted; no performance
+(dev/migration/REQUIREMENTS.md, NG-06 "no performance target is asserted; no performance
 measurement exists"). "Fastest" is therefore a design intent and stays theory: you decided against a
 benchmark gate, so no speed figure is claimed and no measurement is an acceptance criterion.
 
@@ -137,7 +137,7 @@ job and its musl convention extend to it instead of inventing a second Rust home
 
 | Choice | Version basis | Why |
 |---|---|---|
-| axum + tokio | vetted in docs/backend-migration/ARCHITECTURE.md section 6.1 (axum 0.8.9 keep, actix-web reject, hyper reject-as-direct) | tower middleware composes auth, timeout and tracing; SSE is built in |
+| axum + tokio | vetted in dev/migration/ARCHITECTURE.md section 6.1 (axum 0.8.9 keep, actix-web reject, hyper reject-as-direct) | tower middleware composes auth, timeout and tracing; SSE is built in |
 | sqlx, postgres, runtime-tokio, tls-rustls-ring-webpki | the version the other Rust tree already locks (0.9.0) | one query layer; RLS stays binding because the service uses the application connection |
 | serde, serde_json, chrono, thiserror | same table | wire types and config |
 | bcrypt | matches admin-panel bcryptjs format (bcrypt:<hash>, 10 rounds) | the Rust service verifies the same stored hashes the panel does |
@@ -292,7 +292,7 @@ gains a permissioned editor for that table; removing an override ends the row ra
 2. the Dockerfile gains a Rust build stage; the Debian rustc already in the package list is not a
    build toolchain and must not be used;
 3. cms-ranking-data is retired for data and kept only if the logo stays file-backed; the ADR
-   docs/decisions/ranking-logo-storage.md is superseded by this decision and must be amended, not
+   dev/decisions/ranking-logo-storage.md is superseded by this decision and must be amended, not
    silently contradicted;
 4. the Python command stays installed until the parity gate passes, then is removed from the runtime
    path; removal from src/setup.py is a separate, approved step.
@@ -327,7 +327,7 @@ gains a permissioned editor for that table; removing an override ends the row ra
 | Table shape | One table per entity kind, mirroring the entity classes. |
 | /credits | The full credit list stays on the route and becomes editable; the footer carries the compact editable text. |
 | Access mode | A login toggle the panel controls; CAPTCHA keys stay in config.toml and are never panel-edited. |
-| Logo storage | Keep the volume plus host mirror; docs/decisions/ranking-logo-storage.md stands. |
+| Logo storage | Keep the volume plus host mirror; dev/decisions/ranking-logo-storage.md stands. |
 
 Also confirmed for this work: sectional commits, clean code, why-not-what comments, Conventional
 Commits throughout.
@@ -342,7 +342,7 @@ Commits throughout.
 | Port only the hot path and keep Tornado | Two runtimes for one surface doubles the deployment and the parity surface |
 | Use cms-docker-rust/backend as the home | That workspace belongs to a different branch and a different analysis; worktree drift would fork the crate |
 | Write it as a separate repository | Loses the existing rust CI job and the musl packaging convention |
-| Defer until the single-backend plan finishes | The confirmed plan (docs/PLAN-SINGLE-BACKEND.md) targets a different end state and is still in flight; deferring leaves the ranking service on the file store |
+| Defer until the single-backend plan finishes | The confirmed plan (dev/PLAN-SINGLE-BACKEND.md) targets a different end state and is still in flight; deferring leaves the ranking service on the file store |
 
 ### A.2 HTTP stack
 

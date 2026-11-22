@@ -37,7 +37,7 @@ Local artefacts are **gitignored**: `config/hsm/*`, `*.db`, `config/vault/data/`
   # There is no `hsm` compose service: the token store is a PKCS#11 module, not a daemon,
   # so nothing has to run alongside the stack. The former `image: opencrypto/softhsm`
   # service never resolved (that repository does not exist) and was removed by
-  # docs/decisions/image-digest-pinning.md rather than left as an unpinnable name.
+  # dev/decisions/image-digest-pinning.md rather than left as an unpinnable name.
   # SoftHSM for dev: install the package on the host that runs certbot, keep the token DB
   # at config/hsm/tokens/ (gitignored). Hardware: YubiHSM via yubico/yubihsm if you script
   # it — pin that image by tag+digest like every other third-party image.

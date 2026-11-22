@@ -8,7 +8,7 @@
 
 **Tech Stack:** Next.js 16 App Router, React 19, TypeScript 5, Prisma 6, Tailwind v4, vitest 4, jose JWT, bcryptjs.
 
-**Spec:** `docs/superpowers/specs/2026-08-23-admin-panel-refactor-design.md`
+**Spec:** `dev/superpowers/specs/2026-08-23-admin-panel-refactor-design.md`
 
 ## Global Constraints
 

@@ -2,7 +2,7 @@
 # scripts/__image_scan.sh — scan the images this repo PINS, nightly, and say so where a human looks.
 #
 # WHY this exists: every third-party image in docker-compose*.yml is digest-pinned
-# (docs/decisions/image-digest-pinning.md) and CI only scans the one image it builds
+# (dev/decisions/image-digest-pinning.md) and CI only scans the one image it builds
 # (`container-scan` in ci.yml scans cms-admin-panel:scan). So a CVE that lands in postgres:15 or
 # nginx:alpine after the pin was chosen has no signal at all: no job reads those digests, and a
 # fixable CRITICAL sits in a running database until someone happens to read a registry page.
@@ -491,7 +491,7 @@ case "$mode" in
           printf '\n### Digest drift\n\n'
           write_drift
           printf '\n### What to do\n\n'
-          printf -- '- **A fixable CVE**: bump that image'"'"'s digest to the tag'"'"'s current one (see `docker buildx imagetools inspect <ref>`), one image per commit; the pin policy is `docs/decisions/image-digest-pinning.md`.\n'
+          printf -- '- **A fixable CVE**: bump that image'"'"'s digest to the tag'"'"'s current one (see `docker buildx imagetools inspect <ref>`), one image per commit; the pin policy is `dev/decisions/image-digest-pinning.md`.\n'
           printf -- '- **Cannot bump yet** (no fixed release in a usable tag): file a waiver in `security_waivers` with a `review_by` date — the only suppression mechanism, rendered to `.trivyignore` by CI. Do not add a second ignore file.\n'
           printf -- '- **Drift**: a newer build of the tag you already run exists. Bumping the digest is the cheap win — it usually clears this table on its own.\n'
           printf -- '- **unknown**: the registry could not be read (rate limit, private repo). Not a claim that the image is current.\n'

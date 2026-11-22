@@ -179,9 +179,9 @@ versions above adds no measurement either.
 
 ## 8. Relationship to the confirmed single-backend plan
 
-A user-confirmed plan on this branch (`docs/PLAN-SINGLE-BACKEND.md`) makes the Next.js panel the
+A user-confirmed plan on this branch (`dev/PLAN-SINGLE-BACKEND.md`) makes the Next.js panel the
 only write backend and turns the Python admin into a client of the panel API. Its audit
-(`docs/PHASE0-INVENTORY.md`) finds 55 mutating handlers, 95 permission guards, 147 panel server
+(`dev/PHASE0-INVENTORY.md`) finds 55 mutating handlers, 95 permission guards, 147 panel server
 actions that write Prisma directly, and 10 field-permission divergences between the two UIs.
 
 This architecture supersedes that end-state only if the Rust task is chosen. The two can be

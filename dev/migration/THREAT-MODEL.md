@@ -92,7 +92,7 @@ residual are not fully covered by a current requirement and are carried into `OP
 | TM-27 | Repudiation | Every Python-side mutation is unaudited: the audit model exists but has no writer, so the hash chain excludes Python changes. | 3 | REQ-F17, REQ-S09 |
 | TM-28 | Tampering | One operation is gated by three different permission keys across the two UIs. | 2 | REQ-F13, REQ-F16 |
 
-Sources for TM-23 to TM-28 are the findings recorded in `docs/PHASE0-INVENTORY.md`.
+Sources for TM-23 to TM-28 are the findings recorded in `dev/PHASE0-INVENTORY.md`.
 
 ## Residual risk and assumptions
 

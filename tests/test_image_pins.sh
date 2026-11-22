@@ -5,7 +5,7 @@
 # `postgres:15` or `nginx:alpine` re-resolve to whatever the registry serves today, so the stack
 # that passed review is not the stack that starts tomorrow, and nothing in git records the
 # difference. The policy — the decision, the readable-tag rule, and why our own images are
-# exempt — lives in docs/decisions/image-digest-pinning.md, which is the single place to read
+# exempt — lives in dev/decisions/image-digest-pinning.md, which is the single place to read
 # or change it; this suite is only the enforcement.
 #
 # WHAT it asserts, per `image:` line in every compose file the repo ships
@@ -28,7 +28,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
-ADR="${REPO_ROOT}/docs/decisions/image-digest-pinning.md"
+ADR="${REPO_ROOT}/dev/decisions/image-digest-pinning.md"
 # Files the decision record's prose lives behind; the suite fails if an exempt image has no
 # explanation beside it, so the exemption cannot be smuggled in silently.
 SENTINEL='WHY no digest on our own images'
@@ -307,7 +307,7 @@ fi
 # ── the decision record ─────────────────────────────────────────────────────────────────────
 printf '\nthe decision lives in one place\n'
 if [ -f "$ADR" ]; then
-  ok "docs/decisions/image-digest-pinning.md exists"
+  ok "dev/decisions/image-digest-pinning.md exists"
   if grep -qF -- "$SENTINEL" "$ADR"; then
     ok "the record states why our own images are exempt"
   else
@@ -319,7 +319,7 @@ if [ -f "$ADR" ]; then
     no "the record does not name \${IMG_TAG}"
   fi
 else
-  no "docs/decisions/image-digest-pinning.md is missing — the pin policy has no home"
+  no "dev/decisions/image-digest-pinning.md is missing — the pin policy has no home"
 fi
 
 # ── inventory mode ──────────────────────────────────────────────────────────────────────────

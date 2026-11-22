@@ -12,13 +12,13 @@ disagree.
 |---|---|---|
 | how work is cut, staffed, proved, landed | `TEAM-WORKFLOW.md` | three axes, the cell rule (an unproven green is a lie), the council, anti-drift locks |
 | which files an agent may edit right now | `coordination/PROTOCOL.md` in the panel checkout | claim on the board before editing; overlaps go to a chat thread |
-| what this migration must achieve and in what order | `docs/backend-migration/PLAN.md` | nine decisions, slices S-0…S-9, seven gates |
+| what this migration must achieve and in what order | `dev/migration/PLAN.md` | nine decisions, slices S-0…S-9, seven gates |
 
 ---
 
 ## Binding rules — every agent, every session
 
-<!-- BEGIN agent-protocol §1 — verbatim copy of docs/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
+<!-- BEGIN agent-protocol §1 — verbatim copy of dev/agent-protocol.md §1. Do not edit here; edit there and re-copy. -->
 **Tier A — decide, do not ask.** Naming, file layout, test shape, step order inside a slice, commit
 split, which existing component to extend, re-running a gate. Record the reason once in the epic
 file only when another person's work depends on it.

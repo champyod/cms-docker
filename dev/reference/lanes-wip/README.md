@@ -3,7 +3,7 @@
 Source: `cms-lanes-worktree` (branch `feat/evaluation-lanes`, uncommitted working tree, 2026-10-05/06).
 That branch is an **ancestor** of `major/admin-panel` (0 ahead, 633 behind), so none of this ever landed.
 
-Ported verbatim under `docs/reference/lanes-wip/` — outside every build path — for one reason: the
+Ported verbatim under `dev/reference/lanes-wip/` — outside every build path — for one reason: the
 files below do not compile against `major/admin-panel` at a093b003, and committing them in place
 would turn `bun run build` red before the schema decision (design doc section 4, Q9) is settled.
 

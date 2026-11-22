@@ -1,7 +1,7 @@
 # CMS Docker Compose — unified stack with profiles: core, admin, contest, worker, monitor
 # Services orchestrate the Competitive Management System platform
 #
-# Image pin policy (docs/decisions/image-digest-pinning.md): every third-party image
+# Image pin policy (dev/decisions/image-digest-pinning.md): every third-party image
 # carries its readable tag PLUS an @sha256 digest, so the reference stays legible and the
 # bits are fixed. Renovate bumps tag+digest; `make test` (tests/test_image_pins.sh) fails
 # on a floating reference.

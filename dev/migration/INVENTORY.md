@@ -165,18 +165,18 @@ Config file is selected by the `CMS_CONFIG` environment variable with a compiled
 
 ## 10. Confirmed-plan inventory (cross-reference)
 
-The user-confirmed single-backend plan carries its own audit, `docs/PHASE0-INVENTORY.md`. This
+The user-confirmed single-backend plan carries its own audit, `dev/PHASE0-INVENTORY.md`. This
 inventory must stay consistent with its numbers:
 
 | Metric | Value | Source |
 |---|---|---|
-| Mutating Python handlers | 55 across 11 of 16 modules | `docs/PHASE0-INVENTORY.md` |
-| `@require_permission` applications | 95 | `docs/PHASE0-INVENTORY.md` |
-| Operations that write the database | 45, of which 16 are multi-write | `docs/PHASE0-INVENTORY.md` |
-| Mutating operations with no panel API route | 16 | `docs/PHASE0-INVENTORY.md` |
-| Panel server actions | 147 across 29 files, none calling an API route | `docs/PHASE0-INVENTORY.md` |
-| Panel API routes | 28 | `docs/PHASE0-INVENTORY.md` |
-| Field-permission divergences between the two UIs | 10 | `docs/PHASE0-INVENTORY.md` |
+| Mutating Python handlers | 55 across 11 of 16 modules | `dev/PHASE0-INVENTORY.md` |
+| `@require_permission` applications | 95 | `dev/PHASE0-INVENTORY.md` |
+| Operations that write the database | 45, of which 16 are multi-write | `dev/PHASE0-INVENTORY.md` |
+| Mutating operations with no panel API route | 16 | `dev/PHASE0-INVENTORY.md` |
+| Panel server actions | 147 across 29 files, none calling an API route | `dev/PHASE0-INVENTORY.md` |
+| Panel API routes | 28 | `dev/PHASE0-INVENTORY.md` |
+| Field-permission divergences between the two UIs | 10 | `dev/PHASE0-INVENTORY.md` |
 
 The audit also records operational defects outside this inventory's scope — two TUI files over the
 line limit, a linked-but-broken `expose` command, and a shellcheck bug in the smoke test — which

@@ -77,5 +77,5 @@ Supporting fixtures (the request list, the normalisation rules) go beside it und
 
 ## Report
 
-Command, exit code, counts, one line of what it proves — per `docs/agent-protocol.md` §1. End with what
+Command, exit code, counts, one line of what it proves — per `dev/agent-protocol.md` §1. End with what
 landed (SHA), what is blocked (named), what is next.

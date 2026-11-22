@@ -54,7 +54,7 @@ guarantee; without it the two layers grow back.
 
 ## Decided — not to be re-litigated
 
-- **Runtime is Tokio; io_uring is not adopted** — see `docs/decisions/no-io-uring.md`: the io_uring
+- **Runtime is Tokio; io_uring is not adopted** — see `dev/decisions/no-io-uring.md`: the io_uring
   runtimes are unmaintained (`tokio-uring` last released 2024-05-27, `compio` still beta), it replaces
   the runtime rather than accelerating it, Docker's default seccomp profile denies `io_uring_setup`
   outright, and this workload is Postgres-bound rather than local-disk-bound. It reopens only on a

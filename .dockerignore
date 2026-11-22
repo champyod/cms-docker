@@ -12,6 +12,7 @@ node_modules/
 .vscode/
 .idea/
 docs/
+dev/
 examples/
 *.md
 backups/

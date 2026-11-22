@@ -31,7 +31,7 @@ The upstream relationship is the defining constraint of this work:
 - The best-supported base is an upstream commit after the v1.5.1 tree; the vendored
   `src/cms/__init__.py` reports version `1.6.dev0`.
 
-Details and the recorded last-sync commits are in `docs/FORK-SUMMARY.md`.
+Details and the recorded last-sync commits are in `dev/FORK-SUMMARY.md`.
 
 ## What the fork adds (not upstream at all)
 
@@ -83,7 +83,7 @@ blast radius are enumerated in `MIGRATION-OPTIONS.md`; the decision belongs to t
 ## The confirmed plan this work sits beside
 
 A user-confirmed plan already exists on this baseline branch and is being implemented:
-`docs/PLAN-SINGLE-BACKEND.md`, with its audit at `docs/PHASE0-INVENTORY.md` (committed at
+`dev/PLAN-SINGLE-BACKEND.md`, with its audit at `dev/PHASE0-INVENTORY.md` (committed at
 `8ed54dd5`). It sets a target that is the **opposite** of the Rust task documented here.
 
 | | Confirmed plan (`PLAN-SINGLE-BACKEND.md`) | This document set (Rust task) |

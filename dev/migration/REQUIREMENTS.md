@@ -70,7 +70,7 @@ not select a migration strategy; the strategies are in `MIGRATION-OPTIONS.md`.
 
 ## Reconciliation with the confirmed single-backend plan
 
-A user-confirmed plan (`docs/PLAN-SINGLE-BACKEND.md`, audit at `docs/PHASE0-INVENTORY.md`) targets
+A user-confirmed plan (`dev/PLAN-SINGLE-BACKEND.md`, audit at `dev/PHASE0-INVENTORY.md`) targets
 the panel as the single write backend. The requirement set above assumes a Rust backend instead.
 The two targets conflict; OQ-00 decides. The following requirements hold under either target and
 should be treated as binding now, because they remove the divergences the confirmed plan exists to
@@ -78,8 +78,8 @@ eliminate.
 
 | ID | Requirement | Source | Acceptance criteria | Priority |
 |---|---|---|---|---|
-| REQ-F13 | Security rules have exactly one source of truth and are generated into every other language, with a gate that fails on drift. | `docs/PLAN-SINGLE-BACKEND.md` decision 5; `docs/PHASE0-INVENTORY.md` finding 3 | A mismatch between a generated copy and the source fails the build. | P0 |
-| REQ-F14 | No handler writes the database outside the single agreed write path, enforced by a gate. | `docs/PLAN-SINGLE-BACKEND.md`, drift-gate stage | A handler that writes directly fails the drift gate. | P0 |
-| REQ-F15 | `all:all` expands identically everywhere; the two current Python predicates are unified. | `docs/PHASE0-INVENTORY.md` finding 3.2 | One expansion rule; a test fails on divergence. | P0 |
-| REQ-F16 | Field-level permission rules exist in exactly one place, not three conflicting copies. | `docs/PHASE0-INVENTORY.md` finding 3.4 | The copies collapse to one; a test proves parity. | P1 |
-| REQ-F17 | The Python-side audit gap is closed: today the audit model has no writer, so Python mutations are unrecorded. | `docs/PHASE0-INVENTORY.md` finding 2 | Every mutating Python path writes an audit entry before the change commits. | P1 |
+| REQ-F13 | Security rules have exactly one source of truth and are generated into every other language, with a gate that fails on drift. | `dev/PLAN-SINGLE-BACKEND.md` decision 5; `dev/PHASE0-INVENTORY.md` finding 3 | A mismatch between a generated copy and the source fails the build. | P0 |
+| REQ-F14 | No handler writes the database outside the single agreed write path, enforced by a gate. | `dev/PLAN-SINGLE-BACKEND.md`, drift-gate stage | A handler that writes directly fails the drift gate. | P0 |
+| REQ-F15 | `all:all` expands identically everywhere; the two current Python predicates are unified. | `dev/PHASE0-INVENTORY.md` finding 3.2 | One expansion rule; a test fails on divergence. | P0 |
+| REQ-F16 | Field-level permission rules exist in exactly one place, not three conflicting copies. | `dev/PHASE0-INVENTORY.md` finding 3.4 | The copies collapse to one; a test proves parity. | P1 |
+| REQ-F17 | The Python-side audit gap is closed: today the audit model has no writer, so Python mutations are unrecorded. | `dev/PHASE0-INVENTORY.md` finding 2 | Every mutating Python path writes an audit entry before the change commits. | P1 |

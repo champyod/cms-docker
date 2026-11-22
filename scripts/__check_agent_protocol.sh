@@ -1,5 +1,5 @@
 #!/bin/sh
-# Asserts that every verbatim copy of the agent protocol matches §1 of docs/agent-protocol.md.
+# Asserts that every verbatim copy of the agent protocol matches §1 of dev/agent-protocol.md.
 #
 # WHY: a rule that exists twice in different words is two rules, and the reader cannot tell which
 # one binds. The copy is therefore mechanical and this gate is what keeps it mechanical.
@@ -7,7 +7,7 @@
 # Usage: scripts/__check_agent_protocol.sh [additional-copy ...]
 set -u
 
-canonical=docs/agent-protocol.md
+canonical=dev/agent-protocol.md
 copies="AGENTS.md"
 [ $# -gt 0 ] && copies="$copies $*"
 

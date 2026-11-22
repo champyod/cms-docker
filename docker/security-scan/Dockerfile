@@ -5,7 +5,7 @@
 # places for that shape to drift. trivy and osv-scanner are static Go binaries, so they are
 # copied out of their pinned upstream images rather than curled from release tarballs whose
 # URLs rot. Renovate's docker manager bumps the three tags below — and, since the pinned-digest
-# pass, the three @sha256 digests with them (docs/decisions/image-digest-pinning.md).
+# pass, the three @sha256 digests with them (dev/decisions/image-digest-pinning.md).
 #
 # Not in this image on purpose: the Diun container itself. It stays upstream
 # (crazymax/diun) and posts to the translator this image serves in `diun-bridge` mode.

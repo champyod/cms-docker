@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # Base image (ubuntu:noble or debian:bookworm); never apt-upgraded in-build.
-# Base-image policy (docs/decisions/image-digest-pinning.md): the default carries tag+digest
+# Base-image policy (dev/decisions/image-digest-pinning.md): the default carries tag+digest
 # so `FROM ${BASE_IMAGE}` resolves to fixed bits, and package drift is handled by bumping the
 # digest (Renovate's dockerfile manager) rather than by an in-build upgrade. An operator
 # override via --build-arg BASE_IMAGE=... must carry its own tag AND @sha256 digest; a bare

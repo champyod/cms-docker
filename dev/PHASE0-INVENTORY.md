@@ -1,7 +1,7 @@
 # Phase 0 — Inventory (single-backend plan)
 
 Read-only audit preceding Phase 1. Everything downstream derives from this.
-Source plan: `docs/PLAN-SINGLE-BACKEND.md`.
+Source plan: `dev/PLAN-SINGLE-BACKEND.md`.
 
 ## Headline numbers
 
