@@ -1,6 +1,5 @@
 'use client';
 
-import { Card } from '@/components/core/Card';
 import { Tabs } from '@/components/core/Tabs';
 import { useDisplayDensity } from '@/hooks/useDisplayDensity';
 import { useHighContrast } from '@/hooks/useHighContrast';
@@ -23,6 +22,12 @@ const CONTRAST_OPTIONS: { key: ContrastPreference; label: string }[] = [
   { key: 'high', label: 'High' },
 ];
 
+/**
+ * The three choices that change this screen only.
+ *
+ * WHY no card and no heading: the settings layout frames the group and states its scope, so the
+ * panel only carries the three controls and what each one does.
+ */
 export function DisplayTab(): React.JSX.Element {
   const { display, setDisplay } = useDisplayDensity();
   const { highContrast, setHighContrast } = useHighContrast();
@@ -30,10 +35,10 @@ export function DisplayTab(): React.JSX.Element {
   const contrast: ContrastPreference = highContrast === true ? 'high' : 'standard';
   return (
     <div className="space-y-6">
-      <Card className="space-y-4">
+      <div className="space-y-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Density</h2>
-          <p className="text-xs text-muted-foreground mt-1">Compact shrinks padding and gaps panel-wide. Applies instantly. (Stored on this device)</p>
+          <h3 className="text-sm font-semibold text-foreground">Density</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Compact shrinks padding and gaps panel-wide. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={DENSITY_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}
@@ -41,11 +46,11 @@ export function DisplayTab(): React.JSX.Element {
           ariaLabel="Density"
           onSelect={(id) => setDisplay({ ...current, density: id as DensityPreference })}
         />
-      </Card>
-      <Card className="space-y-4">
+      </div>
+      <div className="space-y-4 border-t border-border pt-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Text size</h2>
-          <p className="text-xs text-muted-foreground mt-1">Spacing follows the font size automatically. Applies instantly. (Stored on this device)</p>
+          <h3 className="text-sm font-semibold text-foreground">Text size</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Spacing follows the font size automatically. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={TEXT_SIZE_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}
@@ -53,11 +58,11 @@ export function DisplayTab(): React.JSX.Element {
           ariaLabel="Text size"
           onSelect={(id) => setDisplay({ ...current, textSize: id as TextSizePreference })}
         />
-      </Card>
-      <Card className="space-y-4">
+      </div>
+      <div className="space-y-4 border-t border-border pt-4">
         <div>
-          <h2 className="text-sm font-semibold text-foreground">Contrast</h2>
-          <p className="text-xs text-muted-foreground mt-1">High outlines every card and field and makes status colours solid. Applies instantly. (Stored on this device)</p>
+          <h3 className="text-sm font-semibold text-foreground">Contrast</h3>
+          <p className="mt-1 text-xs text-muted-foreground">High outlines every card and field and makes status colours solid. Applies instantly. (Stored on this device)</p>
         </div>
         <Tabs
           items={CONTRAST_OPTIONS.map((option) => ({ id: option.key, label: option.label }))}
@@ -65,7 +70,7 @@ export function DisplayTab(): React.JSX.Element {
           ariaLabel="Contrast"
           onSelect={(id) => setHighContrast(id as ContrastPreference)}
         />
-      </Card>
+      </div>
     </div>
   );
 }

@@ -71,7 +71,7 @@ describe('System physical pages authorize and delegate', () => {
     [
       'src/app/[locale]/(authenticated)/system/appearance/page.tsx',
       'system.appearance',
-      ['<AppearanceClient'],
+      ['<SettingsPage', '<BrandingTab', '<DisplayTab'],
     ],
     [
       'src/app/[locale]/(authenticated)/system/maintenance/page.tsx',
@@ -110,12 +110,16 @@ describe('System physical pages authorize and delegate', () => {
 
   it('keeps Branding, Services, Display local and URL-stable', () => {
     const page = readSource('src/app/[locale]/(authenticated)/system/appearance/page.tsx');
-    const client = readSource('src/components/appearance/AppearanceClient.tsx');
+    const panels = readSource('src/components/appearance/AppearanceClient.tsx');
+    const display = readSource('src/components/appearance/DisplayTab.tsx');
     expect(page).not.toContain('searchParams');
-    expect(client).toContain("useState<TabKey>('branding')");
-    expect(client).toContain("{ key: 'branding', label: 'Branding' }");
-    expect(client).toContain("{ key: 'services', label: 'Services' }");
-    expect(client).toContain("{ key: 'display', label: 'Display' }");
-    expect(client).not.toContain('useSearchParams');
+    // The three areas are still the three areas; the settings layout now carries them as groups,
+    // so their names are the group keys rather than tab ids.
+    expect(page).toContain("key: 'branding'");
+    expect(page).toContain("key: 'services'");
+    expect(page).toContain("key: 'display'");
+    expect(page).not.toContain('useSearchParams');
+    expect(panels).not.toContain('useSearchParams');
+    expect(display).not.toContain('useSearchParams');
   });
 });

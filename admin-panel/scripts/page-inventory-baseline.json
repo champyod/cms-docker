@@ -18,7 +18,6 @@
     "/ranking/appearance",
     "/ranking/credits",
     "/ranking/users/:key",
-    "/system/appearance",
     "/system/backup-restore",
     "/system/maintenance",
     "/tasks/:id",
