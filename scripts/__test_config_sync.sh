@@ -109,5 +109,59 @@ else
 fi
 
 echo ""
+echo "=== Test 7: .env carries the logger's three inputs ==="
+setup_test_root
+# A cms.toml the injection step has already rendered: [global] log_dir is live.
+sed 's|^#log_dir = .*|log_dir = "/var/local/log/cms"|' "$TEST_ROOT/config/cms.sample.toml" \
+  > "$TEST_ROOT/config/cms.toml"
+run_sync
+assert_exit 0 $? "real run with a rendered cms.toml exits 0"
+assert_grep "$TEST_ROOT/.env" '^LOG_SERVICE_ADDR=cms-log-service:29000$' \
+  ".env LOG_SERVICE_ADDR is the [services] LogService shard"
+assert_grep "$TEST_ROOT/.env" '^LOG_DIR=/var/local/log/cms$' ".env LOG_DIR is [global] log_dir"
+if grep -Eq '^RPC_SECRET=.{32,}$' "$TEST_ROOT/.env"; then
+  pass ".env RPC_SECRET is the generated secret"
+else
+  fail ".env RPC_SECRET is missing or too short to be the generated secret"
+fi
+
+echo ""
+echo "=== Test 8: no [global] log_dir leaves LOG_DIR out rather than inventing one ==="
+setup_test_root
+run_sync
+assert_exit 0 $? "real run without a rendered log_dir still exits 0"
+assert_grep "$TEST_ROOT/sync-output.log" 'has no \[global\] log_dir' "the omission is reported"
+if grep -q '^LOG_DIR=' "$TEST_ROOT/.env"; then
+  fail "LOG_DIR emitted although cms.toml has no [global] log_dir"
+else
+  pass "no LOG_DIR without [global] log_dir"
+fi
+
+echo ""
+echo "=== Test 9: a missing [services] LogService stops the sync ==="
+setup_test_root
+grep -v '^LogService = ' "$TEST_ROOT/config/cms.sample.toml" > "$TEST_ROOT/config/cms.toml"
+if run_sync; then sync_code=0; else sync_code=$?; fi
+assert_exit 1 "$sync_code" "sync exits 1 without [services] LogService"
+assert_grep "$TEST_ROOT/sync-output.log" 'has no \[services\] LogService' \
+  "the failure names the missing entry"
+if grep -q '^LOG_SERVICE_ADDR=' "$TEST_ROOT/.env" 2>/dev/null; then
+  fail "LOG_SERVICE_ADDR emitted empty without [services] LogService"
+else
+  pass "no LOG_SERVICE_ADDR without [services] LogService"
+fi
+
+echo ""
+echo "=== Test 10: a shard above 0 is refused, not given shard 0's address ==="
+setup_test_root
+sed -i 's|^ACTIVE_DATABASE = .*|&\nLOG_SERVICE_SHARD = 1|' "$TEST_ROOT/config.toml"
+sed 's|^#log_dir = .*|log_dir = "/var/local/log/cms"|' "$TEST_ROOT/config/cms.sample.toml" \
+  > "$TEST_ROOT/config/cms.toml"
+if run_sync; then sync_code=0; else sync_code=$?; fi
+assert_exit 1 "$sync_code" "sync exits 1 with LOG_SERVICE_SHARD = 1"
+assert_grep "$TEST_ROOT/sync-output.log" 'LOG_SERVICE_SHARD is 1' \
+  "the failure names the shard it cannot address"
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]
