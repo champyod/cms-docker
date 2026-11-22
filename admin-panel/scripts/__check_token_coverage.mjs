@@ -48,11 +48,11 @@ let checked = 0;
 
 // A size must name a step of the one ladder (DESIGN.md 20). `text-[13px]` and `text-3xl` are the two
 // ways to leave it: one writes a number, the other reaches past the sixth step into Tailwind's
-// defaults. Both are counted rather than forbidden, because the four sites left are display numbers
-// larger than the top step (a 404 numeral, a gauge value, a status glyph) and each needs its own
-// decision. Nothing below 12px remains: the operator raised the nine 10px labels onto text-xs.
+// defaults. The baseline is zero: nothing is set outside the six steps, above or below. The four that
+// were left were each answered rather than exempted, a gauge value and a status heading onto the
+// ladder and a decorative 404 numeral deleted, because a watermark carries no data.
 const OFF_LADDER = /text-(?:\[[0-9.]+(?:px|rem)\]|(?:3xl|4xl|5xl|6xl|7xl|8xl|9xl))/g;
-const LADDER_BASELINE = 4;
+const LADDER_BASELINE = 0;
 
 for (const file of files(CORE)) {
   const source = readFileSync(file, 'utf8');

@@ -35,7 +35,7 @@ export function GaugeCard({ icon, label, source, percent, tone, className }: Gau
           {label} {source === null ? '' : source}
         </span>
       </div>
-      <div className="text-4xl density:text-3xl font-bold text-foreground font-mono">{percent}%</div>
+      <div className="text-xl font-bold text-foreground font-mono">{percent}%</div>
       <div className="w-full h-1.5 bg-muted/50 rounded-full overflow-hidden">
         <div className={`h-full transition-all duration-1000 ${bar}`} style={{ width: `${percent}%` }} />
       </div>

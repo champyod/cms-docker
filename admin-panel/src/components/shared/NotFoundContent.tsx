@@ -13,7 +13,6 @@ export function NotFoundContent() {
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
       <div className="text-center space-y-6">
         <div className="space-y-2">
-          <p className="text-8xl font-bold text-muted-foreground/20 select-none">404</p>
           <h1 className="text-2xl font-semibold text-foreground">Page Not Found</h1>
           <p className="text-muted-foreground text-sm max-w-xs mx-auto">
             The page you are looking for does not exist or has been moved.

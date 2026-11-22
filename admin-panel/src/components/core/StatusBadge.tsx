@@ -62,7 +62,7 @@ export function StatusBadge({ status, running = 0, total = 0 }: StatusBadgeProps
       <div className="flex justify-between items-start z-10">
         <div>
           <p className="text-sm font-medium text-muted-foreground">System Status</p>
-          <h3 className={cn("text-3xl font-bold mt-2", config.textClass)}>{config.label}</h3>
+          <h3 className={cn("text-lg font-bold mt-2", config.textClass)}>{config.label}</h3>
         </div>
         <div className={cn("p-2 rounded-lg", CHIP_CLASSES[config.variant])}>
           <Icon className="w-5 h-5" />
