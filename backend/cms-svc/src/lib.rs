@@ -51,5 +51,6 @@ pub use resource::{
 };
 pub use resource_service::{
     interesting_command_line, CoordError, CpuPercentages, LocalService, Matched, MemoryMegabytes,
-    ProcessCpu, ProcessMatcher, Sample, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage,
+    ProcessCpu, ProcessMatcher, ResourceError, ResourceService, Sample, Sampling, ServiceCoord,
+    ServiceFigures, ServiceState, ServiceUsage, MAX_RESOURCE_SECONDS,
 };

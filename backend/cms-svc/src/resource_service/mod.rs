@@ -4,11 +4,15 @@
 //! looking at one, and only the looking is ported.
 
 mod coord;
+mod error;
+mod machine;
 mod matcher;
 mod sample;
+mod service;
 
 pub use coord::{CoordError, LocalService, ServiceCoord};
+pub use error::ResourceError;
+pub use machine::{CpuPercentages, MemoryMegabytes};
 pub use matcher::{interesting_command_line, Matched, ProcessMatcher};
-pub use sample::{
-    CpuPercentages, MemoryMegabytes, ProcessCpu, Sample, ServiceFigures, ServiceState, ServiceUsage,
-};
+pub use sample::{ProcessCpu, Sample, ServiceFigures, ServiceState, ServiceUsage};
+pub use service::{ResourceService, Sampling, MAX_RESOURCE_SECONDS};
