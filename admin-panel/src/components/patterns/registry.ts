@@ -25,6 +25,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/infrastructure/services': 'board',
   // One row set with per-row and bulk actions; the counts describe it rather than stand alone.
   '/infrastructure/containers': 'list',
+  // Three record kinds that do not save together, plus the state all three share.
+  '/infrastructure/deployments': 'board',
   '/ranking/users': 'board',
   '/evaluation/lanes': 'list',
   '/evaluation/submissions': 'list',

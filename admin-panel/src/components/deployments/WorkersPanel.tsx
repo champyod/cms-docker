@@ -1,11 +1,10 @@
 'use client';
 
 import type { ReactElement } from 'react';
-import { Card } from '@/components/core/Card';
-import { Text } from '@/components/core/Typography';
 import { Stack } from '@/components/core/Layout';
 import { Badge } from '@/components/core/Badge';
 import { InlineAlert } from '@/components/core/InlineAlert';
+import { Text } from '@/components/core/Typography';
 import { WorkerNodeList } from '@/components/workers/WorkerNodeList';
 import { rowsFromNodes } from '@/lib/worker-nodes';
 import type { RowFreshnessInput } from '@/lib/live/row-freshness';
@@ -61,37 +60,41 @@ function joinStatus(workers: WorkerConfig[], status: WorkerNodeView[]): WorkerNo
   return [...configured, ...rowsFromNodes(liveOnly)];
 }
 
+/**
+ * The worker fleet, configured and reported.
+ *
+ * WHY no title and no card: the board names this section and frames it. The count stays, because it
+ * is the one thing the rows cannot be read for at a glance — configured and live-only rows are
+ * unioned below it.
+ */
 export function WorkersPanel(props: WorkersPanelProps): ReactElement {
   const rows = joinStatus(props.workers, props.status);
 
   return (
     <Stack gap={4}>
-      <Stack direction="row" align="center" gap={2} className="px-2 flex-wrap">
-        <Text variant="h2">Worker Nodes</Text>
+      <div className="flex items-center gap-2">
         <Badge variant="info">{rows.length} Nodes</Badge>
-      </Stack>
+      </div>
 
-      <Card className="p-4 density:p-3">
-        {props.forbidden ? (
-          <Text variant="muted">Worker status requires operator permission.</Text>
-        ) : props.error ? (
-          <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
-            {props.error}
-          </InlineAlert>
-        ) : (
-          <WorkerNodeList
-            rows={rows}
-            freshness={props.freshness}
-            canManage={props.canManage}
-            saving={props.saving}
-            dirty={props.workersDirty}
-            onSave={props.onSaveWorkers}
-            onAdd={props.onAddWorker}
-            onRemove={(key) => props.onRemoveWorker(Number(key))}
-            onEdit={(key, field, value) => props.onUpdateWorker(Number(key), field, value)}
-          />
-        )}
-      </Card>
+      {props.forbidden ? (
+        <Text variant="muted">Worker status requires operator permission.</Text>
+      ) : props.error ? (
+        <InlineAlert tone="destructive" announce="polite" title="Worker configuration unreadable">
+          {props.error}
+        </InlineAlert>
+      ) : (
+        <WorkerNodeList
+          rows={rows}
+          freshness={props.freshness}
+          canManage={props.canManage}
+          saving={props.saving}
+          dirty={props.workersDirty}
+          onSave={props.onSaveWorkers}
+          onAdd={props.onAddWorker}
+          onRemove={(key) => props.onRemoveWorker(Number(key))}
+          onEdit={(key, field, value) => props.onUpdateWorker(Number(key), field, value)}
+        />
+      )}
     </Stack>
   );
 }

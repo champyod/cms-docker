@@ -70,7 +70,7 @@ describe('Infrastructure ownership and wiring', () => {
     [
       'src/app/[locale]/(authenticated)/infrastructure/deployments/page.tsx',
       'infrastructure.deployments',
-      '<DeploymentsClient',
+      '<BoardPage',
     ],
     [
       'src/app/[locale]/(authenticated)/infrastructure/containers/page.tsx',
