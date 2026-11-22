@@ -4,9 +4,11 @@
 //! looking at one, and only the looking is ported.
 
 mod coord;
+pub mod daemon;
 mod error;
 #[cfg(test)]
 mod fixture;
+pub mod handlers;
 mod machine;
 mod matcher;
 mod naming;
