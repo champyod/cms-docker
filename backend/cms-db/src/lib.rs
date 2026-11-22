@@ -68,6 +68,7 @@ mod auth;
 mod base;
 mod binary;
 mod codename;
+mod contest;
 mod crypto;
 mod datetime;
 mod digest;
@@ -94,6 +95,7 @@ pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use codename::{Codename, CodenameError};
+pub use contest::{ContestWindow, Phase, WindowError};
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
     generate_random_password, get_hex_random_key, get_random_key, hash_password, Bcrypt,
