@@ -1,20 +1,10 @@
 import { getDictionary } from '@/i18n';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
-import { Card } from '@/components/core/Card';
-import {
-  Users,
-  Trophy,
-  FileCode,
-  Activity,
-  Clock,
-} from 'lucide-react';
 import { prisma } from '@/lib/prisma';
 import { getServiceStatus } from '@/app/actions/services';
 import { PageSurface } from '@/components/core/PageSurface';
-import { StatusBadge, StatusType } from '@/components/core/StatusBadge';
-import { Grid, Stack } from '@/components/core/Layout';
-import { Text } from '@/components/core/Typography';
-import { EmptyState } from '@/components/core/EmptyState';
+import type { StatusType } from '@/components/core/StatusBadge';
+import { DashboardSurface } from '@/components/dashboard/DashboardSurface';
 // Why the bare form: this page is a server component, so the activity row cannot read the
 // reviewer's own zone from a client context; the zone of record is the one this process renders in.
 import { formatInZone } from '@/lib/timezone';
@@ -113,107 +103,37 @@ export default async function DashboardPage({
     getRecentActivity(),
   ]);
 
+  const labels = dict.dashboard;
+
   return (
     <PageSurface
       breadcrumbs={listBreadcrumbs(locale, 'direct', 'home', dict)}
-      title={dict.dashboard.welcome}
-      description={dict.dashboard.description}
+      title={labels.welcome}
+      description={labels.description}
     >
-      <Grid cols={4}>
-        <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Users className="w-24 h-24" />
-          </div>
-          <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
-            <Stack gap={2}>
-              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalUsers}</Text>
-              <Text variant="h1">{stats.usersCount}</Text>
-            </Stack>
-            <div className="p-2 bg-primary/10 rounded-lg text-primary">
-              <Users className="w-5 h-5" />
-            </div>
-          </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10">
-            <Text variant="small" color="text-muted-foreground">
-              {stats.activeContesters} enrolled in running contests
-            </Text>
-          </Stack>
-        </Card>
-
-        <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Trophy className="w-24 h-24" />
-          </div>
-          <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
-            <Stack gap={2}>
-              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalContests}</Text>
-              <Text variant="h1">{stats.contestsCount}</Text>
-            </Stack>
-            <div className="p-2 bg-warning/10 rounded-lg text-warning">
-              <Trophy className="w-5 h-5" />
-            </div>
-          </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-warning">
-            <Activity className="w-4 h-4" />
-            <Text variant="small" color="text-warning">{stats.activeContestsCount} Active Now</Text>
-          </Stack>
-        </Card>
-
-        <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <FileCode className="w-24 h-24" />
-          </div>
-          <Stack direction="row" justify="between" align="start" className="z-10" gap={0}>
-            <Stack gap={2}>
-              <Text variant="small" color="text-muted-foreground">{dict.dashboard.stats.totalSubmissions}</Text>
-              <Text variant="h1">{stats.submissionsCount}</Text>
-            </Stack>
-            <div className="p-2 bg-info/10 rounded-lg text-info">
-              <FileCode className="w-5 h-5" />
-            </div>
-          </Stack>
-          <Stack direction="row" align="center" gap={2} className="z-10 text-muted-foreground">
-            <Clock className="w-4 h-4" />
-            <Text variant="small" color="text-muted-foreground">{stats.pendingSubmissions} Pending</Text>
-          </Stack>
-        </Card>
-
-        <Card className="p-6 flex flex-col gap-4 relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-            <Activity className="w-24 h-24" />
-          </div>
-          <StatusBadge status={serviceStatus.status as StatusType} running={serviceStatus.running} total={serviceStatus.total} />
-        </Card>
-      </Grid>
-
-      <Stack gap={4}>
-        <Text variant="h2">Recent Activity</Text>
-        <Card className="p-6 overflow-hidden">
-          {recentActivity.length > 0 ? (
-            <Stack gap={3}>
-              {recentActivity.map((item) => (
-                <Stack key={item.id} direction="row" align="center" gap={4} className="p-3 rounded-lg bg-muted/50 border border-border">
-                  <div className="p-2 bg-info/10 rounded-lg text-info">
-                    <FileCode className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <Text variant="small">
-                      <span className="font-medium text-primary">{item.username}</span>
-                      {' submitted to '}
-                      <span className="font-medium text-warning">{item.taskName}</span>
-                    </Text>
-                  </div>
-                  <Text variant="muted" className="whitespace-nowrap">
-                    {item.timestamp ? formatInZone(item.timestamp.toISOString()) : ''}
-                  </Text>
-                </Stack>
-              ))}
-            </Stack>
-          ) : (
-            <EmptyState icon={FileCode} title="No recent activity to display" />
-          )}
-        </Card>
-      </Stack>
+      <DashboardSurface
+        stats={stats}
+        service={{
+          status: serviceStatus.status as StatusType,
+          running: serviceStatus.running,
+          total: serviceStatus.total,
+          checkedAt: formatInZone(new Date().toISOString()),
+        }}
+        activity={recentActivity.map((item) => ({
+          id: item.id,
+          username: item.username,
+          taskName: item.taskName,
+          when: item.timestamp ? formatInZone(item.timestamp.toISOString()) : '',
+        }))}
+        labels={{
+          serviceState: labels.serviceState,
+          checkedAt: labels.checkedAt,
+          servicesTitle: labels.servicesTitle,
+          servicesDetail: labels.servicesDetail,
+          stats: labels.stats,
+          activity: labels.activity,
+        }}
+      />
     </PageSurface>
   );
 }

@@ -130,8 +130,26 @@
     "description": "นี่คือสถานะการแข่งขันของคุณในวันนี้",
     "stats": {
       "totalUsers": "ผู้ใช้งานทั้งหมด",
-      "totalContests": "การแข่งขันทั้งหมด",
-      "totalSubmissions": "การส่งคำตอบทั้งหมด"
+      "totalContests": "รายการแข่งขันทั้งหมด",
+      "totalSubmissions": "การส่งคำตอบทั้งหมด",
+      "enrolled": "ลงทะเบียนในรายการที่กำลังแข่ง {count} คน",
+      "activeNow": "กำลังแข่งอยู่ {count} รายการ",
+      "pending": "รอตรวจ {count} รายการ"
+    },
+    "serviceState": {
+      "ok": "บริการทำงานปกติทั้งหมด",
+      "degraded": "บางบริการไม่ทำงาน",
+      "down": "บริการหยุดทำงาน"
+    },
+    "checkedAt": "ตรวจเมื่อ {count}",
+    "servicesTitle": "บริการ",
+    "servicesDetail": "คอนเทนเนอร์ที่ดูแลอยู่",
+    "activity": {
+      "title": "กิจกรรมล่าสุด",
+      "empty": "ยังไม่มีกิจกรรม",
+      "user": "ผู้ใช้",
+      "task": "โจทย์",
+      "when": "เวลา"
     }
   },
   "errors": {
