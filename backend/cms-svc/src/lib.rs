@@ -50,6 +50,6 @@ pub use resource::{
     CpuTimes, ProcReader, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory,
 };
 pub use resource_service::{
-    CoordError, CpuPercentages, LocalService, MemoryMegabytes, ProcessCpu, Sample, ServiceCoord,
-    ServiceFigures, ServiceState, ServiceUsage,
+    interesting_command_line, CoordError, CpuPercentages, LocalService, Matched, MemoryMegabytes,
+    ProcessCpu, ProcessMatcher, Sample, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage,
 };
