@@ -1,3 +1,27 @@
+# Design preference — the charter
+
+**Goal.** Give the admin panel a design system that is Material 3 in structure and *ours* in
+detail: every visual decision recorded in this file, decided one topic at a time, and applied to
+the code only through gated steps.
+
+**How a decision is made here.** A rendered comparison of the real candidates (no hand-picked
+three out of a large field), one question with one topic in it, and a number behind the answer —
+contrast, ΔE, pixels, milliseconds. A principle from a checklist is never a decision; it becomes
+one only after it survives being rendered and measured against this panel.
+
+**What this file is.** The state of the work. No topic is decided until its row says so and carries
+the measurement that settled it. A row marked *queued* is a commitment to a later step, not a
+result.
+
+**Non-negotiables that the system must guarantee, not hope for.** One source of truth per fact and
+per component; no duplicated token, primitive or rule; a new state always has a colour, a new
+control always has a primitive, a new chart always has an encoding — so adding a feature cannot
+break a page silently. Every colour pair is measured in both modes; every control has a focus ring
+that passes 2.4.13; meaning is never carried by hue alone.
+
+**Out of scope of this file.** The Rust backend migration (system and backend only, handed to its
+own session) and any code change: applying tokens and primitives is its own gated step (8e).
+
 # Design preference — what survives repetition
 
 **Status:** provisional, distilled after 3 build→measure→audit rounds of one page (2026-11-21). This
