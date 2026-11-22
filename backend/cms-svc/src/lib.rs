@@ -36,6 +36,7 @@
 mod connector;
 mod host;
 mod log;
+mod resource;
 pub mod service;
 
 pub use connector::{
@@ -44,3 +45,6 @@ pub use connector::{
 };
 pub use host::{DuplicateMethod, Host, HostError, Registry, RunOutcome, Stop};
 pub use log::{FormatterSettings, LogError, LogService, Record, RecordError};
+pub use resource::{
+    CpuTimes, ProcReader, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory,
+};
