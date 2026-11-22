@@ -80,7 +80,7 @@ describe('Infrastructure ownership and wiring', () => {
     [
       'src/app/[locale]/(authenticated)/infrastructure/resources/page.tsx',
       'infrastructure.resources',
-      '<ResourceView',
+      '<BoardPage',
     ],
   ])('%s authorizes and delegates to %s', (relativePath, routeId, clientTag) => {
     const source = readSource(relativePath);
@@ -98,6 +98,8 @@ describe('Infrastructure ownership and wiring', () => {
       .toContain("url: '/api/containers/stream'");
     const resources = readSource('src/components/resources/ResourceView.tsx');
     expect(resources).toContain('url: `/api/resources/stream?trafficLimit=${trafficLimit}`');
-    expect(resources).toContain('density:space-y-4');
+    // The board owns the sections' spacing now; the density step that survives is the metrics
+    // card's own padding, which is the surface that has to compact.
+    expect(resources).toContain('density:p-3');
   });
 });

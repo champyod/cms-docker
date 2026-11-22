@@ -27,6 +27,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/infrastructure/containers': 'list',
   // Three record kinds that do not save together, plus the state all three share.
   '/infrastructure/deployments': 'board',
+  // Five readings on their own tracks, none of them a row of the others.
+  '/infrastructure/resources': 'board',
   '/ranking/users': 'board',
   '/evaluation/lanes': 'list',
   '/evaluation/submissions': 'list',

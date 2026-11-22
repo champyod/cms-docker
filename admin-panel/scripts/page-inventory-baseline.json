@@ -5,7 +5,6 @@
     "/contests/:id/communications",
     "/contests/:id/countdown",
     "/evaluation/submissions/:id/logs",
-    "/infrastructure/resources",
     "/people/teams/:id",
     "/people/teams/:id/contests",
     "/people/teams/:id/members",
