@@ -100,7 +100,7 @@ for (const page of pages) {
   if (kind === 'redirect') {
     if (!/resolveLegacyRedirect|redirect\(/.test(source)) {
       problems.push(`${page.route} declares "redirect" but does not forward anywhere`);
-    } else if (/<PageSurface|<ListPage|<DetailPage|<FormPage|<SettingsPage|<DashboardPage/.test(source)) {
+    } else if (/<PageSurface|<ListPage|<DetailPage|<SettingsPage|<DashboardPage/.test(source)) {
       problems.push(`${page.route} declares "redirect" but renders a page surface`);
     } else {
       declared.push(`${page.route} -> redirect`);

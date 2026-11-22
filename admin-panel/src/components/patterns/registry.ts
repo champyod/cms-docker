@@ -110,7 +110,6 @@ export const ARCHETYPE_COMPONENT: Readonly<Record<PageArchetype, string>> = {
   dashboard: 'DashboardPage',
   list: 'ListPage',
   detail: 'DetailPage',
-  form: 'FormPage',
   settings: 'SettingsPage',
   board: 'BoardPage',
   modes: 'ModePage',

@@ -51,13 +51,6 @@ export const PAGE_SLOTS: Readonly<Record<Exclude<PageArchetype, 'redirect'>, rea
     { key: 'facts', asks: 'What are its values?', required: true },
     { key: 'sections', asks: 'What else belongs to it, and what changed?', required: false },
   ],
-  form: [
-    STATE,
-    { key: 'fields', asks: 'What do I have to supply?', required: true },
-    { key: 'validation', asks: 'What is wrong with what I typed, and where?', required: true },
-    { key: 'submit', asks: 'What happens when I press this?', required: true },
-    { key: 'cancel', asks: 'How do I leave without saving?', required: true },
-  ],
   board: [
     STATE,
     FRESHNESS,

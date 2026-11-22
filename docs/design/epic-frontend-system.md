@@ -23,7 +23,7 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 | S8 | Row height is the density preference, default dense | done | `h-10 density:h-8` from one constant; default `compact` |
 | S9 | `DetailPage`, `FormPage`, `SettingsPage` layouts | done | four contract tests: the fact strip is a `<dl>`, the error summary sits above the fields, a clean form shows no alert, and every settings group states its scope |
 | S10 | Slot contract and per-page inventory | done | `patterns/slots.ts` names the facts each layout requires; `PAGE-INVENTORY.md` lists all 59 surface pages, 5 documented; the gate refuses a declared layout whose facts are empty |
-| S11 | Convert pages to their layout | **done** | 76 declared, 0 undeclared of 76 pages; 53 of 53 inventoried. Seven content layouts (dashboard, list, detail, form, settings, board, modes) plus redirect |
+| S11 | Convert pages to their layout | **done** | 76 declared, 0 undeclared of 76 pages; 53 of 53 inventoried. Six content layouts (dashboard, list, detail, settings, board, modes) plus redirect |
 | S12 | Status colour removed from ordinary text | **open** | 370 uses across 123 files; the gate holds it (may fall, never rise) |
 | S13 | Light, dark, high contrast and both densities measured per rebuilt page | **done at the token level, open at the pixel level** | 72 colour pairs measured across light, dark, high contrast and dark high contrast; every declared page paints only tokens; both densities come from one row-height constant. A per-page rendered measurement needs a browser harness, which is a new dependency and therefore an operator decision |
 | S14 | A board layout for pages carrying several record kinds | done | `BoardPage` with a section contract; two lanes refused those pages before it existed, and the refusal was correct |
@@ -72,3 +72,15 @@ The shape it should become:
 Blast radius: 17 sections across /search, /security/blocks, /people/users/:id/history and the two
 infrastructure boards. It is a contract change plus a page-by-page edit, so it gets its own sessions
 rather than riding along with the component review that found it.
+
+## Why there is no form layout
+
+`FormPage` existed in the taxonomy, the registry, the slot contract and the gate, and no page ever
+rendered it. Every create and edit in this panel is a dialog that keeps the list visible behind it,
+so a page-level form has no consumer here. It was removed rather than kept for a future that may not
+arrive: a layout nothing renders is a template whose rules - error summary above the fields, one
+assertive alert, exactly one primary - were never exercised against real data.
+
+If a page-level form ever appears, the shape is in git history (`FormPage.tsx` before this commit)
+and the contract is the five slots the old `PAGE_SLOTS.form` named. Add it back with a page that
+renders it, not before.

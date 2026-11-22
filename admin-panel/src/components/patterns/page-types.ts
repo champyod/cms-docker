@@ -5,12 +5,11 @@ import type { BreadcrumbItem } from '@/lib/navigation/types';
 /**
  * The page layouts. A page names one and fills its slots; it never draws layout of its own.
  *
- * `settings` is separate from `form` on purpose: a form submits values that describe one record,
- * while settings change how the panel behaves and end in a save bar that speaks for several
- * groups at once. Shared, the form grew switch rows it never needed and settings inherited a
- * submit button implying one record.
+ * There is no `form` kind. Every create and edit in this panel is a dialog that keeps the list
+ * visible behind it, so a page-level form has no consumer - and a layout nothing renders is a
+ * template whose rules were never tested against real data.
  */
-export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'form', 'settings', 'board', 'modes', 'redirect'] as const;
+export const PAGE_ARCHETYPES = ['dashboard', 'list', 'detail', 'settings', 'board', 'modes', 'redirect'] as const;
 
 export type PageArchetype = (typeof PAGE_ARCHETYPES)[number];
 

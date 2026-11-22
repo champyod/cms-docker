@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { DetailPage } from '@/components/patterns/DetailPage';
-import { FormPage } from '@/components/patterns/FormPage';
 import { SettingsPage } from '@/components/patterns/SettingsPage';
 
 /**
@@ -33,35 +32,6 @@ describe('DetailPage', () => {
   });
 });
 
-describe('FormPage', () => {
-  it('puts the error summary above the fields', () => {
-    const html = renderToStaticMarkup(
-      <FormPage
-        breadcrumbs={crumbs}
-        title="New task"
-        errors={['Name is required']}
-        submit={<button type="submit">Save</button>}
-      >
-        <label htmlFor="name">Name</label>
-        <input id="name" />
-      </FormPage>
-    );
-
-    expect(html.indexOf('This form needs a correction')).toBeLessThan(html.indexOf('id="name"'));
-    // the reader just pressed submit, so this is the one alert that may interrupt
-    expect(html).toContain('role="alert"');
-  });
-
-  it('says nothing extra when the form is clean', () => {
-    const html = renderToStaticMarkup(
-      <FormPage breadcrumbs={crumbs} title="New task" submit={<button type="submit">Save</button>}>
-        <span>fields</span>
-      </FormPage>
-    );
-
-    expect(html).not.toContain('role="alert"');
-  });
-});
 
 describe('SettingsPage', () => {
   it('states the scope of every group, because a screen preference and a system rule look alike', () => {
