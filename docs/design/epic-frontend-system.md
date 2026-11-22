@@ -142,3 +142,14 @@ offered as a question first. The four sizes above the top of the ladder were tha
 heading is text and belongs on the ladder, a gauge value is a card's headline and belongs one step
 below it, and a 20% opacity numeral is decoration the law refuses. One candidate each, so three
 questions were three too many.
+
+### How the dev server starts in this checkout
+
+`bun run dev` exits with code 1 the first time: Next 16.4.3 prints a security-upgrade reminder and
+stops, writing a receipt under `.next/cache/next-agentic-upgrade-retries/`. Running the same command
+again inside five minutes continues normally ("This command is continuing after the upgrade
+reminder"), and the server is up in about 250ms. `CI=1` does not bypass it; `canPromptForUpgrade`
+needs a TTY, and the block is the receipt, not the prompt.
+
+The reminder itself is real and unaddressed: the installed Next is affected by a published advisory,
+and upgrading it is a dependency change, so it is the operator's decision and it stays open.
