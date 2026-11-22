@@ -638,7 +638,8 @@
       "logs": {
         "emptyTitle": "No compilation logs",
         "emptyDescription": "Compiler output appears once the submission has been compiled.",
-        "title": "Compilation Logs — {record} #{id}"
+        "title": "Compilation Logs: {record} #{id}",
+        "lines": "Log lines"
       },
       "evaluation": {
         "testcases": "Testcases",

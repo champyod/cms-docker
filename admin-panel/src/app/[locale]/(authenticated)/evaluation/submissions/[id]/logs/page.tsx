@@ -3,6 +3,7 @@ import { DetailPage } from '@/components/patterns/DetailPage';
 import { SubmissionLogsTab } from '@/components/submissions/SubmissionLogsTab';
 import { getDictionary } from '@/i18n';
 import { getSubmissionLogs } from '@/lib/evaluation-read-models';
+import { formatCount } from '@/lib/format-number';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
@@ -51,10 +52,9 @@ export default async function SubmissionLogsPage({ params }: { params: Promise<{
       // The record shell above renders the submission's name, its trail and its tabs; the rail says
       // Logs, so this page states the verdict that produced the output and its size.
       ownsHeader={false}
-      title={`#${id}`}
       facts={[
         { term: copy.outcome.compilation, value: model.compilationOutcome ?? copy.results.pending },
-        { term: 'Log lines', value: String(logLineCount(model)) },
+        { term: copy.logs.lines, value: formatCount(logLineCount(model), locale) },
       ]}
     >
       <SubmissionLogsTab model={model} />
