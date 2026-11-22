@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import bcrypt from 'bcryptjs';
 
 import type { LoginActionState } from '@/app/actions/auth';
 
 const ADMIN_ID = 7;
 const USERNAME = 'ada';
 const PASSWORD = 'secret';
-const STORED_AUTHENTICATION = `plaintext:${PASSWORD}`;
+const STORED_AUTHENTICATION = `bcrypt:${bcrypt.hashSync(PASSWORD, 10)}`;
 
 type LoginAction = typeof import('@/app/actions/auth').login;
 
@@ -142,5 +143,20 @@ describe('signing in requires admin:login', () => {
     const refused = await attemptLogin(operator.login);
 
     expect(refused.error).toBe('Invalid credentials');
+  });
+
+  it('refuses a legacy plaintext credential instead of comparing it', async () => {
+    const harness = await loadLoginWith(['admin:login']);
+    harness.findCredential.mockResolvedValue({
+      id: ADMIN_ID,
+      username: USERNAME,
+      enabled: true,
+      authentication: `plaintext:${PASSWORD}`,
+    });
+
+    const state = await attemptLogin(harness.login);
+
+    expect(state.error).toBe('Invalid credentials');
+    expect(harness.createSession).not.toHaveBeenCalled();
   });
 });

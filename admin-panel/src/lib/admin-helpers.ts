@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { formatStoredPassword, DEFAULT_PASSWORD_KIND, type PasswordKind } from '@/lib/password-format';
+import { formatBcryptPassword } from '@/lib/password-format';
 
 export type AdminTarget = Awaited<ReturnType<typeof findAdminTarget>>;
 
@@ -7,7 +7,6 @@ export interface UpdateAdminInput {
   name?: string;
   enabled?: boolean;
   password?: string;
-  passwordKind?: PasswordKind;
   groupIds?: number[];
   overrides?: { permissionKey: string; effect: 'allow' | 'deny' }[];
 }
@@ -73,10 +72,6 @@ export async function buildAdminUpdateData(data: UpdateAdminInput): Promise<Admi
   const updateData: AdminUpdateData = {};
   if (data.name) updateData.name = data.name;
   if (data.enabled !== undefined) updateData.enabled = data.enabled;
-  if (data.password)
-    updateData.authentication = await formatStoredPassword(
-      data.passwordKind ?? DEFAULT_PASSWORD_KIND,
-      data.password,
-    );
+  if (data.password) updateData.authentication = await formatBcryptPassword(data.password);
   return updateData;
 }

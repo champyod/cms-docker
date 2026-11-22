@@ -1,10 +1,8 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { PasswordFieldWithKind, type RevealProps } from '@/components/core/PasswordFieldWithKind';
 import { Input } from '@/components/core/Input';
 import { Button } from '@/components/core/Button';
-import type { PasswordKind } from '@/lib/password-format';
 import { type AdminFormState } from './adminFormConfig';
 
 export interface RoleSelectorProps {
@@ -65,43 +63,3 @@ export function AdminModalFooter({ loading, isEdit, onClose }: ModalFooterProps)
   );
 }
 
-export interface FormFieldsProps {
-  formData: AdminFormState;
-  isEdit: boolean;
-  onChange: (updates: Partial<AdminFormState>) => void;
-  passwordKind: PasswordKind;
-  onPasswordKind: (kind: PasswordKind) => void;
-  reveal?: RevealProps;
-}
-
-export function AdminFormFields({ formData, isEdit, onChange, passwordKind, onPasswordKind, reveal }: FormFieldsProps) {
-  return (
-    <>
-      <Input
-        label="Display Name"
-        value={formData.name}
-        onChange={(e) => onChange({ name: e.target.value })}
-        placeholder="e.g., John Doe"
-      />
-
-      <Input
-        label="Username"
-        value={formData.username}
-        onChange={(e) => onChange({ username: e.target.value })}
-        placeholder="e.g., johnd"
-        disabled={isEdit}
-      />
-
-      <PasswordFieldWithKind
-        label={`Password ${isEdit ? '(Leave empty to keep current)' : ''}`}
-        value={formData.password}
-        onChange={(password) => onChange({ password })}
-        required={!isEdit}
-        placeholder="••••••••"
-        kind={passwordKind}
-        onKind={onPasswordKind}
-        reveal={reveal}
-      />
-    </>
-  );
-}

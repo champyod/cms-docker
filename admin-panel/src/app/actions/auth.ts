@@ -4,7 +4,6 @@ import { headers } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 
 import bcrypt from 'bcryptjs';
-import crypto from 'crypto';
 
 import { createSession, deleteSession, getSession } from '@/lib/auth';
 import { SYSTEM_IDENTITIES, withActor } from '@/lib/db-actor';
@@ -30,7 +29,6 @@ import { isLoginExempt } from '@/lib/security/exemptions';
 import { recordLoginLockout } from '@/lib/security/lockouts';
 
 const DUMMY_BCRYPT_HASH = '$2a$10$C6UzMDM.H6dfI/f/IKcEeO7ZBpQz0l8Dp5uJHnKzTKmPqR3sWbGyq';
-const PLAINTEXT_PREFIX = 'plaintext:';
 const BCRYPT_PREFIX = 'bcrypt:';
 
 export interface LoginActionState {
@@ -112,17 +110,10 @@ export async function getCaptchaState(username?: string): Promise<{ required: bo
   return { required, enabled: true, provider: active.provider, siteKey: active.siteKey, threshold: env.threshold, banThreshold: env.banThreshold };
 }
 
-function verifyPlaintextPassword(password: string, stored: string): boolean {
-  const expected = stored.substring(PLAINTEXT_PREFIX.length);
-  const actualBytes = Buffer.from(password);
-  const expectedBytes = Buffer.from(expected);
-  return actualBytes.length === expectedBytes.length && crypto.timingSafeEqual(actualBytes, expectedBytes);
-}
-
 async function verifyStoredPassword(password: string, stored: string): Promise<boolean> {
-  if (stored.startsWith(PLAINTEXT_PREFIX)) return verifyPlaintextPassword(password, stored);
-  const hash = stored.startsWith(BCRYPT_PREFIX) ? stored.substring(BCRYPT_PREFIX.length) : stored;
-  return bcrypt.compare(password, hash);
+  // Admin credentials are bcrypt-only; a plaintext or legacy value never authenticates.
+  if (!stored.startsWith(BCRYPT_PREFIX)) return false;
+  return bcrypt.compare(password, stored.substring(BCRYPT_PREFIX.length));
 }
 
 async function findActiveAdmin(username: string): Promise<AuthenticatedAdmin | null> {

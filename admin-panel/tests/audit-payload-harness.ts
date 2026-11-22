@@ -72,7 +72,7 @@ export async function loadAuditedActions(options?: { userRow?: unknown; adminRow
   const entries: AuditCall[] = [];
   // An `in` check, not `??`: a test passing null asks for a missing row, not the default.
   const userRow = options && 'userRow' in options ? options.userRow : { password: PASSWORD_SECRET };
-  const adminRow = options && 'adminRow' in options ? options.adminRow : { authentication: PASSWORD_SECRET };
+  const adminRow = options && 'adminRow' in options ? options.adminRow : { authentication: 'bcrypt:$2b$10$not-a-real-hash-for-the-audit-shape' };
   const users = { findUnique: vi.fn(async () => userRow) };
   const admins = { findUnique: vi.fn(async () => adminRow) };
 

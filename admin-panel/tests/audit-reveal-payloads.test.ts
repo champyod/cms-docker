@@ -72,7 +72,7 @@ describe('password reveal rows never carry the password', () => {
       entity: 'admin',
       entityId: '2',
       result: 'success',
-      afterValues: { kind: 'plaintext' },
+      afterValues: { kind: 'bcrypt' },
     });
   });
 

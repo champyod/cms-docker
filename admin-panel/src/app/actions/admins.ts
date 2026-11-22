@@ -24,12 +24,7 @@ import {
   wouldRemoveLastSuperadmin,
   type UpdateAdminInput,
 } from '@/lib/admin-helpers';
-import {
-  formatStoredPassword,
-  parseStoredPassword,
-  DEFAULT_PASSWORD_KIND,
-  type PasswordKind,
-} from '@/lib/password-format';
+import { formatBcryptPassword } from '@/lib/password-format';
 import { ROOT_ACTOR_USERNAME } from '@/lib/permission-groups';
 import { handleAdminUpdateWrite } from './admin-update-helpers';
 
@@ -47,7 +42,6 @@ interface CreateAdminInput extends AdminPermissionAssignment {
   name: string;
   username: string;
   password: string;
-  passwordKind?: PasswordKind;
 }
 
 interface AdminMutationError {
@@ -93,7 +87,7 @@ export async function createAdmin(data: CreateAdminInput): Promise<ActionResult>
       data: {
         name: data.name,
         username: data.username,
-        authentication: await formatStoredPassword(data.passwordKind ?? DEFAULT_PASSWORD_KIND, data.password),
+        authentication: await formatBcryptPassword(data.password),
         enabled: true,
       },
       select: { id: true },
@@ -211,7 +205,7 @@ export async function deleteAdmin(adminId: number): Promise<ActionResult> {
 }
 
 export async function revealAdminPassword(id: number): Promise<
-  { success: true; kind: 'plaintext'; value: string } | { success: true; kind: 'bcrypt' } | { success: false; error: string }
+  { success: true; kind: 'bcrypt' } | { success: false; error: string }
 > {
   await ensurePermission('password:reveal');
   try {
@@ -228,18 +222,27 @@ export async function revealAdminPassword(id: number): Promise<
       });
       return { success: false, error: 'Admin not found' };
     }
-    const parsed = parseStoredPassword(row.authentication);
-    // Kind only, never the secret: a credential that re-grants every permission must leave a trail.
+    // Admin credentials are bcrypt-only. A legacy plaintext/unprefixed value is never returned or revealed.
+    if (!row.authentication.startsWith('bcrypt:')) {
+      await recordAudit({
+        verb: 'password:reveal',
+        entity: 'admin',
+        entityId: String(id),
+        beforeValues: { adminId: id },
+        afterValues: { error: 'UnsupportedCredentialFormat' },
+        result: 'failure',
+      });
+      return { success: false, error: 'This password is stored in an unsupported format; reset it.' };
+    }
     await recordAudit({
       verb: 'password:reveal',
       entity: 'admin',
       entityId: String(id),
       beforeValues: { adminId: id },
-      afterValues: { kind: parsed.kind },
+      afterValues: { kind: 'bcrypt' },
       result: 'success',
     });
-    if (parsed.kind === 'bcrypt') return { success: true, kind: 'bcrypt' };
-    return { success: true, kind: 'plaintext', value: parsed.value };
+    return { success: true, kind: 'bcrypt' };
   } catch (error) {
     // The error name is the whole payload: a message here can carry the refused query.
     await recordAudit({

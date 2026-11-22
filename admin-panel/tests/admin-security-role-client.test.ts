@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import bcrypt from 'bcryptjs';
 
 // Pin the connection: the application role holds every column, so a mutation through it would go unnoticed.
 
@@ -213,7 +214,7 @@ describe('runtime — the mutations use the security delegates', () => {
   async function loadAdminsActions(): Promise<Delegates> {
     vi.resetModules();
     const security = {
-      findUnique: vi.fn(async () => ({ username: 'target', name: 'Target', enabled: true, authentication: 'plaintext:secret' })),
+      findUnique: vi.fn(async () => ({ username: 'target', name: 'Target', enabled: true, authentication: `bcrypt:${bcrypt.hashSync('secret', 10)}` })),
       create: vi.fn(async () => ({ id: 9 })),
       update: vi.fn(async () => ({ id: 2 })),
       delete: vi.fn(async () => ({ id: 2 })),
@@ -269,6 +270,17 @@ describe('runtime — the mutations use the security delegates', () => {
       select: { id: true },
     });
     expect(application.create).not.toHaveBeenCalled();
+    expect(security.create.mock.calls[0][0].data.authentication).toMatch(/^bcrypt:/);
+  });
+
+  it('ignores a plaintext passwordKind on create', async () => {
+    const { security } = await loadAdminsActions();
+    const { createAdmin } = await import('@/app/actions/admins');
+
+    const result = await createAdmin({ name: 'Ada', username: 'ada', password: 'secret123', passwordKind: 'plaintext' } as never);
+
+    expect(result).toEqual({ success: true });
+    expect(security.create.mock.calls[0][0].data.authentication).toMatch(/^bcrypt:/);
   });
 
   it('deleteAdmin deletes through the security delegate, never the application one', async () => {
@@ -292,8 +304,18 @@ describe('runtime — the mutations use the security delegates', () => {
 
     const result = await revealAdminPassword(2);
 
-    expect(result).toEqual({ success: true, kind: 'plaintext', value: 'secret' });
+    expect(result).toEqual({ success: true, kind: 'bcrypt' });
     expect(security.findUnique).toHaveBeenCalledWith({ where: { id: 2 }, select: { authentication: true } });
     expect(application.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('never reveals a legacy plaintext credential', async () => {
+    const { security } = await loadAdminsActions();
+    security.findUnique.mockResolvedValueOnce({ authentication: 'plaintext:secret' });
+    const { revealAdminPassword } = await import('@/app/actions/admins');
+
+    const result = await revealAdminPassword(2);
+
+    expect(result).toEqual({ success: false, error: 'This password is stored in an unsupported format; reset it.' });
   });
 });
