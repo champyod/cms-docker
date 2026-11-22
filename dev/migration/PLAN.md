@@ -206,6 +206,7 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | (main session) | — | consolidated the duplicate `TokenMode` into `cms-db/src/token_mode.rs` (one concept: `contest.py:157` and `task.py:133` use the same constants and differ only in default). Parent's own mutation of `quota.rs:65` (infinite balance refusing as if zero) failed `an_infinite_task_always_offers_a_token` and `two_unlimited_sides_stay_unlimited`, exit 101, restored byte-identical. 104 binaries, 714 passed with a live database | `8549667f` |
 | 2026-11-22 | `feat/rust-S3f-util` | `8422a988` | contest/service binding + bootstrap. Parent's own mutation of `binding/active.rs:74` (an empty `is_active` flag made to bootstrap from `CONTEST_ID`) failed `a_fresh_install_is_bootstrapped_only_while_the_table_is_missing`, exit 101, restored byte-identical. Merged tree: 108 binaries, 736 passed, live database | merged |
 | 2026-11-22 | `feat/rust-S3g-reads` | `dd53f811` | the deferred 244 lines. Parent's own mutation of `reads/walk.rs:64` (`!submissions && !users` → `||`) failed `the_walk_visits_every_table_and_honours_each_skip`, leaking digests …0006 and …0007 into a walk "without users", exit 101, restored byte-identical. Merged tree: 113 binaries, 760 passed, live database | `4df2295e` |
+| 2026-11-22 | `feat/rust-S3h-schema` | `70945d9f` | closes the three gaps: schema creation (DDL obtained by running the reference and dumping it, frozen at `dev/fixtures/cms_schema.sql`, 224 statements split into `cms-db/sql/`), username display/registration, and the team fallback. Parent's own mutation of `username/policy.rs:72` (removing the contest short-circuit) failed `a_contest_denial_is_not_reopened_by_a_user_allow` and `a_contest_policy_decides_for_every_participant`, exit 101, restored byte-identical. Merged tree: 117 binaries, 772 passed, live database | `be01014e` |
 
 Gate on the tree after all fifteen merges (`7408c34d`, plus the test fix `50a37ea3`), with a live
 database: `cargo fmt --check` exit 0; `cargo clippy --all-targets -- -D warnings` exit 0; `cargo test --
@@ -328,6 +329,27 @@ type system, and four were deliberately left out (the two interactive prompts, `
 Confirmed *not* a gap: `resolve_username_config` is ported as `resolve_config` (`username/policy.rs:68`).
 The schema gap is the serious one: a fresh deployment cannot initialise a database from Rust, so the Python
 tree cannot be deleted while it stands. Queued as **S-3h**.
+
+**S-3 IS CLOSED (2026-11-22, `be01014e`) — verified by re-running the check that found the gap.** The same
+mechanical comparison (every module-level `def` in the 21 Python files against the crate's `fn` names) now
+leaves 10 without a verbatim counterpart, and each was checked rather than waved through:
+`registerable_teams_query` → `registerable_teams` (`team.rs`, with the `COALESCE` fallback);
+`get_submission_results_for_dataset` → subsumed by the dataset criterion on the results query;
+`actor_sql`/`apply_actor`/`apply_actor_session` → the stamping SQL constants and `Session::begin`;
+and the five `compile_*` → replaced by the frozen DDL, because with the schema dumped from the reference
+there is nothing left for a DDL compiler to emit. Four are deliberately unported (the two interactive
+prompts, `test_db_connection`, `custom_psycopg2_connection`).
+
+**Open item the schema gate depends on, and it is the operator's:** `cms-db/tests/schema_live.rs` needs a
+`pg_dump` whose major version matches the fixture's author (16.16) on `PATH`, and **this host has no
+`pg_dump` at all** — the gate passed today only because a 16.16 binary was extracted into
+`~/.hermes/cache/scratch/s3h/bin`, which scratch prunes after 24h. So the gate is green now and will go red
+by itself later today or tomorrow. The Python suite carries the same prerequisite
+(`src/cmstestsuite/unit_tests/schema_diff_test.py:124-133`), so this is not a new need, but it is unmet
+here. Three ways to close it, none taken yet: run `pg_dump` from the pinned `postgres:16-alpine` image (no
+host package, parity by construction, needs docker); install `postgresql-client-16` on the host (needs
+sudo); or compare the catalogue with SQL instead of dump text (no external tool at all, and immune to the
+version drift that already cost this lane a cycle — 469 statements against 224).
 
 Lesson, recorded because it cost a false claim in a commit message: "the child said every function is
 covered" is a claim. Compare the Python `def` list against the crate's `fn` list mechanically; the two
