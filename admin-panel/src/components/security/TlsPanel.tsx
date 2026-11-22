@@ -27,19 +27,6 @@ export function TlsPanel({ state }: TlsPanelProps): React.JSX.Element {
   return (
     <div className="space-y-4">
       <Card>
-        <dl className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <dt className="text-sm text-muted-foreground">TLS proxy</dt>
-            <dd className="font-mono text-sm">{state.proxyStatus ?? 'not running'}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted-foreground">Certbot</dt>
-            <dd className="font-mono text-sm">{state.certbotStatus ?? 'not running'}</dd>
-          </div>
-        </dl>
-      </Card>
-
-      <Card>
         <h2 className="mb-3 text-lg font-semibold">Certificate lineages</h2>
         {state.lineages.length === 0 ? (
           <p className="text-sm text-muted-foreground">No readable lineage under config/letsencrypt/live.</p>

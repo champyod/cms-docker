@@ -19,6 +19,8 @@ export interface DetailPageProps extends Omit<PageSlots, 'children'> {
   readonly children?: ReactNode;
   /** Where the record came from and when it last changed. */
   readonly freshness?: ReactNode;
+  /** False when a module shell above already renders the page identity. */
+  readonly identity?: boolean;
 }
 
 /**
@@ -37,9 +39,10 @@ export function DetailPage({
   state,
   children,
   freshness,
+  identity = true,
 }: DetailPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
       <div className="space-y-4">
         {state}
         <Card className="p-4">

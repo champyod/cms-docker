@@ -20,6 +20,8 @@ export interface SettingsPageProps extends Omit<PageSlots, 'children'> {
   /** The save bar for the whole page; absent when every group saves itself on change. */
   readonly saveBar?: ReactNode;
   readonly reset?: ReactNode;
+  /** False when a module shell above already renders the page identity. */
+  readonly identity?: boolean;
 }
 
 /**
@@ -29,9 +31,9 @@ export interface SettingsPageProps extends Omit<PageSlots, 'children'> {
  * the question a reader has is not "what do I type" but "does this change my screen or everyone's".
  * Each group therefore carries a `scope` line that the page cannot omit.
  */
-export function SettingsPage({ breadcrumbs, title, description, actions, groups, saveBar, reset }: SettingsPageProps): React.JSX.Element {
+export function SettingsPage({ breadcrumbs, title, description, actions, groups, saveBar, reset, identity = true }: SettingsPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
       <div className="max-w-3xl space-y-4">
         {groups.map((group) => (
           <Card key={group.key} className="space-y-3 p-4">

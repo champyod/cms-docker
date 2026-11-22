@@ -54,7 +54,7 @@ Inventory: **3 of 59 pages documented.**
 | `/security/blocks` | list | — *to inventory* |
 | `/security/overview` | list | — *to inventory* |
 | `/security/patching` | list | — *to inventory* |
-| `/security/tls` | list | — *to inventory* |
+| `/security/tls` | detail | TLS proxy and certbot status · certificate lineages with expiry and days left · unreadable lineages · queue a renewal with a reason |
 | `/security/waf` | list | — *to inventory* |
 | `/system/about` | settings | — *to inventory* |
 | `/system/appearance` | settings | — *to inventory* |

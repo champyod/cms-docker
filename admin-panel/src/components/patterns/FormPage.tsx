@@ -14,6 +14,8 @@ export interface FormPageProps extends PageSlots {
   readonly secondary?: ReactNode;
   /** What happens on success, in one line, so the button is not a guess. */
   readonly consequence?: ReactNode;
+  /** False when a module shell above already renders the page identity. */
+  readonly identity?: boolean;
 }
 
 /**
@@ -33,10 +35,11 @@ export function FormPage({
   submit,
   secondary,
   consequence,
+  identity = true,
 }: FormPageProps): React.JSX.Element {
   const hasErrors = errors !== undefined && errors.length > 0;
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
       <div className="max-w-2xl space-y-4">
         {hasErrors && (
           <InlineAlert tone="destructive" title="This form needs a correction" announce="assertive">

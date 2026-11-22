@@ -25,6 +25,8 @@ export interface ListPageProps extends PageSlots {
   readonly empty?: ReactNode;
   /** Skeleton of the real shape, not a spinner over a blank card. */
   readonly loading?: boolean;
+  /** False when a module shell above already renders the page identity. */
+  readonly identity?: boolean;
 }
 
 /**
@@ -43,9 +45,10 @@ export function ListPage({
   footer,
   empty,
   loading = false,
+  identity = true,
 }: ListPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
       <div className="space-y-3">
         {state && (
           <InlineAlert

@@ -11,6 +11,8 @@ import type { PageSlots } from '@/components/patterns/types';
 export interface DashboardPageProps extends PageSlots {
   /** The system's state, above every metric. */
   readonly state: ReactNode;
+  /** False when a module shell above already renders the page identity. */
+  readonly identity?: boolean;
 }
 
 export function DashboardPage({
@@ -20,9 +22,10 @@ export function DashboardPage({
   actions,
   state,
   children,
+  identity = true,
 }: DashboardPageProps): React.JSX.Element {
   return (
-    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions}>
+    <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} identity={identity}>
       <div className="space-y-4">
         {state}
         {children}

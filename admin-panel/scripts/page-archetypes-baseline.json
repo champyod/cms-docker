@@ -41,7 +41,6 @@
     "/security/blocks",
     "/security/overview",
     "/security/patching",
-    "/security/tls",
     "/security/waf",
     "/system/about",
     "/system/appearance",
