@@ -49,6 +49,7 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 | P12 | **WS-75 admin boundary** — admin writes use role-specific clients; `admins` and its trigger function are owned by `cms_platform_owner`; migrations use `cms_platform_migrator`; security-column changes append to the canonical audit log. | base checkout | `major/admin-panel` | hermes-agent | `scripts/__generate_rls_sql.sh`, `admin-panel/prisma/sql/20260820130000_admin_owner_separation.sql`, `admin-panel/prisma/migrations/20261122120000_admin_security_audit/`, `scripts/__owner_url.sh`, `tests/test_admin_role_credentials.sh`, `tests/test_admin_security_audit.sh`, `coordination/BOARD.md` | done 2026-11-22 |
+| P13 | **WS-76 read-only backup** — `cms_backup` has no membership in `cmsuser`; existing and new large objects grant SELECT to it; the dump still carries both schemas and object ACLs; live restore runs as the owner with an RLS snapshot. | base checkout | `major/admin-panel` | hermes-agent | `admin-panel/prisma/sql/20260820120000_db_roles.sql`, `20260820125000_backup_role.sql`, `20260820131000_backup_large_object_grants.sql`, `scripts/__apply_sql.sh`, `scripts/__restore.sh`, `tests/test_prisma_sync_bootstrap_gate.sh`, `tests/test_admin_role_credentials.sh`, `coordination/BOARD.md` | done 2026-11-22 |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
