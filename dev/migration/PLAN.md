@@ -194,9 +194,10 @@ commit names the lane tip and the gate result it was accepted on.
 | 2026-11-22 | `feat/rust-svc-surface` | `cc92e0ff` | `cargo test -p cms-svc` → 57 passed; parent's own mutation of `inflight.rs` (condvar loop removed) failed **no** test, so the parent added the missing in-crate assertion; the same mutation now fails at 4.141µs, exit 101 | `9bf7953c` |
 | 2026-11-22 | `feat/rust-proc-reader` | `81f45804` | `cargo test -p cms-svc` → 68 passed; parent's own mutation of `procfs_reader.rs:36` (`swap_used` → plain `swap_free`) failed **no** test, so the parent added the swap identity and a per-key memory comparison; the same mutation now fails at exit 101 | `ef3ceadc` |
 | 2026-11-22 | `feat/rust-resourcesvc` | `c982c182` | `cargo test -p cms-svc` → 99 passed; parent's own mutation of `machine.rs:122` (`round_ties_even` → `round`) failed `percentages_round_like_python` with left 3 / right 2, exit 101, restored byte-identical | `d800accd` |
+| 2026-11-22 | `feat/rust-resourcesvc-sup` | `52406c1e` | `cargo test -p cms-svc` → 119 passed; parent's own mutation of `naming.rs:28` (dropped the hyphen) failed 6 tests including the round-trip, with "autorestart would spawn /opt/cms/bin/cmsworker 0 -c 7 and then not see it", exit 101; process count before/after a full serial run was 1/1, so the suite spawned nothing | `39cc28f3` |
 
-Gate on the tree after all eight merges (`d800accd`): `cargo fmt --check` exit 0; `cargo clippy
---all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 70 test binaries, 414 passed,
+Gate on the tree after all nine merges (`39cc28f3`): `cargo fmt --check` exit 0; `cargo clippy
+--all-targets -- -D warnings` exit 0; `cargo test -- --test-threads=1` → 70 test binaries, 434 passed,
 0 failed, 2 ignored, exit 0; `bash scripts/__test_config_sync.sh` → 24 passed, exit 0; `bash
 scripts/__check_agent_protocol.sh` → exit 0; `docker compose config` → exit 0. Serial because the
 parallel run hits the pre-existing `ETXTBSY` race on `backend/target/tmp/**/isolate`
