@@ -41,14 +41,15 @@ export const PAGE_SLOTS: Readonly<Record<Exclude<PageArchetype, 'redirect'>, rea
     { key: 'create', asks: 'How do I add one?', required: false },
     { key: 'empty', asks: 'What does empty mean here?', required: true },
   ],
+  // Four slots, because four is what the layout places: the record's identity is the page title and
+  // its actions are the header actions, so neither is a slot of its own. Sections and history are one
+  // slot - what else belongs to the record, and what changed - because the layout cannot tell them
+  // apart and a contract that named two things it treats as one could not be checked.
   detail: [
     STATE,
     FRESHNESS,
-    { key: 'identity', asks: 'Which record is this?', required: true },
     { key: 'facts', asks: 'What are its values?', required: true },
-    { key: 'related', asks: 'What else belongs to it?', required: false },
-    { key: 'actions', asks: 'What can I do to it?', required: true },
-    { key: 'history', asks: 'What changed, and who changed it?', required: false },
+    { key: 'sections', asks: 'What else belongs to it, and what changed?', required: false },
   ],
   form: [
     STATE,

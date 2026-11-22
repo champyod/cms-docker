@@ -25,6 +25,13 @@ describe('page slot contract', () => {
     expect(PAGE_SLOTS.board.some((slot) => slot.asks.includes('when empty'))).toBe(true);
   });
 
+  it('describes the detail layout as four slots, because four is what it places', () => {
+    // The record's identity is the page title and its actions are the header actions, so a contract
+    // that named them as slots would describe a component that does not exist.
+    expect(PAGE_SLOTS.detail.map((slot) => slot.key)).toEqual(['state', 'freshness', 'facts', 'sections']);
+    expect(required('detail')).toEqual(['state', 'freshness', 'facts']);
+  });
+
   it('requires a list to state its total and its empty meaning', () => {
     expect(required('list')).toEqual(
       expect.arrayContaining(['rows', 'count', 'filter', 'rowActions', 'empty'])

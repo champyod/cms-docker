@@ -83,10 +83,12 @@ for (const page of pages) {
 
   if (SHELL_OWNS_HEADER.test(source)) titleDebt.push(page.route);
 
-  // A board with no sections is a page whose whole content is its state. Without one it renders a
-  // heading over nothing, which reads as a page that failed rather than a page that has no rows.
-  if (kind === 'board' && /sections=\{\s*\[\s*\]\s*\}/.test(source) && !/\bstate=/.test(source)) {
-    problems.push(`${page.route} is a board with no sections and no state to say why`);
+  // A layout whose required content slot is an empty literal renders a frame over nothing, which
+  // reads as a page that failed rather than one whose subject does not exist yet. The page must say
+  // why in its state.
+  const emptySlot = /(?:sections|facts)=\{\s*\[\s*\]\s*\}/.exec(source);
+  if (emptySlot && !/\bstate=/.test(source)) {
+    problems.push(`${page.route} passes an empty ${emptySlot[0].split('=')[0]} and no state to say why`);
   }
 
   // A declared page supplies facts to its layout; headings and cards are the layout's.

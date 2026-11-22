@@ -25,7 +25,9 @@ export function DefinitionEntry({
 }: DefinitionEntryProps): React.JSX.Element {
   return (
     <div>
-      <Text as="dt" variant="label" color={termColor}>
+      {/* Not `variant="label"`: that is uppercase with wide tracking, which is emphasis English can
+          express and Thai cannot, so the two languages would not read as the same list. */}
+      <Text as="dt" variant="small" color={termColor} className="font-medium">
         {term}
       </Text>
       <Text as="dd" variant="small" className="text-foreground/80">
