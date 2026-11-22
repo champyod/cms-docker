@@ -19,7 +19,6 @@
     "/ranking/credits",
     "/ranking/users/:key",
     "/system/backup-restore",
-    "/system/maintenance",
     "/tasks/:id",
     "/tasks/:id/datasets",
     "/tasks/:id/files",

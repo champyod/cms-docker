@@ -76,7 +76,7 @@ describe('System physical pages authorize and delegate', () => {
     [
       'src/app/[locale]/(authenticated)/system/maintenance/page.tsx',
       'system.maintenance',
-      ['<MaintenanceClient'],
+      ['<SettingsPage', '<MaintenanceProvider', '<MaintenanceSaveBar'],
     ],
     [
       'src/app/[locale]/(authenticated)/system/settings/page.tsx',

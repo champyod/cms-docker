@@ -29,6 +29,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/system/settings': 'settings',
   // Three groups, each reaching a different audience: the scoreboard, the host, this browser.
   '/system/appearance': 'settings',
+  // Two groups that change what the host does on its own: its dumps and its alerts.
+  '/system/maintenance': 'settings',
   // The panel's own record: its values, its contributors and the software it ships.
   '/system/about': 'detail',
   // Four record kinds answer one query, each with its own rows and its own meaning of empty.
