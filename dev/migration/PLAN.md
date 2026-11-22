@@ -199,6 +199,33 @@ A lane is removed as soon as it is merged and its gate is green — worktree del
 `git worktree prune`. A merged lane left on disk is 1-11 GB of build artifacts holding a branch label
 nothing needs, and it makes the next sweep unable to tell stale work from live work.
 
+### 7.1 Service order, corrected against the imports (2026-11-22)
+
+The order first proposed was LogService, ScoringService, ResourceService, ProxyService, Worker,
+EvaluationService — smallest file first. The imports say otherwise, and file size is the wrong
+measure. Measured with `grep -E '^from cms' src/cms/service/*.py`:
+
+| Service | Needs `cms.db` | Needs `cms.grading` | Needs the log stack | External Python modules |
+|---|---|---|---|---|
+| `LogService` (122) | no | no | **yes** (`cms.log`) | none |
+| `ResourceService` (481) | no | no | no | **`psutil`** |
+| `ScoringService` (235) | **yes** | no | no | none |
+| `ProxyService` (780) | **yes** | no | no | none |
+| `Worker` (197) | **yes** | **yes** | no | none |
+| `EvaluationService` (1178) | **yes** | **yes** | no | none |
+
+Only LogService and ResourceService are free of `cms.db`, and `cms.db` is S-3, which B1 blocks. Between
+those two, `ResourceService` samples processes through **`psutil`** (`ResourceService.py:88-118`,
+`_get_all_processes`, `_get_interesting_running_processes`) and has no std equivalent — a replacement
+crate is a new dependency, which is a Tier C question. LogService reaches instead for `cms/log.py`,
+whose formatter is string formatting over a mutable record and portables with `std` alone.
+
+**Chosen: LogService first**, and the epic carries the log layer it needs rather than waiting for S-2b.
+**Rejected: ResourceService first** — it is the better seam but it needs `psutil`'s replacement decided
+first. **Rejected: keep the file-size order** — it would have started the largest service before the
+machinery had been exercised once.
+
+
 
 Not merged, and why: `feat/rust-S2a-crypto-core` (`1fd7f8cc`) is blocked on **B1** (the `aes`/`bcrypt`
 dependency decision). `feat/rust-S4-retire-cmsranking` (`b15ebf92`) deletes `src/cmsranking`, which is
