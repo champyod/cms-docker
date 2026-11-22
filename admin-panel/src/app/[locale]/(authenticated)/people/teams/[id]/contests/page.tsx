@@ -32,16 +32,13 @@ export default async function TeamContestsPage({ params }: { params: Promise<{ l
   await authorizeTeamTab('people.team-tabs.contests');
   const dictionary = await getDictionary(locale);
   const contests = await readRecordOrNotFound(async () => ((await getTeamContests(id)) ?? null));
-  const label = dictionary.navigation.people['team-tabs'].contests.label;
   return (
     <ListPage
-      // The record shell above renders the team's name, the trail and the tabs.
+      // The team's record shell renders this tab's name, the team, the trail and the tab rail.
       ownsHeader={false}
-      title={label}
-      // Why no filter and no toolbar: the read returns every contest this team entered in a single
-      // pass, so there is no narrower set for a filter to produce and nothing left out to page to.
-      // The footer states the whole set instead, which is the only total there is.
-      footer={<p className="text-sm text-muted-foreground">{`${label} (${contests.length})`}</p>}
+      // Why no filter, no toolbar and no count line: the read returns every contest this team
+      // entered in a single pass, so the table already shows the whole set and a total beneath it
+      // would repeat what the reader can count.
       empty={contests.length === 0 ? <TeamContestsEmpty copy={dictionary.teams} /> : undefined}
     >
       <TeamContestsTab contests={contests} locale={locale as 'en' | 'th'} />
