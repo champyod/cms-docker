@@ -44,7 +44,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | the name, email, timezone, languages and teams the header does not already state · the saved password, masked until an operator who may reveal it asks |
-| `/people/users/:id/teams` | detail | — *to inventory* |
+| `/people/users/:id/teams` | list | the team each participation was made under, row by row, or that no participation has a team yet · how many memberships there are (no filter and no total: the read returns every one in a single pass) · the team each row links to |
 | `/ranking` | list | — *to inventory* |
 | `/ranking/appearance` | settings | — *to inventory* |
 | `/ranking/credits` | list | — *to inventory* |

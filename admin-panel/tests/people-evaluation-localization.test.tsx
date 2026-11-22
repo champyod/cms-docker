@@ -9,7 +9,7 @@ import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
 import { UserHistoryTab } from '@/components/users/UserHistoryTab';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
 import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/profile/page';
-import { UserTeamsTab } from '@/components/users/UserTeamsTab';
+import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
 import { TeamContestsTab } from '@/components/teams/TeamContestsTab';
 import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
@@ -17,7 +17,7 @@ import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
 import { getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import type { UserHistory, UserProfile, UserSummary } from '@/lib/people-read-model-types';
-import type { TeamContest, TeamMember, TeamSummary } from '@/lib/people-read-model-types';
+import type { TeamContest, TeamMember, TeamSummary, UserTeamMembership } from '@/lib/people-read-model-types';
 
 afterEach(() => cleanup());
 
@@ -158,8 +158,29 @@ describe('User record tab copy', () => {
     expect(body).not.toContain(en.users.profile.savedPassword);
   });
 
+  it('renders the team code as a row link, without repeating the tab label as a heading', () => {
+    const body = text(
+      <UserTeamsTab
+        memberships={[{
+          id: 1,
+          contestId: 2,
+          contestName: 'Practice Round',
+          teamId: 4,
+          teamCode: 'THA-01',
+        } as unknown as UserTeamMembership]}
+        copy={th.users}
+        locale="th"
+      />,
+    );
+
+    expect(body).toContain('THA-01');
+    // The heading moved to the list layout's frame and the tab rail above it, so a second copy of
+    // the label here would be the same word three times on one screen.
+    expect(body).not.toContain(th.navigation.people['user-tabs'].teams.label);
+  });
+
   it('renders the Thai empty state on the user teams tab', () => {
-    const body = text(<UserTeamsTab memberships={[]} navigation={th.navigation} copy={th.users} locale="th" />);
+    const body = text(<UserTeamsEmpty copy={th.users} />);
 
     expect(body).toContain(th.users.teamsTab.emptyTitle);
     expect(body).toContain(th.users.teamsTab.emptyDescription);
