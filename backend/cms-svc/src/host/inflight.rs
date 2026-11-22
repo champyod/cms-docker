@@ -47,3 +47,45 @@ impl Drop for Guard<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::InFlight;
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    /// WHY: `run` relies on this to let the reply it interrupted reach its caller before the
+    /// process goes. A wait that returns early cannot be seen from outside the crate — the
+    /// connection threads are detached — so the guarantee is asserted where it is made.
+    #[test]
+    fn a_wait_outlives_the_frame_it_is_waiting_for() {
+        let answers = Arc::new(InFlight::default());
+        let held = Arc::clone(&answers);
+
+        let frame = thread::spawn(move || {
+            let _underway = held.guard();
+            thread::sleep(Duration::from_millis(150));
+        });
+
+        // Let the frame take its guard before the wait looks at the count.
+        thread::sleep(Duration::from_millis(50));
+        let started = Instant::now();
+        answers.wait_until_idle();
+        let waited = started.elapsed();
+        frame.join().expect("the frame's thread finishes");
+
+        assert!(
+            waited >= Duration::from_millis(50),
+            "the wait returned after {waited:?} while a frame was still underway"
+        );
+    }
+
+    #[test]
+    fn a_wait_with_nothing_underway_returns_at_once() {
+        let answers = InFlight::default();
+        let started = Instant::now();
+        answers.wait_until_idle();
+        assert!(started.elapsed() < Duration::from_millis(50));
+    }
+}
