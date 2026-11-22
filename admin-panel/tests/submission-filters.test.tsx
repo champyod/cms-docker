@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { SubmissionList, type SubmissionFilters } from '@/components/submissions/SubmissionList';
-import type { SubmissionListItem } from '@/types';
+import { SubmissionListToolbar } from '@/components/submissions/SubmissionListToolbar';
+import type { SubmissionFilters } from '@/components/submissions/SubmissionFiltersCard';
 
 const mocks = vi.hoisted(() => ({
   getContests: vi.fn(),
@@ -28,28 +28,10 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const SUBMISSION_ROW = {
-  id: 19,
-  timestamp: new Date('2026-02-03T04:05:06.000Z'),
-  language: 'cpp',
-  comment: '',
-  official: false,
-  tasks: { id: 3, name: 'sum', title: 'Sum' },
-  participations: { users: { username: 'ada' }, contests: { name: 'Thailand Cup' } },
-  submission_results: [],
-  files: [],
-} as unknown as SubmissionListItem;
-
-function renderList(filters?: SubmissionFilters): HTMLElement {
+function renderToolbar(filters?: SubmissionFilters): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
-      <SubmissionList
-        initialSubmissions={[SUBMISSION_ROW]}
-        totalPages={1}
-        currentPage={1}
-        navigation={en.navigation}
-        filters={filters}
-      />
+      <SubmissionListToolbar filters={filters ?? {}} />
     </DictionaryProvider>,
   );
   return container;
@@ -69,14 +51,14 @@ function submit(container: HTMLElement): void {
 
 describe('submission list filters', () => {
   it('renders a filter form even when no filter is active', () => {
-    const container = renderList();
+    const container = renderToolbar();
     expect(container.querySelector('form')).toBeTruthy();
     expect(field(container, 'contest').value).toBe('');
   });
 
   it('pushes the three narrowing parameters the query already supports', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'contest'), { target: { value: '2' } });
     fireEvent.change(field(container, 'task'), { target: { value: '5' } });
     fireEvent.change(field(container, 'user'), { target: { value: '9' } });
@@ -90,7 +72,7 @@ describe('submission list filters', () => {
 
   it('pushes the trimmed search term alongside the id narrowing', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'search'), { target: { value: '  ada  ' } });
     fireEvent.change(field(container, 'contest'), { target: { value: '2' } });
     submit(container);
@@ -102,7 +84,7 @@ describe('submission list filters', () => {
 
   it('drops a blank search rather than sending an empty term', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'search'), { target: { value: '   ' } });
     submit(container);
 
@@ -111,7 +93,7 @@ describe('submission list filters', () => {
 
   it('resets to page 1 when a filter is applied', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'contest'), { target: { value: '2' } });
     submit(container);
 
@@ -121,7 +103,7 @@ describe('submission list filters', () => {
   });
 
   it('prefills the fields from the active filters', () => {
-    const container = renderList({ contestId: 7, taskId: 3, userId: 11, search: 'ada' });
+    const container = renderToolbar({ contestId: 7, taskId: 3, userId: 11, search: 'ada' });
     expect(field(container, 'contest').value).toBe('7');
     expect(field(container, 'task').value).toBe('3');
     expect(field(container, 'user').value).toBe('11');
@@ -130,7 +112,7 @@ describe('submission list filters', () => {
 
   it('drops a non-numeric value rather than filtering on zero', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'contest'), { target: { value: 'abc' } });
     submit(container);
 
@@ -142,7 +124,7 @@ describe('submission list filters', () => {
 
   it('drops a negative or zero id rather than sending it', () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     fireEvent.change(field(container, 'user'), { target: { value: '-4' } });
     submit(container);
 
@@ -151,7 +133,7 @@ describe('submission list filters', () => {
 
   it('clears every filter and the fields when Clear is pressed', () => {
     mockPush.mockClear();
-    const container = renderList({ contestId: 7, search: 'ada' });
+    const container = renderToolbar({ contestId: 7, search: 'ada' });
     const clear = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Clear');
     if (!clear) throw new Error('Missing Clear control');
@@ -165,14 +147,14 @@ describe('submission list filters', () => {
   });
 
   it('offers Clear when only a search is active', () => {
-    const container = renderList({ search: 'ada' });
+    const container = renderToolbar({ search: 'ada' });
     const clear = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Clear');
     expect(clear).toBeTruthy();
   });
 
   it('offers no Clear control when nothing is filtered', () => {
-    const container = renderList();
+    const container = renderToolbar();
     const clear = [...container.querySelectorAll('button')]
       .find((button) => button.textContent?.trim() === 'Clear');
     expect(clear).toBeUndefined();
@@ -203,7 +185,7 @@ describe('submission list pickers', () => {
   }
 
   it('opens the contest picker and lists options as name (#id)', async () => {
-    const container = renderList();
+    const container = renderToolbar();
     await openPicker(container, 'Contest');
 
     expect(await screen.findByText('Thailand Cup (#2)')).toBeTruthy();
@@ -211,7 +193,7 @@ describe('submission list pickers', () => {
 
   it('writes the chosen option into the named field and pushes it on submit', async () => {
     mockPush.mockClear();
-    const container = renderList();
+    const container = renderToolbar();
     await openPicker(container, 'Contest');
     fireEvent.click(await screen.findByText('Thailand Cup (#2)'));
 
@@ -221,7 +203,7 @@ describe('submission list pickers', () => {
   });
 
   it('re-queries the permission-gated reader as the operator types a name', async () => {
-    const container = renderList();
+    const container = renderToolbar();
     await openPicker(container, 'Contest');
     await screen.findByText('Thailand Cup (#2)');
 
@@ -231,7 +213,7 @@ describe('submission list pickers', () => {
   });
 
   it('loads user options through the gated reader and selects one', async () => {
-    const container = renderList();
+    const container = renderToolbar();
     await openPicker(container, 'User');
     fireEvent.click(await screen.findByText('ada (#9)'));
 
@@ -239,7 +221,7 @@ describe('submission list pickers', () => {
   });
 
   it('offers a Clear choice inside an open picker for a prefilled field', async () => {
-    const container = renderList({ contestId: 7 });
+    const container = renderToolbar({ contestId: 7 });
     const dialog = await openPicker(container, 'Contest');
     fireEvent.click(within(dialog).getByText('Clear'));
 
@@ -247,7 +229,7 @@ describe('submission list pickers', () => {
   });
 
   it('collapses the pickers behind More below the desktop breakpoint', () => {
-    const container = renderList();
+    const container = renderToolbar();
     const more = [...container.querySelectorAll('button')]
       .find((candidate) => candidate.textContent?.trim() === 'More');
     if (!more) throw new Error('Missing More control');

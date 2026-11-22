@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **16 of 58 pages documented.**
+Inventory: **17 of 58 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -24,7 +24,7 @@ Inventory: **16 of 58 pages documented.**
 | `/contests/:id/settings` | settings | — *to inventory* |
 | `/contests/:id/tasks` | detail | — *to inventory* |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
-| `/evaluation/submissions` | list | — *to inventory* |
+| `/evaluation/submissions` | list | submissions with id, time, submitter and contest, task, language, judging status and score · filter by contest, task, user or free text, with sort · how many match against the whole set, paged · per-row view, rejudge and official toggle · bulk rescore, official and comment over the checked rows or the whole filtered set · live refresh · what empty means |
 | `/evaluation/submissions/:id` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/evaluation` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/history` | detail | — *to inventory* |

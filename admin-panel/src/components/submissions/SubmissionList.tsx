@@ -1,7 +1,6 @@
 'use client';
 
-import { BadgeCheck, Eye, FileCode, HelpCircle, RefreshCw } from 'lucide-react';
-import Link from 'next/link';
+import { BadgeCheck, Eye, FileCode, RefreshCw } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
 import { useState } from 'react';
@@ -14,7 +13,6 @@ import type { ResponsiveColumn } from '@/components/core/ResponsiveTable';
 import { RowActions } from '@/components/core/RowActions';
 import { buildSelectionColumn } from '@/components/core/SelectionColumn';
 import { RecordList } from '@/components/list/RecordList';
-import { RecordListPager } from '@/components/list/RecordListPager';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { useAppRouter } from '@/hooks/useAppRouter';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -30,15 +28,13 @@ import type { SubmissionListItem } from '@/types';
 
 import { buildSubmissionColumns } from './submissionColumns';
 import { BatchRecalcBar, SubmissionBulkActions } from './BatchRecalcBar';
-import { SubmissionFiltersCard, type SubmissionFilters } from './SubmissionFiltersCard';
+import type { SubmissionFilters } from './SubmissionFiltersCard';
 import { SubmissionRequeueToasts, watchSubmissionsForCompletion } from './SubmissionRequeueToasts';
 
 export type { SubmissionFilters };
 
 export interface SubmissionListProps {
   readonly initialSubmissions: readonly SubmissionListItem[];
-  readonly totalPages: number;
-  readonly currentPage: number;
   readonly navigation: Dictionary['navigation'];
   readonly initialSort?: ListSortInput;
   /**
@@ -68,24 +64,6 @@ function recordHref(locale: string, submission: SubmissionListItem): string {
   return buildRoute(locale, 'evaluation.submission-record', { id: submission.id });
 }
 
-function SubmissionListHeader({ locale, currentPage, totalPages }: {
-  locale: string;
-  currentPage: number;
-  totalPages: number;
-}): React.JSX.Element {
-  const dict = useDictionary();
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
-      <Link href={`${buildRoute(locale, 'system.docs')}#submissions`} className="flex h-11 w-11 items-center justify-center p-1 hover:bg-accent rounded-full transition-colors text-muted-foreground hover:text-primary" title={dict.docs.viewDocumentation}>
-        <HelpCircle className="w-4 h-4" />
-      </Link>
-      <div className="text-sm text-muted-foreground">
-        Page {currentPage} of {totalPages}
-      </div>
-    </div>
-  );
-}
-
 // Why one fragment for the size: the desktop row and the mobile card render the same
 // cluster, so a per-layout target would drift the two apart.
 const ROW_ACTION_TARGET = 'min-h-11 min-w-11';
@@ -113,7 +91,7 @@ function withShiftSelection(
   };
 }
 
-export function SubmissionList({ initialSubmissions, totalPages, currentPage, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false, canComment = false }: SubmissionListProps): React.JSX.Element {
+export function SubmissionList({ initialSubmissions, navigation, initialSort, filters = {}, canRecalculate = false, canOfficial = false, canComment = false }: SubmissionListProps): React.JSX.Element {
   const [submissions] = useSyncedState(initialSubmissions);
   const pathname = usePathname();
   const locale = pathname.split('/')[1] || 'en';
@@ -213,12 +191,8 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
     ...buildSubmissionColumns(),
   ];
 
-  const handlePageChange = (newPage: number): void => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('page', newPage.toString());
-    router.push(url.toString());
-  };
-
+  // Why the page resets on sort: page 4 of one order is not page 4 of another, so keeping
+  // the number would land the reader on a page that exists only in the old order.
   const applySort = (next: ListSortInput): void => {
     const url = new URL(window.location.href);
     if (next !== null && next !== undefined) {
@@ -227,24 +201,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
     } else {
       url.searchParams.delete('sort');
       url.searchParams.delete('dir');
-    }
-    url.searchParams.set('page', '1');
-    router.push(url.toString());
-  };
-
-  // Why page resets here too: page 4 of the unfiltered list is not page 4 of a narrowed
-  // one, so keeping it would show an empty page that looks like "no matches".
-  const applyFilters = (next: SubmissionFilters): void => {
-    const url = new URL(window.location.href);
-    const narrowing: readonly (readonly [string, string | number | undefined])[] = [
-      ['contest', next.contestId],
-      ['task', next.taskId],
-      ['user', next.userId],
-      ['search', next.search],
-    ];
-    for (const [key, value] of narrowing) {
-      if (value === undefined || value === '') url.searchParams.delete(key);
-      else url.searchParams.set(key, String(value));
     }
     url.searchParams.set('page', '1');
     router.push(url.toString());
@@ -282,8 +238,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
 
   return (
     <div className="space-y-6">
-      <SubmissionListHeader locale={locale} currentPage={currentPage} totalPages={totalPages} />
-      <SubmissionFiltersCard filters={filters} onApply={applyFilters} />
       {canRecalculate || canOfficial || canComment ? (
         <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <SubmissionBulkActions
@@ -313,7 +267,6 @@ export function SubmissionList({ initialSubmissions, totalPages, currentPage, na
         sort={initialSort}
         onSortChange={applySort}
       />
-      <RecordListPager currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} />
       <ReasonDialog request={reasonPrompt.request} onClose={reasonPrompt.close} onSubmit={reasonPrompt.submit} />
       <SubmissionRequeueToasts submissions={submissions} />
     </div>

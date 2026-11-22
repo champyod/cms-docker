@@ -1,12 +1,18 @@
 import { notFound } from 'next/navigation';
-import { PageSurface } from '@/components/core/PageSurface';
+import Link from 'next/link';
+import { HelpCircle } from 'lucide-react';
+
+import { RecordListPager } from '@/components/list/RecordListPager';
+import { ListPage } from '@/components/patterns/ListPage';
 import { SubmissionList } from '@/components/submissions/SubmissionList';
 import type { SubmissionFilters } from '@/components/submissions/SubmissionList';
+import { SubmissionListToolbar } from '@/components/submissions/SubmissionListToolbar';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { listBreadcrumbs } from '@/lib/navigation/breadcrumbs';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
+import { buildRoute } from '@/lib/navigation/routes';
 import type { RouteDescriptor, RouteId } from '@/lib/navigation/types';
 import { getSubmissions } from '@/lib/people-read-models';
 import type { SubmissionsPageResult } from '@/lib/people-read-model-types';
@@ -118,17 +124,52 @@ export default async function EvaluationSubmissionsPage({
   // `submission:update`, so one resolved value gates both controls.
   const canOfficial = hasEffectivePermission(result.effectivePermissions, 'submission:update');
   const canComment = canOfficial;
+  // Why a link and not a click handler: the page number is part of the request, so the pager
+  // produces the address of the next page and the narrowing and sort the reader chose survive it.
+  const hrefForPage = (next: number): string => {
+    const query = new URLSearchParams();
+    if (filters.search !== undefined) query.set('search', filters.search);
+    if (filters.contestId !== undefined) query.set('contest', String(filters.contestId));
+    if (filters.taskId !== undefined) query.set('task', String(filters.taskId));
+    if (filters.userId !== undefined) query.set('user', String(filters.userId));
+    if (sort != null) {
+      query.set('sort', sort.key);
+      query.set('dir', sort.direction);
+    }
+    if (next > 1) query.set('page', String(next));
+    const suffix = query.toString();
+    return `${buildRoute(locale, 'evaluation.submissions')}${suffix.length > 0 ? `?${suffix}` : ''}`;
+  };
   return (
-    <PageSurface
+    <ListPage
       breadcrumbs={listBreadcrumbs(locale, 'evaluation', 'evaluation.submissions', dict)}
       title={submissionsLabel}
       description={dict.submissions.subtitle}
-      actions={<LiveRefresh url="/api/submissions/stream" />}
+      actions={
+        <>
+          <LiveRefresh url="/api/submissions/stream" />
+          <Link
+            href={`${buildRoute(locale, 'system.docs')}#submissions`}
+            title={dict.docs.viewDocumentation}
+            className="flex h-11 w-11 items-center justify-center rounded-full p-1 text-muted-foreground transition-colors hover:bg-accent"
+          >
+            <HelpCircle className="size-4" aria-hidden />
+          </Link>
+        </>
+      }
+      toolbar={<SubmissionListToolbar filters={filters} />}
+      footer={
+        <RecordListPager
+          currentPage={currentPage}
+          totalPages={result.totalPages}
+          hrefForPage={hrefForPage}
+          totalRows={result.total}
+          rowLabel="submissions"
+        />
+      }
     >
       <SubmissionList
         initialSubmissions={result.submissions}
-        totalPages={result.totalPages}
-        currentPage={currentPage}
         navigation={dict.navigation}
         initialSort={sort}
         filters={filters}
@@ -136,6 +177,6 @@ export default async function EvaluationSubmissionsPage({
         canOfficial={canOfficial}
         canComment={canComment}
       />
-    </PageSurface>
+    </ListPage>
   );
 }
