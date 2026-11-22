@@ -86,7 +86,7 @@ describe('System physical pages authorize and delegate', () => {
     [
       'src/app/[locale]/(authenticated)/system/docs/page.tsx',
       null,
-      ['<DocsContent'],
+      ['<BoardPage', '<ContestsSection', '<ServicesSection'],
     ],
   ])('%s delegates to its feature owner', (
     relativePath: string,

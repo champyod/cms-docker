@@ -29,6 +29,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/system/about': 'detail',
   // Four record kinds answer one query, each with its own rows and its own meaning of empty.
   '/search': 'board',
+  // Five topics of reference, none of them a record the reader acts on.
+  '/system/docs': 'board',
   // A record landing carries no surface either: it resolves the record and forwards to its default
   // tab, which is where the detail actually lives.
   '/contests/:id': 'redirect',

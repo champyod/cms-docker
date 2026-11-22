@@ -59,7 +59,7 @@ Inventory: **0 of 0 pages documented.**
 | `/system/about` | detail | the panel's project, its upstream and its licence, and how many components it ships · the byline with the source and licence addresses · contributors, and what each contributed · the panel's own first-party paths · every third-party asset with version, holder, licence and the paths it covers. No action: nothing on this page changes the panel |
 | `/system/appearance` | settings | — *to inventory* |
 | `/system/backup-restore` | settings | — *to inventory* |
-| `/system/docs` | settings | — *to inventory* |
+| `/system/docs` | board | contests: how timing, analysis mode and submission limits work · users: teams, and the participation constraints a contest applies · tasks: task types, datasets and scoring · submissions: what evaluation does and what invalidates a result · services: the three services a stack runs. Static reference: it states no state and no freshness, because nothing on it is read or can be wrong |
 | `/system/maintenance` | settings | — *to inventory* |
 | `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | tasks with id, name, title, the contests they belong to, resources and submission count · filter, with sort · how many match against the whole set, paged · per-row edit and delete · assign and unassign the checked rows, edit their limits · create · what empty means |
