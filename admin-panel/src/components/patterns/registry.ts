@@ -45,6 +45,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/evaluation/submissions/:id': 'redirect',
   '/evaluation/submissions/:id/evaluation': 'detail',
   '/evaluation/submissions/:id/history': 'detail',
+  '/evaluation/submissions/:id/logs': 'detail',
   '/evaluation/submissions/:id/results': 'detail',
   '/evaluation/submissions/:id/summary': 'detail',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.

@@ -2,7 +2,6 @@
   "undeclared": [
     "/administration/audit",
     "/administration/groups",
-    "/evaluation/submissions/:id/logs",
     "/infrastructure/containers",
     "/infrastructure/deployments",
     "/infrastructure/resources",

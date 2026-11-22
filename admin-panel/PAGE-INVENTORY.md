@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **31 of 55 pages documented.**
+Inventory: **32 of 55 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -28,7 +28,7 @@ Inventory: **31 of 55 pages documented.**
 | `/evaluation/submissions/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/evaluation/submissions/:id/evaluation` | detail | how many testcases were evaluated and how many failed · each testcase's verdict, time and memory, expandable to its input, expected output and the submission's output, or to the reason those bytes are withheld |
 | `/evaluation/submissions/:id/history` | detail | who made the latest recorded change, what it was and when · every recorded change, with its actor, action, result, reason and time, newest first, or what empty means · a failed read instead of an empty list |
-| `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
+| `/evaluation/submissions/:id/logs` | detail | the compilation outcome that produced this output, and how many lines it runs to · the compiler's output as one stream, stdout and stderr included, or what empty means |
 | `/evaluation/submissions/:id/results` | detail | how many datasets were judged and how many compilations failed · each dataset's score, compilation outcome, evaluation outcome, time, memory, public score and when it was scored · the stored files, each downloadable · what empty means |
 | `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |
 | `/infrastructure/containers` | list | — *to inventory* |

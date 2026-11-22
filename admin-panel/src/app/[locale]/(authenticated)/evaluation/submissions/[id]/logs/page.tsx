@@ -1,5 +1,7 @@
 import { notFound } from 'next/navigation';
+import { DetailPage } from '@/components/patterns/DetailPage';
 import { SubmissionLogsTab } from '@/components/submissions/SubmissionLogsTab';
+import { getDictionary } from '@/i18n';
 import { getSubmissionLogs } from '@/lib/evaluation-read-models';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -21,11 +23,41 @@ async function authorizeSubmissionTab(routeId: RouteId): Promise<ReadonlySet<str
   }
 }
 
+/** How much output the reader is about to scroll, across all three streams. */
+function logLineCount(model: { compilationText: readonly string[]; compilationStdout: string | null; compilationStderr: string | null }): number {
+  return [
+    model.compilationText.join('\n'),
+    model.compilationStdout ?? '',
+    model.compilationStderr ?? '',
+  ]
+    .join('\n')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .length;
+}
+
 export default async function SubmissionLogsPage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
-  const { id: rawId } = await params;
+  const { locale, id: rawId } = await params;
   const id = parseRecordId(rawId);
   if (id === null) notFound();
   await authorizeSubmissionTab('evaluation.submission-tabs.logs');
-  const model = await readRecordOrNotFound(() => getSubmissionLogs(id));
-  return <SubmissionLogsTab model={model} submissionId={id} />;
+  const [model, dictionary] = await Promise.all([
+    readRecordOrNotFound(() => getSubmissionLogs(id)),
+    getDictionary(locale),
+  ]);
+  const copy = dictionary.submissions.record;
+  return (
+    <DetailPage
+      // The record shell above renders the submission's name, its trail and its tabs; the rail says
+      // Logs, so this page states the verdict that produced the output and its size.
+      ownsHeader={false}
+      title={`#${id}`}
+      facts={[
+        { term: copy.outcome.compilation, value: model.compilationOutcome ?? copy.results.pending },
+        { term: 'Log lines', value: String(logLineCount(model)) },
+      ]}
+    >
+      <SubmissionLogsTab model={model} />
+    </DetailPage>
+  );
 }
