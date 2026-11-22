@@ -22,7 +22,7 @@ Inventory: **15 of 57 pages documented.**
 | `/contests/:id/participants` | detail | — *to inventory* |
 | `/contests/:id/ranking` | detail | — *to inventory* |
 | `/contests/:id/settings` | settings | the contest's name, description and zone · what it allows: questions, user tests, submission download, password auth, registration, analysis mode · the scope each change reaches · save, and a locked form when contest:update is absent |
-| `/contests/:id/tasks` | detail | — *to inventory* |
+| `/contests/:id/tasks` | list | the tasks this contest carries, by name and title · filter by name or title, with select-all over the filtered set · how many are assigned in total · per-row open and remove · attach and detach the selection · create a task and add it · what empty means |
 | `/evaluation/lanes` | list | lanes with queue depth and state · per-lane actions · live refresh |
 | `/evaluation/submissions` | list | — *to inventory* |
 | `/evaluation/submissions/:id` | detail | — *to inventory* |

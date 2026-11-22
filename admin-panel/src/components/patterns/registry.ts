@@ -29,6 +29,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/contests/:id': 'redirect',
   '/contests/:id/overview': 'detail',
   '/contests/:id/settings': 'settings',
+  '/contests/:id/tasks': 'list',
   '/people/users/:id': 'redirect',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.
   '/admins': 'redirect',

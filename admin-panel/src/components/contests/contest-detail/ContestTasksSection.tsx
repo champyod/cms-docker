@@ -9,7 +9,6 @@ import { BulkActionBar } from '@/components/core/BulkActionBar';
 import { Button } from '@/components/core/Button';
 import { EmptyState } from '@/components/core/EmptyState';
 import { Input } from '@/components/core/Input';
-import { SectionCard } from '@/components/core/SectionCard';
 import { SELECTION_CHECKBOX_CLASS } from '@/components/core/SelectionColumn';
 import { useListSelection } from '@/hooks/useListSelection';
 import type { Dictionary } from '@/lib/dictionary';
@@ -22,11 +21,9 @@ interface Task { id: number; name: string; title: string; }
 interface Props {
   contestId: number;
   tasks: Task[];
-  expanded: boolean;
   locale: string;
   permissionKeys: readonly string[];
   copy: Dictionary;
-  onToggle: () => void;
   onAddTask: () => void;
   onAttachTasks: () => void;
   onRemoveTask: (id: number) => void;
@@ -97,6 +94,10 @@ function TaskRow({
 /**
  * The contest's task roster, with the bulk attach/detach the day-2 setup needs.
  *
+ * WHY no section card of its own: the list layout draws the frame, and this component is the rows
+ * inside it. The count it used to carry in a header now sits in the page's footer, where the reader
+ * compares it with the filtered set.
+ *
  * WHY the filter drives the list and the header cell selects what the filter matches: a contest's
  * roster is read one task at a time today, and attaching or detaching a term's worth of tasks one
  * row at a time is the manual work this surface exists to end. The select-all box walks the
@@ -109,11 +110,9 @@ function TaskRow({
 export function ContestTasksSection({
   contestId,
   tasks,
-  expanded,
   locale,
   permissionKeys,
   copy,
-  onToggle,
   onAddTask,
   onAttachTasks,
   onRemoveTask,
@@ -153,13 +152,7 @@ export function ContestTasksSection({
   };
 
   return (
-    <SectionCard
-      title="Tasks"
-      icon={<ClipboardList className="h-5 w-5 text-warning" />}
-      count={tasks.length}
-      expanded={expanded}
-      onToggle={onToggle}
-    >
+    <div>
       <div className="flex flex-wrap items-end gap-3 border-b border-border bg-muted/20 p-4">
         {canManage && (
           <label className="flex items-center gap-2 pb-2 text-sm text-foreground">
@@ -227,6 +220,6 @@ export function ContestTasksSection({
         ))}
         {filtered.length === 0 && <EmptyState icon={ClipboardList} title="No tasks assigned to this contest" />}
       </div>
-    </SectionCard>
+    </div>
   );
 }

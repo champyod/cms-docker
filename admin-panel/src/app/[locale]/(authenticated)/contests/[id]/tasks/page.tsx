@@ -5,6 +5,7 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getContestTasks } from '@/lib/queries/contest-detail';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { ListPage } from '@/components/patterns/ListPage';
 import { ContestTasksTab } from '@/components/contests/contest-detail/ContestTasksTab';
 
 type ContestRouteProps = {
@@ -27,11 +28,24 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
   }
 }
 
-export default async function ContestTasksPage({ params }: ContestRouteProps) {
+export default async function ContestTasksPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
   const { id } = await params;
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.tasks');
   const data = await readRecordOrNotFound(() => getContestTasks(contestId));
-  return <ContestTasksTab data={data} />;
+  const assigned = data.tasks.length;
+  return (
+    <ListPage
+      // The record shell above renders the contest's name, its trail and its tabs.
+      ownsHeader={false}
+      title="Tasks"
+      // The count is the whole assignment, not the filtered set: the rows below narrow themselves
+      // as the operator types, and a footer that moved with the filter would answer a question
+      // nobody asked.
+      footer={<p className="text-sm text-muted-foreground">{assigned} {assigned === 1 ? 'task' : 'tasks'} assigned to this contest</p>}
+    >
+      <ContestTasksTab data={data} />
+    </ListPage>
+  );
 }

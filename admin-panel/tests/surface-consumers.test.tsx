@@ -31,27 +31,22 @@ const SETTINGS_FORM = {
 // a shared primitive instead of re-declaring the same markup, so re-inlining the
 // duplicate fails here rather than shipping a second look.
 describe('detail sections render through SectionCard', () => {
-  it('marks the task section collapsed with its count and reveals the body when expanded', () => {
+  it('renders the task rows with their actions and no section header of its own', () => {
     const props = {
       contestId: 7,
       tasks: [{ id: 3, name: 'sum', title: 'Sum' }],
       locale: 'en',
       permissionKeys: ['task:update'] as readonly string[],
       copy: en,
-      onToggle: () => undefined,
       onAddTask: () => undefined,
       onAttachTasks: () => undefined,
       onRemoveTask: () => undefined,
       onRefresh: () => undefined,
     };
-    const collapsed = renderToStaticMarkup(<ContestTasksSection {...props} expanded={false} />);
-    expect(collapsed).toContain('aria-expanded="false"');
-    expect(collapsed).toContain('(1)');
-    expect(collapsed).not.toContain('Remove sum');
-
-    const expanded = renderToStaticMarkup(<ContestTasksSection {...props} expanded />);
-    expect(expanded).toContain('aria-expanded="true"');
-    expect(expanded).toContain('Remove sum');
+    const html = renderToStaticMarkup(<ContestTasksSection {...props} />);
+    expect(html).toContain('Add Task');
+    expect(html).toContain('Remove sum');
+    expect(html).not.toContain('aria-expanded');
   });
 
   it('marks the participant section collapsed and shows the gated invite actions when expanded', () => {

@@ -6,7 +6,6 @@
     "/contests/:id/countdown",
     "/contests/:id/participants",
     "/contests/:id/ranking",
-    "/contests/:id/tasks",
     "/evaluation/submissions",
     "/evaluation/submissions/:id",
     "/evaluation/submissions/:id/evaluation",
