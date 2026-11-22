@@ -137,8 +137,8 @@ pub use grants::{
 };
 pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
-    dataset_from_row, get_datasets_to_judge, result_from_row, submission_from_row,
-    testcase_from_row, DatasetId, DatasetRecord, ReadError, ResultRecord, SubmissionId,
+    dataset_from_row, enumerate_files, get_datasets_to_judge, result_from_row, submission_from_row,
+    testcase_from_row, DatasetId, DatasetRecord, FileSkips, ReadError, ResultRecord, SubmissionId,
     SubmissionRecord, TestcaseRecord, DATASET_BY_ID, JUDGEABLE_DATASETS,
     RESULT_BY_SUBMISSION_AND_DATASET, SUBMISSION_BY_ID, TESTCASES_BY_DATASET,
 };
