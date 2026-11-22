@@ -300,6 +300,21 @@ Exact shapes the port must reproduce, because they are not symmetric in the orig
 `resident`/`virtual` are **integer** divisions (374-375). `ram_available` is the reader's **free**
 bytes, not `available` (342). Retention is `MAX_RESOURCE_SECONDS = 11 * 60` (51).
 
+**The hazard the matcher change creates, and the reason the two halves must agree.** `_restart_services`
+builds the command it spawns as `os.path.join(BIN_PATH, "cms%s" % service.name)` (`:255`) — a Python
+entrypoint name such as `cmsScoringService`, while the Rust services are binaries such as
+`cms-log-service`. If the spawner keeps the Python naming and the matcher learns only the binary naming,
+autorestart spawns a process its own matcher cannot see, concludes the service is still down on the next
+pass, and spawns again — **an unbounded spawn loop**, 5 seconds apart (`:205-209`). The two rules are
+therefore one decision, and the round-trip ("a command the spawner builds is recognised by the matcher")
+is the test that holds it.
+
+Guard order in the original, all of which the port must keep (`:229-250`): skip `LogService`,
+`ResourceService`, and `ProxyService` without a contest id (`:231-235`); skip when `will_restart` is
+false (`:239-240`); re-find the process if the held one is gone (`:244-247`); spawn only when it is
+*still* not running — the case the comment at `:216-220` explains, where the operator started a service
+by hand and a second copy would duplicate it.
+
 ### 7.1 First service swap completed — the logger (2026-11-22)
 
 `log-service` in `docker-compose.yml` now runs `cms-log-service`. This is the first W-B swap and the
