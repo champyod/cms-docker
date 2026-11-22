@@ -995,14 +995,14 @@
       "maintainer": "Maintainer of this project",
       "upstream": "Upstream project this forks"
     },
-    "softwareCount": "Components ({count})",
     "columns": {
       "name": "Software",
       "version": "Version",
       "holder": "Copyright holder",
       "license": "Licence",
       "paths": "Used by"
-    }
+    },
+    "software": "Software"
   },
   "confirmations": {
     "cancel": "Cancel",

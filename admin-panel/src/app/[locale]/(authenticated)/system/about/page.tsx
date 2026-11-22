@@ -1,3 +1,4 @@
+import { SectionCard } from '@/components/core/SectionCard';
 import { DetailPage, type DetailFact } from '@/components/patterns/DetailPage';
 import {
   Table,
@@ -98,30 +99,24 @@ export default async function SystemAboutPage({
     { term: copy.project, value: projectName },
     { term: copy.upstream, value: upstream.name },
     { term: copy.license, value: license.name },
-    {
-      term: copy.softwareCount.replace('{count}', String(panel.assets.length)),
-      value: String(panel.assets.length),
-    },
   ];
   return (
     <DetailPage
-      // The system module shell above renders the title, the description and the trail.
+      // The system module shell renders this page's name, description and trail.
       ownsHeader={false}
-      title={dict.navigation.system.about.label}
       facts={facts}
     >
       {/* The byline the scoreboard sidebar carries, and the two addresses a licence has to offer:
           the values above say what this is, this line says where to get it. */}
-      <p className="text-base text-foreground">
+      <Text>
         {projectAuthor === null ? projectName : `${projectName} by ${projectAuthor}`}
         {panel.attribution.length > 0 ? ` · ${panel.attribution[0].text}` : ''}
         {' · '}
         <ExternalLink href={sourceUrl}>{sourceUrl}</ExternalLink>
         {' · '}
         <ExternalLink href={license.url}>{license.spdxId}</ExternalLink>
-      </p>
-      <section className="space-y-4">
-        <Text as="h2" variant="h2">{copy.contributors.title}</Text>
+      </Text>
+      <SectionCard title={copy.contributors.title}>
         <Table>
           <TableHeader>
             <TableRow>
@@ -148,28 +143,27 @@ export default async function SystemAboutPage({
             ))}
           </TableBody>
         </Table>
-      </section>
-      <section className="space-y-4">
-        <Text as="h2" variant="h2">{panel.title}</Text>
+      </SectionCard>
+      <SectionCard title={panel.title}>
         <div className="space-y-2">
           <Text variant="label">{copy.firstParty}</Text>
-          <ul className="list-inside list-disc space-y-1 font-mono text-xs text-muted-foreground">
+          <ul className="list-inside list-disc space-y-1 font-mono text-[length:var(--text-label)] text-muted-foreground">
             {panel.firstParty.map((path) => <li key={path} className="break-all">{path}</li>)}
           </ul>
         </div>
         {panel.transitiveDependencies !== null && (
           <div className="space-y-2">
             <Text variant="label">{copy.transitiveDependencies}</Text>
-            <p className="text-sm text-muted-foreground">{panel.transitiveDependencies}</p>
+            <Text variant="muted">{panel.transitiveDependencies}</Text>
           </div>
         )}
-      </section>
-      <section className="space-y-4">
-        <Text as="h2" variant="h2">
-          {copy.softwareCount.replace('{count}', String(panel.assets.length))}
-        </Text>
+      </SectionCard>
+      <SectionCard
+        title={copy.software}
+        count={panel.assets.length}
+      >
         <AssetsTable assets={panel.assets} copy={copy} />
-      </section>
+      </SectionCard>
     </DetailPage>
   );
 }

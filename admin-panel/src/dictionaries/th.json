@@ -995,14 +995,14 @@
       "maintainer": "ผู้ดูแลโปรเจกต์นี้",
       "upstream": "โปรเจกต์ต้นทางที่ fork มา"
     },
-    "softwareCount": "องค์ประกอบ ({count})",
     "columns": {
       "name": "ซอฟต์แวร์",
       "version": "รุ่น",
       "holder": "ผู้ถือลิขสิทธิ์",
       "license": "สัญญาอนุญาต",
       "paths": "ถูกใช้โดย"
-    }
+    },
+    "software": "ซอฟต์แวร์"
   },
   "confirmations": {
     "cancel": "ยกเลิก",

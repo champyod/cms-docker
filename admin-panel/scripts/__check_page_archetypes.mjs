@@ -56,7 +56,10 @@ const undeclared = [];
 const OWNED_BY_LAYOUT = [
 
   { pattern: /<h[1-3][\s>]/, rule: 'renders its own heading (the layout owns the page heading levels)' },
-  { pattern: /variant="h1"/, rule: 'renders a heading through the text primitive' },
+  {
+    pattern: /(?:as|variant)="h[1-6]"/,
+    rule: 'renders a heading through the text primitive (the layout owns the page heading levels)',
+  },
   { pattern: /from '@\/components\/core\/Card'/, rule: 'imports Card (a page supplies facts, the layout supplies the card)' },
 ];
 
@@ -72,7 +75,7 @@ const problems = [];
 // Ceilings are overridable so a fixture can prove the ratchet fails when a page adds one back.
 const ceiling = (prop, fallback) => Number(process.env[`SHELL_DEBT_${prop.toUpperCase()}`] ?? fallback);
 const SHELL_OWNED_PROPS = [
-  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 34) },
+  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 33) },
   { prop: 'description', pattern: /ownsHeader=\{false\}[^>]*description=/s, ceiling: ceiling('description', 2) },
 ];
 const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]));
@@ -85,7 +88,7 @@ const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]
  * ever changing. Counted per file, and the count may only fall, one page per session.
  */
 const OFF_SCALE_TYPE = /\btext-(?:xs|sm|base|lg|xl|2xl|3xl|4xl|5xl)\b/g;
-const OFF_SCALE_CEILING = Number(process.env.OFF_SCALE_TYPE_CEILING ?? 18);
+const OFF_SCALE_CEILING = Number(process.env.OFF_SCALE_TYPE_CEILING ?? 15);
 let offScaleType = 0;
 
 for (const page of pages) {
