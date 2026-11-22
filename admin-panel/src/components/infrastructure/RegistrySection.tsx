@@ -4,13 +4,10 @@ import type { ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/core/Button';
-import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
 
 interface RegistrySectionProps<Row> {
-  readonly title: string;
-  readonly count: number;
   readonly empty: string;
   readonly addLabel: string;
   readonly onAdd: () => void;
@@ -25,13 +22,12 @@ interface RegistrySectionProps<Row> {
 /**
  * One collection of the registry, rendered through the shared list primitives.
  *
- * Why it takes a plain row array and a key function: the caller owns its record
- * type, so the section stays generic and every table keys on the record id rather
+ * WHY no card and no heading: the board section around it owns both, so a second frame here would
+ * read as a section inside a section. The add control stays with the rows because it opens this
+ * table's own dialog, and the row type stays generic so every table keys on the record id rather
  * than a render index.
  */
 export function RegistrySection<Row>({
-  title,
-  count,
   empty,
   addLabel,
   onAdd,
@@ -43,11 +39,12 @@ export function RegistrySection<Row>({
   renderRowActions,
 }: RegistrySectionProps<Row>): React.JSX.Element {
   return (
-    <Card className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium text-foreground">{title} ({count})</h2>
-        {canAdd && <Button size="sm" icon={Plus} onClick={onAdd}>{addLabel}</Button>}
-      </div>
+    <div className="space-y-3">
+      {canAdd && (
+        <div className="flex justify-end">
+          <Button size="sm" icon={Plus} onClick={onAdd}>{addLabel}</Button>
+        </div>
+      )}
       <ResponsiveTable
         columns={[...columns]}
         rows={[...rows]}
@@ -56,6 +53,6 @@ export function RegistrySection<Row>({
         renderRowActions={(row) => renderRowActions(row)}
         emptyState={<EmptyState title={empty} />}
       />
-    </Card>
+    </div>
   );
 }

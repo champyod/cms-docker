@@ -72,13 +72,12 @@ export function PreviewPanel(): React.JSX.Element {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{copy.description}</p>
       {rendered.map((artifact) => {
         const card = artifactCopy(copy, artifact);
         return (
           <Card key={artifact.node ?? artifact.mode} className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-medium text-foreground">{card.title}</h2>
+              <h3 className="text-sm font-medium text-foreground">{card.title}</h3>
               <span className="text-xs text-muted-foreground">{card.hotApply}</span>
             </div>
             <pre className="overflow-auto rounded-lg border border-border bg-muted/40 p-3 text-xs text-foreground">{artifact.content}</pre>

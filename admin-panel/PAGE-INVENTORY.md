@@ -34,7 +34,7 @@ Inventory: **9 of 59 pages documented.**
 | `/infrastructure/containers` | list | — *to inventory* |
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
-| `/infrastructure/services` | list | — *to inventory* |
+| `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
 | `/people/teams` | list | teams with member count and state · count against total · sort · per-row actions · create · live refresh |
 | `/people/teams/:id` | detail | — *to inventory* |
 | `/people/teams/:id/contests` | detail | — *to inventory* |

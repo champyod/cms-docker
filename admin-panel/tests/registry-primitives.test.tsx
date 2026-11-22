@@ -2,11 +2,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 
 import en from '@/dictionaries/en.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { ServiceRegistryView } from '@/components/infrastructure/ServiceRegistryView';
+import { RegistryKindSection } from '@/components/infrastructure/RegistryKindSection';
 import type { ServiceRecord } from '@/lib/service-wiring-contract';
 
 vi.mock('next/navigation', () => ({
@@ -47,18 +47,34 @@ const SERVICE: ServiceRecord = {
 function renderView(services: ServiceRecord[] = [SERVICE], permissionKeys: readonly string[] = ['container:control']): HTMLElement {
   const { container } = render(
     <DictionaryProvider dict={en}>
-      <ServiceRegistryView
+      <RegistryKindSection
+        kind="service"
         services={services}
         wirings={[]}
         exposures={[]}
         contests={[]}
-        title="Services"
-        description="The service registry"
         permissionKeys={permissionKeys}
+        frontVhosts={[]}
       />
     </DictionaryProvider>,
   );
   return container;
+}
+
+function renderKind(kind: 'wiring' | 'exposure'): void {
+  render(
+    <DictionaryProvider dict={en}>
+      <RegistryKindSection
+        kind={kind}
+        services={[SERVICE]}
+        wirings={[]}
+        exposures={[]}
+        contests={[]}
+        permissionKeys={['container:control']}
+        frontVhosts={[]}
+      />
+    </DictionaryProvider>,
+  );
 }
 
 describe('the registry screen renders through the templated primitives', () => {
@@ -66,7 +82,6 @@ describe('the registry screen renders through the templated primitives', () => {
     const container = renderView();
     // The row id, not a render index, is the key the table hands to the DOM.
     expect(container.querySelector('[data-row-id="1"]')).not.toBeNull();
-    expect(screen.getByRole('heading', { name: `${copy.kinds.service} (1)` })).not.toBeNull();
     expect(screen.getAllByRole('group', { name: copy.actions.rowGroup }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: copy.actions.edit }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole('button', { name: copy.actions.remove }).length).toBeGreaterThan(0);
@@ -77,13 +92,12 @@ describe('the registry screen renders through the templated primitives', () => {
     expect(screen.getByText(copy.empty.service)).not.toBeNull();
   });
 
-  it('switches sections through the tab strip and keeps its own empty copy', () => {
-    renderView([SERVICE]);
-
-    fireEvent.click(screen.getByRole('button', { name: copy.tabs.wirings }));
+  it('keeps each kind its own empty copy in its own section', () => {
+    renderKind('wiring');
     expect(screen.getByText(copy.empty.wiring)).not.toBeNull();
+    cleanup();
 
-    fireEvent.click(screen.getByRole('button', { name: copy.tabs.exposures }));
+    renderKind('exposure');
     expect(screen.getByText(copy.empty.exposure)).not.toBeNull();
   });
 });
