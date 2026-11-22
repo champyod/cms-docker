@@ -5,39 +5,7 @@ use chrono::{Duration, NaiveDateTime};
 use super::quota::{Playable, Tokens};
 use crate::interval::Interval;
 
-/// How many tokens a task grants at all (`tasks.token_mode`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenMode {
-    /// `disabled`: a token can never be played on this task.
-    Disabled,
-    /// `finite`: a balance that generation refills, capped by the columns beside it.
-    Finite,
-    /// `infinite`: a token can always be played, and no limit applies.
-    Infinite,
-}
-
-impl TokenMode {
-    /// The value the `token_mode` enum stores.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Disabled => "disabled",
-            Self::Finite => "finite",
-            Self::Infinite => "infinite",
-        }
-    }
-
-    /// The mode a column value names, or `None` for one the enum does not declare.
-    #[must_use]
-    pub fn parse(text: &str) -> Option<Self> {
-        match text {
-            "disabled" => Some(Self::Disabled),
-            "finite" => Some(Self::Finite),
-            "infinite" => Some(Self::Infinite),
-            _ => None,
-        }
-    }
-}
+pub use crate::token_mode::TokenMode;
 
 /// The seven `tasks` columns a balance is computed from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

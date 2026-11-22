@@ -16,78 +16,9 @@
 //! does too: an `infinite` contest with `token_max_number = 0` is still refused,
 //! because the reference's `INSERT` would be.
 
-use std::str::FromStr;
-
 use crate::interval::Interval;
 
-/// One of the three values the `token_mode` enum stores.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TokenMode {
-    /// `disabled`: no token may be played.
-    Disabled,
-    /// `finite`: tokens accrue from the generation parameters.
-    Finite,
-    /// `infinite`: a token is always available.
-    Infinite,
-}
-
-impl TokenMode {
-    /// The spelling the enum stores.
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Disabled => "disabled",
-            Self::Finite => "finite",
-            Self::Infinite => "infinite",
-        }
-    }
-
-    /// How this mode answers a request for a token.
-    #[must_use]
-    pub const fn grant(self) -> TokenGrant {
-        match self {
-            Self::Disabled => TokenGrant::Never,
-            Self::Finite => TokenGrant::Accrued,
-            Self::Infinite => TokenGrant::Always,
-        }
-    }
-}
-
-impl FromStr for TokenMode {
-    type Err = TokenModeError;
-
-    /// # Errors
-    ///
-    /// Returns [`TokenModeError::Unknown`] for every spelling outside the enum,
-    /// which is what the column cast refuses too.
-    fn from_str(value: &str) -> Result<Self, Self::Err> {
-        match value {
-            "disabled" => Ok(Self::Disabled),
-            "finite" => Ok(Self::Finite),
-            "infinite" => Ok(Self::Infinite),
-            other => Err(TokenModeError::Unknown(other.to_string())),
-        }
-    }
-}
-
-/// How a mode answers a token request, before any timestamp is considered.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TokenGrant {
-    /// `disabled`: the answer is always no.
-    Never,
-    /// `infinite`: the answer is always yes.
-    Always,
-    /// `finite`: the answer depends on the generation history.
-    Accrued,
-}
-
-/// Why a spelling is not a `token_mode` value.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum TokenModeError {
-    /// The value is not one of the three enum labels.
-    #[error("{0:?} is not a token mode; the column stores disabled, finite or infinite")]
-    Unknown(String),
-}
+pub use crate::token_mode::{TokenGrant, TokenMode};
 
 /// The `contests` token columns as one value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

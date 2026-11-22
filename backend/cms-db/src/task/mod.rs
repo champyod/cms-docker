@@ -18,7 +18,9 @@ pub use dataset::{
 };
 pub use quota::{merge, Playable, Tokens};
 pub use settings::{FeedbackLevel, ScoreMode};
-pub use token::{TokenMode, TokenRules};
+pub use token::TokenRules;
+
+use crate::token_mode::TokenMode;
 
 /// The `tasks` table (`src/cms/db/task.py:56-283`).
 pub const TASK: Declaration = Declaration {

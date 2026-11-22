@@ -84,6 +84,7 @@ mod security_block;
 mod session;
 mod submission;
 mod task;
+mod token_mode;
 mod types;
 mod user;
 mod username;
@@ -99,8 +100,8 @@ pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use codename::{Codename, CodenameError};
 pub use contest::{
-    Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenGrant, TokenMode,
-    TokenModeError, TokenPolicy, WindowError, CONTEST,
+    Contest, ContestError, ContestWindow, Phase, TokenConfigError, TokenPolicy, WindowError,
+    CONTEST,
 };
 pub use crypto::{
     build_password, decrypt_binary, decrypt_number, encrypt_binary, encrypt_number,
@@ -142,9 +143,10 @@ pub use submission::{
 };
 pub use task::{
     activate_dataset, dataset_by_id, delete_dataset, merge, unjudged_submissions, FeedbackLevel,
-    Playable, ScoreMode, Task, TaskError, TokenMode, TokenRules, Tokens, ACTIVATE_DATASET,
-    DELETE_DATASET, SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
+    Playable, ScoreMode, Task, TaskError, TokenRules, Tokens, ACTIVATE_DATASET, DELETE_DATASET,
+    SUBMISSIONS_WITHOUT_RESULT, TASK, TASK_BY_ID,
 };
+pub use token_mode::{TokenGrant, TokenMode, TokenModeError};
 pub use types::{
     resolve, AuthError, BcryptPassword, BcryptVerifier, CacheError, CacheHandle, DigestError,
     Effect, EffectivePermissions, FileDigest, Interval, IntervalError, PasswordForm,
