@@ -147,6 +147,8 @@ CONSOLE_LOGIN_UPDATE=" admins "
 # window, and nothing else. The trigger in 20261026120100_audit_log_durable enforces the window
 # even for this identity, so the grant is a shape, not a licence.
 AUDIT_RETENTION="system:audit-retention"
+# The admin-change trigger writes under this identity so it can append without impersonating staff.
+AUDIT_SECURITY="system:admin-audit"
 
 in_list() {
   case " $2 " in
@@ -291,7 +293,7 @@ emit_policy_set() {
         "  OR public.cms_actor_any(ARRAY['system:ingest'])" \
         ");" \
         "CREATE POLICY cms_actor_append ON public.$tbl FOR INSERT TO cmsuser WITH CHECK (" \
-        "  ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest']))" \
+        "  ($(read_predicate "$tbl") OR public.cms_actor_any(ARRAY['system:ingest', '$AUDIT_SECURITY']))" \
         "  AND (" \
         "    public.cms_actor_admin_id() IS NULL" \
         "    OR actor_id IS NULL" \

@@ -48,6 +48,8 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
+| P12 | **WS-75 detection** — admin security-column changes append to the canonical audit log; the trigger records `session_user`, actor, changed columns and hash prefixes only; RLS grants the trigger's own system identity. | base checkout | `major/admin-panel` | hermes-agent | `scripts/__generate_rls_sql.sh`, `admin-panel/prisma/migrations/20261122120000_admin_security_audit/`, `tests/test_admin_security_audit.sh`, `coordination/BOARD.md` | in-flight |
+
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
 | # | Item | Files (likely) | Waiting on |
