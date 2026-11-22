@@ -18,7 +18,52 @@
 //! denormalised from the participation: they make the per-contest uniqueness
 //! and a lookup by user possible without joining through it.
 
+use chrono::NaiveDateTime;
+use sqlx::postgres::PgRow;
+use sqlx::Row;
+
 use crate::base::{Column, ColumnKind, Declaration};
+use crate::codename::Codename;
+
+/// A row of `contest_usernames`: the alias one participation shows as.
+///
+/// WHY the username is a [`Codename`](crate::Codename): the reference declares the
+/// column with that domain, and Prisma's migration creates it as a plain `varchar`,
+/// so a row outside the alphabet can exist and is refused here rather than shown.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DisplayUsername {
+    /// `contest_usernames.id`.
+    pub id: i32,
+    /// `contest_usernames.participation_id`, unique across the table.
+    pub participation_id: i32,
+    /// `contest_usernames.contest_id`, half of the per-contest uniqueness.
+    pub contest_id: i32,
+    /// `contest_usernames.user_id`.
+    pub user_id: i32,
+    /// `contest_usernames.username`, the name shown in place of the real one.
+    pub username: Codename,
+    /// `contest_usernames.updated_at`.
+    pub updated_at: NaiveDateTime,
+    /// `contest_usernames.updated_by_admin_id`, absent when the contestant set it.
+    pub updated_by_admin_id: Option<i32>,
+}
+
+impl DisplayUsername {
+    /// The row a `SELECT` naming [`DisplayUsername`]'s columns returned.
+    pub(crate) fn from_row(row: &PgRow) -> Result<Self, sqlx::Error> {
+        let username: String = row.try_get("username")?;
+        Ok(Self {
+            id: row.try_get("id")?,
+            participation_id: row.try_get("participation_id")?,
+            contest_id: row.try_get("contest_id")?,
+            user_id: row.try_get("user_id")?,
+            username: Codename::parse(&username)
+                .map_err(|error| sqlx::Error::Decode(Box::new(error)))?,
+            updated_at: row.try_get("updated_at")?,
+            updated_by_admin_id: row.try_get("updated_by_admin_id")?,
+        })
+    }
+}
 
 /// The `contestant_groups` table.
 pub const CONTESTANT_GROUP: Declaration = Declaration {

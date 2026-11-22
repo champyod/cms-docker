@@ -169,8 +169,10 @@ pub use types::{
 };
 pub use user::{Participation, User, PARTICIPATION, USER};
 pub use username::{
-    resolve_config, ConfigInputs, Policy, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP,
-    CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
+    get_display_name, get_display_username, get_display_usernames, load_config_inputs,
+    resolve_config, set_display_username, username_config_allowed, ConfigInputs, DisplayUsername,
+    Policy, UsernameError, CONTESTANT_GROUP, CONTESTANT_GROUP_MEMBERSHIP, CONTEST_USERNAME,
+    CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use usertest::{
     Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey, UserTest,
