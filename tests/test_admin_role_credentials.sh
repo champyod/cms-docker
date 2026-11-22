@@ -34,7 +34,8 @@ check_literal() { # <label> <fixed string> <file>
 
 # ── 1. Shell syntax ─────────────────────────────────────────────────────────────────────────
 printf '== changed shell scripts parse ==\n'
-for script in "$APPLY" "$SYNC" "$ENGINE"; do
+GENERATOR="${REPO_ROOT}/scripts/__generate_role_sql.sh"
+for script in "$APPLY" "$SYNC" "$ENGINE" "$GENERATOR"; do
   if bash -n "$script" 2>"$TEST_ROOT/syntax.err"; then
     ok "bash -n ${script#"$REPO_ROOT"/}"
   else
@@ -67,6 +68,11 @@ check_grep "the ALTER only runs for a non-empty setting" "_pw <> ''" "$SQL_FILE"
 check_not_grep "no password literal in the SQL" "PASSWORD[[:space:]]+'[^']" "$SQL_FILE"
 check_not_grep "no hex secret pasted into the SQL" "[0-9a-f]{32,}" "$SQL_FILE"
 if [[ -f "$GEN_SQL" ]]; then
+  if grep -qxE 'local|role|tbl|verbs|verb|policy|row_role' "$GEN_SQL"; then
+    no "the generated role catalog has no bare generator variables"
+  else
+    ok "the generated role catalog has no bare generator variables"
+  fi
   order="$(printf '%s\n' "$(basename "$GEN_SQL")" "$(basename "$SQL_FILE")" 20260820120000_db_roles.sql | LC_ALL=C sort | paste -sd' ' -)"
   if [[ "$order" == "$(basename "$GEN_SQL") $(basename "$SQL_FILE") 20260820120000_db_roles.sql" ]]; then
     ok "the file sorts after role creation and before the backup role"
