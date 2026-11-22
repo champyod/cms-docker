@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { Card } from '@/components/core/Card';
 import { PageSurface } from '@/components/core/PageSurface';
+import { SectionCard } from '@/components/core/SectionCard';
 import type { PageSlots } from '@/components/patterns/page-types';
 
 export interface SettingsGroup {
@@ -30,20 +30,33 @@ export interface SettingsPageProps extends Omit<PageSlots, 'children'> {
  * Settings are not a form. Nothing describes a record, several groups may save independently, and
  * the question a reader has is not "what do I type" but "does this change my screen or everyone's".
  * Each group therefore carries a `scope` line that the page cannot omit.
+ *
+ * A group is a section, so it is drawn by the section frame rather than by a second card written
+ * here: the heading level, the title size and the padding are the panel's, and a settings group that
+ * chose its own weight would be the one place a section looked different.
  */
-export function SettingsPage({ breadcrumbs, title, description, actions, groups, saveBar, reset, ownsHeader = true }: SettingsPageProps): React.JSX.Element {
+export function SettingsPage({
+  breadcrumbs,
+  title,
+  description,
+  actions,
+  groups,
+  saveBar,
+  reset,
+  ownsHeader = true,
+}: SettingsPageProps): React.JSX.Element {
   return (
     <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
       <div className="max-w-3xl space-y-4">
         {groups.map((group) => (
-          <Card key={group.key} className="space-y-3 p-4">
-            <div>
-              <h2 className="text-[length:var(--text-card)] font-semibold">{group.title}</h2>
-              <p className="text-muted-foreground">{group.description}</p>
-              <p className="text-muted-foreground">{group.scope}</p>
-            </div>
+          <SectionCard
+            key={group.key}
+            title={group.title}
+            description={group.description}
+            note={group.scope}
+          >
             <div className="space-y-3">{group.children}</div>
-          </Card>
+          </SectionCard>
         ))}
         {(saveBar || reset) && (
           <div className="flex items-center gap-2">

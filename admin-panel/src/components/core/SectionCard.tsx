@@ -13,6 +13,11 @@ export interface SectionCardProps {
   readonly count?: number;
   /** What this section answers, when the title alone would leave it ambiguous. */
   readonly description?: React.ReactNode;
+  /**
+   * A promise about the section rather than a description of it - who a change reaches, what a save
+   * covers. Settings groups need it; a board section rarely does.
+   */
+  readonly note?: React.ReactNode;
   /** Present together with `onToggle` to make the section collapsible; absent for a plain section. */
   readonly expanded?: boolean;
   readonly onToggle?: () => void;
@@ -40,6 +45,7 @@ export function SectionCard({
   icon,
   count,
   description,
+  note,
   expanded,
   onToggle,
   actions,
@@ -85,7 +91,7 @@ export function SectionCard({
               {titleNode}
             </div>
           )}
-          {(count !== undefined || description) && (
+          {(count !== undefined || description || note) && (
             <div className="flex min-w-0 flex-wrap items-baseline gap-2">
               {count !== undefined && (
                 <span className="rounded-full bg-accent px-2 py-0.5 text-[length:var(--text-label)] text-muted-foreground">
@@ -93,6 +99,7 @@ export function SectionCard({
                 </span>
               )}
               {description}
+              {note && <p className="text-[length:var(--text-label)] text-muted-foreground">{note}</p>}
             </div>
           )}
         </div>
