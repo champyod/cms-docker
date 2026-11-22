@@ -63,6 +63,7 @@
 #![forbid(unsafe_code)]
 
 mod actor;
+mod admin;
 mod auth;
 mod base;
 mod binary;
@@ -83,6 +84,7 @@ pub use actor::{
     default_actor, label_for, process_label, validate_actor, ActorError, ACTOR_ENV, ACTOR_SETTING,
     CONNECTION_STAMP_SQL, CORE_ACTOR, KNOWN_SYSTEM_ACTORS, TRANSACTION_STAMP_SQL,
 };
+pub use admin::{Admin, ADMIN};
 pub use base::{ArrayItem, Column, ColumnKind, Declaration, DeclarationError};
 pub use binary::{b64_to_bin, bin_to_b64, bin_to_hex, hex_to_bin, BinaryError};
 pub use codename::{Codename, CodenameError};

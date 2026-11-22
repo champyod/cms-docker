@@ -5,8 +5,8 @@
 //! replaces the user's for that contest. Nothing opens a connection.
 
 use cms_db::{
-    hash_password, Bcrypt, BcryptVerifier, Codename, Interval, Participation, PasswordForm, User,
-    PARTICIPATION, USER,
+    hash_password, resolve, Admin, Bcrypt, BcryptVerifier, Codename, Interval, Participation,
+    PasswordForm, PermissionInputs, User, ADMIN, PARTICIPATION, USER, WILDCARD_PERMISSION,
 };
 
 /// A verifier that proves a path never reached bcrypt.
@@ -92,6 +92,7 @@ fn a_participation_password_replaces_the_users_credential() {
 fn the_identity_declarations_validate_and_skip_their_keys() {
     assert_eq!(USER.validate(), Ok(()));
     assert_eq!(PARTICIPATION.validate(), Ok(()));
+    assert_eq!(ADMIN.validate(), Ok(()));
 
     let carried: Vec<&str> = USER.value_columns().map(|column| column.name).collect();
     assert_eq!(
@@ -113,4 +114,74 @@ fn the_identity_declarations_validate_and_skip_their_keys() {
         .find(|column| column.name == "password")
         .expect("the password column is declared");
     assert!(password.has_default && !password.is_required());
+}
+
+fn admin_with(authentication: PasswordForm, enabled: bool) -> Admin {
+    Admin {
+        id: 4,
+        name: "Grace Hopper".to_string(),
+        username: Codename::parse("grace").expect("a codename"),
+        authentication,
+        enabled,
+    }
+}
+
+fn keys(values: &[&str]) -> std::collections::BTreeSet<String> {
+    values.iter().map(|value| (*value).to_string()).collect()
+}
+
+#[test]
+fn an_admin_holding_only_the_wildcard_grants_a_key_it_never_registered() {
+    let effective = resolve(&PermissionInputs {
+        is_enabled: true,
+        group_grants: keys(&[WILDCARD_PERMISSION]),
+        ..PermissionInputs::default()
+    });
+    let admin = admin_with(
+        PasswordForm::parse("bcrypt:$2b$12$synthetic").expect("a bcrypt row"),
+        true,
+    );
+
+    assert!(admin.has_permission(&effective, &["never:registered"]));
+    assert_eq!(effective.keys(), &keys(&[WILDCARD_PERMISSION]));
+}
+
+#[test]
+fn an_expanded_wildcard_does_not_regrant_a_key_an_override_denied() {
+    let effective = resolve(&PermissionInputs {
+        is_enabled: true,
+        group_grants: keys(&[WILDCARD_PERMISSION]),
+        deny_overrides: keys(&["contest:read"]),
+        registered_keys: keys(&["contest:read", "contest:delete"]),
+        ..PermissionInputs::default()
+    });
+    let admin = admin_with(
+        PasswordForm::parse("bcrypt:$2b$12$synthetic").expect("a bcrypt row"),
+        true,
+    );
+
+    assert!(effective.keys().contains(WILDCARD_PERMISSION));
+    assert!(!admin.has_permission(&effective, &["contest:read"]));
+    assert!(admin.has_permission(&effective, &["contest:delete"]));
+    assert!(admin.has_permission(&effective, &["contest:read", "contest:delete"]));
+}
+
+#[test]
+fn an_admin_logs_in_only_with_its_password_and_only_while_enabled() {
+    let stored = hash_password("let me in", "bcrypt").expect("bcrypt accepts this password");
+    let form = PasswordForm::parse(&stored).expect("a bcrypt row");
+
+    assert!(admin_with(form.clone(), true).authenticates("let me in", &Bcrypt));
+    assert!(!admin_with(form.clone(), false).authenticates("let me in", &Bcrypt));
+    assert!(!admin_with(form, true).authenticates("let me out", &Bcrypt));
+}
+
+#[test]
+fn a_plaintext_admin_row_never_authenticates() {
+    let admin = admin_with(
+        PasswordForm::parse("plaintext:let me in").expect("a plaintext row"),
+        true,
+    );
+
+    assert!(!admin.authenticates("let me in", &Bcrypt));
 }
