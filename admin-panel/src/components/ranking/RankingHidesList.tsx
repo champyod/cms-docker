@@ -12,7 +12,6 @@ import type { RankingHide, RankingHideSource } from '@/lib/ranking-hides';
 type RankingCopy = Dictionary['ranking'];
 
 const MUTED = 'text-muted-foreground';
-const NO_REASON = '—';
 
 /** The word the rest of the ranking surface already uses for a target kind. */
 function kindWord(copy: RankingCopy, kind: string): string {
@@ -64,11 +63,13 @@ function SourceMark({
   );
 }
 
-function reasonText(hide: RankingHide): string {
+function reasonText(hide: RankingHide, copy: RankingCopy): string {
   for (const source of hide.sources) {
     if (source.source === 'override' && source.reason !== null && source.reason !== '') return source.reason;
   }
-  return NO_REASON;
+  // Why a word and not a dash: DESIGN.md 19 bans the em dash from anything a reader sees, and this
+  // column's empty meaning is a sentence, not a mark.
+  return copy.hides.noReason;
 }
 
 function buildColumns(copy: RankingCopy): ResponsiveColumn<RankingHide>[] {
@@ -103,7 +104,7 @@ function buildColumns(copy: RankingCopy): ResponsiveColumn<RankingHide>[] {
     {
       key: 'reason',
       header: copy.hides.columnReason,
-      render: (hide) => <span className={MUTED}>{reasonText(hide)}</span>,
+      render: (hide) => <span className={MUTED}>{reasonText(hide, copy)}</span>,
     },
   ];
 }

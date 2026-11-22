@@ -21,7 +21,7 @@ export function RankingShardTabs({ shards, activeShard, copy }: RankingShardTabs
     <Tabs
       items={shards.map((shard) => ({
         id: String(shard.shard),
-        label: `${copy.shardLabel} ${shard.shard} · ${shard.contestName}`,
+        label: `${copy.shardLabel} ${shard.shard}, ${shard.contestName}`,
         href: `?shard=${shard.shard}`,
       }))}
       activeId={String(activeShard)}

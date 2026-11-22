@@ -17,7 +17,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(process.env.BANNED_ROOT ?? process.cwd());
-const BASELINE = Number(process.env.BANNED_BASELINE ?? 176);
+const BASELINE = Number(process.env.BANNED_BASELINE ?? 166);
 const BANNED = [
   { mark: '·', name: 'middle dot' },
   { mark: '—', name: 'em dash' },
@@ -27,6 +27,17 @@ const BANNED = [
 function isComment(line) {
   const trimmed = line.trimStart();
   return trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*');
+}
+
+/**
+ * Tracks a JSX comment block, which opens with `{/*` and closes with `*}` on a later line.
+ * Why: the marks inside one are comments, and reading them as copy counted a false positive on a
+ * comment that happened to sit on its own line.
+ */
+function trackJsxComment(line, open) {
+  if (!open && line.includes('{/*') && !line.includes('*/}')) return true;
+  if (open && line.includes('*/}')) return false;
+  return open;
 }
 
 function files(dir, out = []) {
@@ -41,8 +52,11 @@ function files(dir, out = []) {
 const hits = [];
 for (const file of [...files(join(ROOT, 'src'))]) {
   const lines = readFileSync(file, 'utf8').split('\n');
+  let inJsxComment = false;
   lines.forEach((line, index) => {
-    if (isComment(line)) return;
+    const wasInComment = inJsxComment;
+    inJsxComment = trackJsxComment(line, inJsxComment);
+    if (wasInComment || isComment(line)) return;
     for (const { mark, name } of BANNED) {
       if (line.includes(mark)) hits.push(`${relative(ROOT, file)}:${index + 1}: ${name}`);
     }

@@ -24,7 +24,7 @@ interface ImpactListProps {
 function ImpactList({ term, entries }: ImpactListProps): React.JSX.Element {
   return (
     <div className="min-w-0">
-      <Text as="dt" variant="label">{`${term} · ${entries.length}`}</Text>
+      <Text as="dt" variant="label">{`${term}, ${entries.length}`}</Text>
       <dd className="text-sm text-foreground/80">
         {entries.map((entry) => (
           <span key={entry} className="block truncate" title={entry}>

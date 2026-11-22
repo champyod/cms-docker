@@ -142,7 +142,7 @@ function ShownList({ copy, rows, onEnd }: ShownListProps): React.JSX.Element {
             <span className="truncate font-medium">{row.key}</span>
             <span className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
               <span className="truncate">
-                {row.kind} · {row.reason}
+                {row.kind}, {row.reason}
               </span>
               {/*
                 WHY the author is on every row: a config row can be written outside the panel

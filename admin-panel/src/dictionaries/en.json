@@ -898,7 +898,8 @@
       "sourceOverride": "override row",
       "sourceParticipation": "participation flag",
       "unknownTarget": "names nothing the board has",
-      "wholeBoard": "the whole board"
+      "wholeBoard": "the whole board",
+      "noReason": "no reason given"
     },
     "credits": {
       "title": "Credit list",

@@ -29,7 +29,7 @@ function PreviewImage({ previewUrl, onClick }: { previewUrl: string; onClick: ()
         onClick={onClick}
         className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-border bg-muted/40 text-sm text-muted-foreground transition-colors hover:border-border hover:text-foreground"
       >
-        No ranking logo — click to upload
+        No ranking logo: click to upload
       </button>
     );
   }

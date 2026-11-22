@@ -898,7 +898,8 @@
       "sourceOverride": "แถวโอเวอร์ไรด์",
       "sourceParticipation": "ธงการเข้าร่วม",
       "unknownTarget": "ไม่ตรงกับแถวใดบนกระดาน",
-      "wholeBoard": "ทั้งกระดาน"
+      "wholeBoard": "ทั้งกระดาน",
+      "noReason": "ไม่ได้ระบุเหตุผล"
     },
     "credits": {
       "title": "รายการเครดิต",
