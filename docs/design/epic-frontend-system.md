@@ -84,3 +84,30 @@ assertive alert, exactly one primary - were never exercised against real data.
 If a page-level form ever appears, the shape is in git history (`FormPage.tsx` before this commit)
 and the contract is the five slots the old `PAGE_SLOTS.form` named. Add it back with a page that
 renders it, not before.
+
+## Working rule — the ask flow (binding on every session of this epic)
+
+This epic produced its own failure worth writing down. After the nine layout reviews, the queue held
+counted debts - dead props, off-scale type, counts written into strings - and each looked small
+enough to fix without asking. Eight pages went by that way. The discussion tables had turned into
+reports of decisions already taken, which is a decision taken alone with a summary attached.
+
+The rules that replace it:
+
+1. **One item per turn.** One page, or one component. A turn that touches two pages is two turns'
+   work and is refused, however small the second one looks.
+2. **Never bulk.** No batch of N pages in one commit, no multi-lane fan-out for design work, no
+   "while I am here". A class of identical defects is still N items, not one sweep - unless the
+   operator says otherwise for that class.
+3. **Never skip.** Every item in the queue gets its own discussion, its own decision and its own
+   verification. "Mechanical" is not a reason to skip the discussion; it is a reason the discussion
+   is short.
+4. **Ask before the code, not after.** Anything a reader can see or feel - a type size, a number, a
+   footer's sentence, a heading's name, the taxonomy itself - is presented as the real candidate set
+   with a reason for each and the recommended one first. The operator picks. The table comes before
+   the edit, never as a report of one.
+5. **Code nobody can see may be fixed without a question, but never without a report.** A dead prop
+   removed is not a design decision; it is still one item, still its own commit, and the message
+   says what it was and why nothing changes on screen.
+6. **A decision already taken is reversible by the operator.** When he revisits one, the earlier
+   commit is re-opened as a discussion, not defended.
