@@ -254,6 +254,11 @@
       "title": "Task Settings",
       "description": "How this task scores a submission, and what it tells the contestant who sent it.",
       "scope": "Every contestant of this task, and the evaluator that scores them."
+    },
+    "datasets": {
+      "datasets": "Datasets",
+      "activeDataset": "Active dataset",
+      "testcases": "Testcases"
     }
   },
   "users": {

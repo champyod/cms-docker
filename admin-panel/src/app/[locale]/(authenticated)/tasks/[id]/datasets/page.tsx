@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
+import { formatCount } from '@/lib/format-number';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -28,17 +30,22 @@ async function authorizeTaskTab(routeId: RouteId): Promise<ReadonlySet<string>> 
   }
 }
 
-/** The dataset acting as the task's live one, or the panel's missing mark when none is set. */
-function activeDatasetName(data: { activeDatasetId: number | null; datasets: readonly { id: number; description: string }[] }): string {
-  if (data.activeDatasetId === null) return '—';
-  return data.datasets.find((dataset) => dataset.id === data.activeDatasetId)?.description ?? '—';
+/** The dataset acting as the task's live one, or the missing word when none is set. */
+function activeDatasetName(
+  data: { activeDatasetId: number | null; datasets: readonly { id: number; description: string }[] },
+  notSet: string,
+): string {
+  if (data.activeDatasetId === null) return notSet;
+  return data.datasets.find((dataset) => dataset.id === data.activeDatasetId)?.description ?? notSet;
 }
 
 export default async function TaskDatasetsPage({ params }: TaskRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
   const taskId = parseRecordId(id);
   if (taskId === null) notFound();
   await authorizeTaskTab('tasks.tabs.datasets');
+  const dictionary = await getDictionary(locale);
+  const facts = dictionary.tasks.datasets;
   const data = await readRecordOrNotFound(() => getTaskDatasets(taskId));
   // Why the testcase count over the datasets array rather than a second read: both numbers come from
   // the same projection, so a count that could disagree with the rows is a count nobody can check.
@@ -48,11 +55,10 @@ export default async function TaskDatasetsPage({ params }: TaskRouteProps): Prom
       // The record shell above renders the task's name, its trail and its tabs; the rail says
       // Datasets, so this page states which datasets exist and how the live one is chosen.
       ownsHeader={false}
-      title={`Task #${data.taskId}`}
       facts={[
-        { term: 'Datasets', value: String(data.datasets.length) },
-        { term: 'Active dataset', value: activeDatasetName(data) },
-        { term: 'Testcases', value: String(testcases) },
+        { term: facts.datasets, value: formatCount(data.datasets.length, locale) },
+        { term: facts.activeDataset, value: activeDatasetName(data, dictionary.common.notSet) },
+        { term: facts.testcases, value: formatCount(testcases, locale) },
       ]}
     >
       <TaskDatasetsTab data={data} />
