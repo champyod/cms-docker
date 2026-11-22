@@ -144,8 +144,9 @@ pub use username::{
     CONTEST_USERNAME, CONTEST_USERNAME_HISTORY, USERNAME_POLICY,
 };
 pub use usertest::{
-    Filename, FilenameError, FilenameSchema, ResultKey, UserTest, UserTestExecutable, UserTestFile,
-    UserTestManager, UserTestResult, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
+    Filename, FilenameError, FilenameSchema, ReferentialError, ResultKey, UserTest,
+    UserTestExecutable, UserTestFile, UserTestFiles, UserTestManager, UserTestManagers,
+    UserTestResult, UserTestResults, UserTestStatus, USER_TEST, USER_TEST_EXECUTABLE,
     USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };
 pub use writes::{

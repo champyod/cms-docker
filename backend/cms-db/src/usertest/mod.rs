@@ -10,11 +10,13 @@
 mod model;
 mod name;
 mod result;
+mod rules;
 mod schema;
 
 pub use model::{UserTest, UserTestExecutable, UserTestFile, UserTestManager};
 pub use name::{Filename, FilenameError, FilenameSchema};
 pub use result::{ResultKey, UserTestResult, UserTestStatus};
+pub use rules::{ReferentialError, UserTestFiles, UserTestManagers, UserTestResults};
 pub use schema::{
     USER_TEST, USER_TEST_EXECUTABLE, USER_TEST_FILE, USER_TEST_MANAGER, USER_TEST_RESULT,
 };

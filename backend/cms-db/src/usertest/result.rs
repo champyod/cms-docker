@@ -199,6 +199,11 @@ impl UserTestResult {
         self.executables.values()
     }
 
+    /// The executable store, for the rule that refuses a duplicate filename.
+    pub(super) fn executables_mut(&mut self) -> &mut BTreeMap<String, UserTestExecutable> {
+        &mut self.executables
+    }
+
     /// Record the compilation outcome as the boolean the evaluator reports.
     pub fn set_compilation_outcome(&mut self, success: bool) {
         self.compilation_outcome = Some(if success {
