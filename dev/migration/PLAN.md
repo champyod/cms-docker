@@ -243,6 +243,26 @@ crate was not used: its padding traits describe a scheme this data never used, s
 the vetted `aes` core. The cipher is byte-compatible on purpose, because existing ciphertext is already
 in the database; the missing MAC remains a named finding (F3), not something the port silently fixed.
 
+### S-3 epic split (the remaining order, recorded so it is not re-derived)
+
+`src/cms/db` is 6,816 lines across 22 files, split by measured size and by import direction:
+
+| epic | files | lines | state |
+|---|---|---|---|
+| S-3a | `actor` 183, `session` 154, `base` 330, `drop` 84 | **751** | **merged** (`c07e695a`) |
+| S-3b | `fsobject` 437 → `filecacher` 954 (filecacher imports `FSObject`, `LargeObject`) | **1,391** | in a lane |
+| S-3c | `user` 439, `username/models` 175, `username/resolution` 211, `permissions` 145, `admin` 70, `security_block` 56 | **1,096** | in a lane, independent of S-3b |
+| S-3d | `submission` 799, `task` 646 | **1,445** | after S-3b — both need the file store |
+| S-3e | `contest` 499, `usertest` 550 | **1,049** | after S-3d |
+| S-3f | `util` 568, `__init__` 175 | **743** | last: `__init__` is the package surface |
+
+The arithmetic, computed rather than asserted: 751 + 1,391 + 1,096 + 1,445 + 1,049 + 743 = **6,475**, plus
+`types.py` **248** (already ported into `cms-db`'s `types.rs` long before S-3), `init.py` **52** and
+`username/__init__.py` **41** = **6,816**, which is the `wc -l` total. Nothing in the slice is unassigned.
+
+Two ordering facts that are not obvious from the sizes: `filecacher` must follow `fsobject` because it
+imports `FSObject` and `LargeObject`, and S-3d must follow S-3b for the same reason through the cache.
+
 **Divergence carried by LogService — MEASURED AND WITHDRAWN (2026-11-22).** This entry first claimed the
 Rust formatter printing UTC was a behaviour change from Python's `time.localtime`, and warned that a
 non-UTC host would log a different clock. Production says otherwise, so the warning was wrong:
