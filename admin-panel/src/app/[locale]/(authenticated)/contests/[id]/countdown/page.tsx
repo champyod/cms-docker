@@ -52,7 +52,6 @@ export default async function ContestCountdownPage({ params }: ContestRouteProps
       // The record shell above renders the contest's name, its trail and its tabs; the rail says
       // Countdown, so the tab adds the timings and the clock that counts to them.
       ownsHeader={false}
-      title={data.name}
       facts={[
         { term: 'Timezone', value: data.timezone ?? 'UTC' },
         { term: 'Start', value: zoneFact(data.start, zone, dictionary.common.notSet) },
