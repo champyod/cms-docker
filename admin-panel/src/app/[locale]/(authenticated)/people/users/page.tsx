@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PageSurface } from '@/components/core/PageSurface';
+import { ListPage } from '@/components/patterns/ListPage';
 import { getUsers } from '@/app/actions/users';
 import { UserList } from '@/components/users/UserList';
 import { UserListHeader } from '@/components/users/UserListHeader';
@@ -77,7 +77,7 @@ export default async function PeopleUsersPage({ params, searchParams }: {
   const usersLabel = labelForDescriptor(dict, usersRouteDescriptor());
   const { result, search, contests, canReadContests } = await loadUsersListPage(searchParams);
   return (
-    <PageSurface
+    <ListPage
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.users', dict)}
       title={usersLabel}
       description={dict.users.subtitle}
@@ -105,6 +105,6 @@ export default async function PeopleUsersPage({ params, searchParams }: {
         permissionKeys={[...result.effectivePermissions]}
         locale={locale as 'en' | 'th'}
       />
-    </PageSurface>
+    </ListPage>
   );
 }

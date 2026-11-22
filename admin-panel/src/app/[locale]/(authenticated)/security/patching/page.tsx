@@ -1,9 +1,20 @@
+import Link from 'next/link';
+
 import { readPatchingFindingsPage } from '@/app/actions/securityPatching';
+import { ListPage } from '@/components/patterns/ListPage';
+import { PatchingFooter } from '@/components/security/PatchingFooter';
 import { PatchingPanel } from '@/components/security/PatchingPanel';
+import { PatchingToolbar } from '@/components/security/PatchingToolbar';
 import { getDictionary } from '@/i18n';
+import { buildRoute } from '@/lib/navigation/routes';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 import { hasEffectivePermission } from '@/lib/permission-engine';
-import type { PatchingQueryInput } from '@/lib/security/patching';
+import { patchingSearchParams, type PatchingQueryInput } from '@/lib/security/patching';
+
+/** Fills `{count}` in the sentence; the number is the same SQL count the filter selects. */
+function counted(template: string, count: number): string {
+  return template.replace('{count}', String(count));
+}
 
 /**
  * The patching page: one page of the feed, and the numbers for the whole of it.
@@ -15,6 +26,9 @@ import type { PatchingQueryInput } from '@/lib/security/patching';
  * WHY the paged action and not `readPatchingState`: the overview's read builds the digest, and the
  * digest is about the whole feed — computing it here would put a dozen aggregate queries behind a
  * page that renders none of them.
+ *
+ * WHY the rows, the controls and the arithmetic are three components: the list layout decides where
+ * each of the three sits, so each one supplies its facts and none of them draws a frame of its own.
  */
 export default async function SecurityPatchingPage({
   params,
@@ -29,11 +43,50 @@ export default async function SecurityPatchingPage({
   // missing either key is concealed as a 404 rather than shown an empty page.
   const effective = await authorizeRoutePage('security.patching');
   const [state, dict] = await Promise.all([readPatchingFindingsPage(query), getDictionary(locale)]);
+  const copy = dict.security.patching;
+  // The newest report among the rows shown: the feed's own age, which is what tells a clean table
+  // from a producer that stopped pushing.
+  const newest = state.groups
+    .flatMap((group) => group.findings)
+    .reduce<string | null>(
+      (latest, finding) => (latest === null || finding.lastSeen > latest ? finding.lastSeen : latest),
+      null,
+    );
+  const flipParams = new URLSearchParams(
+    patchingSearchParams({ ...state.page.query, flip: 'waived', page: 1 }),
+  ).toString();
   return (
-    <PatchingPanel
-      state={state}
-      copy={dict.security.patching}
-      canWaive={hasEffectivePermission(effective, 'patching:waive')}
-    />
+    <ListPage
+      // The module shell above renders the title, the description and the trail.
+      ownsHeader={false}
+      // The module shell above renders the trail as well as the title, so the page has none to add.
+      breadcrumbs={[]}
+      title={copy.title}
+      description={copy.subtitle}
+      state={
+        state.waivedReachable > 0
+          ? {
+              tone: 'destructive',
+              title: counted(copy.filters.flipNotice, state.waivedReachable),
+              action: (
+                <Link
+                  className="underline"
+                  href={`${buildRoute(locale, 'security.patching')}?${flipParams}`}
+                >
+                  {copy.filters.flipLink}
+                </Link>
+              ),
+            }
+          : undefined
+      }
+      toolbar={<PatchingToolbar page={state.page} copy={copy} canWaive={hasEffectivePermission(effective, 'patching:waive')} />}
+      footer={<PatchingFooter page={state.page} cards={state.cards} newest={newest} copy={copy} />}
+    >
+      <PatchingPanel
+        state={state}
+        copy={copy}
+        canWaive={hasEffectivePermission(effective, 'patching:waive')}
+      />
+    </ListPage>
   );
 }

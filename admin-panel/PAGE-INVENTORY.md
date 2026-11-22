@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **3 of 59 pages documented.**
+Inventory: **9 of 59 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -40,7 +40,7 @@ Inventory: **3 of 59 pages documented.**
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
 | `/people/teams/:id/overview` | detail | — *to inventory* |
-| `/people/users` | list | — *to inventory* |
+| `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | detail | — *to inventory* |
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | — *to inventory* |
@@ -53,7 +53,7 @@ Inventory: **3 of 59 pages documented.**
 | `/search` | list | — *to inventory* |
 | `/security/blocks` | list | — *to inventory* |
 | `/security/overview` | list | — *to inventory* |
-| `/security/patching` | list | — *to inventory* |
+| `/security/patching` | list | whether a waiver now covers a reachable finding, and the way to those rows · findings by producer with severity, reachability, version, host and waiver state · filter by source, severity, reachability and waiver fit, with sort · how many match against the whole feed, and the feed's four totals · waive one row · waive every unreachable finding · what empty means |
 | `/security/tls` | detail | TLS proxy and certbot status · certificate lineages with expiry and days left · unreadable lineages · queue a renewal with a reason |
 | `/security/waf` | list | — *to inventory* |
 | `/system/about` | settings | — *to inventory* |
@@ -61,7 +61,7 @@ Inventory: **3 of 59 pages documented.**
 | `/system/backup-restore` | settings | — *to inventory* |
 | `/system/docs` | settings | — *to inventory* |
 | `/system/maintenance` | settings | — *to inventory* |
-| `/system/settings` | settings | — *to inventory* |
+| `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
 | `/tasks` | list | — *to inventory* |
 | `/tasks/:id` | detail | — *to inventory* |
 | `/tasks/:id/datasets` | detail | — *to inventory* |
