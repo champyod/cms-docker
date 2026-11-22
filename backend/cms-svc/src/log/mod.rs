@@ -2,7 +2,12 @@
 
 mod civil;
 mod formatter;
+mod handlers;
+mod recent;
 mod record;
+mod service;
+mod sink;
 
 pub use formatter::FormatterSettings;
 pub use record::{Record, RecordError};
+pub use service::{LogError, LogService};

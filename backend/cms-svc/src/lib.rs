@@ -42,4 +42,4 @@ pub use connector::{
     PeerState, ReconnectNotice, Send,
 };
 pub use host::{DuplicateMethod, Host, HostError, Registry};
-pub use log::{FormatterSettings, Record, RecordError};
+pub use log::{FormatterSettings, LogError, LogService, Record, RecordError};
