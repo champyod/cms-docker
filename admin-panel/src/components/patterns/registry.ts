@@ -14,6 +14,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/people/users': 'list',
   '/security/tls': 'detail',
   '/security/patching': 'list',
+  '/security/blocks': 'board',
   '/evaluation/lanes': 'list',
   '/system/settings': 'settings',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.

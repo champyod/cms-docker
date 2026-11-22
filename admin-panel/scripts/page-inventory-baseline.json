@@ -35,7 +35,6 @@
     "/ranking/users",
     "/ranking/users/:key",
     "/search",
-    "/security/blocks",
     "/security/overview",
     "/security/waf",
     "/system/about",

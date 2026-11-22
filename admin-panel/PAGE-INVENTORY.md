@@ -51,7 +51,7 @@ Inventory: **9 of 59 pages documented.**
 | `/ranking/users` | list | — *to inventory* |
 | `/ranking/users/:key` | list | — *to inventory* |
 | `/search` | list | — *to inventory* |
-| `/security/blocks` | list | — *to inventory* |
+| `/security/blocks` | board | captcha settings, thresholds and provider health · banned addresses with their unban, plus the queue-by-address control · permanent exemptions with revoke, beside the grant form · live failure counters, each expandable to the attempts behind it · open lockouts with unlock · what each section means when empty |
 | `/security/overview` | list | — *to inventory* |
 | `/security/patching` | list | whether a waiver now covers a reachable finding, and the way to those rows · findings by producer with severity, reachability, version, host and waiver state · filter by source, severity, reachability and waiver fit, with sort · how many match against the whole feed, and the feed's four totals · waive one row · waive every unreachable finding · what empty means |
 | `/security/tls` | detail | TLS proxy and certbot status · certificate lineages with expiry and days left · unreadable lineages · queue a renewal with a reason |
