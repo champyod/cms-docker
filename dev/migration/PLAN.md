@@ -341,6 +341,12 @@ and the five `compile_*` → replaced by the frozen DDL, because with the schema
 there is nothing left for a DDL compiler to emit. Four are deliberately unported (the two interactive
 prompts, `test_db_connection`, `custom_psycopg2_connection`).
 
+**Confirmed decision (operator, 2026-11-22): the schema gate keeps option 1** — `pg_dump` from the
+`postgres:15` image it already pins, docker on the machine that runs the test, nothing installed on the host.
+Chosen over installing `postgresql-client-15` (a manual step no install or update script performs, and one
+that drifts against the server) and over a catalogue rewrite (same facts, but exact DDL text lost). Already
+in the tree as merged; no code change follows from the answer.
+
 **The schema gate's prerequisite — RESOLVED, and it was worse than a missing tool (2026-11-22, `2461a695`).**
 The gate needed a `pg_dump` matching the fixture's author on `PATH`, this host had none, and it passed only
 because a binary sat in `~/.hermes/cache/scratch` — pruned daily. Chasing that turned up the real defect: the
