@@ -49,7 +49,7 @@ describe('the digest pushes one fact for the flipped set', () => {
     expect(flip).toEqual({
       key: waiverFlipKey(3, 'CVE-2026-7|linux'),
       kind: 'waiver-flip',
-      detail: '3 waived finding(s) reachable now — worst CRITICAL kernel: ksmbd: ksmbd_write error on como-main',
+      detail: '3 waived findings reachable now, worst CRITICAL kernel: ksmbd: ksmbd_write error on como-main',
       since: '2026-11-10T09:00:00.000Z',
     });
     // The unwaived critical is still pushed, and the flip leads: a decision that no longer fits

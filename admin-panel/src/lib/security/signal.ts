@@ -7,6 +7,7 @@ import {
   type PatchingWaiver,
 } from '@/lib/security/patching';
 import type { WaivedReachable } from '@/lib/security/verdict-flip';
+import { countLabel } from '@/lib/format-number';
 
 /**
  * What deserves to reach a human, and how loudly.
@@ -221,7 +222,7 @@ function ageDays(since: string, now: Date): number {
 
 function findingDetail(finding: PatchingFinding): string {
   const title = finding.title === null ? '' : ` (${finding.title})`;
-  return `${finding.source} · ${finding.subject}${title}`;
+  return `${finding.source}, ${finding.subject}${title}`;
 }
 
 function findingLabel(finding: PatchingFinding): string {
@@ -260,7 +261,7 @@ function waiverFlipFact(flips: WaivedReachable): SignalFact | null {
   return {
     key: waiverFlipKey(flips.count, worst?.key ?? null),
     kind: 'waiver-flip',
-    detail: `${String(flips.count)} waived finding(s) reachable now — worst ${named}`,
+    detail: `${countLabel(flips.count, { one: 'waived finding', other: 'waived findings' })} reachable now, worst ${named}`,
     since: worst?.flippedAt ?? null,
   };
 }
@@ -297,7 +298,7 @@ export function buildSecurityDigest(
     triggers.push({
       key: expiredWaiverKey(waiver.id),
       kind: 'waiver-expired',
-      detail: `${waiver.source} waiver ${waiver.match} — review was due ${waiver.reviewBy.slice(0, 10)}`,
+      detail: `${waiver.source} waiver ${waiver.match}: review was due ${waiver.reviewBy.slice(0, 10)}`,
       since: waiver.reviewBy,
     });
   }
@@ -330,7 +331,7 @@ export function buildSecurityDigest(
       detail:
         reading.state === 'stale'
           ? `${reading.channel}: ${reading.detail ?? 'stale'}`
-          : `${reading.channel}: cannot evaluate — ${reading.detail ?? 'no reading'}`,
+          : `${reading.channel}: cannot evaluate, ${reading.detail ?? 'no reading'}`,
       since:
         reading.state === 'stale' && reading.observedAtSeconds !== null
           ? new Date(reading.observedAtSeconds * 1000).toISOString()
@@ -446,7 +447,7 @@ function worstFinding(worst: PatchingFinding | null): SignalLead | null {
         : 'no waiver';
   return {
     label: findingLabel(worst),
-    detail: `${worst.severity ?? 'unrated'} · ${waiver}`,
+    detail: `${worst.severity ?? 'unrated'}, ${waiver}`,
     since: worst.firstSeen,
     ageDays: null,
   };
@@ -471,7 +472,7 @@ function oldestUnowned(
       : [
           {
             label: findingLabel(oldestUnwaived),
-            detail: `${oldestUnwaived.severity ?? 'unrated'} · no waiver · first seen ${oldestUnwaived.firstSeen.slice(0, 10)}`,
+            detail: `${oldestUnwaived.severity ?? 'unrated'}, no waiver, first seen ${oldestUnwaived.firstSeen.slice(0, 10)}`,
             since: oldestUnwaived.firstSeen,
             ageDays: ageDays(oldestUnwaived.firstSeen, now),
           },
@@ -610,5 +611,5 @@ function renderRiderSummary(digest: SecurityDigest): string | null {
   ];
   const named = counts.filter(([count]) => count > 0);
   if (named.length === 0) return null;
-  return named.map(([count, label]) => `${String(count)} ${label}`).join(' · ');
+  return named.map(([count, label]) => `${String(count)} ${label}`).join(', ');
 }

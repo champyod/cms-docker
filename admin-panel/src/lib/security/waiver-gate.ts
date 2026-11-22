@@ -143,12 +143,12 @@ export function parseWaiverExport(value: unknown): WaiverExportParse {
   if (document.version !== WAIVER_EXPORT_VERSION) {
     return {
       ok: false,
-      error: `the export is version ${String(document.version)}, this gate reads ${WAIVER_EXPORT_VERSION} — re-render it`,
+      error: `the export is version ${String(document.version)}, this gate reads ${WAIVER_EXPORT_VERSION}: re-render it`,
     };
   }
   const generatedAt = isoInstant(document.generatedAt);
   if (generatedAt === null) {
-    return { ok: false, error: 'generatedAt is missing or not a date — re-render the export' };
+    return { ok: false, error: 'generatedAt is missing or not a date: re-render the export' };
   }
   if (!Array.isArray(document.waivers)) {
     return { ok: false, error: 'waivers is not an array' };
@@ -247,7 +247,7 @@ const AUDIT_SOURCE: PatchingSource = 'osv';
  */
 export function renderTrivyIgnore(waivers: readonly WaiverRecord[], now: Date): string {
   const lines = [
-    '# GENERATED from the panel\'s security_waivers table — do not edit, do not commit.',
+    '# GENERATED from the panel\'s security_waivers table. Do not edit, do not commit.',
     '# Rendered per CI run by admin-panel/scripts/security-waivers.ts from security/waivers.json.',
     '# Every id below is a live waiver a person signed with a review date; a finding with no',
     '# waiver is not suppressed, and an expired waiver is not written here at all.',
@@ -257,7 +257,7 @@ export function renderTrivyIgnore(waivers: readonly WaiverRecord[], now: Date): 
     // The id has to be on its own line, so the provenance rides in a comment above it.
     const owner = waiver.createdByName ?? `admin #${String(waiver.createdBy)}`;
     lines.push(
-      `# waiver #${String(waiver.id)} · review by ${waiver.reviewBy.slice(0, 10)} · ${owner}: ${waiver.reason}`,
+      `# waiver #${String(waiver.id)}, review by ${waiver.reviewBy.slice(0, 10)}, ${owner}: ${waiver.reason}`,
     );
     lines.push(suppressionId(waiver));
   }
@@ -290,12 +290,12 @@ export function waiverGateFailure(exported: WaiverExport, now: Date): string | n
   if (age > MAX_EXPORT_AGE_DAYS) {
     failures.push(
       `the waiver export was rendered ${String(age)} days ago (${exported.generatedAt.slice(0, 10)}), ` +
-        `older than the ${String(MAX_EXPORT_AGE_DAYS)}-day bound — re-render security/waivers.json`,
+        `older than the ${String(MAX_EXPORT_AGE_DAYS)}-day bound: re-render security/waivers.json`,
     );
   }
   if (age < 0) {
     failures.push(
-      `the waiver export is dated ${exported.generatedAt.slice(0, 10)}, in the future — its clock or its contents are wrong`,
+      `the waiver export is dated ${exported.generatedAt.slice(0, 10)}, in the future: its clock or its contents are wrong`,
     );
   }
 
@@ -303,7 +303,7 @@ export function waiverGateFailure(exported: WaiverExport, now: Date): string | n
   if (expired.length > 0) {
     const rows = expired.map(
       (waiver) =>
-        `  #${String(waiver.id)} ${waiver.source} ${waiver.match} — review by ${waiver.reviewBy.slice(0, 10)}, ` +
+        `  #${String(waiver.id)} ${waiver.source} ${waiver.match}, review by ${waiver.reviewBy.slice(0, 10)}, ` +
         `signed by ${waiver.owner}: ${waiver.reason}`,
     );
     failures.push(

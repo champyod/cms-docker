@@ -84,7 +84,7 @@ export function mapPatchingWaiver(
 export function toWaiverRecord(row: WaiverRow, owner: string | undefined): WaiverRecord {
   if (!isPatchingSource(row.source)) {
     throw new Error(
-      `security_waivers row ${row.id} has source ${JSON.stringify(row.source)}, outside the contract enum — fix the row before exporting`,
+      `security_waivers row ${row.id} has source ${JSON.stringify(row.source)}, outside the contract enum: fix the row before exporting`,
     );
   }
   return {

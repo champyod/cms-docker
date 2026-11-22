@@ -12,7 +12,7 @@ import {
 } from './security-signal-fixture';
 
 /**
- * The digest is the one answer to "what is wrong and how bad" — the card, the channel and the tests
+ * The digest is the one answer to "what is wrong and how bad": the card, the channel and the tests
  * all read it. These cases pin the counts the card shows, which item it names, and the one rule that
  * decides whether a fact is allowed to start a message.
  */
@@ -47,7 +47,7 @@ describe('security digest', () => {
     expect(digest.tone).toBe('act');
   });
 
-  it('pushes the lapsed decision, the unwaived critical and the stale copy — nothing else', () => {
+  it('pushes the lapsed decision, the unwaived critical and the stale copy: nothing else', () => {
     const digest = buildSecurityDigest(
       makeSignalFacts(
         [
@@ -68,7 +68,7 @@ describe('security digest', () => {
       'stale:backup',
     ]);
     // HIGH, the aged MEDIUM and the drifted image are context for a message, never a reason to send
-    // one — see the module comment in lib/security/signal.ts. They are counted, not listed: a rider
+    // one: see the module comment in lib/security/signal.ts. They are counted, not listed: a rider
     // is only ever rendered as a number, so the digest must not walk the feed to enumerate them.
     expect(digest.riderCounts).toEqual({
       unwaivedHigh: 1,

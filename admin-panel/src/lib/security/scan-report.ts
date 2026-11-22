@@ -9,6 +9,8 @@ export const SCAN_CRITICAL_LINES = 5;
 /** Where the message sends a reader who wants the rows: the page that owns them. */
 export const PATCHING_PATH = '/security/patching';
 
+import { countLabel } from '@/lib/format-number';
+
 const SUBJECT_LIMIT = 90;
 const ID_LIMIT = 40;
 const FOOTER_LIMIT = 400;
@@ -123,17 +125,19 @@ function where(facts: ScanRunFacts): string {
 /** L1: what to do, said plainly — a reader who has never seen this must get it in one line. */
 function titleLine(facts: ScanRunFacts): string {
   if (facts.criticals > 0) {
-    const verb = facts.criticals === 1 ? 'needs' : 'need';
-    const noun = facts.criticals === 1 ? 'finding' : 'findings';
-    return `${String(facts.criticals)} CRITICAL ${noun} ${verb} action now · ${where(facts)}`;
+    return `${countLabel(facts.criticals, { one: 'CRITICAL finding', other: 'CRITICAL findings' })} awaiting action, ${where(facts)}`;
   }
   if (facts.counts.high > 0) {
     // Nothing to patch is a different message from work waiting: state which one this is.
+    // The verb agrees with the noun countLabel prints: one finding needs, several need.
+    const one = facts.counts.high === 1;
     const awaiting =
-      facts.counts.highWithFix === 0 ? 'await an upstream fix' : 'need a decision';
-    return `${grouped(facts.counts.high)} HIGH findings ${awaiting} · ${where(facts)}`;
+      facts.counts.highWithFix === 0
+        ? one ? 'awaits an upstream fix' : 'await an upstream fix'
+        : one ? 'needs a decision' : 'need a decision';
+    return `${countLabel(facts.counts.high, { one: 'HIGH finding', other: 'HIGH findings' })} ${awaiting}, ${where(facts)}`;
   }
-  return `Nothing needs action · ${where(facts)}`;
+  return `Nothing needs action, ${where(facts)}`;
 }
 
 /** L2: the total a reader cares about, the delta, and one plain sentence on how urgent it is. */
@@ -142,17 +146,17 @@ function leadLine(facts: ScanRunFacts): string {
     facts.criticals > 0
       ? 'fix these today'
       : facts.counts.high > 0 && facts.counts.highWithFix === 0
-        ? 'no patch exists yet — nothing to apply today'
+        ? 'no patch exists yet: nothing to apply today'
         : facts.counts.high > 0
-          ? `${grouped(facts.counts.highWithFix)} can be patched — patch or accept`
+          ? `${grouped(facts.counts.highWithFix)} can be patched: patch or accept`
           : 'all MEDIUM/LOW or accepted';
-  return `**${grouped(facts.standing)} open** · ${grouped(facts.added)} new · ${urgency}`;
+  return `**${grouped(facts.standing)} open**, ${grouped(facts.added)} new, ${urgency}`;
 }
 
 /** L3: the CVE leads because it is the string an operator pastes into a tracker. */
 function namedLine(row: ScanCriticalRow): string {
   const id = clip(row.key.split('|')[0], ID_LIMIT);
-  return `**${id}** · ${clip(row.subject, SUBJECT_LIMIT)} · ${ageLabel(row.ageDays)}`;
+  return `**${id}**, ${clip(row.subject, SUBJECT_LIMIT)}, ${ageLabel(row.ageDays)}`;
 }
 
 /** L4: grouped by what the reader should do with them, in a fence so the columns line up. */
@@ -164,11 +168,11 @@ function countsBlock(facts: ScanRunFacts): string {
     facts.counts.unrated > 0 ? `unknown ${grouped(facts.counts.unrated)}` : '',
   ]
     .filter((part) => part.length > 0)
-    .join(' · ');
+    .join(', ');
   const acceptedNote = facts.nextReview === null ? 'no re-check date' : `re-check ${facts.nextReview}`;
   const rows: [string, number, string][] = [
     ['act now', facts.criticals, 'CRITICAL'],
-    ['decide', facts.counts.high, `HIGH · ${grouped(facts.counts.highWithFix)} with a fix`],
+    ['decide', facts.counts.high, `HIGH: ${grouped(facts.counts.highWithFix)} with a fix`],
     ['noted', noted, detail],
     ['accepted', facts.waived, acceptedNote],
   ];
@@ -186,8 +190,8 @@ function footerLine(facts: ScanRunFacts): string {
     `${grouped(facts.judged.reachable)} reachable`,
     `${grouped(facts.judged.unreachable)} unreachable`,
     `${grouped(facts.judged.unknown)} unknown`,
-  ].join(' · ');
-  const line = `run ${runTime(facts.runStartedAt)} · ${duration(facts.runStartedAt, facts.lastPushAt)} · ${split} · ${PATCHING_PATH}`;
+  ].join(', ');
+  const line = `run ${runTime(facts.runStartedAt)}, ${duration(facts.runStartedAt, facts.lastPushAt)}, ${split}, ${PATCHING_PATH}`;
   return clip(line, FOOTER_LIMIT);
 }
 

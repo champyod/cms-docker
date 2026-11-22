@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Why a store and not call assertions: the contract is about what a human was told. The facts are
-// counted through the real read path, so the store has to answer what that path asks — aggregates,
+// counted through the real read path, so the store has to answer what that path asks: aggregates,
 // bounded row lists, the waiver table and the ingest ledger.
 
 type Row = Record<string, unknown>;
@@ -300,9 +300,9 @@ describe('the scan announcement is composed by the poller, one message per run',
     await announceFinishedScans(TICK);
 
     const [message] = store.messages;
-    expect(message.title).toBe('1 CRITICAL finding needs action now · box-a');
+    expect(message.title).toBe('1 CRITICAL finding awaiting action, box-a');
     expect(message.body).not.toContain('53867');
-    expect(message.body).toContain('**CVE-2024-0001** · glibc');
+    expect(message.body).toContain('**CVE-2024-0001**, glibc');
     expect(message.body).toContain('re-check 2027-01-31');
   });
 
@@ -337,7 +337,7 @@ describe('the scan announcement is composed by the poller, one message per run',
 
     expect(actionValue(message.body, 'decide')).toBe(pageCount('HIGH'));
     expect(actionValue(message.body, 'decide')).toBe(snapshot.signal.counts.unwaivedHigh);
-    // One of the four HIGH rows is covered, so the message says 3 — the raw count would be 4.
+    // One of the four HIGH rows is covered, so the message says 3: the raw count would be 4.
     expect(actionValue(message.body, 'decide')).toBe(3);
     expect(notedDetail(message.body, 'MEDIUM')).toBe(pageCount('MEDIUM'));
     expect(notedDetail(message.body, 'LOW')).toBe(pageCount('LOW'));
@@ -347,7 +347,7 @@ describe('the scan announcement is composed by the poller, one message per run',
     expect(message.body).toContain(`**${String(unwaived.length)} open**`);
     // One of the two CRITICALs is covered, so the title names the other and not both.
     expect(pageCount('CRITICAL')).toBe(1);
-    expect(message.title).toBe('1 CRITICAL finding needs action now · box-a');
+    expect(message.title).toBe('1 CRITICAL finding awaiting action, box-a');
   });
 
   it('(d) renders a clean run as the short form, with no named rows', async () => {
@@ -360,11 +360,11 @@ describe('the scan announcement is composed by the poller, one message per run',
     await announceFinishedScans(TICK);
 
     const [message] = store.messages;
-    expect(message.title).toBe('Nothing needs action · box-b');
+    expect(message.title).toBe('Nothing needs action, box-b');
     expect(message.color).toBe(SCAN_REPORT_COLOR);
     expect(message.mention).toBe(false);
-    expect(message.body.split('\n')[0]).toBe('**0 open** · 0 new · all MEDIUM/LOW or accepted');
-    // Two levels only: the lead and the counts block — L3 has nothing to name and says nothing.
+    expect(message.body.split('\n')[0]).toBe('**0 open**, 0 new, all MEDIUM/LOW or accepted');
+    // Two levels only: the lead and the counts block: L3 has nothing to name and says nothing.
     expect(message.body.split('\n')[1]).toBe('```');
     expect(message.body).not.toContain('…and');
     expect(actionValue(message.body, 'decide')).toBe(0);
@@ -458,7 +458,7 @@ describe('the scan announcement is composed by the poller, one message per run',
     ]);
   });
 
-  it('says nothing at all when no webhook is configured — the page is the only surface', async () => {
+  it('says nothing at all when no webhook is configured: the page is the only surface', async () => {
     store.seedFinding({ key: 'CVE-2026-0001|openssl', severity: 'HIGH', subject: 'openssl' });
     seedSingleRun();
     store.setWebhook(false);

@@ -59,39 +59,39 @@ describe('the scan announcement layout', () => {
   it('L1 says what to do, in plain words, and turns the bar red', () => {
     const { title, color, mention } = buildScanAnnouncement(facts());
 
-    expect(title).toBe('3 CRITICAL findings need action now · box-a');
+    expect(title).toBe('3 CRITICAL findings awaiting action, box-a');
     expect(color).toBe(SCAN_ALERT_COLOR);
     expect(mention).toBe(true);
   });
 
   it('L2 leads with the open total, then the delta, then how urgent it is', () => {
     expect(buildScanAnnouncement(facts()).body.split('\n')[0]).toBe(
-      '**13,357 open** · 34 new · fix these today',
+      '**13,357 open**, 34 new, fix these today',
     );
   });
 
   it('L3 names a row as CVE, subject and age, and counts the ones it did not name', () => {
     const { body } = buildScanAnnouncement(facts());
 
-    expect(namedRows(body)).toEqual(['**CVE-2023-53867** · libxml2 · 412d']);
+    expect(namedRows(body)).toEqual(['**CVE-2023-53867**, libxml2, 412d']);
     expect(body).toContain('…and 2 more');
   });
 
-  it('L3 keeps the order it was given — reachable first is the read path’s job', () => {
+  it('L3 keeps the order it was given: reachable first is the read path’s job', () => {
     const rows = [
       row({ key: 'CVE-2026-0001|openssl', subject: 'openssl', reachability: 'reachable' }),
       row({ key: 'CVE-2026-0002|glibc', subject: 'glibc', reachability: 'unreachable' }),
     ];
     const { body } = buildScanAnnouncement(facts({ criticals: 2, criticalRows: rows }));
 
-    expect(namedRows(body).map((line) => line.split(' · ')[0])).toEqual(['**CVE-2026-0001**', '**CVE-2026-0002**']);
+    expect(namedRows(body).map((line) => line.split(', ')[0])).toEqual(['**CVE-2026-0001**', '**CVE-2026-0002**']);
   });
 
   it('L4 groups the count by what the reader should do with it', () => {
     expect(tokens(countBlock(buildScanAnnouncement(facts()).body))).toEqual([
       ['act', 'now', '3', 'CRITICAL'],
-      ['decide', '1,415', 'HIGH', '·', '40', 'with', 'a', 'fix'],
-      ['noted', '845', 'MEDIUM', '612', '·', 'LOW', '233'],
+      ['decide', '1,415', 'HIGH:', '40', 'with', 'a', 'fix'],
+      ['noted', '845', 'MEDIUM', '612,', 'LOW', '233'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
   });
@@ -101,15 +101,15 @@ describe('the scan announcement layout', () => {
 
     expect(tokens(countBlock(body))).toEqual([
       ['act', 'now', '3', 'CRITICAL'],
-      ['decide', '1', 'HIGH', '·', '1', 'with', 'a', 'fix'],
-      ['noted', '6', 'MEDIUM', '0', '·', 'LOW', '0', '·', 'unknown', '6'],
+      ['decide', '1', 'HIGH:', '1', 'with', 'a', 'fix'],
+      ['noted', '6', 'MEDIUM', '0,', 'LOW', '0,', 'unknown', '6'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
   });
 
   it('L5 carries the run clock, its duration, the judged split and the page', () => {
     expect(buildScanAnnouncement(facts()).footer).toBe(
-      `run 2026-11-12 03:00 UTC · 4m12s · 900 reachable · 12 unreachable · 6 unknown · ${PATCHING_PATH}`,
+      `run 2026-11-12 03:00 UTC, 4m12s, 900 reachable, 12 unreachable, 6 unknown, ${PATCHING_PATH}`,
     );
   });
 
@@ -125,15 +125,15 @@ describe('the scan announcement layout', () => {
       }),
     );
 
-    expect(title).toBe('Nothing needs action · box-a');
+    expect(title).toBe('Nothing needs action, box-a');
     expect({ color, mention }).toEqual({ color: SCAN_REPORT_COLOR, mention: false });
-    expect(body.split('\n')[0]).toBe('**0 open** · 0 new · all MEDIUM/LOW or accepted');
+    expect(body.split('\n')[0]).toBe('**0 open**, 0 new, all MEDIUM/LOW or accepted');
     expect(body).not.toContain('…and');
     expect(namedRows(body)).toEqual([]);
     expect(tokens(countBlock(body))).toEqual([
       ['act', 'now', '0', 'CRITICAL'],
-      ['decide', '0', 'HIGH', '·', '0', 'with', 'a', 'fix'],
-      ['noted', '0', 'MEDIUM', '0', '·', 'LOW', '0'],
+      ['decide', '0', 'HIGH:', '0', 'with', 'a', 'fix'],
+      ['noted', '0', 'MEDIUM', '0,', 'LOW', '0'],
       ['accepted', '881', 're-check', '2027-01-31'],
     ]);
   });
@@ -145,12 +145,12 @@ describe('the scan announcement layout', () => {
       'all MEDIUM/LOW or accepted',
     );
     expect(buildScanAnnouncement(facts({ criticals: 0, criticalRows: [] })).body).toContain(
-      '40 can be patched — patch or accept',
+      '40 can be patched: patch or accept',
     );
     const noFix = { high: 1_415, highWithFix: 0, medium: 612, low: 233, unrated: 0 };
     expect(
       buildScanAnnouncement(facts({ criticals: 0, counts: noFix, criticalRows: [] })).body,
-    ).toContain('no patch exists yet — nothing to apply today');
+    ).toContain('no patch exists yet: nothing to apply today');
   });
 
   it('names at most SCAN_CRITICAL_LINES rows and stays inside the Discord cap', () => {

@@ -173,8 +173,8 @@ describe('waiver expiry', () => {
 
     expect(failure).not.toBeNull();
     expect(failure).toContain('2 waiver(s) are past their review date');
-    expect(failure).toContain('#4 rootfs CVE-2026-78669 — review by 2026-10-01');
-    expect(failure).toContain('#7 osv GHSA-vfj7-8cjw-p6xm — review by 2026-10-20');
+    expect(failure).toContain('#4 rootfs CVE-2026-78669, review by 2026-10-01');
+    expect(failure).toContain('#7 osv GHSA-vfj7-8cjw-p6xm, review by 2026-10-20');
     expect(failure).toContain('signed by root');
     expect(failure).toContain('end it');
   });
@@ -215,7 +215,7 @@ describe('the suppressions a waiver licenses', () => {
     expect(body).not.toContain('CVE-2026-97031');
     expect(body).not.toContain('GHSA-vfj7-8cjw-p6xm');
     // Provenance per id: whoever renews knows whose decision it was and when it lapses.
-    expect(body).toContain('# waiver #1 · review by 2027-01-31 · root: vendor backport pending');
+    expect(body).toContain('# waiver #1, review by 2027-01-31, root: vendor backport pending');
     expect(body).toContain('GENERATED from the panel');
     expect(body).toContain('do not commit');
   });

@@ -49,7 +49,7 @@ describe('security notification plan', () => {
     expect(plan.body).toContain('review was due 2026-10-02');
   });
 
-  it('stays quiet when the same fact is still the only one — every tick, forever', () => {
+  it('stays quiet when the same fact is still the only one: every tick, forever', () => {
     const digest = lapsedWaiverDigest();
     const first = planNotification(digest, null, NOW);
     expect(first.send).toBe(true);
