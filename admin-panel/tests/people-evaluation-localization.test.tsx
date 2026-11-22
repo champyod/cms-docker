@@ -6,7 +6,7 @@ import { cleanup, render } from '@testing-library/react';
 import en from '@/dictionaries/en.json';
 import th from '@/dictionaries/th.json';
 import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
-import { UserHistoryTab } from '@/components/users/UserHistoryTab';
+import UserHistoryPage from '@/app/[locale]/(authenticated)/people/users/[id]/history/page';
 import { UserProfileTab } from '@/components/users/UserProfileTab';
 import UserProfilePage from '@/app/[locale]/(authenticated)/people/users/[id]/profile/page';
 import { UserTeamsEmpty, UserTeamsTab } from '@/components/users/UserTeamsTab';
@@ -15,7 +15,7 @@ import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { TeamMembersTab } from '@/components/teams/TeamMembersTab';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 import { buildConfirmationCopy } from '@/lib/confirmation-copy';
-import { getUserProfile, getUserSummary } from '@/lib/people-read-models';
+import { getUserHistory, getUserProfile, getUserSummary } from '@/lib/people-read-models';
 import type { UserHistory, UserProfile, UserSummary } from '@/lib/people-read-model-types';
 import type { TeamContest, TeamMember, TeamSummary, UserTeamMembership } from '@/lib/people-read-model-types';
 
@@ -34,7 +34,9 @@ vi.mock('sonner', () => ({ toast: { loading: vi.fn(), success: vi.fn(), error: v
 // Why the page is renderable here: its fact strip is where the profile's labels now live, so the
 // copy is pinned by rendering the page rather than the tab that used to draw the same labels.
 vi.mock('@/lib/server/authorization', () => ({
-  requirePermission: vi.fn(async () => new Set(['user:read'])),
+  // Every key the three record tabs gate on, so the pages under test resolve their descriptor
+  // instead of concealing themselves; each page still asks for its own keys one by one.
+  requirePermission: vi.fn(async () => new Set(['user:read', 'participation:list', 'submission:read', 'team:read'])),
   AuthorizationError: class AuthorizationError extends Error {
     readonly status: 401 | 403;
     constructor(status: 401 | 403) {
@@ -45,6 +47,7 @@ vi.mock('@/lib/server/authorization', () => ({
 }));
 
 vi.mock('@/lib/people-read-models', () => ({
+  getUserHistory: vi.fn(),
   getUserProfile: vi.fn(),
   getUserSummary: vi.fn(),
 }));
@@ -186,8 +189,10 @@ describe('User record tab copy', () => {
     expect(body).toContain(th.users.teamsTab.emptyDescription);
   });
 
-  it('renders Thai section titles, the Account Access heading, and the last-login line', () => {
-    const body = text(<UserHistoryTab history={HISTORY} navigation={th.navigation} copy={th.users} />);
+  it('renders Thai section titles, the account access heading, and the last-login line', async () => {
+    vi.mocked(getUserHistory).mockResolvedValue(HISTORY);
+
+    const body = text(await UserHistoryPage({ params: Promise.resolve({ locale: 'th', id: '17' }) }));
 
     expect(body).toContain(th.users.history.accountAccess);
     expect(body).toContain('2026-01-15T08:30:00Z');

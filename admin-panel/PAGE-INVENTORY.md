@@ -42,7 +42,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/teams/:id/overview` | detail | the team's leader and member count · the code, name and registerable flag, each editable in place · save, and delete with confirmation · read-only when team:update is absent |
 | `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
 | `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
-| `/people/users/:id/history` | detail | — *to inventory* |
+| `/people/users/:id/history` | board | when the account last signed in · the contests it appears in, its participations, its teams, its submissions and its recent contest activity, each a row set with its own meaning when empty |
 | `/people/users/:id/profile` | detail | the name, email, timezone, languages and teams the header does not already state · the saved password, masked until an operator who may reveal it asks |
 | `/people/users/:id/teams` | list | the team each participation was made under, row by row, or that no participation has a team yet · how many memberships there are (no filter and no total: the read returns every one in a single pass) · the team each row links to |
 | `/ranking` | list | — *to inventory* |
