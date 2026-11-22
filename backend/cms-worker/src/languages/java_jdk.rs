@@ -45,8 +45,7 @@ impl Toolchain for JavaJdk {
     ) -> Vec<Vec<String>> {
         let mut compile = words(&[COMPILER]);
         compile.extend(sources.iter().cloned());
-        // The name is quoted because /bin/sh reads this string, not an argv: a
-        // filename with a space would otherwise reach jar as two words.
+        // Quoted because /bin/sh reads this string, not an argv: a space would split it.
         let script = format!("jar cf {} *.class", escape(Cow::Borrowed(executable)));
         vec![compile, words(&[SHELL, "-c", &script])]
     }
