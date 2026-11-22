@@ -1,7 +1,4 @@
-//! The submission result's state machine, walked as sequences rather than pinned as shapes.
-//!
-//! Every step names the status before and after, so an off-by-one in the ordering
-//! shows as a wrong state rather than as a field that happens to hold no value.
+//! The result's state machine walked as sequences: every step names the status before and after.
 
 use cms_db::{
     max_resources, DatasetId, Evaluation, Submission, SubmissionId, SubmissionRecord,

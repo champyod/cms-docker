@@ -1,10 +1,4 @@
-//! Activating and deleting a dataset, and what each of them leaves behind.
-//!
-//! Activation moves `tasks.active_dataset_id` and nothing else: the results filed
-//! under the old dataset keep pointing at it, and only a submission's *next*
-//! `get_result` sees the new one (`dataset.py:283-295`). Deletion is the other
-//! direction — the composite key cascades the dataset's results away and sets the
-//! task's pointer to NULL (`task.py:57-67`, `submission.py:311-315`).
+//! Activating a dataset moves the pointer and leaves the old results alone (`dataset.py:283-295`).
 
 use sqlx::postgres::PgConnection;
 
@@ -19,10 +13,7 @@ pub const ACTIVATE_DATASET: &str = "UPDATE tasks SET active_dataset_id = $2 WHER
 /// Removes a dataset, bound to its own id: the results filed under it cascade away.
 pub const DELETE_DATASET: &str = "DELETE FROM datasets WHERE id = $1";
 
-/// The submissions of a task with no result for a dataset, bound as the task's id then the dataset's id.
-///
-/// The outer join says it more plainly than a set difference: a submission is
-/// listed exactly when no `submission_results` row pairs it with that dataset.
+/// The submissions of a task with no `submission_results` row for a dataset, bound to the task's id then the dataset's id.
 pub const SUBMISSIONS_WITHOUT_RESULT: &str = "\
     SELECT s.id
     FROM submissions AS s
@@ -47,10 +38,7 @@ impl Task {
         Ok(dataset_by_id(connection, dataset).await?)
     }
 
-    /// The testcases of the active dataset, the set the reference reads as `Dataset.testcases`.
-    ///
-    /// Empty when no dataset is active: `task.py:239-245` keeps the pointer the only
-    /// entry, so there is no set to fall back to.
+    /// The testcases of the active dataset, the set the reference reads as `Dataset.testcases`, empty when none is active.
     ///
     /// # Errors
     ///
@@ -117,10 +105,7 @@ pub async fn activate_dataset(
     Ok(())
 }
 
-/// The submissions of `task_id` with no result for `dataset`: what activation re-queues.
-///
-/// `submission_to_compile(None)` is true (`esoperations.py:87-95`), and a dataset
-/// marked `autojudge` is judged beside the active one, so this list is one dataset's.
+/// The submissions of `task_id` with no result for `dataset`: what activation re-queues, since `submission_to_compile(None)` is true (`esoperations.py:87-95`).
 ///
 /// # Errors
 ///

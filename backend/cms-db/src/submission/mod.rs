@@ -1,8 +1,4 @@
-//! The `submissions` row, the token it may carry, and the result it is judged into.
-//!
-//! `src/cms/db/submission.py:45-208`: a submission is one contestant's attempt at one
-//! task, it carries at most one token, and its results are keyed by (submission,
-//! dataset) so a rejudge on a new dataset adds a row rather than moving one.
+//! The `submissions` row: `src/cms/db/submission.py:45-208`, its at-most-one token, and its per-dataset results.
 
 use sqlx::postgres::PgConnection;
 
@@ -12,13 +8,15 @@ use crate::task::{Task, TaskError};
 
 mod evaluation;
 mod result;
+mod status;
 mod token;
 
 pub use evaluation::{
     max_resources, Evaluation, DELETE_EVALUATIONS, DELETE_EXECUTABLES, EVALUATION,
     EVALUATIONS_BY_RESULT, EVALUATION_BY_TESTCASE,
 };
-pub use result::{result_by_id, SubmissionResult, SubmissionStatus};
+pub use result::{result_by_id, SubmissionResult};
+pub use status::SubmissionStatus;
 pub use token::{
     accept_token, token_of, Token, TokenBudget, TokenRefusal, INSERT_TOKEN, TOKEN,
     TOKEN_BY_SUBMISSION, TOKEN_HISTORY,
@@ -40,10 +38,7 @@ pub const SUBMISSION: Declaration = Declaration {
     relationships: &["participation", "task", "files", "token", "results"],
 };
 
-/// The columns one `submissions` row is read with, bound to its own id as `$1`.
-///
-/// The six judging columns are the ones [`crate::SUBMISSION_BY_ID`] already projects,
-/// so both queries name them and both map through the same field order.
+/// The columns one `submissions` row is read with, naming the six [`crate::SUBMISSION_BY_ID`] already projects.
 pub const SUBMISSION_JUDGING_BY_ID: &str = "\
     SELECT s.id, s.opaque_id, s.task_id, s.participation_id, s.timestamp,
            s.language, s.comment, s.official
@@ -53,8 +48,7 @@ pub const SUBMISSION_JUDGING_BY_ID: &str = "\
 /// One submission: the judging columns, the opaque handle, and the panel's comment.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Submission {
-    /// `id`, `task_id`, `participation_id`, `timestamp`, `language` and `official`,
-    /// read by the mapping the judging reads already use.
+    /// `id`, `task_id`, `participation_id`, `timestamp`, `language` and `official`, read by the mapping the judging reads use.
     pub record: SubmissionRecord,
     /// `submissions.opaque_id`, unique within the participation that sent it.
     pub opaque_id: i64,
@@ -120,10 +114,7 @@ impl Submission {
         Ok(self.token(connection).await?.is_some())
     }
 
-    /// This submission's result on `dataset`, or on the task's active one when absent.
-    ///
-    /// A dataset from another task is refused here rather than read as a mismatch
-    /// the composite key would have refused (`submission.py:150-158`).
+    /// This submission's result on `dataset` or the active one, refusing a dataset of another task (`submission.py:150-158`).
     ///
     /// # Errors
     ///
@@ -153,11 +144,7 @@ impl Submission {
         Ok(result_by_id(connection, self.record.id, dataset_id).await?)
     }
 
-    /// The result on `dataset`, or a fresh one that reads as still compiling.
-    ///
-    /// The reference returns an unsaved row for the pair (`submission.py:160-180`) and
-    /// lets the caller write it; this does the same, so a rejudge is an upsert of what
-    /// comes back rather than a second read after an insert nobody made.
+    /// The result on `dataset`, or the unsaved row the reference hands back (`submission.py:160-180`), which reads as still compiling.
     ///
     /// # Errors
     ///

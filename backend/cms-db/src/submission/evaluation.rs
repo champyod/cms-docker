@@ -1,7 +1,4 @@
-//! The `evaluations` row one testcase run leaves, and the rows an invalidation removes.
-//!
-//! `submission.py:603-615,697-799`: one evaluation per (submission, dataset, testcase),
-//! and clearing one testcase's evaluation clears the outcome that described the set.
+//! The `evaluations` row one testcase run leaves: `submission.py:603-615,697-799`.
 
 use sqlx::postgres::PgConnection;
 
@@ -45,10 +42,7 @@ pub const EVALUATIONS_BY_RESULT: &str = "\
     WHERE submission_id = $1 AND dataset_id = $2
     ORDER BY testcase_id";
 
-/// The columns the one evaluation on a testcase is read with, bound as `$1`, `$2`, `$3`.
-///
-/// The unique constraint on the triple is what lets this be a read for "the"
-/// evaluation rather than a list the caller has to narrow.
+/// The columns the one evaluation on a testcase is read with: the unique triple is what makes it one row rather than a list.
 pub const EVALUATION_BY_TESTCASE: &str = "\
     SELECT id, submission_id, dataset_id, testcase_id, outcome, text, admin_text,
            execution_time, execution_wall_clock_time, execution_memory,
@@ -56,11 +50,7 @@ pub const EVALUATION_BY_TESTCASE: &str = "\
     FROM evaluations
     WHERE submission_id = $1 AND dataset_id = $2 AND testcase_id = $3";
 
-/// Removes one result's evaluations, or only the one on `$3` when it is not NULL.
-///
-/// One statement carries both cases because the reference's `invalidate_evaluation`
-/// does: the outcome and the try count are cleared either way, so two statements
-/// would be two chances to clear only one of them.
+/// Removes one result's evaluations, or only the one on `$3`, since the outcome and try count are cleared either way (`:609-615`).
 pub const DELETE_EVALUATIONS: &str = "\
     DELETE FROM evaluations
     WHERE submission_id = $1 AND dataset_id = $2
@@ -127,10 +117,7 @@ impl SubmissionResult {
             .await?)
     }
 
-    /// The largest time and memory any testcase used, absent when nothing was measured.
-    ///
-    /// Only an evaluated result reports resources: before that the evaluations are a
-    /// partial set, and its maximum would be a number the contest did not run.
+    /// The largest time and memory any testcase used: before evaluation the set is partial, and its maximum is not a number the contest ran.
     ///
     /// # Errors
     ///

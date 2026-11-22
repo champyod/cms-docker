@@ -1,7 +1,4 @@
-//! The `tokens` row, and the two refusals `accept_token` makes before writing one.
-//!
-//! `tokening.py:337-382`: a play is a row, the history is read back from the rows, and
-//! the quota is consulted before the submission's own token is looked at.
+//! The `tokens` row: `tokening.py:337-382`, where a play is a row and the quota is consulted before the submission's token.
 
 use chrono::NaiveDateTime;
 use sqlx::postgres::PgConnection;
@@ -22,10 +19,7 @@ pub const TOKEN: Declaration = Declaration {
     relationships: &["submission"],
 };
 
-/// Every play of one participation up to a timestamp, with the task it was played on.
-///
-/// The history is what the balance is rebuilt from, so it is read for the whole
-/// contest at once: the same rows give the contest's history and each task's.
+/// Every play of one participation up to a timestamp: one read gives the contest's history and each task's.
 pub const TOKEN_HISTORY: &str = "\
     SELECT t.timestamp, s.task_id
     FROM tokens AS t
@@ -106,11 +100,7 @@ impl TokenBudget {
     }
 }
 
-/// Plays a token on `submission`, or refuses with the reason the reference gives.
-///
-/// The quota is consulted first, so a spent balance reports no tokens rather than a
-/// repeated play (`tokening.py:362-377`). Check and insert are not one statement, as
-/// in the reference: two simultaneous plays can both pass the check.
+/// Plays a token on `submission`, consulting the quota first (`tokening.py:362-377`); check and insert are not one statement, as there.
 ///
 /// # Errors
 ///

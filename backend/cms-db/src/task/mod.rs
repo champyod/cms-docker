@@ -1,7 +1,4 @@
-//! The `tasks` row: what it declares, what it holds, and the dataset it judges with.
-//!
-//! `src/cms/db/task.py:52-301` — the `Task` model, its token parameters, and the
-//! fallback that reads a task's allowed languages off its single contest.
+//! The `tasks` row: `src/cms/db/task.py:52-301`, with its token columns and language fallback.
 
 use sqlx::postgres::PgConnection;
 
@@ -11,6 +8,7 @@ use crate::interval::Interval;
 use crate::reads::DatasetId;
 
 mod dataset;
+mod quota;
 mod settings;
 mod token;
 
@@ -18,8 +16,9 @@ pub use dataset::{
     activate_dataset, dataset_by_id, delete_dataset, unjudged_submissions, ACTIVATE_DATASET,
     DELETE_DATASET, SUBMISSIONS_WITHOUT_RESULT,
 };
+pub use quota::{merge, Playable, Tokens};
 pub use settings::{FeedbackLevel, ScoreMode};
-pub use token::{merge, Playable, TokenMode, TokenRules, Tokens};
+pub use token::{TokenMode, TokenRules};
 
 /// The `tasks` table (`src/cms/db/task.py:56-283`).
 pub const TASK: Declaration = Declaration {
@@ -123,11 +122,7 @@ impl Task {
         row.map(Task::try_from).transpose()
     }
 
-    /// The languages a contest may use, given the contests this task is offered in.
-    ///
-    /// A task offered in more than one contest has no single fallback
-    /// (`task.py:294-301`), and the contest rows belong to another lane, so the
-    /// caller supplies them rather than this reading a relationship it cannot see.
+    /// The languages a contest may use: the task's own or its only contest's, since a shared task has no fallback (`task.py:294-301`).
     #[must_use]
     pub fn get_allowed_languages(&self, contests: &[Vec<String>]) -> Option<Vec<String>> {
         if let Some(languages) = &self.allowed_languages {
