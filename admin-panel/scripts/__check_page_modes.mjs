@@ -8,7 +8,7 @@
  *
  * Usage: bun scripts/__check_page_modes.mjs [--root <dir>]
  */
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 // Overridable so a negative control can point at a fixture tree.
@@ -31,6 +31,33 @@ for (const mode of MODES) {
   for (const selector of mode.selectors) {
     if (!CSS.includes(selector)) problems.push(`${mode.name}: no rule for \`${selector}\``);
   }
+}
+
+/**
+ * A mode that exists only in the stylesheet is a mode nobody can reach.
+ *
+ * This is the defect the gate was blind to: `.high-contrast` was written, measured and shipped,
+ * and no control ever applied the class, so the palette was decoration. Each mode therefore names
+ * the code that must apply it, and that code is read rather than assumed.
+ */
+function sourceText(dir, out = '') {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) out += sourceText(full);
+    else if (/\.(ts|tsx)$/.test(entry)) out += readFileSync(full, 'utf8');
+  }
+  return out;
+}
+
+const SOURCE = sourceText(join(ROOT, 'src'));
+
+const REACHABLE = [
+  { mode: 'high contrast', token: "'high-contrast'", applies: 'a control or hook toggles the class' },
+  { mode: 'density', token: 'density-compact', applies: 'a control toggles the density class' },
+];
+
+for (const { mode, token, applies } of REACHABLE) {
+  if (!SOURCE.includes(token)) problems.push(`${mode}: nothing in src/ applies it (${applies})`);
 }
 
 // Row height belongs to one constant: two lists that pick their own are already two rhythms.

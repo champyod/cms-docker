@@ -3,6 +3,18 @@ export const THEME_COOKIE_NAME = 'cms-theme';
 export const THEME_COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 export const THEME_CHANGE_EVENT = 'cms-theme-change';
 
+export const CONTRAST_STORAGE_KEY = 'cms-contrast';
+export const CONTRAST_COOKIE_NAME = 'cms-contrast';
+export const CONTRAST_CHANGE_EVENT = 'cms-contrast-change';
+
+/**
+ * Contrast is a separate axis from light/dark, not a fourth theme.
+ *
+ * The palette already defines `.high-contrast` and `.dark.high-contrast`, so a person who needs
+ * more contrast should not have to give up their light or dark choice to get it.
+ */
+export type ContrastPreference = 'normal' | 'high';
+
 /** What the person chose. `system` is a real choice, not the absence of one. */
 export type ThemePreference = 'system' | 'light' | 'dark';
 /** What is painted; `system` always resolves to one of these. */
@@ -72,6 +84,37 @@ export function persistTheme(preference: ThemePreference): void {
   document.cookie = `${THEME_COOKIE_NAME}=${preference}; path=/; max-age=${THEME_COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
 }
 
+export function applyContrast(preference: ContrastPreference): void {
+  if (typeof document === 'undefined') return;
+  const root = document.documentElement;
+  root.classList.toggle('high-contrast', preference === 'high');
+  root.dataset.contrast = preference;
+  document.dispatchEvent(new Event(CONTRAST_CHANGE_EVENT));
+}
+
+export function persistContrast(preference: ContrastPreference): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CONTRAST_STORAGE_KEY, preference);
+  } catch {
+    // Non-critical mirror; cookie below remains the durable store.
+  }
+  document.cookie = `${CONTRAST_COOKIE_NAME}=${preference}; path=/; max-age=${THEME_COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
+}
+
+export function subscribeToContrast(onChange: () => void): () => void {
+  if (typeof document === 'undefined') return () => undefined;
+  document.addEventListener(CONTRAST_CHANGE_EVENT, onChange);
+  return () => document.removeEventListener(CONTRAST_CHANGE_EVENT, onChange);
+}
+
+export function getContrastPreference(): ContrastPreference {
+  if (typeof document === 'undefined') return 'normal';
+  const fromDom: unknown = document.documentElement.dataset.contrast;
+  if (fromDom === 'high' || fromDom === 'normal') return fromDom;
+  return 'normal';
+}
+
 export function subscribeToTheme(onChange: () => void): () => void {
   if (typeof document === 'undefined') return () => undefined;
   document.addEventListener(THEME_CHANGE_EVENT, onChange);
@@ -110,5 +153,10 @@ export const NO_FLASH_THEME_SCRIPT = [
   "var d=(p==='dark')||(p==='system'&&window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches);",
   "var c=document.documentElement.classList;c.remove('light','dark');c.add(d?'dark':'light');",
   'document.documentElement.dataset.themePreference=p;',
+  `var x=null;try{var cm=document.cookie.match(/(?:^|;\\\\s*)${CONTRAST_COOKIE_NAME}=(normal|high)(?:;|$)/);x=cm?cm[1]:null}catch(e){}`,
+  `if(!x){try{x=window.localStorage.getItem('${CONTRAST_STORAGE_KEY}')}catch(e){}}`,
+  "if(x!=='high'){x='normal'}",
+  "document.documentElement.classList.toggle('high-contrast',x==='high');",
+  'document.documentElement.dataset.contrast=x;',
   '}catch(e){}})();',
 ].join('');

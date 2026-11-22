@@ -9,6 +9,7 @@ import { useAppRouter } from '@/hooks/useAppRouter';
 import { buildRoute } from '@/lib/navigation/routes';
 import { localeFromPathname } from '@/lib/navigation/breadcrumbs';
 import { useLiveNotifications } from '@/lib/live/notifications';
+import { ContrastToggle } from './ContrastToggle';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from './NotificationBell';
 import { Button } from '@/components/core/Button';
@@ -94,6 +95,7 @@ export const Header: React.FC<{ className?: string; username?: string; permissio
           ⌘K
         </kbd>
       </button>
+      <ContrastToggle />
       <ThemeToggle />
       <HeaderNotifications permissionKeys={permissionKeys} />
       <div className="flex items-center gap-3 pl-4 border-l border-border">

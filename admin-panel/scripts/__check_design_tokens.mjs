@@ -31,6 +31,16 @@ function block(selectorRegex) {
 
 const light = block(/^:root,\s*\n\.light\s*\{/m);
 const dark = block(/^\.dark\s*\{/m);
+// High contrast is an override layer, so a mode is its base block plus the overrides on top. It is
+// measured like any other mode: a palette nobody measures is a palette nobody can claim.
+const highContrast = { ...light, ...block(/^\.high-contrast\s*\{/m) };
+const darkHighContrast = { ...dark, ...block(/^\.dark\.high-contrast\s*\{/m) };
+const MODES = [
+  ['light', light],
+  ['dark', dark],
+  ['high-contrast', highContrast],
+  ['dark high-contrast', darkHighContrast],
+];
 
 /** sRGB relative luminance for #rgb/#rrggbb; oklch() is not accepted here by design. */
 function luminance(value) {
@@ -90,7 +100,7 @@ const RADIUS_ALLOWED = new Set(['0px', '2px', '4px', '9999px']);
 const problems = [];
 const lines = [];
 
-for (const [mode, tokens] of [['light', light], ['dark', dark]]) {
+for (const [mode, tokens] of MODES) {
   for (const name of REQUIRED) {
     if (!(name in tokens)) problems.push(`${mode}: token --${name} is missing`);
   }
@@ -109,7 +119,7 @@ for (const [mode, tokens] of [['light', light], ['dark', dark]]) {
 }
 
 for (const [name, expected] of Object.entries(TYPE_CHAIN)) {
-  for (const [mode, tokens] of [['light', light], ['dark', dark]]) {
+  for (const [mode, tokens] of MODES) {
     const value = tokens[name];
     if (!value) continue;
     const px = Number.parseFloat(value);
