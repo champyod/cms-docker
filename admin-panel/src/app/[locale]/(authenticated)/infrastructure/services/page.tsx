@@ -105,7 +105,6 @@ export default async function InfrastructureServicesPage({
     <BoardPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      breadcrumbs={[]}
       title={dict.navigation.infrastructure.services.label}
       description={dict.navigation.infrastructure.services.description}
       state={problems.length > 0 ? <RegistryProblems problems={problems} copy={copy} /> : undefined}

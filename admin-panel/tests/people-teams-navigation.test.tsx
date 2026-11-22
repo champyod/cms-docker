@@ -37,7 +37,6 @@ function renderList(permissionKeys: readonly string[]) {
         permissionKeys={permissionKeys}
         navigation={en.navigation}
         copy={en.teams}
-        docsLinkLabel={en.docs.viewDocumentation}
       />
     </DictionaryProvider>,
   );

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { ListPage } from '@/components/patterns/ListPage';
 import { TeamList } from '@/components/teams/TeamList';
+import { TeamListHeader } from '@/components/teams/TeamListHeader';
 import { LiveRefresh } from '@/lib/live/live-refresh';
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
@@ -56,14 +57,25 @@ export default async function PeopleTeamsPage({ params, searchParams }: {
       breadcrumbs={listBreadcrumbs(locale, 'people', 'people.teams', dict)}
       title={teamsLabel}
       description={dict.teams.subtitle}
-      actions={<LiveRefresh url="/api/teams/stream" />}
+      actions={
+        <>
+          {/* Renders nothing: the stream keeps the rows current, the header carries the actions. */}
+          <LiveRefresh url="/api/teams/stream" />
+          <TeamListHeader
+            locale={locale}
+            permissionKeys={[...effectivePermissions]}
+            navigation={dict.navigation}
+            copy={dict.teams}
+            docsLinkLabel={dict.docs.viewDocumentation}
+          />
+        </>
+      }
     >
       <TeamList
         initialTeams={teams}
         permissionKeys={[...effectivePermissions]}
         navigation={dict.navigation}
         copy={dict.teams}
-        docsLinkLabel={dict.docs.viewDocumentation}
         initialSort={sort}
       />
     </ListPage>

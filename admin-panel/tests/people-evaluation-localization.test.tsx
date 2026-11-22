@@ -151,7 +151,13 @@ describe('docs affordance label', () => {
     const renderHeader = (dict: typeof en): string | null => {
       const { container } = render(
         <DictionaryProvider dict={dict}>
-          <TeamListHeader locale="en" canCreate onCreate={vi.fn()} copy={dict.teams} docsLinkLabel={dict.docs.viewDocumentation} />
+          <TeamListHeader
+            locale="en"
+            permissionKeys={['team:create']}
+            navigation={dict.navigation}
+            copy={dict.teams}
+            docsLinkLabel={dict.docs.viewDocumentation}
+          />
         </DictionaryProvider>,
       );
       return container.querySelector('a[title]')?.getAttribute('title') ?? null;
@@ -168,7 +174,6 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read', 'team:update']}
-        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,
@@ -184,7 +189,6 @@ describe('Team record tab copy', () => {
       <TeamOverviewTab
         team={TEAM}
         permissionKeys={['team:read']}
-        navigation={th.navigation}
         copy={th.teams}
         locale="th"
       />,

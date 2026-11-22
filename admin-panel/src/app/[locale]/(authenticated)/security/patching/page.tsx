@@ -60,7 +60,6 @@ export default async function SecurityPatchingPage({
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
       // The module shell above renders the trail as well as the title, so the page has none to add.
-      breadcrumbs={[]}
       title={copy.title}
       description={copy.subtitle}
       state={

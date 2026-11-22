@@ -6,7 +6,7 @@ import type { BreadcrumbItem } from '@/lib/navigation/types';
 import { cn } from '@/lib/utils';
 
 export interface PageSurfaceProps {
-  readonly breadcrumbs: readonly BreadcrumbItem[];
+  readonly breadcrumbs?: readonly BreadcrumbItem[];
   readonly title: ReactNode;
   readonly description?: ReactNode;
   readonly actions?: ReactNode;
@@ -22,7 +22,7 @@ export interface PageSurfaceProps {
 }
 
 export function PageSurface({
-  breadcrumbs,
+  breadcrumbs = [],
   title,
   description,
   actions,

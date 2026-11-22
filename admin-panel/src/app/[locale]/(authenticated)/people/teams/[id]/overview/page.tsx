@@ -6,6 +6,8 @@ import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
 import type { RouteId } from '@/lib/navigation/types';
 import { getTeamSummary } from '@/lib/people-read-models';
 import { parseRecordId, readRecordOrNotFound } from '@/lib/queries/record-access';
+import { DetailPage } from '@/components/patterns/DetailPage';
+import { leaderName } from '@/components/teams/teamColumns';
 import { TeamOverviewTab } from '@/components/teams/TeamOverviewTab';
 
 // Why: the reader enforces the same keys, but the page must resolve the exact
@@ -31,13 +33,24 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
   const effective = await authorizeTeamTab('people.team-tabs.overview');
   const dictionary = await getDictionary(locale);
   const summary = await readRecordOrNotFound(() => getTeamSummary(id));
+  const copy = dictionary.teams.overview;
   return (
-    <TeamOverviewTab
-      team={summary}
-      permissionKeys={[...effective]}
-      navigation={dictionary.navigation}
-      copy={dictionary.teams}
-      locale={locale as 'en' | 'th'}
-    />
+    <DetailPage
+      // The record shell above renders the team's name, its trail and its tabs. This tab adds the
+      // two values the edit form does not show, then the three it does.
+      ownsHeader={false}
+      title={summary.name ?? summary.code ?? `#${summary.id}`}
+      facts={[
+        { term: copy.leader, value: leaderName(summary) },
+        { term: copy.members, value: String(summary.participationCount) },
+      ]}
+    >
+      <TeamOverviewTab
+        team={summary}
+        permissionKeys={[...effective]}
+        copy={dictionary.teams}
+        locale={locale as 'en' | 'th'}
+      />
+    </DetailPage>
   );
 }

@@ -32,8 +32,8 @@ export function useTeamCapabilities(permissionKeys: readonly string[]): TeamCapa
   };
 }
 
-// Why the dialog state is its own hook: the create and edit forms are the same
-// dialog, so the row action and the header button open one shared surface.
+// Why the dialog state is its own hook: the row's edit action and the modal it opens are one
+// surface, so the state lives beside the capability and delete hooks the table already needs.
 export function useTeamDialogs(): TeamDialogs {
   const [isOpen, setIsOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<TeamSummary | null>(null);

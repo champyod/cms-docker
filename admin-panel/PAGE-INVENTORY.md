@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **9 of 59 pages documented.**
+Inventory: **16 of 58 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -14,7 +14,7 @@ Inventory: **9 of 59 pages documented.**
 | `/administration/admins` | list | admins with id, username, name, last sign-in, the groups and override count each holds, and enabled state · sort · per-row edit, delete and enable toggle · create · what empty means |
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
-| `/contests` | list | state of the contest service · contests with state, window and age · count against total · filter · per-row actions · create |
+| `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
 | `/contests/:id` | detail | contest identity and state · window and rule facts · participants and tasks it owns · actions · change history |
 | `/contests/:id/communications` | detail | — *to inventory* |
 | `/contests/:id/countdown` | detail | — *to inventory* |
@@ -35,13 +35,13 @@ Inventory: **9 of 59 pages documented.**
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
-| `/people/teams` | list | teams with member count and state · count against total · sort · per-row actions · create · live refresh |
+| `/people/teams` | list | teams with id, code, name, registerable flag, member count and organization · sort · per-row edit and delete · create · live refresh · what empty means. No filter and no total: the read returns every team in one pass, so there is no narrower set and nothing left out to count against |
 | `/people/teams/:id` | detail | — *to inventory* |
 | `/people/teams/:id/contests` | detail | — *to inventory* |
 | `/people/teams/:id/members` | detail | — *to inventory* |
-| `/people/teams/:id/overview` | detail | — *to inventory* |
+| `/people/teams/:id/overview` | detail | the team's leader and member count · the code, name and registerable flag, each editable in place · save, and delete with confirmation · read-only when team:update is absent |
 | `/people/users` | list | users with name, username, team, status and participations · count against total · search · sort · per-row edit and delete · create, bulk add and bulk edit |
-| `/people/users/:id` | detail | — *to inventory* |
+| `/people/users/:id` | redirect | forwards to the record's default tab; it renders no surface of its own |
 | `/people/users/:id/history` | detail | — *to inventory* |
 | `/people/users/:id/profile` | detail | — *to inventory* |
 | `/people/users/:id/teams` | detail | — *to inventory* |
@@ -62,7 +62,7 @@ Inventory: **9 of 59 pages documented.**
 | `/system/docs` | settings | — *to inventory* |
 | `/system/maintenance` | settings | — *to inventory* |
 | `/system/settings` | settings | whether a restart is pending · the environment group and the monitor group, each with who it reaches · per-section save, with and without restart · the monitor targets and their state |
-| `/tasks` | list | — *to inventory* |
+| `/tasks` | list | tasks with id, name, title, the contests they belong to, resources and submission count · filter, with sort · how many match against the whole set, paged · per-row edit and delete · assign and unassign the checked rows, edit their limits · create · what empty means |
 | `/tasks/:id` | detail | — *to inventory* |
 | `/tasks/:id/datasets` | detail | — *to inventory* |
 | `/tasks/:id/files` | detail | — *to inventory* |

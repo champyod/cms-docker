@@ -10,7 +10,6 @@ export default async function SecurityTlsPage(): Promise<React.JSX.Element> {
   return (
     <DetailPage
       ownsHeader={false}
-      breadcrumbs={[]}
       title="TLS"
       facts={[
         { term: 'TLS proxy', value: state.proxyStatus ?? 'not running' },

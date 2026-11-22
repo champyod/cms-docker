@@ -157,7 +157,7 @@ describe('the task modal tabs push the form limits to contests', () => {
 
 describe('the list bulk bars open the same dialog on the checked rows', () => {
   it('keeps the Edit limits action hidden until a row is checked, then preselects it', async () => {
-    render(withDictionary(<TaskList initialTasks={[TASK]} totalPages={1} currentPage={1} permissionKeys={['task:update']} />));
+    render(withDictionary(<TaskList initialTasks={[TASK]} permissionKeys={['task:update']} />));
 
     expect(screen.queryByRole('button', { name: en.limits.apply.editButton })).toBeNull();
 
@@ -176,7 +176,7 @@ describe('the list bulk bars open the same dialog on the checked rows', () => {
     render(
       withDictionary(
         <DeployContestProvider>
-          <ContestList initialContests={[CONTEST]} totalPages={1} permissionKeys={['contest:update']} />
+          <ContestList initialContests={[CONTEST]} permissionKeys={['contest:update']} />
         </DeployContestProvider>,
       ),
     );

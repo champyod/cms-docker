@@ -9,9 +9,9 @@ import { EmptyState } from '@/components/core/EmptyState';
 import { ResponsiveTable } from '@/components/core/ResponsiveTable';
 import { ContestModal } from './ContestModal';
 import { DeployConfirmModal } from './DeployConfirmModal';
-import { ContestListHeader } from './contest-list/ContestListHeader';
 import { ContestRowActions, buildContestColumns, getContestRowClassName, getContestRowProps, type ContestRowData } from './contest-list/ContestTableRows';
 import { ContestBulkEditDialog } from './contest-list/ContestBulkEditDialog';
+import { useRegisterContestListRefresh } from './contest-list/useContestListRefresh';
 import { useContestListActions } from './contest-list/useContestListActions';
 import { Button } from '@/components/core/Button';
 import { BulkActionBar } from '@/components/core/BulkActionBar';
@@ -28,7 +28,6 @@ import type { ListSortInput } from '@/lib/list-sorting';
 
 interface ContestListProps {
   initialContests: ContestRowData[];
-  totalPages: number;
   permissionKeys: readonly string[];
   initialSort?: ListSortInput;
 }
@@ -50,8 +49,7 @@ function resolveContestPermissions(permissionKeys: readonly string[]): ContestPe
   };
 }
 
-export function ContestList({ initialContests, totalPages, permissionKeys, initialSort }: ContestListProps): React.JSX.Element {
-  void totalPages;
+export function ContestList({ initialContests, permissionKeys, initialSort }: ContestListProps): React.JSX.Element {
   const [contests] = useSyncedState(initialContests);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditWindowOpen, setIsEditWindowOpen] = useState(false);
@@ -65,8 +63,11 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
 
   const contestIds = useMemo(() => contests.map((contest) => contest.id), [contests]);
   const selection = useListSelection('contests.list', contestIds);
+  // Why the header reloads through this registration: its create dialog renders in the page
+  // header, outside this component, and only this component knows the current query.
+  const refreshList = useCallback((): void => { router.refresh(); }, [router]);
+  useRegisterContestListRefresh(refreshList);
 
-  const handleCreate = () => { if (!permissions.canCreate) return; setSelectedContest(null); setIsModalOpen(true); };
   const handleEdit = useCallback(async (id: number) => {
     if (!permissions.canUpdate) return;
     const result = await apiClient.get<{ contest: ExistingContest }>(`/api/contests/${id}`);
@@ -122,7 +123,6 @@ export function ContestList({ initialContests, totalPages, permissionKeys, initi
 
   return (
     <div className="space-y-6">
-      <ContestListHeader locale={locale} canManage={permissions.canCreate} onCreate={handleCreate} />
       {permissions.canUpdate && (
         <BulkActionBar selectedCount={selection.selectedCount} countLabel={dict.states.selection.count} clearLabel={dict.states.selection.clear} onClear={selection.clear}>
           <Button variant="secondary" onClick={() => setIsEditWindowOpen(true)}>Edit window</Button>

@@ -120,7 +120,6 @@ export default async function AdminHomePage({
 
   return (
     <DashboardPage
-      breadcrumbs={[]}
       title={dict.dashboard.welcome}
       description={dict.dashboard.description}
       state={<DashboardState service={service} labels={dashboardLabels} stats={stats} />}

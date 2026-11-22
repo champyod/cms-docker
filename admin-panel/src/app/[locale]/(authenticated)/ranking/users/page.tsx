@@ -117,7 +117,6 @@ export default async function RankingOverridesPage({
       <BoardPage
         // The module shell above renders the title, the description and the trail.
         ownsHeader={false}
-        breadcrumbs={[]}
         title={dict.navigation.ranking.users.label}
         description={dict.navigation.ranking.users.description}
         state={<p className="text-sm text-muted-foreground">{dict.ranking.overrides.noShards}</p>}
@@ -177,7 +176,6 @@ export default async function RankingOverridesPage({
     <BoardPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      breadcrumbs={[]}
       title={dict.navigation.ranking.users.label}
       description={dict.navigation.ranking.users.description}
       sections={sections}

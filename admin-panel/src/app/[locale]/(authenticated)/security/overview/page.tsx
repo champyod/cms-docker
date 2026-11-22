@@ -47,7 +47,6 @@ export default async function SecurityOverviewPage({
   const checkedAt = formatInZone(new Date().toISOString());
   return (
     <DashboardPage
-      breadcrumbs={[]}
       title=""  // the security module shell renders this page's name and trail
       ownsHeader={false}
       state={<SecuritySignalCard digest={patching.signal} locale={locale} copy={dict.security.signal} />}

@@ -117,7 +117,6 @@ export default async function SecurityBlocksPage({
     <BoardPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      breadcrumbs={[]}
       title={dict.navigation.security.blocks.label}
       description={dict.navigation.security.blocks.description}
       sections={sections}

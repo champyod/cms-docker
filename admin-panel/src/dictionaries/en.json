@@ -327,6 +327,8 @@
     "overview": {
       "code": "Team Code",
       "name": "Team Name",
+      "leader": "Leader",
+      "members": "Members",
       "registerable": "Registerable",
       "registerableHint": "Offer this team to contestants at registration",
       "readOnlyHint": "Read-only — you lack team:update",

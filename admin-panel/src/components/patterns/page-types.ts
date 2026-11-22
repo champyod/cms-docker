@@ -23,7 +23,10 @@ export type PageLayoutKind = Exclude<PageArchetype, 'redirect'>;
 
 /** Slots every archetype understands. A slot left empty renders nothing, never a placeholder. */
 export interface PageSlots {
-  readonly breadcrumbs: readonly BreadcrumbItem[];
+  // Why optional: a page under a module shell has its trail rendered by that shell, and the trail
+  // itself may only come from the navigation builders - so the honest value for such a page is
+  // no value, not an empty array it had to write by hand.
+  readonly breadcrumbs?: readonly BreadcrumbItem[];
   readonly title: ReactNode;
   readonly description?: ReactNode;
   /** The single primary action of the page. More than one belongs in the page, not the header. */
