@@ -47,7 +47,7 @@ Inventory: **0 of 0 pages documented.**
 | `/people/users/:id/teams` | detail | — *to inventory* |
 | `/ranking` | list | — *to inventory* |
 | `/ranking/appearance` | settings | — *to inventory* |
-| `/ranking/credits` | list | — *to inventory* |
+| `/ranking/credits` | settings | the credit list the board attributes its licences to, with the vendored file named as the fallback · who the save reaches · save, and a read-only notice when ranking:appearance is absent |
 | `/ranking/users` | board | which contests the board draws, each with its kind, reason and author · the shard being edited · overrides with target, contest, reason, author and orphan state, filtered, selected, ended one by one or in bulk · the rows the board actually drops, with the write that hides each · what empty means per section |
 | `/ranking/users/:key` | list | — *to inventory* |
 | `/search` | list | — *to inventory* |
