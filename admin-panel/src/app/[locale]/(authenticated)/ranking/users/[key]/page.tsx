@@ -28,13 +28,12 @@ type UsersCopy = Dictionary['ranking']['users'];
 type RankingCopy = Dictionary['ranking'];
 type OverrideOptions = Awaited<ReturnType<typeof getRankingOverrideOptions>>;
 
-const EMPTY_VALUE = '—';
 const MUTED = 'text-muted-foreground';
 const TOTAL_SCORE_PRECISION = 0;
 
-function taskScore(entry: RankingUserEntry, task: RankingTask): string {
+function taskScore(entry: RankingUserEntry, task: RankingTask, missing: string): string {
   const value = entry.taskScores[task.id];
-  return value === undefined ? EMPTY_VALUE : value.toFixed(task.scorePrecision);
+  return value === undefined ? missing : value.toFixed(task.scorePrecision);
 }
 
 /**
@@ -58,10 +57,12 @@ function TaskScores({
   entry,
   tasks,
   copy,
+  missing,
 }: {
   readonly entry: RankingUserEntry;
   readonly tasks: readonly RankingTask[];
   readonly copy: UsersCopy;
+  readonly missing: string;
 }): React.JSX.Element {
   return (
     <SectionCard title={copy.taskScores}>
@@ -81,7 +82,7 @@ function TaskScores({
                 <TableCell className="max-w-[200px]">
                   <span className="truncate block" title={task.title}>{task.name}</span>
                 </TableCell>
-                <TableCell className={`${MUTED} w-24 font-mono`}>{taskScore(entry, task)}</TableCell>
+                <TableCell className={`${MUTED} w-24 font-mono`}>{taskScore(entry, task, missing)}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -136,7 +137,8 @@ export default async function RankingUserDetailPage({
     params,
     authorizeRoutePage('ranking.users'),
   ]);
-  const copy = (await getDictionary(locale)).ranking;
+  const dictionary = await getDictionary(locale);
+  const copy = dictionary.ranking;
   const detail = await getRankingUserDetail(key);
   if (detail === null) notFound();
   const canOverride = effective.has('ranking:override');
@@ -150,7 +152,7 @@ export default async function RankingUserDetailPage({
       facts={[
         { term: copy.users.name, value: detail.entry.displayName },
         { term: copy.users.username, value: detail.entry.username },
-        { term: copy.users.team, value: detail.entry.teamName ?? EMPTY_VALUE },
+        { term: copy.users.team, value: detail.entry.teamName ?? dictionary.common.notSet },
         { term: copy.users.total, value: detail.entry.totalScore.toFixed(TOTAL_SCORE_PRECISION) },
         { term: copy.users.rank, value: String(detail.entry.rank) },
         {
@@ -160,7 +162,7 @@ export default async function RankingUserDetailPage({
       ]}
     >
       <div className="space-y-4">
-        <TaskScores entry={detail.entry} tasks={detail.tasks} copy={copy.users} />
+        <TaskScores entry={detail.entry} tasks={detail.tasks} copy={copy.users} missing={dictionary.common.notSet} />
         <OverrideCard
           copy={copy}
           entry={detail.entry}

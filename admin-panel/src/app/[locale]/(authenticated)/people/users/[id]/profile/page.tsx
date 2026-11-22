@@ -11,7 +11,6 @@ import { UserProfileTab } from '@/components/users/UserProfileTab';
 
 // Why: a value the record does not carry is shown as the panel's missing mark rather than as an
 // empty cell, so "no email on file" cannot be read as "the field did not load".
-const MISSING = '—';
 
 async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> {
   const route = ROUTE_REGISTRY.find((candidate) => candidate.id === routeId);
@@ -27,12 +26,12 @@ async function authorizeUserTab(routeId: RouteId): Promise<ReadonlySet<string>> 
   }
 }
 
-function orMissing(value: string | null): string {
-  return value === null || value.trim() === '' ? MISSING : value;
+function orMissing(value: string | null, missing: string): string {
+  return value === null || value.trim() === '' ? missing : value;
 }
 
-function joined(values: readonly string[]): string {
-  return values.length > 0 ? values.join(', ') : MISSING;
+function joined(values: readonly string[], missing: string): string {
+  return values.length > 0 ? values.join(', ') : missing;
 }
 
 export default async function UserProfilePage({ params }: { params: Promise<{ locale: string; id: string }> }): Promise<React.JSX.Element> {
@@ -57,11 +56,11 @@ export default async function UserProfilePage({ params }: { params: Promise<{ lo
       // country and the participation count, so listing them again would be a second copy of a
       // fact the reader has just read. These five are what the profile adds to that header.
       facts={[
-        { term: copy.name, value: orMissing(`${profile.firstName} ${profile.lastName}`.trim()) },
-        { term: copy.email, value: orMissing(profile.email) },
-        { term: copy.timezone, value: orMissing(profile.timezone) },
-        { term: copy.languages, value: joined(profile.preferredLanguages) },
-        { term: copy.teams, value: joined(summary.teamCodes) },
+        { term: copy.name, value: orMissing(`${profile.firstName} ${profile.lastName}`.trim(), dictionary.common.notSet) },
+        { term: copy.email, value: orMissing(profile.email, dictionary.common.notSet) },
+        { term: copy.timezone, value: orMissing(profile.timezone, dictionary.common.notSet) },
+        { term: copy.languages, value: joined(profile.preferredLanguages, dictionary.common.notSet) },
+        { term: copy.teams, value: joined(summary.teamCodes, dictionary.common.notSet) },
       ]}
     >
       <UserProfileTab userId={summary.id} copy={dictionary.users} permissionKeys={[...effective]} />

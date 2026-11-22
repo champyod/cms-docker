@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -30,7 +31,8 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
 }
 
 export default async function ContestOverviewPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
+  const dictionary = await getDictionary(locale);
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.overview');
@@ -45,7 +47,7 @@ export default async function ContestOverviewPage({ params }: ContestRouteProps)
       title={contest.name}
       facts={[
         { term: 'Contest state', value: PHASE_LABELS[resolveContestPhase(contest, new Date())] },
-        { term: 'Timezone', value: contest.timezone ?? '—' },
+        { term: 'Timezone', value: contest.timezone ?? dictionary.common.notSet },
       ]}
     >
       <ContestOverviewTab data={data} />

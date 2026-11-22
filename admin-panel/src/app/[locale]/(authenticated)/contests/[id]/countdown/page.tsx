@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { getDictionary } from '@/i18n';
 import { AuthorizationError, requirePermission } from '@/lib/server/authorization';
 import { isRoutePermitted } from '@/lib/navigation/permissions';
 import { ROUTE_REGISTRY } from '@/lib/navigation/registry';
@@ -31,12 +32,13 @@ async function authorizeContestTab(routeId: RouteId): Promise<ReadonlySet<string
 }
 
 /** One timing in the zone the contest is read in, or the panel's missing mark. */
-function zoneFact(value: string | null, timeZone: string): string {
-  return value === null ? '—' : formatZoneTime(new Date(value), timeZone);
+function zoneFact(value: string | null, timeZone: string, missing: string): string {
+  return value === null ? missing : formatZoneTime(new Date(value), timeZone);
 }
 
 export default async function ContestCountdownPage({ params }: ContestRouteProps): Promise<React.JSX.Element> {
-  const { id } = await params;
+  const { locale, id } = await params;
+  const dictionary = await getDictionary(locale);
   const contestId = parseRecordId(id);
   if (contestId === null) notFound();
   await authorizeContestTab('contests.tabs.countdown');
@@ -53,13 +55,13 @@ export default async function ContestCountdownPage({ params }: ContestRouteProps
       title={data.name}
       facts={[
         { term: 'Timezone', value: data.timezone ?? 'UTC' },
-        { term: 'Start', value: zoneFact(data.start, zone) },
-        { term: 'Stop', value: zoneFact(data.stop, zone) },
+        { term: 'Start', value: zoneFact(data.start, zone, dictionary.common.notSet) },
+        { term: 'Stop', value: zoneFact(data.stop, zone, dictionary.common.notSet) },
         {
           term: 'Analysis',
           value: data.analysis_start === null || data.analysis_stop === null
-            ? '—'
-            : `${zoneFact(data.analysis_start, zone)} → ${zoneFact(data.analysis_stop, zone)}`,
+            ? dictionary.common.notSet
+            : `${zoneFact(data.analysis_start, zone, dictionary.common.notSet)} → ${zoneFact(data.analysis_stop, zone, dictionary.common.notSet)}`,
         },
       ]}
     >

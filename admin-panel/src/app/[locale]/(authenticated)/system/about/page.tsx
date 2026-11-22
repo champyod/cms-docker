@@ -51,7 +51,7 @@ function PathsCell({ asset }: { readonly asset: CreditsAsset }) {
   );
 }
 
-function AssetsTable({ assets, copy }: { readonly assets: readonly CreditsAsset[]; readonly copy: AboutCopy }) {
+function AssetsTable({ assets, copy, missing }: { readonly assets: readonly CreditsAsset[]; readonly copy: AboutCopy; readonly missing: string }) {
   return (
     <Table>
       <TableHeader>
@@ -67,7 +67,7 @@ function AssetsTable({ assets, copy }: { readonly assets: readonly CreditsAsset[
         {assets.map((asset) => (
           <TableRow key={asset.name}>
             <TableCell className="font-medium text-foreground">{asset.name}</TableCell>
-            <TableCell className="font-mono text-xs">{asset.version ?? '—'}</TableCell>
+            <TableCell className="font-mono text-xs">{asset.version ?? missing}</TableCell>
             <TableCell>{asset.holder}</TableCell>
             <TableCell><LicenceCell asset={asset} /></TableCell>
             <TableCell><PathsCell asset={asset} /></TableCell>
@@ -162,7 +162,7 @@ export default async function SystemAboutPage({
         title={copy.software}
         count={panel.assets.length}
       >
-        <AssetsTable assets={panel.assets} copy={copy} />
+        <AssetsTable assets={panel.assets} copy={copy} missing={dict.common.notSet} />
       </SectionCard>
     </DetailPage>
   );

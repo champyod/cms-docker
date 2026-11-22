@@ -14,7 +14,6 @@ import { getRankingDiagnostics } from '@/lib/ranking-diagnostics';
 import { readShownContestId } from '@/lib/ranking-shown';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
 
-const EMPTY_VALUE = '—';
 
 /**
  * The public scoreboard, as the deployment publishes it.
@@ -39,7 +38,8 @@ export default async function RankingBoardPage({
     params,
     authorizeRoutePage('ranking.board'),
   ]);
-  const copy = (await getDictionary(locale)).ranking;
+  const dictionary = await getDictionary(locale);
+  const copy = dictionary.ranking;
   // WHY the contest is resolved before the appearance read: a deployment with no
   // contest yet still has to render the identity facts, so the standings below them must be
   // able to say "nothing to show" rather than fail the whole page.
@@ -80,11 +80,11 @@ export default async function RankingBoardPage({
         </>
       }
       facts={[
-        { term: copy.appearance.displayNameField, value: appearance.displayName || EMPTY_VALUE },
+        { term: copy.appearance.displayNameField, value: appearance.displayName || dictionary.common.notSet },
         { term: copy.shown.contestField, value: named?.name ?? copy.shown.contestNone },
-        { term: copy.appearance.titleField, value: appearance.title || EMPTY_VALUE },
-        { term: copy.appearance.subtitleField, value: appearance.subtitle || EMPTY_VALUE },
-        { term: copy.appearance.organisationField, value: appearance.organisation || EMPTY_VALUE },
+        { term: copy.appearance.titleField, value: appearance.title || dictionary.common.notSet },
+        { term: copy.appearance.subtitleField, value: appearance.subtitle || dictionary.common.notSet },
+        { term: copy.appearance.organisationField, value: appearance.organisation || dictionary.common.notSet },
         { term: copy.appearance.accessField, value: accessValue },
       ]}
     >
