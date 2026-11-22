@@ -48,7 +48,7 @@ Six branches verified fast-forward from `0c2f8f99` — **merge queue, one at a t
 
 
 
-| P12 | **WS-75 detection** — admin security-column changes append to the canonical audit log; the trigger records `session_user`, actor, changed columns and hash prefixes only; RLS grants the trigger's own system identity. | base checkout | `major/admin-panel` | hermes-agent | `scripts/__generate_rls_sql.sh`, `admin-panel/prisma/migrations/20261122120000_admin_security_audit/`, `tests/test_admin_security_audit.sh`, `coordination/BOARD.md` | in-flight |
+| P12 | **WS-75 admin boundary** — admin writes use role-specific clients; `admins` and its trigger function are owned by `cms_platform_owner`; migrations use `cms_platform_migrator`; security-column changes append to the canonical audit log. | base checkout | `major/admin-panel` | hermes-agent | `scripts/__generate_rls_sql.sh`, `admin-panel/prisma/sql/20260820130000_admin_owner_separation.sql`, `admin-panel/prisma/migrations/20261122120000_admin_security_audit/`, `scripts/__owner_url.sh`, `tests/test_admin_role_credentials.sh`, `tests/test_admin_security_audit.sh`, `coordination/BOARD.md` | done 2026-11-22 |
 
 ### Decision-gated candidates (no work starts until the operator picks a method)
 
