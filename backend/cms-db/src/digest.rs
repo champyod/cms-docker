@@ -124,6 +124,13 @@ impl FileDigest {
     }
 }
 
+/// The digest as it is spelled in a column and in a cache path.
+impl fmt::Display for FileDigest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
 impl FromStr for FileDigest {
     type Err = DigestError;
 

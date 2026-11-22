@@ -70,7 +70,9 @@ mod crypto;
 mod datetime;
 mod digest;
 mod drop;
+mod fsobject;
 mod interval;
+mod large_object;
 mod permission;
 mod reads;
 mod session;
@@ -92,6 +94,11 @@ pub use crypto::{
 pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use drop::{drop_db, DropError};
+pub use fsobject::{
+    FSObject, FsObjectError, DELETE_FSOBJECT, DELETE_FSOBJECTS, FSOBJECTS, FSOBJECT_BY_DIGEST,
+    FSOBJECT_DECLARATION, INSERT_FSOBJECT, NO_LARGE_OBJECT,
+};
+pub use large_object::{LargeObject, LargeObjectError, Mode};
 pub use reads::{
     dataset_from_row, result_from_row, submission_from_row, testcase_from_row, DatasetId,
     DatasetRecord, ReadError, ResultRecord, SubmissionId, SubmissionRecord, TestcaseRecord,
