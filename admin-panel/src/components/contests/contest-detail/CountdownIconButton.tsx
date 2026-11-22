@@ -4,7 +4,7 @@ import { memo } from 'react';
 import { cn } from '@/lib/utils';
 
 const ICON_BUTTON_CLASSES =
-  'inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-input bg-transparent px-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
+  'inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-input bg-transparent px-3 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
 
 interface IconButtonProps {
   label: string;

@@ -1,8 +1,9 @@
 'use client';
 
 import { useDictionary } from '@/hooks/useDictionary';
+import { fieldClasses } from '@/components/core/fieldStyles';
 
-const INPUT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const INPUT_CLASS = fieldClasses(false);
 
 interface IpAllowlistInputProps {
   value: string;

@@ -14,7 +14,7 @@ import { EXEMPTION_SCOPES, type ExemptionScope } from '@/lib/security/exemption-
 // The native select is the one control with no core wrapper, so it carries the
 // same field surface the Input adapter uses rather than a bare browser default.
 const SELECT_SURFACE =
-  'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
+  'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
 
 const SCOPE_LABELS: Record<ExemptionScope, string> = {
   account_address: 'Account + address',

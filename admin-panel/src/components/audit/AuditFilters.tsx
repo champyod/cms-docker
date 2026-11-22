@@ -57,7 +57,7 @@ export function AuditFilters({
   onClear,
 }: AuditFiltersProps): React.JSX.Element {
   const selectClassName =
-    'h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
+    'h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
   return (
     <Card className="p-4">
       <form

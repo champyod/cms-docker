@@ -6,6 +6,7 @@ import { InlineAlert } from '@/components/core/InlineAlert';
 import { useDictionary } from '@/hooks/useDictionary';
 import { IpAllowlistInput } from './IpAllowlistInput';
 import { EXPECTED_FIELDS } from './csvTemplate';
+import { fieldClasses } from '@/components/core/fieldStyles';
 
 export interface BulkSubmitFailure {
   rowIndex: number;
@@ -145,7 +146,7 @@ interface BulkCreateInputSectionProps {
   onFillEmpty: () => void;
 }
 
-const SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const SELECT_CLASS = fieldClasses(false);
 
 const LABEL_BUTTON_CLASS = 'inline-flex items-center gap-2 h-8 px-3 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/80 cursor-pointer text-sm transition-colors';
 
@@ -221,7 +222,7 @@ export function BulkCreateInputSection({
         value={csvText}
         onChange={(event) => onCsvTextChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full h-44 overflow-auto bg-background/60 border border-border rounded-lg p-3 text-sm text-foreground font-mono resize-none placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors"
+        className="w-full h-44 overflow-auto bg-background/60 border border-border rounded-lg p-3 text-sm text-foreground font-mono resize-none placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 transition-colors"
       />
 
       <div className="flex flex-wrap gap-2">

@@ -33,8 +33,8 @@ export interface RecomputeDialogController {
 }
 
 const RPC_TIMEOUT_MESSAGE = 'Evaluation service did not respond in time';
-const SELECT_SURFACE = 'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]';
-const REASON_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50';
+const SELECT_SURFACE = 'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2';
+const REASON_CLASSES = 'w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-[color,box-shadow] outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50';
 
 function isRpcTimeout(outcome: { timedOut?: boolean; error?: string }): boolean {
   return outcome.timedOut === true || outcome.error === RPC_TIMEOUT_MESSAGE;

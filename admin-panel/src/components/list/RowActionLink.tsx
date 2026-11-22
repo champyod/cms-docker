@@ -22,7 +22,7 @@ export interface RowActionLinkProps {
 export const ROW_ACTION_CLASSES = [
   'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-sm font-medium',
   'text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground',
-  'dark:hover:bg-accent/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+  'dark:hover:bg-accent/50 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
   "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0",
 ].join(' ');
 

@@ -4,9 +4,10 @@ import { Button } from '@/components/core/Button';
 import { useDictionary } from '@/hooks/useDictionary';
 import { IpAllowlistInput } from './IpAllowlistInput';
 import type { ContestOption } from './bulkEditActions';
+import { fieldClasses } from '@/components/core/fieldStyles';
 
-const CONTEST_SELECT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
-const TEXT_INPUT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const CONTEST_SELECT_CLASS = fieldClasses(false);
+const TEXT_INPUT_CLASS = 'bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 transition-colors';
 
 interface SectionBoxProps {
   title: string;

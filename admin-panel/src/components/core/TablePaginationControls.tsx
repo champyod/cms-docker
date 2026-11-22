@@ -56,7 +56,7 @@ export function TablePaginationControls({
         title="Page number"
         placeholder="Page"
         onChange={(event) => onPageInputChange(event.target.value)}
-        className="min-h-11 w-20 rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        className="min-h-11 w-20 rounded-md border border-input bg-transparent px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
       />
       <Button variant="ghost" size="sm" onClick={onPageGo}>Go</Button>
 
@@ -65,7 +65,7 @@ export function TablePaginationControls({
         value={perPage}
         title="Rows per page"
         onChange={(event) => onPerPageChange(Number(event.target.value) || 20)}
-        className="min-h-11 rounded-md border border-input bg-card px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+        className="min-h-11 rounded-md border border-input bg-card px-2 py-1 text-sm text-foreground outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
       >
         {[10, 20, 50, 100].map((value) => (
           <option key={value} value={value}>{value}</option>

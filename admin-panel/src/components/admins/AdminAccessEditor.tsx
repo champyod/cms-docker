@@ -134,7 +134,7 @@ export function AdminAccessEditor({
               <select
                 value={draft.permissionKey}
                 onChange={(event) => handleOverrideKey(index, event.target.value)}
-                className="flex-1 h-9 min-w-0 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                className="flex-1 h-9 min-w-0 rounded-md border border-input bg-transparent px-2 text-xs font-mono outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
               >
                 {PERMISSION_REGISTRY.map((definition) => (
                   <option key={definition.key} value={definition.key}>
@@ -145,7 +145,7 @@ export function AdminAccessEditor({
               <select
                 value={draft.effect}
                 onChange={(event) => handleOverrideEffect(index, event.target.value as OverrideEffect)}
-                className="h-9 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                className="h-9 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
               >
                 <option value="allow">Allow</option>
                 <option value="deny">Deny</option>

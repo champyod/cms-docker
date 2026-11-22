@@ -112,7 +112,7 @@ export function LanguagePicker({
         aria-invalid={showWarning ? true : undefined}
         className={cn(
           'flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none',
-          'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]',
+          'placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2',
           'disabled:cursor-not-allowed disabled:opacity-50',
           showWarning ? 'border-amber-500/50 ring-amber-500/20' : ''
         )}

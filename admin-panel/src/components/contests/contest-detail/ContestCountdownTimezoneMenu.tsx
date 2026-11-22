@@ -140,7 +140,7 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder={`Search ${zones.length} timezones`}
                 aria-label="Search timezone"
-                className="mb-2 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                className="mb-2 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
               />
               <ul role="listbox" aria-label="Timezone" className="max-h-64 overflow-auto">
                 {visible.map((zone) => (

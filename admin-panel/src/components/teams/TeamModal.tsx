@@ -81,7 +81,7 @@ export function TeamModal({ isOpen, onClose, onSuccess, initialData, permissionK
     setLoading(false);
   };
 
-  const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+  const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-2 focus:ring-ring/30 transition-colors';
 
   // Why the guard: a submit already in flight cannot be recalled, so cancelling
   // through it would close the dialog over an unresolved save.

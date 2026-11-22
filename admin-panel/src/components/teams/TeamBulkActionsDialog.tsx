@@ -8,6 +8,7 @@ import { InlineAlert } from '@/components/core/InlineAlert';
 import { addUsersToTeamByUsername, applyTeamParticipationSettings } from '@/app/actions/team-members';
 import { updateTeam } from '@/app/actions/teams';
 import type { Dictionary } from '@/lib/dictionary';
+import { fieldClasses } from '@/components/core/fieldStyles';
 
 interface ContestOption {
   id: number;
@@ -28,7 +29,7 @@ interface TeamBulkActionsDialogProps {
 
 type TriState = 'no-change' | 'yes' | 'no';
 
-const inputClassName = 'w-full px-3 py-2 bg-background/60 border border-border rounded-lg text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:border-ring focus:ring-[3px] focus:ring-ring/30 transition-colors';
+const inputClassName = fieldClasses(false);
 
 function triStateToBoolean(value: TriState): boolean | undefined {
   if (value === 'yes') return true;
