@@ -27,7 +27,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// Starts the service on the configured address and serves until the listener fails.
+/// Starts the service on the configured address and serves until the host is stopped.
 fn run() -> Result<(), StartError> {
     let address = required(ADDRESS_VARIABLE)?;
     let secret = required(SECRET_VARIABLE)?;
