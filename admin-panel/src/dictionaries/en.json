@@ -1451,6 +1451,12 @@
       "detail": "Open patching",
       "clear": "Nothing needs a decision: no expired waiver, no unwaived critical, and both copies of the data are current.",
       "unreadable": "A backup reading could not be taken, so this card does not claim the backups are healthy."
+    },
+    "tls": {
+      "proxy": "TLS proxy",
+      "certbot": "Certbot",
+      "lineages": "Certificate lineages",
+      "notRunning": "not running"
     }
   },
   "navigation": {
