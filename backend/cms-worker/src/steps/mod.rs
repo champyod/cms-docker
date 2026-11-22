@@ -14,25 +14,32 @@
 //! small closed table, which a checker may ask for by name instead of writing one
 //! itself: that is [`StockMessage`].
 //!
+//! A checker is the one thing here that makes a box, since it is a program and not a
+//! value; [`checker_step`] is that run's orchestration, and what it hands back is
+//! either a [`Verdict`] or nothing where the check could not be made at all.
+//!
 //! # Errors
 //!
-//! [`CheckerError`], and only that: an outcome line that is not a number, and text
-//! carrying a character a report must never be shown. A comparison has nothing to
-//! fail on — two answers that are not the same is a statement about the submission,
-//! not a fault of the worker — so that is [`Difference`], and what a report says
-//! about it is the caller's to write.
+//! [`CheckerError`], [`StepError`] and nothing else: an outcome line that is not a
+//! number, text carrying a character a report must never be shown, and a file or a run
+//! the worker could not carry out. A comparison has nothing to fail on — two answers
+//! that are not the same is a statement about the submission, not a fault of the
+//! worker — so that is [`Difference`], and what a report says about it is the caller's
+//! to write.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 mod checker;
 mod escape;
+mod trusted;
 mod white_diff;
 
 pub use checker::{
     checker_command, extract_verdict, judge_trusted_run, CheckerError, TrustedLimits, TrustedRun,
     Verdict, CHECKER_FILENAME, CORRECT_OUTPUT_FILENAME, INPUT_FILENAME,
 };
+pub use trusted::{checker_step, Check, StepError};
 pub use white_diff::{exact_diff, white_diff, Comparison, Difference};
 
 /// A sentence a report shows for a submission, which a checker may name rather than

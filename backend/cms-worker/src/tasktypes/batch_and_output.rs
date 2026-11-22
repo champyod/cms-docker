@@ -6,11 +6,12 @@
 //! per task.
 //!
 //! The order an answer is decided in is what this type exists for. An answer the
-//! submission carried wins and nothing runs, since a file needs no executable. A
-//! testcase the dataset listed as output-only is never run, because a program is not
-//! what answers it even where the submission compiled one. Anything else runs the
-//! executable, and a testcase with no answer carried and nothing to run is a partial
-//! submission: scored nothing, and said so rather than refused.
+//! submission carried wins and nothing runs, since a file needs no executable, and it
+//! is judged by the judge the way a run's own answer is. A testcase the dataset listed
+//! as output-only is never run, because a program is not what answers it even where the
+//! submission compiled one. Anything else runs the executable, and a testcase with no
+//! answer carried and nothing to run is a partial submission: scored nothing, and said
+//! so rather than refused.
 //!
 //! # Errors
 //!
@@ -24,12 +25,14 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use serde_json::Value;
 
-use super::batch::TaskError;
+use super::judge::{self, OutputSource, CHECKER_CODENAME};
 use super::kinds_answer::{carries_source, listed};
 use super::output_only::{carried, no_compilation};
+use super::TaskError;
 use super::{Batch, Compilation, OutputFile, Runtime, Toolchain};
 use crate::job::{CompilationJob, EvaluationJob};
 use crate::stage::{Cache, FileDigest};
@@ -68,11 +71,13 @@ pub struct Answer {
     /// Whether the answer handed on can be believed: a run reports through a box that
     /// has to have worked, and a carried answer needs no box.
     pub success: bool,
-    /// The score, zero where there was no answer to hand on and absent where the one
-    /// that was has not been judged.
+    /// The score, zero where there was no answer to hand on and absent where the judge
+    /// could not decide about the one that was.
     pub outcome: Option<f64>,
     /// The sentences a report shows, the first of which the rest are arguments for.
     pub text: Vec<String>,
+    /// What only an administrator is shown, absent where the judge wrote none.
+    pub admin_text: Option<String>,
     /// What the run was charged, absent where the answer was carried rather than run.
     pub stats: Option<ExecutionStats>,
     /// The paths the report names this evaluation's box by.
@@ -122,6 +127,12 @@ impl BatchAndOutput {
         self.output_only.contains(codename)
     }
 
+    /// The checker a dataset names for this task, or `None` where the parameters asked
+    /// for a plain diff, which is the Batch parameter's own answer.
+    fn checker(&self) -> Option<&'static str> {
+        self.batch.uses_comparator().then_some(CHECKER_CODENAME)
+    }
+
     /// Compiles a submission carrying a source the way a Batch compilation does, and
     /// reports that none was needed for one carrying nothing but answers.
     ///
@@ -144,6 +155,9 @@ impl BatchAndOutput {
 
     /// Judges one testcase in the order the reference decides an answer in: the
     /// answer the submission carried, then a testcase nothing may run, then a run.
+    /// Whichever of the first and last answered, the answer is judged — the carried one
+    /// here and the run's own in the Batch phase — so this type never hands on an
+    /// unjudged answer.
     ///
     /// A result holding a number of executables other than one is refused rather
     /// than run, and that is a deliberate departure from the reference, which
@@ -178,10 +192,21 @@ impl BatchAndOutput {
             BATCH
         };
         if let Some(answer) = carried(job, codename)? {
-            return Ok(Answer::carried(answer, kind));
+            let judged = judge::eval_output(
+                job,
+                self.checker(),
+                OutputSource::Digest(answer.clone()),
+                "",
+                &[kind.to_owned()],
+                runtime,
+                Arc::from(store),
+            )?;
+            return Ok(Answer::carried(answer, kind, judged));
         }
         if kind == BATCH && !job.executables.is_empty() {
-            let run = self.batch.evaluate(job, toolchain, runtime, store)?;
+            let run =
+                self.batch
+                    .evaluate_with(job, toolchain, runtime, store, &[BATCH.to_owned()])?;
             return Ok(Answer::from_run(run, kind));
         }
         Ok(Answer::not_carried())

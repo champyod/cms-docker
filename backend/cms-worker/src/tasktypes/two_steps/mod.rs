@@ -38,15 +38,15 @@ mod verdict;
 
 use std::fs;
 use std::path::Path;
-use std::sync::Arc;
 
 use serde_json::Value;
 
 use crate::job::EvaluationJob;
 use crate::sandbox::Launch;
-use crate::stage::{Cache, CacheHandle, FileDigest, StageError};
+use crate::stage::{Cache, StageError};
 
-use super::{Evaluation, Run, Runtime, TaskError, Toolchain};
+use super::judge::{self, OutputSource, CHECKER_CODENAME};
+use super::{Evaluation, Run, Runtime, Shared, TaskError, Toolchain};
 
 const INPUT: &str = "input.txt";
 const OUTPUT: &str = "output.txt";
@@ -79,21 +79,6 @@ const SECOND: Phase = Phase {
     input: None,
     answer: Some(OUTPUT),
 };
-
-/// The one store every box of an evaluation reads, shared rather than split: a `Box`
-/// cannot be handed to two and the reference passes its file cacher to every sandbox.
-#[derive(Clone)]
-struct Shared(Arc<dyn Cache>);
-
-impl Cache for Shared {
-    fn get_file(&self, handle: &CacheHandle) -> Result<Vec<u8>, StageError> {
-        self.0.get_file(handle)
-    }
-
-    fn put_file(&self, digest: &FileDigest, content: &[u8]) -> Result<bool, StageError> {
-        self.0.put_file(digest, content)
-    }
-}
 
 /// The Two Steps task type, as its one parameter says.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -141,12 +126,12 @@ impl TwoSteps {
         store: Box<dyn Cache>,
     ) -> Result<Evaluation, TaskError> {
         let (executable, digest) = one_executable(job)?;
-        let shared = Shared(Arc::from(store));
+        let store = Shared::of(store);
         let pipe = pipes::pipe_dir(runtime.temp_dir())?;
         let mut first =
-            boxes::open_phase(runtime, &shared, &FIRST, &executable, &digest, &job.input)?;
-        let second =
-            boxes::open_phase(runtime, &shared, &SECOND, &executable, &digest, &job.input)?;
+            boxes::open_phase(runtime, &store, &FIRST, &executable, &digest, &job.input)?;
+        let mut second =
+            boxes::open_phase(runtime, &store, &SECOND, &executable, &digest, &job.input)?;
         let one = launch::start(
             &mut first,
             job,
@@ -156,43 +141,42 @@ impl TwoSteps {
             &pipe,
             &FIRST,
         )?;
-        finish(
-            [first, second],
-            one,
+        let two = launch::start(
+            &mut second,
             job,
             toolchain,
             runtime,
             &executable,
             &pipe,
+            &SECOND,
+        )?;
+        let checker = self.uses_comparator().then_some(CHECKER_CODENAME);
+        finish(
+            [first, second],
+            [one, two],
+            job,
+            runtime,
+            &store,
+            checker,
+            &pipe,
         )
     }
 }
 
-/// What is left once the first phase has been started: the second phase is started
-/// beside it, both are waited for, the answer the second phase was told to write is
-/// judged, and both boxes and the pipe are closed.
+/// What is left once both phases have been started: they are waited for, the answer the
+/// second phase was told to write is judged, and both boxes and the pipe are closed.
 ///
 /// The two boxes arrive in the order the phases do, the first before the second, so
-/// that neither the start of the second phase nor the closing of the two has to say
-/// which is which.
+/// that neither the judging nor the closing of the two has to say which is which.
 fn finish(
-    [first, mut second]: [Run; 2],
-    one: Launch,
+    [first, second]: [Run; 2],
+    [one, two]: [Launch; 2],
     job: &EvaluationJob,
-    toolchain: &dyn Toolchain,
     runtime: &Runtime,
-    executable: &str,
+    store: &Shared,
+    checker: Option<&'static str>,
     pipe: &Path,
 ) -> Result<Evaluation, TaskError> {
-    let two = launch::start(
-        &mut second,
-        job,
-        toolchain,
-        runtime,
-        executable,
-        pipe,
-        &SECOND,
-    )?;
     let (one_stats, two_stats) = (
         one.wait().map_err(TaskError::Spawn)?,
         two.wait().map_err(TaskError::Spawn)?,
@@ -201,8 +185,29 @@ fn finish(
     if evaluation.success {
         verdict::judge(&mut evaluation, &second, job)?;
     }
-    let keep = job.archive_sandbox || !evaluation.success;
+    let judged = evaluation
+        .output_file
+        .clone()
+        .map(|answer| {
+            judge::eval_output(
+                job,
+                checker,
+                OutputSource::Path(answer.path),
+                OUTPUT,
+                &[],
+                runtime,
+                store.arc(),
+            )
+        })
+        .transpose()?;
+    let judged_ok = judged
+        .as_ref()
+        .map_or(evaluation.success, |judged| judged.success);
+    let keep = job.archive_sandbox || !judged_ok;
     evaluation.sandboxes = vec![first.close(keep)?, second.close(keep)?];
+    if let Some(judged) = judged {
+        evaluation.absorb(judged);
+    }
     if !keep {
         let gone = fs::remove_dir_all(pipe);
         gone.map_err(|source| TaskError::Stage(StageError::io(pipe, &source)))?;

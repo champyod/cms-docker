@@ -9,7 +9,9 @@
 //!
 //! What the run did with them is read in the same order: a box that did not work
 //! is undecided, a run that was stopped or killed was charged nothing and is told
-//! why, and a run that answered is judged on the file it was told to write.
+//! why, and a run that answered is judged on the file it was told to write. That
+//! last step is the judge's, which is where the answer stops being a file and
+//! becomes a score.
 
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
@@ -18,17 +20,17 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::job::EvaluationJob;
-use crate::measure::ExitStatus;
 use crate::sandbox::Options;
-use crate::stage::{Cache, FileDigest};
+use crate::stage::Cache;
 use crate::stats::ExecutionStats;
 
 use super::batch::Batch;
-use super::{handle, wall_clock_of, Run, Runtime, TaskError, Toolchain};
+use super::judge::{self, OutputSource, CHECKER_CODENAME};
+use super::outcome::{decide, Evaluation};
+use super::{handle, wall_clock_of, Run, Runtime, Shared, TaskError, Toolchain};
 
 const EVALUATE_BOX: &str = "evaluate";
 const EXECUTABLES_REQUIRED: usize = 1;
-const NO_CREDIT: f64 = 0.0;
 const ERROR_FILENAME: &str = "stderr.txt";
 const LIMIT_TIME: &str = "time limit";
 const LIMIT_MEMORY: &str = "memory limit";
@@ -36,57 +38,22 @@ const LIMIT_MEMORY: &str = "memory limit";
 /// multithreaded one is given so a fork bomb is bounded rather than enabled.
 const SINGLE_PROCESS: u32 = 1;
 const MULTIPROCESS_LIMIT: u32 = 1000;
-/// The sentences a report shows for a run that did not answer. The first of the
-/// list of text is the message and the rest are its arguments, as the reference
-/// hands a message and its arguments over; a code a run returned is not quoted.
-const NO_OUTPUT: &str = "Evaluation didn't produce file";
-const TIMED_OUT: &str = "Execution timed out";
-const WALL_TIMED_OUT: &str = "Execution timed out (wall clock limit exceeded)";
-const MEMORY_EXCEEDED: &str = "Memory limit exceeded";
-const KILLED: &str = "Execution killed by signal";
-const NONZERO_RETURN: &str = "Execution failed because the return code was nonzero";
-const EXECUTED: &str = "Execution completed successfully";
-
-/// What an evaluation left behind, as the result is filed.
-#[derive(Debug, Clone, PartialEq)]
-pub struct Evaluation {
-    /// The paths the report names this evaluation's box by.
-    pub sandboxes: Vec<PathBuf>,
-    /// Whether the box worked, so that what the run reported can be believed.
-    pub success: bool,
-    /// Whether the run itself did what it was asked to, as against one stopped,
-    /// killed or returned non-zero. It means nothing unless the box worked.
-    pub ran: bool,
-    /// The score, zero when the run did not answer, absent when the box did not work.
-    pub outcome: Option<f64>,
-    /// The sentences a report shows, the first of which the rest are arguments for.
-    pub text: Vec<String>,
-    /// What the run was charged, absent when no run was measured.
-    pub stats: Option<ExecutionStats>,
-    /// The digest of the run's answer, absent unless the job asked for it.
-    pub user_output: Option<FileDigest>,
-    /// The file the answer is in and the name the run was told to write, absent
-    /// once the run is judged here.
-    pub output_file: Option<OutputFile>,
-}
-
-/// The file a run wrote its answer to, and the name it was told to write.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputFile {
-    /// Where the answer is, on this side of the box.
-    pub path: PathBuf,
-    /// The filename the parameters named, empty where the answer is a redirect.
-    pub filename: String,
-}
 
 impl Batch {
+    /// The checker a dataset names for this task, or `None` where the parameters asked
+    /// for a plain diff: the codename is the same for every task type that has one.
+    pub(super) fn checker(&self) -> Option<&'static str> {
+        self.uses_comparator().then_some(CHECKER_CODENAME)
+    }
+
     /// Evaluates one submission on one testcase, in the reference's order.
     ///
     /// # Errors
     ///
     /// [`TaskError`], and only that: a result holding a number of executables
     /// other than one, a limit that is not positive, a file the store would not
-    /// hand over, and a run the box could not carry or read back.
+    /// hand over, a run the box could not carry or read back, and what the judge
+    /// refuses for the answer that run wrote.
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
@@ -94,10 +61,29 @@ impl Batch {
         runtime: &Runtime,
         store: Box<dyn Cache>,
     ) -> Result<Evaluation, TaskError> {
+        self.evaluate_with(job, toolchain, runtime, store, &[])
+    }
+
+    /// The same evaluation, with arguments the checker is given after its three files.
+    /// A task type that shares this phase adds the word that says which kind of
+    /// testcase it is judging; one that judges alone passes none.
+    ///
+    /// # Errors
+    ///
+    /// What [`evaluate`](Self::evaluate) refuses.
+    pub fn evaluate_with(
+        &self,
+        job: &EvaluationJob,
+        toolchain: &dyn Toolchain,
+        runtime: &Runtime,
+        store: Box<dyn Cache>,
+        extra_args: &[String],
+    ) -> Result<Evaluation, TaskError> {
         let executable = only_executable(job)?;
         let main = self.main_of(&executable.0);
         let commands = toolchain.evaluation_commands(&executable.0, &main, &[]);
-        let mut run = runtime.open(EVALUATE_BOX, store)?;
+        let store = Shared::of(store);
+        let mut run = runtime.open_shared(EVALUATE_BOX, store.arc())?;
         stage_run(&run, self, job, &executable)?;
         let mut last: Option<ExecutionStats> = None;
         for command in &commands {
@@ -109,8 +95,21 @@ impl Batch {
         if evaluation.success {
             evaluation.judge(&run, self, job)?;
         }
+        if let Some(answer) = evaluation.output_file.clone() {
+            let judged = judge::eval_output(
+                job,
+                self.checker(),
+                OutputSource::Path(answer.path),
+                &answer.filename,
+                extra_args,
+                runtime,
+                store.arc(),
+            )?;
+            evaluation.absorb(judged);
+        }
         let keep = job.archive_sandbox || !evaluation.success;
-        evaluation.sandboxes.push(run.close(keep)?);
+        let root = run.close(keep)?;
+        evaluation.sandboxes.insert(0, root);
         Ok(evaluation)
     }
 }
@@ -179,71 +178,4 @@ fn run_options(run: &mut Run, batch: &Batch, job: &EvaluationJob) -> Result<Opti
 /// The refusal a limit set to a number that bounds nothing is reported as.
 fn bounded_by(limit: &'static str, value: f64) -> TaskError {
     TaskError::NonPositiveLimit { limit, value }
-}
-
-/// What a run's figures say, undecided when there was no command to run or the
-/// box itself did not work: the figures of a box that failed are of nothing.
-fn decide(stats: Option<ExecutionStats>) -> Evaluation {
-    let (success, ran) = match stats.as_ref().map(|stats| stats.exit_status) {
-        Some(ExitStatus::Ok) => (true, true),
-        Some(ExitStatus::SandboxError) | None => (false, false),
-        Some(_) => (true, false),
-    };
-    Evaluation {
-        sandboxes: Vec::new(),
-        success,
-        ran,
-        outcome: None,
-        text: Vec::new(),
-        stats: if success { stats } else { None },
-        user_output: None,
-        output_file: None,
-    }
-}
-
-/// The one sentence a report shows for a run that did not do what it was asked
-/// to, and nothing for a run that ended cleanly: a run that answered is judged on
-/// its answer rather than on this. The Communication task type reads the same
-/// sentence for the process it is blaming, so this is the one table of them.
-pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
-    let message = match stats.exit_status {
-        ExitStatus::Timeout => Some(TIMED_OUT),
-        ExitStatus::TimeoutWall => Some(WALL_TIMED_OUT),
-        ExitStatus::MemoryLimit => Some(MEMORY_EXCEEDED),
-        ExitStatus::Signal => Some(KILLED),
-        ExitStatus::NonzeroReturn => Some(NONZERO_RETURN),
-        ExitStatus::Ok | ExitStatus::SandboxError => None,
-    };
-    message.map_or_else(Vec::new, |said| vec![said.to_owned()])
-}
-
-impl Evaluation {
-    /// Judges a run that came back: whether it wrote the file it was told to
-    /// write, the digest of it where the job asked, and the file to compare.
-    fn judge(&mut self, run: &Run, batch: &Batch, job: &EvaluationJob) -> Result<(), TaskError> {
-        if !self.ran {
-            self.outcome = Some(NO_CREDIT);
-            self.text = self.stats.as_ref().map_or_else(Vec::new, what_went_wrong);
-            return Ok(());
-        }
-        let output = batch.actual_output();
-        if !run.files().path(output).is_file() {
-            self.outcome = Some(NO_CREDIT);
-            self.text = vec![NO_OUTPUT.to_owned(), output.to_owned()];
-            return Ok(());
-        }
-        if job.get_output.unwrap_or(false) {
-            self.user_output = Some(run.files().store(output)?);
-        }
-        if job.only_execution.unwrap_or(false) {
-            self.outcome = Some(NO_CREDIT);
-            self.text = vec![EXECUTED.to_owned()];
-            return Ok(());
-        }
-        self.output_file = Some(OutputFile {
-            path: run.files().path(output),
-            filename: batch.output_filename().to_owned(),
-        });
-        Ok(())
-    }
 }

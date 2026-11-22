@@ -13,6 +13,9 @@ mod support;
 use cms_worker::tasktypes::{OutputOnly, TaskError};
 use serde_json::json;
 
+use support::toolchain::{
+    runtime_of, store_of, workspace, CLEAN_LOG, GRADER_DIGEST, NOTHING, SOURCE_DIGEST,
+};
 use support::{evaluation, output_only, ANSWER, ANSWER_DIGEST, OTHER_ANSWER, TESTCASE};
 
 #[test]
@@ -47,26 +50,82 @@ fn an_output_only_submission_is_compiled_without_a_box() {
 }
 
 #[test]
-fn a_testcase_is_judged_on_the_answer_the_submission_carried_for_it() {
+fn a_carried_answer_is_diffed_with_the_answer_the_dataset_says_is_right() {
+    let dir = workspace("kinds-diff");
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, NOTHING);
+    let store = store_of(&dir);
+    let task = OutputOnly::new(&json!(["diff"])).expect("one parameter is a task");
+
+    for (answer, outcome, text) in [
+        (SOURCE_DIGEST, 1.0, "Output is correct"),
+        (GRADER_DIGEST, 0.0, "Output isn't correct"),
+    ] {
+        let judged = task
+            .evaluate(
+                &evaluation(TESTCASE, &[(ANSWER, answer)], &[]),
+                &runtime,
+                Box::new(store.clone()),
+            )
+            .expect("a carried answer is judged");
+
+        assert!(judged.success);
+        assert_eq!(judged.outcome, Some(outcome), "the answer {answer}");
+        assert_eq!(judged.text, vec![text]);
+        assert_eq!(
+            judged.output.as_ref().map(|digest| digest.as_str()),
+            Some(answer),
+            "the answer that was judged is still named"
+        );
+    }
+}
+
+#[test]
+fn a_checker_the_dataset_does_not_hold_is_a_check_that_could_not_be_made() {
+    let dir = workspace("kinds-checker");
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, NOTHING);
+
     let judged = output_only()
-        .evaluate(&evaluation(TESTCASE, &[(ANSWER, ANSWER_DIGEST)], &[]))
-        .expect("the evaluation must be decided");
-    assert_eq!(judged.outcome, None, "an unjudged answer has no score yet");
-    assert!(judged.text.is_empty());
-    let carried = judged.output.expect("the answer that was carried");
-    assert_eq!(carried.as_str(), ANSWER_DIGEST);
+        .evaluate(
+            &evaluation(TESTCASE, &[(ANSWER, SOURCE_DIGEST)], &[]),
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
+        .expect("a carried answer is decided");
+
+    assert!(
+        !judged.success,
+        "a checker that is not in the dataset is not a wrong answer"
+    );
+    assert_eq!(
+        judged.outcome, None,
+        "nothing was decided about the answer, so it earns no zero either"
+    );
+    assert!(
+        judged.text.is_empty(),
+        "and there is nothing to show for it"
+    );
 }
 
 #[test]
 fn a_testcase_nobody_answered_is_scored_nothing_and_says_so() {
-    let for_another = output_only()
-        .evaluate(&evaluation(TESTCASE, &[(OTHER_ANSWER, ANSWER_DIGEST)], &[]))
+    let dir = workspace("kinds-uncarried");
+    let runtime = runtime_of(&dir, "0", CLEAN_LOG, NOTHING);
+
+    let judged = OutputOnly::new(&json!(["diff"]))
+        .expect("one parameter is a task")
+        .evaluate(
+            &evaluation(TESTCASE, &[(OTHER_ANSWER, ANSWER_DIGEST)], &[]),
+            &runtime,
+            Box::new(store_of(&dir)),
+        )
         .expect("the evaluation must be decided");
+
+    assert!(judged.success);
     assert_eq!(
-        for_another.outcome,
+        judged.outcome,
         Some(0.0),
         "an answer for another testcase is not this one's answer"
     );
-    assert_eq!(for_another.text, vec!["File not submitted"]);
-    assert!(for_another.output.is_none());
+    assert_eq!(judged.text, vec!["File not submitted"]);
+    assert!(judged.output.is_none());
 }

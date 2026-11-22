@@ -110,7 +110,7 @@ fn a_carried_answer_wins_over_the_run_and_says_which_kind_of_testcase_it_is() {
         let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
         let job = evaluation(
             TESTCASE,
-            &[(ANSWER, ANSWER_DIGEST)],
+            &[(ANSWER, SOURCE_DIGEST)],
             &[(EXECUTABLE, PROGRAM_DIGEST)],
         );
         let judged = task
@@ -118,20 +118,14 @@ fn a_carried_answer_wins_over_the_run_and_says_which_kind_of_testcase_it_is() {
             .expect("the evaluation must be decided");
 
         assert!(judged.success);
-        assert_eq!(judged.outcome, None, "a carried answer is not judged here");
+        assert_eq!(judged.outcome, Some(1.0), "an identical answer scores");
+        assert_eq!(judged.text, vec!["Output is correct"]);
         let Some(Origin::Carried(answer)) = judged.origin else {
             panic!("the answer the submission carried");
         };
-        assert_eq!(answer.as_str(), ANSWER_DIGEST);
-        assert_eq!(
-            judged.extra_args,
-            vec![kind],
-            "a checker is told which kind of testcase it is judging"
-        );
-        assert!(
-            judged.sandboxes.is_empty() && judged.stats.is_none(),
-            "a carried answer needs no executable and so no run"
-        );
+        assert_eq!(answer.as_str(), SOURCE_DIGEST);
+        assert_eq!(judged.extra_args, vec![kind], "a checker is told the kind");
+        assert!(judged.sandboxes.is_empty() && judged.stats.is_none());
     }
 }
 
@@ -164,8 +158,12 @@ fn a_testcase_nobody_carried_an_answer_for_runs_the_executable() {
         .expect("the evaluation must run");
 
     assert!(judged.success);
-    assert_eq!(judged.outcome, None, "the run's answer is not judged here");
-    assert!(judged.text.is_empty());
+    assert_eq!(
+        judged.outcome,
+        Some(0.0),
+        "the run wrote an answer that is not the dataset's"
+    );
+    assert_eq!(judged.text, vec!["Output isn't correct"]);
     let Some(Origin::Written(answer)) = judged.origin else {
         panic!("the answer the run wrote");
     };

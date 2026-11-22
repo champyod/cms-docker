@@ -90,7 +90,12 @@ fn the_answer_is_handed_on_for_comparison_and_stored_when_asked_for() {
     let judged = task()
         .evaluate(&job(), &StubToolchain, &runtime, Box::new(store.clone()))
         .expect("the evaluation must run");
-    assert_eq!(judged.outcome, None, "an unjudged answer has no score");
+    assert_eq!(
+        judged.outcome,
+        Some(0.0),
+        "the answer the second phase wrote is not the dataset's"
+    );
+    assert_eq!(judged.text, vec!["Output isn't correct"]);
     let answer = judged.output_file.as_ref().expect("the file to compare");
     assert!(answer.path.ends_with("output.txt"), "{:?}", answer.path);
 
