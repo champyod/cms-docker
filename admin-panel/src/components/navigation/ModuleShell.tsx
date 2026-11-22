@@ -65,7 +65,7 @@ function ModuleSurface({
     <section
       data-surface="module"
       className={cn(
-        'mx-auto w-full max-w-7xl space-y-6 pb-[env(safe-area-inset-bottom)] md:pb-0',
+        'w-full space-y-6 pb-[env(safe-area-inset-bottom)] md:pb-0',
         className,
       )}
     >

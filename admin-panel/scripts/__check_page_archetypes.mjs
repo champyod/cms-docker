@@ -69,9 +69,13 @@ const problems = [];
  * from the navigation registry. The title slot became optional once this was noticed; these pages
  * still pass one, and the count may only fall, one page per session.
  */
-const SHELL_OWNS_HEADER = /ownsHeader=\{false\}[^>]*title=/s;
-const TITLE_DEBT_CEILING = 39;
-const titleDebt = [];
+// Ceilings are overridable so a fixture can prove the ratchet fails when a page adds one back.
+const ceiling = (prop, fallback) => Number(process.env[`SHELL_DEBT_${prop.toUpperCase()}`] ?? fallback);
+const SHELL_OWNED_PROPS = [
+  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 38) },
+  { prop: 'description', pattern: /ownsHeader=\{false\}[^>]*description=/s, ceiling: ceiling('description', 5) },
+];
+const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]));
 
 for (const page of pages) {
   const kind = PAGE_ARCHETYPE_BY_ROUTE[page.route];
@@ -81,7 +85,9 @@ for (const page of pages) {
   }
   const source = readFileSync(page.file, 'utf8');
 
-  if (SHELL_OWNS_HEADER.test(source)) titleDebt.push(page.route);
+  for (const entry of SHELL_OWNED_PROPS) {
+    if (entry.pattern.test(source)) shellOwnedDebt.get(entry.prop).push(page.route);
+  }
 
   // A layout whose required content slot is an empty literal renders a frame over nothing, which
   // reads as a page that failed rather than one whose subject does not exist yet. The page must say
@@ -146,10 +152,13 @@ for (const route of undeclared) {
   if (!allowed.has(route)) problems.push(`${route} has no archetype and is not in the baseline (new page, or a route renamed)`);
 }
 
-if (titleDebt.length > TITLE_DEBT_CEILING) {
-  problems.push(
-    `${titleDebt.length} pages pass a title the shell owns, above the ${TITLE_DEBT_CEILING} this branch inherited`
-  );
+for (const entry of SHELL_OWNED_PROPS) {
+  const debt = shellOwnedDebt.get(entry.prop);
+  if (debt.length > entry.ceiling) {
+    problems.push(
+      `${debt.length} pages pass a ${entry.prop} the shell owns, above the ${entry.ceiling} this branch inherited`
+    );
+  }
 }
 
 if (problems.length) {
@@ -163,5 +172,8 @@ const progress = baseline.undeclared.length - undeclared.length;
 console.log(
   `page archetypes: OK - ${declared.length} declared, ${undeclared.length} undeclared of ${pages.length} pages` +
     (progress > 0 ? `, ${progress} fewer than the baseline` : '') +
-    (titleDebt.length ? `, ${titleDebt.length} page(s) still pass a title their shell owns` : '')
+    [...shellOwnedDebt]
+      .filter(([, debt]) => debt.length > 0)
+      .map(([prop, debt]) => `, ${debt.length} page(s) still pass a ${prop} their shell owns`)
+      .join('')
 );

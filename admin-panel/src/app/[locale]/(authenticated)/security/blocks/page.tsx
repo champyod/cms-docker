@@ -115,10 +115,9 @@ export default async function SecurityBlocksPage({
 
   return (
     <BoardPage
-      // The module shell above renders the title, the description and the trail.
+      // The security module shell renders this page's name, description and trail from the
+      // navigation registry, so the page supplies only its sections.
       ownsHeader={false}
-      title={dict.navigation.security.blocks.label}
-      description={dict.navigation.security.blocks.description}
       sections={sections}
     />
   );
