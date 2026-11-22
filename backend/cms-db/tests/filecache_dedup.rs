@@ -37,9 +37,18 @@ async fn connection(config: &SessionConfig) -> PgConnection {
 
 /// The large objects no row names, which is exactly what a losing writer leaves if
 /// its bytes are not unlinked.
+///
+/// Scoped to objects created after `$1`, because the count is otherwise taken over
+/// the whole database: an orphan left by an earlier failed run made this test fail
+/// for a reason no code change could fix, and only a dropped database cleared it.
 const ORPHANS_SQL: &str = "\
     SELECT count(*) FROM pg_largeobject_metadata AS m \
-    WHERE NOT EXISTS (SELECT 1 FROM fsobjects AS f WHERE f.loid = m.oid)";
+    WHERE m.oid::bigint > $1 \
+    AND NOT EXISTS (SELECT 1 FROM fsobjects AS f WHERE f.loid = m.oid)";
+
+/// The highest object id before this test creates any, so [`ORPHANS_SQL`] can ignore
+/// what was already there.
+const ORPHAN_FLOOR_SQL: &str = "SELECT COALESCE(max(oid), 0)::bigint FROM pg_largeobject_metadata";
 
 #[test]
 fn a_competing_insert_leaves_one_row_and_no_unlinked_bytes() {
@@ -47,6 +56,10 @@ fn a_competing_insert_leaves_one_row_and_no_unlinked_bytes() {
     sqlx::test_block_on(async {
         let mut setup = connection(&config).await;
         support::create(&mut setup).await;
+        let orphan_floor: i64 = sqlx::query_scalar(ORPHAN_FLOOR_SQL)
+            .fetch_one(&mut setup)
+            .await
+            .expect("reading the object id floor");
         let digest: FileDigest = bytes_digest(CONTENT).parse().expect("a digest");
         sqlx::query("DELETE FROM fsobjects WHERE digest = $1::varchar")
             .bind(digest.as_str())
@@ -92,6 +105,7 @@ fn a_competing_insert_leaves_one_row_and_no_unlinked_bytes() {
         assert_eq!(rows, 1, "one digest must name one row");
 
         let orphans: i64 = sqlx::query_scalar(ORPHANS_SQL)
+            .bind(orphan_floor)
             .fetch_one(&mut setup)
             .await
             .expect("counting the large objects");
