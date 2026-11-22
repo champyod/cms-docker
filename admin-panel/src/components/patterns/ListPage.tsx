@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { Card } from '@/components/core/Card';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { PageSurface } from '@/components/core/PageSurface';
+import { ROW_HEIGHT_CLASS } from '@/components/core/ResponsiveTable';
 import { Skeleton } from '@/components/core/Skeleton';
 import type { PageSlots } from '@/components/patterns/page-types';
 
@@ -49,7 +50,7 @@ export function ListPage({
 }: ListPageProps): React.JSX.Element {
   return (
     <PageSurface breadcrumbs={breadcrumbs} title={title} description={description} actions={actions} ownsHeader={ownsHeader}>
-      <div className="space-y-3">
+      <div className="space-y-4">
         {state && (
           <InlineAlert
             tone={state.tone}
@@ -70,12 +71,16 @@ export function ListPage({
   );
 }
 
-/** Six rows at the row height the real rows will use, so nothing shifts on load. */
+/**
+ * Rows at the height the real ones use, taken from the one constant, so the skeleton answers to the
+ * density mode too. Six of them show the shape of a table; they do not promise the page's own row
+ * count, and a list that pages twenty rows will still settle rather than jump from nothing.
+ */
 function RowSkeleton(): React.JSX.Element {
   return (
     <div className="divide-y divide-border" aria-busy="true" aria-live="polite">
       {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="flex h-8 items-center gap-3 px-4">
+        <div key={index} className={`flex ${ROW_HEIGHT_CLASS} items-center gap-3 px-4`}>
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-3 flex-1" />
           <Skeleton className="h-3 w-16" />
