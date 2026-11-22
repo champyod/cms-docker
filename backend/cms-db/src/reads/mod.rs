@@ -38,7 +38,10 @@ mod result;
 mod submission;
 mod testcase;
 
-pub use dataset::{dataset_from_row, DatasetId, DatasetRecord, DATASET_BY_ID};
+pub use dataset::{
+    dataset_from_row, get_datasets_to_judge, DatasetId, DatasetRecord, DATASET_BY_ID,
+    JUDGEABLE_DATASETS,
+};
 pub use result::{result_from_row, ResultRecord, RESULT_BY_SUBMISSION_AND_DATASET};
 pub use submission::{submission_from_row, SubmissionId, SubmissionRecord, SUBMISSION_BY_ID};
 pub use testcase::{testcase_from_row, TestcaseRecord, TESTCASES_BY_DATASET};
