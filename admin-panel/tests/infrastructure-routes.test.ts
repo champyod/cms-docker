@@ -75,7 +75,7 @@ describe('Infrastructure ownership and wiring', () => {
     [
       'src/app/[locale]/(authenticated)/infrastructure/containers/page.tsx',
       'infrastructure.containers',
-      '<ContainersClient',
+      '<ListPage',
     ],
     [
       'src/app/[locale]/(authenticated)/infrastructure/resources/page.tsx',

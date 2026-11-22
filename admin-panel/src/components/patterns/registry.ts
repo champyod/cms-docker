@@ -23,6 +23,8 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   // One subsystem's values, with its tuning and its alerts as the sections that belong to it.
   '/security/waf': 'detail',
   '/infrastructure/services': 'board',
+  // One row set with per-row and bulk actions; the counts describe it rather than stand alone.
+  '/infrastructure/containers': 'list',
   '/ranking/users': 'board',
   '/evaluation/lanes': 'list',
   '/evaluation/submissions': 'list',

@@ -31,7 +31,7 @@ Inventory: **0 of 0 pages documented.**
 | `/evaluation/submissions/:id/logs` | detail | — *to inventory* |
 | `/evaluation/submissions/:id/results` | detail | how many datasets were judged and how many compilations failed · each dataset's score, compilation outcome, evaluation outcome, time, memory, public score and when it was scored · the stored files, each downloadable · what empty means |
 | `/evaluation/submissions/:id/summary` | detail | the submission's language and comment, and when it arrived · the stored source, with a diff against the previous submission where one exists · which outcome tabs this reader may open, and which of them are not readable |
-| `/infrastructure/containers` | list | — *to inventory* |
+| `/infrastructure/containers` | list | how many containers exist, how many run, how many do not, and the stack uptime · each container's name, image, status, auto-restart and restart count, with when the row was last read · per-row logs, settings, start/stop/restart and selection · bulk restart, remove and logs over the checked rows · compose up, restart and build per stack, with the system log · what empty means (the stream has reported no container). No filter and no total against a whole: the stream reports every container in one pass |
 | `/infrastructure/deployments` | list | — *to inventory* |
 | `/infrastructure/resources` | list | — *to inventory* |
 | `/infrastructure/services` | board | the problems a sync would refuse · services with role, host, ports, contest and enabled state, each editable and removable · wirings with their relation · exposures with hostname, path, owner and TLS, a curated one without an editor · the artifacts the next sync renders, each with its hot-apply class · what empty means per section |
