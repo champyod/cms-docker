@@ -2,7 +2,6 @@
   "undeclared": [
     "/administration/audit",
     "/administration/groups",
-    "/contests/:id",
     "/contests/:id/communications",
     "/contests/:id/countdown",
     "/contests/:id/overview",

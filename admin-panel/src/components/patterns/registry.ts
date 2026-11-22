@@ -26,6 +26,7 @@ export const PAGE_ARCHETYPE_BY_ROUTE: Readonly<Record<string, PageArchetype>> = 
   '/system/settings': 'settings',
   // A record landing carries no surface either: it resolves the record and forwards to its default
   // tab, which is where the detail actually lives.
+  '/contests/:id': 'redirect',
   '/people/users/:id': 'redirect',
   // Legacy addresses that forward to their canonical route; they render no surface of their own.
   '/admins': 'redirect',

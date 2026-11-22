@@ -6,7 +6,7 @@ where they sit.
 
 Legacy redirects are not listed: they forward an old address and render nothing.
 
-Inventory: **16 of 58 pages documented.**
+Inventory: **15 of 57 pages documented.**
 
 | Route | Archetype | Facts it must show (reading order) |
 |---|---|---|
@@ -15,7 +15,7 @@ Inventory: **16 of 58 pages documented.**
 | `/administration/audit` | list | — *to inventory* |
 | `/administration/groups` | list | — *to inventory* |
 | `/contests` | list | contests with id, name, state, active flag, window and their task and participant counts · filter by name or description, with sort · how many match against the whole set, paged · per-row edit, activate and delete · create · what empty means |
-| `/contests/:id` | detail | contest identity and state · window and rule facts · participants and tasks it owns · actions · change history |
+| `/contests/:id` | redirect | nothing of its own — it resolves the record and forwards to the overview tab, which renders the surface |
 | `/contests/:id/communications` | detail | — *to inventory* |
 | `/contests/:id/countdown` | detail | — *to inventory* |
 | `/contests/:id/overview` | detail | — *to inventory* |
