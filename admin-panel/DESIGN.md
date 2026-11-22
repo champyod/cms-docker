@@ -244,3 +244,16 @@ the index; that file is the evidence, and a rule may only cite a source that app
 | "unslopped UI" tell catalogue (3.2M posts, 47 subreddits) and mowgli.ai's 15 tells | §2: the AI tells — big-number stats strip, icon in a tinted square on every card, ALL-CAPS eyebrow, identical rounded cards, emoji as icons; "a tell is just a default that nobody overrode" |
 | dev.to, "The Purple Gradient Problem" (2026), incl. Adam Wathan's `bg-indigo-500` apology | §4: distributional convergence; the root cause of slop is *no decision*; fix by committing to one direction and holding a banned list |
 
+## 19. Two characters are banned from anything a reader sees
+
+An em dash and a middle dot are the two marks that make a sentence read as machine-written, and both
+are avoidable without losing meaning. They are banned in every user-visible string: dictionary
+entries, JSX text, tooltips, empty states, error messages.
+
+| Banned | Write instead |
+|---|---|
+| `—` (em dash) | a comma, a colon, a full stop, or two sentences |
+| `·` (middle dot) | a comma, a slash where it is a path, or a separate line |
+
+They are allowed inside source comments, which no reader sees. When a separator is genuinely needed
+between two values, use a comma and a word, not a glyph.
