@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 cms-db = { path = "../cms-db" }
+cms-grading = { path = "../cms-grading" }
 sqlx = { workspace = true }
 
 [dev-dependencies]
