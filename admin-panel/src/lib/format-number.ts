@@ -29,3 +29,21 @@ export function formatCountOrText(value: number | string, locale?: string): stri
 export function countLabel(count: number, noun: { one: string; other: string }, locale?: string): string {
   return `${formatCount(count, locale)} ${count === 1 ? noun.one : noun.other}`;
 }
+
+/**
+ * A score printed at the precision the task declares, grouped in the reader's locale.
+ *
+ * Why here: a score's precision belongs to the task, not to the page that shows it, and four surfaces
+ * were each deciding that for themselves (`toFixed(precision)`, `toFixed(1)`, a bare `toFixed(0)`).
+ */
+export function formatScore(value: number, precision: number, locale?: string): string {
+  if (!Number.isFinite(value)) return String(value);
+  try {
+    return new Intl.NumberFormat(locale ?? 'en', {
+      minimumFractionDigits: precision,
+      maximumFractionDigits: precision,
+    }).format(value);
+  } catch {
+    return value.toFixed(precision);
+  }
+}

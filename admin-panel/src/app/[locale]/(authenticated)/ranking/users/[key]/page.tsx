@@ -23,6 +23,7 @@ import { RankingOverrideSurface } from '@/components/ranking/RankingOverrideSurf
 import { getDictionary } from '@/i18n';
 import type { Dictionary } from '@/lib/dictionary';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
+import { formatCount, formatScore } from '@/lib/format-number';
 
 type UsersCopy = Dictionary['ranking']['users'];
 type RankingCopy = Dictionary['ranking'];
@@ -154,8 +155,8 @@ export default async function RankingUserDetailPage({
         { term: copy.users.name, value: detail.entry.displayName },
         { term: copy.users.username, value: detail.entry.username },
         { term: copy.users.team, value: detail.entry.teamName ?? dictionary.common.notSet },
-        { term: copy.users.total, value: detail.entry.totalScore.toFixed(TOTAL_SCORE_PRECISION) },
-        { term: copy.users.rank, value: String(detail.entry.rank) },
+        { term: copy.users.total, value: formatScore(detail.entry.totalScore, TOTAL_SCORE_PRECISION, locale) },
+        { term: copy.users.rank, value: formatCount(detail.entry.rank, locale) },
         {
           term: copy.users.hidden,
           value: detail.entry.hidden ? copy.users.hiddenYes : copy.users.hiddenNo,
