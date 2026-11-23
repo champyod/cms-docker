@@ -1,8 +1,5 @@
-//! The attempt caps a submission and a user test are given.
-//!
-//! They are read by the service that enforces them and by the dashboard that counts
-//! the submissions sitting at the cap, so neither of those two owns them
-//! (`EvaluationService.py:253` asks for exactly this move in its own comment).
+//! The attempt caps a submission and a user test are given: read by the service that enforces one and the
+//! dashboard that counts the other, so neither owns them (`EvaluationService.py:253` asks for the move).
 
 /// The compilation failures a submission may collect before it is counted as exhausted.
 pub const MAX_COMPILATION_TRIES: i32 = 3;

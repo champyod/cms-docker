@@ -1,7 +1,5 @@
 //! The scratch schema the status tally is counted against, and the rows the three suites seed it with.
-//!
-//! Every table is `TEMP`, so each test owns its own copy in its own connection and leaves the
-//! scratch database exactly as it found it.
+//! Every table is `TEMP`, so each test owns its own copy in its own connection and leaves the database as it was.
 
 use sqlx::postgres::PgConnection;
 use sqlx::{AssertSqlSafe, Connection};

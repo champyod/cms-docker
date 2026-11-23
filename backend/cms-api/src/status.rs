@@ -1,8 +1,6 @@
-//! How many submissions sit in each status: `server.py:112-201`, counted over each task's active dataset.
-//!
-//! `submissions` drives the scan, so the total is every submission in scope and one whose active dataset has
-//! no result arrives with nothing attached — the case [`StatusCounts`]'s reconciliation exists for. A contest
-//! restricts the scan through the submission's participation, never through its task.
+//! How many submissions sit in each status: `server.py:112-201`, over each task's active dataset.
+//! `submissions` drives the scan, so a submission whose active dataset has no result is the case the
+//! reconciliation exists for; a contest restricts the scan through the participation, never the task.
 
 use cms_db::{CompilationOutcome, DatasetId, EvaluationOutcome, SubmissionId, SubmissionResult};
 use sqlx::postgres::{PgConnection, Postgres};
@@ -28,14 +26,11 @@ const STATUS_ROWS: &str = "\
            ON r.submission_id = s.id AND r.dataset_id = t.active_dataset_id";
 
 /// The seven statuses and the total, for `contest_id`'s submissions or for all of them when `None`.
-///
-/// The reference's docstring says six statuses; what it returns is these seven plus `total`, and the gauge
-/// reads the dict.
+/// The reference's docstring says six statuses; it returns these seven plus `total`, and the gauge reads the dict.
 ///
 /// # Errors
 ///
-/// Returns the driver's own error for a statement it refused, and a `ColumnDecode` naming the column when an
-/// outcome holds a value the enum does not declare or a joined counter arrives NULL.
+/// Returns the driver's error for a statement it refused, and `ColumnDecode` naming a column it could not read.
 pub async fn submissions_status(
     connection: &mut PgConnection,
     contest_id: Option<i32>,
