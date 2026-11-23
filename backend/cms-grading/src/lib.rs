@@ -16,6 +16,9 @@
 //! language this workspace compiles, and a lookup that answers `None` for a name
 //! it does not know rather than inventing a command.
 //!
+//! [`limits`] is the four attempt caps: the evaluation service enforces them and the
+//! dashboard counts the submissions that reached them, so one module holds both readings.
+//!
 //! [`scoretypes`] is what a submission is worth once its runs are judged: four score
 //! types chosen by the name in a dataset's `score_type` column, the two document shapes
 //! they produce, and the two formatting rules that decide what a contestant reads — the
@@ -69,6 +72,7 @@
 
 pub mod job;
 pub mod languages;
+pub mod limits;
 pub mod messages;
 pub mod scoretypes;
 pub mod scoring;
