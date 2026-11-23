@@ -203,7 +203,12 @@
     },
     "ranking": {
       "title": "Standings",
-      "description": "Every participant’s total, with each task’s score as a column, and the progress graph over the first twenty."
+      "description": "Every participant’s total, with each task’s score as a column, and the progress graph over the first twenty.",
+      "columns": {
+        "rank": "#",
+        "user": "User",
+        "total": "Total"
+      }
     },
     "tasks": {
       "one": "task",
