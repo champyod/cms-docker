@@ -232,6 +232,11 @@
         "searchLabel": "Search timezone",
         "listLabel": "Timezone",
         "searchPlaceholder": "Search {count} timezones"
+      },
+      "controls": {
+        "warnTitle": "Warn me this far ahead",
+        "warnLabel": "Hurry warning window",
+        "back": "Back"
       }
     },
     "overview": {

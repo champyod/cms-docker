@@ -1,5 +1,6 @@
 'use client';
 
+import { useDictionary } from '@/hooks/useDictionary';
 import { memo } from 'react';
 import { ArrowLeftIcon, MaximizeIcon, MinimizeIcon, PauseIcon, PlayIcon } from 'lucide-animated';
 import {
@@ -27,6 +28,7 @@ export const CountdownThresholdField = memo(function CountdownThresholdField({
   threshold,
   onChange,
 }: ThresholdFieldProps): React.JSX.Element {
+  const words = useDictionary().contests.countdown.controls;
   const changeAmount = (event: React.ChangeEvent<HTMLInputElement>): void => {
     onChange({ ...threshold, amount: event.target.valueAsNumber });
   };
@@ -42,8 +44,8 @@ export const CountdownThresholdField = memo(function CountdownThresholdField({
     if (input.selectionStart === input.selectionEnd) input.select();
   };
   return (
-    <label className="countdown-threshold" title="Warn me this far ahead">
-      <span className="sr-only">Hurry warning window</span>
+    <label className="countdown-threshold" title={words.warnTitle}>
+      <span className="sr-only">{words.warnLabel}</span>
       <input
         type="number"
         inputMode="numeric"
@@ -86,9 +88,10 @@ export const CountdownToolbar = memo(function CountdownToolbar({
   isPaused,
   onTogglePaused,
 }: ToolbarProps): React.JSX.Element {
+  const words = useDictionary().contests.countdown.controls;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <CountdownIconButton label="Back" onClick={onBack}>
+      <CountdownIconButton label={words.back} onClick={onBack}>
         <ArrowLeftIcon size={18} animateOnHover />
       </CountdownIconButton>
       <div className="flex flex-wrap items-center justify-end gap-2">

@@ -232,6 +232,11 @@
         "searchLabel": "ค้นหาเขตเวลา",
         "listLabel": "เขตเวลา",
         "searchPlaceholder": "ค้นหาเขตเวลา {count} รายการ"
+      },
+      "controls": {
+        "warnTitle": "เตือนล่วงหน้าเมื่อเหลือเวลานี้",
+        "warnLabel": "ช่วงเวลาเตือนให้รีบ",
+        "back": "ย้อนกลับ"
       }
     },
     "overview": {
