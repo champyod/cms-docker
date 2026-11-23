@@ -1,5 +1,6 @@
 'use client';
 
+import { useDictionary } from '@/hooks/useDictionary';
 import { panicDigitClassNames, panicDigitStyle } from '@/lib/contest-panic';
 
 // ── Time decomposition ────────────────────────────────────────────────────────
@@ -144,6 +145,8 @@ export function ContestCountdownClock({
   isPanicking = false,
   panicTurn = 0,
 }: Props): React.JSX.Element {
+  // The unit words are content; the CSS uppercases them, so the dictionary holds natural case.
+  const words = useDictionary().contests.countdown.units;
   const units = remainingMs !== null ? decompose(remainingMs) : null;
   const { showDays, showHours } = units !== null
     ? visibleUnits(units)
@@ -163,22 +166,22 @@ export function ContestCountdownClock({
         <div className="yt-units-row" data-units={unitCount}>
           {showDays && (
             <>
-              <UnitBlock value={pad2(units.days)} label="DAYS"
+              <UnitBlock value={pad2(units.days)} label={words.days}
                 startIndex={IDX_DAYS} isPanicking={isPanicking} panicTurn={panicTurn} />
               <Separator />
             </>
           )}
           {showHours && (
             <>
-              <UnitBlock value={pad2(units.hours)} label="HOURS"
+              <UnitBlock value={pad2(units.hours)} label={words.hours}
                 startIndex={IDX_HOURS} isPanicking={isPanicking} panicTurn={panicTurn} />
               <Separator />
             </>
           )}
-          <UnitBlock value={pad2(units.minutes)} label="MINUTES"
+          <UnitBlock value={pad2(units.minutes)} label={words.minutes}
             startIndex={IDX_MINUTES} isPanicking={isPanicking} panicTurn={panicTurn} />
           <Separator />
-          <UnitBlock value={pad2(units.seconds)} label="SECONDS"
+          <UnitBlock value={pad2(units.seconds)} label={words.seconds}
             startIndex={IDX_SECONDS} isPanicking={isPanicking} panicTurn={panicTurn} />
         </div>
       )}

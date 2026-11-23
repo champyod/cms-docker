@@ -220,6 +220,12 @@
         "start": "เริ่ม",
         "stop": "สิ้นสุด",
         "analysis": "ช่วงวิเคราะห์"
+      },
+      "units": {
+        "days": "วัน",
+        "hours": "ชั่วโมง",
+        "minutes": "นาที",
+        "seconds": "วินาที"
       }
     },
     "overview": {
