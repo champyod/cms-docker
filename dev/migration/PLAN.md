@@ -629,14 +629,23 @@ merged, because the answer decides whether that deletion is meaningful or moot.
 lists six `__check_*` scripts and not this one). It boots two Docker stacks, so wiring it is a cost
 decision, not an oversight to fix quietly.
 
-### Blocked on an operator decision (2026-11-23)
+### Resolved: the schema gate (2026-11-23)
 
-`backend/cms-db/tests/support/schema_check.rs:95` shells out to `pg_dump`, and the schema
-gate (`the_created_schema_matches_the_frozen_dump`) therefore cannot run on this host:
-`command -v pg_dump` is empty and the 16.16 scratch shim was pruned after its 24 hours.
-The failure is the tool's absence, not a schema difference — every other target is green
-(153 targets, 932 passed). Precedent for requiring it: `src/cmstestsuite/unit_tests/
-schema_diff_test.py:124-133`. Two ways out, and it is a toolchain decision, not a code one:
-install `pg_dump` 16 on the host, or replace the checker's external dependency with an
-`information_schema` comparison that needs no tool (which changes what the gate proves, so
-it is not a quiet edit).
+Not a missing tool. The checker already takes `pg_dump` from the compose-pinned image
+(`backend/cms-db/tests/support/pg_dump.rs:26-46`, `docker run --entrypoint pg_dump`); the
+failure was a **server version** mismatch — I had brought the test database up on
+`postgres:16-alpine` while docker-compose pins `postgres:15` (pg_dump 15.20 refuses a 16.16
+server), and `dev/fixtures/cms_schema.sql` was itself dumped by 15.20.
+
+Run the live gate against the version the deployment actually pins:
+
+```
+docker run -d --rm --name cms-schema15 -e POSTGRES_USER=cmsuser \
+  -e POSTGRES_PASSWORD=… -e POSTGRES_DB=cmsdb_test -p 127.0.0.1:15444:5432 \
+  --tmpfs /var/lib/postgresql/data postgres:15
+CMS_DB_TEST_URL='postgres://cmsuser:…@127.0.0.1:15444/cmsdb_test' cargo test -- --test-threads=1
+```
+
+**153 targets, 933 passed, 0 failed.** The gate is not weakened: `schema_check.rs` still
+compares statements against the frozen dump, and the version check that made this visible is
+the reason a 16 server cannot silently pass.
