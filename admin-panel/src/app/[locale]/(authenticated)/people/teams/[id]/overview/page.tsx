@@ -40,7 +40,6 @@ export default async function TeamOverviewPage({ params }: { params: Promise<{ l
       // The record shell above renders the team's name, its trail and its tabs. This tab adds the
       // two values the edit form does not show, then the three it does.
       ownsHeader={false}
-      title={summary.name ?? summary.code ?? `#${summary.id}`}
       facts={[
         { term: copy.leader, value: leaderName(summary, dictionary.common.notSet) },
         { term: copy.members, value: formatCount(summary.participationCount, locale) },
