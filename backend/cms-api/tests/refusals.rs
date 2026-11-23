@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use cms_api::{permits, tier_for, Access, Tier};
+use cms_api::{authorize, permits, tier_for, Access, AccessError, Tier};
 use cms_db::{resolve, EffectivePermissions, PermissionInputs};
 
 /// The keys `permissions` registers; `all:all` is one of them, which is why it survives resolution.
@@ -36,6 +36,14 @@ fn admitted(effective: EffectivePermissions) -> Access {
         enabled: true,
         effective,
     }
+}
+
+fn read_admitted(effective: EffectivePermissions) -> Result<Option<Access>, AccessError> {
+    Ok(Some(admitted(effective)))
+}
+
+fn read_failed() -> Result<Option<Access>, AccessError> {
+    Err(AccessError::Row(sqlx::Error::RowNotFound))
 }
 
 #[test]
@@ -112,4 +120,49 @@ fn a_disabled_admin_is_refused_though_its_set_would_be_admitted() {
         "a disabled admin killed a service"
     );
     assert!(!permits(&disabled, "ResourceService", "get_resources"));
+}
+
+#[tokio::test]
+async fn an_absent_admin_id_is_refused_before_the_read_runs() {
+    let present = authorize(
+        |_| async { read_admitted(superadmin()) },
+        Some(7),
+        "ResourceService",
+        "kill_service",
+    )
+    .await;
+    assert!(present, "the same read admits a present id");
+
+    let absent = authorize(
+        |_| async { read_admitted(superadmin()) },
+        None,
+        "ResourceService",
+        "kill_service",
+    )
+    .await;
+    assert!(!absent, "an absent admin id was admitted");
+}
+
+#[tokio::test]
+async fn a_failed_read_is_refused_where_the_same_read_admits() {
+    let refused = authorize(
+        |_| async { read_failed() },
+        Some(7),
+        "ResourceService",
+        "get_resources",
+    )
+    .await;
+    assert!(
+        !refused,
+        "a failed read fell through to the floor tier's get_resources"
+    );
+
+    let admitted_read = authorize(
+        |_| async { read_admitted(authenticated_admin()) },
+        Some(7),
+        "ResourceService",
+        "get_resources",
+    )
+    .await;
+    assert!(admitted_read);
 }

@@ -6,3 +6,6 @@ edition = "2021"
 [dependencies]
 cms-db = { path = "../cms-db" }
 sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

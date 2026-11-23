@@ -193,6 +193,7 @@ version = "0.1.0"
 dependencies = [
  "cms-db",
  "sqlx",
+ "tokio",
 ]
 
 [[package]]
