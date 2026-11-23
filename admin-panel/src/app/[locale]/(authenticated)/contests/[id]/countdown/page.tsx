@@ -46,18 +46,21 @@ export default async function ContestCountdownPage({ params }: ContestRouteProps
   // Why the facts carry absolute times while the clock carries the remainder: the clock behind
   // them counts down and can be paused, so it answers "how long left"; only the four stored timings
   // say when this contest actually runs, and reading them in the contest's own zone is the point.
+  // The zone a timestamp is read in, which needs a usable value; what the page *says* the zone is
+  // comes from the record, so a contest with none reads as unset rather than claiming UTC.
   const zone = data.timezone ?? 'UTC';
+  const copy = dictionary.contests.countdown.facts;
   return (
     <DetailPage
       // The record shell above renders the contest's name, its trail and its tabs; the rail says
       // Countdown, so the tab adds the timings and the clock that counts to them.
       ownsHeader={false}
       facts={[
-        { term: 'Timezone', value: data.timezone ?? 'UTC' },
-        { term: 'Start', value: zoneFact(data.start, zone, dictionary.common.notSet) },
-        { term: 'Stop', value: zoneFact(data.stop, zone, dictionary.common.notSet) },
+        { term: copy.timezone, value: data.timezone ?? dictionary.common.notSet },
+        { term: copy.start, value: zoneFact(data.start, zone, dictionary.common.notSet) },
+        { term: copy.stop, value: zoneFact(data.stop, zone, dictionary.common.notSet) },
         {
-          term: 'Analysis',
+          term: copy.analysis,
           value: data.analysis_start === null || data.analysis_stop === null
             ? dictionary.common.notSet
             : `${zoneFact(data.analysis_start, zone, dictionary.common.notSet)} → ${zoneFact(data.analysis_stop, zone, dictionary.common.notSet)}`,

@@ -208,6 +208,14 @@
     "tasks": {
       "one": "task",
       "other": "tasks"
+    },
+    "countdown": {
+      "facts": {
+        "timezone": "Timezone",
+        "start": "Start",
+        "stop": "Stop",
+        "analysis": "Analysis"
+      }
     }
   },
   "tasks": {

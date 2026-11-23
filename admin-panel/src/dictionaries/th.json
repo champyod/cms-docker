@@ -208,6 +208,14 @@
     "tasks": {
       "one": "งาน",
       "other": "งาน"
+    },
+    "countdown": {
+      "facts": {
+        "timezone": "เขตเวลา",
+        "start": "เริ่ม",
+        "stop": "สิ้นสุด",
+        "analysis": "ช่วงวิเคราะห์"
+      }
     }
   },
   "tasks": {
