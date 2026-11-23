@@ -40,7 +40,6 @@ export default async function SystemMaintenancePage({ params }: {
       <SettingsPage
         // The system module shell above renders the title, the description and the trail.
         ownsHeader={false}
-        title={dict.navigation.system.maintenance.label}
         groups={groups}
         saveBar={<MaintenanceSaveBar />}
       />
