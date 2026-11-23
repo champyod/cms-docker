@@ -7,13 +7,6 @@ export interface ContestTimingWindow {
   analysis_stop: string | Date | null;
 }
 
-export const PHASE_LABELS: Readonly<Record<ContestPhase, string>> = {
-  not_started: 'Not Started',
-  running: 'Running',
-  analysis: 'Analysis Mode',
-  ended: 'Ended',
-};
-
 export type CountdownStage = 'waiting' | 'running' | 'analysis' | 'hurry' | 'ended';
 
 export const STAGE_LABELS: Readonly<Record<CountdownStage, string>> = {

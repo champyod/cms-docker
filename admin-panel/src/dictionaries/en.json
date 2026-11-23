@@ -216,6 +216,18 @@
         "stop": "Stop",
         "analysis": "Analysis"
       }
+    },
+    "overview": {
+      "facts": {
+        "state": "Contest state",
+        "timezone": "Timezone"
+      }
+    },
+    "phases": {
+      "not_started": "Not started",
+      "running": "Running",
+      "analysis": "Analysis mode",
+      "ended": "Ended"
     }
   },
   "tasks": {
