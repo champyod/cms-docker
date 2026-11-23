@@ -41,7 +41,6 @@ export default async function ContestCommunicationsPage({ params }: ContestRoute
     <BoardPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      title="Communications"
       sections={[
         {
           // Why an announcement and a question are two sections and not two tabs of one: they are
