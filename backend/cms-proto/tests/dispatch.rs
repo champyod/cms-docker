@@ -15,9 +15,20 @@
 
 mod dispatch_fixtures;
 
-use cms_proto::{dispatch, ok, Decision, DropReason};
+use cms_proto::{dispatch, ok, Decision, DropReason, Method};
 use dispatch_fixtures::{gate, message, refused, REQUEST, SECRET, SERVICE};
 use serde_json::{json, Value};
+
+/// The number a context-answering handler is handed, which no `__data` in these tests carries.
+const CONTEXT_VALUE: u32 = 1_234_567;
+
+/// The name the context-answering method is served under.
+const CONTEXT_METHOD: &str = "context";
+
+/// Answers with the context it was handed, which is what a service carrying state needs.
+fn answer_with_context(_data: &Value, context: &u32) -> Result<Value, String> {
+    Ok(json!(*context))
+}
 
 /// A well-formed message with `key` carrying `value` instead, for a shape the
 /// Python client never writes.
@@ -179,5 +190,26 @@ fn a_failing_handler_answers_with_its_own_message_and_no_result() {
             &gate(Some(SECRET), false)
         ),
         refused("no log for this shard")
+    );
+}
+
+#[test]
+fn a_handler_receives_the_context_the_gate_was_given() {
+    // WHY: only a real dispatch proves the gate hands the context through, which is the point of it.
+    const TABLE: [Method<u32>; 1] = [Method {
+        name: CONTEXT_METHOD,
+        is_callable: true,
+        handler: answer_with_context,
+    }];
+
+    assert_eq!(
+        dispatch(
+            &message(CONTEXT_METHOD),
+            &TABLE,
+            &CONTEXT_VALUE,
+            &gate(Some(SECRET), false)
+        ),
+        Decision::Answered(ok(REQUEST, json!(CONTEXT_VALUE))),
+        "the answer is the context, not the __data the message carried"
     );
 }
