@@ -226,6 +226,12 @@
         "hours": "ชั่วโมง",
         "minutes": "นาที",
         "seconds": "วินาที"
+      },
+      "timezoneMenu": {
+        "select": "เลือกเขตเวลา",
+        "searchLabel": "ค้นหาเขตเวลา",
+        "listLabel": "เขตเวลา",
+        "searchPlaceholder": "ค้นหาเขตเวลา {count} รายการ"
       }
     },
     "overview": {

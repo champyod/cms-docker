@@ -8,7 +8,10 @@ import { listTimezones, zoneOffsetLabel, zoneOffsetMap } from '@/lib/contest-cou
 import { resolvePanelPlacement, type PanelPlacement } from '@/lib/anchored-panel';
 import { CountdownIconButton } from './CountdownIconButton';
 import { usePortalHost } from './usePortalHost';
+import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
+import { formatCount } from '@/lib/format-number';
+import { interpolate } from '@/lib/interpolate';
 
 // The list runs to hundreds of zones, so a search box beats scrolling all of them.
 const MAX_VISIBLE_RESULTS = 200;
@@ -48,6 +51,7 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
   value,
   onChange,
 }: TimezoneMenuProps): React.JSX.Element {
+  const words = useDictionary().contests.countdown.timezoneMenu;
   const host = usePortalHost();
   const [isOpen, setIsOpen] = useState(false);
   const [placement, setPlacement] = useState<PanelPlacement | null>(null);
@@ -118,7 +122,7 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
 
   return (
     <div ref={anchorRef} className="relative">
-      <CountdownIconButton label="Select timezone" onClick={toggle} hasPopup expanded={isOpen}>
+      <CountdownIconButton label={words.select} onClick={toggle} hasPopup expanded={isOpen}>
         <EarthIcon ref={iconRef} size={18} animateOnHover />
         <span className="tabular-nums">{zoneOffsetLabel(value)}</span>
       </CountdownIconButton>
@@ -138,11 +142,11 @@ export const ContestCountdownTimezoneMenu = memo(function ContestCountdownTimezo
                 autoFocus
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={`Search ${zones.length} timezones`}
-                aria-label="Search timezone"
+                placeholder={interpolate(words.searchPlaceholder, { count: formatCount(zones.length) })}
+                aria-label={words.searchLabel}
                 className="mb-2 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-2"
               />
-              <ul role="listbox" aria-label="Timezone" className="max-h-64 overflow-auto">
+              <ul role="listbox" aria-label={words.listLabel} className="max-h-64 overflow-auto">
                 {visible.map((zone) => (
                   <li key={zone}>
                     <button

@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MotionGlobalConfig } from 'motion/react';
+import { DictionaryProvider } from '@/components/providers/DictionaryProvider';
+import en from '@/dictionaries/en.json';
 import { ContestCountdownTimezoneMenu } from '@/components/contests/contest-detail/ContestCountdownTimezoneMenu';
 
 // Why: happy-dom rejects on Animation.cancel() when an unfinished animation is torn down, and
@@ -17,13 +19,13 @@ const PANEL_SELECTOR = '.countdown-zone-panel';
 
 describe('countdown timezone panel', () => {
   it('stays closed until its control is used', () => {
-    render(<ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} />);
+    render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} /></DictionaryProvider>);
     expect(document.querySelector(PANEL_SELECTOR)).toBeNull();
   });
 
   it('portals the open panel onto the body, outside the toolbar it belongs to', async () => {
     const user = userEvent.setup();
-    const { container } = render(<ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} />);
+    const { container } = render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={() => undefined} /></DictionaryProvider>);
 
     await user.click(screen.getByRole('button', { name: 'Select timezone' }));
 
@@ -37,7 +39,7 @@ describe('countdown timezone panel', () => {
   it('lists the zones and reports the one that was picked', async () => {
     const user = userEvent.setup();
     const picked: string[] = [];
-    render(<ContestCountdownTimezoneMenu value="UTC" onChange={(zone) => picked.push(zone)} />);
+    render(<DictionaryProvider dict={en}><ContestCountdownTimezoneMenu value="UTC" onChange={(zone) => picked.push(zone)} /></DictionaryProvider>);
 
     await user.click(screen.getByRole('button', { name: 'Select timezone' }));
     // The list shows the first 200 of the runtime's zones, so the search box is what reaches the rest.

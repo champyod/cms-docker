@@ -226,6 +226,12 @@
         "hours": "hours",
         "minutes": "minutes",
         "seconds": "seconds"
+      },
+      "timezoneMenu": {
+        "select": "Select timezone",
+        "searchLabel": "Search timezone",
+        "listLabel": "Timezone",
+        "searchPlaceholder": "Search {count} timezones"
       }
     },
     "overview": {
