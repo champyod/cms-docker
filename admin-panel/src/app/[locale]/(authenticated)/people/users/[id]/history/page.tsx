@@ -39,7 +39,6 @@ export default async function UserHistoryPage({ params }: { params: Promise<{ lo
     <BoardPage
       // The record shell above renders the user's name, the trail and the tabs.
       ownsHeader={false}
-      title={dictionary.navigation.people['user-tabs'].history.label}
       // Why a board and not one list: this tab carries five different record kinds - contests,
       // participations, teams, submissions and contest activity - and each has its own meaning of
       // empty. Forcing them into one row set meant one filter and one total none of them could
