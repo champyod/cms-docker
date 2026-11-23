@@ -64,6 +64,7 @@ export default async function RankingBoardPage({
     <DetailPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
+      // shell-title-exempt: the board's name comes from its appearance settings, which the module shell cannot read
       title={appearance.displayName || appearance.title || named?.name || copy.board.title}
       state={
         // The report keeps its card: the layout places a state but does not frame one, and a set of

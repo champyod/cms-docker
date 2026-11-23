@@ -74,9 +74,16 @@ const problems = [];
  */
 // Ceilings are overridable so a fixture can prove the ratchet fails when a page adds one back.
 const ceiling = (prop, fallback) => Number(process.env[`SHELL_DEBT_${prop.toUpperCase()}`] ?? fallback);
+/**
+ * A page may name itself when the name is the record's, not the module's: a participant's display name
+ * and a board's configured name are facts the shell cannot derive. Such a page says so with
+ * `// shell-title-exempt: <why>` on the line above the prop, and this gate stops counting it. The
+ * marker carries the reason, so an exemption is a decision on the record rather than a number.
+ */
+const TITLE_EXEMPTION = /shell-title-exempt:/;
 const SHELL_OWNED_PROPS = [
-  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 2) },
-  { prop: 'description', pattern: /ownsHeader=\{false\}[^>]*description=/s, ceiling: ceiling('description', 0) },
+  { prop: 'title', pattern: /ownsHeader=\{false\}[^>]*title=/s, ceiling: ceiling('title', 0), exemptable: true },
+  { prop: 'description', pattern: /ownsHeader=\{false\}[^>]*description=/s, ceiling: ceiling('description', 0), exemptable: false },
 ];
 const shellOwnedDebt = new Map(SHELL_OWNED_PROPS.map((entry) => [entry.prop, []]));
 
@@ -100,7 +107,9 @@ for (const page of pages) {
   const source = readFileSync(page.file, 'utf8');
 
   for (const entry of SHELL_OWNED_PROPS) {
-    if (entry.pattern.test(source)) shellOwnedDebt.get(entry.prop).push(page.route);
+    if (!entry.pattern.test(source)) continue;
+    if (entry.exemptable && TITLE_EXEMPTION.test(source)) continue;
+    shellOwnedDebt.get(entry.prop).push(page.route);
   }
 
   // A layout whose required content slot is an empty literal renders a frame over nothing, which

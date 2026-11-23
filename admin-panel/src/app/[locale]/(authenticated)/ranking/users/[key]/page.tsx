@@ -148,6 +148,7 @@ export default async function RankingUserDetailPage({
     <DetailPage
       // The module shell above renders the title, the description and the trail.
       ownsHeader={false}
+      // shell-title-exempt: the participant's display name is this record's identity, not the module's name
       title={detail.entry.displayName}
       facts={[
         { term: copy.users.name, value: detail.entry.displayName },
