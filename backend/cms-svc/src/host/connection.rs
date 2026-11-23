@@ -19,7 +19,7 @@ enum Flow {
 }
 
 /// Serves one connection until the peer closes it or a message ends it.
-pub(super) fn serve(mut stream: TcpStream, registry: &Registry, answers: &InFlight) {
+pub(super) fn serve<C>(mut stream: TcpStream, registry: &Registry<C>, answers: &InFlight) {
     let mut framer = Framer::default();
     let mut chunk = [0_u8; READ_CHUNK];
     loop {
@@ -40,11 +40,11 @@ pub(super) fn serve(mut stream: TcpStream, registry: &Registry, answers: &InFlig
 }
 
 /// Absorbs one read and answers every frame it completed; a refused read ends the connection.
-fn converse(
+fn converse<C>(
     stream: &mut TcpStream,
     framer: &mut Framer,
     chunk: &[u8],
-    registry: &Registry,
+    registry: &Registry<C>,
 ) -> Flow {
     // WHY: a frame may arrive across two reads, and the framer is what holds the half it has.
     if framer.push(chunk).is_err() {
@@ -54,7 +54,7 @@ fn converse(
 }
 
 /// Answers buffered frames until one is incomplete or one ends the connection.
-fn drain(stream: &mut TcpStream, framer: &mut Framer, registry: &Registry) -> Flow {
+fn drain<C>(stream: &mut TcpStream, framer: &mut Framer, registry: &Registry<C>) -> Flow {
     loop {
         let frame = match framer.next_frame() {
             Ok(Some(frame)) => frame,
@@ -68,7 +68,7 @@ fn drain(stream: &mut TcpStream, framer: &mut Framer, registry: &Registry) -> Fl
 }
 
 /// Writes what one frame is owed.
-fn answer(stream: &mut TcpStream, registry: &Registry, frame: &Frame) -> Flow {
+fn answer<C>(stream: &mut TcpStream, registry: &Registry<C>, frame: &Frame) -> Flow {
     // WHY: the codec refuses a `__data` that is not an object before the gate, so no handler sees it.
     let send = match frame.refusal {
         Some(_) => of_frame(&frame.value),

@@ -18,6 +18,7 @@ fn serve() -> (SocketAddr, Stop, JoinHandle<RunOutcome>) {
     let host = Host::bind(
         "127.0.0.1:0",
         vec![callable("probe", answer_with_arguments)],
+        (),
         config,
     )
     .expect("an ephemeral port is bindable");

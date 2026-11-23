@@ -16,7 +16,7 @@ pub const SECRET: &str = "correct-horse-battery-staple";
 
 /// A service exposing two callable methods, one that fails, two backdoor
 /// methods, and one that exists without being callable.
-pub const SERVICE: [Method; 5] = [
+pub const SERVICE: [Method<()>; 5] = [
     Method {
         name: "get_status",
         is_callable: true,
@@ -52,7 +52,7 @@ pub const SERVICE: [Method; 5] = [
 ///
 /// The refusal string when `data` is not an object, which is the one case the
 /// gate lets through for a handler to answer.
-pub fn echo(data: &Value) -> Result<Value, String> {
+pub fn echo(data: &Value, _context: &()) -> Result<Value, String> {
     data.as_object()
         .map(|_| data.clone())
         .ok_or_else(|| "__data must be an object".to_owned())
@@ -65,7 +65,7 @@ pub fn echo(data: &Value) -> Result<Value, String> {
 ///
 /// Always: this handler exists to produce a failure the way a Python handler's
 /// exception does.
-pub fn refuse(_data: &Value) -> Result<Value, String> {
+pub fn refuse(_data: &Value, _context: &()) -> Result<Value, String> {
     Err("no log for this shard".to_owned())
 }
 

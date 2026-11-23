@@ -69,7 +69,7 @@ fn run() -> Result<ExitCode, StartError> {
         secret: Some(&secret),
         is_backdoor_enabled: false,
     };
-    let host = Host::bind(address.as_str(), handlers::methods(), config)?;
+    let host = Host::bind(address.as_str(), handlers::methods(), (), config)?;
     let (mailbox, requests) = channel();
     handlers::install(mailbox).map_err(StartError::Mailbox)?;
     let stop = host.stop_handle();

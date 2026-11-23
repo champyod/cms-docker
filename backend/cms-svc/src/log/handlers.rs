@@ -1,6 +1,6 @@
 //! The two methods the wire serves, and the one sink they share.
 //!
-//! `cms_proto::Method` carries a bare `fn`, so the sink lives in one process-global slot; a second `LogService` takes it over.
+//! The sink is installed in one process-global slot rather than handed in as a context; a second `LogService` takes it over.
 
 use std::sync::{Mutex, MutexGuard};
 
@@ -28,7 +28,7 @@ pub(crate) fn install(sink: Sink) -> Result<(), String> {
 }
 
 /// `Log`: draws the record into both outputs and answers with nothing.
-pub(crate) fn log_method(data: &Value) -> Result<Value, String> {
+pub(crate) fn log_method(data: &Value, _context: &()) -> Result<Value, String> {
     let record = super::record::Record::from_json(data).map_err(|error| error.to_string())?;
     with_sink(|sink| {
         sink.record(&record)
@@ -38,7 +38,7 @@ pub(crate) fn log_method(data: &Value) -> Result<Value, String> {
 }
 
 /// `last_messages`: the buffer, oldest first, taking no arguments.
-pub(crate) fn last_messages_method(_data: &Value) -> Result<Value, String> {
+pub(crate) fn last_messages_method(_data: &Value, _context: &()) -> Result<Value, String> {
     with_sink(|sink| Ok(Value::Array(sink.last_messages())))
 }
 

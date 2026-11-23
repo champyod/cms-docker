@@ -38,7 +38,7 @@ fn run() -> Result<ExitCode, StartError> {
         secret: Some(&secret),
         is_backdoor_enabled: false,
     };
-    let host = Host::bind(address.as_str(), service.methods(), config)?;
+    let host = Host::bind(address.as_str(), service.methods(), (), config)?;
     // WHY: `quit` reaches the host through one slot, so the root that bound it is the one that fills it.
     service::attach_stop(host.stop_handle()).map_err(StartError::Stop)?;
     println!("cms-log-service listening on {}", host.local_addr()?);

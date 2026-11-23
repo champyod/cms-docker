@@ -36,8 +36,7 @@ static MAILBOX: Mutex<Option<Sender<Request>>> = Mutex::new(None);
 /// One question the wire asks the thread that owns the service.
 ///
 /// The service holds a `&dyn ResourceReader` and the children it spawned, so it is not `Send`
-/// and no connection thread may touch it. The handlers are bare `fn`s with no captured state,
-/// so the one channel is how a thread that did not build the service still gets an answer.
+/// and cannot be a host's context; the one channel is how a connection thread still reaches it.
 pub struct Request {
     question: Question,
 }
@@ -84,8 +83,8 @@ impl Request {
 
 /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind), the base ones first.
 #[must_use]
-pub fn methods() -> Vec<Method> {
-    let mut methods = service::methods();
+pub fn methods() -> Vec<Method<()>> {
+    let mut methods = service::methods::<()>();
     methods.push(Method {
         name: GET_RESOURCES_METHOD,
         is_callable: true,
@@ -110,7 +109,7 @@ pub fn install(mailbox: Sender<Request>) -> Result<(), String> {
 }
 
 /// `get_resources`: every stored sample newer than `last_time`, as `(time, sample)` pairs.
-fn get_resources(data: &Value) -> Result<Value, String> {
+fn get_resources(data: &Value, _context: &()) -> Result<Value, String> {
     // WHY: Python's default is 0.0, which the service then floors at the retention window.
     let last_time = data
         .get(LAST_TIME_ARGUMENT)
@@ -127,7 +126,7 @@ fn get_resources(data: &Value) -> Result<Value, String> {
 }
 
 /// `toggle_autorestart`: flips one service's flag and answers what it is now, `null` when off.
-fn toggle_autorestart(data: &Value) -> Result<Value, String> {
+fn toggle_autorestart(data: &Value, _context: &()) -> Result<Value, String> {
     let name = data
         .get(SERVICE_ARGUMENT)
         .and_then(Value::as_str)
