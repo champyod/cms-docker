@@ -115,3 +115,10 @@ fn a_question_key_grants_the_messaging_tier() {
     assert!(has_messaging(&effective));
     assert_eq!(tier_for(&effective), Tier::Messaging);
 }
+
+#[test]
+fn an_announcement_key_grants_the_messaging_tier() {
+    let effective = resolved(&["announcement:announce"]);
+    assert!(has_messaging(&effective));
+    assert_eq!(tier_for(&effective), Tier::Messaging);
+}
