@@ -39,9 +39,8 @@ const BACKDOOR_METHODS: [&str; 2] = ["start_backdoor", "stop_backdoor"];
 /// attribute its `rpc_method` decorator sets.
 ///
 /// `C` is the state a handler is handed with its arguments: a type parameter
-/// rather than a captured closure, because a `fn` pointer stays `Copy` and that
-/// is what keeps every table a `static`.
-#[derive(Debug, Clone, Copy)]
+/// rather than a captured closure, because a `fn` pointer stays `Copy` for any
+/// `C` and that is what keeps every table a `static`.
 pub struct Method<C> {
     /// The name as it travels under `__method`, matched exactly.
     pub name: &'static str,
@@ -51,6 +50,26 @@ pub struct Method<C> {
     /// and either the value to answer with or the message to answer it with
     /// instead.
     pub handler: fn(&Value, &C) -> Result<Value, String>,
+}
+
+// WHY hand-written: a derive would demand `C: Copy`, and a context that carries a service's state is not.
+impl<C> Clone for Method<C> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<C> Copy for Method<C> {}
+
+impl<C> std::fmt::Debug for Method<C> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Method")
+            .field("name", &self.name)
+            .field("is_callable", &self.is_callable)
+            .field("handler", &format_args!("{:p}", self.handler as *const ()))
+            .finish()
+    }
 }
 
 /// The two settings a gate is allowed to decide with.
