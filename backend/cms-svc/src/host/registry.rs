@@ -20,19 +20,25 @@ impl std::fmt::Display for DuplicateMethod {
 
 impl std::error::Error for DuplicateMethod {}
 
-/// The methods a host answers for, together with the gate settings they are served under.
-pub struct Registry {
-    methods: Vec<Method>,
+/// The methods a host answers for, the state they run against, and the gate settings they are served under.
+pub struct Registry<C> {
+    methods: Vec<Method<C>>,
+    context: C,
     secret: Option<String>,
     is_backdoor_enabled: bool,
 }
 
-impl Registry {
-    /// Takes the table, refusing a name twice because lookup answers only the first entry.
-    pub fn new(methods: Vec<Method>, config: GateConfig<'_>) -> Result<Self, DuplicateMethod> {
+impl<C> Registry<C> {
+    /// Takes the table and the context its handlers run against, refusing a name twice because lookup answers only the first entry.
+    pub fn new(
+        methods: Vec<Method<C>>,
+        context: C,
+        config: GateConfig<'_>,
+    ) -> Result<Self, DuplicateMethod> {
         ensure_unique(&methods)?;
         Ok(Self {
             methods,
+            context,
             secret: config.secret.map(str::to_owned),
             is_backdoor_enabled: config.is_backdoor_enabled,
         })
@@ -40,7 +46,7 @@ impl Registry {
 
     /// The table as the gate takes it.
     #[must_use]
-    pub fn methods(&self) -> &[Method] {
+    pub fn methods(&self) -> &[Method<C>] {
         &self.methods
     }
 
@@ -56,12 +62,12 @@ impl Registry {
     /// Runs one decoded message through the gate, which is the only judge here.
     #[must_use]
     pub fn decide(&self, envelope: &Value) -> Decision {
-        dispatch(envelope, &self.methods, &self.gate())
+        dispatch(envelope, &self.methods, &self.context, &self.gate())
     }
 }
 
 /// Reports the first name that appears twice, if any.
-fn ensure_unique(methods: &[Method]) -> Result<(), DuplicateMethod> {
+fn ensure_unique<C>(methods: &[Method<C>]) -> Result<(), DuplicateMethod> {
     let mut seen = HashSet::with_capacity(methods.len());
     for entry in methods {
         if !seen.insert(entry.name) {

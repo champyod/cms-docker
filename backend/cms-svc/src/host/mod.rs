@@ -23,21 +23,23 @@ pub use stop::Stop;
 const ACCEPT_PAUSE: Duration = Duration::from_millis(5);
 
 /// A listening host: the socket, the shared table every connection is served from, and its stop.
-pub struct Host {
+pub struct Host<C> {
     listener: TcpListener,
-    registry: Arc<Registry>,
+    registry: Arc<Registry<C>>,
     answers: Arc<InFlight>,
     stop: Stop,
 }
 
-impl Host {
+// WHY `Send + Sync + 'static`: a connection has its own thread but the handlers share one context.
+impl<C: Send + Sync + 'static> Host<C> {
     /// Binds the address, refusing a duplicate name or an unusable address; port zero asks the kernel.
     pub fn bind(
         addr: impl ToSocketAddrs,
-        methods: Vec<Method>,
+        methods: Vec<Method<C>>,
+        context: C,
         config: GateConfig<'_>,
     ) -> Result<Self, HostError> {
-        let registry = Registry::new(methods, config).map_err(HostError::Duplicate)?;
+        let registry = Registry::new(methods, context, config).map_err(HostError::Duplicate)?;
         let listener = TcpListener::bind(addr).map_err(HostError::Bind)?;
         // WHY: nothing in `std` interrupts a blocked accept, so the loop polls and reads a flag instead.
         listener

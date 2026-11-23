@@ -15,9 +15,20 @@
 
 mod dispatch_fixtures;
 
-use cms_proto::{dispatch, ok, Decision, DropReason};
+use cms_proto::{dispatch, ok, Decision, DropReason, Method};
 use dispatch_fixtures::{gate, message, refused, REQUEST, SECRET, SERVICE};
 use serde_json::{json, Value};
+
+/// The number a context-answering handler is handed, which no `__data` in these tests carries.
+const CONTEXT_VALUE: u32 = 1_234_567;
+
+/// The name the context-answering method is served under.
+const CONTEXT_METHOD: &str = "context";
+
+/// Answers with the context it was handed, which is what a service carrying state needs.
+fn answer_with_context(_data: &Value, context: &u32) -> Result<Value, String> {
+    Ok(json!(*context))
+}
 
 /// A well-formed message with `key` carrying `value` instead, for a shape the
 /// Python client never writes.
@@ -41,7 +52,7 @@ fn without(key: &str) -> Value {
 fn a_message_missing_a_required_key_is_dropped_rather_than_answered() {
     for key in ["__id", "__method", "__data"] {
         assert_eq!(
-            dispatch(&without(key), &SERVICE, &gate(Some(SECRET), false)),
+            dispatch(&without(key), &SERVICE, &(), &gate(Some(SECRET), false)),
             Decision::Dropped(DropReason::MissingKey(key)),
             "a message without {key} has no reply to carry"
         );
@@ -51,7 +62,7 @@ fn a_message_missing_a_required_key_is_dropped_rather_than_answered() {
 #[test]
 fn a_message_that_is_not_an_object_is_dropped() {
     assert_eq!(
-        dispatch(&json!([1, 2, 3]), &SERVICE, &gate(Some(SECRET), false)),
+        dispatch(&json!([1, 2, 3]), &SERVICE, &(), &gate(Some(SECRET), false)),
         Decision::Dropped(DropReason::NotAnObject)
     );
 }
@@ -62,6 +73,7 @@ fn an_id_that_is_not_a_string_is_dropped_rather_than_keyed_into_a_reply() {
         dispatch(
             &with("__id", json!(7)),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         Decision::Dropped(DropReason::IdNotAString)
@@ -74,6 +86,7 @@ fn a_secret_that_is_not_a_string_authenticates_as_no_secret_at_all() {
         dispatch(
             &with("__secret", json!(7)),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         refused("RPC authentication failed.")
@@ -83,7 +96,7 @@ fn a_secret_that_is_not_a_string_authenticates_as_no_secret_at_all() {
 #[test]
 fn a_service_that_configured_no_secret_authenticates_nobody() {
     assert_eq!(
-        dispatch(&message("get_status"), &SERVICE, &gate(None, false)),
+        dispatch(&message("get_status"), &SERVICE, &(), &gate(None, false)),
         refused("RPC authentication failed.")
     );
 }
@@ -94,6 +107,7 @@ fn a_name_no_entry_carries_is_refused_as_missing() {
         dispatch(
             &message("no_such_method"),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         refused("Method no_such_method doesn't exist.")
@@ -106,6 +120,7 @@ fn a_method_that_is_not_a_string_names_no_entry_at_all() {
         dispatch(
             &with("__method", json!(7)),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         refused("Method 7 doesn't exist.")
@@ -118,6 +133,7 @@ fn a_method_that_exists_without_being_callable_is_refused() {
         dispatch(
             &message("reset_connection"),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         refused("Method reset_connection isn't callable.")
@@ -127,7 +143,12 @@ fn a_method_that_exists_without_being_callable_is_refused() {
 #[test]
 fn a_callable_method_is_dispatched_with_the_arguments_it_named() {
     assert_eq!(
-        dispatch(&message("get_status"), &SERVICE, &gate(Some(SECRET), false)),
+        dispatch(
+            &message("get_status"),
+            &SERVICE,
+            &(),
+            &gate(Some(SECRET), false)
+        ),
         Decision::Answered(ok(REQUEST, json!({"limit": 3})))
     );
 }
@@ -138,6 +159,7 @@ fn an_enabled_backdoor_is_dispatched_on_a_service_that_exposes_one() {
         dispatch(
             &message("start_backdoor"),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), true)
         ),
         Decision::Answered(ok(REQUEST, json!({"limit": 3})))
@@ -150,6 +172,7 @@ fn the_arguments_reach_the_handler_exactly_as_they_arrived() {
         dispatch(
             &with("__data", json!(7)),
             &SERVICE,
+            &(),
             &gate(Some(SECRET), false)
         ),
         refused("__data must be an object"),
@@ -160,7 +183,33 @@ fn the_arguments_reach_the_handler_exactly_as_they_arrived() {
 #[test]
 fn a_failing_handler_answers_with_its_own_message_and_no_result() {
     assert_eq!(
-        dispatch(&message("get_log"), &SERVICE, &gate(Some(SECRET), false)),
+        dispatch(
+            &message("get_log"),
+            &SERVICE,
+            &(),
+            &gate(Some(SECRET), false)
+        ),
         refused("no log for this shard")
+    );
+}
+
+#[test]
+fn a_handler_receives_the_context_the_gate_was_given() {
+    // WHY: only a real dispatch proves the gate hands the context through, which is the point of it.
+    const TABLE: [Method<u32>; 1] = [Method {
+        name: CONTEXT_METHOD,
+        is_callable: true,
+        handler: answer_with_context,
+    }];
+
+    assert_eq!(
+        dispatch(
+            &message(CONTEXT_METHOD),
+            &TABLE,
+            &CONTEXT_VALUE,
+            &gate(Some(SECRET), false)
+        ),
+        Decision::Answered(ok(REQUEST, json!(CONTEXT_VALUE))),
+        "the answer is the context, not the __data the message carried"
     );
 }

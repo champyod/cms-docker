@@ -33,13 +33,16 @@ const POISONED: &str = "the stop slot is unusable after a panic while it was hel
 
 /// The stop `quit` raises, empty until a composition root attaches its host's.
 ///
-/// `cms_proto::Method` carries a bare `fn`, so a handler cannot capture the host
-/// it stops; one process serves one service, which is what makes one slot enough.
+/// `quit` ignores the context it is handed: the stop is attached here, once,
+/// before any call can arrive, and one process serves one service.
 static STOP: Mutex<Option<Stop>> = Mutex::new(None);
 
 /// The methods every service answers, ready to compose with the ones it adds.
+///
+/// Generic over the context so a service that carries state can compose them
+/// with its own table instead of being pinned to the unit type.
 #[must_use]
-pub fn methods() -> Vec<Method> {
+pub fn methods<C>() -> Vec<Method<C>> {
     vec![
         Method {
             name: ECHO_METHOD,
@@ -65,7 +68,7 @@ pub fn attach_stop(stop: Stop) -> Result<(), String> {
 }
 
 /// `echo`: the argument back, unchanged — the probe the CLI and the tests read liveness from.
-fn echo(data: &Value) -> Result<Value, String> {
+fn echo<C>(data: &Value, _context: &C) -> Result<Value, String> {
     // WHY: the Python method annotates `str` and checks nothing, so a caller gets back what it sent.
     data.get(STRING_ARGUMENT).cloned().ok_or_else(|| {
         format!("{ECHO_METHOD}() missing 1 required positional argument: '{STRING_ARGUMENT}'")
@@ -73,7 +76,7 @@ fn echo(data: &Value) -> Result<Value, String> {
 }
 
 /// `quit`: names the reason, then stops the host, fatally when asked.
-fn quit(data: &Value) -> Result<Value, String> {
+fn quit<C>(data: &Value, _context: &C) -> Result<Value, String> {
     let reason = data
         .get(REASON_ARGUMENT)
         .and_then(Value::as_str)

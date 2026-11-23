@@ -37,15 +37,39 @@ const BACKDOOR_METHODS: [&str; 2] = ["start_backdoor", "stop_backdoor"];
 /// [`is_callable`](Self::is_callable) cleared does exist but is refused, which
 /// is the difference `rpc.py` draws between `hasattr` and the `rpc_callable`
 /// attribute its `rpc_method` decorator sets.
-#[derive(Debug, Clone, Copy)]
-pub struct Method {
+///
+/// `C` is the state a handler is handed with its arguments: a type parameter
+/// rather than a captured closure, because a `fn` pointer stays `Copy` for any
+/// `C` and that is what keeps every table a `static`.
+pub struct Method<C> {
     /// The name as it travels under `__method`, matched exactly.
     pub name: &'static str,
     /// Whether another service may reach the method once every gate has passed.
     pub is_callable: bool,
-    /// What runs then: the `__data` object as arguments, and either the value
-    /// to answer with or the message to answer it with instead.
-    pub handler: fn(&Value) -> Result<Value, String>,
+    /// What runs then: the `__data` object as arguments, the service's context,
+    /// and either the value to answer with or the message to answer it with
+    /// instead.
+    pub handler: fn(&Value, &C) -> Result<Value, String>,
+}
+
+// WHY hand-written: a derive would demand `C: Copy`, and a context that carries a service's state is not.
+impl<C> Clone for Method<C> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<C> Copy for Method<C> {}
+
+impl<C> std::fmt::Debug for Method<C> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Method")
+            .field("name", &self.name)
+            .field("is_callable", &self.is_callable)
+            .field("handler", &format_args!("{:p}", self.handler as *const ()))
+            .finish()
+    }
 }
 
 /// The two settings a gate is allowed to decide with.
@@ -65,7 +89,12 @@ pub struct GateConfig<'a> {
 /// Runs one decoded message through every gate, in the order the module
 /// documents.
 #[must_use]
-pub fn dispatch(envelope: &Value, methods: &[Method], config: &GateConfig<'_>) -> Decision {
+pub fn dispatch<C>(
+    envelope: &Value,
+    methods: &[Method<C>],
+    context: &C,
+    config: &GateConfig<'_>,
+) -> Decision {
     let Some(object) = envelope.as_object() else {
         return Decision::Dropped(DropReason::NotAnObject);
     };
@@ -86,7 +115,7 @@ pub fn dispatch(envelope: &Value, methods: &[Method], config: &GateConfig<'_>) -
     {
         None => refusal(message.id, method_missing(message.method)),
         Some(entry) if !entry.is_callable => refusal(message.id, method_uncallable(message.method)),
-        Some(entry) => call(entry, &message),
+        Some(entry) => call(entry, &message, context),
     }
 }
 
@@ -129,7 +158,7 @@ fn read(object: &Map<String, Value>) -> Result<Envelope<'_>, DropReason> {
 }
 
 /// Finds the entry a method name reaches, by exact name.
-fn lookup<'a>(methods: &'a [Method], name: &str) -> Option<&'a Method> {
+fn lookup<'a, C>(methods: &'a [Method<C>], name: &str) -> Option<&'a Method<C>> {
     methods.iter().find(|entry| entry.name == name)
 }
 

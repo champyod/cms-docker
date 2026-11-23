@@ -51,8 +51,8 @@ impl LogService {
 
     /// The methods this service answers, ready for [`Host::bind`](crate::Host::bind), the base ones first.
     #[must_use]
-    pub fn methods(&self) -> Vec<Method> {
-        let mut methods = service::methods();
+    pub fn methods(&self) -> Vec<Method<()>> {
+        let mut methods = service::methods::<()>();
         methods.push(Method {
             name: LOG_METHOD,
             is_callable: true,

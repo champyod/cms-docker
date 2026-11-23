@@ -54,8 +54,8 @@ pub enum Decision {
 /// does. The handler's own message becomes the `__error` verbatim, because
 /// `rpc.py` formats an exception with its class and a traceback, which a handler
 /// in another language has no honest way to reproduce.
-pub(super) fn call(entry: &Method, message: &Envelope<'_>) -> Decision {
-    match (entry.handler)(message.data) {
+pub(super) fn call<C>(entry: &Method<C>, message: &Envelope<'_>, context: &C) -> Decision {
+    match (entry.handler)(message.data, context) {
         Ok(result) => Decision::Answered(ok(message.id, result)),
         Err(failure) => refusal(message.id, failure),
     }

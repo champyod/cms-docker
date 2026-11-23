@@ -22,12 +22,15 @@ pub(crate) const SECRET: &str = "correct horse battery";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Answers with the arguments the gate handed it.
-pub(crate) fn answer_with_arguments(data: &Value) -> Result<Value, String> {
+pub(crate) fn answer_with_arguments(data: &Value, _context: &()) -> Result<Value, String> {
     Ok(data.clone())
 }
 
 /// A method another service may call.
-pub(crate) fn callable(name: &'static str, handler: fn(&Value) -> Result<Value, String>) -> Method {
+pub(crate) fn callable(
+    name: &'static str,
+    handler: fn(&Value, &()) -> Result<Value, String>,
+) -> Method<()> {
     Method {
         name,
         is_callable: true,
@@ -38,8 +41,8 @@ pub(crate) fn callable(name: &'static str, handler: fn(&Value) -> Result<Value, 
 /// A method this service exposes but does not let another service reach.
 pub(crate) fn uncallable(
     name: &'static str,
-    handler: fn(&Value) -> Result<Value, String>,
-) -> Method {
+    handler: fn(&Value, &()) -> Result<Value, String>,
+) -> Method<()> {
     Method {
         name,
         is_callable: false,
@@ -48,12 +51,13 @@ pub(crate) fn uncallable(
 }
 
 /// Starts a host on an ephemeral port; the listener accepts from bind, so no test waits or sleeps.
-pub(crate) fn start(methods: Vec<Method>, secret: Option<&str>) -> SocketAddr {
+pub(crate) fn start(methods: Vec<Method<()>>, secret: Option<&str>) -> SocketAddr {
     let config = GateConfig {
         secret,
         is_backdoor_enabled: false,
     };
-    let host = Host::bind("127.0.0.1:0", methods, config).expect("an ephemeral port is bindable");
+    let host =
+        Host::bind("127.0.0.1:0", methods, (), config).expect("an ephemeral port is bindable");
     let addr = host
         .local_addr()
         .expect("a bound listener reports its address");

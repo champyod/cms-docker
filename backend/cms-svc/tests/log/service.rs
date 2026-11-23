@@ -64,7 +64,7 @@ fn serve(service: &LogService) -> SocketAddr {
         secret: Some(SECRET),
         is_backdoor_enabled: false,
     };
-    let host = Host::bind("127.0.0.1:0", service.methods(), config)
+    let host = Host::bind("127.0.0.1:0", service.methods(), (), config)
         .expect("an ephemeral port is bindable");
     let addr = host
         .local_addr()

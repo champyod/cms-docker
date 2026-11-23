@@ -15,12 +15,12 @@ static UNTRUSTED_CALLS: AtomicUsize = AtomicUsize::new(0);
 /// Calls the handler that is not callable would have seen.
 static UNCALLABLE_CALLS: AtomicUsize = AtomicUsize::new(0);
 
-fn count_untrusted(_data: &Value) -> Result<Value, String> {
+fn count_untrusted(_data: &Value, _context: &()) -> Result<Value, String> {
     UNTRUSTED_CALLS.fetch_add(1, Ordering::SeqCst);
     Ok(json!("ran"))
 }
 
-fn count_uncallable(_data: &Value) -> Result<Value, String> {
+fn count_uncallable(_data: &Value, _context: &()) -> Result<Value, String> {
     UNCALLABLE_CALLS.fetch_add(1, Ordering::SeqCst);
     Ok(json!("ran"))
 }
