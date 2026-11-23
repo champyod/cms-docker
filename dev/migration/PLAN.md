@@ -339,6 +339,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | crate (ARCHITECTURE.md) | contents | state |
 |---|---|---|
 | `cms-sandbox` (:24) | `sandbox/` 1,641 + `measure` + `stats` | **extracted** (`60271227`) |
+| S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
 | S-8a admin RPC authorization | `cms-api` crate + the three tiered allowlists; deny-on-wildcard demotes | **merged** `dbff4afb` |
 | S-5h parameters | value validation at construction; the silent not-grader fallback | **merged** `c908c696` |
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
@@ -627,3 +628,15 @@ merged, because the answer decides whether that deletion is meaningful or moot.
 `scripts/__check_render_parity.sh` is **not** wired into `scripts/__gates.sh` (checked: `__gates.sh:17-23`
 lists six `__check_*` scripts and not this one). It boots two Docker stacks, so wiring it is a cost
 decision, not an oversight to fix quietly.
+
+### Blocked on an operator decision (2026-11-23)
+
+`backend/cms-db/tests/support/schema_check.rs:95` shells out to `pg_dump`, and the schema
+gate (`the_created_schema_matches_the_frozen_dump`) therefore cannot run on this host:
+`command -v pg_dump` is empty and the 16.16 scratch shim was pruned after its 24 hours.
+The failure is the tool's absence, not a schema difference — every other target is green
+(153 targets, 932 passed). Precedent for requiring it: `src/cmstestsuite/unit_tests/
+schema_diff_test.py:124-133`. Two ways out, and it is a toolchain decision, not a code one:
+install `pg_dump` 16 on the host, or replace the checker's external dependency with an
+`information_schema` comparison that needs no tool (which changes what the gate proves, so
+it is not a quiet edit).
