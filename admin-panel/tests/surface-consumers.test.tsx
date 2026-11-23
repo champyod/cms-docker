@@ -59,6 +59,7 @@ describe('detail sections render through SectionCard', () => {
         onMarkAsTest={() => undefined}
         onOpenSettings={() => undefined}
         onRemove={() => undefined}
+        copy={en.contests.participants}
       />,
     );
     expect(html).toContain('Add Participant');
@@ -90,6 +91,7 @@ describe('row action clusters render through RowActions', () => {
         onMarkAsTest={() => undefined}
         onOpenSettings={() => undefined}
         onRemove={() => undefined}
+        copy={en.contests.participants}
       />,
     );
   }

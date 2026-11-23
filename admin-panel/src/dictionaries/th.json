@@ -255,6 +255,11 @@
         "analysisMode": "โหมดวิเคราะห์"
       },
       "saveChanges": "บันทึกการเปลี่ยนแปลง"
+    },
+    "participants": {
+      "unrestricted": "ไม่จำกัด",
+      "hidden": "ซ่อนอยู่",
+      "empty": "ยังไม่มีผู้เข้าแข่งขัน"
     }
   },
   "tasks": {

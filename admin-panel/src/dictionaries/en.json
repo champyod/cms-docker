@@ -255,6 +255,11 @@
         "analysisMode": "Analysis Mode"
       },
       "saveChanges": "Save Changes"
+    },
+    "participants": {
+      "unrestricted": "Unrestricted",
+      "hidden": "Hidden",
+      "empty": "No participants yet"
     }
   },
   "tasks": {

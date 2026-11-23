@@ -1,5 +1,6 @@
 'use client';
 
+import { useDictionary } from '@/hooks/useDictionary';
 import { useMemo } from 'react';
 import type { ContestParticipantsData } from '@/lib/queries/contest-detail';
 import { ParticipantModal } from '../ParticipantModal';
@@ -90,6 +91,7 @@ function ParticipantDialogs({ data, inviteCandidates, actions, onSuccess }: {
  * two record kinds.
  */
 export function ContestParticipantsTab({ data }: ContestParticipantsTabProps): React.JSX.Element {
+  const participantsCopy = useDictionary().contests.participants;
   const actions = useContestParticipantActions();
   const refresh = useTabRefresh();
   const inviteCandidates = useInviteCandidates(data);
@@ -105,6 +107,7 @@ export function ContestParticipantsTab({ data }: ContestParticipantsTabProps): R
         onMarkAsTest={(participationId) => { void actions.handleMarkAsTest(participationId); }}
         onOpenSettings={(participationId, username) => actions.handleOpenParticipationSettings(participationId, username)}
         onRemove={(participationId) => { void actions.handleRemoveParticipant(participationId); }}
+        copy={participantsCopy}
       />
       <ParticipantDialogs data={data} inviteCandidates={inviteCandidates} actions={actions} onSuccess={refresh} />
     </>

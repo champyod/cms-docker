@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
+import type { Dictionary } from '@/lib/dictionary';
 import { EmptyState } from '@/components/core/EmptyState';
 import { RowActions } from '@/components/core/RowActions';
 import { Users, Plus, Trash2, Settings, FlaskConical } from 'lucide-react';
@@ -12,6 +13,8 @@ interface ParticipationUser { username: string; first_name: string; last_name: s
 interface Participation { id: number; user_id: number; unrestricted: boolean; hidden: boolean; users: ParticipationUser | null; teams?: { code: string } | null; }
 
 interface Props {
+  /** The section's own words: two chips and the empty state. */
+  copy: Dictionary['contests']['participants'];
   participations: Participation[];
   permissionKeys: readonly string[];
   onAddParticipant: () => void;
@@ -23,12 +26,15 @@ interface Props {
 
 const CHIP_CLASSES = 'rounded-full px-2 py-0.5 text-xs';
 
-function ParticipationChips({ participation }: { participation: Participation }): React.JSX.Element {
+function ParticipationChips({ participation, copy }: {
+  participation: Participation;
+  copy: Dictionary['contests']['participants'];
+}): React.JSX.Element {
   return (
     <>
       {participation.teams && <span className={cn(CHIP_CLASSES, 'bg-primary/10 text-primary')}>{participation.teams.code}</span>}
-      {participation.unrestricted && <span className={cn(CHIP_CLASSES, 'bg-warning/10 text-warning')}>Unrestricted</span>}
-      {participation.hidden && <span className={cn(CHIP_CLASSES, 'bg-muted text-muted-foreground')}>Hidden</span>}
+      {participation.unrestricted && <span className={cn(CHIP_CLASSES, 'bg-warning/10 text-warning')}>{copy.unrestricted}</span>}
+      {participation.hidden && <span className={cn(CHIP_CLASSES, 'bg-muted text-muted-foreground')}>{copy.hidden}</span>}
     </>
   );
 }
@@ -70,7 +76,16 @@ function ParticipantActions({ participation, permissionKeys, onMarkAsTest, onOpe
  * Why no section card of its own: the board layout draws a card per section with the section's
  * title and the meaning of its rows, so the header this component used to carry is the layout's.
  */
-export function ContestParticipantsSection({ participations, permissionKeys, onAddParticipant, onAddTeam, onMarkAsTest, onOpenSettings, onRemove }: Props): React.JSX.Element {
+export function ContestParticipantsSection({
+  participations,
+  permissionKeys,
+  onAddParticipant,
+  onAddTeam,
+  onMarkAsTest,
+  onOpenSettings,
+  onRemove,
+  copy,
+}: Props): React.JSX.Element {
   const effective = new Set(permissionKeys);
   return (
     <div>
@@ -85,12 +100,12 @@ export function ContestParticipantsSection({ participations, permissionKeys, onA
           <div key={participation.id} className="group flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
             <ParticipationIdentity participation={participation} />
             <div className="flex flex-wrap items-center gap-2">
-              <ParticipationChips participation={participation} />
+              <ParticipationChips participation={participation} copy={copy} />
               <ParticipantActions participation={participation} permissionKeys={permissionKeys} onMarkAsTest={onMarkAsTest} onOpenSettings={onOpenSettings} onRemove={onRemove} />
             </div>
           </div>
         ))}
-        {participations.length === 0 && <EmptyState icon={Users} title="No participants yet" />}
+        {participations.length === 0 && <EmptyState icon={Users} title={copy.empty} />}
       </div>
     </div>
   );
