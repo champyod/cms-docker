@@ -82,7 +82,6 @@ export default async function SystemDocsPage({
     <BoardPage
       // The system module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title={dict.navigation.system.docs.label}
       sections={sections}
     />
   );
