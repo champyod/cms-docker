@@ -1494,6 +1494,14 @@
       "certbot": "Certbot",
       "lineages": "ชุดใบรับรอง",
       "notRunning": "ไม่ได้ทำงาน"
+    },
+    "waf": {
+      "facts": {
+        "container": "คอนเทนเนอร์",
+        "alertsParsed": "การแจ้งเตือนที่อ่านได้",
+        "unparsedLines": "บรรทัดบันทึกที่อ่านไม่ได้"
+      },
+      "notRunning": "ไม่ได้ทำงาน"
     }
   },
   "navigation": {

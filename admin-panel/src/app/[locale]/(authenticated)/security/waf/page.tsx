@@ -1,5 +1,6 @@
 import { readWafState } from '@/app/actions/securityWaf';
 import { getDictionary } from '@/i18n';
+import { formatCount } from '@/lib/format-number';
 import { DetailPage } from '@/components/patterns/DetailPage';
 import { WafPanel } from '@/components/security/WafPanel';
 import { authorizeRoutePage } from '@/lib/navigation/page-authorization';
@@ -16,16 +17,16 @@ export default async function SecurityWafPage({ params }: { params: Promise<{ lo
   const { locale } = await params;
   await authorizeRoutePage('security.waf');
   const dictionary = await getDictionary(locale);
+  const copy = dictionary.security.waf;
   const state = await readWafState();
   return (
     <DetailPage
       // The security module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title="WAF"
       facts={[
-        { term: 'Container', value: state.containerStatus ?? 'not running' },
-        { term: 'Alerts parsed', value: String(state.alerts.length) },
-        { term: 'Unparsed log lines', value: String(state.skippedAlertLines) },
+        { term: copy.facts.container, value: state.containerStatus ?? copy.notRunning },
+        { term: copy.facts.alertsParsed, value: formatCount(state.alerts.length, locale) },
+        { term: copy.facts.unparsedLines, value: formatCount(state.skippedAlertLines, locale) },
       ]}
     >
       <WafPanel missing={dictionary.common.notSet} state={state} />

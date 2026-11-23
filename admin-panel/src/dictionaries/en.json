@@ -1494,6 +1494,14 @@
       "certbot": "Certbot",
       "lineages": "Certificate lineages",
       "notRunning": "not running"
+    },
+    "waf": {
+      "facts": {
+        "container": "Container",
+        "alertsParsed": "Alerts parsed",
+        "unparsedLines": "Unparsed log lines"
+      },
+      "notRunning": "not running"
     }
   },
   "navigation": {
