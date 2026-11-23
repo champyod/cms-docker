@@ -42,7 +42,6 @@ export default async function ContestParticipantsPage({ params }: ContestRoutePr
     <BoardPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      title="Participants"
       sections={[
         {
           key: 'participants',
