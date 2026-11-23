@@ -69,7 +69,6 @@ export default async function InfrastructureResourcesPage({
       <BoardPage
         // The infrastructure module shell above renders the title, the description and the trail.
         ownsHeader={false}
-        title={dict.resources.title}
         sections={sections}
       />
     </ResourcesProvider>
