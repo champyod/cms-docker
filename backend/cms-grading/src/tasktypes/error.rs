@@ -3,7 +3,9 @@
 //! One error for the five task types, because a job is refused by the phase that could
 //! not do its part whatever the task is, and a caller that catches one of these is
 //! catching all of them. Every variant names the two things that disagree or the file to
-//! look at, so a refusal says which manager, limit or count.
+//! look at, so a refusal says which manager, limit or count. A name the registry does not
+//! hold is here too, because it is a job that cannot be built rather than a job that ran
+//! badly.
 //!
 //! A verdict about a submission is never one of these: an answer that is wrong, a
 //! checker that could not run and a file the run never wrote are all facts the task
@@ -25,6 +27,12 @@ use super::parameters::Accepts;
 /// Why a job was not compiled, not run, or not read back.
 #[derive(Debug)]
 pub enum TaskError {
+    /// A job's task type name is one this worker does not implement, which the registry
+    /// refuses rather than falling back to a type nobody selected.
+    UnknownName {
+        /// The name the job carried, which the task row's `task_type` column holds.
+        name: String,
+    },
     /// The task type parameters are not the entries the task type declares: not a list,
     /// or not one entry per declared parameter.
     Parameters,
@@ -84,6 +92,9 @@ pub enum TaskError {
 impl fmt::Display for TaskError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::UnknownName { name } => {
+                write!(f, "the task type `{name}` is not one this worker has")
+            }
             Self::Parameters => {
                 write!(
                     f,

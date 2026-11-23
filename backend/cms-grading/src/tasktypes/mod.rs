@@ -31,6 +31,11 @@
 //! shown are what it returns. That is what makes an unjudged run impossible to hand
 //! on rather than merely discouraged.
 //!
+//! The name a task's `task_type` column holds selects one of them through [`TaskType::of`]:
+//! a closed enum rather than a trait object, because the set is chosen by a column and a
+//! sixth type costs one variant, one arm in each accessor match and one key arm, while a
+//! trait would let a caller hold a type the registry cannot name.
+//!
 //! Three things are the caller's, because none of them is a task type's business.
 //! The language a job names is a [`Toolchain`], and the lookup that produced it
 //! lives with the languages the worker was configured with. Where a box is made
@@ -64,6 +69,7 @@ mod kinds_answer;
 mod outcome;
 mod output_only;
 mod parameters;
+mod registry;
 mod two_steps;
 
 use std::str::FromStr;
@@ -79,6 +85,7 @@ pub use judge::{eval_output, Judgement, OutputSource};
 pub use outcome::{Evaluation, OutputFile};
 pub use output_only::{Answer as OutputOnlyAnswer, OutputOnly};
 pub use parameters::{Accepts, Parameter};
+pub use registry::TaskType;
 pub use two_steps::TwoSteps;
 
 pub(crate) use boxed::{Run, Shared};
