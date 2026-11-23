@@ -38,7 +38,6 @@ export default async function ContestSettingsPage({ params }: ContestRouteProps)
     <SettingsPage
       // The record shell above renders the contest's name, its trail and its tabs.
       ownsHeader={false}
-      title={data.fields.name}
       groups={[
         {
           key: 'contest',
