@@ -6,6 +6,7 @@ import { Card } from '@/components/core/Card';
 import { EmptyState } from '@/components/core/EmptyState';
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import type { Dictionary } from '@/lib/dictionary';
+import { formatScore } from '@/lib/format-number';
 import type { SubmissionJudgingPhase, SubmissionResultsModel } from '@/lib/evaluation-read-model-types';
 import { judgingPhaseLabelKey, judgingPhaseOf } from '@/lib/evaluation-read-model-judging';
 import { useDictionary } from '@/hooks/useDictionary';
@@ -55,7 +56,7 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
         </h3>
         {result.score !== null && (
           <span className={cn('text-sm px-2 py-0.5 rounded-full border shrink-0', scoreTone(result))}>
-            {interpolate(record.status.points, { score: result.score.toFixed(1) })}
+            {interpolate(record.status.points, { score: formatScore(result.score, 1) })}
           </span>
         )}
       </div>
@@ -77,7 +78,7 @@ function ResultCard({ result }: { readonly result: ResultRow }): React.JSX.Eleme
           <span>{record.results.stats.memory + ': ' + (result.compilationMemoryBytes / 1024 / 1024).toFixed(2) + ' MB'}</span>
         )}
         {result.publicScore !== null && (
-          <span>{record.results.stats.public + ': ' + result.publicScore.toFixed(1)}</span>
+          <span>{record.results.stats.public + ': ' + formatScore(result.publicScore, 1)}</span>
         )}
         {result.scoredAt !== null && (
           <span>{record.results.stats.scored + ': ' + formatTimestamp(result.scoredAt)}</span>

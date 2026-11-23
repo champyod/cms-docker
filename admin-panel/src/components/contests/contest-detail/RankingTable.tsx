@@ -3,6 +3,8 @@
 import { useMemo } from 'react';
 import { CellText } from '@/components/core/CellText';
 import { ResponsiveTable, type ResponsiveColumn } from '@/components/core/ResponsiveTable';
+import { useDictionary } from '@/hooks/useDictionary';
+import { formatScore } from '@/lib/format-number';
 
 export interface TaskCol { id: number; name: string; title: string; score_precision: number; }
 export interface RankingEntry { participationId: number; rank: number; user: { username: string }; taskScores: Record<string, number>; totalScore: number; }
@@ -11,13 +13,13 @@ interface Props {
   ranking: { ranking: RankingEntry[]; tasks: TaskCol[] } | null;
 }
 
-function formatTaskScore(value: number | undefined, precision: number): string {
-  return value !== undefined ? value.toFixed(precision) : '-';
+function formatTaskScore(value: number | undefined, precision: number, missing: string): string {
+  return value !== undefined ? formatScore(value, precision) : missing;
 }
 
 // Why: one column definition drives desktop rows and mobile cards, so
 // the two layouts cannot drift apart.
-function buildRankingColumns(tasks: TaskCol[]): ResponsiveColumn<RankingEntry>[] {
+function buildRankingColumns(tasks: TaskCol[], missing: string): ResponsiveColumn<RankingEntry>[] {
   return [
     {
       key: 'rank',
@@ -38,7 +40,7 @@ function buildRankingColumns(tasks: TaskCol[]): ResponsiveColumn<RankingEntry>[]
       cellClassName: 'min-w-[80px]',
       render: (entry) => (
         <CellText width="sm" mono muted>
-          {formatTaskScore(entry.taskScores[task.id], task.score_precision)}
+          {formatTaskScore(entry.taskScores[task.id], task.score_precision, missing)}
         </CellText>
       ),
     })),
@@ -56,7 +58,8 @@ function buildRankingColumns(tasks: TaskCol[]): ResponsiveColumn<RankingEntry>[]
 }
 
 export function RankingTable({ ranking }: Props): React.JSX.Element | null {
-  const columns = useMemo(() => buildRankingColumns(ranking?.tasks ?? []), [ranking?.tasks]);
+  const missing = useDictionary().common.notSet;
+  const columns = useMemo(() => buildRankingColumns(ranking?.tasks ?? [], missing), [ranking?.tasks, missing]);
   if (!ranking) return null;
   return (
     <ResponsiveTable
