@@ -1,5 +1,6 @@
 'use client';
 
+import { useDictionary } from '@/hooks/useDictionary';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
 import type { ContestOverviewData } from '@/lib/queries/contest-detail';
@@ -24,6 +25,7 @@ function buildOverviewPayload(form: ContestSettingsFormState): Partial<ContestDa
 }
 
 export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX.Element {
+  const copy = useDictionary().contests.settings;
   const { formData, updateForm, saving, justSaved, timeErrors, handleSave } = useContestSettingsState(
     data.contest.id,
     toOverviewFormState(data.contest),
@@ -37,7 +39,7 @@ export function ContestOverviewTab({ data }: ContestOverviewTabProps): React.JSX
         timeErrors={timeErrors}
       />
       <div className="flex justify-end">
-        <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
+        <SaveButton saving={saving} justSaved={justSaved} idleLabel={copy.saveChanges} disabled={saving} onClick={() => { void handleSave(); }} />
       </div>
     </div>
   );
