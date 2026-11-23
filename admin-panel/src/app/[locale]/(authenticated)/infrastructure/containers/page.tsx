@@ -28,7 +28,6 @@ export default async function InfrastructureContainersPage({
       <ListPage
         // The infrastructure module shell above renders the title, the description and the trail.
         ownsHeader={false}
-        title={dict.navigation.infrastructure.containers.label}
         toolbar={<ContainerStats />}
         footer={<ContainerStacks />}
       >
