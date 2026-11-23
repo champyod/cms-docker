@@ -51,7 +51,6 @@ export default async function UserProfilePage({ params }: { params: Promise<{ lo
       // record's values, so the layout's fact strip carries them and the tab keeps only what the
       // strip cannot: the saved password and the one action that reads it.
       ownsHeader={false}
-      title={summary.username}
       // Why only five values: the shell's header already prints the status, the organization, the
       // country and the participation count, so listing them again would be a second copy of a
       // fact the reader has just read. These five are what the profile adds to that header.
