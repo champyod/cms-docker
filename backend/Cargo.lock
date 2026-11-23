@@ -192,6 +192,7 @@ name = "cms-api"
 version = "0.1.0"
 dependencies = [
  "cms-db",
+ "cms-grading",
  "sqlx",
  "tokio",
 ]
