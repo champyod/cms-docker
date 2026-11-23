@@ -1,5 +1,8 @@
 'use client';
 
+import type { Dictionary } from '@/lib/dictionary';
+import { interpolate } from '@/lib/interpolate';
+
 import { Fragment, useState } from 'react';
 import { ClipboardList } from 'lucide-react';
 
@@ -22,6 +25,8 @@ export interface TestcaseDetailTableProps {
   readonly canReadTestcase: boolean;
   /** common.notSet: a cell or block whose value the record does not hold. */
   readonly missing: string;
+  /** The table's own words: columns, block labels, empty state. */
+  readonly copy: Dictionary['submissions']['record']['testcases'];
 }
 
 const DETAIL_COLUMN_COUNT = 5;
@@ -86,30 +91,32 @@ function HiddenTestcaseData(): React.JSX.Element {
   );
 }
 
-function TestcaseDetailBody({ detail, loading, error, missing }: {
+function TestcaseDetailBody({ detail, loading, error, missing, copy }: {
   readonly detail: SubmissionTestcaseDetailModel | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly missing: string;
+  readonly copy: Dictionary['submissions']['record']['testcases'];
 }): React.JSX.Element {
-  if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading testcase…</p>;
+  if (loading) return <p role="status" className="text-sm text-muted-foreground">{copy.loading}</p>;
   if (error !== null) return <InlineAlert tone="destructive" density="compact">{error}</InlineAlert>;
-  if (detail === null) return <p className="text-sm text-muted-foreground">No testcase detail.</p>;
+  if (detail === null) return <p className="text-sm text-muted-foreground">{copy.noDetail}</p>;
   if (!detail.testcaseReadable) return <HiddenTestcaseData />;
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <DetailBlock label="Input" body={detail.input} emptyLabel={missing} />
-      <DetailBlock label="Expected output" body={detail.expectedOutput} emptyLabel={missing} />
-      <DetailBlock label="Submission output" body={detail.output} emptyLabel="Not stored" />
+      <DetailBlock label={copy.input} body={detail.input} emptyLabel={missing} />
+      <DetailBlock label={copy.expectedOutput} body={detail.expectedOutput} emptyLabel={missing} />
+      <DetailBlock label={copy.submissionOutput} body={detail.output} emptyLabel={copy.notStored} />
     </div>
   );
 }
 
-function TestcaseRow({ row, expanded, onToggle, missing }: {
+function TestcaseRow({ row, expanded, onToggle, missing, copy }: {
   readonly row: EvaluationRow;
   readonly expanded: boolean;
   readonly onToggle: () => void;
   readonly missing: string;
+  readonly copy: Dictionary['submissions']['record']['testcases'];
 }): React.JSX.Element {
   const label = testcaseLabel(row);
   return (
@@ -123,7 +130,7 @@ function TestcaseRow({ row, expanded, onToggle, missing }: {
       <TableCell className="text-right">
         <RowExpandAction
           expanded={expanded}
-          ariaLabel={`Toggle details for ${label}`}
+          ariaLabel={interpolate(copy.toggleDetails, { testcase: label })}
           onToggle={onToggle}
         />
       </TableCell>
@@ -135,7 +142,7 @@ function TestcaseRow({ row, expanded, onToggle, missing }: {
  * One row per testcase; opening a row fetches that testcase's input, expected
  * output and stored output from the gated per-testcase route.
  */
-export function TestcaseDetailTable({ model, canReadTestcase, missing }: TestcaseDetailTableProps): React.JSX.Element {
+export function TestcaseDetailTable({ model, canReadTestcase, missing, copy }: TestcaseDetailTableProps): React.JSX.Element {
   const [expandedTestcaseId, setExpandedTestcaseId] = useState<number | null>(null);
   const [detail, setDetail] = useState<SubmissionTestcaseDetailModel | null>(null);
   const [loading, setLoading] = useState(false);
@@ -157,12 +164,12 @@ export function TestcaseDetailTable({ model, canReadTestcase, missing }: Testcas
       const response = await fetch(withBasePath(`/api/submissions/${model.submissionId}/testcase/${row.testcaseId}`));
       const payload = await response.json() as SubmissionTestcaseDetailModel & { error?: string };
       if (!response.ok) {
-        setError(payload.error ?? 'Could not load this testcase.');
+        setError(payload.error ?? copy.loadFailed);
         return;
       }
       setDetail(payload);
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : 'Could not load this testcase.');
+      setError(cause instanceof Error ? cause.message : copy.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -172,8 +179,8 @@ export function TestcaseDetailTable({ model, canReadTestcase, missing }: Testcas
     return (
       <EmptyState
         icon={ClipboardList}
-        title="No testcase evaluations"
-        description="Per-testcase outcomes appear once the submission has been evaluated."
+        title={copy.emptyTitle}
+        description={copy.emptyDescription}
       />
     );
   }
@@ -182,12 +189,12 @@ export function TestcaseDetailTable({ model, canReadTestcase, missing }: Testcas
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Testcase</TableHead>
-          <TableHead>Verdict</TableHead>
-          <TableHead className="text-right">Time</TableHead>
-          <TableHead className="text-right">Memory</TableHead>
+          <TableHead>{copy.columns.testcase}</TableHead>
+          <TableHead>{copy.columns.verdict}</TableHead>
+          <TableHead className="text-right">{copy.columns.time}</TableHead>
+          <TableHead className="text-right">{copy.columns.memory}</TableHead>
           <TableHead className="w-12 text-right">
-            <span className="sr-only">Details</span>
+            <span className="sr-only">{copy.columns.details}</span>
           </TableHead>
         </TableRow>
       </TableHeader>
@@ -196,12 +203,12 @@ export function TestcaseDetailTable({ model, canReadTestcase, missing }: Testcas
           const expanded = expandedTestcaseId === row.testcaseId;
           return (
             <Fragment key={row.id}>
-              <TestcaseRow row={row} expanded={expanded} onToggle={() => { void toggleRow(row); }} missing={missing} />
+              <TestcaseRow row={row} expanded={expanded} onToggle={() => { void toggleRow(row); }} missing={missing} copy={copy} />
               {expanded && (
                 <TableRow>
                   <TableCell colSpan={DETAIL_COLUMN_COUNT} className="bg-muted/40">
                     {canReadTestcase
-                      ? <TestcaseDetailBody detail={detail} loading={loading} error={error} missing={missing} />
+                      ? <TestcaseDetailBody detail={detail} loading={loading} error={error} missing={missing} copy={copy} />
                       : <HiddenTestcaseData />}
                   </TableCell>
                 </TableRow>

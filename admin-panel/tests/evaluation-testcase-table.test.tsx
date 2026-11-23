@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import en from '@/dictionaries/en.json';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -65,7 +66,7 @@ beforeEach(() => {
 
 describe('Submission testcase table', () => {
   it('shows one row per testcase, verdict, time and memory, and fetches nothing', () => {
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     expect(screen.getByText('test-2')).not.toBeNull();
     expect(screen.getByText('Testcase #3')).not.toBeNull();
@@ -78,7 +79,7 @@ describe('Submission testcase table', () => {
 
   it('fetches one testcase through the gated route when its row opens', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, DETAIL_PAYLOAD));
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('test-2'));
 
@@ -92,7 +93,7 @@ describe('Submission testcase table', () => {
 
   it('fetches the row that was opened, not the first one', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, { ...DETAIL_PAYLOAD, testcaseId: 3, testcaseName: null }));
-    render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('Testcase #3'));
 
@@ -102,7 +103,7 @@ describe('Submission testcase table', () => {
 
   it('collapses the row and keeps its fetch count at one', async () => {
     mockFetch.mockResolvedValue(jsonResponse(true, DETAIL_PAYLOAD));
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('test-2'));
     await waitFor(() => expect(container.textContent).toContain('1 2'));
@@ -114,7 +115,7 @@ describe('Submission testcase table', () => {
 
   it('surfaces the route error without leaving a loading line', async () => {
     mockFetch.mockResolvedValue(jsonResponse(false, { success: false, error: 'Testcase not found for this submission' }));
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('test-2'));
 
@@ -123,7 +124,7 @@ describe('Submission testcase table', () => {
   });
 
   it('names the missing key instead of fetching when testcase:read is absent', () => {
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('test-2'));
 
@@ -141,7 +142,7 @@ describe('Submission testcase table', () => {
       output: null,
       testcaseReadable: false,
     }));
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase missing="Not set" copy={en.submissions.record.testcases} />);
 
     fireEvent.click(toggleButton('test-2'));
 
@@ -150,7 +151,7 @@ describe('Submission testcase table', () => {
   });
 
   it('keeps the row data visible to a reader without testcase:read', () => {
-    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} missing="Not set" />);
+    const { container } = render(<TestcaseDetailTable model={MODEL} canReadTestcase={false} missing="Not set" copy={en.submissions.record.testcases} />);
 
     expect(screen.getByText('test-2')).not.toBeNull();
     expect(container.textContent).toContain('1.0');

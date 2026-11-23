@@ -683,6 +683,25 @@
         "reason": "Reason",
         "result": "Result",
         "timestamp": "Time"
+      },
+      "testcases": {
+        "loading": "Loading testcase…",
+        "noDetail": "No testcase detail.",
+        "input": "Input",
+        "expectedOutput": "Expected output",
+        "submissionOutput": "Submission output",
+        "notStored": "Not stored",
+        "loadFailed": "Could not load this testcase.",
+        "emptyTitle": "No testcase evaluations",
+        "emptyDescription": "Per-testcase outcomes appear once the submission has been evaluated.",
+        "toggleDetails": "Toggle details for {testcase}",
+        "columns": {
+          "testcase": "Testcase",
+          "verdict": "Verdict",
+          "time": "Time",
+          "memory": "Memory",
+          "details": "Details"
+        }
       }
     }
   },

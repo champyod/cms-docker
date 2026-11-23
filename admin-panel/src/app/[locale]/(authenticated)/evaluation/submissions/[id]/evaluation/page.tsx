@@ -57,6 +57,7 @@ export default async function SubmissionEvaluationPage({ params }: { params: Pro
     >
       <SubmissionEvaluationTab
         missing={dictionary.common.notSet}
+        copy={dictionary.submissions.record.testcases}
         model={model}
         canReadTestcase={hasEffectivePermission(effective, 'testcase:read')}
       />

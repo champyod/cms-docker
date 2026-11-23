@@ -683,6 +683,25 @@
         "reason": "เหตุผล",
         "result": "ผลลัพธ์",
         "timestamp": "เวลา"
+      },
+      "testcases": {
+        "loading": "กำลังโหลดกรณีทดสอบ…",
+        "noDetail": "ไม่มีรายละเอียดกรณีทดสอบ",
+        "input": "อินพุต",
+        "expectedOutput": "ผลลัพธ์ที่คาดหวัง",
+        "submissionOutput": "ผลลัพธ์ที่ส่งมา",
+        "notStored": "ไม่ได้เก็บไว้",
+        "loadFailed": "โหลดกรณีทดสอบนี้ไม่สำเร็จ",
+        "emptyTitle": "ยังไม่มีผลกรณีทดสอบ",
+        "emptyDescription": "ผลรายกรณีทดสอบจะปรากฏเมื่อประเมินการส่งแล้ว",
+        "toggleDetails": "เปิด/ปิดรายละเอียดของ {testcase}",
+        "columns": {
+          "testcase": "กรณีทดสอบ",
+          "verdict": "ผลตัดสิน",
+          "time": "เวลา",
+          "memory": "หน่วยความจำ",
+          "details": "รายละเอียด"
+        }
       }
     }
   },
