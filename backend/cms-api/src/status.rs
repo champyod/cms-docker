@@ -134,9 +134,9 @@ struct StatusRow {
     submission_id: i32,
     dataset_id: Option<i32>,
     compilation_outcome: Option<String>,
-    compilation_tries: i32,
+    compilation_tries: Option<i32>,
     evaluation_outcome: Option<String>,
-    evaluation_tries: i32,
+    evaluation_tries: Option<i32>,
     score: Option<f64>,
     score_details: Option<String>,
     public_score: Option<f64>,
@@ -157,13 +157,13 @@ fn status_row_result(row: StatusRow) -> Result<Option<SubmissionResult>, sqlx::E
             row.compilation_outcome,
             CompilationOutcome::parse,
         )?,
-        compilation_tries: row.compilation_tries,
+        compilation_tries: required("compilation_tries", row.compilation_tries)?,
         evaluation_outcome: outcome(
             "evaluation_outcome",
             row.evaluation_outcome,
             EvaluationOutcome::parse,
         )?,
-        evaluation_tries: row.evaluation_tries,
+        evaluation_tries: required("evaluation_tries", row.evaluation_tries)?,
         score: row.score,
         score_details: row.score_details,
         public_score: row.public_score,
@@ -186,6 +186,14 @@ fn outcome<T>(
             })
         })
         .transpose()
+}
+
+/// One counter a joined result row must hold: `NOT NULL` in the schema, so a NULL means the join failed.
+fn required(column: &'static str, value: Option<i32>) -> Result<i32, sqlx::Error> {
+    value.ok_or_else(|| sqlx::Error::ColumnDecode {
+        index: column.to_owned(),
+        source: format!("{column} is NULL on a result row").into(),
+    })
 }
 
 #[cfg(test)]
