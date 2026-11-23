@@ -233,6 +233,22 @@
       "running": "Running",
       "analysis": "Analysis mode",
       "ended": "Ended"
+    },
+    "settings": {
+      "fields": {
+        "name": "Name",
+        "description": "Description",
+        "timezone": "Timezone"
+      },
+      "toggles": {
+        "allowQuestions": "Allow Questions",
+        "allowUserTests": "Allow User Tests",
+        "submissionsDownload": "Allow Submissions Download",
+        "passwordAuth": "Allow Password Auth",
+        "registration": "Allow Registration",
+        "analysisMode": "Analysis Mode"
+      },
+      "saveChanges": "Save Changes"
     }
   },
   "tasks": {

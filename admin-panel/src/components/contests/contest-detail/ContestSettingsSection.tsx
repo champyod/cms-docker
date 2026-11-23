@@ -1,5 +1,7 @@
 'use client';
 
+import type { Dictionary } from '@/lib/dictionary';
+
 import { ToggleSwitch } from '../contest-modal/shared/ToggleSwitch';
 
 const LABEL_CLASSES = 'mb-1 block text-xs font-bold uppercase tracking-widest text-muted-foreground';
@@ -16,6 +18,8 @@ interface Props {
   disabled?: boolean;
   canEdit?: boolean;
   onChange: (patch: Partial<FormState>) => void;
+  /** The form's own words: three field labels and six switches. */
+  copy: Dictionary['contests']['settings'];
 }
 
 function ToggleRow({ label, checked, disabled, onChange }: { label: string; checked: boolean; disabled: boolean; onChange: (v: boolean) => void }): React.JSX.Element {
@@ -37,31 +41,31 @@ function ToggleRow({ label, checked, disabled, onChange }: { label: string; chec
  * Why the lock flag: a read-only caller must never meet an editable form, so either flag locks
  * every input and no false save affordance reaches the reader.
  */
-export function ContestSettingsSection({ formData, disabled = false, canEdit = true, onChange }: Props): React.JSX.Element {
+export function ContestSettingsSection({ formData, disabled = false, canEdit = true, onChange, copy }: Props): React.JSX.Element {
   const readOnly = disabled || !canEdit;
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
       <div className="space-y-4">
         <div>
-          <label className={LABEL_CLASSES}>Name</label>
+          <label className={LABEL_CLASSES}>{copy.fields.name}</label>
           <input type="text" value={formData.name} disabled={readOnly} onChange={(e) => onChange({ name: e.target.value })} className={FIELD_CLASSES} />
         </div>
         <div>
-          <label className={LABEL_CLASSES}>Description</label>
+          <label className={LABEL_CLASSES}>{copy.fields.description}</label>
           <textarea value={formData.description} disabled={readOnly} onChange={(e) => onChange({ description: e.target.value })} rows={2} className={FIELD_CLASSES} />
         </div>
         <div>
-          <label className={LABEL_CLASSES}>Timezone</label>
+          <label className={LABEL_CLASSES}>{copy.fields.timezone}</label>
           <input type="text" value={formData.timezone} disabled={readOnly} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="Asia/Bangkok" className={FIELD_CLASSES} />
         </div>
       </div>
       <div className="space-y-3">
-        <ToggleRow label="Allow Questions" checked={formData.allow_questions} disabled={readOnly} onChange={(v) => onChange({ allow_questions: v })} />
-        <ToggleRow label="Allow User Tests" checked={formData.allow_user_tests} disabled={readOnly} onChange={(v) => onChange({ allow_user_tests: v })} />
-        <ToggleRow label="Allow Submissions Download" checked={formData.submissions_download_allowed} disabled={readOnly} onChange={(v) => onChange({ submissions_download_allowed: v })} />
-        <ToggleRow label="Allow Password Auth" checked={formData.allow_password_authentication} disabled={readOnly} onChange={(v) => onChange({ allow_password_authentication: v })} />
-        <ToggleRow label="Allow Registration" checked={formData.allow_registration} disabled={readOnly} onChange={(v) => onChange({ allow_registration: v })} />
-        <ToggleRow label="Analysis Mode" checked={formData.analysis_enabled} disabled={readOnly} onChange={(v) => onChange({ analysis_enabled: v })} />
+        <ToggleRow label={copy.toggles.allowQuestions} checked={formData.allow_questions} disabled={readOnly} onChange={(v) => onChange({ allow_questions: v })} />
+        <ToggleRow label={copy.toggles.allowUserTests} checked={formData.allow_user_tests} disabled={readOnly} onChange={(v) => onChange({ allow_user_tests: v })} />
+        <ToggleRow label={copy.toggles.submissionsDownload} checked={formData.submissions_download_allowed} disabled={readOnly} onChange={(v) => onChange({ submissions_download_allowed: v })} />
+        <ToggleRow label={copy.toggles.passwordAuth} checked={formData.allow_password_authentication} disabled={readOnly} onChange={(v) => onChange({ allow_password_authentication: v })} />
+        <ToggleRow label={copy.toggles.registration} checked={formData.allow_registration} disabled={readOnly} onChange={(v) => onChange({ allow_registration: v })} />
+        <ToggleRow label={copy.toggles.analysisMode} checked={formData.analysis_enabled} disabled={readOnly} onChange={(v) => onChange({ analysis_enabled: v })} />
       </div>
     </div>
   );

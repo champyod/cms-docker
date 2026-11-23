@@ -1,5 +1,6 @@
 'use client';
 
+import { useDictionary } from '@/hooks/useDictionary';
 import { SaveButton } from '@/components/core/SaveButton';
 import type { ContestData } from '@/lib/contests-repo';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -42,6 +43,7 @@ function buildSettingsPayload(form: ContestSettingsFormState): Partial<ContestDa
  * this component's form state, and the layout cannot hold a control it does not own the state for.
  */
 export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX.Element {
+  const settings = useDictionary().contests.settings;
   // Why: the settings reader carries only contest:read — without
   // contest:update the form locks and the save affordance never appears.
   const canEdit = hasEffectivePermission(new Set(data.permissionKeys), 'contest:update');
@@ -56,10 +58,11 @@ export function ContestSettingsTab({ data }: ContestSettingsTabProps): React.JSX
         formData={formData}
         canEdit={canEdit}
         onChange={(patch) => updateForm(patch)}
+        copy={settings}
       />
       {canEdit && (
         <div className="flex justify-end">
-          <SaveButton saving={saving} justSaved={justSaved} idleLabel="Save Changes" disabled={saving} onClick={() => { void handleSave(); }} />
+          <SaveButton saving={saving} justSaved={justSaved} idleLabel={settings.saveChanges} disabled={saving} onClick={() => { void handleSave(); }} />
         </div>
       )}
     </div>

@@ -67,12 +67,12 @@ describe('detail sections render through SectionCard', () => {
   });
 
   it('renders the settings group body without a second section header', () => {
-    const html = renderToStaticMarkup(<ContestSettingsSection formData={SETTINGS_FORM} onChange={() => undefined} />);
+    const html = renderToStaticMarkup(<ContestSettingsSection formData={SETTINGS_FORM} onChange={() => undefined} copy={en.contests.settings} />);
     expect(html).toContain('Timezone');
     expect(html).toContain('Asia/Bangkok');
     expect(html).not.toContain('Contest Settings');
 
-    render(<ContestSettingsSection formData={SETTINGS_FORM} canEdit={false} onChange={() => undefined} />);
+    render(<ContestSettingsSection formData={SETTINGS_FORM} canEdit={false} onChange={() => undefined} copy={en.contests.settings} />);
     expect(screen.getByPlaceholderText('Asia/Bangkok').hasAttribute('disabled')).toBe(true);
   });
 });

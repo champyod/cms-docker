@@ -233,6 +233,22 @@
       "running": "กำลังแข่งขัน",
       "analysis": "โหมดวิเคราะห์",
       "ended": "สิ้นสุดแล้ว"
+    },
+    "settings": {
+      "fields": {
+        "name": "ชื่อ",
+        "description": "คำอธิบาย",
+        "timezone": "เขตเวลา"
+      },
+      "toggles": {
+        "allowQuestions": "เปิดให้ถามคำถาม",
+        "allowUserTests": "เปิดให้ผู้ใช้ทดสอบเอง",
+        "submissionsDownload": "เปิดให้ดาวน์โหลดผลส่ง",
+        "passwordAuth": "เปิดใช้รหัสผ่าน",
+        "registration": "เปิดรับสมัคร",
+        "analysisMode": "โหมดวิเคราะห์"
+      },
+      "saveChanges": "บันทึกการเปลี่ยนแปลง"
     }
   },
   "tasks": {

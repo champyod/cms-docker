@@ -26,7 +26,7 @@ describe('contest tab parity', () => {
   });
 
   it('keeps the current Contest settings form fields', () => {
-    const html = renderToStaticMarkup(<ContestSettingsTab data={{ contestId: 7, fields: { name: 'Contest', description: 'Description', timezone: 'Asia/Bangkok', allow_questions: true, allow_user_tests: false, submissions_download_allowed: true, allow_password_authentication: true, allow_registration: false, analysis_enabled: false, token_mode: 'disabled', score_precision: 0, start: null, stop: null, analysis_start: null, analysis_stop: null }, permissionKeys: ['contest:read', 'contest:update'] }} />);
+    const html = renderToStaticMarkup(<DictionaryProvider dict={en}><ContestSettingsTab data={{ contestId: 7, fields: { name: 'Contest', description: 'Description', timezone: 'Asia/Bangkok', allow_questions: true, allow_user_tests: false, submissions_download_allowed: true, allow_password_authentication: true, allow_registration: false, analysis_enabled: false, token_mode: 'disabled', score_precision: 0, start: null, stop: null, analysis_start: null, analysis_stop: null }, permissionKeys: ['contest:read', 'contest:update'] }} /></DictionaryProvider>);
     expect(html).toContain('Timezone');
     expect(html).toContain('Save Changes');
   });
