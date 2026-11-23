@@ -65,7 +65,6 @@ export default async function SystemAppearancePage({
     <SettingsPage
       // The system module shell above renders the title, the description and the trail.
       ownsHeader={false}
-      title={dict.navigation.system.appearance.label}
       groups={groups}
       saveBar={
         <p className="text-sm text-muted-foreground">
