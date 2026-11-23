@@ -54,7 +54,6 @@ export default async function InfrastructureDeploymentsPage({
       <BoardPage
         // The infrastructure module shell above renders the title, the description and the trail.
         ownsHeader={false}
-        title={dict.navigation.infrastructure.deployments.label}
         state={<DeploymentState />}
         sections={sections}
       />
