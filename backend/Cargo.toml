@@ -4,6 +4,7 @@ members = [
     "cms-api",
     "cms-audit",
     "cms-db",
+    "cms-evaluation",
     "cms-grading",
     "cms-proto",
     "cms-sandbox",
