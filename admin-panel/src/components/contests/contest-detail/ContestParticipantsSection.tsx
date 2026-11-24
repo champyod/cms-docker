@@ -1,12 +1,12 @@
 'use client';
 
 import { Button } from '@/components/core/Button';
+import { Badge } from '@/components/core/Badge';
 import type { Dictionary } from '@/lib/dictionary';
 import { EmptyState } from '@/components/core/EmptyState';
 import { RowActions } from '@/components/core/RowActions';
 import { Users, Plus, Trash2, Settings, FlaskConical } from 'lucide-react';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
-import { cn } from '@/lib/utils';
 
 interface ParticipationUser { username: string; first_name: string; last_name: string; }
 
@@ -24,7 +24,7 @@ interface Props {
   onRemove: (id: number) => void;
 }
 
-const CHIP_CLASSES = 'rounded-full px-2 py-0.5 text-xs';
+const CHIP_CLASS = 'normal-case tracking-normal';
 
 function ParticipationChips({ participation, copy }: {
   participation: Participation;
@@ -32,9 +32,9 @@ function ParticipationChips({ participation, copy }: {
 }): React.JSX.Element {
   return (
     <>
-      {participation.teams && <span className={cn(CHIP_CLASSES, 'bg-primary/10 text-primary')}>{participation.teams.code}</span>}
-      {participation.unrestricted && <span className={cn(CHIP_CLASSES, 'bg-warning/10 text-warning')}>{copy.unrestricted}</span>}
-      {participation.hidden && <span className={cn(CHIP_CLASSES, 'bg-muted text-muted-foreground')}>{copy.hidden}</span>}
+      {participation.teams && <Badge variant="indigo" className={CHIP_CLASS}>{participation.teams.code}</Badge>}
+      {participation.unrestricted && <Badge variant="warning" className={CHIP_CLASS}>{copy.unrestricted}</Badge>}
+      {participation.hidden && <Badge variant="neutral" className={CHIP_CLASS}>{copy.hidden}</Badge>}
     </>
   );
 }
@@ -45,7 +45,7 @@ function ParticipationIdentity({ participation }: { participation: Participation
   const fullName = participation.users ? `${participation.users.first_name} ${participation.users.last_name}`.trim() : '';
   return (
     <div className="flex items-center gap-3">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success/10 text-xs font-bold text-success">{username.substring(0, 2).toUpperCase()}</div>
+      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">{username.substring(0, 2).toUpperCase()}</div>
       <div>
         <div className="font-medium text-foreground">{username}</div>
         {fullName && <div className="text-xs text-muted-foreground">{fullName}</div>}
