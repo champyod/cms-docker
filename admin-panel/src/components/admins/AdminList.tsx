@@ -18,6 +18,7 @@ import { usePublishModuleActions } from '@/components/navigation/ModuleActionSlo
 import { useFormatTimestamp } from '@/components/layout/TimezoneProvider';
 import { ACTION_PERMISSIONS, hasEffectivePermission } from '@/lib/permission-engine';
 import { type ListSortInput } from '@/lib/list-sorting';
+import { countLabel } from '@/lib/format-number';
 import { cn } from '@/lib/utils';
 import { AdminModal } from './AdminModal';
 import { AdminRowActions } from './AdminRowActions';
@@ -163,7 +164,7 @@ export function AdminList({
     },
     {
       key: 'groups',
-      header: 'Groups',
+      header: dict.admins.columns.groups,
       render: (admin) => {
         const groupNames = accessSummary[admin.id]?.groupNames ?? [];
         const overrideCount = accessSummary[admin.id]?.overrideCount ?? 0;
@@ -175,16 +176,17 @@ export function AdminList({
               </Badge>
             ))}
             {accessSummary[admin.id] && groupNames.length === 0 && (
-              <span className="text-xs text-muted-foreground italic">No groups</span>
+              <span className="text-xs text-muted-foreground italic">{dict.admins.noGroups}</span>
             )}
             {overrideCount > 0 && (
-              <span
-                className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-warning/20 text-warning high-contrast:bg-warning high-contrast:text-warning-foreground"
-                title={`${overrideCount} per-person override${overrideCount === 1 ? '' : 's'}`}
+              <Badge
+                variant="warning"
+                className="gap-1"
+                title={countLabel(overrideCount, dict.admins.overrides)}
               >
                 <ShieldAlert className="w-3 h-3" />
                 {overrideCount}
-              </span>
+              </Badge>
             )}
           </div>
         );
@@ -192,10 +194,14 @@ export function AdminList({
     },
     {
       key: 'status',
-      header: 'Status',
+      header: dict.admins.columns.status,
       sortKey: 'enabled',
       render: (admin) => {
-        const badge = <span className={cn('px-2 py-0.5 text-xs rounded-full', admin.enabled ? 'bg-success/20 text-success high-contrast:bg-success high-contrast:text-success-foreground' : 'bg-destructive/20 text-destructive high-contrast:bg-destructive high-contrast:text-destructive-foreground')}>{admin.enabled ? 'Enabled' : 'Disabled'}</span>;
+        const badge = (
+          <Badge variant={admin.enabled ? 'success' : 'destructive'}>
+            {admin.enabled ? dict.admins.enabled : dict.admins.disabled}
+          </Badge>
+        );
         if (!canUpdate) return badge;
         return (
           <Button variant="ghost" size="sm" onClick={() => handleToggleEnabled(admin)} className="h-auto p-1">
@@ -204,7 +210,7 @@ export function AdminList({
         );
       },
     },
-  ], [accessSummary, canUpdate, formatTimestamp, handleToggleEnabled]);
+  ], [accessSummary, canUpdate, dict.admins, formatTimestamp, handleToggleEnabled]);
 
   const table = (
     <ResponsiveTable

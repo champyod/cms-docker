@@ -761,6 +761,17 @@
     "actions": {
       "edit": "Edit",
       "delete": "Delete"
+    },
+    "columns": {
+      "groups": "Groups",
+      "status": "Status"
+    },
+    "noGroups": "No groups",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "overrides": {
+      "one": "per-person override",
+      "other": "per-person overrides"
     }
   },
   "resources": {

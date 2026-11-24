@@ -761,6 +761,17 @@
     "actions": {
       "edit": "แก้ไข",
       "delete": "ลบ"
+    },
+    "columns": {
+      "groups": "กลุ่ม",
+      "status": "สถานะ"
+    },
+    "noGroups": "ไม่มีกลุ่ม",
+    "enabled": "เปิดใช้งาน",
+    "disabled": "ปิดใช้งาน",
+    "overrides": {
+      "one": "การตั้งค่าเฉพาะบุคคล",
+      "other": "การตั้งค่าเฉพาะบุคคล"
     }
   },
   "resources": {
