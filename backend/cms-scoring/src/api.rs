@@ -28,10 +28,13 @@ const CONTEST_ID_ARGUMENT: &str = "contest_id";
 const POISONED: &str = "the scoring queue is unusable after a panic while it was held";
 
 /// The session, fair queue and optional proxy endpoint one scoring daemon shares.
+///
+/// Clones share the same session and queue.
+#[derive(Clone)]
 pub struct Scoring {
     session: Arc<Session>,
     runtime: tokio::runtime::Handle,
-    queue: Mutex<ScoringQueue>,
+    queue: Arc<Mutex<ScoringQueue>>,
     proxy_address: Option<String>,
     rpc_secret: Option<String>,
 }
@@ -48,7 +51,7 @@ impl Scoring {
         Self {
             session,
             runtime,
-            queue: Mutex::new(ScoringQueue::default()),
+            queue: Arc::new(Mutex::new(ScoringQueue::default())),
             proxy_address,
             rpc_secret,
         }

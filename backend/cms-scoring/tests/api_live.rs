@@ -25,9 +25,13 @@ async fn new_evaluation_enqueues_once_per_submission_and_dataset() {
             .expect("the first request is accepted"),
         Value::Null
     );
+    let duplicate = scoring.clone();
     assert_eq!(
-        cms_scoring::api::new_evaluation(&json!({"submission_id": 41, "dataset_id": 9}), &scoring)
-            .expect("the duplicate request is accepted"),
+        cms_scoring::api::new_evaluation(
+            &json!({"submission_id": 41, "dataset_id": 9}),
+            &duplicate,
+        )
+        .expect("the duplicate request is accepted"),
         Value::Null
     );
     assert_eq!(scoring.queue_len(), 1);
