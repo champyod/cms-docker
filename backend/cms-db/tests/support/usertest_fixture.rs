@@ -81,6 +81,8 @@ pub fn dataset(id: i32, task_id: i32) -> DatasetRecord {
         id: DatasetId(id),
         task_id,
         task_type: "Batch".to_string(),
+        score_type: "Sum".to_string(),
+        score_type_parameters: "0".to_string(),
         time_limit: Some(1.0),
         memory_limit: None,
         is_active: true,

@@ -101,7 +101,9 @@ const TABLES: &[&str] = &[
         autojudge boolean NOT NULL DEFAULT false,
         time_limit double precision,
         memory_limit bigint,
-        task_type varchar NOT NULL DEFAULT 'Batch')",
+        task_type varchar NOT NULL DEFAULT 'Batch',
+        score_type varchar NOT NULL DEFAULT 'Sum',
+        score_type_parameters jsonb NOT NULL DEFAULT '0')",
     "CREATE TEMP TABLE submissions (
         id integer PRIMARY KEY,
         opaque_id bigint NOT NULL DEFAULT 0,
