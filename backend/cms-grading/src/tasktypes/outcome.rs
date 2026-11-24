@@ -40,8 +40,8 @@ pub struct Evaluation {
     /// The score, zero when the run did not answer, absent when the box did not work
     /// and when there was no answer to judge.
     pub outcome: Option<f64>,
-    /// The sentences a report shows, the first of which the rest are arguments for.
-    pub text: Vec<String>,
+    /// The sentences a report shows, absent when the configuration prevented evaluation.
+    pub text: Option<Vec<String>>,
     /// What only an administrator is shown, absent where the judge wrote none.
     pub admin_text: Option<String>,
     /// What the run was charged, absent when no run was measured.
@@ -72,16 +72,18 @@ impl Evaluation {
     ) -> Result<(), TaskError> {
         if !self.ran {
             self.outcome = Some(NO_CREDIT);
-            self.text = self.stats.as_ref().map_or_else(Vec::new, what_went_wrong);
+            self.text = Some(self.stats.as_ref().map_or_else(Vec::new, what_went_wrong));
             return Ok(());
         }
         let output = batch.actual_output();
         if !run.files().path(output).is_file() {
             self.outcome = Some(NO_CREDIT);
-            self.text = EVALUATION_MESSAGES
-                .get("nooutput")
-                .message()
-                .reported_naming(output);
+            self.text = Some(
+                EVALUATION_MESSAGES
+                    .get("nooutput")
+                    .message()
+                    .reported_naming(output),
+            );
             return Ok(());
         }
         if job.get_output.unwrap_or(false) {
@@ -89,7 +91,7 @@ impl Evaluation {
         }
         if job.only_execution.unwrap_or(false) {
             self.outcome = Some(NO_CREDIT);
-            self.text = vec![EXECUTED.to_owned()];
+            self.text = Some(vec![EXECUTED.to_owned()]);
             return Ok(());
         }
         self.output_file = Some(OutputFile {
@@ -103,7 +105,7 @@ impl Evaluation {
     pub(super) fn absorb(&mut self, judgement: Judgement) {
         self.success = judgement.success;
         self.outcome = judgement.outcome;
-        self.text = judgement.text;
+        self.text = judgement.success.then_some(judgement.text);
         self.admin_text = judgement.admin_text;
         self.sandboxes.extend(judgement.sandboxes);
     }
@@ -138,7 +140,7 @@ pub(super) fn decide(stats: Option<ExecutionStats>) -> Evaluation {
         success,
         ran,
         outcome: None,
-        text: Vec::new(),
+        text: if success { Some(Vec::new()) } else { None },
         admin_text: None,
         stats: if success { stats } else { None },
         user_output: None,

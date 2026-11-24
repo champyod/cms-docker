@@ -70,6 +70,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod execute;
 pub mod job;
 pub mod languages;
 pub mod limits;

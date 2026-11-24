@@ -95,7 +95,7 @@ fn the_answer_is_handed_on_for_comparison_and_stored_when_asked_for() {
         Some(0.0),
         "the answer the second phase wrote is not the dataset's"
     );
-    assert_eq!(judged.text, vec!["Output isn't correct"]);
+    assert_eq!(judged.text, Some(vec!["Output isn't correct".to_owned()]));
     let answer = judged.output_file.as_ref().expect("the file to compare");
     assert!(answer.path.ends_with("output.txt"), "{:?}", answer.path);
 
@@ -129,7 +129,10 @@ fn a_job_only_asked_to_be_run_is_answered_before_the_answer_is_compared() {
         )
         .expect("the evaluation must run");
     assert_eq!(executed.outcome, Some(NO_CREDIT));
-    assert_eq!(executed.text, vec!["Execution completed successfully"]);
+    assert_eq!(
+        executed.text,
+        Some(vec!["Execution completed successfully".to_owned()])
+    );
     assert!(
         executed.output_file.is_none(),
         "a job that only asked to be run hands nothing to a comparison"

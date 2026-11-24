@@ -30,7 +30,7 @@ fn compilation() -> Compilation {
         sandboxes: vec![PathBuf::from("/sandbox/compile")],
         success: true,
         compilation_success: Some(true),
-        text: vec!["Compilation succeeded".to_owned()],
+        text: Some(vec!["Compilation succeeded".to_owned()]),
         stats: Some(stats()),
         executables: digests(&[("foo", "3333333333333333333333333333333333333333")]),
         diagnostics: Default::default(),
@@ -43,7 +43,7 @@ fn evaluation() -> Evaluation {
         success: true,
         ran: true,
         outcome: Some(42.5),
-        text: vec!["Output is correct".to_owned()],
+        text: Some(vec!["Output is correct".to_owned()]),
         admin_text: Some("read the input twice".to_owned()),
         stats: Some(stats()),
         user_output: Some(
@@ -136,7 +136,7 @@ fn an_evaluation_writer_fills_the_keys_the_finished_decoder_reads() {
 fn evaluation_text_stays_a_string_list_beside_admin_text() {
     let mut body = evaluation_body();
     let mut result = evaluation();
-    result.text = vec!["Wrong answer: %s".to_owned(), "got".to_owned()];
+    result.text = Some(vec!["Wrong answer: %s".to_owned(), "got".to_owned()]);
     result.write_body(body.as_object_mut().expect("a job object"));
 
     assert_eq!(body["text"], json!(["Wrong answer: %s", "got"]));

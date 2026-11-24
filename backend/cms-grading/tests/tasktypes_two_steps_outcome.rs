@@ -41,7 +41,7 @@ fn a_stopped_phase_and_a_phase_that_wrote_nothing_are_both_charged_nothing() {
     assert!(timed.success, "the box worked");
     assert!(!timed.ran, "a phase stopped by its limit did not answer");
     assert_eq!(timed.outcome, Some(NO_CREDIT));
-    assert_eq!(timed.text, vec!["Execution timed out"]);
+    assert_eq!(timed.text, Some(vec!["Execution timed out".to_owned()]));
 
     let silent = workspace("two-steps-nothing");
     let runtime = runtime_of(&silent, CLEAN_LOG, false);
@@ -56,7 +56,7 @@ fn a_stopped_phase_and_a_phase_that_wrote_nothing_are_both_charged_nothing() {
     assert!(wrote_nothing.success && wrote_nothing.ran);
     assert_eq!(wrote_nothing.outcome, Some(NO_CREDIT));
     assert_eq!(
-        format_status_text(&wrote_nothing.text),
+        format_status_text(wrote_nothing.text.as_deref().unwrap_or_default()),
         "Evaluation didn't produce file output.txt",
         "the sentence names the file the run did not write"
     );

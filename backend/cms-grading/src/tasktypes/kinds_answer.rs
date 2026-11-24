@@ -69,7 +69,7 @@ impl Answer {
         Self {
             success: run.success,
             outcome: run.outcome,
-            text: run.text,
+            text: run.text.unwrap_or_default(),
             admin_text: run.admin_text,
             stats: run.stats,
             sandboxes: run.sandboxes,

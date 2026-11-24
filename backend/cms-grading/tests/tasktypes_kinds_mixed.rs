@@ -70,7 +70,10 @@ fn a_submission_carrying_a_source_is_compiled_the_way_a_batch_one_is() {
         .expect("the compilation must run");
 
     assert!(compiled.success);
-    assert_eq!(compiled.text, vec!["Compilation succeeded"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["Compilation succeeded".to_owned()])
+    );
     assert_eq!(
         compiled.sandboxes.len(),
         1,
@@ -98,7 +101,10 @@ fn a_submission_of_answers_alone_is_compiled_without_a_box() {
 
     assert!(compiled.success);
     assert_eq!(compiled.compilation_success, Some(true));
-    assert_eq!(compiled.text, vec!["No compilation needed"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["No compilation needed".to_owned()])
+    );
     assert!(
         compiled.sandboxes.is_empty() && compiled.executables.is_empty(),
         "an answer is not a source, so no box is made"

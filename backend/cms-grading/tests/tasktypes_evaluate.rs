@@ -60,7 +60,10 @@ fn an_evaluation_runs_the_executable_under_the_datasets_limits_and_hands_on_its_
         Some(0.0),
         "the run's answer is not the dataset's"
     );
-    assert_eq!(evaluated.text, vec!["Output isn't correct"]);
+    assert_eq!(
+        evaluated.text,
+        Some(vec!["Output isn't correct".to_owned()])
+    );
     let answer = evaluated.output_file.as_ref().expect("the file to compare");
     assert!(answer.path.ends_with("output.txt"));
     assert_eq!(answer.filename, "");
@@ -101,7 +104,7 @@ fn a_comparator_batch_is_judged_by_the_datasets_checker_in_a_box_of_its_own() {
 
     assert!(judged.success);
     assert_eq!(judged.outcome, Some(1.0), "the checker's own score");
-    assert_eq!(judged.text, vec!["Output is correct"]);
+    assert_eq!(judged.text, Some(vec!["Output is correct".to_owned()]));
     assert_eq!(judged.sandboxes.len(), 2, "the run's box and the check's");
     assert!(judged.sandboxes[1].ends_with("cms-sandbox-check"));
     assert_eq!(
@@ -151,7 +154,10 @@ fn a_job_asking_for_the_answer_gets_it_stored_and_one_only_to_run_stops_early() 
         )
         .expect("the evaluation must run");
     assert_eq!(executed.outcome, Some(0.0));
-    assert_eq!(executed.text, vec!["Execution completed successfully"]);
+    assert_eq!(
+        executed.text,
+        Some(vec!["Execution completed successfully".to_owned()])
+    );
     assert!(executed.output_file.is_none());
 }
 
@@ -173,11 +179,14 @@ fn a_run_that_wrote_nothing_and_a_run_that_was_stopped_are_both_charged_nothing(
     assert_eq!(wrote_nothing.outcome, Some(0.0));
     assert_eq!(
         wrote_nothing.text,
-        vec!["Evaluation didn't produce file %s", "output.txt"],
+        Some(vec![
+            "Evaluation didn't produce file %s".to_owned(),
+            "output.txt".to_owned()
+        ]),
         "the sentence names the file the run did not write"
     );
     assert_eq!(
-        format_status_text(&wrote_nothing.text),
+        format_status_text(wrote_nothing.text.as_deref().unwrap_or_default()),
         "Evaluation didn't produce file output.txt",
         "and the filename reaches the contestant rather than a bare %s"
     );
@@ -199,7 +208,7 @@ fn a_run_that_wrote_nothing_and_a_run_that_was_stopped_are_both_charged_nothing(
         "the run itself did not do what it was asked to"
     );
     assert_eq!(stopped.outcome, Some(0.0));
-    assert_eq!(stopped.text, vec!["Execution timed out"]);
+    assert_eq!(stopped.text, Some(vec!["Execution timed out".to_owned()]));
     assert!(stopped.output_file.is_none());
 }
 

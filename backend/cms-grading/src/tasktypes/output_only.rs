@@ -220,7 +220,7 @@ pub(super) fn no_compilation() -> Compilation {
         sandboxes: Vec::new(),
         success: true,
         compilation_success: Some(true),
-        text: vec![NOTHING_TO_COMPILE.to_owned()],
+        text: Some(vec![NOTHING_TO_COMPILE.to_owned()]),
         stats: None,
         executables: DigestMap::new(),
         diagnostics: DigestMap::new(),

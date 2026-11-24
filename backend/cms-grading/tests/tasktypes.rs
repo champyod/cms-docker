@@ -118,7 +118,10 @@ fn a_compilation_hands_over_the_sources_and_the_managers_and_keeps_the_executabl
 
     assert!(compiled.success);
     assert_eq!(compiled.compilation_success, Some(true));
-    assert_eq!(compiled.text, vec!["Compilation succeeded"]);
+    assert_eq!(
+        compiled.text,
+        Some(vec!["Compilation succeeded".to_owned()])
+    );
     assert_eq!(
         compiled.stats.as_ref().map(|s| s.exit_status),
         Some(ExitStatus::Ok)
@@ -165,7 +168,7 @@ fn a_compilation_that_produced_nothing_is_a_failure_and_leaves_no_executable() {
         "the box worked, so the compilation is judged"
     );
     assert_eq!(compiled.compilation_success, Some(false));
-    assert_eq!(compiled.text, vec!["Compilation failed"]);
+    assert_eq!(compiled.text, Some(vec!["Compilation failed".to_owned()]));
     assert!(compiled.executables.is_empty());
     let silent = &compiled.diagnostics;
     assert!(silent.is_empty(), "a command that printed nothing is filed");
@@ -195,14 +198,15 @@ fn a_compilation_killed_by_a_signal_names_the_signal_it_was_killed_with() {
     assert_eq!(compiled.compilation_success, Some(false));
     assert_eq!(
         compiled.text,
-        vec![
-            "Compilation killed with signal %s (could be triggered by violating memory limits)",
-            "11",
-        ],
+        Some(vec![
+            "Compilation killed with signal %s (could be triggered by violating memory limits)"
+                .to_owned(),
+            "11".to_owned(),
+        ]),
         "the sentence and the number it names, as the reference hands them over"
     );
     assert_eq!(
-        format_status_text(&compiled.text),
+        format_status_text(compiled.text.as_deref().unwrap_or_default()),
         "Compilation killed with signal 11 (could be triggered by violating memory limits)"
     );
 }

@@ -201,7 +201,7 @@ fn a_failed_compilation_stores_no_executable() {
 
     assert!(compiled.success, "the box worked, so the run is judged");
     assert_eq!(compiled.compilation_success, Some(false));
-    assert_eq!(compiled.text, vec!["Compilation failed"]);
+    assert_eq!(compiled.text, Some(vec!["Compilation failed".to_owned()]));
     assert!(
         compiled.executables.is_empty(),
         "an executable is stored only where the compilation produced one"
