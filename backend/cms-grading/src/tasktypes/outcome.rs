@@ -1,3 +1,16 @@
+//! What an evaluation leaves behind, and how a judgement fills it in.
+//!
+//! A result is a box's own answer first and a submission's score second. The box
+//! either worked or it did not; if it did, the run either did what it was asked to or
+//! it was stopped, killed or returned non-zero; and if it answered, the file it wrote
+//! is judged with the input, not here. This module is that order for one box and for
+//! two boxes alive at once, and it is where a judge's verdict is stored.
+//!
+//! # Errors
+//!
+//! None: every value here is decided from figures a run already reported, and what a
+//! judge refuses is the judge's to report before a result is built.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -21,13 +34,16 @@ const NO_CREDIT: f64 = 0.0;
 pub struct Evaluation {
     /// The paths the report names this evaluation's box by.
     pub sandboxes: Vec<PathBuf>,
-    /// The archive digest of each box that was archived, keyed by its path.
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
     pub sandbox_digests: DigestMap,
     /// Whether the box worked, so that what the run reported can be believed.
     pub success: bool,
-    /// Distinguishes a stopped or non-zero run from a box that failed.
+    /// Whether the run itself did what it was asked to, as against one stopped,
+    /// killed or returned non-zero. It means nothing unless the box worked.
     pub ran: bool,
-    /// Keeps an unjudged run distinct from one that legitimately scored zero.
+    /// The score, zero when the run did not answer, absent when the box did not work
+    /// and when there was no answer to judge.
     pub outcome: Option<f64>,
     /// The sentences a report shows, absent when the configuration prevented evaluation.
     pub text: Option<Vec<String>>,
@@ -51,6 +67,8 @@ pub struct OutputFile {
 }
 
 impl Evaluation {
+    /// Judges a run that came back: whether it wrote the file it was told to
+    /// write, the digest of it where the job asked, and the file to compare.
     pub(super) fn judge(
         &mut self,
         run: &Run,
@@ -99,6 +117,10 @@ impl Evaluation {
     }
 }
 
+/// The one sentence a report shows for a run that did not do what it was asked
+/// to, and nothing for a run that ended cleanly: a run that answered is judged on
+/// its answer rather than on this. The Communication task type reads the same
+/// sentence for the process it is blaming, so this is the one table of them.
 pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
     let shorthand = match stats.exit_status {
         ExitStatus::Timeout => "timeout",
@@ -111,6 +133,8 @@ pub(super) fn what_went_wrong(stats: &ExecutionStats) -> Vec<String> {
     EVALUATION_MESSAGES.get(shorthand).message().reported()
 }
 
+/// What a run's figures say, undecided when there was no command to run or the
+/// box itself did not work: the figures of a box that failed are of nothing.
 pub(super) fn decide(stats: Option<ExecutionStats>) -> Evaluation {
     let (success, ran) = match stats.as_ref().map(|stats| stats.exit_status) {
         Some(ExitStatus::Ok) => (true, true),

@@ -1,3 +1,25 @@
+//! The judge: an answer compared with the one the dataset says is right.
+//!
+//! One function decides a run — `tasktypes/util.py:216` — and its returning contract is
+//! the whole of it. An answer is a path the run wrote or a digest a submission carried,
+//! and exactly one of the two, so both together and neither are a refusal rather than a
+//! guess. A path that is not there is a **wrong answer**: the run was asked to write a
+//! file and did not, which is worth zero and is said to the contestant in those words.
+//! That is deliberately not a failed check, and neither is a dataset that names a
+//! checker it does not hold — that one is `success` false with no score at all, because
+//! nothing was decided about the answer.
+//!
+//! A named checker runs in a box of its own, made for the check and closed after it,
+//! since a manager is a program and a check is a run. A link is treated as no file at
+//! all: the reference treats links as potential attacks, and a judge that followed one
+//! would read whatever it pointed at.
+//!
+//! # Errors
+//!
+//! [`TaskError`], and only that: an answer described by both a path and a digest or by
+//! neither, a dataset holding no correct answer to compare with, a store that would not
+//! hand a file over, and a checker the worker could not stage or launch.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -19,12 +41,15 @@ use crate::steps::{checker_step, white_diff, Check, Comparison, Verdict};
 pub const CHECKER_CODENAME: &str = "checker";
 /// The name of the box a check is made in, which the report names it by.
 const CHECK_BOX: &str = "check";
+/// The name the answer is copied into the check box under, which is the third argument
+/// the checker is given.
 const USER_OUTPUT_FILENAME: &str = "user_output.txt";
 
 /// What a judge decided about one answer.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Judgement {
-    /// Separates an undecidable check from a wrong answer worth zero.
+    /// Whether the answer could be judged at all. False means the check could not be
+    /// made, which is a fault of the dataset or the worker and never a wrong answer.
     pub success: bool,
     /// The score the answer earned, absent when it could not be judged.
     pub outcome: Option<f64>,
@@ -34,7 +59,8 @@ pub struct Judgement {
     pub admin_text: Option<String>,
     /// The boxes a check was made in, which the report names.
     pub sandboxes: Vec<PathBuf>,
-    /// The archive digest of each box that was archived, keyed by its path.
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
     pub sandbox_digests: DigestMap,
 }
 
@@ -48,7 +74,12 @@ pub enum OutputSource {
 }
 
 impl OutputSource {
-    /// Refuses ambiguous answers rather than choosing one of two sources.
+    /// Exactly one of the two, which is the reference's first refusal: both together
+    /// name two answers and neither names none, and a judge cannot choose between them.
+    ///
+    /// # Errors
+    ///
+    /// [`TaskError::OutputSource`] when both are given or neither is.
     pub fn of(path: Option<PathBuf>, digest: Option<FileDigest>) -> Result<Self, TaskError> {
         match (path, digest) {
             (Some(path), None) => Ok(Self::Path(path)),
@@ -59,6 +90,8 @@ impl OutputSource {
 }
 
 impl Judgement {
+    /// An answer that was never written: a wrong answer, not a failed check, naming the
+    /// file the parameters asked for.
     fn unwritten(filename: &str) -> Self {
         let sentence = EVALUATION_MESSAGES.get("nooutput").message();
         Self {
@@ -71,6 +104,8 @@ impl Judgement {
         }
     }
 
+    /// A check that could not be made: a checker the dataset does not hold, a box that
+    /// would not take its files, or a run whose ending says nothing about the answer.
     fn unchecked() -> Self {
         Self {
             success: false,
@@ -82,6 +117,9 @@ impl Judgement {
         }
     }
 
+    /// What a checker decided, or nothing where it could not decide, with the boxes the
+    /// check was made in — named whether or not the check could be completed, since a
+    /// box left behind is only findable if the report says where it is.
     fn of(verdict: Option<Verdict>, closed: Closed) -> Self {
         let mut judgement = match verdict {
             Some(verdict) => Self {
@@ -99,7 +137,13 @@ impl Judgement {
     }
 }
 
-/// Checks answer existence before selecting a checker so a missing file stays a wrong answer.
+/// Judges an answer by a checker the dataset names, or by a white diff where it names
+/// none, in the reference's order: whether the file is there comes before who checks it.
+///
+/// # Errors
+///
+/// [`TaskError`], and only that: a dataset holding no correct answer, a store that would
+/// not hand a file over, and a checker the worker could not stage or launch.
 pub fn eval_output(
     job: &EvaluationJob,
     checker: Option<&str>,
@@ -120,6 +164,10 @@ pub fn eval_output(
     }
 }
 
+/// Runs the checker the dataset names, in a box of its own, over the answer copied in.
+///
+/// The sandbox path is returned whether or not it is removed, because a report names
+/// every box a job made, and one left behind is named for whoever reads it.
 fn check_with(
     job: &EvaluationJob,
     codename: &str,
@@ -150,6 +198,8 @@ fn check_with(
     Ok(Judgement::of(verdict, closed))
 }
 
+/// Compares the answer with the dataset's own, byte for byte once whitespace is folded,
+/// and awards the whole score or none of it.
 fn compare_with_correct(
     job: &EvaluationJob,
     answer: &OutputSource,
@@ -173,6 +223,8 @@ fn compare_with_correct(
     })
 }
 
+/// Copies the answer into the check box, from where it is: a file the run wrote is read
+/// here, and one the submission carried is fetched from the store by a box of its own.
 fn stage_answer(files: &Stage, answer: &OutputSource) -> Result<(), TaskError> {
     match answer {
         OutputSource::Path(path) => {
@@ -189,6 +241,8 @@ fn stage_answer(files: &Stage, answer: &OutputSource) -> Result<(), TaskError> {
     Ok(())
 }
 
+/// The handle for the answer the dataset says is right, which a job judging an answer at
+/// all always carries; one that does not is a job built wrong rather than an answer.
 fn correct_handle(job: &EvaluationJob) -> Result<CacheHandle, TaskError> {
     job.output
         .as_deref()
@@ -197,6 +251,9 @@ fn correct_handle(job: &EvaluationJob) -> Result<CacheHandle, TaskError> {
         .ok_or(TaskError::NoCorrectOutput)
 }
 
+/// Whether a path names a file a judge may read. A link is no file at all, which is the
+/// reference's rule and the reason it is stated here rather than after the read: a
+/// symlink to an existing file would otherwise pass every check it is given.
 fn is_answer(path: &Path) -> bool {
     let linked = fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink());
     path.exists() && !linked

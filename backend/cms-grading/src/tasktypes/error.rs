@@ -1,3 +1,16 @@
+//! Why a task type did not compile, run, or read back a job.
+//!
+//! One error for the five task types, because a job is refused by the phase that could
+//! not do its part whatever the task is, and a caller that catches one of these is
+//! catching all of them. Every variant names the two things that disagree or the file to
+//! look at, so a refusal says which manager, limit or count. A name the registry does not
+//! hold is here too, because it is a job that cannot be built rather than a job that ran
+//! badly.
+//!
+//! A verdict about a submission is never one of these: an answer that is wrong, a
+//! checker that could not run and a file the run never wrote are all facts the task
+//! type reports, not failures of the worker.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -14,14 +27,21 @@ use super::parameters::Accepts;
 /// Why a job was not compiled, not run, or not read back.
 #[derive(Debug)]
 pub enum TaskError {
-    /// Refuses an unknown registry key instead of falling back to another task type.
+    /// A job's task type name is one this worker does not implement, which the registry
+    /// refuses rather than falling back to a type nobody selected.
     UnknownName {
         /// The name the job carried, which the task row's `task_type` column holds.
         name: String,
     },
-    /// Refuses a parameter list whose shape cannot describe the selected task.
+    /// The task type parameters are not the entries the task type declares: not a list,
+    /// or not one entry per declared parameter.
     Parameters,
-    /// Names the declaration and refused value so an administrator can correct it.
+    /// A declared parameter was given a value it does not accept.
+    ///
+    /// The declaration's own name, what it accepts and the value it refused are carried
+    /// because the reference's per-type messages say all three, and they are what an
+    /// administrator has to correct in a dataset's parameters: "not the entries a Batch
+    /// task has" names no parameter at all.
     Parameter {
         /// The name the declaration gives the parameter.
         name: &'static str,
@@ -37,7 +57,8 @@ pub enum TaskError {
         /// The manager the compilation needs and the dataset does not hold.
         name: String,
     },
-    /// Refuses a submission that cannot satisfy the task type's file contract.
+    /// The submission's file count is not what the task type takes: fewer than a
+    /// floor, or not exactly a fixed number.
     TooFewFiles {
         /// How many files the submission carries.
         found: usize,
@@ -64,7 +85,8 @@ pub enum TaskError {
     NoCorrectOutput,
     /// A file the run was to be handed could not be staged.
     Stage(StageError),
-    /// A run's directory could not be archived and filed.
+    /// A run's directory could not be packed and filed, so the job cannot report
+    /// the archive it asked for.
     Archive(ArchiveError),
     /// A run could not be launched, or could not be read back once it had run.
     Spawn(SpawnError),

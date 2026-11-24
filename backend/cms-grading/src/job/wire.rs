@@ -117,7 +117,12 @@ fn write_run(
     put(body, JobKey::PLUS, plus_value(stats, success));
 }
 
-/// Empty plus means a working box measured nothing, while null means the box failed.
+/// The `plus` metadata: the run's statistics, an empty object when the box worked
+/// but measured nothing, and null only when the box itself failed.
+///
+/// `OutputOnly.compile` writes `{}` for a task that needs no compilation
+/// (`OutputOnly.py:111`) and `{} if box_success else None` after an evaluation
+/// (`:138`), so "nothing measured" and "nothing worked" are different answers.
 fn plus_value(stats: Option<&ExecutionStats>, success: bool) -> Value {
     match stats {
         Some(stats) => stats_value(stats),

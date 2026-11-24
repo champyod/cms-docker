@@ -1,3 +1,15 @@
+//! How an answer of a [`BatchAndOutput`](super::BatchAndOutput) task is put
+//! together, and the two readings of a job that putting together depends on.
+//!
+//! Which shape an answer has was decided before it was built, in the order the
+//! reference decides an answer in, so each shape is built by one constructor here.
+//! The score, the sentences and the words a checker is told are therefore written
+//! once each, rather than spread across the places that hand an answer back.
+//!
+//! The other two functions read what that decision needs read first: which
+//! testcases a parameter listed as output-only, and whether a submission carries
+//! anything to compile, since an answer file is not a source.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -13,6 +25,9 @@ use super::Evaluation;
 use crate::stage::FileDigest;
 
 impl Answer {
+    /// What a testcase the submission carried an answer for is worth: the digest the
+    /// answer is kept under, the word a checker is told which kind it holds, and what
+    /// the judge decided about the answer itself.
     pub(super) fn carried(answer: FileDigest, kind: &'static str, judgement: Judgement) -> Self {
         Self {
             success: judgement.success,
@@ -29,6 +44,8 @@ impl Answer {
         }
     }
 
+    /// What a testcase nothing answered is worth: a score of zero and the sentence
+    /// that says so, and no answer for a checker to be handed.
     pub(super) fn not_carried() -> Self {
         Self {
             success: true,
@@ -45,6 +62,9 @@ impl Answer {
         }
     }
 
+    /// What a run is worth as the answer it left: what the box reported, what the run
+    /// was charged, and the file a comparison or a checker read. A run that wrote no
+    /// answer hands nothing on, so it is given no word either.
     pub(super) fn from_run(mut run: Evaluation, kind: &'static str) -> Self {
         let origin = run.output_file.take().map(Origin::Written);
         let extra_args = if origin.is_some() {
@@ -68,6 +88,8 @@ impl Answer {
     }
 }
 
+/// The testcases a parameter listed as output-only: a comma-separated list of
+/// codenames, where one naming none is the empty set and not the empty name.
 pub(super) fn listed(text: &str) -> BTreeSet<String> {
     text.split(',')
         .filter(|codename| !codename.is_empty())
@@ -75,6 +97,8 @@ pub(super) fn listed(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
+/// Whether a submission carries anything to compile, which is what decides whether a
+/// compilation is attempted: an answer file is not a source.
 pub(super) fn carries_source(files: &DigestMap) -> bool {
     files
         .keys()

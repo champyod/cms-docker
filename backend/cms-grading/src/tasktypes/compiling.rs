@@ -1,3 +1,15 @@
+//! One compilation in one box, as every task type that builds a program does it:
+//! the files it is handed, the commands that turn them into an executable, the
+//! executable itself, and what each of those commands printed.
+//!
+//! Which files are handed over and what the executable is called is the task
+//! type's own decision and arrives as [`Inputs`] and a name. Everything from the
+//! box on is the same for all of them, so it happens here once: a second copy is
+//! how a box's success and a compilation's success drift apart.
+//!
+//! A box that did not work is not a compilation that failed, so it comes back
+//! undecided, and an executable is stored only where the compilation produced one.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -15,6 +27,8 @@ use cms_sandbox::{MappedDirectory, Options, Sandbox};
 use super::batch::SOURCE_PLACEHOLDER;
 use super::{handle, wall_clock_of, Run, Runtime, TaskError, Toolchain};
 
+/// The name the box a compilation runs in is made under, which is also what the
+/// report names its sandbox by.
 pub(super) const COMPILE_BOX: &str = "compile";
 /// The prefix a command's standard output is written under, numbered so two never collide.
 const OUTPUT_PREFIX: &str = "compilation_stdout_";
@@ -30,11 +44,13 @@ const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
 pub struct Compilation {
     /// The paths the report names this compilation's box by.
     pub sandboxes: Vec<PathBuf>,
-    /// The archive digest of each box that was archived, keyed by its path.
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
     pub sandbox_digests: DigestMap,
     /// Whether the box worked, so what the run reported can be believed.
     pub success: bool,
-    /// Leaves compilation undecided when the box itself failed.
+    /// Whether the compilation produced an executable, `None` when the box did
+    /// not work and there is nothing to say either way.
     pub compilation_success: Option<bool>,
     /// The sentences a report shows, absent when no compilation was attempted.
     pub text: Option<Vec<String>>,
@@ -42,7 +58,8 @@ pub struct Compilation {
     pub stats: Option<ExecutionStats>,
     /// The files the report stores, by name, as digests.
     pub executables: DigestMap,
-    /// Lets compiler warnings outlive the box that printed them.
+    /// What every command printed, by the name of the stream file it was
+    /// redirected to, as digests, so a warning outlives the box that held it.
     pub diagnostics: DigestMap,
 }
 
@@ -52,6 +69,12 @@ pub(super) struct Inputs {
     pub(super) files: DigestMap,
 }
 
+/// The executable a set of codenames compiles to: their names without the
+/// placeholder, sorted and joined, then the language's extension.
+///
+/// Sorting is what makes the name deterministic whatever order the files arrived
+/// in, and the placeholder is dropped because the name is the one an evaluation
+/// looks for rather than a source of any language.
 pub(super) fn executable_name<'a>(
     codenames: impl IntoIterator<Item = &'a String>,
     toolchain: &dyn Toolchain,
@@ -64,6 +87,13 @@ pub(super) fn executable_name<'a>(
     format!("{}{}", names.join("_"), toolchain.executable_extension())
 }
 
+/// Runs one compilation: the box is made and handed every file, its commands are
+/// run in order, and what they left is filed.
+///
+/// # Errors
+///
+/// [`TaskError`], and only that: a file the store would not hand over, a stream
+/// file it would not keep, and a run the box could not carry.
 pub(super) fn in_a_box(
     job: &CompilationJob,
     runtime: &Runtime,
@@ -94,6 +124,8 @@ pub(super) fn in_a_box(
     Ok(compilation)
 }
 
+/// Runs the compilation commands in the box, stopping at the first that did not
+/// end cleanly, filing what each printed and answering with what all cost.
 fn compile_with(
     run: &mut Run,
     commands: &[Vec<String>],
@@ -117,6 +149,9 @@ fn compile_with(
     Ok(merged)
 }
 
+/// The options one compilation command is launched under: the two directories a
+/// compilation needs to see, the three limits the operator set, and that
+/// command's own two stream files, over the options the box carries.
 fn command_options(sandbox: &Sandbox, runtime: &Runtime, number: usize) -> Options {
     let limits = &runtime.compilation;
     let mut options = sandbox.options().clone();
@@ -140,6 +175,8 @@ fn stream_file(prefix: &str, number: usize) -> String {
     format!("{prefix}{number}{STREAM_EXTENSION}")
 }
 
+/// The two streams one command was redirected to, filed in the store under the
+/// names the run was given them by, and a stream it never wrote left out.
 fn file_diagnostics(run: &Run, number: usize, into: &mut DigestMap) -> Result<(), TaskError> {
     for prefix in [OUTPUT_PREFIX, ERROR_PREFIX] {
         let name = stream_file(prefix, number);
@@ -178,10 +215,15 @@ fn decide(stats: Option<&ExecutionStats>) -> Compilation {
     }
 }
 
+/// The one sentence a report shows for a compilation that ended this way, as the list a
+/// report holds its sentences in.
 fn said(shorthand: &str) -> Vec<String> {
     COMPILATION_MESSAGES.get(shorthand).message().reported()
 }
 
+/// The sentence for a compilation a signal killed, with the signal's number as its one
+/// argument; a log that wrote no number reads as zero, which is the reference's own
+/// reading of the same log.
 fn killed_by(stats: &ExecutionStats) -> Vec<String> {
     COMPILATION_MESSAGES
         .get("signal")

@@ -1,4 +1,18 @@
-//! Typed jobs keep configuration refusals as results and worker refusals as group errors.
+//! The seam between a typed job and the task type that runs it.
+//!
+//! [`compile`] hands a [`CompilationJob`] to the selected task type's compilation,
+//! and [`evaluate`] hands an [`EvaluationJob`] to its evaluation, with the caller's
+//! toolchain, runtime and store. The phase decides the work; this module only
+//! dispatches it and translates its result.
+//!
+//! A file count, manager or executable count that cannot describe the selected
+//! task is a configuration refusal: the reference records it on the job and
+//! returns normally, so it becomes a failed result here. A missing toolchain,
+//! stage, spawn, step or any other refusal stays an error for the whole group.
+//!
+//! [`Compilation`] and [`Evaluation`] keep text optional because the reference
+//! writes JSON null when configuration prevented a result, while an empty list
+//! means a phase ran and had no sentences to report.
 
 use cms_proto::DigestMap;
 
@@ -45,7 +59,13 @@ impl Evaluation {
     }
 }
 
-/// Configuration refusals become failed results so one bad job does not fail its group.
+/// Compiles one typed job, translating only configuration refusals into failed results.
+///
+/// # Errors
+///
+/// [`TaskError::NoLanguage`] when a task that reaches a language phase receives no
+/// toolchain; [`TaskError::Stage`], [`TaskError::Spawn`], [`TaskError::Step`] and
+/// every other non-configuration refusal propagate.
 pub fn compile(
     task_type: &TaskType,
     job: &CompilationJob,
@@ -69,7 +89,13 @@ pub fn compile(
     translate(result, Compilation::configuration_error)
 }
 
-/// Configuration refusals become failed results so one bad job does not fail its group.
+/// Evaluates one typed job, translating only configuration refusals into failed results.
+///
+/// # Errors
+///
+/// [`TaskError::NoLanguage`] when a task that reaches a language phase receives no
+/// toolchain; [`TaskError::Stage`], [`TaskError::Spawn`], [`TaskError::Step`] and
+/// every other non-configuration refusal propagate.
 pub fn evaluate(
     task_type: &TaskType,
     job: &EvaluationJob,
@@ -100,8 +126,8 @@ pub fn evaluate(
 
 fn output_only_evaluation(answer: OutputOnlyAnswer) -> Evaluation {
     Evaluation {
-        sandboxes: Vec::new(),
-        sandbox_digests: DigestMap::new(),
+        sandboxes: answer.sandboxes,
+        sandbox_digests: answer.sandbox_digests,
         success: answer.success,
         ran: false,
         outcome: answer.outcome,

@@ -1,3 +1,18 @@
+//! The evaluation phase: the executable and the input a run is handed, the limits
+//! it is held to, and what the run's own answer is worth.
+//!
+//! The order is the reference's. The executable is the only one a Batch result
+//! holds, and the name it is judged by comes from the parameters. Then the two
+//! streams, which the two filenames decide: an empty one is a redirect to the
+//! default file and a named one is a file the run opens itself. Then the limits,
+//! the dataset's two and the box's own bound on how large a file may be.
+//!
+//! What the run did with them is read in the same order: a box that did not work
+//! is undecided, a run that was stopped or killed was charged nothing and is told
+//! why, and a run that answered is judged on the file it was told to write. That
+//! last step is the judge's, which is where the answer stops being a file and
+//! becomes a score.
+
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -19,15 +34,26 @@ const EXECUTABLES_REQUIRED: usize = 1;
 const ERROR_FILENAME: &str = "stderr.txt";
 const LIMIT_TIME: &str = "time limit";
 const LIMIT_MEMORY: &str = "memory limit";
+/// The processes a run may have alive at once: one, and the ceiling a
+/// multithreaded one is given so a fork bomb is bounded rather than enabled.
 const SINGLE_PROCESS: u32 = 1;
 const MULTIPROCESS_LIMIT: u32 = 1000;
 
 impl Batch {
+    /// The checker a dataset names for this task, or `None` where the parameters asked
+    /// for a plain diff: the codename is the same for every task type that has one.
     pub(super) fn checker(&self) -> Option<&'static str> {
         self.uses_comparator().then_some(CHECKER_CODENAME)
     }
 
-    /// Reuses the Batch phase without letting task types copy its staging and limits.
+    /// Evaluates one submission on one testcase, in the reference's order.
+    ///
+    /// # Errors
+    ///
+    /// [`TaskError`], and only that: a result holding a number of executables
+    /// other than one, a limit that is not positive, a file the store would not
+    /// hand over, a run the box could not carry or read back, and what the judge
+    /// refuses for the answer that run wrote.
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
@@ -38,7 +64,13 @@ impl Batch {
         self.evaluate_with(job, toolchain, runtime, store, &[])
     }
 
-    /// Adds checker arguments without changing the shared evaluation order.
+    /// The same evaluation, with arguments the checker is given after its three files.
+    /// A task type that shares this phase adds the word that says which kind of
+    /// testcase it is judging; one that judges alone passes none.
+    ///
+    /// # Errors
+    ///
+    /// What [`evaluate`](Self::evaluate) refuses.
     pub fn evaluate_with(
         &self,
         job: &EvaluationJob,
@@ -82,6 +114,8 @@ impl Batch {
     }
 }
 
+/// The one executable a result holds: the count is the reference's check, and the
+/// entry read once it is right is the first of the one that is there.
 fn only_executable(job: &EvaluationJob) -> Result<(String, String), TaskError> {
     let unexpected = || TaskError::UnexpectedExecutables {
         found: job.executables.len(),
@@ -108,6 +142,10 @@ fn stage_run(
     Ok(files.write_from_storage(batch.actual_input(), &input, false)?)
 }
 
+/// The options an evaluation run is launched under: the dataset's two limits and
+/// the two streams the parameters ask for, over the options the box already
+/// carries. A limit that bounds nothing is refused rather than turned into a flag
+/// no run could be stopped by.
 fn run_options(run: &mut Run, batch: &Batch, job: &EvaluationJob) -> Result<Options, TaskError> {
     let time = match job.time_limit {
         Some(seconds) if seconds <= 0.0 => return Err(bounded_by(LIMIT_TIME, seconds)),

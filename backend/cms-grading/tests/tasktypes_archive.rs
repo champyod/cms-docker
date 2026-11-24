@@ -8,11 +8,13 @@ use assertions::{assert_archived, assert_body_pair};
 use cms_grading::execute::{compile, evaluate};
 use cms_grading::stage::ArchiveError;
 use cms_grading::tasktypes::{Batch, TaskError, TaskType};
+use cms_proto::DigestMap;
 use serde_json::{json, Map};
 
 use helpers::{
     answered, compile_job, digests, evaluate_job, managers, produced, runtime_of, store_of,
     workspace, StubToolchain, CLEAN_LOG, EXECUTABLE, GRADER_DIGEST, NOTHING, PROGRAM_DIGEST,
+    SOURCE_DIGEST,
 };
 
 const SANDBOX_ERROR_LOG: &str = "time:0.5\ntime-wall:1.5\ncg-mem:2048\nstatus:XX\nexitcode:1\n";
@@ -185,4 +187,40 @@ fn a_batch_and_output_run_carries_its_archive_digest_to_the_body() {
     let mut body = Map::new();
     evaluated.write_body(&mut body);
     assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+}
+
+#[test]
+fn output_only_checker_archives_follow_the_job_flag() {
+    for (archive, label) in [
+        (true, "archive-output-only"),
+        (false, "archive-output-only-off"),
+    ] {
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let verdict = "printf '1.0\\n'; printf 'Output is correct\\n' >&2\n:";
+        let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict);
+        let task = TaskType::of("OutputOnly", &json!(["comparator"]))
+            .expect("an OutputOnly comparator task");
+        let mut job = evaluate_job(DigestMap::new());
+        job.files
+            .insert("output_1.in.txt".to_owned(), SOURCE_DIGEST.to_owned());
+        job.managers = digests(&[("checker", GRADER_DIGEST)]);
+        job.archive_sandbox = archive;
+
+        let evaluated = evaluate(&task, &job, None, &runtime, Box::new(store.clone()))
+            .expect("the carried answer is judged by the checker");
+
+        assert!(evaluated.success);
+        assert_eq!(evaluated.sandboxes.len(), 1);
+        if archive {
+            assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
+            assert!(evaluated.sandboxes[0].is_dir());
+        } else {
+            assert!(evaluated.sandbox_digests.is_empty());
+            assert!(!evaluated.sandboxes[0].exists());
+        }
+        let mut body = Map::new();
+        evaluated.write_body(&mut body);
+        assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+    }
 }
