@@ -31,7 +31,7 @@ DONE WHEN:
 | Page declares an archetype | done | `design:archetypes`: 76 declared, 0 undeclared of 76 pages |
 | Facts from the slot list | done at inventory level | `design:inventory`: 53 of 53 |
 | Status colour only for status | gate green, debt being reduced | `design:colour`: 197 uses in 100 files; baseline 321 |
-| Raw controls use primitives | gate green, debt 216 | `design:controls` |
+| Raw controls use primitives | gate green, debt 209 | `design:controls` |
 | Type scale, density, focus ring | done | `design:usage`, `design:token-coverage`, `design:modes` |
 | Four modes, both densities | token level done; pixel level blocked | needs an authenticated browser harness and a fixture server |
 
@@ -85,6 +85,7 @@ DONE WHEN:
 | `f10a033b` | `GeneralTab` language chips use `Button`; debt 199 to 197, raw controls 225 to 224 |
 | `a1f58192` | `DatasetScoreSubtaskRow` uses `Input` and `Button`; raw controls 224 to 220 |
 | `4e5807f1` | `ParticipationEditTabs` four fields use `Input` and `Textarea`; raw controls 220 to 216 |
+| `7487eb09` | `ParticipationFormFields` uses Select, Checkbox and Input; raw controls 216 to 209 |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
