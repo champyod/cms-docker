@@ -25,43 +25,58 @@ fn alone() -> Batch {
 }
 
 #[test]
-fn a_successful_archived_compilation_is_filed_and_removed() {
-    let dir = workspace("archive-compile");
-    let store = store_of(&dir);
-    let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE));
-    let mut job = compile_job(managers());
-    job.archive_sandbox = true;
+fn a_successful_archived_compilation_is_filed_and_kept_as_asked() {
+    for keep in [false, true] {
+        let label = if keep {
+            "archive-compile-kept"
+        } else {
+            "archive-compile-removed"
+        };
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let runtime =
+            runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE)).with_keep_sandbox(keep);
+        let mut job = compile_job(managers());
+        job.archive_sandbox = true;
 
-    let compiled = alone()
-        .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
-        .expect("the compilation must run");
+        let compiled = alone()
+            .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
+            .expect("the compilation must run");
 
-    assert!(compiled.success);
-    assert_eq!(compiled.sandboxes.len(), 1);
-    assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
-    assert!(!compiled.sandboxes[0].exists());
+        assert!(compiled.success);
+        assert_eq!(compiled.sandboxes.len(), 1);
+        assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
+        assert_eq!(compiled.sandboxes[0].is_dir(), keep);
 
-    let mut body = Map::new();
-    compiled.write_body(&mut body);
-    assert_body_pair(&body, &compiled.sandboxes, &compiled.sandbox_digests);
+        let mut body = Map::new();
+        compiled.write_body(&mut body);
+        assert_body_pair(&body, &compiled.sandboxes, &compiled.sandbox_digests);
+    }
 }
 
 #[test]
 fn a_failed_archived_compilation_keeps_its_archive_and_sandbox() {
-    let dir = workspace("archive-compile-failed");
-    let store = store_of(&dir);
-    let runtime = runtime_of(&dir, "0", SANDBOX_ERROR_LOG, NOTHING);
-    let mut job = compile_job(managers());
-    job.archive_sandbox = true;
+    for keep in [false, true] {
+        let label = if keep {
+            "archive-compile-failed-kept"
+        } else {
+            "archive-compile-failed-default"
+        };
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let runtime = runtime_of(&dir, "0", SANDBOX_ERROR_LOG, NOTHING).with_keep_sandbox(keep);
+        let mut job = compile_job(managers());
+        job.archive_sandbox = true;
 
-    let compiled = alone()
-        .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
-        .expect("a failed box is a result, not a worker error");
+        let compiled = alone()
+            .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
+            .expect("a failed box is a result, not a worker error");
 
-    assert!(!compiled.success);
-    assert_eq!(compiled.sandboxes.len(), 1);
-    assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
-    assert!(compiled.sandboxes[0].is_dir());
+        assert!(!compiled.success);
+        assert_eq!(compiled.sandboxes.len(), 1);
+        assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
+        assert!(compiled.sandboxes[0].is_dir());
+    }
 }
 
 #[test]
@@ -88,24 +103,32 @@ fn an_archive_refusal_fails_the_group_and_keeps_the_box() {
 
 #[test]
 fn disabling_archive_leaves_the_result_map_and_body_empty() {
-    let dir = workspace("archive-disabled");
-    let store = store_of(&dir);
-    let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE));
-    let mut job = compile_job(managers());
-    job.archive_sandbox = false;
+    for keep in [false, true] {
+        let label = if keep {
+            "archive-disabled-kept"
+        } else {
+            "archive-disabled-removed"
+        };
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let runtime =
+            runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE)).with_keep_sandbox(keep);
+        let mut job = compile_job(managers());
+        job.archive_sandbox = false;
 
-    let compiled = alone()
-        .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
-        .expect("the compilation must run");
+        let compiled = alone()
+            .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
+            .expect("the compilation must run");
 
-    assert!(compiled.success);
-    assert_eq!(compiled.sandboxes.len(), 1);
-    assert!(compiled.sandbox_digests.is_empty());
-    assert!(!compiled.sandboxes[0].exists());
-    let mut body = Map::new();
-    compiled.write_body(&mut body);
-    assert_body_pair(&body, &compiled.sandboxes, &compiled.sandbox_digests);
-    assert_eq!(body["sandbox_digests"], json!({}));
+        assert!(compiled.success);
+        assert_eq!(compiled.sandboxes.len(), 1);
+        assert!(compiled.sandbox_digests.is_empty());
+        assert_eq!(compiled.sandboxes[0].is_dir(), keep);
+        let mut body = Map::new();
+        compiled.write_body(&mut body);
+        assert_body_pair(&body, &compiled.sandboxes, &compiled.sandbox_digests);
+        assert_eq!(body["sandbox_digests"], json!({}));
+    }
 }
 
 #[test]

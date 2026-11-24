@@ -151,6 +151,36 @@ fn a_compilation_hands_over_the_sources_and_the_managers_and_keeps_the_executabl
 }
 
 #[test]
+fn a_successful_compilation_is_kept_only_when_the_worker_asks() {
+    for keep in [false, true] {
+        let label = if keep {
+            "compile-kept"
+        } else {
+            "compile-removed"
+        };
+        let dir = workspace(label);
+        let runtime =
+            runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE)).with_keep_sandbox(keep);
+        let compiled = alone()
+            .compile(
+                &compile_job(managers()),
+                &StubToolchain,
+                &runtime,
+                Box::new(store_of(&dir)),
+            )
+            .expect("the compilation must run");
+
+        assert!(compiled.success);
+        assert_eq!(compiled.sandboxes.len(), 1);
+        assert_eq!(
+            compiled.sandboxes[0].is_dir(),
+            keep,
+            "worker keep_sandbox={keep}"
+        );
+    }
+}
+
+#[test]
 fn a_compilation_that_produced_nothing_is_a_failure_and_leaves_no_executable() {
     let dir = workspace("compile-failed");
     let runtime = runtime_of(&dir, "1", FAILED_LOG, NOTHING);
