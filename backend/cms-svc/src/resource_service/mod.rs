@@ -27,4 +27,4 @@ pub use service::{
     MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
 };
 pub use spawn::{ProcessSpawner, ServiceCommand, SpawnError, SpawnedChild, Spawner};
-pub use table::{local_services, TableError};
+pub use table::{all_services, local_services, TableError};
