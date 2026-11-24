@@ -7,3 +7,7 @@ edition = "2021"
 cms-db = { path = "../cms-db" }
 cms-proto = { path = "../cms-proto" }
 chrono = { workspace = true }
+sqlx = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
