@@ -7,10 +7,10 @@ import type { TaskData } from '@/app/actions/tasks';
 import { apiClient } from '@/lib/apiClient';
 import { useActionFeedback } from '@/hooks/useActionFeedback';
 import { Dialog } from '@/components/core/Dialog';
+import { Button } from '@/components/core/Button';
 import { ResponsiveModalShell } from '@/components/core/ResponsiveModalShell';
 import { ModalFooter } from '@/components/core/ModalFooter';
 import { InlineAlert } from '@/components/core/InlineAlert';
-import { cn } from '@/lib/utils';
 import { parseIntervalToSeconds } from '@/lib/task-intervals';
 import { getFieldAccess, type FieldAccess } from '@/lib/field-permissions';
 import { hasEffectivePermission } from '@/lib/permission-engine';
@@ -227,19 +227,17 @@ export function TaskModal({ isOpen, onClose, task, onSuccess, permissionKeys }: 
           sidebar={
             <>
               {TAB_CONFIG.filter((tab) => tab.id !== 'statements' || canCreateStatement).map((tab) => (
-                <button
+                <Button
                   key={tab.id}
+                  variant={activeTab === tab.id ? 'secondary' : 'ghost'}
+                  size="sm"
+                  icon={tab.icon}
+                  aria-pressed={activeTab === tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={cn(
-                    'flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2',
-                    activeTab === tab.id
-                      ? 'bg-primary/10 text-primary ring-1 ring-ring/50'
-                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                  )}
+                  className="w-full justify-start max-sm:flex-1 max-sm:justify-center max-sm:rounded-md max-sm:border max-sm:border-border max-sm:px-3 max-sm:py-2"
                 >
-                  <tab.icon className="h-4 w-4" />
                   {tab.label}
-                </button>
+                </Button>
               ))}
             </>
           }
