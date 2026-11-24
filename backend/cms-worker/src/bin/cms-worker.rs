@@ -72,7 +72,7 @@ fn build_worker(settings: &Settings) -> Result<Worker, StartError> {
         settings.max_file_size,
         settings.trusted_limits,
     );
-    let cache = FsCache::at(settings.cache_dir.clone()).map_err(StartError::Cache)?;
+    let cache = FsCache::at(settings.shared_file_dir()).map_err(StartError::Cache)?;
     let runner = Runner::new(runtime, cache);
     Ok(Worker::new(
         settings.shard,
@@ -217,6 +217,10 @@ mod tests {
             trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),
         };
         let worker = build_worker(&settings).expect("the test cache can be opened");
+        assert!(
+            settings.shared_file_dir().is_dir(),
+            "the worker opens the shared file directory"
+        );
         let config = GateConfig {
             secret: Some(SECRET),
             is_backdoor_enabled: false,

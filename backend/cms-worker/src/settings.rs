@@ -55,6 +55,7 @@ const DEFAULT_TRUSTED_PROCESSES: u32 = 1000;
 const DEFAULT_TRUSTED_TIME: Duration = Duration::from_secs(10);
 const DEFAULT_TRUSTED_MEMORY_KIB: u64 = 4_194_304;
 const BYTES_PER_KIB: u64 = 1024;
+const SHARED_FILE_DIR_COMPONENT: &str = "fs-cache-shared";
 
 /// The typed inputs one worker carries from its environment into the runtime.
 #[derive(Clone, PartialEq, Eq)]
@@ -101,6 +102,12 @@ impl Settings {
             compilation_limits: compilation_limits()?,
             trusted_limits: trusted_limits()?,
         })
+    }
+
+    /// The directory where the shared file cacher stores files by digest.
+    #[must_use]
+    pub fn shared_file_dir(&self) -> PathBuf {
+        self.cache_dir.join(SHARED_FILE_DIR_COMPONENT)
     }
 }
 
@@ -371,6 +378,22 @@ mod tests {
             std::time::Duration::from_secs(10)
         );
         assert_eq!(settings.trusted_limits.memory, 4_194_304 * 1024);
+    }
+
+    #[test]
+    fn shared_file_dir_joins_the_reference_component() {
+        let _serial = serial_environment();
+        let environment = Environment::clean();
+        environment.set(SECRET_VARIABLE, SECRET);
+        environment.set("CMS_CACHE_DIR", "/srv/cache");
+
+        let settings = Settings::from_env().expect("the cache root is valid");
+
+        assert_eq!(settings.cache_dir, PathBuf::from("/srv/cache"));
+        assert_eq!(
+            settings.shared_file_dir(),
+            PathBuf::from("/srv/cache/fs-cache-shared")
+        );
     }
 
     #[test]
