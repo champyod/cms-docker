@@ -12,6 +12,7 @@ use cms_proto::Operation;
 
 pub mod operation;
 pub mod plan;
+pub mod queue;
 pub mod sweep;
 
 pub use operation::{
@@ -22,6 +23,7 @@ pub use operation::{
 pub use plan::{
     compilation_priority, evaluation_priority, submission_operations, user_test_operations,
 };
+pub use queue::{EvaluationOperation, EvaluationQueue, QueueStatusEntry};
 pub use sweep::contest_operations;
 
 #[cfg(test)]
