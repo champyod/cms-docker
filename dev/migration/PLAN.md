@@ -353,6 +353,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c2 scoring core | dataset score fields plus pure `score()` producing a `ScoreRow` | **merged** `9cf76eff` (see note) |
 | S-6c3 scoring io | candidate discovery, transaction bundle read and score upsert | **merged** `1eb276c0` (see note) |
 | S-6c4 scoring library | fair queue, transactional `score_candidate`, score invalidation | **merged** `b6e7cd17` (see note) |
+| S-6c5 scoring daemon | `cms-scoring` RPC, sweeper/worker, binary and compose entrypoint | **merged** `b5216bf4` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -949,6 +950,27 @@ The daemon, RPC methods, queue threads and ProxyService notification are not in 
 slice.
 
 Merged gate: **176 targets, 1099 passed, 0 failed, 2 ignored**.
+
+### S-6c5: the ScoringService daemon
+
+`cms-scoring` serves `new_evaluation` and `invalidate_submission`, sweeps unscored
+candidates immediately and every 347 seconds, and scores one operation at a time with
+three retries before dropping it for the next sweep. A score and its dataset's active
+flag come from one transaction snapshot, so proxy notification cannot disagree with
+the row that was written. `PROXY_SERVICE_ADDR` enables the post-score notification; a
+refused proxy call is logged and never rolls the score back. The image builds and
+ships the binary, and compose runs it with `DATABASE_URL`, `RPC_SECRET`, the shard and
+a configurable port, healthchecking the Rust process.
+
+Five commits, merged as `b5216bf4`. Lane gate: **199 passed** across `cms-scoring` and
+`cms-svc` with the live database; compose 9/0, config-sync 100/0; fmt, clippy and
+`cargo metadata --locked` clean. Compose does not set `PROXY_SERVICE_ADDR`, so ranking
+notification stays off until ProxyService is ported; the database scores are written
+regardless.
+
+Merged gate: **180 targets, 1114 passed, 0 failed, 2 ignored**, run with
+`CMS_DB_TEST_URL` set; the first merged run omitted it and the ten live tests failed
+by name, then passed with the variable present.
 
 
 
