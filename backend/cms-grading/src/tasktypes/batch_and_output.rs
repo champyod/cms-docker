@@ -185,8 +185,8 @@ impl BatchAndOutput {
     ) -> Result<Answer, TaskError> {
         let codename = job
             .operation
-            .testcase_codename
-            .as_deref()
+            .as_ref()
+            .and_then(|operation| operation.testcase_codename.as_deref())
             .unwrap_or_default();
         let kind = if self.is_output_only(codename) {
             OUTPUT_ONLY

@@ -38,6 +38,7 @@ mod compilation;
 mod evaluation;
 mod model;
 mod user_test;
+pub mod wire;
 
 pub use cms_proto::{DigestMap, Operation, OperationKind};
 pub use compilation::CompilationJob;

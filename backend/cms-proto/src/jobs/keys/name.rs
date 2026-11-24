@@ -20,6 +20,33 @@ impl JobKey {
     /// The key whose value names the operation kind.
     pub const TYPE: Self = Self("type");
 
+    /// The key naming the task type that judges the job.
+    pub const TASK_TYPE: Self = Self("task_type");
+
+    /// The key holding parameters opaque to everything but the task type.
+    pub const TASK_TYPE_PARAMETERS: Self = Self("task_type_parameters");
+
+    /// The key naming the language the object was submitted under.
+    pub const LANGUAGE: Self = Self("language");
+
+    /// The key reporting whether the sandbox permits multiple threads.
+    pub const MULTITHREADED_SANDBOX: Self = Self("multithreaded_sandbox");
+
+    /// The key reporting whether the worker must keep the sandbox.
+    pub const KEEP_SANDBOX: Self = Self("keep_sandbox");
+
+    /// The key holding archived sandbox digests by path.
+    pub const SANDBOX_DIGESTS: Self = Self("sandbox_digests");
+
+    /// The key holding the human-readable description of the job.
+    pub const INFO: Self = Self("info");
+
+    /// The key holding the contestant-facing report as a list of strings.
+    pub const TEXT: Self = Self("text");
+
+    /// The key holding the administrator-facing report.
+    pub const ADMIN_TEXT: Self = Self("admin_text");
+
     /// The key naming the submission or user test the operation is for.
     pub const OBJECT_ID: Self = Self("object_id");
 
@@ -94,6 +121,15 @@ impl JobKey {
         match name {
             "operation" => Ok(Self::OPERATION),
             "type" => Ok(Self::TYPE),
+            "task_type" => Ok(Self::TASK_TYPE),
+            "task_type_parameters" => Ok(Self::TASK_TYPE_PARAMETERS),
+            "language" => Ok(Self::LANGUAGE),
+            "multithreaded_sandbox" => Ok(Self::MULTITHREADED_SANDBOX),
+            "keep_sandbox" => Ok(Self::KEEP_SANDBOX),
+            "sandbox_digests" => Ok(Self::SANDBOX_DIGESTS),
+            "info" => Ok(Self::INFO),
+            "text" => Ok(Self::TEXT),
+            "admin_text" => Ok(Self::ADMIN_TEXT),
             "object_id" => Ok(Self::OBJECT_ID),
             "dataset_id" => Ok(Self::DATASET_ID),
             "testcase_codename" => Ok(Self::TESTCASE_CODENAME),

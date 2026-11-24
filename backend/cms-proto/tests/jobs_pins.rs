@@ -73,13 +73,22 @@ fn a_claimed_key_is_one_the_python_side_writes() {
     let claimed = [
         JobKey::OPERATION,
         JobKey::TYPE,
+        JobKey::TASK_TYPE,
+        JobKey::TASK_TYPE_PARAMETERS,
+        JobKey::LANGUAGE,
+        JobKey::MULTITHREADED_SANDBOX,
         JobKey::OBJECT_ID,
         JobKey::DATASET_ID,
         JobKey::TESTCASE_CODENAME,
         JobKey::ARCHIVE_SANDBOX,
         JobKey::SHARD,
+        JobKey::KEEP_SANDBOX,
         JobKey::SANDBOXES,
+        JobKey::SANDBOX_DIGESTS,
+        JobKey::INFO,
         JobKey::SUCCESS,
+        JobKey::TEXT,
+        JobKey::ADMIN_TEXT,
         JobKey::FILES,
         JobKey::MANAGERS,
         JobKey::EXECUTABLES,
@@ -110,7 +119,7 @@ fn a_claimed_key_is_one_the_python_side_writes() {
     }
     let unclaimed = JobError::UnknownKey { key: String::new() };
     assert_eq!(JobKey::new(""), Err(unclaimed));
-    for name in ["shoard", "language"] {
+    for name in ["shoard", "retries"] {
         assert_eq!(
             JobKey::new(name),
             Err(JobError::UnknownKey {
