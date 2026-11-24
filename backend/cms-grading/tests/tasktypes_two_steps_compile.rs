@@ -47,7 +47,7 @@ fn the_manager_its_header_and_each_source_with_its_header_reach_the_compiler_in_
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced("manager"));
     let compiled = two_steps()
         .compile(
-            &job_of(sources(), json!(["diff"]), managers(), true),
+            &job_of(sources(), json!(["diff"]), managers(), false),
             &CPP,
             &runtime,
             Box::new(store.clone()),
@@ -86,7 +86,7 @@ fn a_language_with_no_headers_is_compiled_without_any() {
     ]);
     let compiled = two_steps()
         .compile(
-            &job_of(sources(), json!(["diff"]), without, true),
+            &job_of(sources(), json!(["diff"]), without, false),
             &PYTHON,
             &runtime,
             Box::new(store.clone()),
@@ -118,7 +118,7 @@ fn the_executable_is_the_manager_with_the_languages_own_extension() {
                 sources(),
                 json!(["diff"]),
                 digests(&[("manager.cs", PROGRAM_DIGEST)]),
-                true,
+                false,
             ),
             &CSHARP,
             &runtime,
@@ -147,7 +147,7 @@ fn a_submission_that_does_not_carry_exactly_two_files_is_refused() {
 
     for (files, found) in [(one, 1), (three, 3)] {
         let refused = two_steps().compile(
-            &job_of(files, json!(["diff"]), managers(), true),
+            &job_of(files, json!(["diff"]), managers(), false),
             &CPP,
             &runtime,
             Box::new(store_of(&dir)),
@@ -174,7 +174,7 @@ fn a_missing_header_is_refused_before_a_box_is_made() {
         ("b.h", HEADER_DIGEST),
     ]);
     let refused = two_steps().compile(
-        &job_of(sources(), json!(["diff"]), no_manager_header, true),
+        &job_of(sources(), json!(["diff"]), no_manager_header, false),
         &CPP,
         &runtime,
         Box::new(store_of(&dir)),
@@ -190,7 +190,7 @@ fn a_missing_header_is_refused_before_a_box_is_made() {
         ("a.h", HEADER_DIGEST),
     ]);
     let refused = two_steps().compile(
-        &job_of(sources(), json!(["diff"]), no_user_header, true),
+        &job_of(sources(), json!(["diff"]), no_user_header, false),
         &CPP,
         &runtime,
         Box::new(store_of(&dir)),
@@ -208,7 +208,7 @@ fn a_failed_compilation_stores_no_executable() {
     let runtime = runtime_of(&dir, "1", FAILED_LOG, NOTHING);
     let compiled = two_steps()
         .compile(
-            &job_of(sources(), json!(["diff"]), managers(), true),
+            &job_of(sources(), json!(["diff"]), managers(), false),
             &CPP,
             &runtime,
             Box::new(store_of(&dir)),

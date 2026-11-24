@@ -217,7 +217,7 @@ fn finish(
     let judged_ok = judged
         .as_ref()
         .map_or(evaluation.success, |judged| judged.success);
-    let keep = job.archive_sandbox || !judged_ok;
+    let keep = !judged_ok;
     for closed in [
         first.close(keep, job.archive_sandbox)?,
         second.close(keep, job.archive_sandbox)?,

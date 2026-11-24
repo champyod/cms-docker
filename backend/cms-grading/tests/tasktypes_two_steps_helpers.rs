@@ -80,6 +80,10 @@ pub fn runtime_of(dir: &Path, log: &str, answers: bool) -> Runtime {
              \x20 sleep 0.02\n\
              done\n\
              {write}\
+             inspect=\"${{home%/home}}.inspect\"\n\
+             mkdir -p \"$inspect\"\n\
+             cp \"$home/flags.txt\" \"$inspect/flags.txt\"\n\
+             find \"$home\" -mindepth 1 -maxdepth 1 -printf '%f\\n' | sort > \"$inspect/files\"\n\
              printf '{log}' > \"$meta\"\n\
              printf 'end %s\\n' \"$home\" >> '{record}'\n\
              exit 0\n",
@@ -113,7 +117,13 @@ pub fn order_of(dir: &Path) -> Vec<String> {
 
 /// The flags a run was held to, read out of the box it was launched in.
 pub fn flags_of(box_of: &Path) -> String {
-    fs::read_to_string(box_of.join("home").join("flags.txt")).expect("the stub recorded them")
+    let live = box_of.join("home").join("flags.txt");
+    if live.is_file() {
+        fs::read_to_string(live).expect("the stub recorded them")
+    } else {
+        fs::read_to_string(box_of.with_extension("inspect").join("flags.txt"))
+            .expect("the stub recorded them")
+    }
 }
 
 /// The evaluation of one submission on the one testcase, holding the manager.
@@ -123,7 +133,7 @@ pub fn job() -> EvaluationJob {
         object_id: OBJECT,
         dataset_id: DATASET,
         testcase_codename: Some(TESTCASE.to_owned()),
-        archive_sandbox: true,
+        archive_sandbox: false,
     };
     let submission = Submission {
         id: OBJECT,

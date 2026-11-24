@@ -118,7 +118,7 @@ pub(super) fn in_a_box(
             .executables
             .insert(executable, digest.as_str().to_owned());
     }
-    let keep = job.archive_sandbox || !compilation.success;
+    let keep = !compilation.success;
     run.close(keep, job.archive_sandbox)?
         .record(&mut compilation.sandboxes, &mut compilation.sandbox_digests);
     Ok(compilation)

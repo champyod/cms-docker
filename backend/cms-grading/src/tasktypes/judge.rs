@@ -191,10 +191,7 @@ fn check_with(
     };
     let (sandbox, files) = run.parts();
     let verdict = checker_step(sandbox, files, &check)?;
-    let closed = run.close(
-        job.archive_sandbox || verdict.is_none(),
-        job.archive_sandbox,
-    )?;
+    let closed = run.close(verdict.is_none(), job.archive_sandbox)?;
     Ok(Judgement::of(verdict, closed))
 }
 

@@ -25,24 +25,21 @@ fn alone() -> Batch {
 }
 
 #[test]
-fn a_compilation_archive_is_keyed_by_its_sandbox_path() {
+fn a_successful_archived_compilation_is_filed_and_removed() {
     let dir = workspace("archive-compile");
     let store = store_of(&dir);
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced(EXECUTABLE));
+    let mut job = compile_job(managers());
+    job.archive_sandbox = true;
 
     let compiled = alone()
-        .compile(
-            &compile_job(managers()),
-            &StubToolchain,
-            &runtime,
-            Box::new(store.clone()),
-        )
+        .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
         .expect("the compilation must run");
 
     assert!(compiled.success);
     assert_eq!(compiled.sandboxes.len(), 1);
     assert_archived(&store, &compiled.sandboxes, &compiled.sandbox_digests);
-    assert!(compiled.sandboxes[0].is_dir());
+    assert!(!compiled.sandboxes[0].exists());
 
     let mut body = Map::new();
     compiled.write_body(&mut body);
@@ -50,18 +47,15 @@ fn a_compilation_archive_is_keyed_by_its_sandbox_path() {
 }
 
 #[test]
-fn a_failed_box_is_archived_before_it_is_kept() {
+fn a_failed_archived_compilation_keeps_its_archive_and_sandbox() {
     let dir = workspace("archive-compile-failed");
     let store = store_of(&dir);
     let runtime = runtime_of(&dir, "0", SANDBOX_ERROR_LOG, NOTHING);
+    let mut job = compile_job(managers());
+    job.archive_sandbox = true;
 
     let compiled = alone()
-        .compile(
-            &compile_job(managers()),
-            &StubToolchain,
-            &runtime,
-            Box::new(store.clone()),
-        )
+        .compile(&job, &StubToolchain, &runtime, Box::new(store.clone()))
         .expect("a failed box is a result, not a worker error");
 
     assert!(!compiled.success);
@@ -80,14 +74,10 @@ fn an_archive_refusal_fails_the_group_and_keeps_the_box() {
     );
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &leaves);
     let task = TaskType::of("Batch", &json!(["alone", ["", ""], "diff"])).expect("a Batch task");
+    let mut job = compile_job(managers());
+    job.archive_sandbox = true;
 
-    let refused = compile(
-        &task,
-        &compile_job(managers()),
-        Some(&StubToolchain),
-        &runtime,
-        Box::new(store),
-    );
+    let refused = compile(&task, &job, Some(&StubToolchain), &runtime, Box::new(store));
 
     assert!(
         matches!(refused, Err(TaskError::Archive(ArchiveError::Store { .. }))),
@@ -149,6 +139,7 @@ fn an_archived_evaluation_and_checker_are_keyed_by_their_own_paths() {
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, verdict);
     let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
     job.managers = digests(&[("checker", GRADER_DIGEST)]);
+    job.archive_sandbox = true;
     let comparator =
         Batch::new(&json!(["alone", ["", ""], "comparator"])).expect("three parameters are a task");
 
@@ -159,6 +150,7 @@ fn an_archived_evaluation_and_checker_are_keyed_by_their_own_paths() {
     assert!(evaluated.success);
     assert_eq!(evaluated.sandboxes.len(), 2);
     assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
+    assert!(evaluated.sandboxes.iter().all(|path| !path.exists()));
     let mut body = Map::new();
     evaluated.write_body(&mut body);
     assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
@@ -172,9 +164,11 @@ fn a_batch_and_output_run_carries_its_archive_digest_to_the_body() {
     let task = TaskType::of("BatchAndOutput", &json!(["alone", ["", ""], "diff", ""]))
         .expect("a BatchAndOutput task");
 
+    let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
+    job.archive_sandbox = true;
     let evaluated = evaluate(
         &task,
-        &evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)])),
+        &job,
         Some(&StubToolchain),
         &runtime,
         Box::new(store.clone()),
@@ -184,6 +178,7 @@ fn a_batch_and_output_run_carries_its_archive_digest_to_the_body() {
     assert!(evaluated.success);
     assert_eq!(evaluated.sandboxes.len(), 1);
     assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
+    assert!(!evaluated.sandboxes[0].exists());
     let mut body = Map::new();
     evaluated.write_body(&mut body);
     assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
@@ -214,7 +209,7 @@ fn output_only_checker_archives_follow_the_job_flag() {
         assert_eq!(evaluated.sandboxes.len(), 1);
         if archive {
             assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
-            assert!(evaluated.sandboxes[0].is_dir());
+            assert!(!evaluated.sandboxes[0].exists());
         } else {
             assert!(evaluated.sandbox_digests.is_empty());
             assert!(!evaluated.sandboxes[0].exists());

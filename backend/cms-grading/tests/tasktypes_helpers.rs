@@ -61,7 +61,7 @@ fn operation(kind: OperationKind) -> Operation {
         object_id: OBJECT,
         dataset_id: DATASET,
         testcase_codename: None,
-        archive_sandbox: true,
+        archive_sandbox: false,
     }
 }
 
@@ -162,6 +162,10 @@ fn isolation_stub(dir: &Path, code: &str, log: &str, leaves: &str) -> PathBuf {
              \x20 esac; done\n\
              printf '%s\\n' \"$@\" > \"$home/flags.txt\"\n\
              {leaves}\n\
+             inspect=\"${{home%/home}}.inspect\"\n\
+             mkdir -p \"$inspect\"\n\
+             cp \"$home/flags.txt\" \"$inspect/flags.txt\"\n\
+             find \"$home\" -mindepth 1 -maxdepth 1 -printf '%f\\n' | sort > \"$inspect/files\"\n\
              printf '{log}' > \"$meta\"\n\
              exit {code}\n"
         )
@@ -194,23 +198,38 @@ pub fn runtime_of(dir: &Path, code: &str, log: &str, leaves: &str) -> Runtime {
 
 /// The names of the files a box was handed, in one order however it wrote them.
 pub fn staged(box_of: &Path) -> Vec<String> {
-    let mut names: Vec<String> = fs::read_dir(box_of.join("home"))
-        .expect("a box to have a directory")
-        .map(|entry| {
-            entry
-                .expect("a staged file")
-                .file_name()
-                .to_string_lossy()
-                .into_owned()
-        })
-        .collect();
-    names.sort();
-    names
+    let home = box_of.join("home");
+    if home.is_dir() {
+        let mut names: Vec<String> = fs::read_dir(home)
+            .expect("a box to have a directory")
+            .map(|entry| {
+                entry
+                    .expect("a staged file")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    } else {
+        fs::read_to_string(box_of.with_extension("inspect").join("files"))
+            .expect("the stub recorded the box contents")
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
 }
 
 /// The arguments a run was launched with, read out of the box it was launched in.
 pub fn flags_of(box_of: &Path) -> String {
-    fs::read_to_string(box_of.join("home").join("flags.txt")).expect("the stub recorded them")
+    let live = box_of.join("home").join("flags.txt");
+    if live.is_file() {
+        fs::read_to_string(live).expect("the stub recorded them")
+    } else {
+        fs::read_to_string(box_of.with_extension("inspect").join("flags.txt"))
+            .expect("the stub recorded them")
+    }
 }
 
 /// The content the store holds for a digest a report names.
