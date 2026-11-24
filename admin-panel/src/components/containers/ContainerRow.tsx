@@ -1,5 +1,6 @@
 'use client';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
+import { Badge } from '@/components/core/Badge';
 import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
@@ -29,12 +30,12 @@ interface ContainerRowProps {
   onToggleSelection?: (containerId: string) => void;
 }
 
-function getStatusColor(state: string): string {
+function statusVariant(state: string): 'success' | 'destructive' | 'warning' | 'neutral' {
   switch (state.toLowerCase()) {
-    case 'running': return 'text-success bg-success/10 border-success/20';
-    case 'exited': return 'text-destructive bg-destructive/10 border-destructive/20';
-    case 'paused': return 'text-warning bg-warning/10 border-warning/20';
-    default: return 'text-muted-foreground bg-muted/40 border-border';
+    case 'running': return 'success';
+    case 'exited': return 'destructive';
+    case 'paused': return 'warning';
+    default: return 'neutral';
   }
 }
 
@@ -46,9 +47,9 @@ function ContainerIdentity({ container }: { container: ContainerInfo }): React.J
         <div className="font-bold text-foreground text-sm group-hover:text-primary transition-colors flex flex-wrap items-center gap-2">
           <span className="truncate">{container.name}</span>
           {container.protected && (
-            <span className="px-1.5 py-0.5 bg-warning/10 text-warning border border-warning/20 text-xs rounded uppercase font-bold inline-flex items-center gap-1">
+            <Badge variant="warning" className="gap-1">
               <Lock className="w-3 h-3" aria-hidden /> Platform
-            </span>
+            </Badge>
           )}
           {!container.isCmsContainer && !container.protected && <span className="px-1.5 py-0.5 bg-muted text-muted-foreground text-xs rounded uppercase font-bold">External</span>}
         </div>
@@ -79,7 +80,7 @@ function ContainerActions({
     return (
       <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
         <div className="hidden sm:block text-xs text-muted-foreground">Platform-managed: not controllable from the panel</div>
-        <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
+        <Badge variant={statusVariant(container.state)}>{container.state.toUpperCase()}</Badge>
         <RowActions
           ariaLabel={rowActionGroupLabel(dict, 'containers')}
           className="flex-wrap gap-2"
@@ -93,7 +94,7 @@ function ContainerActions({
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-4 sm:justify-end">
-      <div className={cn('px-2 py-0.5 rounded text-xs font-bold border', getStatusColor(container.state))}>{container.state.toUpperCase()}</div>
+      <Badge variant={statusVariant(container.state)}>{container.state.toUpperCase()}</Badge>
       <RowActions
         ariaLabel={rowActionGroupLabel(dict, 'containers')}
         className="flex-wrap gap-2"
