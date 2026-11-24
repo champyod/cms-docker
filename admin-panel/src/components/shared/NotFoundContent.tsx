@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { LinkButton } from '@/components/core/LinkButton';
 import { buildRoute } from '@/lib/navigation/routes';
 
 export function NotFoundContent() {
@@ -18,12 +18,9 @@ export function NotFoundContent() {
             The page you are looking for does not exist or has been moved.
           </p>
         </div>
-        <Link
-          href={buildRoute(locale, 'home')}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary text-sm font-medium transition-colors"
-        >
+        <LinkButton href={buildRoute(locale, 'home')} variant="positiveOutline">
           Go to Dashboard
-        </Link>
+        </LinkButton>
       </div>
     </div>
   );
