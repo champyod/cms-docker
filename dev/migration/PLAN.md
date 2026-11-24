@@ -351,6 +351,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6b checker | all-services rows, 90-second liveness rounds, `cms-checker` binary and container entrypoint | **merged** `901a35af` (see note) |
 | S-6c1 score details | exact `score_details` / `public_score_details` JSON for Sum and Group | **merged** `aaa394d5` (see note) |
 | S-6c2 scoring core | dataset score fields plus pure `score()` producing a `ScoreRow` | **merged** `9cf76eff` (see note) |
+| S-6c3 scoring io | candidate discovery, transaction bundle read and score upsert | **merged** `1eb276c0` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -912,6 +913,22 @@ Three commits, merged as `9cf76eff`. Lane gate: **116 targets, 679 passed, 0 fai
 `cargo metadata --locked` clean, zero removed comments.
 
 Merged gate: **170 targets, 1088 passed, 0 failed, 2 ignored**.
+
+### S-6c3: the scoring database boundary
+
+`cms_db::scoring_candidates` reproduces the reference queue filter — judgeable
+dataset, five score columns not all set, and either a failed compilation or an
+evaluation outcome — ordered by submission timestamp and id. `read_result_bundle`
+gathers the task, dataset, result, evaluations and testcases in the caller's
+transaction. `write_score` executes the existing score upsert with every column
+bound and replaces an existing row.
+
+Two commits, merged as `1eb276c0`. Lane gate: **57 targets, 384 passed, 0 failed,
+2 ignored** in `cms-db`; the three scoring live tests ran against PostgreSQL and
+passed. fmt, clippy and `cargo metadata --locked` clean; zero removed comments.
+
+Merged gate: **172 targets, 1091 passed, 0 failed, 2 ignored**.
+
 
 
 
