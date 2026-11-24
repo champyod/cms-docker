@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 use crate::stage::{Cache, CacheHandle, FileDigest, Stage, StageError};
 use crate::steps::TrustedLimits;
+use cms_proto::DigestMap;
 use cms_sandbox::ExecutionStats;
 use cms_sandbox::{Launch, Options, Sandbox};
 
@@ -135,6 +136,66 @@ pub(crate) struct Run {
     files: Stage,
 }
 
+/// One run's box after it has been finished, and the archive the store answered
+/// with when the job asked for one.
+///
+/// The path and the digest are kept together because a report names every box a
+/// job made, while an archived box is findable only under the same path its
+/// digest was recorded beside.
+pub(crate) struct Closed {
+    /// The outer directory the report names the box by.
+    root: PathBuf,
+    /// The digest the store filed the archive under, absent when the job did not
+    /// ask for the box to be archived.
+    digest: Option<FileDigest>,
+}
+
+impl Closed {
+    /// Records the box after those closed before it.
+    ///
+    /// The path is always named, and a digest is inserted under that same path
+    /// rather than under a second spelling of it, so the list and the map cannot
+    /// disagree about which box an archive belongs to.
+    pub(super) fn record(self, sandboxes: &mut Vec<PathBuf>, sandbox_digests: &mut DigestMap) {
+        let index = sandboxes.len();
+        self.record_at(index, sandboxes, sandbox_digests);
+    }
+
+    /// Records the box before those a later phase closed.
+    ///
+    /// A Batch evaluation closes its run after the judge has closed its check,
+    /// but the report names the run first, so both the path and its digest are
+    /// inserted at the front together.
+    pub(super) fn record_first(
+        self,
+        sandboxes: &mut Vec<PathBuf>,
+        sandbox_digests: &mut DigestMap,
+    ) {
+        self.record_at(0, sandboxes, sandbox_digests);
+    }
+
+    fn record_at(
+        self,
+        index: usize,
+        sandboxes: &mut Vec<PathBuf>,
+        sandbox_digests: &mut DigestMap,
+    ) {
+        if let Some(digest) = &self.digest {
+            sandbox_digests.insert(sandbox_path(&self.root), digest.as_str().to_owned());
+        }
+        sandboxes.insert(index, self.root);
+    }
+}
+
+/// The string a sandbox path is keyed by in a result and on the wire.
+///
+/// The reference records an archive under `sandbox.get_root_path()`, so both the
+/// result and the raw body use the path's own string rather than a basename or a
+/// second path format.
+pub(crate) fn sandbox_path(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
 impl Run {
     pub(super) fn sandbox(&mut self) -> &mut Sandbox {
         &mut self.sandbox
@@ -176,13 +237,26 @@ impl Run {
 
     /// Finishes the run: keeps the box where `keep` asks for it and removes it
     /// otherwise, answering with the path the report names the box by either way.
-    pub(super) fn close(self, keep: bool) -> Result<PathBuf, TaskError> {
+    ///
+    /// Archives the box before any removal when `archive` asks for it, so a
+    /// directory a failed job must keep is still filed and a refused archive
+    /// cannot destroy the box it was meant to preserve.
+    pub(super) fn close(self, keep: bool, archive: bool) -> Result<Closed, TaskError> {
         let root = self.sandbox.outer().to_path_buf();
+        let digest = if archive {
+            Some(
+                self.files
+                    .archive(&self.sandbox)
+                    .map_err(TaskError::Archive)?,
+            )
+        } else {
+            None
+        };
         if !keep {
             if let Err(source) = fs::remove_dir_all(&root) {
                 return Err(TaskError::Stage(StageError::io(&root, &source)));
             }
         }
-        Ok(root)
+        Ok(Closed { root, digest })
     }
 }

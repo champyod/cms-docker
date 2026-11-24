@@ -170,8 +170,10 @@ impl Communication {
         let rest = self.start_users(&mut runs, job, toolchain, runtime, &pipes, &executable)?;
         let (manager_stats, user_stats) = launch::drain_all(first, rest)?;
         let mut verdict = self.judge(&manager_run, job, manager_stats, user_stats)?;
-        let keep = job.archive_sandbox || !verdict.success;
-        verdict.sandboxes = boxes::close(manager_run, runs, keep)?;
+        let keep = !verdict.success;
+        for closed in boxes::close(manager_run, runs, keep, job.archive_sandbox)? {
+            closed.record(&mut verdict.sandboxes, &mut verdict.sandbox_digests);
+        }
         pipes::close(&pipes, keep)?;
         Ok(verdict)
     }

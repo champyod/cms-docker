@@ -29,6 +29,7 @@ impl Compilation {
     pub fn configuration_error() -> Self {
         Self {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             compilation_success: None,
             text: None,
@@ -45,6 +46,7 @@ impl Evaluation {
     pub fn configuration_error() -> Self {
         Self {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             ran: false,
             outcome: None,
@@ -124,7 +126,8 @@ pub fn evaluate(
 
 fn output_only_evaluation(answer: OutputOnlyAnswer) -> Evaluation {
     Evaluation {
-        sandboxes: Vec::new(),
+        sandboxes: answer.sandboxes,
+        sandbox_digests: answer.sandbox_digests,
         success: answer.success,
         ran: false,
         outcome: answer.outcome,
@@ -143,6 +146,7 @@ fn batch_and_output_evaluation(answer: BatchAndOutputAnswer) -> Evaluation {
     };
     Evaluation {
         sandboxes: answer.sandboxes,
+        sandbox_digests: answer.sandbox_digests,
         success: answer.success,
         ran: answer.ran,
         outcome: answer.outcome,
@@ -158,6 +162,7 @@ impl From<Verdict> for Evaluation {
     fn from(verdict: Verdict) -> Self {
         Self {
             sandboxes: verdict.sandboxes,
+            sandbox_digests: verdict.sandbox_digests,
             success: verdict.success,
             ran: verdict.ran,
             outcome: verdict.outcome,
@@ -195,12 +200,14 @@ fn translate<T>(
 #[cfg(test)]
 mod tests {
     use super::{Evaluation, Verdict};
+    use cms_proto::DigestMap;
     use serde_json::Map;
 
     #[test]
     fn failed_communication_verdict_keeps_text_null() {
         let verdict = Verdict {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             ran: false,
             outcome: None,

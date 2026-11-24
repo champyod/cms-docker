@@ -61,7 +61,7 @@ fn the_stub_comes_first_and_only_the_managers_the_language_reads_are_copied() {
     let store = store_of(&dir);
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced("a_b"));
     let compiled = with_stub()
-        .compile(&stub_job(true), &CPP, &runtime, Box::new(store.clone()))
+        .compile(&stub_job(false), &CPP, &runtime, Box::new(store.clone()))
         .expect("the compilation must run");
 
     assert!(compiled.success);
@@ -96,7 +96,7 @@ fn a_compilation_with_no_stub_compiles_the_sources_alone() {
     ]);
     let compiled = alone()
         .compile(
-            &job_of(sources(), json!([1, "alone", "std_io"]), without, true),
+            &job_of(sources(), json!([1, "alone", "std_io"]), without, false),
             &CPP,
             &runtime,
             Box::new(store.clone()),
@@ -128,7 +128,7 @@ fn the_executable_takes_the_languages_extension_after_the_codenames() {
                 digests(&[("a.%l", SOURCE_DIGEST)]),
                 json!([1, "alone", "std_io"]),
                 DigestMap::new(),
-                true,
+                false,
             ),
             &CSHARP,
             &runtime,
@@ -150,7 +150,7 @@ fn a_stub_compilation_without_the_stub_is_refused_before_a_box_is_made() {
     let runtime = runtime_of(&dir, "0", CLEAN_LOG, &produced("a_b"));
     let without = digests(&[("grader.cpp", PROGRAM_DIGEST), ("README", INPUT_DIGEST)]);
     let refused = with_stub().compile(
-        &job_of(sources(), json!([2, "stub", "fifo_io"]), without, true),
+        &job_of(sources(), json!([2, "stub", "fifo_io"]), without, false),
         &CPP,
         &runtime,
         Box::new(store_of(&dir)),
@@ -174,7 +174,7 @@ fn a_submission_with_no_files_is_refused_before_a_box_is_made() {
         DigestMap::new(),
         json!([2, "stub", "fifo_io"]),
         managers(),
-        true,
+        false,
     );
     let refused = with_stub().compile(&empty, &CPP, &runtime, Box::new(store_of(&dir)));
 
@@ -196,7 +196,7 @@ fn a_failed_compilation_stores_no_executable() {
     let dir = workspace("communication-compile-failed");
     let runtime = runtime_of(&dir, "1", FAILED_LOG, NOTHING);
     let compiled = with_stub()
-        .compile(&stub_job(true), &CPP, &runtime, Box::new(store_of(&dir)))
+        .compile(&stub_job(false), &CPP, &runtime, Box::new(store_of(&dir)))
         .expect("the compilation must run");
 
     assert!(compiled.success, "the box worked, so the run is judged");

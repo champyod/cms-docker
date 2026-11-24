@@ -87,6 +87,10 @@ pub fn runtime_of(dir: &Path, user_time: &str, starts: usize) -> Runtime {
              else\n\
              \x20 printf 'time:{user_time}\\ntime-wall:1.5\\ncg-mem:2048\\n' > \"$meta\"\n\
              fi\n\
+             inspect=\"${{home%/home}}.inspect\"\n\
+             mkdir -p \"$inspect\"\n\
+             cp \"$home/flags.txt\" \"$inspect/flags.txt\"\n\
+             find \"$home\" -mindepth 1 -maxdepth 1 -printf '%f\\n' | sort > \"$inspect/files\"\n\
              printf 'end %s\\n' \"$home\" >> '{record}'\n\
              exit 0\n",
             record = record.display(),
@@ -152,7 +156,7 @@ pub fn job() -> EvaluationJob {
         object_id: OBJECT,
         dataset_id: DATASET,
         testcase_codename: Some(TESTCASE.to_owned()),
-        archive_sandbox: true,
+        archive_sandbox: false,
     };
     let submission = Submission {
         id: OBJECT,
@@ -168,7 +172,13 @@ pub fn job() -> EvaluationJob {
 
 /// The flags and the words of a run, read out of the box it was launched in.
 pub fn flags_of(box_of: &Path) -> String {
-    fs::read_to_string(box_of.join("home").join("flags.txt")).expect("the stub recorded them")
+    let live = box_of.join("home").join("flags.txt");
+    if live.is_file() {
+        fs::read_to_string(live).expect("the stub recorded them")
+    } else {
+        fs::read_to_string(box_of.with_extension("inspect").join("flags.txt"))
+            .expect("the stub recorded them")
+    }
 }
 
 /// The words a run was launched with, which are the last of what the stub recorded.

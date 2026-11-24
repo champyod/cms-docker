@@ -4,11 +4,13 @@ use std::path::PathBuf;
 
 use serde_json::{json, Map, Value};
 
-use cms_proto::{check_key_set, field, key_set_for, JobError, JobKey, JobKind, Operation};
+use cms_proto::{
+    check_key_set, field, key_set_for, DigestMap, JobError, JobKey, JobKind, Operation,
+};
 use cms_sandbox::{ExecutionStats, ExitStatus};
 
 use crate::stage::FileDigest;
-use crate::tasktypes::{Compilation, Evaluation};
+use crate::tasktypes::{sandbox_path, Compilation, Evaluation};
 
 use super::{CompilationJob, EvaluationJob};
 
@@ -63,6 +65,7 @@ impl Compilation {
             self.success,
             self.text.as_deref(),
             &self.sandboxes,
+            &self.sandbox_digests,
             self.stats.as_ref(),
         );
         put(
@@ -82,6 +85,7 @@ impl Evaluation {
             self.success,
             self.text.as_deref(),
             &self.sandboxes,
+            &self.sandbox_digests,
             self.stats.as_ref(),
         );
         put(body, JobKey::ADMIN_TEXT, json!(self.admin_text));
@@ -103,11 +107,13 @@ fn write_run(
     success: bool,
     text: Option<&[String]>,
     sandboxes: &[PathBuf],
+    sandbox_digests: &DigestMap,
     stats: Option<&ExecutionStats>,
 ) {
     put(body, JobKey::SUCCESS, json!(success));
     put(body, JobKey::TEXT, json!(text));
     put(body, JobKey::SANDBOXES, json!(sandbox_paths(sandboxes)));
+    put(body, JobKey::SANDBOX_DIGESTS, json!(sandbox_digests));
     put(body, JobKey::PLUS, plus_value(stats, success));
 }
 
@@ -130,10 +136,7 @@ fn put(body: &mut Map<String, Value>, key: JobKey, value: Value) {
 }
 
 fn sandbox_paths(paths: &[PathBuf]) -> Vec<String> {
-    paths
-        .iter()
-        .map(|path| path.to_string_lossy().into_owned())
-        .collect()
+    paths.iter().map(|path| sandbox_path(path)).collect()
 }
 
 fn stats_value(stats: &ExecutionStats) -> Value {

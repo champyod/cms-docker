@@ -88,7 +88,7 @@ pub use parameters::{Accepts, Parameter};
 pub use registry::TaskType;
 pub use two_steps::TwoSteps;
 
-pub(crate) use boxed::{Run, Shared};
+pub(crate) use boxed::{sandbox_path, Closed, Run, Shared};
 pub(crate) use parameters::Parameters;
 
 use crate::stage::{CacheHandle, FileDigest, StageError};

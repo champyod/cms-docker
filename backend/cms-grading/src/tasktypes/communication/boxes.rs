@@ -9,12 +9,11 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::job::EvaluationJob;
 use crate::stage::{Cache, CacheHandle, FileDigest, StageError};
-use crate::tasktypes::{handle, Run, Runtime, TaskError};
+use crate::tasktypes::{handle, Closed, Run, Runtime, TaskError};
 
 use super::{INPUT, MANAGER};
 
@@ -91,11 +90,19 @@ pub(super) fn users_of(
 
 /// Every box kept where the job asked for it and removed otherwise, the manager's
 /// first, answered with the path the report names each box by.
-pub(super) fn close(manager: Run, users: Vec<Run>, keep: bool) -> Result<Vec<PathBuf>, TaskError> {
-    let mut sandboxes = Vec::with_capacity(users.len() + 1);
-    sandboxes.push(manager.close(keep)?);
+///
+/// Each box is archived before it is removed when `archive` asks for it, and the
+/// closed values keep each path beside the digest the store answered with.
+pub(super) fn close(
+    manager: Run,
+    users: Vec<Run>,
+    keep: bool,
+    archive: bool,
+) -> Result<Vec<Closed>, TaskError> {
+    let mut closed = Vec::with_capacity(users.len() + 1);
+    closed.push(manager.close(keep, archive)?);
     for run in users {
-        sandboxes.push(run.close(keep)?);
+        closed.push(run.close(keep, archive)?);
     }
-    Ok(sandboxes)
+    Ok(closed)
 }

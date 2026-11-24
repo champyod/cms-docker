@@ -12,6 +12,8 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+use cms_proto::DigestMap;
+
 use crate::job::EvaluationJob;
 use crate::messages::{EVALUATION_MESSAGES, EXECUTED};
 use crate::tasktypes::outcome::what_went_wrong;
@@ -76,6 +78,7 @@ pub(super) fn decide(first: &ExecutionStats, second: &ExecutionStats) -> Evaluat
     let success = worked(first) && worked(second);
     Evaluation {
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
         success,
         ran: clean(first) && clean(second),
         outcome: None,

@@ -107,9 +107,9 @@ impl Batch {
             )?;
             evaluation.absorb(judged);
         }
-        let keep = job.archive_sandbox || !evaluation.success;
-        let root = run.close(keep)?;
-        evaluation.sandboxes.insert(0, root);
+        let keep = !evaluation.success;
+        run.close(keep, job.archive_sandbox)?
+            .record_first(&mut evaluation.sandboxes, &mut evaluation.sandbox_digests);
         Ok(evaluation)
     }
 }

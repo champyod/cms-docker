@@ -29,6 +29,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde_json::Value;
@@ -91,6 +92,12 @@ pub struct Answer {
     /// The digest the carried answer is stored under. Absent where the testcase's
     /// answer was not carried.
     pub output: Option<FileDigest>,
+    /// The boxes the judge made to decide a carried answer, which the report
+    /// names whether or not they were kept.
+    pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived judge box was filed under, keyed by the same path
+    /// the sandbox list names.
+    pub sandbox_digests: DigestMap,
 }
 
 impl OutputOnly {
@@ -168,6 +175,8 @@ impl Answer {
             text: vec![NOT_CARRIED.to_owned()],
             admin_text: None,
             output: None,
+            sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
         }
     }
 
@@ -179,6 +188,8 @@ impl Answer {
             text: judgement.text,
             admin_text: judgement.admin_text,
             output: Some(answer),
+            sandboxes: judgement.sandboxes,
+            sandbox_digests: judgement.sandbox_digests,
         }
     }
 }
@@ -218,6 +229,7 @@ fn digest_of(digest: &str) -> Result<FileDigest, TaskError> {
 pub(super) fn no_compilation() -> Compilation {
     Compilation {
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
         success: true,
         compilation_success: Some(true),
         text: Some(vec![NOTHING_TO_COMPILE.to_owned()]),

@@ -217,8 +217,13 @@ fn finish(
     let judged_ok = judged
         .as_ref()
         .map_or(evaluation.success, |judged| judged.success);
-    let keep = job.archive_sandbox || !judged_ok;
-    evaluation.sandboxes = vec![first.close(keep)?, second.close(keep)?];
+    let keep = !judged_ok;
+    for closed in [
+        first.close(keep, job.archive_sandbox)?,
+        second.close(keep, job.archive_sandbox)?,
+    ] {
+        closed.record(&mut evaluation.sandboxes, &mut evaluation.sandbox_digests);
+    }
     if let Some(judged) = judged {
         evaluation.absorb(judged);
     }

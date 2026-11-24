@@ -27,6 +27,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use cms_proto::DigestMap;
 use serde_json::Value;
 
 use super::batch::{COMPILATION, EVALUATION, USE_FILE};
@@ -92,6 +93,9 @@ pub struct Answer {
     pub stats: Option<ExecutionStats>,
     /// The paths the report names this evaluation's box by.
     pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
+    pub sandbox_digests: DigestMap,
     /// The answer handed on, absent where there was none.
     pub origin: Option<Origin>,
     /// Whether a run did what it was asked to, false where no run was made.

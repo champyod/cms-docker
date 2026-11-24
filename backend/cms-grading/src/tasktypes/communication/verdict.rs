@@ -15,6 +15,8 @@
 
 use std::path::PathBuf;
 
+use cms_proto::DigestMap;
+
 use crate::job::EvaluationJob;
 use crate::stage::FileDigest;
 use cms_sandbox::ExecutionStats;
@@ -37,6 +39,9 @@ pub struct Verdict {
     /// The paths the report names the boxes by, the manager's first and then one
     /// per process in index order.
     pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
+    pub sandbox_digests: DigestMap,
     /// Whether every box worked and the manager terminated correctly, so that what
     /// the manager reported can be believed.
     pub success: bool,
@@ -79,6 +84,7 @@ impl Communication {
         let success = boxes_worked && manager.exit_status == ExitStatus::Ok;
         let mut verdict = Verdict {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success,
             ran: charged.exit_status == ExitStatus::Ok,
             outcome: None,

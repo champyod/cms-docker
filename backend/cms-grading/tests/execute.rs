@@ -49,6 +49,7 @@ fn failed_compilation_body() -> Value {
         "text": null,
         "plus": null,
         "sandboxes": [],
+        "sandbox_digests": {},
         "executables": {}
     })
 }
@@ -60,6 +61,7 @@ fn failed_evaluation_body() -> Value {
         "text": null,
         "plus": null,
         "sandboxes": [],
+        "sandbox_digests": {},
         "admin_text": null,
         "user_output": null
     })
@@ -73,6 +75,7 @@ fn output_only_compilation_writes_the_no_compilation_result() {
     let result = compile(&output_only(), &job, None, &runtime, Box::new(store))
         .expect("OutputOnly needs no toolchain");
 
+    assert!(result.sandbox_digests.is_empty());
     assert_eq!(
         compilation_body(&result),
         json!({
@@ -81,6 +84,8 @@ fn output_only_compilation_writes_the_no_compilation_result() {
             "text": ["No compilation needed"],
             "plus": {},
             "sandboxes": [],
+            "sandbox_digests": {},
+        "sandbox_digests": {},
             "executables": {}
         })
     );
@@ -101,6 +106,7 @@ fn batch_compilation_with_zero_files_writes_a_configuration_error() {
     )
     .expect("a configuration error is a failed job, not a worker error");
 
+    assert!(result.sandbox_digests.is_empty());
     assert_eq!(compilation_body(&result), failed_compilation_body());
 }
 
@@ -145,6 +151,7 @@ fn batch_evaluation_with_zero_executables_writes_a_configuration_error() {
     )
     .expect("a configuration error is a failed job, not a worker error");
 
+    assert!(result.sandbox_digests.is_empty());
     assert_eq!(evaluation_body(&result), failed_evaluation_body());
 }
 
@@ -218,6 +225,8 @@ fn output_only_evaluation_writes_the_carried_answer_without_a_toolchain() {
             "text": ["Output is correct"],
             "plus": {},
             "sandboxes": [],
+            "sandbox_digests": {},
+        "sandbox_digests": {},
             "admin_text": null,
             "user_output": null
         })

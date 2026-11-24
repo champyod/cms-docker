@@ -65,7 +65,7 @@ pub fn evaluation(
         object_id: object.id,
         dataset_id: tests.id,
         testcase_codename: Some(codename.to_owned()),
-        archive_sandbox: true,
+        archive_sandbox: false,
     };
     EvaluationJob::from_submission(&operation, &object, &tests).expect("an evaluation job")
 }

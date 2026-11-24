@@ -44,6 +44,9 @@ const TOOLCHAIN_PACKAGES: &str = "/var/lib/ghc";
 pub struct Compilation {
     /// The paths the report names this compilation's box by.
     pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
+    pub sandbox_digests: DigestMap,
     /// Whether the box worked, so what the run reported can be believed.
     pub success: bool,
     /// Whether the compilation produced an executable, `None` when the box did
@@ -115,8 +118,9 @@ pub(super) fn in_a_box(
             .executables
             .insert(executable, digest.as_str().to_owned());
     }
-    let keep = job.archive_sandbox || !compilation.success;
-    compilation.sandboxes.push(run.close(keep)?);
+    let keep = !compilation.success;
+    run.close(keep, job.archive_sandbox)?
+        .record(&mut compilation.sandboxes, &mut compilation.sandbox_digests);
     Ok(compilation)
 }
 
@@ -201,6 +205,7 @@ fn decide(stats: Option<&ExecutionStats>) -> Compilation {
     };
     Compilation {
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
         success,
         compilation_success,
         text,

@@ -16,6 +16,8 @@
 
 use std::path::PathBuf;
 
+use cms_proto::DigestMap;
+
 use crate::messages::{EVALUATION_MESSAGES, EXECUTED};
 use crate::stage::FileDigest;
 use cms_sandbox::ExecutionStats;
@@ -32,6 +34,9 @@ const NO_CREDIT: f64 = 0.0;
 pub struct Evaluation {
     /// The paths the report names this evaluation's box by.
     pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
+    pub sandbox_digests: DigestMap,
     /// Whether the box worked, so that what the run reported can be believed.
     pub success: bool,
     /// Whether the run itself did what it was asked to, as against one stopped,
@@ -108,6 +113,7 @@ impl Evaluation {
         self.text = judgement.success.then_some(judgement.text);
         self.admin_text = judgement.admin_text;
         self.sandboxes.extend(judgement.sandboxes);
+        self.sandbox_digests.extend(judgement.sandbox_digests);
     }
 }
 
@@ -137,6 +143,7 @@ pub(super) fn decide(stats: Option<ExecutionStats>) -> Evaluation {
     };
     Evaluation {
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
         success,
         ran,
         outcome: None,

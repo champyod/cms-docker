@@ -18,7 +18,7 @@ use std::fmt;
 
 use serde_json::Value;
 
-use crate::stage::StageError;
+use crate::stage::{ArchiveError, StageError};
 use crate::steps::StepError;
 use cms_sandbox::SpawnError;
 
@@ -85,6 +85,9 @@ pub enum TaskError {
     NoCorrectOutput,
     /// A file the run was to be handed could not be staged.
     Stage(StageError),
+    /// A run's directory could not be packed and filed, so the job cannot report
+    /// the archive it asked for.
+    Archive(ArchiveError),
     /// A run could not be launched, or could not be read back once it had run.
     Spawn(SpawnError),
     /// A checker could not be staged or launched.
@@ -132,6 +135,7 @@ impl fmt::Display for TaskError {
                 write!(f, "the job carries no correct answer to compare with")
             }
             Self::Stage(error) => write!(f, "{error}"),
+            Self::Archive(error) => write!(f, "{error}"),
             Self::Spawn(error) => write!(f, "{error}"),
             Self::Step(error) => write!(f, "{error}"),
         }
@@ -142,6 +146,7 @@ impl std::error::Error for TaskError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Stage(error) => Some(error),
+            Self::Archive(error) => Some(error),
             Self::Spawn(error) => Some(error),
             Self::Step(error) => Some(error),
             _ => None,

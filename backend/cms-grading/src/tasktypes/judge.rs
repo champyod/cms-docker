@@ -28,9 +28,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use cms_db::FileDigest;
+use cms_proto::DigestMap;
 
 use super::TaskError;
-use super::{handle, Runtime};
+use super::{handle, Closed, Runtime};
 use crate::job::EvaluationJob;
 use crate::messages::EVALUATION_MESSAGES;
 use crate::stage::{Cache, CacheHandle, Stage, StageError};
@@ -58,6 +59,9 @@ pub struct Judgement {
     pub admin_text: Option<String>,
     /// The boxes a check was made in, which the report names.
     pub sandboxes: Vec<PathBuf>,
+    /// The digest each archived box was filed under, keyed by the same path the
+    /// sandbox list names.
+    pub sandbox_digests: DigestMap,
 }
 
 /// The answer to be judged: a file a run wrote, or a digest a submission carried.
@@ -96,6 +100,7 @@ impl Judgement {
             text: sentence.reported_naming(filename),
             admin_text: None,
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
         }
     }
 
@@ -108,26 +113,27 @@ impl Judgement {
             text: Vec::new(),
             admin_text: None,
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
         }
     }
 
     /// What a checker decided, or nothing where it could not decide, with the boxes the
     /// check was made in — named whether or not the check could be completed, since a
     /// box left behind is only findable if the report says where it is.
-    fn of(verdict: Option<Verdict>, sandboxes: Vec<PathBuf>) -> Self {
-        let Some(verdict) = verdict else {
-            return Self {
-                sandboxes,
-                ..Self::unchecked()
-            };
+    fn of(verdict: Option<Verdict>, closed: Closed) -> Self {
+        let mut judgement = match verdict {
+            Some(verdict) => Self {
+                success: true,
+                outcome: Some(verdict.outcome),
+                text: verdict.text,
+                admin_text: verdict.admin_text,
+                sandboxes: Vec::new(),
+                sandbox_digests: DigestMap::new(),
+            },
+            None => Self::unchecked(),
         };
-        Self {
-            success: true,
-            outcome: Some(verdict.outcome),
-            text: verdict.text,
-            admin_text: verdict.admin_text,
-            sandboxes,
-        }
+        closed.record(&mut judgement.sandboxes, &mut judgement.sandbox_digests);
+        judgement
     }
 }
 
@@ -185,8 +191,8 @@ fn check_with(
     };
     let (sandbox, files) = run.parts();
     let verdict = checker_step(sandbox, files, &check)?;
-    let root = run.close(job.archive_sandbox || verdict.is_none())?;
-    Ok(Judgement::of(verdict, vec![root]))
+    let closed = run.close(verdict.is_none(), job.archive_sandbox)?;
+    Ok(Judgement::of(verdict, closed))
 }
 
 /// Compares the answer with the dataset's own, byte for byte once whitespace is folded,
@@ -210,6 +216,7 @@ fn compare_with_correct(
         text: comparison.text,
         admin_text: None,
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
     })
 }
 
