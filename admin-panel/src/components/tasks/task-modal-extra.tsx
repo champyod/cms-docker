@@ -65,8 +65,8 @@ export function LanguagesTab({ formData, onToggleLanguage, onToggleFormat }: Lan
           {SUBMISSION_FORMATS.map((fmt) => {
             const active = (formData.submission_format ?? []).includes(fmt);
             return (
-              <button key={fmt} type="button" onClick={() => onToggleFormat(fmt)} className={cn('flex items-center gap-3 rounded-lg border p-3 text-left transition-all', active ? 'border-ring/50 bg-primary/10 text-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
-                <div className={cn('flex h-4 w-4 items-center justify-center rounded border', active ? 'border-primary bg-primary' : 'border-muted-foreground/40')}>{active && <div className="h-2 w-2 rounded-sm bg-card" />}</div>
+              <button key={fmt} type="button" onClick={() => onToggleFormat(fmt)} className={cn('flex items-center gap-3 rounded-lg border p-3 text-left transition-all', active ? 'border-foreground bg-muted text-foreground' : 'border-border bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
+                <div className={cn('flex h-4 w-4 items-center justify-center rounded border', active ? 'border-foreground bg-foreground' : 'border-muted-foreground/40')}>{active && <div className="h-2 w-2 rounded-sm bg-background" />}</div>
                 <span>{fmt}</span>
               </button>
             );
@@ -79,7 +79,7 @@ export function LanguagesTab({ formData, onToggleLanguage, onToggleFormat }: Lan
           {PROGRAMMING_LANGUAGES.map((lang) => {
             const active = (formData.allowed_languages ?? []).includes(lang);
             return (
-              <button key={lang} type="button" onClick={() => onToggleLanguage(lang)} className={cn('truncate rounded-lg px-3 py-2 text-left text-xs font-medium transition-all', active ? 'bg-success/10 text-success ring-1 ring-success/50' : 'bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
+              <button key={lang} type="button" onClick={() => onToggleLanguage(lang)} className={cn('truncate rounded-lg px-3 py-2 text-left text-xs font-medium transition-all', active ? 'bg-muted text-foreground ring-1 ring-foreground/20' : 'bg-muted/30 text-muted-foreground hover:bg-muted/50')}>
                 {lang}
               </button>
             );
