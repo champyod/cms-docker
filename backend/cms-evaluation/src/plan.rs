@@ -52,7 +52,7 @@ fn submission_compilation(
     archive_sandbox: bool,
 ) -> Vec<PlannedOperation> {
     let tries = result.map_or(0, |result| result.compilation_tries);
-    let priority = queue_priority(dataset.is_active, tries, PRIORITY_HIGH, PRIORITY_MEDIUM);
+    let priority = compilation_priority(dataset.is_active, tries);
     vec![planned(
         Operation {
             kind: OperationKind::Compilation,
@@ -74,12 +74,7 @@ fn submission_evaluations(
     result: &SubmissionResult,
     archive_sandbox: bool,
 ) -> Vec<PlannedOperation> {
-    let priority = queue_priority(
-        dataset.is_active,
-        result.evaluation_tries,
-        PRIORITY_MEDIUM,
-        PRIORITY_LOW,
-    );
+    let priority = evaluation_priority(dataset.is_active, result.evaluation_tries);
     testcases
         .iter()
         .filter(|testcase| submission_to_evaluate_on_testcase(result, testcase.id, evaluations))
@@ -123,12 +118,7 @@ fn user_test_evaluation(
     dataset: &DatasetRecord,
     result: &UserTestResult,
 ) -> PlannedOperation {
-    let priority = queue_priority(
-        dataset.is_active,
-        result.evaluation_tries,
-        PRIORITY_MEDIUM,
-        PRIORITY_LOW,
-    );
+    let priority = evaluation_priority(dataset.is_active, result.evaluation_tries);
     planned(
         Operation {
             kind: OperationKind::UserTestEvaluation,
@@ -148,7 +138,7 @@ fn user_test_compilation(
     result: Option<&UserTestResult>,
 ) -> Vec<PlannedOperation> {
     let tries = result.map_or(0, |result| result.compilation_tries);
-    let priority = queue_priority(dataset.is_active, tries, PRIORITY_HIGH, PRIORITY_MEDIUM);
+    let priority = compilation_priority(dataset.is_active, tries);
     vec![planned(
         Operation {
             kind: OperationKind::UserTestCompilation,
@@ -170,6 +160,18 @@ fn queue_priority(is_active: bool, tries: i32, first_try: i32, retry: i32) -> i3
     } else {
         retry
     }
+}
+
+/// The queue priority one compilation attempt takes.
+#[must_use]
+pub fn compilation_priority(is_active: bool, tries: i32) -> i32 {
+    queue_priority(is_active, tries, PRIORITY_HIGH, PRIORITY_MEDIUM)
+}
+
+/// The queue priority one evaluation attempt takes.
+#[must_use]
+pub fn evaluation_priority(is_active: bool, tries: i32) -> i32 {
+    queue_priority(is_active, tries, PRIORITY_MEDIUM, PRIORITY_LOW)
 }
 
 fn planned(operation: Operation, priority: i32, timestamp: NaiveDateTime) -> PlannedOperation {

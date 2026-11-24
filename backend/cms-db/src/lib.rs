@@ -78,6 +78,7 @@ mod crypto;
 mod datetime;
 mod digest;
 mod drop;
+mod evaluation;
 mod filecache;
 mod fsobject;
 mod grants;
@@ -125,6 +126,10 @@ pub use crypto::{
 pub use datetime::{make_datetime, make_timestamp, DateTimeError, EPOCH, LOCAL_TZ, UTC};
 pub use digest::{bytes_digest, path_digest, Digester, DEFAULT_READ_BUFFER};
 pub use drop::{drop_db, DropError};
+pub use evaluation::{
+    submission_compilations, submission_evaluations, user_test_compilations, user_test_evaluations,
+    CompilationCandidate, EvaluationCandidate,
+};
 pub use filecache::{
     Backend, CacheScope, DbBackend, FileCache, FileCacheConfig, FileCacheError, FsBackend,
     NullBackend, Readable, StoredFile, Writable, CHUNK_SIZE,
