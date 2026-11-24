@@ -1,6 +1,7 @@
 'use client';
 
 import { PROGRAMMING_LANGUAGES } from '@/lib/constants';
+import { Button } from '@/components/core/Button';
 import { cn } from '@/lib/utils';
 import { ErrorText, fieldClasses, LABEL_CLASSES } from './fieldStyles';
 import type { ContestFormData, SetContestForm } from '../types';
@@ -133,19 +134,15 @@ function LanguagesGrid({ formData, onLanguageToggle }: Pick<GeneralTabProps, 'fo
         const lang = langStr;
         const isSelected = formData.languages.includes(lang);
         return (
-          <button
+          <Button
             key={lang}
-            type="button"
+            variant={isSelected ? 'secondary' : 'ghost'}
+            aria-pressed={isSelected}
             onClick={() => onLanguageToggle(lang)}
-            className={cn(
-              'rounded-lg px-3 py-2 text-left font-mono text-xs transition-colors',
-              isSelected
-                ? 'border border-success/30 bg-success/10 text-success'
-                : 'bg-muted/30 text-muted-foreground hover:bg-muted'
-            )}
+            className="h-auto min-h-0 justify-start rounded-lg px-3 py-2 font-mono text-xs"
           >
             {langStr}
-          </button>
+          </Button>
         );
       })}
     </div>
