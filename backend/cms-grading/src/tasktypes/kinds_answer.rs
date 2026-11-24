@@ -37,6 +37,8 @@ impl Answer {
             stats: None,
             sandboxes: judgement.sandboxes,
             origin: Some(Origin::Carried(answer)),
+            ran: false,
+            user_output: None,
             extra_args: vec![kind.to_owned()],
         }
     }
@@ -52,6 +54,8 @@ impl Answer {
             stats: None,
             sandboxes: Vec::new(),
             origin: None,
+            ran: false,
+            user_output: None,
             extra_args: Vec::new(),
         }
     }
@@ -74,6 +78,8 @@ impl Answer {
             stats: run.stats,
             sandboxes: run.sandboxes,
             origin,
+            ran: run.ran,
+            user_output: run.user_output,
             extra_args,
         }
     }

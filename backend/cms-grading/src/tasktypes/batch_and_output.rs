@@ -94,6 +94,10 @@ pub struct Answer {
     pub sandboxes: Vec<PathBuf>,
     /// The answer handed on, absent where there was none.
     pub origin: Option<Origin>,
+    /// Whether a run did what it was asked to, false where no run was made.
+    pub ran: bool,
+    /// The digest of a run's answer, absent unless the job asked for it.
+    pub user_output: Option<FileDigest>,
     /// The words a checker is given after the three files, saying which kind of
     /// testcase it is judging, and empty where no answer was handed on to give it.
     pub extra_args: Vec<String>,
