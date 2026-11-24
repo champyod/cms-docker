@@ -32,4 +32,6 @@ mod accounting;
 mod tombstone;
 
 pub use accounting::{Accounting, BusyReport};
-pub use tombstone::{content_digest, dispose, resolve_task_type, JobError, JobResult};
+pub use tombstone::{
+    content_digest, dispose, from_task_error, resolve_task_type, JobError, JobResult,
+};
