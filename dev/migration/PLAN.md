@@ -355,6 +355,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-6c4 scoring library | fair queue, transactional `score_candidate`, score invalidation | **merged** `b6e7cd17` (see note) |
 | S-6c5 scoring daemon | `cms-scoring` RPC, sweeper/worker, binary and compose entrypoint | **merged** `b5216bf4` (see note) |
 | S-6d1 ES planner | predicates, retry bounds and per-dataset submission/user-test operations | **merged** `2b328100` (see note) |
+| S-6d2 ES sweep | four contest-scoped candidate reads and the planned operations built from them | **merged** `a5920ce6` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -989,6 +990,26 @@ the missing evaluation branch was completed here, and my mutation removing the
 evaluation exclusion failed `submission_evaluations_exclude_completed_testcases_in_input_order`
 at `backend/cms-evaluation/src/plan/tests/submission.rs:154`, restored byte-identically.
 Lane gate **39 passed**; merged gate **182 targets, 1153 passed, 0 failed, 2 ignored**.
+
+### S-6d2: the EvaluationService contest sweep
+
+`cms-db::evaluation` adds four reads: unfinished compilations and unevaluated
+testcases for submissions and for user tests, each optionally limited to one
+contest through the participation. A dataset is judgeable when it is its task's
+active dataset or `autojudge`; the retry ceiling is a parameter so the query and
+the planner share one rule. `cms-evaluation::contest_operations` turns those rows
+into `PlannedOperation`s, reusing the planner's new `compilation_priority` and
+`evaluation_priority` helpers, and sorts by timestamp, object, dataset and
+testcase codename. Two commits, merged as `a5920ce6`.
+
+The child stalled without issuing a tool call; the slice was built in the lane
+instead. The negative control removing `e.id IS NULL` failed
+`contest_operations_returns_the_exact_submission_and_user_test_work` and the
+predicate was restored byte-identically. Lane gate **428 passed** for
+`cms-db` + `cms-evaluation`; the first merged run omitted `CMS_DB_TEST_URL` and
+13 live tests failed by name, then the merged gate passed with it set:
+**174 targets, 1157 passed, 0 failed, 2 ignored**.
+
 
 
 
