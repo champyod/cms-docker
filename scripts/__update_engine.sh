@@ -618,6 +618,7 @@ VAR_SPECS=(
   "Core & Network|[core]|LOG_SERVICE_SHARD|num||0"
   "Core & Network|[core]|RESOURCE_SERVICE_SHARD|num||0"
   "Core & Network|[core]|SCORING_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|SCORING_SERVICE_PORT|port||28500"
   "Core & Network|[core]|EVALUATION_SERVICE_SHARD|num||0"
   "Core & Network|[core]|PROXY_SERVICE_SHARD|num||0"
   "Core & Network|[core]|CHECKER_SERVICE_SHARD|num||0"

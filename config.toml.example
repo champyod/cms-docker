@@ -15,7 +15,8 @@ CMS_SOURCE_URL = "https://github.com/champyod/cms-docker" # str; AGPL-13 Corresp
 CMS_RANKING_URL = ""            # str; public address of the ranking scoreboard the contest sign-in links to; empty leaves the link out
 LOG_SERVICE_SHARD = 0           # num; shard index handed to cmsLogService; 0 = single instance — raise only when running multiple shards
 RESOURCE_SERVICE_SHARD = 0      # num; shard index handed to cmsResourceService; 0 = single instance — raise only when running multiple shards
-SCORING_SERVICE_SHARD = 0       # num; shard index handed to cmsScoringService; 0 = single instance — raise only when running multiple shards
+SCORING_SERVICE_SHARD = 0       # num; shard index handed to cms-scoring; 0 = single instance — raise only when running multiple shards
+SCORING_SERVICE_PORT = 28500    # port; container port cms-scoring listens on; the core host publish stays on 28500
 EVALUATION_SERVICE_SHARD = 0    # num; shard index handed to cmsEvaluationService; 0 = single instance — raise only when running multiple shards
 PROXY_SERVICE_SHARD = 0         # num; shard index handed to cmsProxyService; 0 = single instance — raise only when running multiple shards
 CHECKER_SERVICE_SHARD = 0       # num; shard index handed to cms-checker; 0 = single instance — raise only when running multiple shards
