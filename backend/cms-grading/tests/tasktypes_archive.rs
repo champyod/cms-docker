@@ -181,30 +181,37 @@ fn an_archived_evaluation_and_checker_are_keyed_by_their_own_paths() {
 
 #[test]
 fn a_batch_and_output_run_carries_its_archive_digest_to_the_body() {
-    let dir = workspace("archive-mixed-run");
-    let store = store_of(&dir);
-    let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered());
-    let task = TaskType::of("BatchAndOutput", &json!(["alone", ["", ""], "diff", ""]))
-        .expect("a BatchAndOutput task");
+    for keep in [false, true] {
+        let label = if keep {
+            "archive-mixed-run-kept"
+        } else {
+            "archive-mixed-run-removed"
+        };
+        let dir = workspace(label);
+        let store = store_of(&dir);
+        let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered()).with_keep_sandbox(keep);
+        let task = TaskType::of("BatchAndOutput", &json!(["alone", ["", ""], "diff", ""]))
+            .expect("a BatchAndOutput task");
 
-    let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
-    job.archive_sandbox = true;
-    let evaluated = evaluate(
-        &task,
-        &job,
-        Some(&StubToolchain),
-        &runtime,
-        Box::new(store.clone()),
-    )
-    .expect("the run is evaluated");
+        let mut job = evaluate_job(digests(&[(EXECUTABLE, PROGRAM_DIGEST)]));
+        job.archive_sandbox = true;
+        let evaluated = evaluate(
+            &task,
+            &job,
+            Some(&StubToolchain),
+            &runtime,
+            Box::new(store.clone()),
+        )
+        .expect("the run is evaluated");
 
-    assert!(evaluated.success);
-    assert_eq!(evaluated.sandboxes.len(), 1);
-    assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
-    assert!(!evaluated.sandboxes[0].exists());
-    let mut body = Map::new();
-    evaluated.write_body(&mut body);
-    assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+        assert!(evaluated.success);
+        assert_eq!(evaluated.sandboxes.len(), 1);
+        assert_archived(&store, &evaluated.sandboxes, &evaluated.sandbox_digests);
+        assert_eq!(evaluated.sandboxes[0].is_dir(), keep);
+        let mut body = Map::new();
+        evaluated.write_body(&mut body);
+        assert_body_pair(&body, &evaluated.sandboxes, &evaluated.sandbox_digests);
+    }
 }
 
 #[test]

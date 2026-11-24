@@ -87,6 +87,35 @@ fn an_evaluation_runs_the_executable_under_the_datasets_limits_and_hands_on_its_
 }
 
 #[test]
+fn a_successful_evaluation_is_kept_only_when_the_worker_asks() {
+    for keep in [false, true] {
+        let label = if keep {
+            "evaluate-kept"
+        } else {
+            "evaluate-removed"
+        };
+        let dir = workspace(label);
+        let runtime = runtime_of(&dir, "0", CLEAN_LOG, &answered()).with_keep_sandbox(keep);
+        let evaluated = alone()
+            .evaluate(
+                &evaluate_job(one_executable()),
+                &StubToolchain,
+                &runtime,
+                Box::new(store_of(&dir)),
+            )
+            .expect("the evaluation must run");
+
+        assert!(evaluated.success && evaluated.ran);
+        assert_eq!(evaluated.sandboxes.len(), 1);
+        assert_eq!(
+            evaluated.sandboxes[0].is_dir(),
+            keep,
+            "worker keep_sandbox={keep}"
+        );
+    }
+}
+
+#[test]
 fn a_comparator_batch_is_judged_by_the_datasets_checker_in_a_box_of_its_own() {
     let dir = workspace("evaluate-checker");
     // One stub serves both boxes: the run is told where to write, the checker is not.
