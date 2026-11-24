@@ -24,7 +24,7 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 | S9 | `DetailPage`, `FormPage`, `SettingsPage` layouts | done | four contract tests: the fact strip is a `<dl>`, the error summary sits above the fields, a clean form shows no alert, and every settings group states its scope |
 | S10 | Slot contract and per-page inventory | done | `patterns/slots.ts` names the facts each layout requires; `PAGE-INVENTORY.md` lists all 59 surface pages, 5 documented; the gate refuses a declared layout whose facts are empty |
 | S11 | Convert pages to their layout | **done** | 76 declared, 0 undeclared of 76 pages; 53 of 53 inventoried. Six content layouts (dashboard, list, detail, settings, board, modes) plus redirect |
-| S12 | Status colour removed from ordinary text | **open** | 258 uses across 108 files; AdminList, the deploy panel, ContainerRow, the testcase pairs, the dataset actions, the task contest chip, the participant chips, the roster state and the score view switcher use the primitives, and the docs callouts are neutral; the gate holds it (may fall, never rise) |
+| S12 | Status colour removed from ordinary text | **open** | 256 uses across 108 files; AdminList, the deploy panel, ContainerRow, the testcase pairs, the dataset actions, the task contest chip, the participant chips, the roster state, the task avatar and the score view switcher use the primitives, and the docs callouts are neutral; the gate holds it (may fall, never rise) |
 | S13 | Light, dark, high contrast and both densities measured per rebuilt page | **done at the token level, open at the pixel level** | 72 colour pairs measured across light, dark, high contrast and dark high contrast; every declared page paints only tokens; both densities come from one row-height constant. A per-page rendered measurement needs a browser harness, which is a new dependency and therefore an operator decision |
 | S14 | A board layout for pages carrying several record kinds | done | `BoardPage` with a section contract; two lanes refused those pages before it existed, and the refusal was correct |
 | S15 | A contract that does not push a page to invent content | done | `activity` is optional on dashboard after a lane refused a count-only digest; `tests/page-slots.test.ts` pins every slot's requirement level, so loosening one is a decision and not a quiet edit |
@@ -32,7 +32,7 @@ Three layers, one source of truth each: **tokens** (colour, type, radius, densit
 ## Rules this epic is held to
 
 - A step lands only with its gate green and its negative control shown to fail.
-- Debt is counted: raw controls (229), undeclared pages (75), status-colour misuse (258). Each may
+- Debt is counted: raw controls (229), undeclared pages (75), status-colour misuse (256). Each may
   fall, never rise.
 - One writer per worktree index. A step handed to a subagent gets its own lane.
 - Every gate takes its inputs from environment variables, so a negative control can run it against a

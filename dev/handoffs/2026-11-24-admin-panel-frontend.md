@@ -30,7 +30,7 @@ DONE WHEN:
 |---|---|---|
 | Page declares an archetype | done | `design:archetypes`: 76 declared, 0 undeclared of 76 pages |
 | Facts from the slot list | done at inventory level | `design:inventory`: 53 of 53 |
-| Status colour only for status | gate green, debt being reduced | `design:colour`: 258 uses in 108 files; baseline 321 |
+| Status colour only for status | gate green, debt being reduced | `design:colour`: 256 uses in 108 files; baseline 321 |
 | Raw controls use primitives | gate green, debt 229 | `design:controls` |
 | Type scale, density, focus ring | done | `design:usage`, `design:token-coverage`, `design:modes` |
 | Four modes, both densities | token level done; pixel level blocked | needs an authenticated browser harness and a fixture server |
@@ -61,6 +61,7 @@ DONE WHEN:
 | `e39f32ee` | `ContestParticipantsSection` chips through `Badge`; avatar neutral; debt 277 to 271 |
 | `7dffec50` | `DatasetScoreParamsEditor` view switcher through `Tabs`; debt 271 to 264, raw controls 232 to 229 |
 | `ca97bb91` | `ContestRosterSection` state through `Badge`; avatar neutral; debt 264 to 258 |
+| `a5e10c98` (merge) | `ContestTasksSection` task avatar neutral; debt 258 to 256. Swept into the grading lane merge; see Incident. |
 
 Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e28781`,
 `52818b79`, `9f4564b5`. Do not touch them.
@@ -68,7 +69,7 @@ Backend commits by another writer are interleaved: `947168fc`, `bd6b8ba1`, `11e2
 ## Current step
 
 S12, status-colour debt reduction, one component at a time. The latest measured count is
-258 uses in 108 files, and `admin-panel/scripts/status-colour-baseline.json` is 258.
+256 uses in 108 files, and `admin-panel/scripts/status-colour-baseline.json` is 256.
 The epic `docs/design/epic-frontend-system.md` now records 313.
 
 Top remaining offenders:
@@ -77,7 +78,6 @@ Top remaining offenders:
 |---|---|
 | `src/components/containers/ContainerRow.tsx` | 11 |
 | `src/components/ui/button.tsx` | 8 |
-| `src/components/contests/contest-detail/ContestTasksSection.tsx` | 7 |
 | `src/components/submissions/SubmissionResultsTab.tsx` | 7 |
 
 Note: some of these are legitimate status uses on status words. The gate allows status
@@ -88,7 +88,7 @@ decision, not a blind colour removal.
 
 - **Pixel-level measurement is blocked.** It needs an authenticated browser session, a
   fixture server, and a new dev dependency. That is an operator decision.
-- **S12 is not zero.** 258 uses in 108 files. The gate holds the line but the debt is real.
+- **S12 is not zero.** 256 uses in 108 files. The gate holds the line but the debt is real.
 - **Epic S12 record is stale.** It says 325; the measured count is 321.
 - **Epic lives under `docs/`.** `docs/` is end-user only by the workspace rule; this
   maintainer epic belongs under `dev/`. Moving it is a separate file-structure step.
@@ -162,3 +162,13 @@ If the next writer prefers a smaller blast radius, start with `TestcasePairsList
 - One writer per index; explicit-path staging; no `git add .`.
 - Comments are one terse WHY line; license and copyright headers are exempt.
 - Commit subject at most 50 characters; lowercase imperative after the colon; no period.
+
+## Incident
+
+`a5e10c98` is the merge of lane `feat/rust-S5e3a2-archive` into this
+branch. Two admin paths were staged in the index when that merge was
+committed, so they landed inside it: `ContestTasksSection.tsx` and
+`status-colour-baseline.json`. The code is correct and the gates pass,
+but the commit message names only the grading lane. No history rewrite
+was attempted; the next agent should not amend or rebase it without the
+operator.
