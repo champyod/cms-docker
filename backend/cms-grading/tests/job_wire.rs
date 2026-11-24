@@ -2,3 +2,5 @@
 mod job_wire_fixtures;
 #[path = "job_wire/readers.rs"]
 mod job_wire_readers;
+#[path = "job_wire/results.rs"]
+mod job_wire_results;

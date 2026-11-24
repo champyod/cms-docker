@@ -1,8 +1,14 @@
-//! Reads worker job bodies into task-type inputs without retaining result fields.
+//! Bridges raw worker job bodies to typed task-type inputs and results.
 
-use serde_json::{Map, Value};
+use std::path::PathBuf;
+
+use serde_json::{json, Map, Value};
 
 use cms_proto::{check_key_set, field, key_set_for, JobError, JobKey, JobKind, Operation};
+use cms_sandbox::{ExecutionStats, ExitStatus};
+
+use crate::stage::FileDigest;
+use crate::tasktypes::{Compilation, Evaluation};
 
 use super::{CompilationJob, EvaluationJob};
 
@@ -46,6 +52,109 @@ impl EvaluationJob {
             get_output: field(body, JobKey::GET_OUTPUT)?,
             info: field(body, JobKey::INFO)?,
         })
+    }
+}
+
+impl Compilation {
+    /// Writes the compilation result into the raw job body the worker returns.
+    pub fn write_body(&self, body: &mut Map<String, Value>) {
+        write_run(
+            body,
+            self.success,
+            &self.text,
+            &self.sandboxes,
+            self.stats.as_ref(),
+        );
+        put(
+            body,
+            JobKey::COMPILATION_SUCCESS,
+            json!(self.compilation_success),
+        );
+        put(body, JobKey::EXECUTABLES, json!(self.executables));
+    }
+}
+
+impl Evaluation {
+    /// Writes the evaluation result into the raw job body the worker returns.
+    pub fn write_body(&self, body: &mut Map<String, Value>) {
+        write_run(
+            body,
+            self.success,
+            &self.text,
+            &self.sandboxes,
+            self.stats.as_ref(),
+        );
+        put(body, JobKey::ADMIN_TEXT, json!(self.admin_text));
+        put(
+            body,
+            JobKey::OUTCOME,
+            json!(self.outcome.map(|score| json!(score).to_string())),
+        );
+        put(
+            body,
+            JobKey::USER_OUTPUT,
+            json!(self.user_output.as_ref().map(FileDigest::as_str)),
+        );
+    }
+}
+
+fn write_run(
+    body: &mut Map<String, Value>,
+    success: bool,
+    text: &[String],
+    sandboxes: &[PathBuf],
+    stats: Option<&ExecutionStats>,
+) {
+    put(body, JobKey::SUCCESS, json!(success));
+    put(body, JobKey::TEXT, json!(text));
+    put(body, JobKey::SANDBOXES, json!(sandbox_paths(sandboxes)));
+    put(body, JobKey::PLUS, stats.map_or(Value::Null, stats_value));
+}
+
+fn put(body: &mut Map<String, Value>, key: JobKey, value: Value) {
+    body.insert(key.as_str().to_owned(), value);
+}
+
+fn sandbox_paths(paths: &[PathBuf]) -> Vec<String> {
+    paths
+        .iter()
+        .map(|path| path.to_string_lossy().into_owned())
+        .collect()
+}
+
+fn stats_value(stats: &ExecutionStats) -> Value {
+    let mut plus = Map::new();
+    plus.insert("execution_time".to_owned(), json!(stats.cpu_time));
+    plus.insert(
+        "execution_wall_clock_time".to_owned(),
+        json!(stats.wall_time),
+    );
+    plus.insert("execution_memory".to_owned(), json!(stats.memory_bytes));
+    plus.insert(
+        "exit_status".to_owned(),
+        json!(exit_status_text(stats.exit_status)),
+    );
+    if let Some(signal) = stats.signal {
+        plus.insert("signal".to_owned(), json!(signal));
+    }
+    if let Some(stdout) = &stats.stdout {
+        plus.insert("stdout".to_owned(), json!(stdout));
+    }
+    if let Some(stderr) = &stats.stderr {
+        plus.insert("stderr".to_owned(), json!(stderr));
+    }
+    Value::Object(plus)
+}
+
+fn exit_status_text(status: ExitStatus) -> &'static str {
+    match status {
+        ExitStatus::Ok => "ok",
+        ExitStatus::SandboxError => "sandbox error",
+        ExitStatus::Timeout => "timeout",
+        ExitStatus::TimeoutWall => "wall timeout",
+        ExitStatus::Signal => "signal",
+        ExitStatus::MemoryLimit => "memory limit exceeded",
+        ExitStatus::NonzeroReturn => "nonzero return",
     }
 }
 

@@ -1,5 +1,5 @@
 use cms_proto::{Operation, OperationKind};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 const COMPILATION: &str = r#"{
   "operation": {"type": "compile", "object_id": 42, "dataset_id": 7,
@@ -62,4 +62,14 @@ pub(crate) fn digests(pairs: &[(&str, &str)]) -> cms_proto::DigestMap {
         .iter()
         .map(|(name, digest)| ((*name).to_owned(), (*digest).to_owned()))
         .collect()
+}
+
+pub(crate) fn finished(body: &Value) -> cms_proto::IsolatedBatch {
+    cms_proto::FinishedCall {
+        data: json!({ "jobs": [body] }),
+        shard: cms_proto::Shard::new(3),
+        error: None,
+    }
+    .isolate()
+    .expect("the written job is a finished batch")
 }
