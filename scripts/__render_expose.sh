@@ -40,12 +40,13 @@ resolve_ips() {
 
 # service|host_port_var|default_host_port|container_port|bind_key|image
 # The image is the one from docker-compose.yml, emitted so the fragment configures standalone.
+# A container_port written VAR:default is resolved from the rendered environment.
 TABLE="$(cat <<'EOF'
 database|POSTGRES_PORT_EXTERNAL|5432|5432|DB_BIND_IP|postgres:15
 log-service|LOG_SERVICE_PORT_EXTERNAL|29000|29000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
 resource-service|RESOURCE_SERVICE_PORT_EXTERNAL|28000|28000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
 scoring-service|SCORING_SERVICE_PORT_EXTERNAL|28500|28500|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
-checker-service|CHECKER_SERVICE_PORT_EXTERNAL|22000|22000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
+checker-service|CHECKER_SERVICE_PORT_EXTERNAL|22000|CHECKER_SERVICE_PORT:22000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
 evaluation-service|EVALUATION_SERVICE_PORT_EXTERNAL|25000|25000|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
 proxy-service|PROXY_SERVICE_PORT_EXTERNAL|28600|28600|INNER_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
 contest-web-server|CONTEST_PORT_EXTERNAL|8888|8888|CONTEST_BIND_IP|ghcr.io/champyod/cms-docker-core:${IMG_TAG:-major-admin-panel}
@@ -65,6 +66,10 @@ declare -a SVC_ORDER=()
 while IFS='|' read -r svc port_var default_port container_port bind_key image; do
   [[ -n "$svc" ]] || continue
   host_port="${!port_var:-$default_port}"
+  if [[ "$container_port" == *:* ]]; then
+    port_var="${container_port%%:*}"
+    container_port="${!port_var:-${container_port#*:}}"
+  fi
   mapfile -t ips < <(resolve_ips "$bind_key" | tr ',' '\n' | sed '/^[[:space:]]*$/d')
   (( ${#ips[@]} > 0 )) || continue
   if [[ -z "${SVC_PORTS[$svc]:-}" ]]; then

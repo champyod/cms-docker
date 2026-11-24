@@ -306,8 +306,12 @@ services:
       CMS_CONFIG: ${CMS_CONFIG:-/usr/local/etc/cms.toml}
       SERVICE_TYPE: Checker
       SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
+      CHECKER_SERVICE_PORT: ${CHECKER_SERVICE_PORT:-22000}
+      CHECKER_SERVICE_SHARD: ${CHECKER_SERVICE_SHARD:-0}
+      CMS_SERVICES: ${CMS_SERVICES}
+      RPC_SECRET: ${RPC_SECRET}
     ports:
-      - "${INNER_IP:-127.0.0.1}:22000:22000"
+      - "${INNER_IP:-127.0.0.1}:22000:${CHECKER_SERVICE_PORT:-22000}"
     volumes:
       - ./config/cms.toml:/usr/local/etc/cms.toml:ro
       - cms-logs:/var/local/log/cms
@@ -320,9 +324,9 @@ services:
       sh -c "sudo mkdir -p /var/local/log/cms/Checker-${CHECKER_SERVICE_SHARD:-0} &&
              sudo chown -R cmsuser:cmsuser /var/local/log/cms &&
              sudo chmod -R 750 /var/local/log/cms &&
-             cmsChecker ${CHECKER_SERVICE_SHARD:-0}"
+             exec cms-checker"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsChecker && python3 -c \"import socket; s = socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.connect((socket.gethostbyname(socket.gethostname()), 22000))\" || exit 1"]
+      test: ["CMD-SHELL", "pgrep -x cms-checker"]
       interval: 10s
       timeout: 5s
       retries: 5

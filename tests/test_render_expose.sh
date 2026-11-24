@@ -141,5 +141,18 @@ for expect in "image: postgres:15" "image: nginx:alpine" "image: ghcr.io/champyo
   fi
 done
 
-printf '\n%s passed, %s failed\n' "${pass}" "${fail}"
+echo "case 6: a non-default checker port reaches the published target"
+dir="$(sandbox)"
+cat > "${dir}/.env" <<'ENV'
+INNER_IP=100.64.0.1
+CHECKER_SERVICE_PORT=22001
+ENV
+out="$(render "${dir}")"
+if grep -q '"100.64.0.1:22000:22001"' "$out"; then
+  ok "checker publishes host 22000 to its configured container port"
+else
+  no "checker does not follow CHECKER_SERVICE_PORT"
+fi
+
+printf '\n%s passed, %s failed\n' "$pass" "$fail"
 (( fail == 0 ))
