@@ -280,6 +280,7 @@ dependencies = [
  "cms-proto",
  "cms-svc",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

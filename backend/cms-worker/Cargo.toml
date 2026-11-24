@@ -13,3 +13,4 @@ cms-grading = { path = "../cms-grading" }
 cms-proto = { path = "../cms-proto" }
 cms-svc = { path = "../cms-svc" }
 serde_json = { workspace = true }
+tokio = { workspace = true }

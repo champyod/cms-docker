@@ -11,11 +11,13 @@
 use std::fmt;
 use std::process::ExitCode;
 
+use cms_db::FileCacheError;
 use cms_grading::stage::FsCache;
 use cms_grading::tasktypes::Runtime;
 use cms_proto::GateConfig;
 use cms_svc::{service, Host, HostError};
 use cms_worker::api::Worker;
+use cms_worker::precache::Precache;
 use cms_worker::run::Runner;
 use cms_worker::settings::{Settings, SettingsError};
 
@@ -74,11 +76,21 @@ fn build_worker(settings: &Settings) -> Result<Worker, StartError> {
     );
     let cache = FsCache::at(settings.shared_file_dir()).map_err(StartError::Cache)?;
     let runner = Runner::new(runtime, cache);
-    Ok(Worker::new(
+    let worker = Worker::new(
         settings.shard,
         TASK_TYPES.into_iter().map(str::to_owned).collect(),
         runner,
-    ))
+    );
+    let Some(database_url) = settings.database_url.as_deref() else {
+        return Ok(worker);
+    };
+    let precache = Precache::new(
+        database_url,
+        settings.temp_dir.clone(),
+        settings.cache_dir.clone(),
+    )
+    .map_err(StartError::Precache)?;
+    Ok(worker.with_precache(precache))
 }
 
 /// Why the process did not start or keep serving.
@@ -88,6 +100,8 @@ enum StartError {
     Settings(SettingsError),
     /// The shared filesystem store could not be opened.
     Cache(cms_grading::stage::StageError),
+    /// The database-backed precache could not be opened.
+    Precache(FileCacheError),
     /// The base methods could not be given the host `quit` stops.
     Stop(String),
     /// The listener could not be bound, read or run.
@@ -99,6 +113,7 @@ impl fmt::Display for StartError {
         match self {
             Self::Settings(error) => write!(formatter, "{error}"),
             Self::Cache(error) => write!(formatter, "{error}"),
+            Self::Precache(error) => write!(formatter, "{error}"),
             Self::Stop(reason) => write!(formatter, "{reason}"),
             Self::Host(error) => write!(formatter, "{error}"),
         }
@@ -110,6 +125,7 @@ impl std::error::Error for StartError {
         match self {
             Self::Settings(error) => Some(error),
             Self::Cache(error) => Some(error),
+            Self::Precache(error) => Some(error),
             Self::Stop(_) => None,
             Self::Host(error) => Some(error),
         }
@@ -166,6 +182,21 @@ mod tests {
         }
     }
 
+    fn settings(sandbox: &Sandbox, database_url: Option<&str>) -> Settings {
+        Settings {
+            shard: Shard::new(0),
+            bind_address: "127.0.0.1:0".parse().expect("the test address is valid"),
+            secret: SECRET.to_owned(),
+            database_url: database_url.map(str::to_owned),
+            cache_dir: sandbox.path.join("cache"),
+            temp_dir: sandbox.path.join("tmp"),
+            sandbox_program: PathBuf::from("isolate"),
+            max_file_size: None,
+            compilation_limits: CompilationLimits::default(),
+            trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),
+        }
+    }
+
     fn connect(addr: SocketAddr) -> TcpStream {
         let stream = TcpStream::connect(addr).expect("the host is listening");
         stream
@@ -203,19 +234,25 @@ mod tests {
     }
 
     #[test]
+    fn a_database_url_enables_precaching_without_connecting_at_startup() {
+        let sandbox = Sandbox::new();
+        let settings = settings(&sandbox, Some("not-a-database-url"));
+        let worker = build_worker(&settings).expect("a cache can open before connecting");
+        let method = Worker::methods()
+            .into_iter()
+            .find(|method| method.name == "precache_files")
+            .expect("the precache method is served");
+
+        let refusal = (method.handler)(&json!({"contest_id": 7}), &worker)
+            .expect_err("the call reaches the unusable database URL");
+
+        assert!(refusal.contains("not-a-database-url"), "{refusal}");
+    }
+
+    #[test]
     fn echo_replies_and_quit_stops_the_host() {
         let sandbox = Sandbox::new();
-        let settings = Settings {
-            shard: Shard::new(0),
-            bind_address: "127.0.0.1:0".parse().expect("the test address is valid"),
-            secret: SECRET.to_owned(),
-            cache_dir: sandbox.path.join("cache"),
-            temp_dir: sandbox.path.join("tmp"),
-            sandbox_program: PathBuf::from("isolate"),
-            max_file_size: None,
-            compilation_limits: CompilationLimits::default(),
-            trusted_limits: TrustedLimits::new(1, Duration::from_secs(1), 1024),
-        };
+        let settings = settings(&sandbox, None);
         let worker = build_worker(&settings).expect("the test cache can be opened");
         assert!(
             settings.shared_file_dir().is_dir(),
