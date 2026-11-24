@@ -5,6 +5,7 @@ const FILLER = /\b(now|currently)\b/i;
 const FIRST_PERSON = /^\s*(I|We|we)\b/;
 const COMMIT_NARRATION = /\bThis commit\b/i;
 const TRAILER = /^(Co-Authored-By|Generated with|Assisted-by):/im;
+const PROCESS_FACT = /(Preview at \d+px|Status-colour debt|Gates?:|Tests?:|Full suite|\d+ files \/ \d+ tests)/i;
 
 export function validateCommitMessage(message: string): string[] {
   const lines = message
@@ -27,6 +28,7 @@ export function validateCommitMessage(message: string): string[] {
     if (FIRST_PERSON.test(line)) errors.push(`body uses first person: ${line}`);
     if (COMMIT_NARRATION.test(line)) errors.push(`body narrates the commit: ${line}`);
     if (TRAILER.test(line)) errors.push(`body uses a forbidden trailer: ${line}`);
+    if (PROCESS_FACT.test(line)) errors.push(`body carries a process fact: ${line}`);
   }
   return errors;
 }

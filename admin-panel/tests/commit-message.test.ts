@@ -44,6 +44,12 @@ describe('validateCommitMessage', () => {
     ]));
   });
 
+  it('rejects process facts in the body', (): void => {
+    const message = 'refactor(stats): colour only state counts\n\nPreview at 900px.\nStatus-colour debt: 325 to 321.';
+    const errors = validateCommitMessage(message);
+    expect(errors.filter((error) => error.includes('process fact'))).toHaveLength(2);
+  });
+
   it('exits nonzero for a dead message file', (): void => {
     const path = join(scratch, 'message.txt');
     writeFileSync(path, 'fix(contests): this subject is deliberately longer than fifty characters');
