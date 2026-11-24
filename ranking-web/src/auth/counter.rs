@@ -185,4 +185,26 @@ mod tests {
             .expect("the key clears");
         assert_eq!(counter.read(&key).await.expect("the read"), None);
     }
+
+    /// Proves the panel's display facts share the counter window and disappear with it.
+    #[tokio::test]
+    #[ignore = "requires a live redis; CI runs it against a redis service"]
+    async fn display_identity_expires_with_its_key() {
+        let url = std::env::var("RANKING_TEST_REDIS_URL")
+            .unwrap_or_else(|_| "redis://127.0.0.1:6379".to_string());
+        let counter = Counter::connect(&url).await.expect("redis is reachable");
+        let key = format!("cms:ranking:login-meta:test-{}", std::process::id());
+        counter
+            .record_identity(&key, "alice", "1.2.3.4", Duration::from_secs(60))
+            .await
+            .expect("the metadata write");
+        let mut connection = counter.manager.clone();
+        let raw: String = connection.get(&key).await.expect("the metadata value");
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("json metadata");
+        assert_eq!(value["username"], "alice");
+        assert_eq!(value["ip"], "1.2.3.4");
+        let ttl: i64 = connection.ttl(&key).await.expect("the metadata ttl");
+        assert!(ttl > 0 && ttl <= 60);
+        let _: () = connection.del(&key).await.expect("the metadata clears");
+    }
 }
