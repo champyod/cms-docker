@@ -336,5 +336,44 @@ for worker_variable in COMPILATION_SANDBOX_MAX_PROCESSES \
 done
 
 echo ""
+echo "=== Test 18: worker compose runs cms-worker with RPC and database env ==="
+if ! command -v docker >/dev/null 2>&1; then
+  fail "docker compose worker config requires docker"
+else
+  cat > "$TEST_ROOT/compose.env" <<'ENV'
+RPC_SECRET=test-rpc-secret
+POSTGRES_USER=testuser
+POSTGRES_PASSWORD=test-db-password
+POSTGRES_DB=testdb
+ENV
+  compose_db_user=testuser
+  compose_code=0
+  (cd "$REPO_ROOT" && docker compose --env-file "$TEST_ROOT/compose.env" --profile worker config) \
+    > "$TEST_ROOT/worker-compose.yml" 2> "$TEST_ROOT/worker-compose.log" || compose_code=$?
+  assert_exit 0 "$compose_code" "worker compose config exits 0"
+  awk '
+    /^  worker:$/ { in_worker = 1 }
+    in_worker && /^  [^ ]/ && !/^  worker:$/ { exit }
+    in_worker { print }
+  ' "$TEST_ROOT/worker-compose.yml" > "$TEST_ROOT/worker-compose-worker.yml"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'exec cms-worker' "worker command execs cms-worker"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'RPC_SECRET: test-rpc-secret' "worker receives RPC_SECRET"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" "DATABASE_URL: postgresql://${compose_db_user}:[^@]*@database:5432/testdb" "worker receives the panel database URL"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_PROCESSES: "1000"' "compilation process default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_TIME_S: "10.0"' "compilation time default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'COMPILATION_SANDBOX_MAX_MEMORY_KIB: "524288"' "compilation memory default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_PROCESSES: "1000"' "trusted process default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_TIME_S: "10.0"' "trusted time default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'TRUSTED_SANDBOX_MAX_MEMORY_KIB: "4194304"' "trusted memory default is rendered"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'MAX_FILE_SIZE: "1048576"' "worker keeps its file size default"
+  assert_grep "$TEST_ROOT/worker-compose-worker.yml" 'pgrep -x cms-worker' "worker healthcheck matches the binary name"
+  if grep -q 'cmsWorker' "$TEST_ROOT/worker-compose-worker.yml"; then
+    fail "worker compose still references cmsWorker"
+  else
+    pass "worker compose has no cmsWorker reference"
+  fi
+fi
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

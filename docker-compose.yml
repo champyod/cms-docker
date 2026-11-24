@@ -735,9 +735,17 @@ services:
       ISOLATE_CGROUP_CONTROL: ${ISOLATE_CGROUP_CONTROL:-1}
       ISOLATE_CGROUP_PATH: ${ISOLATE_CGROUP_PATH:-/sys/fs/cgroup/cms-isolate}
       WORKER_SHARD: ${WORKER_SHARD:-0}
+      RPC_SECRET: ${RPC_SECRET}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:***@database:5432/${POSTGRES_DB:-cmsdb}
       CORE_SERVICES_HOST: ${CORE_SERVICES_HOST:-cms-log-service}
       KEEP_SANDBOX: ${KEEP_SANDBOX:-false}
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-1048576}
+      COMPILATION_SANDBOX_MAX_PROCESSES: ${COMPILATION_SANDBOX_MAX_PROCESSES:-1000}
+      COMPILATION_SANDBOX_MAX_TIME_S: ${COMPILATION_SANDBOX_MAX_TIME_S:-10.0}
+      COMPILATION_SANDBOX_MAX_MEMORY_KIB: ${COMPILATION_SANDBOX_MAX_MEMORY_KIB:-524288}
+      TRUSTED_SANDBOX_MAX_PROCESSES: ${TRUSTED_SANDBOX_MAX_PROCESSES:-1000}
+      TRUSTED_SANDBOX_MAX_TIME_S: ${TRUSTED_SANDBOX_MAX_TIME_S:-10.0}
+      TRUSTED_SANDBOX_MAX_MEMORY_KIB: ${TRUSTED_SANDBOX_MAX_MEMORY_KIB:-4194304}
       WORKER_NAME: ${WORKER_NAME:-worker-${WORKER_SHARD:-0}}
       WORKER_MEMORY_LIMIT: ${WORKER_MEMORY_LIMIT:-4G}
       WORKER_CPU_LIMIT: ${WORKER_CPU_LIMIT:-4}
@@ -832,7 +840,7 @@ services:
         done
 
         echo "Worker startup complete. Starting service..."
-        exec cmsWorker $$SHARD
+        exec cms-worker
       '
 
     deploy:
@@ -845,7 +853,7 @@ services:
           memory: ${WORKER_MEMORY_RESERVATION:-256M}
       replicas: ${WORKER_REPLICAS:-1}
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f cmsWorker || exit 1"]
+      test: ["CMD-SHELL", "pgrep -x cms-worker"]
       interval: 30s
       timeout: 10s
       retries: 3
