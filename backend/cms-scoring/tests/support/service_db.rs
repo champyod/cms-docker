@@ -1,5 +1,7 @@
 //! A private PostgreSQL schema and pooled session for scoring service tests.
 
+use std::sync::Arc;
+
 use chrono::NaiveDateTime;
 use cms_db::{DatasetId, ScoringCandidate, Session, SessionConfig, SubmissionId, Transaction};
 use sqlx::postgres::PgConnection;
@@ -9,6 +11,8 @@ pub use crate::service_schema::DATASET_ID;
 use crate::service_schema::{self, PARTICIPATION_ID, TASK_ID};
 
 const URL_ENV: &str = "CMS_DB_TEST_URL";
+const LIVE_DATABASE_REQUIRED: &str =
+    "CMS_DB_TEST_URL must name a scratch PostgreSQL database for live scoring tests";
 
 /// The six stored score columns read back after a service transaction.
 #[derive(Debug, PartialEq, sqlx::FromRow)]
@@ -29,16 +33,32 @@ pub struct StoredScore {
 
 /// One test's schema, base rows and pooled session.
 pub struct Fixture {
-    session: Session,
+    session: Arc<Session>,
 }
 
+// WHY: each integration binary uses a different subset of this shared fixture.
+#[allow(dead_code)]
 impl Fixture {
     /// Create a fresh schema, or report that no scratch database was configured.
     pub async fn open(schema: &'static str) -> Option<Self> {
+        Self::from_env(schema, false).await
+    }
+
+    /// Create a fresh schema, refusing to run when the scratch database is absent.
+    pub async fn required(schema: &'static str) -> Self {
+        Self::from_env(schema, true)
+            .await
+            .expect(LIVE_DATABASE_REQUIRED)
+    }
+
+    async fn from_env(schema: &'static str, required: bool) -> Option<Self> {
         let Some(url) = std::env::var(URL_ENV)
             .ok()
             .filter(|url| !url.trim().is_empty())
         else {
+            if required {
+                panic!("{LIVE_DATABASE_REQUIRED}");
+            }
             eprintln!("SKIP: set {URL_ENV} to a scratch database to run the live half");
             return None;
         };
@@ -47,15 +67,22 @@ impl Fixture {
             .expect("connecting to the scratch database");
         service_schema::create(&mut setup, schema).await;
         let config = SessionConfig::new(format!("{url}?options=-csearch_path%3D{schema}"));
-        let session = Session::open(&config)
-            .await
-            .expect("opening the pooled session");
+        let session = Arc::new(
+            Session::open(&config)
+                .await
+                .expect("opening the pooled session"),
+        );
         Some(Self { session })
     }
 
     /// The session the service transactions use.
     pub fn session(&self) -> &Session {
         &self.session
+    }
+
+    /// The same session shared with the daemon's RPC context.
+    pub fn shared_session(&self) -> Arc<Session> {
+        Arc::clone(&self.session)
     }
 
     /// Seed one evaluated result with the two testcase outcomes.
