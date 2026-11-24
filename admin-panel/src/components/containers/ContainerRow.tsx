@@ -1,6 +1,7 @@
 'use client';
 import { RowActions, rowActionGroupLabel } from '@/components/core/RowActions';
 import { Badge } from '@/components/core/Badge';
+import { Button } from '@/components/core/Button';
 import { useDictionary } from '@/hooks/useDictionary';
 import { cn } from '@/lib/utils';
 import { ContainerInfo } from '@/app/actions/docker';
@@ -44,7 +45,7 @@ function ContainerIdentity({ container }: { container: ContainerInfo }): React.J
     <div className="flex items-center gap-3 min-w-0">
       <div className={cn('w-2 h-2 shrink-0 rounded-full', container.state === 'running' ? 'bg-success animate-pulse' : 'bg-destructive')} />
       <div className="min-w-0">
-        <div className="font-bold text-foreground text-sm group-hover:text-primary transition-colors flex flex-wrap items-center gap-2">
+        <div className="font-bold text-foreground text-sm flex flex-wrap items-center gap-2">
           <span className="truncate">{container.name}</span>
           {container.protected && (
             <Badge variant="warning" className="gap-1">
@@ -177,7 +178,7 @@ function ContainerMetaRow({
       {maxRestartsReached && (
         <>
           <div className="text-destructive">• Limit reached!</div>
-          <button onClick={() => onResetRestartCount(container.id)} className="inline-flex min-h-11 min-w-11 items-center justify-center text-primary hover:text-primary/80 underline">Reset</button>
+          <Button variant="link" size="sm" onClick={() => onResetRestartCount(container.id)} className="min-h-11">Reset</Button>
         </>
       )}
       <div className="text-muted-foreground">•</div>
