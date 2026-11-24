@@ -342,6 +342,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e2b job body bridge | `from_body` readers + `write_body` writers; the input/result seam the worker loop needs | **merged** `b6a0ba5e` (see note) |
 | S-5e3a execution port | `execute::compile`/`evaluate` over the five task types; configuration refusals become failed results | **merged** `2aa1c228` (see note) |
 | S-5e3a2 sandbox archives | `archive_sandbox` calls `Stage::archive`, files a digest map on every result, and deletes independently of keep | **merged** `a5e10c98` (see note) |
+| S-5e3b worker execution layer | raw body to typed job to result body; `execute_job_group` envelope, shard stamp and error sentences | **merged** `187b4cf7` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -350,7 +351,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
-| `cms-svc-worker` (:28) | the service that executes job groups | after `cms-grading` |
+| `cms-svc-worker` (:28) | the service that executes job groups | **library merged** (`187b4cf7`); binary and host open |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
 `crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
@@ -720,3 +721,32 @@ require rewriting a shared merge, so they are recorded here and left untouched.
 
 Merged gate: **161 targets, 982 passed, 0 failed, 2 ignored**; fmt and clippy clean,
 and the two ignored tests are the same `TZ=Asia/Bangkok` child probes.
+
+### S-5e3b: the worker computes, the binary still has to carry it
+
+The lane is four commits (`371c8ac4`, `e673ed69`, `ef611a01`, `a9a97851`), merged as
+`187b4cf7`; its own gate was **35 passed**, `cargo metadata --locked` exit 0, and the
+one-line `cms-svc` lockfile edge is the only lock change. `Runner` reads a raw body
+through the grading codec, builds the task type from its parameters, runs the typed
+phase over the shared `FsCache`, and writes the result back; `execute_job_group`
+returns the same ordered `jobs` envelope, stamps the shard, writes the tombstone
+marker as one unsuccessful job, and raises the reference's busy sentence or
+`Worker failed: …` for a group refusal. `JobError::Work` carries every non-tombstone
+task refusal.
+
+Two review defects shaped it. The lockfile was restored to the base to keep the lane
+worker-only, which left `cargo metadata --locked` failing; the required `cms-svc`
+entry is restored and verified. `Runner` also resolved the language before the task
+type decided whether it needed one, which would refuse an `OutputOnly` job that never
+reads a language and an answer-only `BatchAndOutput` job; lookup is deferred, and the
+unknown-name sentence is reported only when a phase returns `NoLanguage`. Tests cover
+the Batch refusal plus the three output-only paths.
+
+Not carried: the binary, host binding, environment parsing and `precache_files`. The
+merge was made with `--no-commit` and the staged set inspected before committing; it
+contains only `backend/Cargo.lock` and `backend/cms-worker`, so this merge did not
+absorb the concurrent panel files left dirty in the shared worktree.
+
+Merged gate: **161 targets, 1004 passed, 0 failed, 2 ignored**; fmt, clippy and
+`cargo metadata --locked` all clean, and the two ignored tests are the same
+`TZ=Asia/Bangkok` child probes.
