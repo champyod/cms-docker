@@ -343,6 +343,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5e3a execution port | `execute::compile`/`evaluate` over the five task types; configuration refusals become failed results | **merged** `2aa1c228` (see note) |
 | S-5e3a2 sandbox archives | `archive_sandbox` calls `Stage::archive`, files a digest map on every result, and deletes independently of keep | **merged** `a5e10c98` (see note) |
 | S-5e3b worker execution layer | raw body to typed job to result body; `execute_job_group` envelope, shard stamp and error sentences | **merged** `187b4cf7` (see note) |
+| S-5e3c worker binary | environment settings, runtime over `fs-cache-shared`, host binding, `echo`/`quit` lifecycle | **merged** `36b9595b` (see note) |
 | S-5e2a task registry | `TaskType::of(key, params)`; the class-name key vs the human label | **merged** `dd37dd47` |
 | S-5e1 method context | `Method<C>` + generic `dispatch`/`Registry`/`Host`; the refactor that unblocks the worker | **merged** `e07a3ec2` |
 | S-8b submissions_status | the dashboard's status counts; the reconciliation bucket | **merged** `d69cc587` |
@@ -351,7 +352,7 @@ them at once. The split is now evidence-driven, not scheduled by taste:
 | S-5g messages | `messages.py` table + the `%s` arity contract; the missing-output defect | **merged** `b4966c79` |
 | S-5f write confinement | `allow_writing_only` + the symlink-out refusal the reference gets wrong | **merged** `a92a5e2f` |
 | `cms-grading` (:25) | job model, **scoring**, language + task-type registry — `tasktypes` 3,763 + `job` 710 + `stage` 734 + `languages` + `steps` | **extracted** (`15ff7cfc`) |
-| `cms-svc-worker` (:28) | the service that executes job groups | **library merged** (`187b4cf7`); binary and host open |
+| `cms-svc-worker` (:28) | the service that executes job groups | **library and binary merged** (`36b9595b`); deployment and precache open |
 
 The extraction was mechanical **because it was measured first**: `sandbox/` referenced
 `crate::tasktypes` and `crate::job` nowhere, while `tasktypes/` referenced `crate::sandbox` in
@@ -750,3 +751,25 @@ absorb the concurrent panel files left dirty in the shared worktree.
 Merged gate: **161 targets, 1004 passed, 0 failed, 2 ignored**; fmt, clippy and
 `cargo metadata --locked` all clean, and the two ignored tests are the same
 `TZ=Asia/Bangkok` child probes.
+
+### S-5e3c: the worker binary exists; the container still runs Python
+
+The lane is four commits (`1b009b6d`, `e4468f41`, `995ea163`, `5e6c4214`), merged as
+`36b9595b`; its own gate was **46 passed**, with fmt, clippy, `cargo build` and
+`cargo metadata --locked` clean. `Settings` reads the worker's environment, names
+every refused variable, and builds `CompilationLimits`/`TrustedLimits` in bytes and
+seconds. The binary composes `Runtime`, `FsCache`, `Runner` and `Worker`, binds the
+five task types, attaches `quit`, reports the bound address and maps a fatal stop to
+a failure exit. The smoke test sends `echo` and `quit` over the real CRLF RPC framing.
+
+One path defect was caught before merge: the Python shared cacher stores files under
+`cache_dir/fs-cache-shared` (`filecacher.py:534,597`), not `cache_dir`. The binary
+opens `Settings::shared_file_dir()`, and the join is tested.
+
+Deployment is not switched. `docker-compose.yml` still starts `cmsWorker`, and the
+worker environment does not pass `RPC_SECRET`, which the Rust binary requires; the
+compose and config-sync change plus `precache_files` remain open.
+
+Merged gate: **162 targets, 1015 passed, 0 failed, 2 ignored**; fmt, clippy, build
+and `cargo metadata --locked` clean, with the same two `TZ=Asia/Bangkok` child probes.
+
