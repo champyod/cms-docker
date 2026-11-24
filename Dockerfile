@@ -26,6 +26,7 @@ COPY backend/ ./
 # Only the service binaries shipped in the runtime image are built here.
 RUN cargo build --release --package cms-svc --bin cms-log-service --bin cms-resource-service --bin cms-checker
 RUN cargo build --release --package cms-worker --bin cms-worker
+RUN cargo build --release --package cms-scoring --bin cms-scoring
 
 FROM ${BASE_IMAGE}
 
@@ -216,6 +217,7 @@ COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-log-
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-resource-service /home/cmsuser/cms/bin/cms-resource-service
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-checker /home/cmsuser/cms/bin/cms-checker
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-worker /home/cmsuser/cms/bin/cms-worker
+COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-scoring /home/cmsuser/cms/bin/cms-scoring
 
 # Install CMS package from the src directory
 RUN --mount=type=cache,target=/home/cmsuser/.cache/pip,uid=1001 cd src && python3 install.py cms --devel

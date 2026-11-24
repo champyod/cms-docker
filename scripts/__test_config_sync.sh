@@ -416,5 +416,17 @@ else
 fi
 
 echo ""
+echo "=== Test 21: scoring port renders from config.toml into .env ==="
+setup_test_root
+run_sync
+assert_exit 0 $? "real run with the scoring port exits 0"
+assert_grep "$TEST_ROOT/config.toml" '^SCORING_SERVICE_PORT = 28500[[:space:]]' "scoring port default is merged into config.toml"
+assert_grep "$TEST_ROOT/.env" '^SCORING_SERVICE_PORT=28500$' ".env carries the scoring port default"
+sed -i 's/^SCORING_SERVICE_PORT = .*/SCORING_SERVICE_PORT = 28501/' "$TEST_ROOT/config.toml"
+run_sync
+assert_exit 0 $? "real run with a scoring port override exits 0"
+assert_grep "$TEST_ROOT/.env" '^SCORING_SERVICE_PORT=28501$' ".env renders the configured scoring port"
+
+echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 [[ "$FAIL" -eq 0 ]]

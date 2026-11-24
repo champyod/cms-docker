@@ -6,10 +6,12 @@ edition = "2021"
 [dependencies]
 cms-db = { path = "../cms-db" }
 cms-grading = { path = "../cms-grading" }
+cms-proto = { path = "../cms-proto" }
+cms-svc = { path = "../cms-svc" }
 chrono = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 
 [dev-dependencies]
 sqlx = { workspace = true }

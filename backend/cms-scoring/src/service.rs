@@ -48,6 +48,15 @@ pub enum ScoringServiceError {
     },
 }
 
+/// A committed score and the dataset activity observed in the same transaction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ScoredCandidate {
+    /// The score row written by the transaction.
+    pub row: ScoreRow,
+    /// Whether the candidate's dataset was its task's active dataset.
+    pub is_active: bool,
+}
+
 /// Read, score and persist one candidate in a single transaction.
 ///
 /// # Errors
@@ -60,6 +69,27 @@ pub async fn score_candidate(
     candidate: &ScoringCandidate,
     scored_at: NaiveDateTime,
 ) -> Result<ScoreRow, ScoringServiceError> {
+    Ok(score_candidate_with_activity(session, candidate, scored_at)
+        .await?
+        .row)
+}
+
+/// Read, score and persist one candidate, returning its committed row and dataset activity.
+///
+/// Dataset activity comes from the same bundle and transaction snapshot as the
+/// score, so a concurrent active-dataset change cannot make notification disagree
+/// with the result that was scored.
+///
+/// # Errors
+///
+/// Returns [`ScoringServiceError::Read`] when the bundle cannot be read,
+/// [`ScoringServiceError::Score`] when the scoring core refuses it, and the named
+/// database variant when beginning, writing, committing or rolling back fails.
+pub async fn score_candidate_with_activity(
+    session: &Session,
+    candidate: &ScoringCandidate,
+    scored_at: NaiveDateTime,
+) -> Result<ScoredCandidate, ScoringServiceError> {
     let mut transaction = session.begin().await?;
     let bundle = match read_result_bundle(transaction.connection(), candidate).await {
         Ok(bundle) => bundle,
@@ -82,19 +112,17 @@ pub async fn score_candidate(
             return rollback(transaction, "score", ScoringServiceError::Score(error)).await;
         }
     };
-    if let Err(error) = write_score(transaction.connection(), &row).await {
-        return rollback(
-            transaction,
-            "write",
-            ScoringServiceError::Write(SessionError::Database(error)),
-        )
-        .await;
+    if let Err(error) = write_candidate_score(&mut transaction, &row).await {
+        return rollback(transaction, "write", error).await;
     }
     transaction
         .commit()
         .await
         .map_err(|error| ScoringServiceError::Commit(SessionError::Database(error)))?;
-    Ok(row)
+    Ok(ScoredCandidate {
+        row,
+        is_active: bundle.dataset.is_active,
+    })
 }
 
 /// Invalidate every fully scored result matching `filter` in one transaction.
@@ -144,6 +172,15 @@ pub async fn invalidate(
         .await
         .map_err(|error| ScoringServiceError::Commit(SessionError::Database(error)))?;
     Ok(candidates)
+}
+
+async fn write_candidate_score(
+    transaction: &mut Transaction,
+    row: &ScoreRow,
+) -> Result<(), ScoringServiceError> {
+    write_score(transaction.connection(), row)
+        .await
+        .map_err(|error| ScoringServiceError::Write(SessionError::Database(error)))
 }
 
 async fn invalidate_result(
