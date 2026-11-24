@@ -22,6 +22,8 @@
 
 use std::collections::BTreeMap;
 
+use serde_json::{json, Value};
+
 /// One submission, as the score type is asked about it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Submission {
@@ -87,6 +89,20 @@ pub struct Scored {
     pub ranking_details: Vec<String>,
 }
 
+impl Scored {
+    /// The JSON document stored in `score_details`.
+    #[must_use]
+    pub fn details_json(&self) -> Value {
+        self.details.to_json()
+    }
+
+    /// The JSON document stored in `public_score_details`.
+    #[must_use]
+    pub fn public_details_json(&self) -> Value {
+        self.public_details.to_json()
+    }
+}
+
 /// The document behind a score, whose shape is the score type's.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreDetails {
@@ -94,6 +110,20 @@ pub enum ScoreDetails {
     Subtasks(Vec<Subtask>),
     /// One entry per testcase, as `Sum` produces: it has no subtasks to group.
     Testcases(Vec<SumRow>),
+}
+
+impl ScoreDetails {
+    /// The JSON document stored in `score_details` or `public_score_details`.
+    ///
+    /// The objects are explicit because the internal enums carry distinctions the
+    /// reference never stores, and an absent measurement is stored as JSON null.
+    #[must_use]
+    pub fn to_json(&self) -> Value {
+        match self {
+            Self::Subtasks(subtasks) => Value::Array(subtasks.iter().map(subtask_json).collect()),
+            Self::Testcases(rows) => Value::Array(rows.iter().map(sum_row_json).collect()),
+        }
+    }
 }
 
 /// One subtask of a details document.
@@ -180,4 +210,66 @@ pub enum SumRow {
         /// The codename of the hidden testcase.
         index: String,
     },
+}
+
+fn sum_row_json(row: &SumRow) -> Value {
+    match row {
+        SumRow::Shown {
+            index,
+            outcome,
+            text,
+            time,
+            memory,
+        } => json!({
+            "idx": index,
+            "outcome": outcome,
+            "text": text,
+            "time": time,
+            "memory": memory
+        }),
+        SumRow::Hidden { index } => json!({ "idx": index }),
+    }
+}
+
+fn subtask_json(subtask: &Subtask) -> Value {
+    match subtask {
+        Subtask::Scored {
+            index,
+            score_fraction,
+            score,
+            max_score,
+            testcases,
+        } => json!({
+            "idx": index,
+            "score_fraction": score_fraction,
+            "score": score,
+            "max_score": max_score,
+            "testcases": Value::Array(testcases.iter().map(row_json).collect())
+        }),
+        Subtask::Unscored { index, testcases } => json!({
+            "idx": index,
+            "testcases": Value::Array(testcases.iter().map(row_json).collect())
+        }),
+    }
+}
+
+fn row_json(row: &Row) -> Value {
+    match row {
+        Row::Shown(testcase) => testcase_json(testcase),
+        Row::Hidden { index } => json!({ "idx": index }),
+    }
+}
+
+fn testcase_json(testcase: &Testcase) -> Value {
+    json!({
+        "idx": testcase.index,
+        "outcome": testcase.outcome,
+        "text": testcase.text,
+        "time": testcase.time,
+        "time_limit": testcase.time_limit,
+        "time_limit_was_exceeded": testcase.time_limit_was_exceeded,
+        "memory": testcase.memory,
+        "show_in_restricted_feedback": testcase.show_in_restricted_feedback,
+        "show_in_oi_restricted_feedback": testcase.show_in_oi_restricted_feedback
+    })
 }
