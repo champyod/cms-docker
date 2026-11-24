@@ -28,6 +28,7 @@ fn stats() -> ExecutionStats {
 fn compilation() -> Compilation {
     Compilation {
         sandboxes: vec![PathBuf::from("/sandbox/compile")],
+        sandbox_digests: Default::default(),
         success: true,
         compilation_success: Some(true),
         text: Some(vec!["Compilation succeeded".to_owned()]),
@@ -40,6 +41,7 @@ fn compilation() -> Compilation {
 fn evaluation() -> Evaluation {
     Evaluation {
         sandboxes: vec![PathBuf::from("/sandbox/evaluate")],
+        sandbox_digests: Default::default(),
         success: true,
         ran: true,
         outcome: Some(42.5),

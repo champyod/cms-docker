@@ -1,18 +1,4 @@
-//! The seam between a typed job and the task type that runs it.
-//!
-//! [`compile`] hands a [`CompilationJob`] to the selected task type's compilation,
-//! and [`evaluate`] hands an [`EvaluationJob`] to its evaluation, with the caller's
-//! toolchain, runtime and store. The phase decides the work; this module only
-//! dispatches it and translates its result.
-//!
-//! A file count, manager or executable count that cannot describe the selected
-//! task is a configuration refusal: the reference records it on the job and
-//! returns normally, so it becomes a failed result here. A missing toolchain,
-//! stage, spawn, step or any other refusal stays an error for the whole group.
-//!
-//! [`Compilation`] and [`Evaluation`] keep text optional because the reference
-//! writes JSON null when configuration prevented a result, while an empty list
-//! means a phase ran and had no sentences to report.
+//! Typed jobs keep configuration refusals as results and worker refusals as group errors.
 
 use cms_proto::DigestMap;
 
@@ -29,6 +15,7 @@ impl Compilation {
     pub fn configuration_error() -> Self {
         Self {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             compilation_success: None,
             text: None,
@@ -45,6 +32,7 @@ impl Evaluation {
     pub fn configuration_error() -> Self {
         Self {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             ran: false,
             outcome: None,
@@ -57,13 +45,7 @@ impl Evaluation {
     }
 }
 
-/// Compiles one typed job, translating only configuration refusals into failed results.
-///
-/// # Errors
-///
-/// [`TaskError::NoLanguage`] when a task that reaches a language phase receives no
-/// toolchain; [`TaskError::Stage`], [`TaskError::Spawn`], [`TaskError::Step`] and
-/// every other non-configuration refusal propagate.
+/// Configuration refusals become failed results so one bad job does not fail its group.
 pub fn compile(
     task_type: &TaskType,
     job: &CompilationJob,
@@ -87,13 +69,7 @@ pub fn compile(
     translate(result, Compilation::configuration_error)
 }
 
-/// Evaluates one typed job, translating only configuration refusals into failed results.
-///
-/// # Errors
-///
-/// [`TaskError::NoLanguage`] when a task that reaches a language phase receives no
-/// toolchain; [`TaskError::Stage`], [`TaskError::Spawn`], [`TaskError::Step`] and
-/// every other non-configuration refusal propagate.
+/// Configuration refusals become failed results so one bad job does not fail its group.
 pub fn evaluate(
     task_type: &TaskType,
     job: &EvaluationJob,
@@ -125,6 +101,7 @@ pub fn evaluate(
 fn output_only_evaluation(answer: OutputOnlyAnswer) -> Evaluation {
     Evaluation {
         sandboxes: Vec::new(),
+        sandbox_digests: DigestMap::new(),
         success: answer.success,
         ran: false,
         outcome: answer.outcome,
@@ -143,6 +120,7 @@ fn batch_and_output_evaluation(answer: BatchAndOutputAnswer) -> Evaluation {
     };
     Evaluation {
         sandboxes: answer.sandboxes,
+        sandbox_digests: answer.sandbox_digests,
         success: answer.success,
         ran: answer.ran,
         outcome: answer.outcome,
@@ -158,6 +136,7 @@ impl From<Verdict> for Evaluation {
     fn from(verdict: Verdict) -> Self {
         Self {
             sandboxes: verdict.sandboxes,
+            sandbox_digests: verdict.sandbox_digests,
             success: verdict.success,
             ran: verdict.ran,
             outcome: verdict.outcome,
@@ -195,12 +174,14 @@ fn translate<T>(
 #[cfg(test)]
 mod tests {
     use super::{Evaluation, Verdict};
+    use cms_proto::DigestMap;
     use serde_json::Map;
 
     #[test]
     fn failed_communication_verdict_keeps_text_null() {
         let verdict = Verdict {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success: false,
             ran: false,
             outcome: None,

@@ -1,34 +1,17 @@
-//! The boxes an evaluation makes, what each is handed, and how each is gone.
-//!
-//! The manager gets a box of its own and the testcase's input, and each process
-//! gets a box of its own named for its index and the executable it runs, so that
-//! two processes never share a directory. The boxes are named for what runs in
-//! them, which is how a report names them and how a worker telling them apart while
-//! looking can.
-
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::job::EvaluationJob;
 use crate::stage::{Cache, CacheHandle, FileDigest, StageError};
-use crate::tasktypes::{handle, Run, Runtime, TaskError};
+use crate::tasktypes::{handle, Closed, Run, Runtime, TaskError};
 
 use super::{INPUT, MANAGER};
 
-/// The two boxes, each named for what runs in it, a process's own box named for its
-/// index too so that two processes never share a directory.
 const MANAGER_BOX: &str = "manager_evaluate";
 const USER_BOX: &str = "user_evaluate";
 
-/// The one store every box of an evaluation reads, handed out as a box of its own.
-///
-/// The reference passes its file cacher to every sandbox it creates, and a `Box`
-/// cannot be handed to two, so the store is shared behind a handle and each box is
-/// handed one. Nothing else changes: a submission is one file however many
-/// processes run it.
 #[derive(Clone)]
 pub(super) struct Shared(Arc<dyn Cache>);
 
@@ -89,13 +72,16 @@ pub(super) fn users_of(
     Ok(runs)
 }
 
-/// Every box kept where the job asked for it and removed otherwise, the manager's
-/// first, answered with the path the report names each box by.
-pub(super) fn close(manager: Run, users: Vec<Run>, keep: bool) -> Result<Vec<PathBuf>, TaskError> {
-    let mut sandboxes = Vec::with_capacity(users.len() + 1);
-    sandboxes.push(manager.close(keep)?);
+pub(super) fn close(
+    manager: Run,
+    users: Vec<Run>,
+    keep: bool,
+    archive: bool,
+) -> Result<Vec<Closed>, TaskError> {
+    let mut closed = Vec::with_capacity(users.len() + 1);
+    closed.push(manager.close(keep, archive)?);
     for run in users {
-        sandboxes.push(run.close(keep)?);
+        closed.push(run.close(keep, archive)?);
     }
-    Ok(sandboxes)
+    Ok(closed)
 }

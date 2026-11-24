@@ -1,14 +1,3 @@
-//! What the two phases left behind, and what that is worth.
-//!
-//! The figures are read first and merged as one run's, for the two were alive at
-//! once: a box that did not work leaves the evaluation undecided and the figures of
-//! nothing, and a stopped, killed or non-zero run did not do what it was asked to.
-//!
-//! The answer is then read in the reference's order: a run that did not do what it
-//! was asked to is told why, an answer that was never written is said so, and a job
-//! that only asked to be run is answered before the answer is looked for. What the
-//! answer is worth is left to the comparison.
-
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -23,10 +12,6 @@ use super::{Evaluation, OUTPUT};
 
 const NO_CREDIT: f64 = 0.0;
 
-/// Fills in the score and the sentences once both boxes have worked, in the
-/// reference's order: a run that did not do what it was asked to is told why, an
-/// answer that was never written is said so, and a job that only asked to be run is
-/// answered before the answer is looked for.
 pub(super) fn judge(
     evaluation: &mut Evaluation,
     second: &Run,
@@ -67,15 +52,13 @@ pub(super) fn judge(
     Ok(())
 }
 
-/// What the two phases' figures say, merged as one run's for they were alive at once:
-/// a box that did not work is undecided, a stopped, killed or non-zero run did not do
-/// what it was asked to, and the figures of a box that failed are of nothing.
 pub(super) fn decide(first: &ExecutionStats, second: &ExecutionStats) -> Evaluation {
     let worked = |stats: &ExecutionStats| stats.exit_status != ExitStatus::SandboxError;
     let clean = |stats: &ExecutionStats| stats.exit_status == ExitStatus::Ok;
     let success = worked(first) && worked(second);
     Evaluation {
         sandboxes: Vec::new(),
+        sandbox_digests: cms_proto::DigestMap::new(),
         success,
         ran: clean(first) && clean(second),
         outcome: None,

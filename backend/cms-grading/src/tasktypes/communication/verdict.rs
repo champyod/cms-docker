@@ -1,19 +1,9 @@
-//! What a Communication evaluation left behind, and what that is worth.
-//!
-//! The order is the reference's and the only one that can be had: whether every box
-//! worked, then the job's own two flags, then what a process is blamed for, and only
-//! then what the manager printed. A job that only asked to be run is answered before
-//! a process's failure is looked for, and a process's failure is answered before the
-//! manager is read at all.
-//!
-//! A process that was stopped, killed or reclassified scores nothing and is told
-//! why, in the same words a Batch run is told, which is the reference's own table.
-//! Otherwise the score is the manager's, and so is every word a report shows.
-
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
 use std::path::PathBuf;
+
+use cms_proto::DigestMap;
 
 use crate::job::EvaluationJob;
 use crate::stage::FileDigest;
@@ -28,40 +18,30 @@ use crate::tasktypes::{Run, TaskError};
 
 use super::{Communication, NO_CREDIT, OUTPUT};
 
-/// What a Communication evaluation left behind, as the result is filed.
-///
-/// The score is the manager's rather than a file to be compared, and what the
-/// administrators are shown is beside what a contestant is shown.
 #[derive(Debug, Clone, PartialEq)]
+/// Keeps the manager's score and every process box in one transferable result.
 pub struct Verdict {
-    /// The paths the report names the boxes by, the manager's first and then one
-    /// per process in index order.
+    /// Names the manager first and each process in index order.
     pub sandboxes: Vec<PathBuf>,
-    /// Whether every box worked and the manager terminated correctly, so that what
-    /// the manager reported can be believed.
+    /// The archive digest of each box that was archived, keyed by its path.
+    pub sandbox_digests: DigestMap,
+    /// Separates a failed box or manager from a legitimately wrong submission.
     pub success: bool,
-    /// Whether the run did what it was asked to: the manager printed a score that
-    /// can be read, and no process was stopped, killed or reclassified. It means
-    /// nothing unless the boxes worked.
+    /// Distinguishes a readable manager score from a stopped or reclassified run.
     pub ran: bool,
     /// The score, absent when the run did not answer.
     pub outcome: Option<f64>,
-    /// The sentences a report shows a contestant, the first of which the rest are
-    /// arguments for.
+    /// Preserves the manager's contestant-facing sentence and its arguments in order.
     pub text: Vec<String>,
-    /// What the manager said to the administrators, which a contestant is not shown,
-    /// and what is said when nothing of the manager's could be read.
+    /// Keeps administrator diagnostics out of the contestant-facing report.
     pub admin_text: Option<String>,
     /// What the processes were charged, absent when no box worked.
     pub stats: Option<ExecutionStats>,
-    /// The digest of the file the manager wrote for a user test, absent unless the
-    /// job asked for it and the manager wrote one.
+    /// Preserves a requested manager file after its box is closed.
     pub user_output: Option<FileDigest>,
 }
 
 impl Communication {
-    /// What the whole run is worth, given what the manager and the processes left
-    /// behind, and whether the job asked for the manager's own file.
     pub(super) fn judge(
         &self,
         run: &Run,
@@ -79,6 +59,7 @@ impl Communication {
         let success = boxes_worked && manager.exit_status == ExitStatus::Ok;
         let mut verdict = Verdict {
             sandboxes: Vec::new(),
+            sandbox_digests: DigestMap::new(),
             success,
             ran: charged.exit_status == ExitStatus::Ok,
             outcome: None,
@@ -120,8 +101,6 @@ impl Communication {
     }
 }
 
-/// The file the manager wrote for a user test to be shown, stored under the digest
-/// the job's report names it by, and absent where the manager wrote none.
 fn taken(run: &Run) -> Result<Option<FileDigest>, TaskError> {
     if !run.files().path(OUTPUT).is_file() {
         return Ok(None);

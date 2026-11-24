@@ -1,38 +1,3 @@
-//! The Two Steps task type: one program run twice, the first computing something the
-//! second has to recover, the two talking through a single named pipe.
-//!
-//! The order is the reference's and the only one that works. The pipe's directory is
-//! made before either box, because a box is handed it as a directory to make visible
-//! and one that is not there cannot be made visible. Each box is handed the manager it
-//! runs — the one executable a result holds — and only the first is handed the input.
-//! Both runs are then started before either is waited for: the first writes down the
-//! pipe and the second reads up it, so a first waited for before the second started
-//! would wait for a reader that had not been started. What the two were charged is
-//! then merged as one run's, for they were alive at once.
-//!
-//! The answer is read in the order the reference reads it: a box that did not work is
-//! undecided, a stopped or killed run is told why, the second phase's answer is judged
-//! on the file it was told to write, and a job that only asked to be run is answered
-//! before any of that. What the answer is worth is left to the comparison, as a
-//! [`Batch`](super::Batch) evaluation leaves its file to it.
-//!
-//! Each of those steps is one module's whole subject — [`pipes`] makes the directory
-//! the two phases talk through, [`boxes`] opens the box of one phase and hands it the
-//! manager it runs, [`launch`] starts each phase under the dataset's own limits, and
-//! [`verdict`] reads what the two left behind. The one program they both run is built
-//! by [`compile`]: the dataset's manager, its header, the two submitted sources and
-//! the headers they are compiled against.
-//!
-//! # Errors
-//!
-//! [`TaskError`], and only that: parameters that are not the one a Two Steps task has or
-//! whose value is not the name the declaration gives it, a submission that does not carry
-//! exactly two files, a dataset missing the manager or one
-//! of the headers it is compiled with, a result holding a number of executables other
-//! than one, a limit the dataset set that is not a positive number, a directory or a
-//! named pipe that could not be made, a file the store would not hand over, and a run the
-//! box could not carry or read back.
-
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
@@ -56,8 +21,6 @@ use super::{Evaluation, Parameter, Parameters, Run, Runtime, Shared, TaskError, 
 
 const INPUT: &str = "input.txt";
 const OUTPUT: &str = "output.txt";
-/// Where inside a box the pipe's directory is seen, and the name the pipe has inside
-/// it, which is the name both phases are handed as their third argument.
 const PIPE_MOUNT: &str = "/fifo";
 const PIPE_NAME: &str = "fifo";
 const OUTPUT_EVAL_COMPARATOR: &str = "comparator";
@@ -74,9 +37,6 @@ const EVALUATION: Parameter = Parameter::choice(
 /// The one parameter a task type of this kind is configured with.
 static PARAMETERS: [Parameter; 1] = [EVALUATION];
 
-/// One phase: the box it runs in, the step its manager is told it is, the file it
-/// reads from that box, and the file its answer is written to. Only the first phase
-/// reads the input and only the second writes the answer.
 struct Phase {
     name: &'static str,
     step: &'static str,
@@ -104,13 +64,7 @@ pub struct TwoSteps {
 }
 
 impl TwoSteps {
-    /// Reads the one parameter a Two Steps task type is configured with: whether the
-    /// second phase's answer is compared with a white diff or by a comparator.
-    ///
-    /// # Errors
-    ///
-    /// [`TaskError::Parameters`] unless the parameters are a list of exactly one, and
-    /// [`TaskError::Parameter`] unless its value is one of the choice's names.
+    /// Refuses malformed parameters before either phase is opened.
     pub fn new(parameters: &Value) -> Result<Self, TaskError> {
         let parameters = Parameters::of(parameters, &PARAMETERS)?;
         Ok(Self {
@@ -118,20 +72,13 @@ impl TwoSteps {
         })
     }
 
-    /// Whether a comparator the dataset holds reads the second phase's answer, rather
-    /// than the two files being diffed.
     #[must_use]
+    /// Selects a dataset checker instead of a plain whitespace-folded diff.
     pub fn uses_comparator(&self) -> bool {
         self.output_eval == OUTPUT_EVAL_COMPARATOR
     }
 
-    /// Judges one submission on one testcase by running the manager twice, the first
-    /// computing and the second recovering, both through one pipe.
-    ///
-    /// # Errors
-    ///
-    /// [`TaskError`], and only that: everything this module's own Errors section
-    /// names, which is what each of the steps below refuses.
+    /// Starts both phases before waiting so the pipe always has a reader and writer.
     pub fn evaluate(
         &self,
         job: &EvaluationJob,
@@ -177,11 +124,6 @@ impl TwoSteps {
     }
 }
 
-/// What is left once both phases have been started: they are waited for, the answer the
-/// second phase was told to write is judged, and both boxes and the pipe are closed.
-///
-/// The two boxes arrive in the order the phases do, the first before the second, so
-/// that neither the judging nor the closing of the two has to say which is which.
 fn finish(
     [first, second]: [Run; 2],
     [one, two]: [Launch; 2],
@@ -218,7 +160,12 @@ fn finish(
         .as_ref()
         .map_or(evaluation.success, |judged| judged.success);
     let keep = job.archive_sandbox || !judged_ok;
-    evaluation.sandboxes = vec![first.close(keep)?, second.close(keep)?];
+    for closed in [
+        first.close(keep, job.archive_sandbox)?,
+        second.close(keep, job.archive_sandbox)?,
+    ] {
+        closed.record(&mut evaluation.sandboxes, &mut evaluation.sandbox_digests);
+    }
     if let Some(judged) = judged {
         evaluation.absorb(judged);
     }
