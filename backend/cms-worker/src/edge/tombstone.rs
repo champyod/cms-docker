@@ -26,6 +26,9 @@
 use std::fmt;
 
 use cms_db::{CacheError, CacheHandle, FileDigest};
+use cms_grading::stage::StageError;
+use cms_grading::steps::StepError;
+use cms_grading::tasktypes::TaskError;
 
 /// Why a job could not be run, or could not be run to the end.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,6 +46,11 @@ pub enum JobError {
     /// name that says what it costs the job, so [`dispose`] can map it to a
     /// result rather than raise it.
     Tombstone,
+    /// The work itself refused, carrying the sentence the task type reported.
+    Work {
+        /// The task type's own refusal, without a Rust debug representation.
+        reason: String,
+    },
 }
 
 impl fmt::Display for JobError {
@@ -52,11 +60,29 @@ impl fmt::Display for JobError {
                 write!(f, "no task type named `{name}` is available to this worker")
             }
             Self::Tombstone => write!(f, "a file the job needs is the tombstone"),
+            Self::Work { reason } => write!(f, "{reason}"),
         }
     }
 }
 
 impl std::error::Error for JobError {}
+
+/// Translates a task type's refusal into the worker's own error vocabulary.
+///
+/// Only the tombstone keeps its disposal as one unsuccessful job; every other
+/// refusal fails the group and carries the task type's display sentence.
+#[must_use]
+pub fn from_task_error(error: TaskError) -> JobError {
+    match error {
+        TaskError::Stage(StageError::Cache(CacheError::Tombstone))
+        | TaskError::Step(StepError::Stage(StageError::Cache(CacheError::Tombstone))) => {
+            JobError::Tombstone
+        }
+        error => JobError::Work {
+            reason: error.to_string(),
+        },
+    }
+}
 
 /// The flags one job is reported back with: whether it succeeded, and the marker
 /// that says why it did not.

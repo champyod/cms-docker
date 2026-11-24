@@ -14,6 +14,16 @@
 //! that turns a tombstone into a result, and the request is charged to the clock
 //! and the worker released whichever way it left.
 //!
+//! [`run`] is the typed-job path inside that loop: it reads the wire body
+//! through the grading crate, resolves the job's language, dispatches the selected
+//! phase with the worker's runtime and cache, and writes the result back through
+//! the same grading crate.
+//!
+//! [`api`] is the RPC seam over that loop: it decodes a group, returns the same
+//! bodies in order, and translates a busy worker or a failed group into the
+//! reference's two sentences. Its method table keeps the base `echo` and `quit`
+//! calls beside the worker's own method.
+//!
 //! # Errors
 //!
 //! [`cms_db::CacheError`], [`edge::JobError`] and [`service::ServiceError`], and
@@ -25,5 +35,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod api;
 pub mod edge;
+pub mod run;
 pub mod service;

@@ -8,9 +8,11 @@
 
 use std::str::FromStr as _;
 
-use cms_grading::stage::{CacheHandle, FileDigest};
+use cms_grading::stage::{CacheError, CacheHandle, FileDigest, StageError};
+use cms_grading::steps::StepError;
+use cms_grading::tasktypes::TaskError;
 use cms_worker::edge::{
-    content_digest, dispose, resolve_task_type, Accounting, JobError, JobResult,
+    content_digest, dispose, from_task_error, resolve_task_type, Accounting, JobError, JobResult,
 };
 
 /// A digest of a file the store really holds, so a refusal is about the tombstone
@@ -34,6 +36,46 @@ fn tombstone() -> CacheHandle {
 fn stored() -> CacheHandle {
     let digest = FileDigest::from_str(STORED_DIGEST).expect("a forty-digit digest is a digest");
     CacheHandle::new(digest)
+}
+
+#[test]
+fn a_tombstone_under_stage_is_a_tombstone_refusal() {
+    let refusal = TaskError::Stage(StageError::Cache(CacheError::Tombstone));
+    assert_eq!(from_task_error(refusal), JobError::Tombstone);
+}
+
+#[test]
+fn a_tombstone_under_a_checker_step_is_a_tombstone_refusal() {
+    let refusal = TaskError::Step(StepError::Stage(StageError::Cache(CacheError::Tombstone)));
+    assert_eq!(from_task_error(refusal), JobError::Tombstone);
+}
+
+#[test]
+fn every_other_task_refusal_is_work_with_its_sentence() {
+    let refusals = [
+        (
+            TaskError::Parameters,
+            "the task type parameters are not the entries the task type declares",
+        ),
+        (
+            TaskError::NoLanguage,
+            "the job needs a language, but no toolchain was given",
+        ),
+        (
+            TaskError::Stage(StageError::Store {
+                reason: String::from("disk full"),
+            }),
+            "the store refused: disk full",
+        ),
+    ];
+    for (refusal, sentence) in refusals {
+        assert_eq!(
+            from_task_error(refusal),
+            JobError::Work {
+                reason: String::from(sentence),
+            }
+        );
+    }
 }
 
 #[test]
