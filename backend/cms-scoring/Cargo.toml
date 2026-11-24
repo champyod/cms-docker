@@ -1,0 +1,12 @@
+[package]
+name = "cms-scoring"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cms-db = { path = "../cms-db" }
+cms-grading = { path = "../cms-grading" }
+chrono = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
