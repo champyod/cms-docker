@@ -1,0 +1,2 @@
+#!/bin/sh
+exec bun "$(dirname "$0")/../admin-panel/scripts/__check_commit_message.ts" "$1"

@@ -10,6 +10,7 @@
     "scheduler": "bun run src/scheduler/main.ts",
     "icons": "bun run scripts/generate-icons.mts",
     "icons:check": "bun run scripts/generate-icons.mts --check",
+    "commit:check": "bun scripts/__check_commit_message.ts",
     "test": "vitest run",
     "design:check": "bun run design:tokens && bun run design:usage && bun run design:colour && bun run design:modes && bun run design:token-coverage && bun run design:controls && bun run design:archetypes && bun run design:modes-per-page && bun run design:inventory && bun run design:banned",
     "design:tokens": "bun scripts/__check_design_tokens.mjs",
