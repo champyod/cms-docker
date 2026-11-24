@@ -13,7 +13,9 @@ use crate::task::Task;
 /// false, so the flag is spelled `IS NOT DISTINCT FROM` to give the false
 /// `Dataset.active` returns for a task with no active dataset.
 pub const DATASET_BY_ID: &str = "\
-    SELECT d.id, d.task_id, d.task_type, d.time_limit, d.memory_limit,
+    SELECT d.id, d.task_id, d.task_type, d.score_type,
+           d.score_type_parameters::text AS score_type_parameters,
+           d.time_limit, d.memory_limit,
            t.active_dataset_id IS NOT DISTINCT FROM d.id AS is_active
     FROM datasets AS d
     JOIN tasks AS t ON t.id = d.task_id
@@ -26,7 +28,9 @@ pub const DATASET_BY_ID: &str = "\
 /// comparison sits under `OR`, so a task with no active dataset still admits its
 /// `autojudge` rows.
 pub const JUDGEABLE_DATASETS: &str = "\
-    SELECT d.id, d.task_id, d.task_type, d.time_limit, d.memory_limit,
+    SELECT d.id, d.task_id, d.task_type, d.score_type,
+           d.score_type_parameters::text AS score_type_parameters,
+           d.time_limit, d.memory_limit,
            t.active_dataset_id IS NOT DISTINCT FROM d.id AS is_active
     FROM datasets AS d
     JOIN tasks AS t ON t.id = d.task_id
@@ -60,6 +64,10 @@ pub struct DatasetRecord {
     pub task_id: i32,
     /// `datasets.task_type`, the name of the `TaskType` that judges it.
     pub task_type: String,
+    /// `datasets.score_type`, the name of the score type that scores it.
+    pub score_type: String,
+    /// `datasets.score_type_parameters`, carried as the raw `jsonb` text the query casts.
+    pub score_type_parameters: String,
     /// `datasets.time_limit`, in seconds, absent when the dataset sets none.
     pub time_limit: Option<f64>,
     /// `datasets.memory_limit`, in bytes, absent when the dataset sets none.
@@ -74,6 +82,8 @@ pub const fn dataset_from_row(
     id: DatasetId,
     task_id: i32,
     task_type: String,
+    score_type: String,
+    score_type_parameters: String,
     time_limit: Option<f64>,
     memory_limit: Option<i64>,
     is_active: bool,
@@ -82,6 +92,8 @@ pub const fn dataset_from_row(
         id,
         task_id,
         task_type,
+        score_type,
+        score_type_parameters,
         time_limit,
         memory_limit,
         is_active,
@@ -106,6 +118,8 @@ where
         let id: i32 = row.try_get("id")?;
         let task_id: i32 = row.try_get("task_id")?;
         let task_type: String = row.try_get("task_type")?;
+        let score_type: String = row.try_get("score_type")?;
+        let score_type_parameters: String = row.try_get("score_type_parameters")?;
         let time_limit: Option<f64> = row.try_get("time_limit")?;
         let memory_limit: Option<i64> = row.try_get("memory_limit")?;
         let is_active: bool = row.try_get("is_active")?;
@@ -114,6 +128,8 @@ where
             id: DatasetId(id),
             task_id,
             task_type,
+            score_type,
+            score_type_parameters,
             time_limit,
             memory_limit,
             is_active,
