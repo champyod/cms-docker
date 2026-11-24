@@ -3,6 +3,10 @@ name = "cms-worker"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "cms-worker"
+path = "src/bin/cms-worker.rs"
+
 [dependencies]
 cms-db = { path = "../cms-db" }
 cms-grading = { path = "../cms-grading" }
