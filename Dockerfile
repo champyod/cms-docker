@@ -24,7 +24,7 @@ FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4
 WORKDIR /build
 COPY backend/ ./
 # Only the service binaries shipped in the runtime image are built here.
-RUN cargo build --release --package cms-svc --bin cms-log-service --bin cms-resource-service
+RUN cargo build --release --package cms-svc --bin cms-log-service --bin cms-resource-service --bin cms-checker
 RUN cargo build --release --package cms-worker --bin cms-worker
 
 FROM ${BASE_IMAGE}
@@ -214,6 +214,7 @@ COPY --from=ranking-build --chown=cmsuser:cmsuser /build/target/release/cms-rank
 # Compose runs these Rust binaries instead of the Python entrypoints.
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-log-service /home/cmsuser/cms/bin/cms-log-service
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-resource-service /home/cmsuser/cms/bin/cms-resource-service
+COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-checker /home/cmsuser/cms/bin/cms-checker
 COPY --from=backend-build --chown=cmsuser:cmsuser /build/target/release/cms-worker /home/cmsuser/cms/bin/cms-worker
 
 # Install CMS package from the src directory

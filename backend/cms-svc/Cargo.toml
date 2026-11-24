@@ -11,6 +11,10 @@ path = "src/bin/cms-log-service.rs"
 name = "cms-resource-service"
 path = "src/bin/cms-resource-service.rs"
 
+[[bin]]
+name = "cms-checker"
+path = "src/bin/cms-checker.rs"
+
 [dependencies]
 backon = { workspace = true }
 cms-proto = { path = "../cms-proto" }

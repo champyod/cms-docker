@@ -33,6 +33,7 @@
 #![deny(missing_docs)]
 #![forbid(unsafe_code)]
 
+pub mod checker;
 mod client;
 mod connector;
 mod host;
@@ -41,6 +42,7 @@ mod resource;
 mod resource_service;
 pub mod service;
 
+pub use checker::{CheckReport, Checker, CheckerError, PeerCheck};
 pub use client::{Client, ClientError};
 pub use connector::{
     of_dispatch, of_frame, BackoffPolicy, Connector, DialError, Dialer, NoRoute, PeerSession,
@@ -52,9 +54,9 @@ pub use resource::{
     CpuTimes, ProcReader, ProcessFacts, ReadError, ResourceReader, SystemFacts, SystemMemory,
 };
 pub use resource_service::{
-    daemon, handlers, interesting_command_line, local_services, ConnectorQuit, CoordError,
-    CpuPercentages, LocalService, Matched, MemoryMegabytes, PeerQuit, ProcessCpu, ProcessMatcher,
-    ProcessSpawner, QuitReceipt, ResourceError, ResourceService, RestartReport, Sample, Sampling,
-    ServiceCommand, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage, SpawnError,
-    SpawnedChild, Spawner, TableError, MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
+    all_services, daemon, handlers, interesting_command_line, local_services, ConnectorQuit,
+    CoordError, CpuPercentages, LocalService, Matched, MemoryMegabytes, PeerQuit, ProcessCpu,
+    ProcessMatcher, ProcessSpawner, QuitReceipt, ResourceError, ResourceService, RestartReport,
+    Sample, Sampling, ServiceCommand, ServiceCoord, ServiceFigures, ServiceState, ServiceUsage,
+    SpawnError, SpawnedChild, Spawner, TableError, MAX_RESOURCE_SECONDS, QUIT_REASON, QUIT_TIMEOUT,
 };

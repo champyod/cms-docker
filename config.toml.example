@@ -18,7 +18,8 @@ RESOURCE_SERVICE_SHARD = 0      # num; shard index handed to cmsResourceService;
 SCORING_SERVICE_SHARD = 0       # num; shard index handed to cmsScoringService; 0 = single instance — raise only when running multiple shards
 EVALUATION_SERVICE_SHARD = 0    # num; shard index handed to cmsEvaluationService; 0 = single instance — raise only when running multiple shards
 PROXY_SERVICE_SHARD = 0         # num; shard index handed to cmsProxyService; 0 = single instance — raise only when running multiple shards
-CHECKER_SERVICE_SHARD = 0       # num; shard index handed to cmsChecker; 0 = single instance — raise only when running multiple shards
+CHECKER_SERVICE_SHARD = 0       # num; shard index handed to cms-checker; 0 = single instance — raise only when running multiple shards
+CHECKER_SERVICE_PORT = 22000    # port; container port cms-checker listens on; the core host publish stays on 22000
 CMS_LOG_DIR = "/var/local/log/cms"    # container path of the cms-logs volume; services write <epoch>.log here and the monitor prunes it — must match the compose mount
 CMS_CACHE_DIR = "/var/local/cache/cms" # container path of the cms-cache volume; read by the update engine's disk sizing — must match the compose mount
 CMS_DATA_DIR = "/var/local/lib/cms"   # container path of the cms-data volume (submissions and service state); read by the update engine's disk sizing — must match the compose mount

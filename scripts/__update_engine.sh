@@ -621,6 +621,7 @@ VAR_SPECS=(
   "Core & Network|[core]|EVALUATION_SERVICE_SHARD|num||0"
   "Core & Network|[core]|PROXY_SERVICE_SHARD|num||0"
   "Core & Network|[core]|CHECKER_SERVICE_SHARD|num||0"
+  "Core & Network|[core]|CHECKER_SERVICE_PORT|port||22000"
   "Core & Network|[core]|APT_PORTS_MIRROR|str||ports.ubuntu.com"
   "Core & Network|[core]|BASE_IMAGE|str||ubuntu:noble"
   "Core & Network|[core]|DB_BIND_IP|str||127.0.0.1"

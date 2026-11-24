@@ -39,6 +39,19 @@ pub fn local_services(
         .collect()
 }
 
+/// Every service in the table, with every host resolved, in the order the table gave them.
+///
+/// Unlike [`local_services`], this selects no host and requires no self entry: the checker
+/// probes every configured peer, including services on other machines.
+///
+/// # Errors
+///
+/// Returns [`TableError::Malformed`] when a line is not `Name|shard|host|port`, and
+/// [`TableError::Unresolvable`] when a row's host cannot be turned into an address.
+pub fn all_services(table: &str) -> Result<Vec<LocalService>, TableError> {
+    rows(table)?.iter().map(Row::local_service).collect()
+}
+
 /// One shard's row of the table, before it becomes a [`LocalService`].
 struct Row {
     coord: ServiceCoord,
@@ -170,7 +183,7 @@ impl std::error::Error for TableError {
 
 #[cfg(test)]
 mod tests {
-    use super::{local_services, TableError};
+    use super::{all_services, local_services, TableError};
     use crate::resource_service::ServiceCoord;
 
     fn coord(name: &str, shard: i32) -> ServiceCoord {
@@ -240,6 +253,33 @@ mod tests {
             );
             assert!(error.to_string().contains("CMS_SERVICES"));
         }
+    }
+
+    #[test]
+    fn every_row_is_kept_when_no_local_host_is_selected() {
+        let table = concat!(
+            "LogService|0|10.0.0.1|29000\n",
+            "Worker|1|192.0.2.7|26001\n",
+            "Checker|0|10.0.0.2|22000\n",
+        );
+        let services = all_services(table).expect("every row is readable");
+        assert_eq!(
+            names(&services),
+            ["LogService,0", "Worker,1", "Checker,0"],
+            "rows on every host stay in the order the table gave them"
+        );
+        assert_eq!(
+            services[1].address,
+            "192.0.2.7:26001".parse().expect("the row's pair")
+        );
+    }
+
+    #[test]
+    fn a_malformed_row_is_refused_even_when_it_is_not_local() {
+        let table = "ResourceService|0|10.0.0.1|28000\nWorker|zero|10.0.0.1|26000\n";
+        let error = all_services(table).expect_err("a malformed row refuses the table");
+        assert!(matches!(error, TableError::Malformed { .. }));
+        assert!(error.to_string().contains("Worker|zero"));
     }
 
     #[test]
