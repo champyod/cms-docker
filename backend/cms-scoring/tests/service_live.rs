@@ -62,6 +62,63 @@ async fn score_candidate_writes_and_replaces_every_score_column() {
     );
 }
 
+#[tokio::test]
+async fn score_candidate_with_activity_reports_an_active_dataset() {
+    let fixture = Fixture::required("scoring_activity_active").await;
+    let candidate = fixture.seed_result(41, at(1), ["1.5", "0.5"]).await;
+
+    let scored = cms_scoring::score_candidate_with_activity(fixture.session(), &candidate, at(10))
+        .await
+        .expect("scoring the active result");
+
+    assert!(scored.is_active);
+    assert_eq!(scored.row.submission_id, candidate.submission_id);
+    assert_eq!(scored.row.dataset_id, candidate.dataset_id);
+    assert_eq!(scored.row.score, Some(2.0));
+    assert_eq!(scored.row.public_score, Some(1.5));
+    assert_eq!(scored.row.scored_at, Some(at(10)));
+    assert_eq!(fixture.stored_score(41).await.score, Some(2.0));
+}
+
+#[tokio::test]
+async fn score_candidate_with_activity_reports_an_inactive_dataset() {
+    let fixture = Fixture::required("scoring_activity_inactive").await;
+    let candidate = fixture.seed_result(41, at(1), ["1.5", "0.5"]).await;
+    set_dataset_active(&fixture, false).await;
+
+    let scored = cms_scoring::score_candidate_with_activity(fixture.session(), &candidate, at(10))
+        .await
+        .expect("scoring the inactive result");
+
+    assert!(!scored.is_active);
+    assert_eq!(scored.row.submission_id, candidate.submission_id);
+    assert_eq!(scored.row.dataset_id, candidate.dataset_id);
+    assert_eq!(scored.row.score, Some(2.0));
+    assert_eq!(fixture.stored_score(41).await.score, Some(2.0));
+}
+
+async fn set_dataset_active(fixture: &Fixture, is_active: bool) {
+    let mut transaction = fixture
+        .session()
+        .begin()
+        .await
+        .expect("beginning the activity update");
+    sqlx::query(
+        "UPDATE tasks
+         SET active_dataset_id = CASE WHEN $1 THEN $2 ELSE NULL END
+         WHERE id = (SELECT task_id FROM datasets WHERE id = $2)",
+    )
+    .bind(is_active)
+    .bind(service_db::DATASET_ID)
+    .execute(transaction.connection())
+    .await
+    .expect("updating the task's active dataset");
+    transaction
+        .commit()
+        .await
+        .expect("committing the activity update");
+}
+
 fn expected_details(alpha: &str, beta: &str) -> (Value, Value) {
     let details = json!([
         {"idx": "alpha", "outcome": alpha, "text": ["run"], "time": 0.25, "memory": 1024},

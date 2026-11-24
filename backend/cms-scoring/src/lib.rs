@@ -12,4 +12,7 @@ pub mod run;
 pub mod service;
 
 pub use queue::{ScoringOperation, ScoringQueue};
-pub use service::{invalidate, score_candidate, ScoringServiceError};
+pub use service::{
+    invalidate, score_candidate, score_candidate_with_activity, ScoredCandidate,
+    ScoringServiceError,
+};

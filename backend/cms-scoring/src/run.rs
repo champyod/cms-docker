@@ -15,12 +15,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::Utc;
-use cms_db::{read_result_bundle, scoring_candidates, ScoreRow, ScoringCandidate, SessionError};
+use cms_db::{scoring_candidates, ScoringCandidate};
 use cms_svc::{Client, Stop};
 use serde_json::json;
 
 use crate::api::Scoring;
-use crate::service::{score_candidate, ScoringServiceError};
+use crate::service::{score_candidate_with_activity, ScoredCandidate, ScoringServiceError};
 
 #[cfg(test)]
 mod tests;
@@ -128,18 +128,15 @@ async fn score_one(
 ) {
     let owned_scoring = Arc::clone(scoring);
     let owned_candidate = candidate.clone();
-    let scored: Result<(ScoreRow, bool), ScoringServiceError> =
+    let scored: Result<ScoredCandidate, ScoringServiceError> =
         retry_score("score candidate", stop, move || {
             let scoring = Arc::clone(&owned_scoring);
             let candidate = owned_candidate.clone();
-            async move {
-                let (row, is_active) = score_active_candidate(&scoring, &candidate).await?;
-                Ok((row, is_active))
-            }
+            async move { score_active_candidate(&scoring, &candidate).await }
         })
         .await;
     match scored {
-        Ok((_, true)) => {
+        Ok(scored) if scored.is_active => {
             if let Err(error) = notify_proxy(scoring, proxy, candidate.submission_id.0) {
                 eprintln!(
                     "cms-scoring: proxy notification failed for submission {}: {error}",
@@ -147,7 +144,7 @@ async fn score_one(
                 );
             }
         }
-        Ok((_, false)) => {}
+        Ok(_) => {}
         Err(error) => eprintln!(
             "cms-scoring: dropped submission {} on dataset {} after retries: {error}",
             candidate.submission_id.0, candidate.dataset_id.0
@@ -158,15 +155,8 @@ async fn score_one(
 async fn score_active_candidate(
     scoring: &Scoring,
     candidate: &ScoringCandidate,
-) -> Result<(ScoreRow, bool), ScoringServiceError> {
-    let mut transaction = scoring.session().begin().await?;
-    let bundle = read_result_bundle(transaction.connection(), candidate).await?;
-    transaction
-        .commit()
-        .await
-        .map_err(|error| ScoringServiceError::Commit(SessionError::Database(error)))?;
-    let row = score_candidate(scoring.session(), candidate, Utc::now().naive_utc()).await?;
-    Ok((row, bundle.dataset.is_active))
+) -> Result<ScoredCandidate, ScoringServiceError> {
+    score_candidate_with_activity(scoring.session(), candidate, Utc::now().naive_utc()).await
 }
 
 fn notify_proxy(
