@@ -209,6 +209,7 @@ mod tests {
             shard: Shard::new(0),
             bind_address: "127.0.0.1:0".parse().expect("the test address is valid"),
             secret: SECRET.to_owned(),
+            database_url: None,
             cache_dir: sandbox.path.join("cache"),
             temp_dir: sandbox.path.join("tmp"),
             sandbox_program: PathBuf::from("isolate"),

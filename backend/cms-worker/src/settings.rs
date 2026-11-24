@@ -30,6 +30,7 @@ const SHARD_VARIABLE: &str = "WORKER_SHARD";
 const BIND_ADDRESS_VARIABLE: &str = "WORKER_BIND_ADDR";
 const PORT_VARIABLE: &str = "WORKER_PORT";
 const SECRET_VARIABLE: &str = "RPC_SECRET";
+const DATABASE_URL_VARIABLE: &str = "DATABASE_URL";
 const CACHE_DIR_VARIABLE: &str = "CMS_CACHE_DIR";
 const TEMP_DIR_VARIABLE: &str = "CMS_TEMP_DIR";
 const SANDBOX_PROGRAM_VARIABLE: &str = "CMS_SANDBOX_PROGRAM";
@@ -66,6 +67,8 @@ pub struct Settings {
     pub bind_address: SocketAddr,
     /// The shared secret every caller must present.
     pub secret: String,
+    /// The database URL precaching uses, absent on workers that only run jobs.
+    pub database_url: Option<String>,
     /// The directory holding files shared with the other services.
     pub cache_dir: PathBuf,
     /// The directory under which sandbox boxes are made.
@@ -92,6 +95,7 @@ impl Settings {
             shard: shard()?,
             bind_address: bind_address()?,
             secret: required_text(SECRET_VARIABLE)?,
+            database_url: database_url()?,
             cache_dir: PathBuf::from(text(CACHE_DIR_VARIABLE, DEFAULT_CACHE_DIR)?),
             temp_dir: PathBuf::from(text(TEMP_DIR_VARIABLE, DEFAULT_TEMP_DIR)?),
             sandbox_program: PathBuf::from(text(
@@ -219,6 +223,20 @@ fn trusted_limits() -> Result<TrustedLimits, SettingsError> {
     ))
 }
 
+fn database_url() -> Result<Option<String>, SettingsError> {
+    let Some(value) = std::env::var_os(DATABASE_URL_VARIABLE) else {
+        return Ok(None);
+    };
+    let value = value
+        .into_string()
+        .map_err(|value| SettingsError::Invalid {
+            variable: DATABASE_URL_VARIABLE,
+            value: value.to_string_lossy().into_owned(),
+            reason: "it is not valid UTF-8",
+        })?;
+    nonempty(DATABASE_URL_VARIABLE, value).map(Some)
+}
+
 fn required_text(name: &'static str) -> Result<String, SettingsError> {
     nonempty(name, read_text(name, None)?)
 }
@@ -292,11 +310,13 @@ mod tests {
     use super::Settings;
 
     const SECRET_VARIABLE: &str = "RPC_SECRET";
-    const VARIABLES: [&str; 14] = [
+    const DATABASE_URL_VARIABLE: &str = "DATABASE_URL";
+    const VARIABLES: [&str; 15] = [
         "WORKER_SHARD",
         "WORKER_BIND_ADDR",
         "WORKER_PORT",
         SECRET_VARIABLE,
+        DATABASE_URL_VARIABLE,
         "CMS_CACHE_DIR",
         "CMS_TEMP_DIR",
         "CMS_SANDBOX_PROGRAM",
@@ -362,6 +382,7 @@ mod tests {
         assert_eq!(settings.shard.get(), 0);
         assert_eq!(settings.bind_address.to_string(), "0.0.0.0:26000");
         assert_eq!(settings.secret, SECRET);
+        assert_eq!(settings.database_url, None);
         assert_eq!(settings.cache_dir, PathBuf::from("/var/local/cache/cms"));
         assert_eq!(settings.temp_dir, PathBuf::from("/tmp"));
         assert_eq!(settings.sandbox_program, PathBuf::from("isolate"));
@@ -404,6 +425,7 @@ mod tests {
         environment.set("WORKER_BIND_ADDR", "127.0.0.1");
         environment.set("WORKER_PORT", "26001");
         environment.set(SECRET_VARIABLE, "override secret");
+        environment.set(DATABASE_URL_VARIABLE, "postgresql://worker@localhost/cms");
         environment.set("CMS_CACHE_DIR", "/srv/cache");
         environment.set("CMS_TEMP_DIR", "/srv/tmp");
         environment.set("CMS_SANDBOX_PROGRAM", "/usr/bin/isolate");
@@ -420,6 +442,10 @@ mod tests {
         assert_eq!(settings.shard.get(), 3);
         assert_eq!(settings.bind_address.to_string(), "127.0.0.1:26001");
         assert_eq!(settings.secret, "override secret");
+        assert_eq!(
+            settings.database_url.as_deref(),
+            Some("postgresql://worker@localhost/cms")
+        );
         assert_eq!(settings.cache_dir, PathBuf::from("/srv/cache"));
         assert_eq!(settings.temp_dir, PathBuf::from("/srv/tmp"));
         assert_eq!(settings.sandbox_program, PathBuf::from("/usr/bin/isolate"));
@@ -445,6 +471,14 @@ mod tests {
         let settings = Settings::from_env().expect("zero is a valid file-size setting");
 
         assert_eq!(settings.max_file_size, None);
+    }
+
+    #[test]
+    fn blank_database_url_is_refused_by_name_and_value() {
+        let message = refusal_for(DATABASE_URL_VARIABLE, "   ");
+
+        assert!(message.contains(DATABASE_URL_VARIABLE), "{message}");
+        assert!(message.contains("\"   \""), "{message}");
     }
 
     #[test]
