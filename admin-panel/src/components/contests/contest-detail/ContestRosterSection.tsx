@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ListChecks, Plus, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/core/Button';
+import { Badge } from '@/components/core/Badge';
 import { EmptyState } from '@/components/core/EmptyState';
 import { InlineAlert } from '@/components/core/InlineAlert';
 import { SurfaceState } from '@/components/core/SurfaceState';
@@ -18,18 +19,15 @@ import {
   removeTeamFromRoster,
   setContestTeamRegisterable,
 } from '@/app/actions/contestTeams';
-import { cn } from '@/lib/utils';
 
 type RosterCopy = Dictionary['contests']['roster'];
 
 export type ContestRosterSectionProps = { contestId: number; permissionKeys: readonly string[] };
 
-const CHIP_CLASSES = 'rounded-full px-2 py-0.5 text-xs';
-
-const STATE_CHIP_CLASS: Record<ContestRosterState, string> = {
-  inherited: 'bg-muted text-muted-foreground',
-  registerable: 'bg-success/10 text-success',
-  blocked: 'bg-destructive/10 text-destructive',
+const STATE_BADGE_VARIANT: Record<ContestRosterState, 'neutral' | 'success' | 'destructive'> = {
+  inherited: 'neutral',
+  registerable: 'success',
+  blocked: 'destructive',
 };
 
 interface FeedbackLabels { pending: string; success: string; failure: string; }
@@ -56,14 +54,14 @@ function ContestRosterRow({ row, copy, canManage, busy, onSet, onAdd, onRemove }
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 p-4 transition-colors hover:bg-muted/50">
       <div className="flex items-center gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">{row.code.substring(0, 2).toUpperCase()}</div>
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">{row.code.substring(0, 2).toUpperCase()}</div>
         <div>
           <div className="font-medium text-foreground">{row.code}</div>
           <div className="text-xs text-muted-foreground">{row.name}</div>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <span className={cn(CHIP_CLASSES, STATE_CHIP_CLASS[row.state])}>{stateLabel(copy, row)}</span>
+        <Badge variant={STATE_BADGE_VARIANT[row.state]} className="normal-case tracking-normal">{stateLabel(copy, row)}</Badge>
         {canManage && (
           <>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
